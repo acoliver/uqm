@@ -4,7 +4,7 @@
 
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lewton::inside_ogg::OggStreamReader;
 
@@ -86,6 +86,8 @@ pub struct OggDecoder {
     initialized: bool,
     /// Stored formats for reference
     formats: Option<DecoderFormats>,
+    /// Path the file reader was opened from, kept so a rewind can reopen it
+    file_path: Option<PathBuf>,
     /// The underlying Ogg stream reader (from file)
     reader_file: Option<OggStreamReader<BufReader<File>>>,
     /// The underlying Ogg stream reader (from bytes)
@@ -112,6 +114,7 @@ impl OggDecoder {
             last_error: 0,
             initialized: false,
             formats: None,
+            file_path: None,
             reader_file: None,
             reader_bytes: None,
             original_data: None,
@@ -120,6 +123,13 @@ impl OggDecoder {
             current_pcm: 0,
             total_pcm: 0,
         }
+    }
+
+    fn open_file_reader(path: &Path) -> DecodeResult<OggStreamReader<BufReader<File>>> {
+        let file = File::open(path)
+            .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
+        OggStreamReader::new(BufReader::new(file))
+            .map_err(|e| DecodeError::InvalidData(format!("Failed to open Ogg stream: {:?}", e)))
     }
 
     /// Decode the next packet and fill the sample buffer
@@ -204,12 +214,7 @@ impl SoundDecoder for OggDecoder {
     }
 
     fn open(&mut self, path: &Path) -> DecodeResult<()> {
-        let file = File::open(path)
-            .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
-
-        let reader = BufReader::new(file);
-        let ogg_reader = OggStreamReader::new(reader)
-            .map_err(|e| DecodeError::InvalidData(format!("Failed to open Ogg stream: {:?}", e)))?;
+        let ogg_reader = Self::open_file_reader(path)?;
 
         self.frequency = ogg_reader.ident_hdr.audio_sample_rate;
         self.format = if ogg_reader.ident_hdr.audio_channels == 1 {
@@ -218,16 +223,20 @@ impl SoundDecoder for OggDecoder {
             AudioFormat::Stereo16
         };
 
-        // Estimate length (lewton doesn't provide total samples easily)
-        // We'll calculate it as we decode or use a reasonable estimate
-        self.length = 0.0; // Will be updated if seeking is supported
-        self.total_pcm = 0;
+        // lewton does not report the stream length, so read it from the
+        // final page's granule position like the in-memory path does.
+        let mut length_probe = File::open(path)
+            .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
+        self.length = calculate_ogg_duration(&mut length_probe, self.frequency);
+        self.total_pcm = (self.length * self.frequency as f32) as u64;
         self.current_pcm = 0;
         self.sample_buffer.clear();
         self.buffer_pos = 0;
 
+        self.file_path = Some(path.to_path_buf());
         self.reader_file = Some(ogg_reader);
         self.reader_bytes = None;
+        self.original_data = None;
 
         Ok(())
     }
@@ -278,6 +287,7 @@ impl SoundDecoder for OggDecoder {
     }
 
     fn close(&mut self) {
+        self.file_path = None;
         self.reader_file = None;
         self.reader_bytes = None;
         self.original_data = None;
@@ -298,7 +308,8 @@ impl SoundDecoder for OggDecoder {
         let mut bytes_written = 0;
         let bytes_per_sample = 2; // i16
 
-        while bytes_written < buf.len() {
+        // Only whole samples are delivered; a trailing spare byte stays untouched.
+        while buf.len() - bytes_written >= bytes_per_sample {
             // If buffer is empty or exhausted, decode next packet
             if self.buffer_pos >= self.sample_buffer.len() {
                 match self.decode_next_packet()? {
@@ -365,40 +376,31 @@ impl SoundDecoder for OggDecoder {
                     }
                 }
             }
-            // For file mode, we'd need to reopen the file - not implemented yet
+            if let Some(path) = self.file_path.clone() {
+                let ogg_reader = Self::open_file_reader(&path)
+                    .map_err(|e| DecodeError::SeekFailed(format!("Failed to rewind: {}", e)))?;
+                self.reader_file = Some(ogg_reader);
+            }
 
             if pcm_pos == 0 {
                 return Ok(0);
             }
         }
 
-        // Now skip forward by decoding and discarding until we reach target
+        // Skip forward, first through whatever is left of the packet already
+        // decoded and then through following packets.
         let channels = self.format.channels() as u64;
         while self.current_pcm < target_pcm {
-            // Decode next packet
+            let frames_left = (self.sample_buffer.len() - self.buffer_pos) as u64 / channels;
+            if frames_left > 0 {
+                let skipped = frames_left.min(target_pcm - self.current_pcm);
+                self.buffer_pos += (skipped * channels) as usize;
+                self.current_pcm += skipped;
+                continue;
+            }
             match self.decode_next_packet() {
-                Ok(true) => {
-                    // Calculate how many PCM frames are in this buffer
-                    let samples_in_buffer = self.sample_buffer.len() as u64;
-                    let frames_in_buffer = samples_in_buffer / channels;
-
-                    let remaining_to_skip = target_pcm - self.current_pcm;
-
-                    if frames_in_buffer <= remaining_to_skip {
-                        // Skip entire buffer
-                        self.current_pcm += frames_in_buffer;
-                        self.buffer_pos = self.sample_buffer.len();
-                    } else {
-                        // Partial skip - position within this buffer
-                        let samples_to_skip = (remaining_to_skip * channels) as usize;
-                        self.buffer_pos = samples_to_skip;
-                        self.current_pcm = target_pcm;
-                    }
-                }
-                Ok(false) => {
-                    // End of stream reached before target
-                    return Ok(self.current_pcm as u32);
-                }
+                Ok(true) => {}
+                Ok(false) => return Ok(self.current_pcm as u32),
                 Err(e) => {
                     return Err(DecodeError::SeekFailed(format!(
                         "Seek failed during skip: {}",
@@ -531,3 +533,7 @@ mod tests {
     //     assert!(bytes > 0);
     // }
 }
+
+#[cfg(test)]
+#[path = "ogg_stream_tests.rs"]
+mod stream_tests;

@@ -204,6 +204,10 @@ pub struct EffectPlan {
     pub write_key: Option<(MenuKey, u8)>,
     /// Release an owned menu key (write 0).
     pub release_key: Option<MenuKey>,
+    /// A tapped menu key that this update only holds down after the press
+    /// that already registered. Its production auto-repeat pulse must not
+    /// register as another press.
+    pub held_repeat_key: Option<MenuKey>,
     /// Write an owned player-one gameplay key to `value`.
     pub write_player_key: Option<(PlayerKey, u8)>,
     /// Release an owned player-one gameplay key.
@@ -223,6 +227,7 @@ impl EffectPlan {
         Self {
             write_key: None,
             release_key: None,
+            held_repeat_key: None,
             write_player_key: None,
             release_player_key: None,
             arm_capture: None,
@@ -236,6 +241,7 @@ impl EffectPlan {
     pub const fn is_empty(self) -> bool {
         self.write_key.is_none()
             && self.release_key.is_none()
+            && self.held_repeat_key.is_none()
             && self.write_player_key.is_none()
             && self.release_player_key.is_none()
             && self.arm_capture.is_none()
@@ -296,7 +302,10 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
                 | ActionPhase::TapReleasePending
                 | ActionPhase::TapSettling { .. }
         ),
-        Action::NavigateToPlanet(_) | Action::NavigateToMoon(_) | Action::NavigateToOrbit(_) => {
+        Action::NavigateToPlanet(_)
+        | Action::NavigateToMoon(_)
+        | Action::NavigateToOrbit(_)
+        | Action::NavigateToHyperspace(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -389,6 +398,7 @@ pub fn scheduler_reduce(
                 Action::NavigateToPlanet(_)
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
+                    | Action::NavigateToHyperspace(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -608,6 +618,7 @@ fn reduce_menu_key(
         (Action::TapMenuKey(t), ActionPhase::TapHolding { remaining }) if remaining > 1 => {
             let effects = EffectPlan {
                 write_key: Some((t.key, if t.value != 0 { 1 } else { 0 })),
+                held_repeat_key: Some(t.key),
                 ..EffectPlan::none()
             };
             SchedulerTransition {
@@ -626,6 +637,7 @@ fn reduce_menu_key(
         (Action::TapMenuKey(t), ActionPhase::TapHolding { remaining: 1 }) => {
             let effects = EffectPlan {
                 write_key: Some((t.key, if t.value != 0 { 1 } else { 0 })),
+                held_repeat_key: Some(t.key),
                 ..EffectPlan::none()
             };
             SchedulerTransition {
@@ -821,7 +833,8 @@ fn reduce_navigation(
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -833,7 +846,8 @@ fn reduce_navigation(
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining }) => {
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
@@ -846,6 +860,18 @@ fn reduce_navigation(
             }
         }
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
@@ -1419,10 +1445,8 @@ fn advance_to_next(
 ) -> SchedulerTransition {
     let next_index = state.step_index + 1;
 
-    // Zero-callback chaining: if the next action requires no input callbacks
-    // (wait_input_ticks(0) or AssertActivity), chain through it immediately.
-    // AssertMainMenuTransition is handled by the AdmittedInput match arm
-    // (enters WaitingSemantic on first input callback), NOT chained here.
+    // Only zero-tick waits may chain. Assertions must remain current until
+    // the coordinator verifies runtime state before their input callback.
     if let Some(next_action) = config.actions.get(next_index) {
         match next_action {
             Action::WaitInputTicks(w) if w.count == 0 => {
@@ -1435,16 +1459,6 @@ fn advance_to_next(
                     ..*state
                 };
                 return advance_to_next(&chained_state, config, sv, combined);
-            }
-            Action::AssertActivity(_) => {
-                // AssertActivity is immediate — no callback needed.
-                let chained_state = SchedulerState {
-                    step_index: next_index,
-                    phase: ActionPhase::WaitingForInput,
-                    state_version: sv,
-                    ..*state
-                };
-                return advance_to_next(&chained_state, config, sv, initial_effects);
             }
             _ => {}
         }
@@ -1469,12 +1483,145 @@ fn advance_to_next(
 mod tests {
     use super::*;
     use crate::automation::script::{
-        ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
-        TapMenuKeyStep, TapPlayerKeyStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForMainMenuReadyStep,
-        WaitInputTicksStep, WaitPresentationsStep,
+        ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToHyperspaceStep,
+        NavigateToMoonStep, SetMenuKeyStep, TapMenuKeyStep, TapPlayerKeyStep,
+        WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
+        WaitForDispatchStep, WaitForMainMenuReadyStep, WaitInputTicksStep, WaitPresentationsStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
+
+    fn explore_script() -> crate::automation::ValidatedScript {
+        let path = std::path::Path::new("explore-planet-v1.json");
+        crate::automation::validate_script(
+            crate::automation::parse_script(
+                include_bytes!("../../scripts/explore-planet-v1.json"),
+                path,
+            )
+            .unwrap(),
+            path,
+        )
+        .unwrap()
+    }
+
+    /// #213: the explore scenario must establish hyperspace through a real new
+    /// game and real flight, never through Down (which focuses Load Game on
+    /// the restart menu) or a start scene.
+    #[test]
+    fn explore_selects_new_game_without_moving_menu_focus() {
+        let script = explore_script();
+        assert_eq!(script.start_scene(), None);
+        let config = cfg(script.steps());
+        let mut state = SchedulerState::initial();
+        let mut observed = Vec::new();
+        for tick in 1..=60 {
+            if tick == 31 {
+                state = scheduler_reduce(&state, &config, SchedulerEvent::MainMenuReady).new_state;
+            }
+            let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            if let Some(key) = transition.effects.write_key {
+                observed.push((tick, key.0, key.1));
+            }
+            if let Some(key) = transition.effects.release_key {
+                observed.push((tick, key, 0));
+            }
+            state = transition.new_state;
+        }
+        assert_eq!(
+            observed,
+            vec![
+                (31, MenuKey::Select, 1),
+                (32, MenuKey::Select, 1),
+                (33, MenuKey::Select, 1),
+                (34, MenuKey::Select, 0),
+            ],
+            "no key may be written before the restart menu reports ready"
+        );
+    }
+
+    /// #213: interplanetary flight is asserted, then the flagship flies out
+    /// with production controls, and only then are the unchanged hyperspace
+    /// capture and assertion evaluated.
+    #[test]
+    fn explore_reaches_hyperspace_by_real_flight_before_its_unchanged_assertions() {
+        let script = explore_script();
+        let steps = script.steps();
+        let position = |predicate: &dyn Fn(&Action) -> bool| {
+            steps.iter().position(predicate).expect("step present")
+        };
+        let interplanetary = position(&|step| {
+            matches!(
+                step,
+                Action::AssertActivity(ActivityAssertion {
+                    mask: 255,
+                    equals: 4
+                })
+            )
+        });
+        let departure = position(&|step| matches!(step, Action::NavigateToHyperspace(_)));
+        let first_capture = position(&|step| matches!(step, Action::Capture(_)));
+        let hyperspace = position(&|step| {
+            matches!(
+                step,
+                Action::AssertActivity(ActivityAssertion {
+                    mask: 255,
+                    equals: 3
+                })
+            )
+        });
+        assert!(interplanetary < departure);
+        assert!(departure < first_capture);
+        assert!(first_capture < hyperspace);
+        let captures: Vec<&str> = steps
+            .iter()
+            .filter_map(|step| match step {
+                Action::Capture(capture) => Some(capture.label.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            captures,
+            [
+                "hyperspace-initial",
+                "hyperspace-after-navigation",
+                "hyperspace-final"
+            ]
+        );
+        assert!(!steps.iter().any(|step| matches!(
+            step,
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Down,
+                ..
+            }) | Action::SetMenuKey(SetMenuKeyStep {
+                key: MenuKey::Down,
+                ..
+            })
+        )));
+    }
+
+    #[test]
+    fn hyperspace_departure_counts_down_and_fails_when_exhausted() {
+        let actions = [
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks: 2 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let started = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        )
+        .new_state;
+        assert_eq!(started.phase, ActionPhase::Navigating { remaining: 1 });
+        let reached = scheduler_reduce(&started, &config, SchedulerEvent::NavigationReached);
+        assert_eq!(reached.new_state.step_index, 1);
+        let last = scheduler_reduce(&started, &config, SchedulerEvent::AdmittedInput).new_state;
+        assert_eq!(last.phase, ActionPhase::Navigating { remaining: 0 });
+        let exhausted = scheduler_reduce(&last, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            exhausted.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+    }
 
     fn cfg(actions: &[Action]) -> SchedulerConfig<'_> {
         SchedulerConfig {
@@ -1721,6 +1868,60 @@ mod tests {
         assert_eq!(release.effects.release_player_key, Some(PlayerKey::Thrust));
         assert_eq!(release.new_state.step_index, 1);
     }
+    /// The production input loop turns a key that stays down into a repeat
+    /// pulse once half a second of wall-clock time has passed. A scripted tap
+    /// is one press, so every update after the first one only holds the key
+    /// and must say so, otherwise a slow host turns one tap into several.
+    #[test]
+    fn tap_marks_only_the_updates_after_the_press_as_held() {
+        let actions = [
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Down,
+                value: 1,
+                hold: 3,
+                settle: 0,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        let mut held = Vec::new();
+        for _ in 0..4 {
+            let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            held.push((t.effects.write_key.is_some(), t.effects.held_repeat_key));
+            state = t.new_state;
+        }
+        assert_eq!(
+            held,
+            [
+                (true, None),
+                (true, Some(MenuKey::Down)),
+                (true, Some(MenuKey::Down)),
+                (false, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn single_update_tap_never_marks_a_held_repeat() {
+        let actions = [
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Select,
+                value: 1,
+                hold: 1,
+                settle: 0,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let press = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(press.effects.held_repeat_key, None);
+    }
+
     // --- Tap edge: hold=1, settle=1 (no infinite loop) ---
 
     #[test]
@@ -2232,6 +2433,37 @@ mod tests {
     // --- assert_activity advances immediately ---
 
     #[test]
+    fn capture_completion_leaves_activity_assertion_for_runtime_verification() {
+        let actions = [
+            Action::Capture(crate::automation::script::CaptureStep {
+                label: "before-activity".into(),
+                expect_change: false,
+            }),
+            Action::AssertActivity(ActivityAssertion { mask: 1, equals: 0 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let armed = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let completed = scheduler_reduce(
+            &armed.new_state,
+            &config,
+            SchedulerEvent::CommittedPresent {
+                generation: armed.new_state.capture_generation,
+            },
+        );
+        assert_eq!(completed.new_state.step_index, 1);
+        assert_eq!(completed.new_state.phase, ActionPhase::WaitingForInput);
+        assert_eq!(
+            completed.effects.complete_capture,
+            Some(CaptureGeneration(1))
+        );
+    }
+
+    #[test]
     fn assert_activity_advances() {
         let actions = [
             Action::AssertActivity(ActivityAssertion { mask: 1, equals: 0 }),
@@ -2708,6 +2940,287 @@ mod tests {
             late_condition.new_state.terminal,
             Some(TerminalOutcome::SemanticMismatch)
         );
+    }
+}
+
+/// Every action that spends a bounded callback budget waiting for the real game
+/// to reach a state shares one contract: the budget counts down one admitted
+/// input at a time, the matching "reached" event advances the script, and an
+/// exhausted budget fails the proof instead of waiting forever.
+#[cfg(test)]
+mod budgeted_wait_tests {
+    use super::*;
+    use crate::automation::script::{
+        NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
+        PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
+        SelectPlanetMenuStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
+        WaitForPlanetSideStartStep,
+    };
+
+    fn navigation_actions(max_ticks: u64) -> Vec<Action> {
+        vec![
+            Action::NavigateToPlanet(NavigateToPlanetStep {
+                planet: 1,
+                max_ticks,
+            }),
+            Action::NavigateToMoon(NavigateToMoonStep {
+                planet: 1,
+                moon: 0,
+                max_ticks,
+            }),
+            Action::NavigateToOrbit(NavigateToOrbitStep {
+                planet: 1,
+                max_ticks,
+            }),
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+        ]
+    }
+
+    fn condition_actions(max_ticks: u64) -> Vec<Action> {
+        vec![
+            Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks }),
+            Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                outcome: PlanetSideOutcomeName::Returned,
+                max_ticks,
+            }),
+            Action::SelectPlanetMenu(SelectPlanetMenuStep {
+                phase: PlanetMenuPhaseName::Orbit,
+                max_ticks,
+            }),
+            Action::WaitForBattleFrames(WaitForBattleFramesStep {
+                minimum: 1,
+                max_ticks,
+            }),
+            Action::WaitForDispatch(WaitForDispatchStep {
+                encounter: 2,
+                dialogue: 2,
+                max_ticks,
+            }),
+            Action::SelectCommunicationResponse(SelectCommunicationResponseStep {
+                index: 0,
+                max_ticks,
+            }),
+            Action::WaitForCommunicationEnd(WaitForCommunicationEndStep {
+                minimum_completions: 1,
+                max_ticks,
+            }),
+            Action::WaitForCommunicationReplay(WaitForCommunicationReplayStep { max_ticks }),
+        ]
+    }
+
+    fn running_phase(action: &Action, remaining: u64) -> ActionPhase {
+        if matches!(
+            action,
+            Action::NavigateToPlanet(_)
+                | Action::NavigateToMoon(_)
+                | Action::NavigateToOrbit(_)
+                | Action::NavigateToHyperspace(_)
+        ) {
+            ActionPhase::Navigating { remaining }
+        } else {
+            ActionPhase::WaitingCondition { remaining }
+        }
+    }
+
+    fn reached_event(action: &Action) -> SchedulerEvent {
+        if matches!(running_phase(action, 0), ActionPhase::Navigating { .. }) {
+            SchedulerEvent::NavigationReached
+        } else {
+            SchedulerEvent::ConditionReached
+        }
+    }
+
+    fn other_family_event(action: &Action) -> SchedulerEvent {
+        if matches!(running_phase(action, 0), ActionPhase::Navigating { .. }) {
+            SchedulerEvent::ConditionReached
+        } else {
+            SchedulerEvent::NavigationReached
+        }
+    }
+
+    fn all_budgeted_actions(max_ticks: u64) -> Vec<Action> {
+        let mut actions = navigation_actions(max_ticks);
+        actions.extend(condition_actions(max_ticks));
+        actions
+    }
+
+    fn step(
+        state: &SchedulerState,
+        actions: &[Action],
+        event: SchedulerEvent,
+    ) -> SchedulerTransition {
+        let config = SchedulerConfig {
+            actions,
+            transitions: &[],
+        };
+        scheduler_reduce(state, &config, event)
+    }
+
+    #[test]
+    fn budget_counts_down_one_admitted_input_at_a_time_then_fails_the_proof() {
+        for action in all_budgeted_actions(3) {
+            let script = [action, Action::Finish];
+            let mut state = SchedulerState::initial();
+            for (tick, remaining) in [(1_u64, 2_u64), (2, 1), (3, 0)] {
+                let transition = step(&state, &script, SchedulerEvent::AdmittedInput);
+                assert_eq!(
+                    transition.new_state.phase,
+                    running_phase(&script[0], remaining),
+                    "{:?} after input {tick}",
+                    script[0]
+                );
+                assert_eq!(transition.new_state.state_version, tick, "{:?}", script[0]);
+                assert_eq!(transition.new_state.step_index, 0, "{:?}", script[0]);
+                assert_eq!(transition.new_state.terminal, None, "{:?}", script[0]);
+                assert!(transition.effects.is_empty(), "{:?}", script[0]);
+                state = transition.new_state;
+            }
+            let expired = step(&state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                expired.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?} must fail once its budget is spent",
+                script[0]
+            );
+            assert_eq!(expired.new_state.step_index, 0, "{:?}", script[0]);
+            assert_eq!(expired.new_state.state_version, 4, "{:?}", script[0]);
+            assert!(expired.effects.is_empty(), "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_zero_budget_admits_one_input_and_then_fails() {
+        for action in all_budgeted_actions(0) {
+            let script = [action, Action::Finish];
+            let started = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            assert_eq!(
+                started.new_state.phase,
+                running_phase(&script[0], 0),
+                "{:?}",
+                script[0]
+            );
+            let expired = step(&started.new_state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                expired.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?}",
+                script[0]
+            );
+        }
+    }
+
+    #[test]
+    fn the_matching_reached_event_advances_before_and_during_the_budget() {
+        for action in all_budgeted_actions(4) {
+            let script = [action, Action::Finish];
+            let event = reached_event(&script[0]);
+
+            let immediately = step(&SchedulerState::initial(), &script, event);
+            assert_eq!(immediately.new_state.step_index, 1, "{:?}", script[0]);
+            assert_eq!(
+                immediately.new_state.phase,
+                ActionPhase::WaitingForInput,
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(immediately.new_state.terminal, None, "{:?}", script[0]);
+            assert_eq!(immediately.new_state.state_version, 1, "{:?}", script[0]);
+
+            let counting = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            let during = step(&counting.new_state, &script, event);
+            assert_eq!(during.new_state.step_index, 1, "{:?}", script[0]);
+            assert_eq!(
+                during.new_state.phase,
+                ActionPhase::WaitingForInput,
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(during.new_state.state_version, 2, "{:?}", script[0]);
+            assert!(during.effects.is_empty(), "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_reached_event_after_the_budget_is_spent_is_a_mismatch_not_a_pass() {
+        for action in all_budgeted_actions(1) {
+            let script = [action, Action::Finish];
+            let spent = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            assert_eq!(
+                spent.new_state.phase,
+                running_phase(&script[0], 0),
+                "{:?}",
+                script[0]
+            );
+            let late = step(&spent.new_state, &script, reached_event(&script[0]));
+            assert_eq!(
+                late.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(late.new_state.step_index, 0, "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_reached_event_from_the_other_family_changes_nothing() {
+        for action in all_budgeted_actions(4) {
+            let script = [action, Action::Finish];
+            let counting = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            for event in [
+                other_family_event(&script[0]),
+                SchedulerEvent::MainMenuReady,
+            ] {
+                let ignored = step(&counting.new_state, &script, event);
+                assert_eq!(
+                    ignored.new_state, counting.new_state,
+                    "{:?} must ignore {event:?}",
+                    script[0]
+                );
+                assert!(ignored.effects.is_empty(), "{:?}", script[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn a_budget_phase_that_belongs_to_the_other_family_is_an_invalid_state() {
+        for action in all_budgeted_actions(4) {
+            let wrong = match running_phase(&action, 2) {
+                ActionPhase::Navigating { remaining } => {
+                    ActionPhase::WaitingCondition { remaining }
+                }
+                _ => ActionPhase::Navigating { remaining: 2 },
+            };
+            let script = [action, Action::Finish];
+            let state = SchedulerState {
+                phase: wrong,
+                ..SchedulerState::initial()
+            };
+            let transition = step(&state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                transition.new_state.terminal,
+                Some(TerminalOutcome::InvalidState),
+                "{:?} cannot run in {wrong:?}",
+                script[0]
+            );
+        }
     }
 }
 

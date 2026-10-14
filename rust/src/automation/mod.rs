@@ -34,6 +34,27 @@ pub mod interrupt;
 pub mod inventory;
 pub mod lifecycle;
 pub mod mode;
+#[cfg(all(unix, feature = "debug-process"))]
+pub mod native_artifacts;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_budget;
+#[cfg(feature = "debug-process")]
+mod native_capture;
+#[cfg(feature = "debug-process")]
+mod native_capture_change;
+pub mod native_checkpoint;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_isolation;
+mod native_predicate;
+#[cfg(feature = "debug-process")]
+mod native_publication_history;
+#[cfg(all(unix, feature = "debug-process"))]
+pub mod native_runner;
+mod native_trace;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_trace_cursor;
+#[cfg(all(test, unix, feature = "debug-process"))]
+mod native_trace_oracle;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
 pub mod navigation;
@@ -109,13 +130,14 @@ pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePl
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
     CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
-    MenuKey, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
-    PlanetSideOutcomeName, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
-    SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep, SetPlayerKeyStep,
-    SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
-    WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
-    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
-    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
+    MenuKey, NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep,
+    NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RootDocument,
+    SceneAssertion, ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep,
+    SetMenuKeyStep, SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep,
+    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+    WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
+    WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
+    CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{

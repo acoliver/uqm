@@ -331,16 +331,14 @@ pub fn convert_canvas_format(
     let src_pixels = canvas.pixels();
     let src_bpp = canvas.format().bytes_per_pixel as usize;
     let dst_bpp = target.bytes_per_pixel as usize;
+    let shared_bytes = dst_bpp.min(src_bpp);
     converted.with_pixels_mut(|dst_pixels| {
         for (idx, chunk) in dst_pixels.chunks_exact_mut(dst_bpp).enumerate() {
             let src_offset = idx * src_bpp;
             if src_offset + src_bpp <= src_pixels.len() {
-                chunk.copy_from_slice(&src_pixels[src_offset..src_offset + dst_bpp.min(src_bpp)]);
-                if dst_bpp > src_bpp {
-                    for extra in &mut chunk[src_bpp..] {
-                        *extra = 255;
-                    }
-                }
+                chunk[..shared_bytes]
+                    .copy_from_slice(&src_pixels[src_offset..src_offset + shared_bytes]);
+                chunk[shared_bytes..].fill(255);
             }
         }
     })?;
@@ -489,7 +487,23 @@ impl Canvas {
             return Err(CanvasError::InvalidPoint);
         }
 
-        Ok(())
+        // copy_canvas reads a non-positive size as "the whole source", which
+        // an empty rect must not mean.
+        if src_rect.extent.width == 0 || src_rect.extent.height == 0 {
+            return Ok(());
+        }
+
+        let mut destination = self.clone();
+        copy_canvas(
+            &mut destination,
+            source,
+            dst_pt.x,
+            dst_pt.y,
+            src_rect.corner.x,
+            src_rect.corner.y,
+            src_rect.extent.width,
+            src_rect.extent.height,
+        )
     }
 }
 
@@ -3548,4 +3562,124 @@ fn test_draw_image_partial_clip() {
     // Pixels outside the copied area should remain black
     let offset = (7 * dst_width + 7) as usize * 4;
     assert_eq!(dst_pixels[offset], 0); // R
+}
+
+#[cfg(test)]
+#[path = "tfb_draw_primitive_tests.rs"]
+mod primitive_tests;
+
+#[cfg(test)]
+mod copy_rect_tests {
+    use super::*;
+
+    fn rect(x: i32, y: i32, width: i32, height: i32) -> Rect {
+        Rect::from_parts(Point::new(x, y), Extent::new(width, height))
+    }
+
+    fn pixel(canvas: &Canvas, x: i32, y: i32) -> [u8; 4] {
+        let at = (y * canvas.width() + x) as usize * 4;
+        canvas.pixels()[at..at + 4].try_into().unwrap()
+    }
+
+    fn red_square_source() -> Canvas {
+        let mut source = Canvas::new_rgba(8, 8);
+        fill_rect(&mut source, 2, 2, 5, 5, Color::rgb(255, 0, 0)).unwrap();
+        source
+    }
+
+    #[test]
+    fn copy_rect_moves_the_requested_pixels_and_nothing_else() {
+        let source = red_square_source();
+        let destination = Canvas::new_rgba(8, 8);
+
+        destination
+            .copy_rect(&source, rect(2, 2, 4, 4), Point::new(0, 4))
+            .unwrap();
+
+        for (x, y) in [(0, 4), (3, 4), (0, 7), (3, 7)] {
+            assert_eq!(pixel(&destination, x, y), [255, 0, 0, 255], "({x}, {y})");
+        }
+        let background = pixel(&Canvas::new_rgba(1, 1), 0, 0);
+        for (x, y) in [(4, 4), (0, 3), (7, 7)] {
+            assert_eq!(
+                pixel(&destination, x, y),
+                background,
+                "({x}, {y}) is outside the copy"
+            );
+        }
+    }
+
+    #[test]
+    fn copy_rect_with_an_empty_rect_copies_nothing() {
+        let source = red_square_source();
+        let destination = Canvas::new_rgba(8, 8);
+        let before = destination.pixels();
+
+        destination
+            .copy_rect(&source, rect(2, 2, 0, 0), Point::new(0, 0))
+            .unwrap();
+
+        assert_eq!(
+            destination.pixels(),
+            before,
+            "an empty rect is not 'the whole source'"
+        );
+    }
+
+    #[test]
+    fn copy_rect_refuses_rects_outside_the_source_and_negative_destinations() {
+        let source = red_square_source();
+        let destination = Canvas::new_rgba(8, 8);
+        let before = destination.pixels();
+
+        for rect in [
+            rect(-1, 0, 2, 2),
+            rect(0, -1, 2, 2),
+            rect(7, 0, 2, 2),
+            rect(0, 7, 2, 2),
+        ] {
+            assert_eq!(
+                destination.copy_rect(&source, rect, Point::new(0, 0)),
+                Err(CanvasError::InvalidRect),
+                "{rect:?}"
+            );
+        }
+        for point in [Point::new(-1, 0), Point::new(0, -1)] {
+            assert_eq!(
+                destination.copy_rect(&source, rect(0, 0, 2, 2), point),
+                Err(CanvasError::InvalidPoint),
+                "{point:?}"
+            );
+        }
+        assert_eq!(destination.pixels(), before);
+    }
+
+    #[test]
+    fn an_image_copies_between_primary_canvases_and_is_marked_dirty() {
+        let source = TFImage::new_rgba(8, 8);
+        let target = TFImage::new_rgba(8, 8);
+        source
+            .normal()
+            .unwrap()
+            .clone()
+            .with_pixels_mut(|pixels| pixels[..4].copy_from_slice(&[9, 8, 7, 255]))
+            .unwrap();
+        target.mark_clean();
+
+        ImagePrimitive::copy_rect(&target, &source, rect(0, 0, 1, 1), Point::new(3, 3)).unwrap();
+
+        assert_eq!(pixel(&target.normal().unwrap(), 3, 3), [9, 8, 7, 255]);
+        assert!(target.is_dirty());
+
+        let hollow = TFImage::new_rgba(8, 8);
+        hollow.delete();
+        assert_eq!(
+            ImagePrimitive::copy_rect(&hollow, &source, rect(0, 0, 1, 1), Point::new(0, 0)),
+            Err(TFImageError::NoPrimaryCanvas)
+        );
+        assert_eq!(
+            ImagePrimitive::copy_rect(&target, &hollow, rect(0, 0, 1, 1), Point::new(0, 0)),
+            Err(TFImageError::NoPrimaryCanvas)
+        );
+    }
 }

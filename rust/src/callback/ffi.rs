@@ -317,6 +317,13 @@ pub extern "C" fn Alarm_processOne() -> bool {
     }
 }
 
+/// Milliseconds from now until the earliest live alarm is due.
+///
+/// The value is RELATIVE: 0 when an alarm is already overdue, `u32::MAX` when
+/// none is queued. The original C returned the alarm's absolute tick time
+/// here, which `netInputBlocking` then used as a timeout and `SleepThreadUntil`
+/// compared against the clock; callers in this port (`pacing::sleep_until`,
+/// `netInputBlocking`) all use it as a duration.
 #[no_mangle]
 pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
     let heap = match ALARM_HEAP.get() {
@@ -327,17 +334,18 @@ pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
     let now = now_ms();
     let guard = heap.lock();
 
-    // Find the earliest non-cancelled alarm.
-    for entry in guard.iter() {
-        if cancelled
-            .map(|c| c.lock().contains(&entry.id))
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        return entry.deadline_ms.saturating_sub(now);
-    }
-    u32::MAX
+    // Heap iteration order is storage order, not deadline order, so the
+    // earliest alarm that can still fire has to be found by comparing them.
+    guard
+        .iter()
+        .filter(|entry| {
+            !cancelled
+                .map(|c| c.lock().contains(&entry.id))
+                .unwrap_or(false)
+        })
+        .map(|entry| entry.deadline_ms.saturating_sub(now))
+        .min()
+        .unwrap_or(u32::MAX)
 }
 
 // ===========================================================================
@@ -441,5 +449,307 @@ mod tests {
         // Second round: fires the callback added during the first round.
         Callback_process();
         assert_eq!(CALL_COUNT.load(Ordering::SeqCst), 2);
+    }
+}
+
+#[cfg(test)]
+mod alarm_and_async_tests {
+    use super::*;
+    use serial_test::serial;
+    use std::sync::Mutex as StdMutex;
+
+    /// Argument values of the callbacks that fired, in firing order.
+    static FIRED: StdMutex<Vec<usize>> = StdMutex::new(Vec::new());
+
+    extern "C" fn record(arg: *mut c_void) {
+        FIRED.lock().unwrap().push(arg as usize);
+    }
+
+    /// Queue another callback carrying `arg + 100`, from inside an alarm.
+    extern "C" fn record_and_queue_follow_up(arg: *mut c_void) {
+        FIRED.lock().unwrap().push(arg as usize);
+        Callback_add(record, (arg as usize + 100) as *mut c_void);
+    }
+
+    fn fired() -> Vec<usize> {
+        FIRED.lock().unwrap().clone()
+    }
+
+    /// Start every test from empty queues, whatever ran before it.
+    fn fresh() {
+        FIRED.lock().unwrap().clear();
+        Callback_init();
+        Alarm_init();
+        Callback_uninit();
+        ALARM_HEAP.get().unwrap().lock().clear();
+        ALARM_CANCELLED.get().unwrap().lock().clear();
+        // Alarms use the SDL tick clock; make sure it has moved past the
+        // small deadlines the tests use.
+        while now_ms() < 20 {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    }
+
+    fn id(n: usize) -> *mut c_void {
+        n as *mut c_void
+    }
+
+    const FAR: u32 = 1_000_000;
+
+    #[test]
+    #[serial]
+    fn due_alarms_fire_in_deadline_order_one_per_call() {
+        fresh();
+        Alarm_addAbsoluteMs(3, record, id(3));
+        Alarm_addAbsoluteMs(1, record, id(1));
+        Alarm_addAbsoluteMs(2, record, id(2));
+
+        assert!(Alarm_processOne());
+        assert!(Alarm_processOne());
+        assert!(Alarm_processOne());
+        assert!(!Alarm_processOne(), "nothing is left");
+
+        assert_eq!(fired(), [1, 2, 3]);
+    }
+
+    #[test]
+    #[serial]
+    fn an_alarm_that_is_not_due_stays_queued() {
+        fresh();
+        Alarm_addAbsoluteMs(now_ms() + FAR, record, id(9));
+
+        assert!(!Alarm_processOne());
+
+        assert!(fired().is_empty());
+        let wait = Alarm_timeBeforeNextMs();
+        assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
+    }
+
+    #[test]
+    #[serial]
+    fn a_removed_alarm_never_fires_and_later_ones_still_do() {
+        fresh();
+        let doomed = Alarm_addAbsoluteMs(1, record, id(1));
+        Alarm_addAbsoluteMs(2, record, id(2));
+
+        Alarm_remove(doomed);
+
+        assert!(Alarm_processOne());
+        assert!(!Alarm_processOne());
+        assert_eq!(fired(), [2]);
+    }
+
+    #[test]
+    #[serial]
+    fn removing_a_null_alarm_is_harmless() {
+        fresh();
+        Alarm_addAbsoluteMs(1, record, id(1));
+
+        Alarm_remove(std::ptr::null_mut());
+
+        assert!(Alarm_processOne());
+        assert_eq!(fired(), [1]);
+    }
+
+    #[test]
+    #[serial]
+    fn removing_the_earliest_alarm_does_not_lengthen_the_wait_for_the_next() {
+        fresh();
+        let base = now_ms() + FAR;
+        let earliest = Alarm_addAbsoluteMs(base, record, id(1));
+        Alarm_addAbsoluteMs(base + 300, record, id(2));
+        Alarm_addAbsoluteMs(base + 100, record, id(3));
+
+        Alarm_remove(earliest);
+
+        // The next alarm that can fire is the one at base + 100.
+        let wait = Alarm_timeBeforeNextMs();
+        assert!(
+            wait <= FAR + 100,
+            "waiting {wait} ms would oversleep the alarm due after {} ms",
+            FAR + 100
+        );
+        assert!(wait > FAR - 10_000);
+    }
+
+    #[test]
+    #[serial]
+    fn relative_alarms_are_due_that_many_milliseconds_from_now() {
+        fresh();
+        let handle = Alarm_addRelativeMs(FAR, record, id(5));
+        assert!(!handle.is_null());
+
+        let wait = Alarm_timeBeforeNextMs();
+        assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
+
+        Alarm_remove(handle);
+        assert_eq!(
+            Alarm_timeBeforeNextMs(),
+            u32::MAX,
+            "only a cancelled alarm remained"
+        );
+        assert!(!Alarm_processOne());
+    }
+
+    #[test]
+    #[serial]
+    fn an_overdue_alarm_has_no_wait_left() {
+        fresh();
+        Alarm_addAbsoluteMs(5, record, id(1));
+
+        assert_eq!(Alarm_timeBeforeNextMs(), 0);
+        assert_eq!(Async_timeBeforeNextMs(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn the_wait_is_a_duration_not_a_clock_time() {
+        fresh();
+        let wait = 60_000;
+        Alarm_addAbsoluteMs(now_ms() + wait, record, id(1));
+
+        let measured = Alarm_timeBeforeNextMs();
+
+        assert!(
+            measured <= wait && measured > wait - 5_000,
+            "expected about {wait} ms, got {measured}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn queued_callbacks_report_a_one_millisecond_wait_ahead_of_any_alarm() {
+        fresh();
+        Alarm_addAbsoluteMs(now_ms() + FAR, record, id(1));
+        Callback_add(record, id(2));
+
+        assert_eq!(Async_timeBeforeNextMs(), 1);
+
+        Callback_process();
+        let wait = Async_timeBeforeNextMs();
+        assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
+    }
+
+    #[test]
+    #[serial]
+    fn with_no_alarms_the_wait_is_unbounded() {
+        fresh();
+
+        assert_eq!(Alarm_timeBeforeNextMs(), u32::MAX);
+        assert!(!Alarm_processOne());
+        assert_eq!(Async_timeBeforeNextMs(), u32::MAX);
+    }
+
+    #[test]
+    #[serial]
+    fn uninit_drops_every_pending_alarm() {
+        fresh();
+        Alarm_addAbsoluteMs(1, record, id(1));
+
+        Alarm_uninit();
+
+        assert!(!Alarm_processOne());
+        assert!(fired().is_empty());
+    }
+
+    #[test]
+    #[serial]
+    fn alarm_handles_are_distinct_per_alarm() {
+        fresh();
+        let a = Alarm_addAbsoluteMs(now_ms() + FAR, record, id(1));
+        let b = Alarm_addAbsoluteMs(now_ms() + FAR, record, id(2));
+
+        assert!(!a.is_null() && !b.is_null() && a != b);
+        assert_ne!(unsafe { (*a).id }, unsafe { (*b).id });
+
+        Alarm_remove(a);
+        Alarm_remove(b);
+    }
+
+    #[test]
+    #[serial]
+    fn async_process_runs_callbacks_then_each_due_alarm_with_its_follow_ups() {
+        fresh();
+        Callback_add(record, id(1));
+        Alarm_addAbsoluteMs(1, record_and_queue_follow_up, id(10));
+        Alarm_addAbsoluteMs(2, record_and_queue_follow_up, id(20));
+
+        Async_process();
+
+        // The pending callback first, then each alarm followed by the
+        // callback it queued before the next alarm fires.
+        assert_eq!(fired(), [1, 10, 110, 20, 120]);
+        assert!(!Callback_haveMore());
+        assert!(!Alarm_processOne());
+    }
+
+    #[test]
+    #[serial]
+    fn async_wait_is_one_while_callbacks_are_pending_otherwise_the_next_alarm() {
+        fresh();
+        Alarm_addAbsoluteMs(now_ms() + FAR, record, id(1));
+        let wait = Async_timeBeforeNextMs();
+        assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
+
+        Callback_add(record, id(2));
+        assert_eq!(
+            Async_timeBeforeNextMs(),
+            1,
+            "never 0, which callers reserve"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn removing_an_unknown_callback_reports_failure() {
+        fresh();
+        let queued = Callback_add(record, id(1));
+
+        assert!(!Callback_remove(id(0x10)));
+        assert!(Callback_remove(queued));
+
+        Callback_process();
+        assert!(fired().is_empty());
+    }
+
+    #[test]
+    #[serial]
+    fn callback_uninit_discards_what_was_queued() {
+        fresh();
+        Callback_add(record, id(1));
+        Callback_add(record, id(2));
+        assert!(Callback_haveMore());
+
+        Callback_uninit();
+
+        assert!(!Callback_haveMore());
+        Callback_process();
+        assert!(fired().is_empty());
+    }
+
+    #[test]
+    #[serial]
+    fn a_callback_cancelled_while_processing_is_swept_afterwards() {
+        fresh();
+        static LATE: StdMutex<usize> = StdMutex::new(0);
+        extern "C" fn queue_and_cancel(_arg: *mut c_void) {
+            let late = Callback_add(record, id(7));
+            *LATE.lock().unwrap() = late as usize;
+            assert!(Callback_remove(late));
+        }
+        Callback_add(queue_and_cancel, std::ptr::null_mut());
+
+        Callback_process();
+
+        assert!(fired().is_empty(), "the cancelled callback never ran");
+        assert!(
+            !Callback_haveMore(),
+            "and it is not left behind for the next round"
+        );
+        assert_eq!(
+            CALLBACKS.get().unwrap().lock().queue.len(),
+            0,
+            "the cancelled entry was swept out of the queue"
+        );
     }
 }

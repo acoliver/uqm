@@ -17,6 +17,7 @@
 pub mod authority;
 pub mod bounded_io;
 pub mod cache;
+pub mod controller;
 pub mod delta;
 pub mod doctor;
 pub mod evidence;
@@ -85,6 +86,16 @@ pub fn run_ci(root: &Path, arguments: &[String]) -> Result<(), String> {
         "plan" => {
             reject_extra("ci plan", &arguments[1..])?;
             plan::plan(root).map(|_| ()).map_err(String::from)
+        }
+        "admit-policy" => {
+            if arguments.len() != 4 {
+                return Err("usage: ci admit-policy BASE CANDIDATE OUTPUT".into());
+            }
+            controller::admit_command(
+                Path::new(&arguments[1]),
+                Path::new(&arguments[2]),
+                Path::new(&arguments[3]),
+            )
         }
         "workflow-check" => {
             reject_extra("ci workflow-check", &arguments[1..])?;

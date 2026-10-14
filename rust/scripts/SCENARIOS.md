@@ -1,5 +1,7 @@
 # Runtime automation paths
 
+The native UI suite that runs these scenarios is a local gate on a real Mac window (`native run/validate/report/gallery/replay`). Hosted GitHub runners do not run it.
+
 Automation can either play through normal game state or, for tests that do not
 need navigation coverage, activate a deterministic start scene.
 
@@ -75,6 +77,39 @@ It samples read-only solar-system state and applies player controls on each
 input callback. It succeeds only after the real game enters the target planet's
 inner system. `max_ticks` contributes to script budget validation and the
 script's global watchdog remains the terminal safety bound.
+
+`navigate_to_hyperspace` is the departure counterpart:
+
+```json
+{"action": "navigate_to_hyperspace", "max_ticks": 1800}
+```
+
+It leaves any orbit through the menu, then flies player one directly away
+from the centre of the current view with production thrust/left/right
+controls. Leaving the screen at maximum zoom makes the game's own
+`CheckShipLocation` end interplanetary flight. The step succeeds only after it
+has itself sampled live interplanetary flight and then sees the solar system
+torn down and the hyperspace activity dispatched. It never writes activity or
+position. A fresh profile starts on the main menu with no save, so every
+script that asserts hyperspace (`explore-planet-v1`, `probe-encounter-v1` to
+`v7`, `starbase-visit-v1`, `load-save-v1`) first selects New Game, asserts
+interplanetary activity and flies out with it (#213). `load-save-v1` then
+saves twice through the hyperspace Game menu and loads slot 0 back through
+the same menu, because the Quit confirmation loop bypasses the `DoInput`
+automation service.
+
+## Restart menu readiness and tap semantics
+
+Every script that begins at the restart menu starts with
+`wait_for_main_menu_ready`. The menu ignores input until its first frame is
+initialized, and a fixed tick count raced that startup (#213). A
+`tap_menu_key` is one press: the updates after its first one only hold the
+key, and the production key-repeat pulse for it is discarded, so a slow host
+cannot turn one tap into several.
+
+Scripts with a `start_scene` begin at the restart menu too: the scene activates
+only after New Game is chosen, so they wait for readiness before that first
+Select (#213 amendment 7).
 
 ## Deterministic start scenes
 

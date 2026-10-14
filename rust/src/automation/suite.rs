@@ -304,6 +304,57 @@ mod tests {
             .collect()
     }
 
+    /// Every file under a directory, following subdirectories.
+    fn files_under(root: &std::path::Path) -> Vec<PathBuf> {
+        let mut found = Vec::new();
+        let Ok(entries) = std::fs::read_dir(root) else {
+            return found;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.is_dir() {
+                found.extend(files_under(&path));
+            } else {
+                found.push(path);
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn this_domain_owns_no_native_implementation() {
+        // The autonomous-play domain is Rust from the start rather than a port
+        // of a C provider, so its ownership outcome is a declaration that
+        // nothing native remains. A declaration nobody checks decays, so this
+        // checks it: if a C-family file ever appears under these roots, the
+        // declaration is false and this fails rather than a reviewer having to
+        // notice.
+        const NATIVE: &[&str] = &["c", "h", "m", "mm", "cpp", "cc", "cxx", "hpp", "S", "s"];
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("repository root")
+            .to_path_buf();
+        let roots = [
+            repo.join("rust/src/automation"),
+            repo.join("rust/harness"),
+            repo.join(".github/workflows"),
+        ];
+        for root in roots {
+            assert!(root.is_dir(), "{} is missing", root.display());
+            for file in files_under(&root) {
+                let extension = file
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                assert!(
+                    !NATIVE.contains(&extension),
+                    "{} is a native implementation inside a domain declared free of one",
+                    file.display()
+                );
+            }
+        }
+    }
+
     #[test]
     fn every_domain_is_covered() {
         for domain in Domain::ALL {

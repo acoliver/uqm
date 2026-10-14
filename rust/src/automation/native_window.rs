@@ -267,6 +267,14 @@ impl BoundOutputDirectory {
         }
     }
 
+    /// Replace `name` atomically by rename.
+    ///
+    /// These files are the live handshake between the game and its observer
+    /// on one machine, written once per presentation. Rename makes each whole
+    /// document visible to the other process at once; a flush to stable
+    /// storage adds nothing for a reader on the same host and a full sync per
+    /// presentation was a large share of each frame. The controller syncs the
+    /// final state and acknowledgement once before it hashes them.
     #[cfg(unix)]
     fn publish(&self, name: &std::ffi::OsStr, bytes: &[u8], label: &str) -> Result<(), String> {
         use std::ffi::CString;
@@ -293,11 +301,7 @@ impl BoundOutputDirectory {
             ));
         }
         let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
-        if let Err(error) = file
-            .write_all(bytes)
-            .and_then(|()| file.write_all(b"\n"))
-            .and_then(|()| file.sync_all())
-        {
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
             drop(file);
             unsafe {
                 libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
@@ -320,12 +324,6 @@ impl BoundOutputDirectory {
             }
             return Err(format!("publish native-window {label}: {error}"));
         }
-        if unsafe { libc::fsync(self.directory.as_raw_fd()) } != 0 {
-            return Err(format!(
-                "sync native-window {label} directory: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
         Ok(())
     }
 
@@ -340,11 +338,7 @@ impl BoundOutputDirectory {
             .write(true)
             .open(&temporary)
             .map_err(|error| format!("create native-window {label} temporary: {error}"))?;
-        if let Err(error) = file
-            .write_all(bytes)
-            .and_then(|()| file.write_all(b"\n"))
-            .and_then(|()| file.sync_all())
-        {
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
             drop(file);
             let _ = fs::remove_file(&temporary);
             return Err(format!("write native-window {label}: {error}"));
@@ -416,6 +410,131 @@ impl BoundOutputDirectory {
             return Err(format!("native-window {label} exceeds its byte budget"));
         }
         Ok(bytes)
+    }
+}
+
+/// Ident of the timeout timer on the wake's queue. The vnode watch uses the
+/// directory's file descriptor as its ident, which is never `usize::MAX`.
+#[cfg(target_os = "macos")]
+const TIMER_IDENT: libc::uintptr_t = libc::uintptr_t::MAX;
+
+/// Wakes a waiter when something is published into a [`BoundOutputDirectory`].
+///
+/// Every publish renames a new file over the target, which replaces the file
+/// inode, so the directory is watched rather than either file. The kernel
+/// remembers a change that happened before [`Self::wait`] was called, so a
+/// publish racing the waiter is not lost. A wake only means "look again":
+/// callers still read and validate the files themselves and keep their own
+/// deadlines.
+#[derive(Debug)]
+pub struct DirectoryChangeWake {
+    #[cfg(target_os = "macos")]
+    queue: std::os::fd::OwnedFd,
+    #[cfg(target_os = "macos")]
+    _directory: std::os::fd::OwnedFd,
+}
+
+impl BoundOutputDirectory {
+    /// Watch this directory through the descriptor it is already bound to, so
+    /// replacing the directory path afterwards cannot redirect the watch.
+    pub(crate) fn change_wake(&self) -> Result<DirectoryChangeWake, String> {
+        #[cfg(target_os = "macos")]
+        {
+            self.change_wake_macos()
+                .map_err(|error| format!("create native-window change wake: {error}"))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Ok(DirectoryChangeWake {})
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn change_wake_macos(&self) -> std::io::Result<DirectoryChangeWake> {
+        use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd};
+
+        let here = c".";
+        // SAFETY: the bound descriptor is open and `here` is NUL-terminated.
+        let raw_directory = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                here.as_ptr(),
+                libc::O_RDONLY
+                    | libc::O_DIRECTORY
+                    | libc::O_NOFOLLOW
+                    | libc::O_CLOEXEC
+                    | libc::O_EVTONLY,
+            )
+        };
+        if raw_directory < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: openat returned a new descriptor that nothing else owns.
+        let directory = unsafe { OwnedFd::from_raw_fd(raw_directory) };
+
+        let queue = crate::threading::critical_timer::create_queue()?;
+
+        let registration = libc::kevent {
+            ident: directory.as_raw_fd() as libc::uintptr_t,
+            filter: libc::EVFILT_VNODE,
+            flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
+            fflags: libc::NOTE_WRITE | libc::NOTE_EXTEND,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        // SAFETY: one valid change record, no event list, no timeout.
+        let registered = unsafe {
+            libc::kevent(
+                queue.as_raw_fd(),
+                &registration,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if registered != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(DirectoryChangeWake {
+            queue,
+            _directory: directory,
+        })
+    }
+}
+
+impl DirectoryChangeWake {
+    /// Return when the directory changed or after `timeout`, whichever is
+    /// first. An interrupted wait counts as a wake.
+    pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        #[cfg(target_os = "macos")]
+        {
+            use crate::threading::critical_timer::{timer_change, wait_for_event};
+            use std::os::fd::AsFd as _;
+
+            if timeout.is_zero() {
+                return Ok(());
+            }
+            // The timer rides on the directory's queue so one blocking call
+            // returns on whichever comes first, and it is a critical timer
+            // because a plain timeout is coalesced to ~16 ms steps on hosted
+            // runners. A one-shot timer that outlives a wake won by the
+            // directory is re-armed by the next wait; if it fires first it
+            // can only end a later wait early, and callers re-read and
+            // re-validate after every wake.
+            wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, timeout)])
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::thread::sleep(timeout);
+            Ok(())
+        }
+    }
+}
+
+impl super::child_session::ChangeWait for DirectoryChangeWake {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        DirectoryChangeWake::wait(self, timeout)
     }
 }
 
@@ -520,6 +639,11 @@ impl NativeWindowStateReader {
         })
     }
 
+    /// Wake when the directory holding the state file changes.
+    pub fn change_wake(&self) -> Result<DirectoryChangeWake, String> {
+        self.output_directory.change_wake()
+    }
+
     pub fn read(
         &self,
         expected_nonce: &str,
@@ -553,6 +677,7 @@ pub struct ActiveNativeWindowConfig {
     pub state_path: std::path::PathBuf,
     pub ack_path: std::path::PathBuf,
     output_directory: std::sync::Arc<BoundOutputDirectory>,
+    ack_wake: std::sync::Arc<DirectoryChangeWake>,
     pub runtime_contract: NativeWindowRuntimeContract,
     pub acceptance_policy: NativeAcceptancePolicy,
 }
@@ -560,7 +685,7 @@ pub struct ActiveNativeWindowConfig {
 static ACTIVE_NATIVE_WINDOW_CONFIG: std::sync::OnceLock<ActiveNativeWindowConfig> =
     std::sync::OnceLock::new();
 
-pub const NATIVE_WINDOW_RECEIPT_SCHEMA: &str = "uqm-native-window-proof-v1";
+pub const NATIVE_WINDOW_RECEIPT_SCHEMA: &str = "uqm-native-window-proof-v3";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -619,11 +744,15 @@ pub struct NativeWindowObservation {
 pub enum NativeScreenshotStage {
     Stable,
     Playable,
+    Checkpoint { action_index: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeScreenshot {
+    /// Exact, uncropped OS output. The normalized image below is derived from
+    /// this image using the recorded OS/client bounds and Lanczos3 downsampling.
+    pub original_os_capture: NativeRetainedInput,
     pub stage: NativeScreenshotStage,
     pub binding: NativeWindowBinding,
     pub post_capture_observation: NativeWindowObservation,
@@ -640,6 +769,7 @@ pub struct NativeScreenshot {
 #[serde(deny_unknown_fields)]
 pub struct NativeWindowReceipt {
     pub schema: String,
+    pub checkpoint_plan: Option<super::native_checkpoint::NativeCheckpointPlan>,
     pub acceptance_policy: NativeAcceptancePolicy,
     pub binding: NativeWindowBinding,
     pub first_visible_presentation: u64,
@@ -652,7 +782,7 @@ pub struct NativeWindowReceipt {
     pub passed: bool,
 }
 
-pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v2";
+pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v4";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -838,6 +968,7 @@ pub struct NativeAcceptanceManifest {
     pub trace_sha256: String,
     pub child: NativeChildCleanupReceipt,
     pub window: NativeWindowReceipt,
+    #[serde(with = "super::native_publication_history")]
     pub publications: Vec<NativeWindowPublication>,
     pub passed: bool,
 }
@@ -973,6 +1104,7 @@ impl std::fmt::Display for NativeWindowProofError {
 impl std::error::Error for NativeWindowProofError {}
 
 pub struct NativeWindowProof {
+    checkpoint_plan: Option<super::native_checkpoint::NativeCheckpointPlan>,
     expected_process: NativeProcessIdentity,
     expected_client_bounds: NativeWindowBounds,
     acceptance_policy: NativeAcceptancePolicy,
@@ -994,6 +1126,7 @@ impl NativeWindowProof {
         acceptance_policy: NativeAcceptancePolicy,
     ) -> Self {
         Self {
+            checkpoint_plan: None,
             expected_process,
             expected_client_bounds,
             acceptance_policy,
@@ -1006,6 +1139,25 @@ impl NativeWindowProof {
             observations: Vec::new(),
             screenshots: Vec::new(),
         }
+    }
+
+    /// Bind the controller-derived selected source before any observation.
+    #[must_use]
+    pub fn for_script(mut self, plan: super::native_checkpoint::NativeCheckpointPlan) -> Self {
+        self.checkpoint_plan = Some(plan);
+        self
+    }
+
+    #[must_use]
+    pub fn checkpoint_plan(&self) -> Option<&super::native_checkpoint::NativeCheckpointPlan> {
+        self.checkpoint_plan.as_ref()
+    }
+
+    #[must_use]
+    pub fn requires_linked_floors(&self) -> bool {
+        self.checkpoint_plan
+            .as_ref()
+            .is_none_or(|plan| plan.linked_floors)
     }
 
     #[must_use]
@@ -1120,12 +1272,30 @@ impl NativeWindowProof {
             || screenshot.battle_frames != semantic.verified_battle_frames
             || screenshot.committed_presentation != self.last_presentation.unwrap_or_default()
             || !is_normal_relative_path(&screenshot.relative_path)
+            || !is_normal_relative_path(&screenshot.original_os_capture.relative_path)
+            || screenshot.original_os_capture.relative_path == screenshot.relative_path
+            || screenshot.original_os_capture.byte_length == 0
+            || !is_lower_hex(&screenshot.original_os_capture.sha256, 64)
             || screenshot.byte_length == 0
             || !is_lower_hex(&screenshot.sha256, 64)
         {
             return Err(NativeWindowProofError::ScreenshotIdentity);
         }
         let stage_is_valid = match screenshot.stage {
+            NativeScreenshotStage::Checkpoint { action_index } => {
+                self.checkpoint_plan.as_ref().is_some_and(|plan| {
+                    let count = self
+                        .screenshots
+                        .iter()
+                        .filter(|shot| {
+                            matches!(shot.stage, NativeScreenshotStage::Checkpoint { .. })
+                        })
+                        .count();
+                    plan.checkpoints
+                        .get(count)
+                        .is_some_and(|item| item.action_index == action_index)
+                })
+            }
             NativeScreenshotStage::Stable => {
                 self.stable_presentations == self.acceptance_policy.stable_presentation_floor
                     && !self
@@ -1168,11 +1338,35 @@ impl NativeWindowProof {
         {
             return Err(NativeWindowProofError::ScreenshotStage);
         }
+        if let NativeScreenshotStage::Checkpoint { action_index } = screenshot.stage {
+            let plan = self
+                .checkpoint_plan
+                .as_ref()
+                .ok_or(NativeWindowProofError::Receipt)?;
+            if let Some(previous) = plan
+                .previous_capture_for_change(action_index)
+                .map_err(|_| NativeWindowProofError::ScreenshotStage)?
+            {
+                let prior = self
+                    .screenshots
+                    .iter()
+                    .find(|shot| {
+                        shot.stage
+                            == (NativeScreenshotStage::Checkpoint {
+                                action_index: previous,
+                            })
+                    })
+                    .ok_or(NativeWindowProofError::ScreenshotStage)?;
+                if prior.sha256 == screenshot.sha256 {
+                    return Err(NativeWindowProofError::ScreenshotStage);
+                }
+            }
+        }
         self.screenshots.push(screenshot);
         Ok(())
     }
 
-    pub fn finish(self) -> Result<NativeWindowReceipt, NativeWindowProofError> {
+    fn validate_linked_floors(&self) -> Result<(), NativeWindowProofError> {
         if self.stable_presentations < self.acceptance_policy.stable_presentation_floor {
             return Err(NativeWindowProofError::StableFloor);
         }
@@ -1193,11 +1387,44 @@ impl NativeWindowProof {
                 return Err(NativeWindowProofError::ScreenshotStage);
             }
         }
-        if self.screenshots.len() != 2 || self.screenshots[0].sha256 == self.screenshots[1].sha256 {
+        let floors: Vec<_> = self
+            .screenshots
+            .iter()
+            .filter(|shot| !matches!(shot.stage, NativeScreenshotStage::Checkpoint { .. }))
+            .collect();
+        if floors.len() != 2 || floors[0].sha256 == floors[1].sha256 {
             return Err(NativeWindowProofError::ScreenshotStage);
+        }
+        Ok(())
+    }
+
+    pub fn finish(self) -> Result<NativeWindowReceipt, NativeWindowProofError> {
+        if self.requires_linked_floors() {
+            self.validate_linked_floors()?;
+        }
+        if let Some(plan) = &self.checkpoint_plan {
+            let captured: Vec<_> = self
+                .screenshots
+                .iter()
+                .filter_map(|shot| match shot.stage {
+                    NativeScreenshotStage::Checkpoint { action_index } => Some(action_index),
+                    _ => None,
+                })
+                .collect();
+            if captured
+                != plan
+                    .checkpoints
+                    .iter()
+                    .map(|item| item.action_index)
+                    .collect::<Vec<_>>()
+                || captured.is_empty()
+            {
+                return Err(NativeWindowProofError::ScreenshotStage);
+            }
         }
         Ok(NativeWindowReceipt {
             schema: NATIVE_WINDOW_RECEIPT_SCHEMA.to_string(),
+            checkpoint_plan: self.checkpoint_plan,
             acceptance_policy: self.acceptance_policy,
             binding: self.binding.ok_or(NativeWindowProofError::NotVisible)?,
             first_visible_presentation: self
@@ -1265,8 +1492,34 @@ fn valid_bound_command_path(value: &str) -> bool {
                 .all(|component| matches!(component, Component::CurDir | Component::Normal(_))))
 }
 
-#[cfg(unix)]
 fn read_relative_regular_nofollow_bounded(
+    root: &Path,
+    relative: &Path,
+    limit: u64,
+) -> std::io::Result<Vec<u8>> {
+    #[cfg(unix)]
+    if relative.starts_with("inputs") {
+        if let Some(shared) = super::native_artifacts::SharedInputs::open(root, 1024 * 1024)
+            .map_err(std::io::Error::other)?
+        {
+            let name = relative
+                .to_str()
+                .ok_or_else(|| std::io::Error::other("input is not UTF-8"))?;
+            if let Some(member) = shared.members.get(name) {
+                if member.byte_length > limit {
+                    return Err(std::io::Error::other("shared member exceeds read bound"));
+                }
+                return shared
+                    .read(root, name, limit)
+                    .map_err(std::io::Error::other);
+            }
+        }
+    }
+    read_physical_relative_regular_nofollow_bounded(root, relative, limit)
+}
+
+#[cfg(unix)]
+fn read_physical_relative_regular_nofollow_bounded(
     root: &Path,
     relative: &Path,
     limit: u64,
@@ -1349,7 +1602,7 @@ fn read_relative_regular_nofollow_bounded(
 }
 
 #[cfg(not(unix))]
-fn read_relative_regular_nofollow_bounded(
+fn read_physical_relative_regular_nofollow_bounded(
     root: &Path,
     relative: &Path,
     limit: u64,
@@ -1476,11 +1729,13 @@ pub fn capture_native_window(
     }
     let bytes = read_regular_nofollow_bounded(path, contract.capture_budget_bytes)
         .map_err(|error| NativeWindowObserverError::Os(format!("read screenshot: {error}")))?;
-    decode_png_bounded(&bytes, contract.capture_budget_bytes)
+    decode_png_bounded(&bytes, contract.capture_budget_bytes).map(|_| ())
 }
 
-#[cfg(any(target_os = "macos", test))]
-fn decode_png_bounded(bytes: &[u8], budget: u64) -> Result<(), NativeWindowObserverError> {
+pub(crate) fn decode_png_bounded(
+    bytes: &[u8],
+    budget: u64,
+) -> Result<image::DynamicImage, NativeWindowObserverError> {
     if budget == 0 || bytes.len() as u64 > budget {
         return Err(NativeWindowObserverError::OutputLimit {
             stream: "screenshot".to_string(),
@@ -1520,7 +1775,7 @@ fn decode_png_bounded(bytes: &[u8], budget: u64) -> Result<(), NativeWindowObser
             "screenshot dimensions changed during decoding".to_string(),
         ));
     }
-    Ok(())
+    Ok(decoded)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1729,6 +1984,7 @@ pub fn activate_native_window_proof(config_path: &Path, output_root: &Path) -> R
         return Err("native-window config violates its schema contract".to_string());
     }
     let output_directory = std::sync::Arc::new(BoundOutputDirectory::open(output_root)?);
+    let ack_wake = std::sync::Arc::new(output_directory.change_wake()?);
     ACTIVE_NATIVE_WINDOW_CONFIG
         .set(ActiveNativeWindowConfig {
             nonce: config.nonce,
@@ -1736,6 +1992,7 @@ pub fn activate_native_window_proof(config_path: &Path, output_root: &Path) -> R
             state_path: output_root.join("native-window-state.json"),
             ack_path: output_root.join("native-window-ack.json"),
             output_directory,
+            ack_wake,
             runtime_contract: config.runtime_contract,
             acceptance_policy: config.acceptance_policy,
         })
@@ -1818,6 +2075,7 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     )?;
     wait_for_native_window_ack(
         &config.output_directory,
+        &*config.ack_wake,
         &config.nonce,
         state.committed_presentation,
         config.runtime_contract.acknowledgement_timeout(),
@@ -1825,8 +2083,13 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     )
 }
 
+/// How long the game waits for a wake before it reads the acknowledgement
+/// again; a change the wake missed costs at most this long.
+const ACK_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_micros(200);
+
 fn wait_for_native_window_ack(
     output_directory: &BoundOutputDirectory,
+    wake: &impl super::child_session::ChangeWait,
     nonce: &str,
     committed_presentation: u64,
     timeout: std::time::Duration,
@@ -1855,7 +2118,10 @@ fn wait_for_native_window_ack(
                 "native-window state presentation {committed_presentation} was not acknowledged"
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        wake.wait(
+            ACK_POLL_INTERVAL.min(deadline.saturating_duration_since(std::time::Instant::now())),
+        )
+        .map_err(|error| format!("wait for native-window acknowledgement: {error}"))?;
     }
 }
 
@@ -1912,6 +2178,9 @@ pub fn validate_native_window_receipt(
         receipt.binding.client_bounds,
         receipt.acceptance_policy,
     );
+    if let Some(plan) = &receipt.checkpoint_plan {
+        proof = proof.for_script(plan.clone());
+    }
     let mut recorded_screenshots = 0;
     for observation in &receipt.observations {
         proof.observe_visible(observation.clone())?;
@@ -1945,7 +2214,6 @@ pub fn validate_native_window_bundle(
     if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
         return Err(NativeWindowProofError::Receipt);
     }
-    let mut first_capture: Option<(u32, u32, Vec<u8>)> = None;
     for screenshot in &receipt.screenshots {
         let relative = Path::new(&screenshot.relative_path);
         let mut current = root.to_path_buf();
@@ -1991,26 +2259,86 @@ pub fn validate_native_window_bundle(
         {
             return Err(NativeWindowProofError::ScreenshotIdentity);
         }
-        let decoded = image::DynamicImage::from_decoder(decoder)
+        image::DynamicImage::from_decoder(decoder)
             .map_err(|_| NativeWindowProofError::ScreenshotIdentity)?;
-        let normalized = decoded.to_rgba8();
-        if let Some((width, height, pixels)) = &first_capture {
-            if *width != normalized.width()
-                || *height != normalized.height()
-                || pixels.as_slice() == normalized.as_raw()
-            {
-                return Err(NativeWindowProofError::ScreenshotStage);
-            }
-        } else {
-            first_capture = Some((
-                normalized.width(),
-                normalized.height(),
-                normalized.into_raw(),
-            ));
+        validate_script_capture_change(
+            root,
+            receipt,
+            screenshot,
+            &bytes,
+            inventory_limits.member_bytes,
+        )?;
+    }
+    for screenshot in &receipt.screenshots {
+        let raw = validate_retained_input(
+            root,
+            &screenshot.original_os_capture,
+            inventory_limits.member_bytes,
+        )
+        .map_err(|_| NativeWindowProofError::ScreenshotIdentity)?;
+        let derived = super::native_capture::normalize_native_capture(
+            &raw,
+            screenshot.binding.os_bounds,
+            screenshot.binding.client_bounds,
+            inventory_limits.member_bytes,
+        )
+        .map_err(|_| NativeWindowProofError::ScreenshotIdentity)?;
+        if derived.len() as u64 != screenshot.byte_length
+            || format!("{:x}", Sha256::digest(&derived)) != screenshot.sha256
+        {
+            return Err(NativeWindowProofError::ScreenshotIdentity);
         }
     }
     Ok(())
 }
+fn validate_script_capture_change(
+    root: &Path,
+    receipt: &NativeWindowReceipt,
+    screenshot: &NativeScreenshot,
+    bytes: &[u8],
+    limit: u64,
+) -> Result<(), NativeWindowProofError> {
+    let previous_stage = match screenshot.stage {
+        NativeScreenshotStage::Stable => return Ok(()),
+        NativeScreenshotStage::Playable => NativeScreenshotStage::Stable,
+        NativeScreenshotStage::Checkpoint { action_index } => {
+            let plan = receipt
+                .checkpoint_plan
+                .as_ref()
+                .ok_or(NativeWindowProofError::Receipt)?;
+            let Some(previous) = plan
+                .previous_capture_for_change(action_index)
+                .map_err(|_| NativeWindowProofError::Receipt)?
+            else {
+                return Ok(());
+            };
+            NativeScreenshotStage::Checkpoint {
+                action_index: previous,
+            }
+        }
+    };
+    let previous = receipt
+        .screenshots
+        .iter()
+        .find(|shot| shot.stage == previous_stage)
+        .ok_or(NativeWindowProofError::ScreenshotStage)?;
+    let previous = validate_retained_input(
+        root,
+        &NativeRetainedInput {
+            relative_path: previous.relative_path.clone(),
+            byte_length: previous.byte_length,
+            sha256: previous.sha256.clone(),
+        },
+        limit,
+    )?;
+    if screenshot.stage == NativeScreenshotStage::Playable {
+        super::native_capture::validate_playable_screenshot_difference(&previous, bytes)
+    } else {
+        super::native_capture_change::validate_change(&previous, bytes, limit)
+    }
+    .map_err(|_| NativeWindowProofError::ScreenshotStage)
+}
+
 struct NativeInventoryBudget {
     limits: NativeInventoryLimits,
     entries: u32,
@@ -2103,6 +2431,23 @@ fn digest_exact_bounded<R: std::io::Read>(
     Ok(format!("{:x}", digest.finalize()))
 }
 
+/// Inventory every physical member, including names used by acceptance envelopes.
+pub(super) fn native_artifact_inventory(
+    root: &Path,
+    limits: NativeInventoryLimits,
+) -> Result<Vec<NativeRetainedInput>, NativeWindowProofError> {
+    let mut files = Vec::new();
+    collect_inventory(
+        root,
+        "",
+        "",
+        &mut files,
+        &mut NativeInventoryBudget::new(limits)?,
+    )?;
+    files.sort();
+    Ok(files)
+}
+
 pub fn native_acceptance_inventory(
     root: &Path,
     limits: NativeInventoryLimits,
@@ -2136,6 +2481,29 @@ fn native_acceptance_inventory_excluding(
         &mut files,
         &mut budget,
     )?;
+    #[cfg(unix)]
+    if let Some(shared) = super::native_artifacts::SharedInputs::open(root, 1024 * 1024)
+        .map_err(|_| NativeWindowProofError::Receipt)?
+    {
+        for member in shared.inventory() {
+            if let Some(physical) = files
+                .iter()
+                .find(|file| file.relative_path == member.relative_path)
+            {
+                if physical != &member {
+                    return Err(NativeWindowProofError::Receipt);
+                }
+            } else {
+                budget.admit_name(member.relative_path.len())?;
+                budget.admit_path(member.relative_path.len())?;
+                budget.admit_file(member.byte_length)?;
+                shared
+                    .read(root, &member.relative_path, limits.member_bytes)
+                    .map_err(|_| NativeWindowProofError::Receipt)?;
+                files.push(member);
+            }
+        }
+    }
     files.sort();
     Ok(files)
 }
@@ -2389,20 +2757,23 @@ fn validate_retained_input(
         return Err(NativeWindowProofError::Receipt);
     }
     let relative = Path::new(&input.relative_path);
-    let mut current = root.to_path_buf();
-    let component_count = relative.components().count();
-    for (position, component) in relative.components().enumerate() {
-        let Component::Normal(name) = component else {
-            return Err(NativeWindowProofError::Receipt);
-        };
-        current.push(name);
-        let metadata =
-            fs::symlink_metadata(&current).map_err(|_| NativeWindowProofError::Receipt)?;
-        if metadata.file_type().is_symlink()
-            || (position + 1 == component_count && !metadata.is_file())
-            || (position + 1 < component_count && !metadata.is_dir())
-        {
-            return Err(NativeWindowProofError::Receipt);
+    #[cfg(not(unix))]
+    {
+        let mut current = root.to_path_buf();
+        let component_count = relative.components().count();
+        for (position, component) in relative.components().enumerate() {
+            let Component::Normal(name) = component else {
+                return Err(NativeWindowProofError::Receipt);
+            };
+            current.push(name);
+            let metadata =
+                fs::symlink_metadata(&current).map_err(|_| NativeWindowProofError::Receipt)?;
+            if metadata.file_type().is_symlink()
+                || (position + 1 == component_count && !metadata.is_file())
+                || (position + 1 < component_count && !metadata.is_dir())
+            {
+                return Err(NativeWindowProofError::Receipt);
+            }
         }
     }
     let bytes = read_relative_regular_nofollow_bounded(root, relative, input.byte_length)
@@ -2569,7 +2940,7 @@ fn validate_native_acceptance_failure_provenance(
         || Path::new(command_paths[1]) != recorded_root.join("config")
         || Path::new(command_paths[2]) != recorded_root.join(content_parent)
         || Path::new(command_paths[3]) != recorded_root.join(&manifest.script.relative_path)
-        || Path::new(command_paths[4]) != recorded_root.join("automation")
+        || Path::new(command_paths[4]) != recorded_root.join("runtime-automation")
         || Path::new(command_paths[5]) != recorded_root.join("native-window-proof.json")
     {
         return Err(NativeWindowProofError::Receipt);
@@ -2580,40 +2951,130 @@ fn validate_native_acceptance_failure_provenance(
 pub fn native_window_trace_semantic_snapshot(
     records: &[crate::automation::trace::TraceRecord],
 ) -> Result<NativeWindowSemanticSnapshot, NativeWindowProofError> {
-    let mut accepted_player_inputs = 0_u64;
-    let mut verified_battle_frames = 0_u64;
-    let mut index = 0;
-    while let Some(record) = records.get(index) {
-        let Some(label) = record.label.as_deref() else {
-            index += 1;
-            continue;
+    SemanticScan::default().finish(records)
+}
+
+/// Resumable form of [`native_window_trace_semantic_snapshot`].
+///
+/// A snapshot depends only on the records it has already passed, apart from one
+/// record of lookahead that pairs each observed player input with its accepted
+/// input. The scan therefore keeps its position and counters between calls on a
+/// growing trace instead of replaying every earlier record.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SemanticScan {
+    index: usize,
+    accepted_player_inputs: u64,
+    verified_battle_frames: u64,
+    /// Records examined over the scan's lifetime, kept across restarts.
+    #[cfg(test)]
+    visits: u64,
+}
+
+impl SemanticScan {
+    /// Forget all progress, for a trace whose earlier records changed or a
+    /// shorter prefix than the one already scanned.
+    pub(crate) fn restart(&mut self) {
+        *self = Self {
+            #[cfg(test)]
+            visits: self.visits,
+            ..Self::default()
         };
-        if label.starts_with("player_input_observed:") {
-            let observed = parse_player_input_observed(record, label)?;
-            let accepted = records
-                .get(index + 1)
-                .ok_or(NativeWindowProofError::Receipt)?;
-            let accepted_label = accepted
-                .label
-                .as_deref()
-                .ok_or(NativeWindowProofError::Receipt)?;
-            let (accepted_key, accepted_value) = parse_player_input(accepted, accepted_label)?;
-            if observed.0 != accepted_key
-                || observed.1 != accepted_value
-                || observed.1 != observed.2
-                || (observed.1 == 0 && observed.3 != 0)
-            {
-                return Err(NativeWindowProofError::Receipt);
-            }
-            accepted_player_inputs = accepted_player_inputs
-                .checked_add(u64::from(observed.3))
-                .ok_or(NativeWindowProofError::Receipt)?;
-            index += 2;
-            continue;
-        }
-        if label.starts_with("player_input") {
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn visits(&self) -> u64 {
+        self.visits
+    }
+
+    /// Scan every record of `records`, the whole current prefix, and return
+    /// its snapshot. An observed input at the end, still waiting for its
+    /// accepted input, is a receipt error exactly as in a one-shot scan.
+    pub(crate) fn finish(
+        &mut self,
+        records: &[crate::automation::trace::TraceRecord],
+    ) -> Result<NativeWindowSemanticSnapshot, NativeWindowProofError> {
+        if !self.advance(records)? {
             return Err(NativeWindowProofError::Receipt);
         }
+        Ok(NativeWindowSemanticSnapshot {
+            trace_record_count: records
+                .len()
+                .try_into()
+                .map_err(|_| NativeWindowProofError::Receipt)?,
+            accepted_player_inputs: self.accepted_player_inputs,
+            verified_battle_frames: self.verified_battle_frames,
+        })
+    }
+
+    /// Scan forward through `records`. Returns false when the last record is an
+    /// observed input whose accepted input is not in `records` yet; the scan
+    /// then stays on that record so a longer prefix resumes there.
+    pub(crate) fn advance(
+        &mut self,
+        records: &[crate::automation::trace::TraceRecord],
+    ) -> Result<bool, NativeWindowProofError> {
+        if self.index > records.len() {
+            self.restart();
+        }
+        while let Some(record) = records.get(self.index) {
+            #[cfg(test)]
+            {
+                self.visits += 1;
+            }
+            let Some(label) = record.label.as_deref() else {
+                self.index += 1;
+                continue;
+            };
+            if label.starts_with("player_input_observed:") {
+                let Some(accepted) = records.get(self.index + 1) else {
+                    // Fail on a malformed observed record before waiting.
+                    parse_player_input_observed(record, label)?;
+                    return Ok(false);
+                };
+                self.accept_observed_input(record, label, accepted)?;
+                self.index += 2;
+                continue;
+            }
+            if label.starts_with("player_input") {
+                return Err(NativeWindowProofError::Receipt);
+            }
+            self.count_battle_frames(record, label)?;
+            self.index += 1;
+        }
+        Ok(true)
+    }
+
+    fn accept_observed_input(
+        &mut self,
+        record: &crate::automation::trace::TraceRecord,
+        label: &str,
+        accepted: &crate::automation::trace::TraceRecord,
+    ) -> Result<(), NativeWindowProofError> {
+        let observed = parse_player_input_observed(record, label)?;
+        let accepted_label = accepted
+            .label
+            .as_deref()
+            .ok_or(NativeWindowProofError::Receipt)?;
+        let (accepted_key, accepted_value) = parse_player_input(accepted, accepted_label)?;
+        if observed.0 != accepted_key
+            || observed.1 != accepted_value
+            || observed.1 != observed.2
+            || (observed.1 == 0 && observed.3 != 0)
+        {
+            return Err(NativeWindowProofError::Receipt);
+        }
+        self.accepted_player_inputs = self
+            .accepted_player_inputs
+            .checked_add(u64::from(observed.3))
+            .ok_or(NativeWindowProofError::Receipt)?;
+        Ok(())
+    }
+
+    fn count_battle_frames(
+        &mut self,
+        record: &crate::automation::trace::TraceRecord,
+        label: &str,
+    ) -> Result<(), NativeWindowProofError> {
         if label.starts_with("battle_frames_reached:") {
             let values = label
                 .strip_prefix("battle_frames_reached:count=")
@@ -2635,7 +3096,7 @@ pub fn native_window_trace_semantic_snapshot(
             {
                 return Err(NativeWindowProofError::Receipt);
             }
-            verified_battle_frames = verified_battle_frames.max(actual);
+            self.verified_battle_frames = self.verified_battle_frames.max(actual);
         }
         if label.starts_with("battle_frames_verified:") {
             let value = label
@@ -2649,18 +3110,10 @@ pub fn native_window_trace_semantic_snapshot(
             {
                 return Err(NativeWindowProofError::Receipt);
             }
-            verified_battle_frames = verified_battle_frames.max(parsed);
+            self.verified_battle_frames = self.verified_battle_frames.max(parsed);
         }
-        index += 1;
+        Ok(())
     }
-    Ok(NativeWindowSemanticSnapshot {
-        trace_record_count: records
-            .len()
-            .try_into()
-            .map_err(|_| NativeWindowProofError::Receipt)?,
-        accepted_player_inputs,
-        verified_battle_frames,
-    })
 }
 
 fn parse_player_input_observed<'a>(
@@ -2745,7 +3198,7 @@ pub fn validate_native_acceptance_setup_failure_bundle(
     if retained != manifest.retained_files {
         return Err(NativeWindowProofError::Receipt);
     }
-    Ok(())
+    validate_config_snapshots(root, manifest.runtime_contract.inventory_limits, false)
 }
 
 pub fn validate_native_acceptance_failure_bundle(
@@ -2795,13 +3248,73 @@ pub fn validate_native_acceptance_failure_bundle(
     {
         return Err(NativeWindowProofError::Receipt);
     }
+    validate_config_snapshots(root, manifest.runtime_contract.inventory_limits, false)?;
+    if manifest.child.config_root_removed
+        && !matches!(root.join("config").symlink_metadata(), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+    {
+        return Err(NativeWindowProofError::Receipt);
+    }
     validate_native_acceptance_failure_provenance(root, manifest)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeConfigSnapshot {
+    schema: String,
+    files: Vec<NativeRetainedInput>,
+}
+
+fn validate_config_snapshots(
+    root: &Path,
+    limits: NativeInventoryLimits,
+    required: bool,
+) -> Result<(), NativeWindowProofError> {
+    let read = |name: &str| -> Result<Option<NativeConfigSnapshot>, NativeWindowProofError> {
+        match read_relative_regular_nofollow_bounded(root, Path::new(name), 1024 * 1024) {
+            Ok(bytes) => serde_json::from_slice(&bytes)
+                .map(Some)
+                .map_err(|_| NativeWindowProofError::Receipt),
+            Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(NativeWindowProofError::Receipt),
+        }
+    };
+    if let Some(initial) = read("config-initial.json")? {
+        if initial.schema != "uqm-native-initial-config-v1" || !initial.files.is_empty() {
+            return Err(NativeWindowProofError::Receipt);
+        }
+    }
+    if let Some(final_config) = read("config-final.json")? {
+        let files = match root.join("config-final").symlink_metadata() {
+            Ok(_) => native_artifact_inventory(&root.join("config-final"), limits)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(_) => return Err(NativeWindowProofError::Receipt),
+        };
+        if final_config.schema != "uqm-native-final-config-v1" || final_config.files != files {
+            return Err(NativeWindowProofError::Receipt);
+        }
+    }
+    Ok(())
+}
+
+fn validate_config_lifecycle(
+    root: &Path,
+    limits: NativeInventoryLimits,
+) -> Result<(), NativeWindowProofError> {
+    validate_config_snapshots(root, limits, true)?;
+    for name in ["config", "runtime-automation"] {
+        if !matches!(root.join(name).symlink_metadata(), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+        {
+            return Err(NativeWindowProofError::Receipt);
+        }
+    }
+    Ok(())
 }
 
 fn recording_inventory_consistency(
     root: &Path,
     manifest: &NativeAcceptanceManifest,
 ) -> Result<Vec<u8>, NativeWindowProofError> {
+    validate_config_lifecycle(root, manifest.runtime_contract.inventory_limits)?;
     let maximum_byte_length = manifest.runtime_contract.inventory_limits.member_bytes;
     let executable = validate_retained_input(root, &manifest.executable, maximum_byte_length)?;
     let retained_files =
@@ -2824,8 +3337,17 @@ fn recording_inventory_consistency(
     validate_retained_input(root, &manifest.content_package, maximum_byte_length)?;
     let document = crate::automation::script::parse_script(&script, &manifest.script.relative_path)
         .map_err(|_| NativeWindowProofError::Receipt)?;
-    crate::automation::script::validate_script(document, &manifest.script.relative_path)
-        .map_err(|_| NativeWindowProofError::Receipt)?;
+    let script =
+        crate::automation::script::validate_script(document, &manifest.script.relative_path)
+            .map_err(|_| NativeWindowProofError::Receipt)?;
+    let plan = super::native_checkpoint::NativeCheckpointPlan::derive(
+        &validate_retained_input(root, &manifest.script, maximum_byte_length)?,
+        &script,
+    )
+    .map_err(|_| NativeWindowProofError::Receipt)?;
+    if manifest.window.checkpoint_plan.as_ref() != Some(&plan) {
+        return Err(NativeWindowProofError::Receipt);
+    }
     Ok(executable)
 }
 
@@ -2870,7 +3392,7 @@ fn recorded_provenance_consistency(
         || Path::new(command_paths[1]) != recorded_root.join("config")
         || Path::new(command_paths[2]) != recorded_root.join(content_parent)
         || Path::new(command_paths[3]) != recorded_root.join(&manifest.script.relative_path)
-        || Path::new(command_paths[4]) != recorded_root.join("automation")
+        || Path::new(command_paths[4]) != recorded_root.join("runtime-automation")
         || Path::new(command_paths[5]) != recorded_root.join("native-window-proof.json")
     {
         return Err(NativeWindowProofError::Receipt);
@@ -2974,6 +3496,14 @@ fn publication_observation_correlation(
         {
             return Err(NativeWindowProofError::Receipt);
         }
+    }
+    if manifest
+        .window
+        .checkpoint_plan
+        .as_ref()
+        .is_some_and(|plan| !plan.linked_floors)
+    {
+        return Ok(());
     }
     let playable = manifest
         .window
@@ -3162,9 +3692,17 @@ fn validate_recorded_semantics(
             return Err(NativeWindowProofError::Receipt);
         }
     }
+    super::native_checkpoint::validate_correlations(manifest, records)
+        .map_err(|_| NativeWindowProofError::Receipt)?;
     let final_semantic = native_window_trace_semantic_snapshot(records)?;
-    if final_semantic.accepted_player_inputs != manifest.window.input_events
-        || final_semantic.verified_battle_frames != manifest.window.battle_frames
+    let final_publication = manifest
+        .publications
+        .last()
+        .ok_or(NativeWindowProofError::Receipt)?;
+    if final_semantic.accepted_player_inputs
+        != final_publication.state.semantic.accepted_player_inputs
+        || final_semantic.verified_battle_frames
+            != final_publication.state.semantic.verified_battle_frames
     {
         return Err(NativeWindowProofError::Receipt);
     }
@@ -3577,6 +4115,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn general_checkpoint_proof_does_not_inherit_battle_floors_and_requires_every_action() {
+        let bytes = include_bytes!("../../scripts/main-menu-v1.json");
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(bytes, "menu.json").unwrap(),
+            "menu.json",
+        )
+        .unwrap();
+        let plan =
+            super::super::native_checkpoint::NativeCheckpointPlan::derive(bytes, &script).unwrap();
+        let mut proof =
+            NativeWindowProof::new(process(), bounds(), policy()).for_script(plan.clone());
+        for (index, checkpoint) in plan.checkpoints.iter().enumerate() {
+            let mut observed = observation(index as u64 + 1);
+            observed.semantic = NativeWindowSemanticSnapshot {
+                trace_record_count: index as u64 + 1,
+                accepted_player_inputs: 0,
+                verified_battle_frames: 0,
+            };
+            proof.observe_visible(observed.clone()).unwrap();
+            let stage = NativeScreenshotStage::Checkpoint {
+                action_index: checkpoint.action_index,
+            };
+            let mut shot = screenshot(stage, index as u64 + 1);
+            shot.post_capture_observation = observed.clone();
+            shot.input_events = 0;
+            shot.battle_frames = 0;
+            shot.trace_record_count = observed.semantic.trace_record_count;
+            shot.sha256 = format!("{:x}", Sha256::digest(index.to_le_bytes()));
+            shot.relative_path = format!("screenshots/checkpoint-{index}.png");
+            shot.original_os_capture.relative_path =
+                format!("screenshots/checkpoint-{index}.os.png");
+            proof.record_screenshot(shot.clone()).unwrap();
+            assert!(proof.record_screenshot(shot).is_err());
+        }
+        let receipt = proof.finish().unwrap();
+        assert_eq!(receipt.battle_frames, 0);
+        validate_native_window_receipt(&receipt).unwrap();
+        let mut missing = receipt.clone();
+        missing.screenshots.pop();
+        assert!(validate_native_window_receipt(&missing).is_err());
+        let mut switched = receipt.clone();
+        switched.checkpoint_plan.as_mut().unwrap().linked_floors = true;
+        assert!(validate_native_window_receipt(&switched).is_err());
+    }
+
+    #[test]
     fn process_start_identity_is_normalized_positive_decimal() {
         for valid in ["1", "1234", "18446744073709551616"] {
             assert!(normalized_positive_process_start(valid));
@@ -3773,7 +4357,7 @@ mod tests {
         let input_events = u64::from(stage == NativeScreenshotStage::Playable);
         let trace_record_count = match stage {
             NativeScreenshotStage::Stable => 1,
-            NativeScreenshotStage::Playable => 5,
+            NativeScreenshotStage::Playable | NativeScreenshotStage::Checkpoint { .. } => 5,
         };
         let battle_frames = if stage == NativeScreenshotStage::Playable {
             policy().battle_frame_floor
@@ -3787,6 +4371,11 @@ mod tests {
             battle_frames,
         );
         NativeScreenshot {
+            original_os_capture: NativeRetainedInput {
+                relative_path: format!("screenshots/{presentation}.os.png"),
+                byte_length: 128,
+                sha256: "a".repeat(64),
+            },
             stage,
             binding: post_capture_observation.binding.clone(),
             post_capture_observation,
@@ -3798,7 +4387,9 @@ mod tests {
             byte_length: 128,
             sha256: match stage {
                 NativeScreenshotStage::Stable => "c".repeat(64),
-                NativeScreenshotStage::Playable => "d".repeat(64),
+                NativeScreenshotStage::Playable | NativeScreenshotStage::Checkpoint { .. } => {
+                    "d".repeat(64)
+                }
             },
         }
     }
@@ -3903,10 +4494,49 @@ mod tests {
             "--configdir=./config".to_string(),
             "--contentdir=./inputs/content".to_string(),
             "--automation-script=./inputs/linked-playable-v1.json".to_string(),
-            "--automation-output=./automation".to_string(),
+            "--automation-output=./runtime-automation".to_string(),
             "--native-window-proof=./native-window-proof.json".to_string(),
         ];
         descriptor_bound
+    }
+
+    #[test]
+    fn native_bundle_requires_original_os_capture_and_reproducible_crop() {
+        let (root, receipt, _) = playable_acceptance_fixture();
+        let raw = root.path().join("screenshots/120.os.png");
+        let original = fs::read(&raw).expect("retain the original full-window OS image");
+        fs::remove_file(&raw).unwrap();
+        assert!(validate_native_window_bundle(
+            root.path(),
+            &receipt,
+            runtime_contract().inventory_limits
+        )
+        .is_err());
+        fs::write(&raw, b"different OS capture").unwrap();
+        assert!(validate_native_window_bundle(
+            root.path(),
+            &receipt,
+            runtime_contract().inventory_limits
+        )
+        .is_err());
+        let other = fs::read(root.path().join("screenshots/300.os.png")).unwrap();
+        fs::write(&raw, &other).unwrap();
+        let mut forged = receipt.clone();
+        forged.screenshots[0].original_os_capture.byte_length = other.len() as u64;
+        forged.screenshots[0].original_os_capture.sha256 = format!("{:x}", Sha256::digest(&other));
+        assert!(validate_native_window_bundle(
+            root.path(),
+            &forged,
+            runtime_contract().inventory_limits
+        )
+        .is_err());
+        fs::write(&raw, original).unwrap();
+        assert!(validate_native_window_bundle(
+            root.path(),
+            &receipt,
+            runtime_contract().inventory_limits
+        )
+        .is_ok());
     }
 
     /// Read the retained linked-build receipt as bytes and parsed JSON.
@@ -3918,6 +4548,17 @@ mod tests {
     }
 
     /// Build the accepted playable bundle used by the acceptance-validation tests.
+    #[test]
+    fn native_final_config_receipt_cannot_disagree_with_rehashed_inventory() {
+        let (root, _, mut manifest) = playable_acceptance_fixture();
+        validate_native_acceptance_bundle(root.path(), &manifest).unwrap();
+        fs::write(root.path().join("config-final/uqm.cfg"), b"volume=17\n").unwrap();
+        manifest.retained_files =
+            native_acceptance_inventory(root.path(), manifest.runtime_contract.inventory_limits)
+                .unwrap();
+        assert!(validate_native_acceptance_bundle(root.path(), &manifest).is_err());
+    }
+
     fn playable_acceptance_fixture() -> (
         tempfile::TempDir,
         NativeWindowReceipt,
@@ -3955,17 +4596,35 @@ mod tests {
         for screenshot in &mut receipt.screenshots {
             let pixel = match screenshot.stage {
                 NativeScreenshotStage::Stable => image::Rgb([0, 0, 0]),
-                NativeScreenshotStage::Playable => image::Rgb([255, 255, 255]),
+                NativeScreenshotStage::Playable | NativeScreenshotStage::Checkpoint { .. } => {
+                    image::Rgb([255, 255, 255])
+                }
             };
-            let image = image::RgbImage::from_pixel(bounds().width, bounds().height, pixel);
+            let os_bounds = screenshot.binding.os_bounds;
+            let image = image::RgbImage::from_pixel(os_bounds.width, os_bounds.height, pixel);
             let mut bytes = std::io::Cursor::new(Vec::new());
             image::DynamicImage::ImageRgb8(image)
                 .write_to(&mut bytes, image::ImageFormat::Png)
                 .unwrap();
-            let bytes = bytes.into_inner();
+            let raw = bytes.into_inner();
+            let bytes = super::super::native_capture::normalize_native_capture(
+                &raw,
+                os_bounds,
+                bounds(),
+                runtime_contract().capture_budget_bytes,
+            )
+            .unwrap();
             let path = root.path().join(&screenshot.relative_path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, &bytes).unwrap();
+            fs::write(
+                root.path()
+                    .join(&screenshot.original_os_capture.relative_path),
+                &raw,
+            )
+            .unwrap();
+            screenshot.original_os_capture.byte_length = raw.len() as u64;
+            screenshot.original_os_capture.sha256 = format!("{:x}", Sha256::digest(&raw));
             screenshot.byte_length = bytes.len() as u64;
             screenshot.sha256 = format!("{:x}", Sha256::digest(&bytes));
         }
@@ -4051,6 +4710,17 @@ mod tests {
         let trace_path = root.path().join("automation/trace.jsonl");
         fs::create_dir_all(trace_path.parent().unwrap()).unwrap();
         fs::write(&trace_path, &trace_bytes).unwrap();
+        fs::create_dir(root.path().join("config-final")).unwrap();
+        fs::write(
+            root.path().join("config-initial.json"),
+            br#"{"schema":"uqm-native-initial-config-v1","files":[]}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.path().join("config-final.json"),
+            br#"{"schema":"uqm-native-final-config-v1","files":[]}"#,
+        )
+        .unwrap();
         let executable_bytes = b"native-executable";
         let executable_path = root.path().join("inputs/uqm");
         fs::create_dir_all(executable_path.parent().unwrap()).unwrap();
@@ -4203,7 +4873,7 @@ mod tests {
                 "--configdir=/tmp/config".to_string(),
                 "--contentdir=/tmp/inputs/content".to_string(),
                 "--automation-script=/tmp/inputs/linked-playable-v1.json".to_string(),
-                "--automation-output=/tmp/automation".to_string(),
+                "--automation-output=/tmp/runtime-automation".to_string(),
                 "--native-window-proof=/tmp/native-window-proof.json".to_string(),
             ],
             environment: std::collections::BTreeMap::from([(
@@ -4275,7 +4945,153 @@ mod tests {
                 .collect(),
             passed: true,
         };
+        let mut manifest = manifest;
+        add_fixture_checkpoint(root.path(), &mut manifest);
         (root, receipt, manifest)
+    }
+
+    fn add_fixture_checkpoint(root: &Path, manifest: &mut NativeAcceptanceManifest) {
+        let source = br#"{"version":1,"name":"linked-playable-v1","budgets":{"max_input_ticks":2500,"max_presentations":5000,"max_wallclock_seconds":240},"steps":[{"action":"assert_battle_frames","minimum":300},{"action":"finish"}]}"#;
+        fs::write(root.join(&manifest.script.relative_path), source).unwrap();
+        manifest.script.byte_length = source.len() as u64;
+        manifest.script.sha256 = format!("{:x}", Sha256::digest(source));
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "fixture.json").unwrap(),
+            "fixture.json",
+        )
+        .unwrap();
+        let plan =
+            super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
+        let mut records: Vec<crate::automation::TraceRecord> =
+            fs::read_to_string(root.join(&manifest.trace_path))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+        let mut end = records.pop().unwrap();
+        let frame = crate::automation::trace::PresentationEvidence {
+            count: 300,
+            generation: 1,
+            width: 320,
+            height: 240,
+        };
+        let mut present = trace_record(4, crate::automation::trace::RecordKind::Presentation, None);
+        present.presentation = Some(frame.clone());
+        records.push(present);
+        let mut marker = trace_record(5, crate::automation::trace::RecordKind::Checkpoint, None);
+        marker.presentation = Some(frame);
+        marker.checkpoint = Some(crate::automation::trace::CheckpointEvidence {
+            id: plan.checkpoints[0].id.clone(),
+        });
+        records.push(marker);
+        end.sequence = 6;
+        records.push(end);
+        let bytes = records
+            .iter()
+            .map(|record| record.to_jsonl().unwrap())
+            .collect::<String>()
+            .into_bytes();
+        fs::write(root.join(&manifest.trace_path), &bytes).unwrap();
+        manifest.trace_byte_length = bytes.len() as u64;
+        manifest.trace_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        manifest.window.checkpoint_plan = Some(plan);
+        manifest
+            .window
+            .observations
+            .last_mut()
+            .unwrap()
+            .semantic
+            .trace_record_count = 7;
+        let shot = manifest.window.screenshots.last_mut().unwrap();
+        shot.trace_record_count = 7;
+        shot.post_capture_observation.semantic.trace_record_count = 7;
+        let mut checkpoint = shot.clone();
+        checkpoint.stage = NativeScreenshotStage::Checkpoint { action_index: 0 };
+        checkpoint.relative_path = "screenshots/checkpoint-0000.png".into();
+        checkpoint.original_os_capture.relative_path = "screenshots/checkpoint-0000.os.png".into();
+        fs::copy(
+            root.join(&shot.relative_path),
+            root.join(&checkpoint.relative_path),
+        )
+        .unwrap();
+        fs::copy(
+            root.join(&shot.original_os_capture.relative_path),
+            root.join(&checkpoint.original_os_capture.relative_path),
+        )
+        .unwrap();
+        manifest.window.screenshots.push(checkpoint);
+        let state = &mut manifest.publications.last_mut().unwrap().state;
+        state.semantic.trace_record_count = 7;
+        fs::write(
+            root.join("automation/native-window-state.json"),
+            serde_json::to_vec(state).unwrap(),
+        )
+        .unwrap();
+        manifest.retained_files =
+            native_acceptance_inventory(root, runtime_contract().inventory_limits).unwrap();
+    }
+
+    #[test]
+    fn native_final_semantics_follow_publications_after_the_last_checkpoint() {
+        let (root, _, mut manifest) = playable_acceptance_fixture();
+        let mut records: Vec<crate::automation::TraceRecord> =
+            fs::read_to_string(root.path().join(&manifest.trace_path))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+        let mut end = records.pop().unwrap();
+        let mut observed = records[1].clone();
+        observed.sequence = 6;
+        let mut accepted = records[2].clone();
+        accepted.sequence = 7;
+        records.extend([observed, accepted]);
+        end.sequence = 8;
+        records.push(end);
+        manifest
+            .publications
+            .last_mut()
+            .unwrap()
+            .state
+            .semantic
+            .trace_record_count = 6;
+        manifest
+            .window
+            .observations
+            .last_mut()
+            .unwrap()
+            .semantic
+            .trace_record_count = 6;
+        for shot in manifest
+            .window
+            .screenshots
+            .iter_mut()
+            .filter(|shot| shot.committed_presentation == 300)
+        {
+            shot.trace_record_count = 6;
+            shot.post_capture_observation.semantic.trace_record_count = 6;
+        }
+        assert!(
+            super::super::native_checkpoint::validate_correlations(&manifest, &records).is_ok()
+        );
+        let mut publication = manifest.publications.last().unwrap().clone();
+        publication.state.committed_presentation += 1;
+        publication.acknowledgement.committed_presentation += 1;
+        publication.state.semantic = native_window_trace_semantic_snapshot(&records).unwrap();
+        assert_eq!(
+            publication.state.semantic.accepted_player_inputs,
+            manifest.window.input_events + 1
+        );
+        manifest.publications.push(publication);
+        assert!(validate_recorded_semantics(&manifest, &records).is_ok());
+        manifest
+            .publications
+            .last_mut()
+            .unwrap()
+            .state
+            .semantic
+            .accepted_player_inputs -= 1;
+        assert!(validate_recorded_semantics(&manifest, &records).is_err());
     }
 
     #[test]
@@ -4284,6 +5100,112 @@ mod tests {
         assert_eq!(receipt.stable_presentations, 300);
         assert!(receipt.passed);
         assert!(manifest.passed);
+    }
+
+    #[test]
+    fn shared_native_receipt_replays_retained_inputs_after_relocation() {
+        use super::super::native_artifacts::{ArtifactBudget, SharedInputs, SharedSnapshot};
+        let (source, _, mut manifest) = playable_acceptance_fixture();
+        let suite = tempfile::tempdir().unwrap();
+        let scenario = suite.path().join("scenarios/0000");
+        fs::create_dir_all(&scenario).unwrap();
+        let limits = manifest.runtime_contract.inventory_limits;
+        let mut store =
+            SharedSnapshot::create(&suite.path().join("shared"), ArtifactBudget::new(limits))
+                .unwrap();
+        let mut names = Vec::new();
+        for member in &manifest.retained_files {
+            let bytes = fs::read(source.path().join(&member.relative_path)).unwrap();
+            if member.relative_path.starts_with("inputs/") {
+                store.insert(&member.relative_path, &bytes).unwrap();
+                names.push(member.relative_path.clone());
+            } else {
+                let output = scenario.join(&member.relative_path);
+                fs::create_dir_all(output.parent().unwrap()).unwrap();
+                fs::write(output, bytes).unwrap();
+            }
+        }
+        store.seal().unwrap();
+        let references = store.references(&names).unwrap();
+        fs::write(
+            scenario.join("shared-inputs.json"),
+            serde_json::to_vec(&references).unwrap(),
+        )
+        .unwrap();
+        drop(source);
+        manifest.retained_files = native_acceptance_inventory(&scenario, limits).unwrap();
+        validate_native_acceptance_bundle(&scenario, &manifest).unwrap();
+        let relocated = tempfile::tempdir().unwrap();
+        let relocated_suite = relocated.path().join("suite");
+        fs::rename(suite.path(), &relocated_suite).unwrap();
+        let scenario = relocated_suite.join("scenarios/0000");
+        validate_native_acceptance_bundle(&scenario, &manifest).unwrap();
+        let references = SharedInputs::open(&scenario, 1024 * 1024).unwrap().unwrap();
+        let executable = references
+            .path(&scenario, "inputs/uqm", limits.member_bytes)
+            .unwrap();
+        fs::remove_file(&executable).unwrap();
+        fs::write(executable, b"different executable").unwrap();
+        assert!(validate_native_acceptance_bundle(&scenario, &manifest).is_err());
+    }
+
+    #[test]
+    fn native_checkpoint_bundle_rejects_forged_plans_and_rehashed_action_evidence() {
+        let (root, _, manifest) = playable_acceptance_fixture();
+        assert!(validate_native_acceptance_bundle(root.path(), &manifest).is_ok());
+        for mutation in 0..7 {
+            let mut changed = manifest.clone();
+            let plan = changed.window.checkpoint_plan.as_mut().unwrap();
+            match mutation {
+                0 => plan.source_sha256 = "0".repeat(64),
+                1 => plan.resolved_sha256 = "0".repeat(64),
+                2 => plan.linked_floors = false,
+                3 => plan.checkpoints.clear(),
+                4 => plan.checkpoints.push(plan.checkpoints[0].clone()),
+                5 => plan.checkpoints[0].id.push('x'),
+                6 => plan.checkpoints[0].action_index += 1,
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_native_acceptance_bundle(root.path(), &changed).is_err(),
+                "plan mutation {mutation}"
+            );
+        }
+        let original = fs::read(root.path().join(&manifest.trace_path)).unwrap();
+        let records: Vec<crate::automation::TraceRecord> = original
+            .split(|byte| *byte == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice(line).unwrap())
+            .collect();
+        for mutation in 0..5 {
+            let mut records = records.clone();
+            match mutation {
+                0 => records[5].checkpoint.as_mut().unwrap().id.push('x'),
+                1 => records[5].presentation.as_mut().unwrap().generation += 1,
+                2 => records[5].presentation.as_mut().unwrap().count += 1,
+                3 => records[3].label = Some("battle_frames_verified:count=299".into()),
+                4 => records[5].kind = crate::automation::trace::RecordKind::InputTick,
+                _ => unreachable!(),
+            }
+            let bytes = records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>()
+                .into_bytes();
+            fs::write(root.path().join(&manifest.trace_path), &bytes).unwrap();
+            let mut changed = manifest.clone();
+            changed.trace_byte_length = bytes.len() as u64;
+            changed.trace_sha256 = format!("{:x}", Sha256::digest(&bytes));
+            changed.retained_files =
+                native_acceptance_inventory(root.path(), runtime_contract().inventory_limits)
+                    .unwrap();
+            assert!(
+                validate_native_acceptance_bundle(root.path(), &changed).is_err(),
+                "rehashed trace mutation {mutation}"
+            );
+        }
+        fs::write(root.path().join(&manifest.trace_path), original).unwrap();
+        assert!(validate_native_acceptance_bundle(root.path(), &manifest).is_ok());
     }
 
     #[test]
@@ -4303,7 +5225,7 @@ mod tests {
             "--configdir=./config".to_string(),
             "--contentdir=./inputs/content".to_string(),
             "--automation-script=./inputs/linked-playable-v1.json".to_string(),
-            "--automation-output=./automation".to_string(),
+            "--automation-output=./runtime-automation".to_string(),
             "--native-window-proof=./native-window-proof.json".to_string(),
         ];
         assert!(validate_native_acceptance_bundle(root.path(), &descriptor_bound).is_ok());
@@ -4405,6 +5327,29 @@ mod tests {
             );
             fs::write(path, original).unwrap();
         }
+    }
+
+    /// The success manifest keeps its original 1 MiB reservation. A healthy
+    /// 5073-presentation run once failed it by retaining one verbose record per
+    /// presentation; the history is now stored compactly, without dropping any.
+    #[test]
+    fn a_long_runs_manifest_fits_the_one_mebibyte_reservation_without_losing_publications() {
+        let (_root, _receipt, mut manifest) = playable_acceptance_fixture();
+        let template = manifest.publications[0].clone();
+        manifest.publications = (1..=24_000_u64)
+            .map(|count| {
+                let mut publication = template.clone();
+                publication.state.committed_presentation = count;
+                publication.acknowledgement.committed_presentation = count;
+                publication.state.semantic.trace_record_count = 2 * count + count % 3;
+                publication.state.semantic.accepted_player_inputs = count / 40;
+                publication
+            })
+            .collect();
+        let encoded = serde_json::to_vec(&manifest).unwrap();
+        assert!(encoded.len() <= 1024 * 1024, "{}", encoded.len());
+        let decoded: NativeAcceptanceManifest = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(decoded, manifest);
     }
 
     #[test]
@@ -4570,6 +5515,22 @@ mod tests {
         assert!(validate_native_acceptance_bundle(root.path(), &manifest).is_ok());
     }
 
+    fn assert_failure_config_binding(root: &Path, manifest: &NativeAcceptanceFailureManifest) {
+        for name in ["config-initial.json", "config-final.json"] {
+            let path = root.join(name);
+            let original = fs::read(&path).unwrap();
+            fs::write(&path, br#"{"schema":"forged","files":[]}"#).unwrap();
+            let mut changed = manifest.clone();
+            changed.retained_files = native_acceptance_failure_inventory(
+                root,
+                manifest.runtime_contract.inventory_limits,
+            )
+            .unwrap();
+            assert!(validate_native_acceptance_failure_bundle(root, &changed).is_err());
+            fs::write(path, original).unwrap();
+        }
+    }
+
     #[test]
     fn bundle_policy_and_configuration_mismatches_are_rejected() {
         let (root, _receipt, manifest) = playable_acceptance_fixture();
@@ -4657,6 +5618,7 @@ mod tests {
             passed: false,
         };
         assert!(validate_native_acceptance_failure_bundle(root.path(), &failure_manifest).is_ok());
+        assert_failure_config_binding(root.path(), &failure_manifest);
         let mut descriptor_bound_failure = failure_manifest.clone();
         descriptor_bound_failure.command = descriptor_bound.command.clone();
         assert!(
@@ -5183,11 +6145,13 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("native-window-ack.json");
         let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = output_directory.change_wake().unwrap();
         let nonce = "a".repeat(64);
         let wrong_nonce = "b".repeat(64);
         assert_eq!(
             wait_for_native_window_ack(
                 &output_directory,
+                &wake,
                 &nonce,
                 41,
                 std::time::Duration::MAX,
@@ -5200,6 +6164,7 @@ mod tests {
         acknowledge_native_window_state(&path, &wrong_nonce, 41).unwrap();
         assert!(wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_millis(5),
@@ -5210,6 +6175,7 @@ mod tests {
         acknowledge_native_window_state(&path, &nonce, 40).unwrap();
         assert!(wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_millis(5),
@@ -5226,6 +6192,7 @@ mod tests {
         });
         wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_secs(60),
@@ -5235,6 +6202,197 @@ mod tests {
         writer.join().unwrap();
         assert!(!root.path().join(".native-window-ack.json.tmp").exists());
     }
+
+    /// Answers every wait at once, or fails it, and records the timeouts.
+    struct ScriptedAckWake {
+        calls: std::sync::Mutex<Vec<(std::time::Instant, std::time::Duration)>>,
+        failure: Option<&'static str>,
+    }
+
+    impl ScriptedAckWake {
+        fn new(failure: Option<&'static str>) -> Self {
+            Self {
+                calls: std::sync::Mutex::new(Vec::new()),
+                failure,
+            }
+        }
+    }
+
+    impl super::super::child_session::ChangeWait for ScriptedAckWake {
+        fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((std::time::Instant::now(), timeout));
+            match self.failure {
+                Some(message) => Err(std::io::Error::other(message)),
+                None => Ok(()),
+            }
+        }
+    }
+
+    #[test]
+    fn immediate_wake_rejects_a_wrong_nonce_and_still_times_out() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("native-window-ack.json");
+        let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = ScriptedAckWake::new(None);
+        acknowledge_native_window_state(&path, &"b".repeat(64), 41).unwrap();
+
+        let error = wait_for_native_window_ack(
+            &output_directory,
+            &wake,
+            &"a".repeat(64),
+            41,
+            std::time::Duration::from_millis(20),
+            4096,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "native-window state presentation 41 was not acknowledged"
+        );
+        let returned = std::time::Instant::now();
+        let calls = wake.calls.lock().unwrap();
+        assert!(!calls.is_empty());
+        for (called, timeout) in calls.iter() {
+            assert!(*timeout <= ACK_POLL_INTERVAL);
+            // The deadline had passed by the time the wait returned an error,
+            // so a wait that fits before the deadline also ends before then.
+            assert!(*called + *timeout <= returned);
+        }
+    }
+
+    #[test]
+    fn acknowledgement_wait_reports_a_wake_failure() {
+        let root = tempfile::tempdir().unwrap();
+        let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = ScriptedAckWake::new(Some("queue broke"));
+
+        let error = wait_for_native_window_ack(
+            &output_directory,
+            &wake,
+            &"a".repeat(64),
+            41,
+            std::time::Duration::from_secs(60),
+            4096,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "wait for native-window acknowledgement: queue broke");
+        assert_eq!(wake.calls.lock().unwrap().len(), 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    mod change_wake {
+        use super::*;
+        use std::os::fd::AsRawFd as _;
+        use std::time::{Duration, Instant};
+
+        fn publish(bound: &BoundOutputDirectory) {
+            bound
+                .publish(std::ffi::OsStr::new("state.json"), b"{}", "state")
+                .unwrap();
+        }
+
+        #[test]
+        fn publish_wakes_a_long_wait() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = std::sync::Arc::new(BoundOutputDirectory::open(root.path()).unwrap());
+            let wake = bound.change_wake().unwrap();
+            let publisher = {
+                let bound = std::sync::Arc::clone(&bound);
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(50));
+                    publish(&bound);
+                })
+            };
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+            publisher.join().unwrap();
+        }
+
+        #[test]
+        fn wait_times_out_without_a_change() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            let started = Instant::now();
+            wake.wait(Duration::from_millis(20)).unwrap();
+            assert!(started.elapsed() >= Duration::from_millis(20));
+        }
+
+        #[test]
+        fn zero_timeout_returns_immediately() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            let started = Instant::now();
+            wake.wait(Duration::ZERO).unwrap();
+            assert!(started.elapsed() < Duration::from_millis(10));
+        }
+
+        #[test]
+        fn a_timer_left_armed_by_a_directory_wake_does_not_cut_the_next_wait_short() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            // The directory wins and the 5 ms timer is left armed.
+            publish(&bound);
+            wake.wait(Duration::from_millis(5)).unwrap();
+            // Let that timer fire while nobody is waiting.
+            std::thread::sleep(Duration::from_millis(50));
+            let started = Instant::now();
+            wake.wait(Duration::from_millis(30)).unwrap();
+            assert!(started.elapsed() >= Duration::from_millis(30));
+        }
+
+        #[test]
+        fn change_before_the_wait_is_not_lost() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            publish(&bound);
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+
+        #[test]
+        fn watch_follows_the_bound_directory_after_the_path_is_replaced() {
+            let root = tempfile::tempdir().unwrap();
+            let visible = root.path().join("output");
+            let retained = root.path().join("output-retained");
+            fs::create_dir(&visible).unwrap();
+            let bound = BoundOutputDirectory::open(&visible).unwrap();
+            let wake = bound.change_wake().unwrap();
+            fs::rename(&visible, &retained).unwrap();
+            fs::create_dir(&visible).unwrap();
+
+            publish(&bound);
+
+            assert!(retained.join("state.json").exists());
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+
+        #[test]
+        fn descriptors_do_not_survive_an_exec() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            for descriptor in [&wake.queue, &wake._directory] {
+                // SAFETY: the descriptor is open for the life of `wake`.
+                let flags = unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) };
+                assert!(flags >= 0);
+                assert_ne!(flags & libc::FD_CLOEXEC, 0);
+            }
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn bound_output_publication_ignores_a_replacement_root_path() {

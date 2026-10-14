@@ -42,6 +42,10 @@ pub const MAX_MULTI_TRACKS: usize = 20;
 pub struct SoundChunk {
     /// Audio decoder for this chunk.
     pub decoder: Option<Box<dyn SoundDecoder>>,
+    /// Length of this chunk's audio in milliseconds, fixed when the chunk is
+    /// built. The decoder itself is lent to the stream while the chunk plays,
+    /// so seeking cannot ask it for the length.
+    pub length_ms: u32,
     /// Absolute position in track sequence (milliseconds).
     pub start_time: f64,
     /// Display hint: positive = exact duration, negative = minimum display time.
@@ -343,6 +347,7 @@ pub fn splice_track(
             for page in pages.iter().skip(1) {
                 let chunk = SoundChunk {
                     decoder: None,
+                    length_ms: 0,
                     start_time: state.dec_offset,
                     run_time: ms_to_ticks(page.timestamp as u32) as i32,
                     tag_me: true,
@@ -353,6 +358,7 @@ pub fn splice_track(
                     next: None,
                 };
                 append_chunk(&mut state, chunk);
+                state.last_sub = state.chunks_tail;
             }
         }
         return Ok(());
@@ -426,8 +432,13 @@ pub fn splice_track(
             page.map(|p| p.text.clone())
         };
 
+        let length_ms = page_decoder
+            .as_ref()
+            .map(|dec| (dec.length() * 1000.0) as u32)
+            .unwrap_or(0);
         let chunk = SoundChunk {
             decoder: page_decoder,
+            length_ms,
             start_time: state.dec_offset,
             run_time: ms_to_ticks(run_time_ms.unsigned_abs()) as i32,
             tag_me,
@@ -484,6 +495,7 @@ pub fn splice_multi_track(
 
         let chunk = SoundChunk {
             decoder: None,
+            length_ms: 0,
             start_time: state.dec_offset,
             run_time: ms_to_ticks((3.0 * TEXT_SPEED) as u32) as i32,
             tag_me: false,
@@ -1100,11 +1112,7 @@ fn resolve_seek_target(state: &mut TrackPlayerState, pos: u32) -> SeekTarget {
         let chunk_ptr = NonNull::from(chunk);
         let chunk_tag_me = chunk.tag_me;
         let chunk_start_ms = chunk.start_time as u32;
-        let chunk_len_ms = chunk
-            .decoder
-            .as_ref()
-            .map(|d| (d.length() * 1000.0) as u32)
-            .unwrap_or(0);
+        let chunk_len_ms = chunk.length_ms;
 
         if chunk_tag_me {
             last_tagged = Some(chunk_ptr);
@@ -1210,13 +1218,7 @@ fn tracks_end_time_inner(state: &TrackPlayerState) -> u32 {
     let mut total_ms: u32 = 0;
     let mut cur = state.chunks_head.as_deref();
     while let Some(chunk) = cur {
-        let chunk_end_ms = (chunk.start_time as u32).saturating_add(
-            chunk
-                .decoder
-                .as_ref()
-                .map(|d| (d.length() * 1000.0) as u32)
-                .unwrap_or(0),
-        );
+        let chunk_end_ms = (chunk.start_time as u32).saturating_add(chunk.length_ms);
         total_ms = total_ms.max(chunk_end_ms);
         cur = chunk.next.as_deref();
     }
@@ -1228,13 +1230,19 @@ fn tracks_end_time_inner(state: &TrackPlayerState) -> u32 {
 // =============================================================================
 
 #[cfg(test)]
+#[path = "trackplayer_flow_tests.rs"]
+mod flow_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
 
     #[test]
     fn test_sound_chunk_creation() {
         let chunk = SoundChunk {
             decoder: None,
+            length_ms: 0,
             start_time: 0.0,
             run_time: 0,
             tag_me: false,
@@ -1252,6 +1260,7 @@ mod tests {
     fn test_sound_chunk_linked_list() {
         let chunk2 = Box::new(SoundChunk {
             decoder: None,
+            length_ms: 0,
             start_time: 1000.0,
             run_time: 500,
             tag_me: true,
@@ -1263,6 +1272,7 @@ mod tests {
         });
         let chunk1 = SoundChunk {
             decoder: None,
+            length_ms: 0,
             start_time: 0.0,
             run_time: 1000,
             tag_me: true,
@@ -1283,6 +1293,7 @@ mod tests {
         for i in (0..1000).rev() {
             head = Some(Box::new(SoundChunk {
                 decoder: None,
+                length_ms: 0,
                 start_time: i as f64,
                 run_time: 0,
                 tag_me: false,
@@ -1396,6 +1407,7 @@ mod tests {
 
     #[test]
     fn test_splice_track_no_name_no_tracks_warns() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         // When no tracks exist and no name is given, should return Ok
         let result = splice_track(None, Some("text"), None, None, Vec::new());
         assert!(result.is_ok());
@@ -1403,6 +1415,7 @@ mod tests {
 
     #[test]
     fn test_splice_track_creates_first_sample() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let state = TRACK_STATE.lock();
         let had_sample = state.sound_sample.is_some();
         drop(state);
@@ -1416,6 +1429,7 @@ mod tests {
         // Test that SoundChunk can be constructed with all fields
         let chunk = SoundChunk {
             decoder: None,
+            length_ms: 0,
             start_time: 500.0,
             run_time: ms_to_ticks(1000) as i32,
             tag_me: true,
@@ -1435,6 +1449,7 @@ mod tests {
     // REQ-TRACK-ASSEMBLE-15..17: Multi-track
     #[test]
     fn test_splice_multi_track_precondition() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
         // Should not panic
         assert!(result.is_ok() || result.is_err());
@@ -1442,6 +1457,7 @@ mod tests {
 
     #[test]
     fn test_splice_multi_track_appends() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
         assert!(result.is_ok() || result.is_err());
     }
@@ -1466,6 +1482,7 @@ mod tests {
 
     #[test]
     fn test_stop_track_clears_all() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = stop_track();
         assert!(result.is_ok());
         let state = TRACK_STATE.lock();
@@ -1476,6 +1493,7 @@ mod tests {
 
     #[test]
     fn test_playing_track_zero_when_empty() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert!(!playing_track());
     }
 
@@ -1507,6 +1525,7 @@ mod tests {
     // REQ-TRACK-POSITION-01..02: Position
     #[test]
     fn test_get_track_position_no_sample() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert_eq!(get_track_position(0), 0);
     }
 
@@ -1522,11 +1541,13 @@ mod tests {
     // REQ-TRACK-SUBTITLE-01..04: Subtitles
     #[test]
     fn test_get_track_subtitle_none_when_empty() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert!(get_track_subtitle().is_none());
     }
 
     #[test]
     fn test_get_first_track_subtitle_none() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert!(get_first_track_subtitle().is_none());
     }
 
@@ -1540,5 +1561,48 @@ mod tests {
     fn test_find_prev_page_defaults_to_head() {
         let head: Option<Box<SoundChunk>> = None;
         assert!(find_prev_page_inner(&head, None).is_none());
+    }
+
+    fn chunks_in_track() -> usize {
+        let state = TRACK_STATE.lock();
+        let mut count = 0;
+        let mut cur = state.chunks_head.as_deref();
+        while let Some(chunk) = cur {
+            count += 1;
+            cur = chunk.next.as_deref();
+        }
+        count
+    }
+
+    /// `splice_multi_track` appends to whatever track list exists, so the two
+    /// tests that call it must wait for the engine lock instead of running
+    /// while a locked test is in the middle of walking its own list.
+    #[test]
+    fn multi_track_tests_wait_for_the_lock_of_the_track_list_they_would_extend() {
+        let serial = ENGINE_TEST_LOCK.lock();
+        splice_track(
+            Some("conversation"),
+            Some("First line\r\nSecond line"),
+            None,
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        let before = chunks_in_track();
+        let probes = [
+            Probe::spawn(test_splice_multi_track_precondition),
+            Probe::spawn(test_splice_multi_track_appends),
+        ];
+
+        let ran_without_the_lock: Vec<bool> =
+            probes.iter().map(Probe::finishes_within_grace).collect();
+        let after = chunks_in_track();
+        stop_track().unwrap();
+        drop(serial);
+        let outcomes: Vec<_> = probes.into_iter().map(Probe::join).collect();
+
+        assert_eq!(ran_without_the_lock, [false, false]);
+        assert_eq!(after, before, "the held track list gained a chunk");
+        assert!(outcomes.iter().all(Result::is_ok));
     }
 }

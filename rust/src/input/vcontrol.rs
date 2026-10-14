@@ -110,6 +110,7 @@ impl VControl {
         // Clear all bindings
         self.keyboard.clear();
         self.joysticks.fill(None);
+        self.last_gesture = None;
 
         self.initialized = false;
     }

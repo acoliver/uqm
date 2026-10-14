@@ -343,7 +343,9 @@ mod cffi {
         }
 
         fn set_status_message_mode_default(&self) {
-            unsafe { c_extern::SetStatusMessageMode(SMM_DEFAULT) }
+            unsafe {
+                c_extern::SetStatusMessageMode(SMM_DEFAULT);
+            }
         }
 
         fn zero_velocity(&self) {

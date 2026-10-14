@@ -127,6 +127,8 @@ extern "C" {
 
 extern "C" {
     // --- Graphics ---
+    /// The whole-screen drawing context created during graphics startup.
+    pub static ScreenContext: *mut c_void;
     /// `DWORD FadeScreen(ScreenFadeType, SIZE)` — SIZE = SWORD = i16.
     pub fn FadeScreen(fade_type: u32, time_interval: c_short) -> u32;
     /// `CONTEXT SetContext(CONTEXT)` — returns the previous context.
@@ -215,7 +217,6 @@ extern "C" {
     pub fn Melee();
     pub fn SetupMenu();
     pub fn FreeGameData();
-    pub fn Introduction();
     pub fn Credits(victory: c_int);
     pub fn Victory();
     /// `void SplashScreen(void (*DoProcessing)(DWORD TimeOut))` — function pointer.

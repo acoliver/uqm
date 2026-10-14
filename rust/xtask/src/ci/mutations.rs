@@ -847,8 +847,8 @@ fn workflow_trust_boundary_mutant(
             "${EVIDENCE_DIR}/xtask-build-unretained.result.json",
         ),
         (
-            "uqm-s4-transport-evidence-v1",
-            "uqm-s4-transport-evidence-disabled",
+            "verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0500",
+            "verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0400",
         ),
     ] {
         if !mutant.contains(from) {
@@ -1036,7 +1036,7 @@ fn validate_workflow_mutant(
     let yaml = String::from_utf8(read("rust-quality.yaml")?)
         .map_err(|error| format!("workflow mutation fixture is not UTF-8: {error}"))?;
     let document = super::workflow::parse_yaml(&yaml)?;
-    let tuples = super::plan::derive_plan(root)?.tuple_names();
+    let tuples = super::plan::derive_tuples(root)?;
     let failed = super::workflow::validate_semantics(&document, &tuples, authority)
         .into_iter()
         .filter(|rule| !rule.passed)
@@ -1276,7 +1276,6 @@ const MINI_XTASK_MAIN: &str = r#"use std::process::{exit, Command};
 
 fn main() {
     match std::env::args().nth(1).as_deref() {
-        Some("native-test") => return,
         Some("test") => {}
         _ => exit(2),
     }

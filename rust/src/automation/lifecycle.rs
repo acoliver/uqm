@@ -81,6 +81,27 @@ pub struct TeardownReceipt {
     pub callbacks_quiescent: bool,
     pub trace_durable: bool,
 }
+/// Closed input receipt, shared by the child writer and offline readers.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolvedScenarioRecord {
+    pub scenario: crate::automation::script::ResolvedScenario,
+    pub replay_identity: String,
+}
+
+impl ResolvedScenarioRecord {
+    /// Reject inconsistent metadata or an identity not derived from these inputs.
+    pub fn validate(&self) -> Result<(), AutomationError> {
+        if self.replay_identity != self.scenario.replay_identity()? {
+            return Err(AutomationError::InvalidValue {
+                path: "resolved-scenario.json".into(),
+                field: "replay_identity",
+                reason: "identity differs from resolved scenario inputs".into(),
+            });
+        }
+        Ok(())
+    }
+}
 
 /// Durably publish the resolved scenario and its replay identity.
 ///
@@ -91,10 +112,10 @@ pub fn write_resolved_scenario(
     output_root: &Path,
     scenario: &crate::automation::script::ResolvedScenario,
 ) -> Result<DurableResult, AutomationError> {
-    let record = serde_json::json!({
-        "scenario": scenario,
-        "replay_identity": scenario.replay_identity(),
-    });
+    let record = ResolvedScenarioRecord {
+        scenario: scenario.clone(),
+        replay_identity: scenario.replay_identity()?,
+    };
     let content = serde_json::to_vec(&record).map_err(|error| AutomationError::InvalidJson {
         path: output_root.display().to_string(),
         reason: error.to_string(),
@@ -328,6 +349,31 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn resolved_receipt_roundtrips_complete_inputs_and_rejects_inconsistency() {
+        let temp = tempfile::tempdir().unwrap();
+        let doc = crate::automation::script::parse_script(
+            br#"{"version":2,"name":"receipt","fixture":"receipt","seed":42,"budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
+            "receipt.json",
+        ).unwrap();
+        let scenario = crate::automation::script::validate_script(doc, "receipt.json")
+            .unwrap()
+            .resolved();
+        write_resolved_scenario(temp.path(), &scenario).unwrap();
+        let mut record: ResolvedScenarioRecord = serde_json::from_slice(
+            &std::fs::read(temp.path().join("resolved-scenario.json")).unwrap(),
+        )
+        .unwrap();
+        record.validate().unwrap();
+        assert_eq!(record.scenario, scenario);
+        record.scenario.seed = 43;
+        assert!(record.validate().is_err());
+        let other = tempfile::tempdir().unwrap();
+        record.scenario.step_count = 99;
+        assert!(write_resolved_scenario(other.path(), &record.scenario).is_err());
+        assert!(!other.path().join("resolved-scenario.json").exists());
     }
 
     // --- Status mapping (REQ-EXIT-008) ---

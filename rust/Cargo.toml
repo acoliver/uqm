@@ -7,6 +7,37 @@ resolver = "2"
 codegen-units = 1
 lto = "off"
 
+# The native-acceptance observer runs inside the debug xtask build and, at
+# every checkpoint, decodes the OS screenshot, Lanczos-resamples the client
+# crop and re-encodes it. Unoptimized codecs spend about 3.4 s on that per
+# checkpoint; optimized, about 0.1 s. Only these third-party image crates are
+# optimized; workspace crates keep the ordinary dev profile.
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.flate2]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3
+[profile.dev.package.moxcms]
+opt-level = 3
+
+# Command supervision hashes each executable it launches: twice for a staged
+# copy. The xtask unit-test binary is over 170 MB, and unoptimized SHA-256
+# spent longer on that than the 30 s helper registration window on aarch64
+# Linux, so the supervised helper was never launched in time.
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.digest]
+opt-level = 3
+[profile.dev.package.block-buffer]
+opt-level = 3
+
 [package]
 name = "uqm"
 version = "0.8.0"

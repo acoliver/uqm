@@ -38,6 +38,10 @@ pub enum SceneActivationBoundary {
     GameInitialized,
 }
 
+/// Where Sol sits in the universe map (`SOL_X`, `SOL_Y` in `hyper.h`), which is
+/// where a new game starts.
+pub const SOL_UNIVERSE_LOCATION: (i16, i16) = (1752, 1450);
+
 /// Pure setup plan for a deterministic scene.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScenePlan {
@@ -46,6 +50,12 @@ pub struct ScenePlan {
     pub expected_encounter_conversation: u32,
     pub expected_dialogue_conversation: u32,
     pub current_activity: u16,
+    /// Star the flagship is in when the scene starts. The encounter screen
+    /// names this star, so a scene entered before the first solar-system visit
+    /// must establish it as the real game does.
+    pub star_location: (i16, i16),
+    /// Named game-state values the scene's circumstances require.
+    pub game_state: &'static [(&'static str, u32)],
 }
 
 /// Scene activation or verification failure.
@@ -122,6 +132,8 @@ pub fn scene_plan(
             expected_dialogue_conversation: crate::comm::dispatch::conv::URQUAN,
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
+            star_location: SOL_UNIVERSE_LOCATION,
+            game_state: &[("PROBE_MESSAGE_DELIVERED", 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
@@ -130,6 +142,16 @@ pub fn scene_plan(
             expected_dialogue_conversation: crate::comm::dispatch::conv::COMMANDER,
             current_activity: crate::comm::dispatch::IN_INTERPLANETARY
                 | crate::comm::dispatch::START_ENCOUNTER,
+            star_location: SOL_UNIVERSE_LOCATION,
+            game_state: &[
+                ("GLOBAL_FLAGS_AND_DATA", 0xFF),
+                ("STARBASE_AVAILABLE", 1),
+                ("PROBE_ILWRATH_ENCOUNTER", 0),
+                // The visit goes straight into the Commander conversation only
+                // when the moon base is on the ship (or Chmmr installed the
+                // bomb); otherwise it falls through to the starbase menu.
+                ("MOONBASE_ON_SHIP", 1),
+            ],
         }),
     }
 }
@@ -255,6 +277,68 @@ fn observation() -> &'static parking_lot::Mutex<SceneObservation> {
     OBSERVATION.get_or_init(|| parking_lot::Mutex::new(SceneObservation::default()))
 }
 
+/// Effects a scene has when it takes over from the new game's first
+/// solar-system entry.
+pub trait SceneEntryOps {
+    fn set_last_activity(&mut self, activity: u16);
+    fn set_current_activity(&mut self, activity: u16);
+    /// Clear the screen context to black.
+    fn clear_screen(&mut self);
+    /// Queue the fade from the faded-out colormap back to full color.
+    fn fade_screen_to_color(&mut self);
+}
+
+/// Switch the main loop to the scene's activity.
+///
+/// A new game leaves the screen faded to black, and the first solar-system
+/// entry fades it back in (`solarsys.c`, "Starting a new game"). The scene
+/// replaces that entry, so it performs the same clear and fade-in; without
+/// it every frame of the scene is composited through a black colormap. The C
+/// does not wait on the fade, so neither does the scene.
+pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
+    ops.set_last_activity(crate::comm::dispatch::IN_ENCOUNTER);
+    ops.set_current_activity(plan.current_activity);
+    ops.clear_screen();
+    ops.fade_screen_to_color();
+}
+
+#[cfg(feature = "linked_c_archive")]
+struct LinkedSceneEntry;
+
+#[cfg(feature = "linked_c_archive")]
+impl SceneEntryOps for LinkedSceneEntry {
+    fn set_last_activity(&mut self, activity: u16) {
+        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(activity));
+    }
+
+    fn set_current_activity(&mut self, activity: u16) {
+        // SAFETY: writes the current-activity global on the main thread.
+        unsafe { crate::mainloop::c_extern::set_current_activity(activity) };
+    }
+
+    fn clear_screen(&mut self) {
+        use crate::mainloop::restart_menu::c_extern;
+        // SAFETY: the screen context exists once game initialization is
+        // complete, and scene activation runs on the main thread.
+        unsafe {
+            c_extern::SetContext(c_extern::ScreenContext);
+            c_extern::ClearDrawable();
+        }
+    }
+
+    fn fade_screen_to_color(&mut self) {
+        use crate::mainloop::restart_menu::c_extern;
+        // SAFETY: FadeScreen is called from the main thread; the returned
+        // completion time is deliberately not awaited, as in the C entry.
+        unsafe {
+            c_extern::FadeScreen(
+                c_extern::FADE_ALL_TO_COLOR,
+                (c_extern::ONE_SECOND / 2) as i16,
+            );
+        }
+    }
+}
+
 /// Activate a scene at the lifecycle-owned safe boundary.
 ///
 /// This prepares the real NPC queue and sets `START_ENCOUNTER`; the normal
@@ -268,27 +352,20 @@ pub fn activate(
 
     #[cfg(feature = "linked_c_archive")]
     unsafe {
-        match scene {
-            AutomationScene::SolProbeEncounter => {
-                if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter()
-                {
-                    *observation().lock() = SceneObservation::default();
-                    return Err(SceneError::SetupFailed(reason));
-                }
-                crate::state::game_state_keys::set_game_state("BATTLE_SEGUE", 0);
-                crate::state::game_state_keys::set_game_state("PROBE_MESSAGE_DELIVERED", 0);
-            }
-            AutomationScene::StarbaseCommander => {
-                crate::state::game_state_keys::set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
-                crate::state::game_state_keys::set_game_state("STARBASE_AVAILABLE", 1);
-                crate::state::game_state_keys::set_game_state("PROBE_ILWRATH_ENCOUNTER", 0);
-                crate::state::game_state_keys::set_game_state("MOONBASE_ON_SHIP", 0);
+        if scene == AutomationScene::SolProbeEncounter {
+            if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter() {
+                *observation().lock() = SceneObservation::default();
+                return Err(SceneError::SetupFailed(reason));
             }
         }
-        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
-            crate::comm::dispatch::IN_ENCOUNTER,
-        ));
-        crate::mainloop::c_extern::set_current_activity(plan.current_activity);
+        if let Err(reason) = crate::comm::dispatch::place_flagship_at_star(plan.star_location) {
+            *observation().lock() = SceneObservation::default();
+            return Err(SceneError::SetupFailed(reason));
+        }
+        for (name, value) in plan.game_state {
+            crate::state::game_state_keys::set_game_state(name, *value);
+        }
+        enter_scene(&plan, &mut LinkedSceneEntry);
     }
 
     #[cfg(not(feature = "linked_c_archive"))]
@@ -388,6 +465,93 @@ mod tests {
         assert_eq!(plan.expected_encounter_conversation, 24);
         assert_eq!(plan.expected_dialogue_conversation, 18);
         assert_eq!(plan.current_activity, 0x0402);
+    }
+
+    #[test]
+    fn scenes_start_in_sol_where_a_new_game_begins() {
+        for scene in [
+            AutomationScene::SolProbeEncounter,
+            AutomationScene::StarbaseCommander,
+        ] {
+            let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized).unwrap();
+            assert_eq!(plan.star_location, (1752, 1450), "{}", scene.name());
+        }
+    }
+
+    #[test]
+    fn the_starbase_scene_reaches_the_commander_without_the_starbase_menu() {
+        let plan = scene_plan(
+            AutomationScene::StarbaseCommander,
+            SceneActivationBoundary::GameInitialized,
+        )
+        .unwrap();
+        let state = |name: &str| {
+            plan.game_state
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(state("STARBASE_AVAILABLE"), Some(1));
+        assert_eq!(state("MOONBASE_ON_SHIP"), Some(1));
+        assert_eq!(state("PROBE_ILWRATH_ENCOUNTER"), Some(0));
+    }
+
+    #[test]
+    fn the_probe_scene_does_not_claim_to_choose_the_segue() {
+        // Ur-Quan initialization sets a hostile segue, so the player always
+        // answers the encounter screen; the scene must not pretend otherwise.
+        let plan = scene_plan(
+            AutomationScene::SolProbeEncounter,
+            SceneActivationBoundary::GameInitialized,
+        )
+        .unwrap();
+        assert!(plan
+            .game_state
+            .iter()
+            .all(|(key, _)| *key != "BATTLE_SEGUE"));
+    }
+
+    #[derive(Default)]
+    struct RecordingOps {
+        calls: Vec<String>,
+    }
+
+    impl SceneEntryOps for RecordingOps {
+        fn set_last_activity(&mut self, activity: u16) {
+            self.calls.push(format!("last_activity:{activity:#x}"));
+        }
+        fn set_current_activity(&mut self, activity: u16) {
+            self.calls.push(format!("current_activity:{activity:#x}"));
+        }
+        fn clear_screen(&mut self) {
+            self.calls.push("clear_screen".into());
+        }
+        fn fade_screen_to_color(&mut self) {
+            self.calls.push("fade_to_color".into());
+        }
+    }
+
+    #[test]
+    fn entering_a_scene_clears_then_fades_the_screen_back_to_color() {
+        for scene in [
+            AutomationScene::SolProbeEncounter,
+            AutomationScene::StarbaseCommander,
+        ] {
+            let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized).unwrap();
+            let mut ops = RecordingOps::default();
+            enter_scene(&plan, &mut ops);
+            assert_eq!(
+                ops.calls,
+                [
+                    format!("last_activity:{:#x}", crate::comm::dispatch::IN_ENCOUNTER),
+                    format!("current_activity:{:#x}", plan.current_activity),
+                    "clear_screen".to_string(),
+                    "fade_to_color".to_string(),
+                ],
+                "{}",
+                scene.name()
+            );
+        }
     }
 
     #[test]

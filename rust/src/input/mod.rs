@@ -17,6 +17,8 @@
 //! from event handlers.
 
 pub mod ffi;
+#[cfg(test)]
+mod ffi_behavior_tests;
 pub mod joystick;
 pub mod keyboard;
 pub mod keynames;

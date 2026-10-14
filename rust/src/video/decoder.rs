@@ -500,6 +500,14 @@ impl DukVideoDecoder {
                     ]
                 };
 
+                // A vector that never marks its end would walk past the 16-item
+                // table; the table comes from the content package, so refuse it.
+                if iseq + 1 >= NUM_VEC_ITEMS {
+                    return Err(VideoError::BadFile(
+                        "Vector sequence has no end marker".into(),
+                    ));
+                }
+
                 // Start with chroma delta (matches C: iSeq++ then iSeq++)
                 let delta = self.deltas.chromas[ivec][iseq];
                 iseq += 1;
@@ -885,5 +893,196 @@ mod tests {
         assert_eq!(header.block_dimensions, (10, 8));
         assert_eq!(header.width(), 40);
         assert_eq!(header.height(), 32);
+    }
+
+    /// A DukVid set with `frame_payloads` placed back to back. Each frame's
+    /// offset-table entry points at its own `vofs`/`vsize` header.
+    fn video_from_frames(
+        wb: u16,
+        hb: u16,
+        frames: &[Vec<u8>],
+    ) -> Result<DukVideoDecoder, VideoError> {
+        video_with_table(wb, hb, frames, &terminated_table())
+    }
+
+    /// Every vector is one step long and marks its own end of sequence.
+    fn terminated_table() -> Vec<u8> {
+        let mut table = vec![0u8; NUM_VECTORS * NUM_VEC_ITEMS];
+        for vector in table.chunks_mut(NUM_VEC_ITEMS) {
+            vector[0] = 2;
+        }
+        table
+    }
+
+    fn video_with_table(
+        wb: u16,
+        hb: u16,
+        frames: &[Vec<u8>],
+        tbl: &[u8],
+    ) -> Result<DukVideoDecoder, VideoError> {
+        let mut hdr = vec![0u8; 48];
+        hdr[0..4].copy_from_slice(&3u32.to_be_bytes());
+        hdr[12..14].copy_from_slice(&wb.to_be_bytes());
+        hdr[14..16].copy_from_slice(&hb.to_be_bytes());
+        let mut frm = Vec::new();
+        let mut duk = Vec::new();
+        for frame in frames {
+            frm.extend_from_slice(&(duk.len() as u32).to_be_bytes());
+            duk.extend_from_slice(&0u32.to_be_bytes());
+            duk.extend_from_slice(&(frame.len() as u32).to_be_bytes());
+            duk.extend_from_slice(frame);
+        }
+        DukVideoDecoder::open_from_data(&hdr, tbl, &frm, &duk)
+    }
+
+    /// Frame payload: version word, padding up to the 0x10 payload offset, then `payload`.
+    fn frame(version: u16, payload: &[u8]) -> Vec<u8> {
+        let mut frame = version.to_be_bytes().to_vec();
+        frame.resize(0x10, 0);
+        frame.extend_from_slice(payload);
+        frame
+    }
+
+    #[test]
+    fn in_memory_data_is_validated_before_a_decoder_is_built() {
+        let hdr = {
+            let mut hdr = vec![0u8; 48];
+            hdr[12..14].copy_from_slice(&1u16.to_be_bytes());
+            hdr[14..16].copy_from_slice(&1u16.to_be_bytes());
+            hdr
+        };
+        let tbl = vec![0u8; NUM_VECTORS * NUM_VEC_ITEMS];
+
+        let error = DukVideoDecoder::open_from_data(&hdr, &tbl, &[0, 0, 0], &[]).unwrap_err();
+        assert!(
+            matches!(&error, VideoError::BadFile(m) if m.contains("not multiple of 4")),
+            "{error:?}"
+        );
+
+        let short_table = &tbl[..tbl.len() - 1];
+        let error = DukVideoDecoder::open_from_data(&hdr, short_table, &[0; 4], &[]).unwrap_err();
+        assert!(
+            matches!(&error, VideoError::BadFile(m) if m.contains("Vector table too short")),
+            "{error:?}"
+        );
+
+        assert!(DukVideoDecoder::open_from_data(&hdr[..10], &tbl, &[0; 4], &[]).is_err());
+    }
+
+    #[test]
+    fn frame_offsets_are_read_big_endian_in_order() {
+        let decoder = video_from_frames(1, 1, &[frame(0x0300, &[0]), frame(0x0300, &[0])]).unwrap();
+        assert_eq!(decoder.frame_count(), 2);
+        assert_eq!(decoder.frame_offsets, [0, 8 + 0x11]);
+    }
+
+    #[test]
+    fn a_frame_index_past_the_table_is_end_of_stream() {
+        let mut decoder = video_from_frames(1, 1, &[frame(0x0300, &[0])]).unwrap();
+        assert!(matches!(decoder.decode_frame(1), Err(VideoError::Eof)));
+        assert_eq!(
+            decoder.current_frame(),
+            0,
+            "a refused frame does not move the cursor"
+        );
+    }
+
+    #[test]
+    fn corrupt_frame_headers_are_reported_by_what_is_wrong_with_them() {
+        // The offset table points past the end of the stream.
+        let mut decoder = video_from_frames(1, 1, &[frame(0x0300, &[0])]).unwrap();
+        decoder.frame_offsets[0] = decoder.duk_data.len() as u32 - 4;
+        assert!(matches!(
+            decoder.decode_frame(0),
+            Err(VideoError::BadFile(m)) if m == "Frame header truncated"
+        ));
+
+        // vsize larger than the format allows.
+        let mut decoder = video_from_frames(1, 1, &[frame(0x0300, &[0])]).unwrap();
+        decoder.duk_data[4..8].copy_from_slice(&(DUCK_MAX_FRAME_SIZE as u32 + 1).to_be_bytes());
+        assert!(matches!(
+            decoder.decode_frame(0),
+            Err(VideoError::OutOfBuffer)
+        ));
+
+        // vsize within the format limit but beyond the bytes present.
+        let mut decoder = video_from_frames(1, 1, &[frame(0x0300, &[0])]).unwrap();
+        decoder.duk_data[4..8].copy_from_slice(&0x400u32.to_be_bytes());
+        assert!(matches!(
+            decoder.decode_frame(0),
+            Err(VideoError::BadFile(m)) if m == "Frame data truncated"
+        ));
+
+        // A frame too small to hold a version word.
+        let mut decoder = video_from_frames(1, 1, &[vec![0x03]]).unwrap();
+        assert!(matches!(
+            decoder.decode_frame(0),
+            Err(VideoError::BadFile(m)) if m == "Frame data too short"
+        ));
+
+        // A frame with a version word but no room for the 0x10-byte frame header.
+        let mut decoder = video_from_frames(1, 1, &[vec![3, 0, 0, 0]]).unwrap();
+        assert!(matches!(
+            decoder.decode_frame(0),
+            Err(VideoError::BadFile(m)) if m == "Frame data missing payload"
+        ));
+    }
+
+    #[test]
+    fn a_frame_without_payload_bytes_is_empty_for_both_codec_versions() {
+        for version in [0x0300, 0x0200] {
+            let mut decoder = video_from_frames(1, 1, &[frame(version, &[])]).unwrap();
+            assert!(
+                matches!(
+                    decoder.decode_frame(0),
+                    Err(VideoError::BadFile(m)) if m == "Empty frame data"
+                ),
+                "version {version:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_neutral_payload_decodes_to_a_black_frame_of_the_header_size() {
+        let black = PixelFormat::default().convert_from_duk(0);
+        for version in [0x0300, 0x0200] {
+            let mut decoder =
+                video_from_frames(2, 1, &[frame(version, &[0]), frame(version, &[0])]).unwrap();
+            let decoded = decoder.decode_frame(1).unwrap();
+            assert_eq!(
+                (decoded.width, decoded.height),
+                (8, 4),
+                "version {version:#x}"
+            );
+            assert_eq!(decoded.data.len(), 32);
+            assert!(decoded.data.iter().all(|&pixel| pixel == black));
+            assert_eq!(decoded.timestamp, 1.0 / DUCK_FPS);
+            assert_eq!(decoder.current_frame(), 1);
+        }
+    }
+
+    #[test]
+    fn a_vector_table_without_end_markers_is_rejected_instead_of_overrunning() {
+        // All-zero vectors never flag the end of a sequence, so the sequence
+        // index runs off the end of the 16-item delta table.
+        let unterminated = vec![0u8; NUM_VECTORS * NUM_VEC_ITEMS];
+        let mut v2 = video_with_table(2, 1, &[frame(0x0200, &[0])], &unterminated).unwrap();
+        assert!(matches!(
+            v2.decode_frame(0),
+            Err(VideoError::BadFile(m)) if m.contains("no end marker")
+        ));
+
+        // The single-row V3 decoder wraps the sequence index instead of failing.
+        let mut v3 = video_with_table(2, 1, &[frame(0x0300, &[0])], &unterminated).unwrap();
+        assert!(v3.decode_frame(0).is_ok());
+    }
+
+    #[test]
+    fn the_configured_pixel_format_decides_the_output_pixels() {
+        let mut decoder = video_from_frames(1, 1, &[frame(0x0300, &[0])]).unwrap();
+        decoder.set_pixel_format(PixelFormat::rgb565());
+        let rgb565_black = PixelFormat::rgb565().convert_from_duk(0);
+        let decoded = decoder.decode_frame(0).unwrap();
+        assert!(decoded.data.iter().all(|&pixel| pixel == rgb565_black));
     }
 }

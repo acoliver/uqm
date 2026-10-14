@@ -629,11 +629,11 @@ pub fn mixer_mix_fake(stream: &mut [u8]) -> Result<(), MixerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
 
     #[test]
-    #[serial]
     fn test_mixer_init() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -647,8 +647,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_init_uninit() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         assert!(!mixer_is_initialized());
         mixer_init(
@@ -667,8 +667,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_reinit() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -690,8 +690,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_get_params() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             22050,
@@ -711,8 +711,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_error() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -730,8 +730,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_empty() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -751,8 +751,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_fake() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -771,8 +771,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_mono16() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -792,8 +792,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_stereo16() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -810,5 +810,246 @@ mod tests {
             assert_eq!(sample, 0);
         }
         mixer_uninit().unwrap();
+    }
+
+    #[test]
+    fn the_mixer_state_tests_wait_for_the_lock_of_the_pool_they_render() {
+        let bodies: [fn(); 9] = [
+            test_mixer_init,
+            test_mixer_init_uninit,
+            test_mixer_reinit,
+            test_mixer_get_params,
+            test_mixer_error,
+            test_mixer_mix_channels_empty,
+            test_mixer_mix_fake,
+            test_mixer_mix_channels_mono16,
+            test_mixer_mix_channels_stereo16,
+        ];
+        let engine = ENGINE_TEST_LOCK.lock();
+        let probes = bodies.map(Probe::spawn);
+        let blocked = Probe::all_blocked_for_grace(&probes);
+        drop(engine);
+
+        let finished: Vec<bool> = probes.into_iter().map(|p| p.join().is_ok()).collect();
+        assert!(blocked, "a mixer state test ran without the engine lock");
+        assert_eq!(finished, [true; 9]);
+    }
+}
+
+/// The sample pipeline below the global source pool: buffers come from the real
+/// buffer pool and sources are local, so the expected output depends on nothing
+/// another test may be playing.
+#[cfg(test)]
+mod pipeline_tests {
+    use super::*;
+    use crate::sound::mixer::buffer::{mixer_buffer_data, mixer_delete_buffers, mixer_gen_buffers};
+
+    const MONO16: u32 = 0x0017_0102;
+    const STEREO16: u32 = 0x0017_0202;
+
+    fn le16(samples: &[i16]) -> Vec<u8> {
+        samples.iter().flat_map(|s| s.to_le_bytes()).collect()
+    }
+
+    /// A buffer of 16-bit PCM at the mixer's own frequency, ready to play.
+    fn filled_buffer(format: u32, samples: &[i16]) -> usize {
+        let handle = mixer_gen_buffers(1).unwrap()[0];
+        mixer_buffer_data(
+            handle,
+            format,
+            &le16(samples),
+            44100,
+            44100,
+            MixerFormat::Stereo16,
+        )
+        .unwrap();
+        handle
+    }
+
+    fn playing_source(first: Option<usize>, gain: f32) -> Arc<Mutex<MixerSource>> {
+        let mut source = MixerSource::new();
+        source.state = SourceState::Playing as u32;
+        source.gain = gain;
+        source.first_queued = first;
+        source.next_queued = first;
+        Arc::new(Mutex::new(source))
+    }
+
+    /// Mono output: every read is a left read of one 16-bit channel.
+    fn mono_output(sources: &[(usize, Arc<Mutex<MixerSource>>)], frames: usize) -> Vec<f32> {
+        (0..frames)
+            .map(|_| accumulate_playing_sources(sources, true, 2, 2, 1, 44100))
+            .collect()
+    }
+
+    #[test]
+    fn output_is_clamped_to_the_word_size_and_truncated_toward_zero() {
+        assert_eq!(clip_sample(40000.0, 2), 32767);
+        assert_eq!(clip_sample(-40000.0, 2), -32768);
+        assert_eq!(clip_sample(12345.9, 2), 12345);
+        assert_eq!(clip_sample(-12345.9, 2), -12345);
+        assert_eq!(clip_sample(300.0, 1), 127);
+        assert_eq!(clip_sample(-300.0, 1), -128);
+        assert_eq!(clip_sample(-5.5, 1), -5);
+    }
+
+    #[test]
+    fn interleaved_stereo_is_walked_one_channel_at_a_time_with_gain() {
+        let buffer = filled_buffer(STEREO16, &[100, -200, 300, -400]);
+        let source = playing_source(Some(buffer), 0.5);
+        let sources = [(1, source.clone())];
+
+        // Alternating left/right reads L0, R0, L1, R1 straight from the data.
+        let heard: Vec<f32> = (0..4)
+            .map(|i| accumulate_playing_sources(&sources, i % 2 == 0, 2, 4, 2, 44100))
+            .collect();
+        assert_eq!(heard, [50.0, -100.0, 150.0, -200.0]);
+        mixer_delete_buffers(&[buffer]).ok();
+    }
+
+    #[test]
+    fn a_mono_buffer_is_heard_on_both_channels() {
+        let buffer = filled_buffer(MONO16, &[1000, -2000]);
+        let source = playing_source(Some(buffer), 1.0);
+        let sources = [(1, source)];
+
+        let heard: Vec<f32> = (0..4)
+            .map(|i| accumulate_playing_sources(&sources, i % 2 == 0, 2, 4, 2, 44100))
+            .collect();
+        // The right channel repeats the sample the left channel just read.
+        assert_eq!(heard, [1000.0, 1000.0, -2000.0, -2000.0]);
+        mixer_delete_buffers(&[buffer]).ok();
+    }
+
+    #[test]
+    fn sources_add_and_only_playing_sources_are_heard() {
+        let first = filled_buffer(MONO16, &[20000, 20000]);
+        let second = filled_buffer(MONO16, &[15000, -5000]);
+        let mut sources = vec![
+            (1, playing_source(Some(first), 1.0)),
+            (2, playing_source(Some(second), 1.0)),
+        ];
+        let paused = playing_source(Some(first), 1.0);
+        paused.lock().state = SourceState::Paused as u32;
+        sources.push((3, paused));
+
+        let heard = mono_output(&sources, 2);
+        // Frames are not clipped here; clipping is applied once to the total.
+        assert_eq!(heard, [35000.0, 15000.0]);
+        mixer_delete_buffers(&[first, second]).ok();
+    }
+
+    #[test]
+    fn a_source_with_nothing_queued_stops_and_a_missing_buffer_is_skipped() {
+        let idle = playing_source(None, 1.0);
+        let dangling = playing_source(Some(usize::MAX), 1.0);
+        let sources = [(1, idle.clone()), (2, dangling.clone())];
+
+        assert_eq!(
+            accumulate_playing_sources(&sources, true, 2, 2, 1, 44100),
+            0.0
+        );
+        assert_eq!(idle.lock().state, SourceState::Stopped as u32);
+        assert_eq!(
+            dangling.lock().state,
+            SourceState::Playing as u32,
+            "a source whose buffer vanished keeps its state and is simply silent"
+        );
+    }
+
+    #[test]
+    fn an_exhausted_buffer_hands_over_to_the_next_one_in_the_queue() {
+        let first = filled_buffer(MONO16, &[1, 2]);
+        let second = filled_buffer(MONO16, &[30, 40]);
+        crate::sound::mixer::buffer::mixer_get_buffer(first)
+            .unwrap()
+            .lock()
+            .next = Some(second);
+        let source = playing_source(Some(first), 1.0);
+        let sources = [(1, source.clone())];
+
+        let heard = mono_output(&sources, 4);
+        assert_eq!(heard, [1.0, 2.0, 30.0, 40.0]);
+
+        let source = source.lock();
+        assert_eq!(source.processed_count, 2, "both buffers have been consumed");
+        assert_eq!(source.prev_queued, Some(second));
+        assert_eq!(source.next_queued, None);
+        assert_eq!(source.pos, 0);
+        drop(source);
+        let first_state = crate::sound::mixer::buffer::mixer_get_buffer(first)
+            .unwrap()
+            .lock()
+            .state;
+        assert_eq!(first_state, BufferState::Processed as u32);
+        mixer_delete_buffers(&[first, second]).ok();
+    }
+
+    #[test]
+    fn retiring_waits_until_the_read_position_reaches_the_end() {
+        let handle = filled_buffer(MONO16, &[1, 2, 3]);
+        let buffer = crate::sound::mixer::buffer::mixer_get_buffer(handle).unwrap();
+        let mut source = MixerSource::new();
+        source.next_queued = Some(handle);
+        let mut guard = buffer.lock();
+        guard.next = Some(99);
+
+        source.pos = 4;
+        retire_buffer_if_exhausted(7, &mut source, &mut guard, true, 2);
+        assert_eq!(guard.state, BufferState::Playing as u32);
+        assert_eq!(source.processed_count, 0);
+        assert_eq!(source.next_queued, Some(handle));
+
+        source.pos = 6;
+        retire_buffer_if_exhausted(7, &mut source, &mut guard, true, 2);
+        assert_eq!(guard.state, BufferState::Processed as u32);
+        assert_eq!(source.processed_count, 1);
+        assert_eq!(source.prev_queued, Some(handle));
+        assert_eq!(source.next_queued, Some(99));
+        assert_eq!(source.pos, 0);
+        drop(guard);
+        mixer_delete_buffers(&[handle]).ok();
+    }
+
+    #[test]
+    fn half_rate_audio_repeats_each_frame_to_fill_the_mixer_rate() {
+        let handle = mixer_gen_buffers(1).unwrap()[0];
+        mixer_buffer_data(
+            handle,
+            MONO16,
+            &le16(&[10, 20, 30]),
+            22050,
+            44100,
+            MixerFormat::Mono16,
+        )
+        .unwrap();
+        let buffer = crate::sound::mixer::buffer::mixer_get_buffer(handle).unwrap();
+        let guard = buffer.lock();
+        let mut source = MixerSource::new();
+        source.gain = 1.0;
+
+        let heard: Vec<f32> = (0..6)
+            .map(|_| next_source_sample(&mut source, &guard, true, 2, 1, 44100))
+            .collect();
+        assert_eq!(heard, [10.0, 10.0, 20.0, 20.0, 30.0, 30.0]);
+        drop(guard);
+        mixer_delete_buffers(&[handle]).ok();
+    }
+
+    #[test]
+    fn reading_past_the_data_yields_silence_instead_of_panicking() {
+        let handle = filled_buffer(MONO16, &[7]);
+        let buffer = crate::sound::mixer::buffer::mixer_get_buffer(handle).unwrap();
+        let guard = buffer.lock();
+        let mut source = MixerSource::new();
+        source.gain = 1.0;
+        source.pos = 2;
+        assert_eq!(
+            next_source_sample(&mut source, &guard, true, 2, 1, 44100),
+            0.0
+        );
+        assert_eq!(source.pos, 4, "the position still advances");
+        drop(guard);
+        mixer_delete_buffers(&[handle]).ok();
     }
 }

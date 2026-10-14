@@ -23,6 +23,7 @@ const CHECK_ABORT: u16 = 0x4000;
 #[cfg(test)]
 const CHECK_LOAD: u16 = 0x1000;
 /// `CHECK_RESTART = MAKE_WORD(0, 1<<5) = 0x2000`.
+#[cfg(test)]
 const CHECK_RESTART: u16 = 0x2000;
 /// `SUPER_MELEE = 0`.
 const SUPER_MELEE: u16 = 0;
@@ -238,49 +239,36 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
 //  StartGame — restart.c:390-423
 // ===========================================================================
 
-/// Outermost game-start loop.
+/// Game-start loop with direct handoff to game initialization.
 ///
 /// Returns `true` if a game was started, `false` if the player quit.
 ///
-/// Matches `StartGame()` in restart.c:390-423.
+/// Preserves the menu, timeout and control setup from `StartGame()` in
+/// restart.c:390-423. Intro presentation is deferred pending its Rust port.
 ///
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
 pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
     loop {
-        // Inner loop: try to start a game (restart.c:392-405)
-        loop {
-            let started = try_start_game_impl(ops);
-
-            if started {
-                break;
-            }
-
-            let activity = ops.get_current_activity();
-
-            if activity == !0u16 {
-                // Timeout: show splash + credits (restart.c:398-401)
-                ops.set_current_activity(0);
-                ops.splash_screen();
-                ops.credits(false);
-            }
-
-            if ops.get_current_activity() & CHECK_ABORT != 0 {
-                return false;
-            }
-        }
-
-        // Show introduction for new games (restart.c:407-409)
-        let last_activity = ops.get_last_activity();
-        if last_activity & CHECK_RESTART != 0 {
-            ops.introduction();
-        }
-
-        // Loop if CHECK_ABORT was set during Introduction (restart.c:411)
-        if ops.get_current_activity() & CHECK_ABORT == 0 {
+        if try_start_game_impl(ops) {
             break;
         }
+
+        let activity = ops.get_current_activity();
+        if activity == !0u16 {
+            // Timeout: show splash + credits (restart.c:398-401)
+            ops.set_current_activity(0);
+            ops.splash_screen();
+            ops.credits(false);
+        }
+
+        if ops.get_current_activity() & CHECK_ABORT != 0 {
+            return false;
+        }
     }
+
+    // Intro presentation is deferred until its Rust port. Hand off directly to
+    // game initialization; IN_INTERPLANETARY already describes the menu choice.
 
     // Assign global arrays (restart.c:413-421)
     ops.assign_global_arrays();
@@ -338,7 +326,7 @@ mod tests {
         credits_victory: Cell<bool>,
         free_game_data_called: Cell<bool>,
         melee_called: Cell<bool>,
-        introduction_called: Cell<bool>,
+        input_callbacks: Cell<u32>,
         splash_called: Cell<bool>,
         assign_globals_called: Cell<bool>,
         player_control_0: Cell<u16>,
@@ -367,7 +355,7 @@ mod tests {
                 credits_victory: Cell::new(false),
                 free_game_data_called: Cell::new(false),
                 melee_called: Cell::new(false),
-                introduction_called: Cell::new(false),
+                input_callbacks: Cell::new(0),
                 splash_called: Cell::new(false),
                 assign_globals_called: Cell::new(false),
                 player_control_0: Cell::new(0),
@@ -475,6 +463,7 @@ mod tests {
         fn set_default_menu_repeat_delay(&self) {}
         fn set_transition_source_null(&self) {}
         fn run_do_input(&self, _reset_input: bool) {
+            self.input_callbacks.set(self.input_callbacks.get() + 1);
             // Simulate DoInput setting activity via user selection.
             // For new game (IN_INTERPLANETARY), DoRestart also sets
             // LastActivity = CHECK_LOAD | CHECK_RESTART.
@@ -513,9 +502,6 @@ mod tests {
         fn setup_menu(&self) {}
         fn free_game_data(&self) {
             self.free_game_data_called.set(true);
-        }
-        fn introduction(&self) {
-            self.introduction_called.set(true);
         }
         fn credits(&self, victory: bool) {
             self.credits_called.set(true);
@@ -671,17 +657,26 @@ mod tests {
     // ---- start_game_impl tests -------------------------------------------
 
     #[test]
-    fn start_game_new_game_calls_introduction() {
+    fn new_game_hands_off_to_lifecycle_without_presentation_input() {
         let ops = MockOps::new();
-        ops.do_input_activity_after.set(4); // IN_INTERPLANETARY
-                                            // Set last_activity to include CHECK_RESTART
-        ops.last_activity.set(CHECK_RESTART);
+        ops.do_input_activity_after.set(4);
 
-        let result = start_game_impl(&ops);
-        assert!(result, "should return true");
-        assert!(
-            ops.introduction_called.get(),
-            "Introduction should be called for new game"
+        assert!(start_game_impl(&ops));
+        assert_eq!(ops.current_activity.get(), 4);
+        assert_eq!(ops.last_activity.get(), CHECK_LOAD | CHECK_RESTART);
+        assert_eq!(
+            ops.input_callbacks.get(),
+            1,
+            "only the menu may consume input before game initialization"
+        );
+        assert!(ops.assign_globals_called.get());
+        assert_eq!(
+            ops.player_control_0.get(),
+            u16::from(HUMAN_CONTROL | STANDARD_RATING)
+        );
+        assert_eq!(
+            ops.player_control_1.get(),
+            u16::from(COMPUTER_CONTROL | AWESOME_RATING)
         );
     }
 

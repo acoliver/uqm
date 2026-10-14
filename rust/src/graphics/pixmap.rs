@@ -377,36 +377,12 @@ impl Pixmap {
             return Err(anyhow::anyhow!("Cannot fill indexed pixmap with color"));
         }
 
-        match self.bytes_per_pixel() {
-            4 => {
-                let data32 = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        self.data_mut().as_mut_ptr() as *mut u32,
-                        self.data.len() / 4,
-                    )
-                };
-                data32.fill(color);
-            }
-            2 => {
-                let data16 = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        self.data_mut().as_mut_ptr() as *mut u16,
-                        self.data.len() / 2,
-                    )
-                };
-                data16.fill(color as u16);
-            }
-            _ => {
-                // Generic fill
-                let color_bytes = color.to_le_bytes();
-                for i in (0..self.data.len()).step_by(color_bytes.len()) {
-                    for (j, &byte) in color_bytes.iter().enumerate() {
-                        if i + j < self.data.len() {
-                            self.data_mut()[i + j] = byte;
-                        }
-                    }
-                }
-            }
+        // Each pixel takes the low bytes of the color; a 24-bit pixel is three
+        // bytes, so a fixed four-byte stride would smear the color across pixels.
+        let bytes_per_pixel = self.bytes_per_pixel() as usize;
+        let color_bytes = color.to_le_bytes();
+        for pixel in self.data_mut().chunks_exact_mut(bytes_per_pixel) {
+            pixel.copy_from_slice(&color_bytes[..bytes_per_pixel]);
         }
         Ok(())
     }
@@ -736,5 +712,262 @@ mod tests {
         let rect = Rect::from_xywh(150, 150, 10, 10);
         let result = pixmap.extract_region(rect);
         assert!(result.is_err());
+    }
+
+    const ALL_FORMATS: [PixmapFormat; 8] = [
+        PixmapFormat::Indexed8,
+        PixmapFormat::Rgb565,
+        PixmapFormat::Rgba5551,
+        PixmapFormat::Rgb24,
+        PixmapFormat::Rgba32,
+        PixmapFormat::Bgra32,
+        PixmapFormat::Argb32,
+        PixmapFormat::Abgr32,
+    ];
+
+    fn pixmap(width: u32, height: u32, format: PixmapFormat) -> Pixmap {
+        Pixmap::new(NonZeroU32::new(1).unwrap(), width, height, format).unwrap()
+    }
+
+    #[test]
+    fn layouts_describe_disjoint_contiguous_channels_that_fit_the_pixel() {
+        for format in ALL_FORMATS {
+            let layout = PixmapLayout::from_format(format, 7);
+            assert_eq!(
+                layout.bits_per_pixel,
+                format.bytes_per_pixel() * 8,
+                "{format:?}"
+            );
+            assert_eq!(layout.stride, 7);
+            assert_eq!(layout.bytes_per_row(), 7 * format.bytes_per_pixel());
+
+            let masks = [layout.rmask, layout.gmask, layout.bmask, layout.amask];
+            let shifts = [layout.rshift, layout.gshift, layout.bshift, layout.ashift];
+            let mut seen = 0_u32;
+            for (mask, shift) in masks.into_iter().zip(shifts) {
+                if mask == 0 {
+                    continue;
+                }
+                assert_eq!(seen & mask, 0, "{format:?} channels overlap");
+                seen |= mask;
+                // The shift lands the channel at bit zero as a run of ones.
+                let channel = mask >> shift;
+                assert_eq!(
+                    mask,
+                    channel << shift,
+                    "{format:?} shift misplaces its mask"
+                );
+                assert_eq!(
+                    channel & (channel + 1),
+                    0,
+                    "{format:?} channel is not contiguous"
+                );
+                assert!(
+                    mask < (1_u64 << layout.bits_per_pixel) as u32 || layout.bits_per_pixel == 32
+                );
+            }
+            assert_eq!(layout.amask != 0, format.has_alpha(), "{format:?}");
+            if format == PixmapFormat::Indexed8 {
+                assert_eq!(seen, 0, "palette pixels carry no channel masks");
+            }
+        }
+    }
+
+    #[test]
+    fn rows_round_up_to_whole_bytes() {
+        let mut layout = PixmapLayout::from_format(PixmapFormat::Rgb565, 3);
+        assert_eq!(layout.bytes_per_row(), 6);
+        layout.bits_per_pixel = 12;
+        assert_eq!(layout.bytes_per_row(), 5, "36 bits need five bytes");
+    }
+
+    #[test]
+    fn filling_writes_every_pixel_with_the_low_bytes_of_the_color() {
+        let color = 0x44_33_22_11_u32;
+        for format in ALL_FORMATS {
+            let mut pixmap = pixmap(3, 2, format);
+            let bytes_per_pixel = format.bytes_per_pixel() as usize;
+            if format == PixmapFormat::Indexed8 {
+                assert!(
+                    pixmap.fill(color).is_err(),
+                    "a palette index is not a color"
+                );
+                continue;
+            }
+            pixmap.fill(color).unwrap();
+            let expected: Vec<u8> = color.to_le_bytes()[..bytes_per_pixel].to_vec();
+            for (index, pixel) in pixmap.data().chunks_exact(bytes_per_pixel).enumerate() {
+                assert_eq!(pixel, expected.as_slice(), "{format:?} pixel {index}");
+            }
+            assert_eq!(pixmap.data().len(), 6 * bytes_per_pixel, "{format:?}");
+            assert!(pixmap.is_dirty());
+        }
+    }
+
+    #[test]
+    fn row_pointers_address_whole_rows_and_refuse_rows_past_the_end() {
+        let mut pixmap = pixmap(4, 3, PixmapFormat::Rgba32);
+        let base = pixmap.data().as_ptr();
+        assert_eq!(pixmap.row_ptr(0).unwrap(), base);
+        assert_eq!(pixmap.row_ptr(2).unwrap(), unsafe { base.add(2 * 16) });
+        let error = pixmap.row_ptr(3).unwrap_err();
+        assert!(
+            error.to_string().contains("Region out of bounds"),
+            "{error}"
+        );
+
+        pixmap.clear_dirty();
+        let row = pixmap.row_ptr_mut(1).unwrap();
+        unsafe { row.write(0xAB) };
+        assert_eq!(pixmap.data()[16], 0xAB);
+        assert!(
+            pixmap.is_dirty(),
+            "taking a writable row marks the pixmap dirty"
+        );
+        assert!(pixmap.row_ptr_mut(3).is_err());
+    }
+
+    #[test]
+    fn copying_a_region_moves_exactly_those_pixels() {
+        let mut src = pixmap(4, 4, PixmapFormat::Rgba32);
+        for (index, byte) in src.data_mut().iter_mut().enumerate() {
+            *byte = index as u8;
+        }
+        let mut dst = pixmap(4, 4, PixmapFormat::Rgba32);
+        dst.copy_region(&src, Rect::from_xywh(1, 1, 2, 2), Point::new(0, 2))
+            .unwrap();
+
+        let pixel = |pixmap: &Pixmap, x: usize, y: usize| -> [u8; 4] {
+            let at = y * 16 + x * 4;
+            pixmap.data()[at..at + 4].try_into().unwrap()
+        };
+        assert_eq!(pixel(&dst, 0, 2), pixel(&src, 1, 1));
+        assert_eq!(pixel(&dst, 1, 2), pixel(&src, 2, 1));
+        assert_eq!(pixel(&dst, 0, 3), pixel(&src, 1, 2));
+        assert_eq!(pixel(&dst, 1, 3), pixel(&src, 2, 2));
+        let untouched = dst
+            .data()
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| {
+                let (x, y) = ((index % 16) / 4, index / 16);
+                !(x < 2 && y >= 2)
+            })
+            .all(|(_, byte)| *byte == 0);
+        assert!(untouched, "pixels outside the destination block stay empty");
+    }
+
+    #[test]
+    fn copying_refuses_regions_outside_either_pixmap_and_mixed_formats() {
+        let src = pixmap(4, 4, PixmapFormat::Rgba32);
+        let mut dst = pixmap(4, 4, PixmapFormat::Rgba32);
+        let whole = Rect::from_xywh(0, 0, 4, 4);
+
+        for (rect, point) in [
+            (Rect::from_xywh(-1, 0, 2, 2), Point::new(0, 0)),
+            (Rect::from_xywh(0, -1, 2, 2), Point::new(0, 0)),
+            (Rect::from_xywh(3, 0, 2, 2), Point::new(0, 0)),
+            (Rect::from_xywh(0, 3, 2, 2), Point::new(0, 0)),
+            (whole, Point::new(-1, 0)),
+            (whole, Point::new(0, -1)),
+            (whole, Point::new(1, 0)),
+            (whole, Point::new(0, 1)),
+        ] {
+            let error = dst.copy_region(&src, rect, point).unwrap_err();
+            assert!(
+                error.to_string().contains("Region out of bounds"),
+                "{rect:?} -> {point:?}: {error}"
+            );
+        }
+
+        let other_format = pixmap(4, 4, PixmapFormat::Rgb565);
+        let error = dst
+            .copy_region(&other_format, Rect::from_xywh(0, 0, 2, 2), Point::new(0, 0))
+            .unwrap_err();
+        assert!(error.to_string().contains("Format mismatch"), "{error}");
+        assert!(dst.data().iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn an_extracted_region_holds_the_source_pixels_under_a_new_id() {
+        let mut source = pixmap(5, 4, PixmapFormat::Rgb565);
+        for (index, byte) in source.data_mut().iter_mut().enumerate() {
+            *byte = index as u8;
+        }
+        let region = source.extract_region(Rect::from_xywh(1, 1, 2, 2)).unwrap();
+        assert_eq!((region.width(), region.height()), (2, 2));
+        assert_eq!(region.id(), source.id() + 1);
+        // Source rows are 10 bytes; the region starts at pixel (1, 1) = byte 12.
+        assert_eq!(region.data(), [12, 13, 14, 15, 22, 23, 24, 25]);
+    }
+
+    #[test]
+    fn a_pixmap_needs_pixels() {
+        for (width, height) in [(0, 4), (4, 0), (0, 0)] {
+            let error = Pixmap::new(
+                NonZeroU32::new(1).unwrap(),
+                width,
+                height,
+                PixmapFormat::Rgba32,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!("Invalid pixmap dimensions: {width}x{height}")
+            );
+        }
+    }
+
+    #[test]
+    fn the_registry_hands_out_sequential_ids_and_rejects_unknown_ones() {
+        let registry = PixmapRegistry::new();
+        let first = registry.allocate(2, 2, PixmapFormat::Rgba32).unwrap();
+        let second = registry.allocate(3, 3, PixmapFormat::Rgb565).unwrap();
+        assert_eq!((first, second), (1, 2));
+        assert_eq!(registry.get(second).unwrap().width(), 3);
+
+        assert!(registry.allocate(0, 2, PixmapFormat::Rgba32).is_err());
+        assert_eq!(
+            registry.count(),
+            2,
+            "a refused allocation leaves nothing behind"
+        );
+
+        let error = registry.get(0).unwrap_err();
+        assert!(
+            error.to_string().contains("Invalid pixmap ID: 0"),
+            "{error}"
+        );
+        assert!(registry
+            .get(99)
+            .unwrap_err()
+            .to_string()
+            .contains("not found"));
+        assert!(registry.get_mut(0).is_err());
+        assert!(registry.release(0).is_err());
+        assert!(registry.release(99).is_err());
+
+        registry.release(first).unwrap();
+        assert!(registry.get(first).is_err());
+        assert!(
+            registry.release(first).is_err(),
+            "a pixmap is released once"
+        );
+        assert_eq!(registry.count(), 1);
+    }
+
+    #[test]
+    fn the_registry_returns_copies_so_callers_cannot_alter_stored_pixels() {
+        let registry = PixmapRegistry::new();
+        let id = registry.allocate(2, 1, PixmapFormat::Rgba32).unwrap();
+        let handle = registry.get(id).unwrap();
+        let mut local = (*handle).clone();
+        local.fill(0xFFFF_FFFF).unwrap();
+        assert!(registry
+            .get(id)
+            .unwrap()
+            .data()
+            .iter()
+            .all(|byte| *byte == 0));
     }
 }

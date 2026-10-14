@@ -1268,3 +1268,476 @@ mod tests {
         assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_HQXX);
     }
 }
+
+#[cfg(test)]
+mod config_file_tests {
+    use super::*;
+    use serial_test::serial;
+
+    fn applied(lines: &[(&str, &str)]) -> ParsedOptions {
+        let mut opts = ParsedOptions::default();
+        for (key, raw) in lines {
+            apply_config_value(&mut opts, key, raw);
+        }
+        opts
+    }
+
+    #[test]
+    fn boolean_settings_switch_the_matching_option() {
+        let opts = applied(&[
+            ("usegl", "BOOLEAN:true"),
+            ("fullscreen", "BOOLEAN:true"),
+            ("scanlines", "BOOLEAN:true"),
+            ("showfps", "BOOLEAN:true"),
+            ("keepaspectratio", "BOOLEAN:false"),
+            ("subtitles", "BOOLEAN:false"),
+            ("3domusic", "BOOLEAN:false"),
+            ("remixmusic", "BOOLEAN:false"),
+            ("speech", "BOOLEAN:false"),
+            ("positionalsfx", "BOOLEAN:false"),
+        ]);
+
+        assert!(opts.opengl && opts.fullscreen && opts.scanlines && opts.show_fps);
+        assert!(!opts.keep_aspect_ratio && !opts.subtitles);
+        assert!(!opts.use_3do_music && !opts.use_remix_music && !opts.use_speech);
+        assert!(!opts.stereo_sfx);
+    }
+
+    #[test]
+    fn the_menu_style_settings_choose_between_pc_and_3do() {
+        let on = applied(&[
+            ("textmenu", "BOOLEAN:true"),
+            ("textgradients", "BOOLEAN:true"),
+            ("iconicscan", "BOOLEAN:true"),
+            ("smoothscroll", "BOOLEAN:true"),
+            ("pulseshield", "BOOLEAN:true"),
+            ("3domovies", "BOOLEAN:true"),
+            ("smoothmelee", "BOOLEAN:true"),
+        ]);
+        assert_eq!((on.which_menu, on.which_fonts), (OPT_PC, OPT_PC));
+        assert_eq!(on.which_coarse_scan, OPT_3DO);
+        assert_eq!((on.smooth_scroll, on.which_shield), (OPT_3DO, OPT_3DO));
+        assert_eq!(on.which_intro, OPT_3DO);
+        assert_eq!(on.melee_scale, TFB_SCALE_TRILINEAR);
+
+        let off = applied(&[
+            ("textmenu", "BOOLEAN:false"),
+            ("textgradients", "BOOLEAN:false"),
+            ("iconicscan", "BOOLEAN:false"),
+            ("smoothscroll", "BOOLEAN:false"),
+            ("pulseshield", "BOOLEAN:false"),
+            ("3domovies", "BOOLEAN:false"),
+            ("smoothmelee", "BOOLEAN:false"),
+        ]);
+        assert_eq!((off.which_menu, off.which_fonts), (OPT_3DO, OPT_3DO));
+        assert_eq!(off.which_coarse_scan, OPT_PC);
+        assert_eq!((off.smooth_scroll, off.which_shield), (OPT_PC, OPT_PC));
+        assert_eq!(off.which_intro, OPT_PC);
+        assert_eq!(off.melee_scale, TFB_SCALE_STEP);
+    }
+
+    #[test]
+    fn alwaysgl_can_only_turn_opengl_on() {
+        let mut opts = ParsedOptions::default();
+        apply_config_value(&mut opts, "alwaysgl", "BOOLEAN:false");
+        assert!(!opts.opengl);
+        apply_config_value(&mut opts, "alwaysgl", "BOOLEAN:true");
+        assert!(opts.opengl);
+        apply_config_value(&mut opts, "alwaysgl", "BOOLEAN:false");
+        assert!(opts.opengl, "false never switches it back off");
+        apply_config_value(&mut opts, "usegl", "BOOLEAN:false");
+        assert!(!opts.opengl, "usegl is the setting that can");
+    }
+
+    #[test]
+    fn integer_settings_are_stored_and_percentages_scaled() {
+        let opts = applied(&[
+            ("reswidth", "INT32:960"),
+            ("resheight", "INT32:720"),
+            ("gamma", "INT32:1250"),
+            ("musicvol", "INT32:40"),
+            ("sfxvol", "INT32:60"),
+            ("speechvol", "INT32:80"),
+            ("player1control", "INT32:3"),
+            ("player2control", "INT32:5"),
+        ]);
+
+        assert_eq!((opts.resolution_width, opts.resolution_height), (960, 720));
+        assert!((opts.gamma - 1.25).abs() < 1e-6);
+        assert!((opts.music_volume_scale - 0.4).abs() < 1e-6);
+        assert!((opts.sfx_volume_scale - 0.6).abs() < 1e-6);
+        assert!((opts.speech_volume_scale - 0.8).abs() < 1e-6);
+        assert_eq!(
+            (opts.player1_control, opts.player2_control),
+            (Some(3), Some(5))
+        );
+    }
+
+    #[test]
+    fn string_settings_choose_scaler_driver_and_quality() {
+        let opts = applied(&[
+            ("scaler", "STRING:xbrz4"),
+            ("audiodriver", "STRING:none"),
+            ("audioquality", "STRING:low"),
+        ]);
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ4);
+        assert_eq!(opts.sound_driver, AUDIO_DRIVER_NOSOUND);
+        assert_eq!(opts.sound_quality, AUDIO_QUALITY_LOW);
+
+        for (value, expected) in [
+            ("hq", TFB_GFXFLAGS_SCALE_HQXX),
+            ("xbrz3", TFB_GFXFLAGS_SCALE_XBRZ3),
+            ("none", 0),
+        ] {
+            let opts = applied(&[("scaler", &format!("STRING:{value}"))]);
+            assert_eq!(opts.scaler, expected, "scaler {value}");
+        }
+        assert_eq!(
+            applied(&[("audiodriver", "STRING:mixsdl")]).sound_driver,
+            AUDIO_DRIVER_MIXSDL
+        );
+        assert_eq!(
+            applied(&[("audioquality", "STRING:medium")]).sound_quality,
+            AUDIO_QUALITY_MEDIUM
+        );
+        assert_eq!(
+            applied(&[("audioquality", "STRING:high")]).sound_quality,
+            AUDIO_QUALITY_HIGH
+        );
+    }
+
+    #[test]
+    fn unrecognised_string_values_keep_the_current_choice() {
+        let opts = applied(&[
+            ("scaler", "STRING:warp"),
+            ("audiodriver", "STRING:openal"),
+            ("audioquality", "STRING:ultra"),
+        ]);
+        let defaults = ParsedOptions::default();
+        assert_eq!(opts.scaler, defaults.scaler);
+        assert_eq!(opts.sound_driver, defaults.sound_driver);
+        assert_eq!(opts.sound_quality, defaults.sound_quality);
+    }
+
+    #[test]
+    fn malformed_or_unknown_entries_change_nothing() {
+        let opts = applied(&[
+            ("fullscreen", "true"),
+            ("fullscreen", "FLOAT:true"),
+            ("reswidth", "INT32:wide"),
+            ("reswidth", "INT32:"),
+            ("nosuchkey", "BOOLEAN:true"),
+            ("nosuchkey", "INT32:7"),
+            ("nosuchkey", "STRING:x"),
+        ]);
+        let defaults = ParsedOptions::default();
+        assert_eq!(opts.fullscreen, defaults.fullscreen);
+        assert_eq!(opts.resolution_width, defaults.resolution_width);
+        assert_eq!(opts.player1_control, None);
+    }
+
+    struct ConfigDir {
+        _dir: tempfile::TempDir,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl ConfigDir {
+        fn with_file(contents: Option<&str>) -> Self {
+            let dir = tempfile::TempDir::new().unwrap();
+            if let Some(text) = contents {
+                std::fs::write(dir.path().join("uqm.cfg"), text).unwrap();
+            }
+            let previous = std::env::var_os("UQM_CONFIG_DIR");
+            std::env::set_var("UQM_CONFIG_DIR", dir.path());
+            Self {
+                _dir: dir,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for ConfigDir {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(value) => std::env::set_var("UQM_CONFIG_DIR", value),
+                None => std::env::remove_var("UQM_CONFIG_DIR"),
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn the_config_file_supplies_defaults_and_skips_comments_and_blanks() {
+        let _config = ConfigDir::with_file(Some(
+            "# written by the options menu\n\
+             \n\
+             fullscreen = BOOLEAN:true\n\
+               reswidth = INT32:1024  \n\
+             resheight=INT32:768\n\
+             this line has no equals sign\n\
+             scaler = STRING:hq\n",
+        ));
+
+        let opts = load_config_defaults();
+
+        assert!(opts.fullscreen);
+        assert_eq!((opts.resolution_width, opts.resolution_height), (1024, 768));
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_HQXX);
+        assert!(opts.subtitles, "unlisted settings keep their defaults");
+    }
+
+    #[test]
+    #[serial]
+    fn a_missing_config_file_leaves_the_defaults() {
+        let _config = ConfigDir::with_file(None);
+
+        let opts = load_config_defaults();
+
+        assert!(!opts.fullscreen);
+        assert_eq!(opts.resolution_width, DEFAULT_RESOLUTION_WIDTH);
+        assert!(!opts.parse_error);
+    }
+
+    #[test]
+    #[serial]
+    fn command_line_arguments_override_the_config_file_and_reach_the_c_getters() {
+        let _config = ConfigDir::with_file(Some(
+            "fullscreen = BOOLEAN:true\n\
+             reswidth = INT32:1024\n\
+             resheight = INT32:768\n\
+             player1control = INT32:4\n\
+             gamma = INT32:1500\n",
+        ));
+        let args: Vec<String> = [
+            "uqm",
+            "--res=800x600",
+            "--windowed",
+            "--scanlines",
+            "--fps",
+            "--nosubtitles",
+            "--safe",
+            "--addon",
+            "first",
+            "--addon",
+            "second",
+            "--logfile",
+            "run.log",
+            "--configdir",
+            "/cfg",
+            "--addondir",
+            "/addons",
+            "--contentdir",
+            "/content",
+            "--renderer",
+            "sdl2",
+            "--scale=xbrz4",
+            "--sound=nosound",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+        let opts = parse_and_store(&args);
+
+        assert!(!opts.fullscreen, "the command line beats the file");
+        assert_eq!((opts.resolution_width, opts.resolution_height), (800, 600));
+        assert_eq!(opts.player1_control, Some(4), "file-only settings survive");
+        assert!((opts.gamma - 1.5).abs() < 1e-6);
+        assert_eq!(rust_options_get_run_mode(), RunMode::Normal as c_int);
+        assert_eq!(rust_options_parse_error(), 0);
+        assert_eq!(rust_options_fullscreen(), 0);
+        assert_eq!(rust_options_scanlines(), 1);
+        assert_eq!(rust_options_show_fps(), 1);
+        assert_eq!(rust_options_subtitles(), 0);
+        assert_eq!(rust_options_safe_mode(), 1);
+        assert_eq!(rust_options_opengl(), 0);
+        assert_eq!(rust_options_keep_aspect_ratio(), 1);
+        assert_eq!(rust_options_use_3do_music(), 1);
+        assert_eq!(rust_options_use_remix_music(), 1);
+        assert_eq!(rust_options_use_speech(), 1);
+        assert_eq!(rust_options_stereo_sfx(), 1);
+        assert_eq!(rust_options_resolution_width(), 800);
+        assert_eq!(rust_options_resolution_height(), 600);
+        assert_eq!(rust_options_scaler(), TFB_GFXFLAGS_SCALE_XBRZ4);
+        assert_eq!(rust_options_sound_driver(), AUDIO_DRIVER_NOSOUND);
+        assert_eq!(rust_options_sound_quality(), AUDIO_QUALITY_HIGH);
+        assert_eq!(rust_options_which_coarse_scan(), OPT_3DO);
+        assert_eq!(rust_options_which_menu(), OPT_PC);
+        assert_eq!(rust_options_which_fonts(), OPT_PC);
+        assert_eq!(rust_options_which_intro(), OPT_3DO);
+        assert_eq!(rust_options_which_shield(), OPT_3DO);
+        assert_eq!(rust_options_smooth_scroll(), OPT_3DO);
+        assert_eq!(rust_options_melee_scale(), TFB_SCALE_TRILINEAR);
+        assert_eq!(rust_options_player1_control(), 4);
+        assert_eq!(rust_options_player2_control(), -1, "unset reads as -1");
+        assert!((rust_options_gamma() - 1.5).abs() < 1e-6);
+        assert_eq!(rust_options_music_volume_scale(), 1.0);
+        assert_eq!(rust_options_sfx_volume_scale(), 1.0);
+        assert_eq!(rust_options_speech_volume_scale(), 1.0);
+
+        let text = |ptr: *mut c_char| {
+            assert!(!ptr.is_null());
+            let value = unsafe { std::ffi::CStr::from_ptr(ptr) }
+                .to_str()
+                .unwrap()
+                .to_string();
+            rust_options_free_string(ptr);
+            value
+        };
+        assert_eq!(text(rust_options_get_log_file()), "run.log");
+        assert_eq!(text(rust_options_get_config_dir()), "/cfg");
+        assert_eq!(text(rust_options_get_addon_dir()), "/addons");
+        assert_eq!(text(rust_options_get_content_dir()), "/content");
+        assert_eq!(text(rust_options_get_graphics_backend()), "sdl2");
+
+        assert_eq!(rust_options_get_addon_count(), 2);
+        assert_eq!(text(rust_options_get_addon(0)), "first");
+        assert_eq!(text(rust_options_get_addon(1)), "second");
+        assert!(rust_options_get_addon(2).is_null());
+        assert!(rust_options_get_addon(-1).is_null());
+        rust_options_free_string(std::ptr::null_mut());
+    }
+
+    fn parse(args: &[&str]) -> ParsedOptions {
+        let owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        let mut opts = ParsedOptions::default();
+        parse_args_into(&owned, &mut opts);
+        opts
+    }
+
+    #[test]
+    fn unrecognised_enumerated_values_are_a_parse_error_that_stops_parsing() {
+        for bad in [
+            ["uqm", "--meleezoom", "huge"],
+            ["uqm", "--audioquality", "ultra"],
+            ["uqm", "--sound", "openal"],
+            ["uqm", "--scale", "scale2x"],
+        ] {
+            let opts = parse(&[bad[0], bad[1], bad[2], "--musicvol", "10", "--intro", "pc"]);
+            assert!(opts.parse_error, "{bad:?}");
+            assert_eq!(
+                opts.music_volume_scale, 1.0,
+                "{bad:?}: later arguments are not applied"
+            );
+            assert_eq!(opts.which_intro, OPT_3DO, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn enumerated_aliases_map_to_their_values() {
+        assert_eq!(parse(&["uqm", "--scale", "no"]).scaler, 0);
+        assert_eq!(
+            parse(&["uqm", "--meleezoom", "3do"]).melee_scale,
+            TFB_SCALE_TRILINEAR
+        );
+        assert_eq!(
+            parse(&["uqm", "--meleezoom", "pc"]).melee_scale,
+            TFB_SCALE_STEP
+        );
+        assert_eq!(parse(&["uqm", "--meleezoom", "bilinear"]).melee_scale, 0);
+        assert_eq!(
+            parse(&["uqm", "--audioquality", "medium"]).sound_quality,
+            AUDIO_QUALITY_MEDIUM
+        );
+        assert_eq!(
+            parse(&["uqm", "--audioquality", "high"]).sound_quality,
+            AUDIO_QUALITY_HIGH
+        );
+        assert_eq!(
+            parse(&["uqm", "--sound", "mixsdl"]).sound_driver,
+            AUDIO_DRIVER_MIXSDL
+        );
+        assert_eq!(
+            parse(&["uqm", "--sound", "nosound"]).sound_driver,
+            AUDIO_DRIVER_NOSOUND
+        );
+    }
+
+    #[test]
+    fn every_three_do_or_pc_choice_has_its_own_option() {
+        let opts = parse(&[
+            "uqm", "--intro", "pc", "--cscan", "pc", "--menu", "3do", "--font", "3do", "--shield",
+            "pc", "--scroll", "pc",
+        ]);
+
+        assert_eq!(opts.which_intro, OPT_PC);
+        assert_eq!(opts.which_coarse_scan, OPT_PC);
+        assert_eq!(opts.which_menu, OPT_3DO);
+        assert_eq!(opts.which_fonts, OPT_3DO);
+        assert_eq!(opts.which_shield, OPT_PC);
+        assert_eq!(opts.smooth_scroll, OPT_PC);
+        assert!(!opts.parse_error);
+    }
+
+    #[test]
+    fn a_bad_choice_is_flagged_and_falls_back_to_pc() {
+        let opts = parse(&["uqm", "--menu", "amiga"]);
+
+        assert!(opts.parse_error);
+        assert_eq!(opts.which_menu, OPT_PC);
+    }
+
+    #[test]
+    fn out_of_range_or_non_numeric_volumes_and_gamma_are_parse_errors() {
+        for args in [
+            ["uqm", "--musicvol", "101"],
+            ["uqm", "--sfxvol", "-1"],
+            ["uqm", "--speechvol", "loud"],
+            ["uqm", "--gamma", "bright"],
+        ] {
+            let opts = parse(&args);
+            assert!(opts.parse_error, "{args:?}");
+        }
+        let edge = parse(&["uqm", "--musicvol", "0", "--sfxvol", "100"]);
+        assert_eq!(edge.music_volume_scale, 0.0);
+        assert_eq!(edge.sfx_volume_scale, 1.0);
+        assert!(!edge.parse_error);
+    }
+
+    #[test]
+    fn malformed_resolutions_are_ignored() {
+        for res in ["640", "axb", "640x", "x480", "640x480x2"] {
+            let opts = parse(&["uqm", "--res", res]);
+            assert_eq!(
+                (opts.resolution_width, opts.resolution_height),
+                (DEFAULT_RESOLUTION_WIDTH, DEFAULT_RESOLUTION_HEIGHT),
+                "{res}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_flags_are_a_parse_error() {
+        let opts = parse(&["uqm", "--warp-drive"]);
+
+        assert!(opts.parse_error);
+    }
+
+    #[test]
+    fn display_and_path_flags_are_applied() {
+        let opts = parse(&[
+            "uqm",
+            "--keepaspectratio",
+            "--stereosfx",
+            "--automation-script",
+            "run.json",
+            "--automation-output",
+            "out",
+            "--configdir",
+            "/c",
+        ]);
+
+        assert!(opts.keep_aspect_ratio && opts.stereo_sfx);
+        assert_eq!(opts.automation_script.as_deref(), Some("run.json"));
+        assert_eq!(opts.automation_output.as_deref(), Some("out"));
+        assert_eq!(opts.config_dir.as_deref(), Some("/c"));
+    }
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn the_native_window_proof_path_is_kept() {
+        let opts = parse(&["uqm", "--native-window-proof", "proof.json"]);
+
+        assert_eq!(opts.native_window_proof.as_deref(), Some("proof.json"));
+    }
+}

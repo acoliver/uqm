@@ -585,7 +585,6 @@ mod tests {
             self.setup_menu_called.set(true);
         }
         fn free_game_data(&self) {}
-        fn introduction(&self) {}
         fn credits(&self, _victory: bool) {}
         fn victory(&self) {}
         fn splash_screen(&self) {}
@@ -626,6 +625,27 @@ mod tests {
 
         let result = do_restart_frame(&ops, &mut state);
         assert!(!result, "CHECK_ABORT should exit menu");
+    }
+    #[test]
+    fn explore_down_then_select_requests_load_without_entering_hyperspace() {
+        let ops = MockOps::new();
+        let mut state = DoRestartState::default();
+        assert_eq!(state.cur_state, RestartMenuItem::NewGame.as_u8());
+        assert!(do_restart_frame(&ops, &mut state));
+        ops.menu_input.set(MenuInputState {
+            down: true,
+            ..Default::default()
+        });
+        assert!(do_restart_frame(&ops, &mut state));
+        assert_eq!(state.cur_state, RestartMenuItem::LoadGame.as_u8());
+        ops.menu_input.set(MenuInputState {
+            select: true,
+            ..Default::default()
+        });
+        assert!(!do_restart_frame(&ops, &mut state));
+        assert_eq!(ops.last_activity.get(), CHECK_LOAD);
+        assert_eq!(ops.current_activity.get(), IN_INTERPLANETARY);
+        assert_ne!(ops.last_activity.get() & CHECK_RESTART, CHECK_RESTART);
     }
 
     #[test]

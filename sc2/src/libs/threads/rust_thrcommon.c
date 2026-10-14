@@ -206,51 +206,8 @@ StartThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char 
 	}
 }
 
-void
-SleepThread (TimeCount sleepTime)
-{
-	uint32 msecs = (uint32)(sleepTime * 1000 / ONE_SECOND);
-	RUST_PUMP_AND_FLUSH();
-	rust_hibernate_thread(msecs);
-}
-
-void
-SleepThreadUntil (TimeCount wakeTime)
-{
-	for (;;)
-	{
-		uint32 nextTimeMs;
-		TimeCount nextTime;
-		TimeCount now;
-
-		Async_process ();
-
-		now = GetTimeCounter ();
-		if (wakeTime <= now)
-		{
-			/* Even when we don't need to sleep, we must still pump
-			 * events and flush the DCQ. In the 2-thread model the
-			 * render thread drains the DCQ continuously; here we
-			 * are the only thread, so skipping the flush leaves
-			 * committed commands unrendered (e.g. menu redraws that
-			 * don't appear until a later frame happens to sleep). */
-			RUST_PUMP_AND_FLUSH ();
-			return;
-		}
-
-		nextTimeMs = Async_timeBeforeNextMs ();
-		nextTime = (nextTimeMs / 1000) * ONE_SECOND +
-				((nextTimeMs % 1000) * ONE_SECOND / 1000);
-				/* Overflow-safe conversion. */
-		if (wakeTime < nextTime)
-			nextTime = wakeTime;
-
-		if (nextTime <= now)
-			SleepThread (0);
-		else
-			SleepThread (nextTime - now);
-	}
-}
+/* SleepThread and SleepThreadUntil are implemented in Rust
+ * (rust/src/threading/pacing.rs). */
 
 void
 TaskSwitch (void)

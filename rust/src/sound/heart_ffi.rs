@@ -43,6 +43,7 @@ use super::decoder::{LimitedDecoder, SoundDecoder};
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::{mixer_get_format, mixer_get_frequency};
 use super::music;
+use super::null::NullDecoder;
 use super::sfx;
 use super::stream;
 use super::trackplayer;
@@ -275,40 +276,49 @@ unsafe fn create_per_page_decoders(
         }
     }
 
-    // Read the audio file once
-    let ext = match file_extension(name) {
-        Some(e) => e,
-        None => return Vec::new(),
-    };
-    let c_name = match CString::new(name) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
-    let file_data = match uio_read_file(c_name.as_ptr()) {
-        Some(d) => d,
-        None => return Vec::new(),
-    };
+    let file_data = CString::new(name)
+        .ok()
+        .and_then(|c_name| uio_read_file(c_name.as_ptr()));
+    page_decoders(name, file_data.as_deref(), &page_run_times)
+}
 
+/// Build one decoder per subtitle page, mirroring C `SoundDecoder_Load` per
+/// page in `SpliceTrack`.
+///
+/// When the clip is missing or its type is unsupported, C substitutes its
+/// null decoder for any page with a nonzero run time, lasting `|runTime|`
+/// milliseconds, "to keep voiceovers going". Content without voice packs
+/// relies on this: dialogue subtitles must still be paced and finish, or
+/// `talking_finished` never becomes true and the conversation cannot end.
+fn page_decoders(
+    name: &str,
+    file_data: Option<&[u8]>,
+    page_run_times: &[i32],
+) -> Vec<Box<dyn SoundDecoder>> {
+    let Some(ext) = file_extension(name) else {
+        return Vec::new();
+    };
     let mut decoders: Vec<Box<dyn SoundDecoder>> = Vec::with_capacity(page_run_times.len());
     let mut dec_offset_ms: u32 = 0;
 
-    for page_idx in 0..page_run_times.len() {
-        let run_time_ms = page_run_times[page_idx];
-
-        // Create a fresh decoder for this page
-        let mut dec = match create_decoder_for_extension(ext) {
-            Some(d) => d,
-            None => break,
-        };
-        match dec.open_from_bytes(&file_data, name) {
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!(
-                    "[SpliceTrack] decoder open failed for {} page {}: {:?}",
-                    name, page_idx, e
-                );
+    for (page_idx, &run_time_ms) in page_run_times.iter().enumerate() {
+        let real = create_decoder_for_extension(ext).zip(file_data);
+        let Some((mut dec, data)) = real else {
+            if run_time_ms == 0 {
                 break;
             }
+            let mut silent = NullDecoder::with_duration(run_time_ms.unsigned_abs() as f32 / 1000.0);
+            silent.init();
+            dec_offset_ms += run_time_ms.unsigned_abs();
+            decoders.push(Box::new(silent));
+            continue;
+        };
+        if let Err(e) = dec.open_from_bytes(data, name) {
+            eprintln!(
+                "[SpliceTrack] decoder open failed for {} page {}: {:?}",
+                name, page_idx, e
+            );
+            break;
         }
 
         // Preserve sign like C SoundDecoder_Load(..., runTime):
@@ -1662,6 +1672,52 @@ impl StreamCallbacks for CCallbackWrapper {
 
 #[cfg(test)]
 mod tests {
+    /// Content without voice packs names clips that do not exist. C keeps the
+    /// conversation going with a null decoder per page lasting `|runTime|`.
+    #[test]
+    fn missing_voice_clip_pages_are_paced_by_silent_decoders() {
+        let decoders = super::page_decoders("urquan-027.ogg", None, &[2000, -3000]);
+        assert_eq!(decoders.len(), 2);
+        assert!(decoders.iter().all(|decoder| decoder.is_null()));
+        assert!((decoders[0].length() - 2.0).abs() < f32::EPSILON);
+        assert!((decoders[1].length() - 3.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn silent_page_decoder_plays_to_its_end() {
+        let mut decoders = super::page_decoders("urquan-027.ogg", None, &[1000]);
+        let decoder = &mut decoders[0];
+        let mut buffer = vec![0u8; 4096];
+        let mut total = 0usize;
+        loop {
+            match decoder.decode(&mut buffer) {
+                Ok(bytes) => total += bytes,
+                Err(crate::sound::decoder::DecodeError::EndOfFile) => break,
+                Err(other) => panic!("silent page failed to decode: {other:?}"),
+            }
+        }
+        // One second of 11025 Hz mono16 silence.
+        assert_eq!(total, 11025 * 2);
+    }
+
+    #[test]
+    fn missing_clip_with_zero_run_time_loads_nothing_like_c() {
+        assert!(super::page_decoders("urquan-027.ogg", None, &[0, 1000]).is_empty());
+    }
+
+    #[test]
+    fn unsupported_clip_type_is_also_paced_silently() {
+        let decoders = super::page_decoders("speech.xyz", Some(b"not audio"), &[1500]);
+        assert_eq!(decoders.len(), 1);
+        assert!(decoders[0].is_null());
+        assert!((decoders[0].length() - 1.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn clip_without_extension_has_no_decoder_like_c() {
+        assert!(super::page_decoders("speech", None, &[1000]).is_empty());
+    }
+
     use super::*;
 
     // --- P19 TDD ---

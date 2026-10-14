@@ -619,8 +619,35 @@ pub struct NativeAcceptanceAuthority {
     pub script: String,
     pub script_sha256: String,
     pub script_byte_length: u64,
+    /// Every scenario script the autoplay suite may execute, pinned.
+    ///
+    /// The suite that runs is chosen per run, but what may run is fixed here,
+    /// in the base-owned authority, by content hash. Selection can therefore
+    /// narrow the set but never reach outside it, which is what keeps a head
+    /// revision from introducing a script for CI to execute.
+    pub scenario_scripts: Vec<PinnedScript>,
     pub acceptance_policy: uqm_rust::automation::native_window::NativeAcceptancePolicy,
     pub runtime_contract: NativeRuntimeAuthority,
+}
+
+/// The only outer child deadline a pin may carry instead of the default.
+///
+/// User-approved for scripts whose declared wall budget is longer than the
+/// default outer deadline ("yeah you can switch them to 15m"). It is a fixed
+/// value, not a per-script choice: a pin either carries exactly this or nothing.
+pub const LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS: u64 = 900_000;
+
+/// One scenario script, pinned by content.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedScript {
+    pub path: String,
+    pub sha256: String,
+    pub byte_length: u64,
+    /// Present only on the approved long scripts. Absent means the shared
+    /// `runtime_contract.outer_child_timeout_ms` applies unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outer_child_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -727,6 +754,34 @@ impl Authority {
         }
     }
 
+    /// The runtime contract one pinned script runs under.
+    ///
+    /// Identical to [`Self::native_runtime_contract`] except for the outer
+    /// child deadline of a pin that carries the approved long value. The pin
+    /// must be the authority's own entry, so a forged override cannot choose
+    /// a deadline.
+    pub fn native_runtime_contract_for(
+        &self,
+        script: &PinnedScript,
+    ) -> Result<uqm_rust::automation::native_window::NativeWindowRuntimeContract, String> {
+        let pinned = self
+            .native_acceptance
+            .scenario_scripts
+            .iter()
+            .find(|entry| *entry == script)
+            .ok_or_else(|| {
+                format!(
+                    "native script {} is not the pin the authority declares",
+                    script.path
+                )
+            })?;
+        let mut contract = self.native_runtime_contract();
+        if let Some(timeout) = pinned.outer_child_timeout_ms {
+            contract.outer_child_timeout_ms = timeout;
+        }
+        Ok(contract)
+    }
+
     /// Explicit canonical toolchain environment for linked-test gate steps.
     ///
     /// Matches the production/linked build path: SOURCE_DATE_EPOCH,
@@ -783,21 +838,26 @@ fn runtime_authority_path(
     }
 }
 
-/// Load the trusted runtime authority and its exact JSON contract.
-pub fn load_authority_contract(root: &Path) -> Result<(Authority, serde_json::Value), String> {
+/// Read the admitted runtime policy without reserializing its identity.
+pub fn load_policy_bytes(root: &Path) -> Result<Vec<u8>, String> {
     let path = runtime_authority_path(
         root,
         std::env::var_os("UQM_CI_SOURCE_ROOT").is_some(),
         std::env::var_os("UQM_CI_AUTHORITY_PATH"),
     )?;
-    let bytes = super::bounded_io::read_regular_nofollow(
+    super::bounded_io::read_regular_nofollow(
         &path,
         super::bounded_io::AUTHORITY_BOOTSTRAP_LIMIT_BYTES,
-    )?;
+    )
+}
+
+/// Load the trusted runtime authority and its exact JSON contract.
+pub fn load_authority_contract(root: &Path) -> Result<(Authority, serde_json::Value), String> {
+    let bytes = load_policy_bytes(root)?;
     let authority = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("invalid authority {}: {error}", path.display()))?;
+        .map_err(|error| format!("invalid admitted authority: {error}"))?;
     let contract = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("invalid authority {}: {error}", path.display()))?;
+        .map_err(|error| format!("invalid admitted authority: {error}"))?;
     Ok((authority, contract))
 }
 
@@ -868,6 +928,7 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     validate_complexity_and_coverage(authority)?;
     validate_cache_and_supervision(authority)?;
     validate_native_acceptance(authority)?;
+    validate_scenario_scripts(authority)?;
     validate_package_and_bootstrap(authority)?;
     validate_gate_inventory(authority)?;
     Ok(())
@@ -1237,6 +1298,86 @@ fn validate_cache_and_supervision(authority: &Authority) -> Result<(), String> {
     Ok(())
 }
 
+/// Every scenario script must be pinned, exactly once, with a well-formed digest.
+///
+/// This validates the shape of the inventory. Whether each digest matches the
+/// file on disk is checked separately, against the real tree, because an
+/// inventory that agrees only with itself proves nothing.
+fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
+    let pinned = &authority.native_acceptance.scenario_scripts;
+    if pinned.is_empty() {
+        return Err("authority native_acceptance must pin at least one scenario script".into());
+    }
+    let mut seen = BTreeSet::new();
+    for entry in pinned {
+        if !entry.path.starts_with("rust/scripts/") || !entry.path.ends_with(".json") {
+            return Err(format!(
+                "authority pins a scenario script outside rust/scripts: {}",
+                entry.path
+            ));
+        }
+        if entry.path.contains("..") {
+            return Err(format!("authority pins a traversing path: {}", entry.path));
+        }
+        if !valid_sha256(&entry.sha256) {
+            return Err(format!(
+                "authority pins {} with a malformed digest",
+                entry.path
+            ));
+        }
+        if entry.byte_length == 0 {
+            return Err(format!("authority pins {} as empty", entry.path));
+        }
+        if !seen.insert(entry.path.as_str()) {
+            return Err(format!("authority pins {} more than once", entry.path));
+        }
+        validate_pin_outer_deadline(authority, entry)?;
+    }
+    // The scenario the native gate runs today must itself be pinned, or the
+    // inventory and the gate disagree about what is allowed to execute.
+    if !seen.contains(authority.native_acceptance.script.as_str()) {
+        return Err(format!(
+            "authority native_acceptance script {} is not in the pinned inventory",
+            authority.native_acceptance.script
+        ));
+    }
+    Ok(())
+}
+
+/// A pin may carry only the approved long outer deadline, and it must still
+/// leave every other deadline in the runtime contract correctly ordered.
+fn validate_pin_outer_deadline(authority: &Authority, entry: &PinnedScript) -> Result<(), String> {
+    let Some(timeout) = entry.outer_child_timeout_ms else {
+        return Ok(());
+    };
+    let default_timeout = authority
+        .native_acceptance
+        .runtime_contract
+        .outer_child_timeout_ms;
+    if timeout != LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS || timeout <= default_timeout {
+        return Err(format!(
+            "authority pins {} with outer_child_timeout_ms {timeout}; only the approved \
+             {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms above the {default_timeout} ms default is allowed",
+            entry.path
+        ));
+    }
+    if entry.path == authority.native_acceptance.script {
+        return Err(format!(
+            "authority gives the primary native script {} an outer deadline the single-script gate does not use",
+            entry.path
+        ));
+    }
+    let mut contract = authority.native_runtime_contract();
+    contract.outer_child_timeout_ms = timeout;
+    if !contract.has_valid_deadline_order() {
+        return Err(format!(
+            "authority pins {} with an outer deadline that breaks the deadline ordering",
+            entry.path
+        ));
+    }
+    Ok(())
+}
+
 fn validate_native_acceptance(authority: &Authority) -> Result<(), String> {
     let native = &authority.native_acceptance;
     let content_transport = &native.content_transport;
@@ -1512,6 +1653,53 @@ mod tests {
             authority.native_acceptance.script_byte_length
         );
         assert_eq!(digest, authority.native_acceptance.script_sha256);
+
+        // The inventory must describe the tree, not itself.
+        {
+            use std::collections::BTreeSet;
+            let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("rust dir")
+                .parent()
+                .expect("repository root")
+                .to_path_buf();
+            let mut pinned = BTreeSet::new();
+            for entry in &authority.native_acceptance.scenario_scripts {
+                let path = root.join(&entry.path);
+                let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+                    panic!("{} is pinned but unreadable: {error}", entry.path)
+                });
+                let digest = Sha256::digest(&bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                assert_eq!(digest, entry.sha256, "{} digest drifted", entry.path);
+                assert_eq!(
+                    bytes.len() as u64,
+                    entry.byte_length,
+                    "{} length drifted",
+                    entry.path
+                );
+                pinned.insert(entry.path.clone());
+            }
+            // A scenario the suite can select but the authority does not pin
+            // would be a scenario CI is asked to run and forbidden to run.
+            for file in std::fs::read_dir(root.join("rust/scripts")).expect("scripts") {
+                let file = file.expect("entry").path();
+                if file.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let name = file
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .expect("name");
+                let relative = format!("rust/scripts/{name}");
+                assert!(
+                    pinned.contains(&relative),
+                    "{relative} exists but is not pinned by the authority"
+                );
+            }
+        }
 
         let script: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         let steps = script["steps"].as_array().unwrap();

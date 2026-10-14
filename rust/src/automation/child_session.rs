@@ -37,6 +37,69 @@ pub const NESTED_GROUP_TOKEN_READ_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_READ
 #[cfg(unix)]
 pub const NESTED_GROUP_TOKEN_WRITE_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_WRITE_FD";
 
+/// Blocks a polling loop for up to `timeout`, returning early when the peer
+/// it is waiting on is known to have changed something.
+///
+/// A return, whether early or at the timeout, only says the caller should
+/// poll again. Callers keep their own deadlines and always pass a bounded
+/// timeout, so a lost wake-up degrades to plain polling.
+pub trait ChangeWait {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()>;
+}
+
+/// [`ChangeWait`] that always sleeps for the full timeout.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SleepWait;
+
+impl ChangeWait for SleepWait {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        std::thread::sleep(timeout);
+        Ok(())
+    }
+}
+
+/// Held while a thread creates a descriptor that must not outlive an exec, or
+/// while it forks a child that would inherit every descriptor then open.
+///
+/// Linux creates close-on-exec descriptors atomically (`pipe2`,
+/// `SOCK_CLOEXEC`), so the guard is empty there. Darwin has neither: it
+/// creates the descriptor and sets `FD_CLOEXEC` in a second call, and a child
+/// forked from another thread between the two calls keeps the descriptor for
+/// its whole life. This lock makes the two steps and every fork exclusive.
+#[cfg(unix)]
+#[derive(Debug)]
+pub struct DescriptorInheritanceGuard {
+    #[cfg(not(target_os = "linux"))]
+    _exclusive: std::sync::MutexGuard<'static, ()>,
+}
+
+/// Block until no other thread is creating a close-on-exec descriptor or
+/// spawning a child, and keep it that way until the guard is dropped.
+#[cfg(unix)]
+pub fn guard_descriptor_inheritance() -> DescriptorInheritanceGuard {
+    #[cfg(not(target_os = "linux"))]
+    {
+        static EXCLUSIVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        // The mutex protects no data, so a panic while it was held leaves no
+        // broken invariant to propagate.
+        DescriptorInheritanceGuard {
+            _exclusive: EXCLUSIVE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        }
+    }
+    #[cfg(target_os = "linux")]
+    DescriptorInheritanceGuard {}
+}
+
+/// Spawn `command` while no other thread is between creating a descriptor and
+/// marking it close-on-exec.
+#[cfg(unix)]
+pub fn spawn_guarded(command: &mut std::process::Command) -> io::Result<std::process::Child> {
+    let _guard = guard_descriptor_inheritance();
+    command.spawn()
+}
+
 /// Operation in the fixed nested process-group registration protocol.
 #[cfg(unix)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -690,7 +753,9 @@ mod os {
 
     use crate::automation::identity::{digest_hex, sha256_file};
 
-    use super::{NestedGroupOperation, NestedGroupProtocol, ProcessIdentity};
+    use super::{
+        ChangeWait, NestedGroupOperation, NestedGroupProtocol, ProcessIdentity, SleepWait,
+    };
 
     // --- Errors -----------------------------------------------------------
 
@@ -1031,6 +1096,14 @@ mod os {
     const OWNED_PROCESS_RECORD_NAME: &str = ".uqm-run-child.json";
     const RUN_LOCK_GUARD_NAME: &str = ".uqm-run-owner.guard";
     const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
+    /// The game blocks on the observer's acknowledgement for every
+    /// presentation, so the gap between observer polls is added to each frame.
+    pub(super) const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
+
+    /// How long one wake may sleep: a poll interval, never past the deadline.
+    pub(super) fn poll_timeout(deadline: Instant, now: Instant) -> Duration {
+        OBSERVER_POLL_INTERVAL.min(deadline.saturating_duration_since(now))
+    }
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -2280,9 +2353,49 @@ mod os {
 
     impl ChildSession {
         pub fn spawn(
-            mut command: Command,
+            command: Command,
             config: ChildSessionConfig,
         ) -> Result<Self, ChildSessionError> {
+            Self::spawn_inner(command, config, true)
+        }
+
+        /// Supervise a leaf candidate without giving its image access to the controller protocol.
+        pub fn spawn_leaf(
+            command: Command,
+            config: ChildSessionConfig,
+        ) -> Result<Self, ChildSessionError> {
+            Self::spawn_inner(command, config, false)
+        }
+
+        fn spawn_inner(
+            command: Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+        ) -> Result<Self, ChildSessionError> {
+            let protocol =
+                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            Self::spawn_with_protocol(command, config, inherit_protocol, protocol)
+        }
+
+        /// Spawn under an explicit containment-monitor protocol.
+        ///
+        /// Both monitor exchanges are bounded by `config.timeout`, the same
+        /// budget the session's run is allowed, rather than a private constant.
+        pub(super) fn spawn_with_protocol(
+            mut command: Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+            protocol: Option<NestedGroupProtocol>,
+        ) -> Result<Self, ChildSessionError> {
+            if !inherit_protocol {
+                for name in [
+                    super::NESTED_GROUP_REGISTRATION_FD_ENV,
+                    super::NESTED_GROUP_TOKEN_READ_FD_ENV,
+                    super::NESTED_GROUP_TOKEN_WRITE_FD_ENV,
+                ] {
+                    command.env_remove(name);
+                }
+            }
             let stdout_file = create_log(&config.stdout_log, StreamKind::Stdout)?;
             let stderr_file = match create_log(&config.stderr_log, StreamKind::Stderr) {
                 Ok(file) => file,
@@ -2296,8 +2409,8 @@ mod os {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null());
-            let protocol =
-                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            // Captured by value so pre_exec only reads a Copy Duration after fork.
+            let exchange_timeout = config.timeout;
             // SAFETY: setsid, setpgid, fcntl, read, write, and getpid are
             // async-signal-safe. A nested group stays in the monitor's session
             // so its stable anchor can join; an unmonitored child owns a session.
@@ -2308,20 +2421,36 @@ mod os {
                             return Err(io::Error::last_os_error());
                         }
                         protocol.make_inheritable()?;
-                        protocol.exchange(NestedGroupOperation::Register, libc::getpid())?;
+                        protocol.exchange_with_timeout(
+                            NestedGroupOperation::Register,
+                            libc::getpid(),
+                            exchange_timeout,
+                        )?;
+                        if !inherit_protocol {
+                            for descriptor in protocol.descriptors() {
+                                if libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) == -1 {
+                                    return Err(io::Error::last_os_error());
+                                }
+                            }
+                        }
                     } else if libc::setsid() == -1 {
                         return Err(io::Error::last_os_error());
                     }
                     Ok(())
                 });
             }
-            let mut child = command.spawn().map_err(ChildSessionError::Spawn)?;
+            let mut child = super::spawn_guarded(&mut command).map_err(ChildSessionError::Spawn)?;
             let pid = child.id();
             let monitor_anchor_pid = match protocol {
                 Some(protocol) => match libc::pid_t::try_from(pid)
                     .map_err(|_| io::Error::other("child PID does not fit pid_t"))
-                    .and_then(|pid| protocol.exchange(NestedGroupOperation::Query, pid))
-                {
+                    .and_then(|pid| {
+                        protocol.exchange_with_timeout(
+                            NestedGroupOperation::Query,
+                            pid,
+                            exchange_timeout,
+                        )
+                    }) {
                     Ok(anchor_pid) => Some(anchor_pid),
                     Err(error) => {
                         let mut anchor = LeaderAnchor::new(pid, None)?;
@@ -2463,13 +2592,28 @@ mod os {
         /// Observer failure triggers the same targeted stop-and-reap path as
         /// reader and wait failures. The callback never owns child cleanup.
         pub fn finish_observing<F>(
-            mut self,
-            mut observer: F,
+            self,
+            observer: F,
         ) -> Result<ChildSessionReceipt, ChildSessionFailure>
         where
             F: FnMut(&ProcessIdentity) -> io::Result<()>,
         {
-            let event = self.wait_for_event(self.config.timeout, &mut observer);
+            self.finish_observing_with_wake(observer, &SleepWait)
+        }
+
+        /// [`Self::finish_observing`] where the gap between polls ends early
+        /// when `wake` reports a change. `wake` is never given more than one
+        /// poll interval, so a missed change costs one interval, not a hang.
+        pub fn finish_observing_with_wake<F, W>(
+            mut self,
+            mut observer: F,
+            wake: &W,
+        ) -> Result<ChildSessionReceipt, ChildSessionFailure>
+        where
+            F: FnMut(&ProcessIdentity) -> io::Result<()>,
+            W: ChangeWait,
+        {
+            let event = self.wait_for_event(self.config.timeout, &mut observer, wake);
             let outcome = match event {
                 Ok(SupervisorEvent::Exited) => self.teardown_and_reap(None),
                 Ok(SupervisorEvent::Reader(fault)) => {
@@ -2520,6 +2664,7 @@ mod os {
             &mut self,
             duration: Duration,
             observer: &mut impl FnMut(&ProcessIdentity) -> io::Result<()>,
+            wake: &impl ChangeWait,
         ) -> Result<SupervisorEvent, ChildSessionError> {
             let deadline = Instant::now()
                 .checked_add(duration)
@@ -2542,10 +2687,11 @@ mod os {
                     Ok(false) if Instant::now() >= deadline => {
                         return Ok(SupervisorEvent::Deadline)
                     }
-                    Ok(false) => thread::sleep(
-                        Duration::from_millis(5)
-                            .min(deadline.saturating_duration_since(Instant::now())),
-                    ),
+                    Ok(false) => match wake.wait(poll_timeout(deadline, Instant::now())) {
+                        Ok(()) => {}
+                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                        Err(error) => return Err(ChildSessionError::Observer(error)),
+                    },
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}
                     Err(error) => return Err(ChildSessionError::Wait(error)),
                 }
@@ -3772,6 +3918,189 @@ mod os_tests {
         assert!(matches!(failure.error, ChildSessionError::Observer(_)));
         assert!(failure.receipt.term_sent);
         assert!(failure.receipt.orphan_check_passed);
+    }
+
+    /// Records when each wait started and the timeout it was given, and
+    /// answers with `respond`.
+    struct ScriptedWake<F: Fn(Duration) -> io::Result<()>> {
+        calls: std::sync::Mutex<Vec<(std::time::Instant, Duration)>>,
+        respond: F,
+    }
+
+    impl<F: Fn(Duration) -> io::Result<()>> ScriptedWake<F> {
+        fn new(respond: F) -> Self {
+            Self {
+                calls: std::sync::Mutex::new(Vec::new()),
+                respond,
+            }
+        }
+
+        fn calls(&self) -> Vec<(std::time::Instant, Duration)> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    impl<F: Fn(Duration) -> io::Result<()>> ChangeWait for ScriptedWake<F> {
+        fn wait(&self, timeout: Duration) -> io::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((std::time::Instant::now(), timeout));
+            (self.respond)(timeout)
+        }
+    }
+
+    #[test]
+    fn immediate_wake_cannot_defeat_the_deadline_and_never_gets_more_than_a_poll() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_millis(50), Duration::from_secs(1));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 10"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|_| Ok(()));
+        let failure = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect_err("an always-ready wake must still time out");
+        let end = std::time::Instant::now();
+        assert!(matches!(
+            failure.error,
+            ChildSessionError::Timeout {
+                term_sent: true,
+                ..
+            }
+        ));
+        assert!(failure.receipt.orphan_check_passed);
+        let calls = wake.calls();
+        assert!(!calls.is_empty());
+        for (called, timeout) in &calls {
+            assert!(*timeout <= os::OBSERVER_POLL_INTERVAL);
+            // The deadline had passed by the time the timeout was reported, so
+            // a wait clamped to the time left also ends before `end`.
+            assert!(*called + *timeout <= end);
+        }
+    }
+
+    #[test]
+    fn poll_timeout_is_one_poll_clamped_to_the_time_left() {
+        let base = std::time::Instant::now();
+        let deadline = base + Duration::from_millis(10);
+        assert_eq!(os::poll_timeout(deadline, base), os::OBSERVER_POLL_INTERVAL);
+        assert_eq!(
+            os::poll_timeout(deadline, deadline - Duration::from_micros(300)),
+            Duration::from_micros(300)
+        );
+        assert_eq!(os::poll_timeout(deadline, deadline), Duration::ZERO);
+        assert_eq!(
+            os::poll_timeout(deadline, deadline + Duration::from_millis(5)),
+            Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn wake_failure_stops_and_reaps_the_exact_child() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 10"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|_| Err(io::Error::other("wake failed")));
+        let failure = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect_err("wake failure");
+        assert!(
+            matches!(&failure.error, ChildSessionError::Observer(error) if error.to_string() == "wake failed"),
+            "{:?}",
+            failure.error
+        );
+        assert!(failure.receipt.term_sent);
+        assert!(failure.receipt.orphan_check_passed);
+    }
+
+    #[test]
+    fn interrupted_wake_counts_as_a_wake() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        // The child exits only once the wake has been called, so the supervisor
+        // cannot see it exit before its first wait however slow the host is.
+        let released = dir.path().join("released");
+        let mut command = Command::new("sh");
+        command.args([
+            "-c",
+            "until [ -e \"$1\" ]; do sleep 0.01; done; exit 0",
+            "sh",
+        ]);
+        command.arg(&released);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|_| {
+            std::fs::write(&released, b"").expect("release the child");
+            Err(io::Error::from(io::ErrorKind::Interrupted))
+        });
+        let receipt = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect("an interrupted wake is not an error");
+        assert_eq!(receipt.exit_code, Some(0));
+        assert!(!wake.calls().is_empty());
+    }
+
+    #[test]
+    fn child_exit_is_detected_while_the_wake_sleeps() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 0.05; exit 0"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|timeout| {
+            std::thread::sleep(timeout);
+            Ok(())
+        });
+        let receipt = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect("finish");
+        assert_eq!(receipt.exit_code, Some(0));
+        assert!(!receipt.term_sent);
+        assert!(receipt.orphan_check_passed);
+    }
+
+    #[test]
+    fn nested_registration_is_bounded_by_the_session_timeout_not_a_fixed_constant() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_millis(50), Duration::from_secs(1));
+        let mut registration = [0; 2];
+        let mut token = [0; 2];
+        // SAFETY: each array has storage for both descriptors of one pipe.
+        assert_eq!(unsafe { libc::pipe(registration.as_mut_ptr()) }, 0);
+        assert_eq!(unsafe { libc::pipe(token.as_mut_ptr()) }, 0);
+        // Nothing ever writes the token, so the monitor "never answers".
+        let protocol = NestedGroupProtocol::new(registration[1], token[0], token[1]);
+        let started = std::time::Instant::now();
+        let result =
+            ChildSession::spawn_with_protocol(Command::new("sh"), config, true, Some(protocol));
+        let elapsed = started.elapsed();
+        // SAFETY: all four descriptors were returned by pipe and are closed once.
+        unsafe {
+            libc::close(registration[0]);
+            libc::close(registration[1]);
+            libc::close(token[0]);
+            libc::close(token[1]);
+        }
+        let error = match result {
+            Ok(session) => panic!(
+                "registration unexpectedly succeeded for pid {}",
+                session.pid()
+            ),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                &error,
+                ChildSessionError::Spawn(source) if source.raw_os_error() == Some(libc::ETIMEDOUT)
+            ),
+            "a stalled monitor must time out registration, got {error:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "registration must honour the 50ms session timeout, not a fixed 5s: {elapsed:?}"
+        );
     }
 
     #[test]

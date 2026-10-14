@@ -15,12 +15,46 @@
 
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
+use crate::mainloop::restart_menu::c_extern::ONE_SECOND;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
 // ===========================================================================
+fn serialize_scene<S: serde::Serializer>(
+    scene: &AutomationScene,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(scene.name())
+}
+
+fn serialize_optional_scene<S: serde::Serializer>(
+    scene: &Option<AutomationScene>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    scene.map(AutomationScene::name).serialize(serializer)
+}
+
+fn serialize_mode<S: serde::Serializer>(
+    mode: &crate::automation::mode::GameMode,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(mode.name())
+}
+
+impl Serialize for MenuKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+impl Serialize for PlayerKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
 //  Build capability contract (REQ-BUILD-001)
 // ===========================================================================
 
@@ -281,7 +315,7 @@ pub fn is_valid_label(label: &str) -> bool {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-002, REQ-SCRIPT-004
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Budgets {
     /// Inclusive maximum number of admitted input callbacks. A maximum `M`
@@ -323,7 +357,7 @@ impl Budgets {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003, REQ-SCRIPT-004
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitInputTicksStep {
     pub count: u64,
@@ -333,7 +367,7 @@ pub struct WaitInputTicksStep {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SetMenuKeyStep {
     pub key: MenuKey,
@@ -345,7 +379,7 @@ pub struct SetMenuKeyStep {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003, REQ-SCRIPT-004
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TapMenuKeyStep {
     pub key: MenuKey,
@@ -354,7 +388,7 @@ pub struct TapMenuKeyStep {
     pub settle: u64,
 }
 /// A `set_player_key` step writes a gameplay control for player one.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SetPlayerKeyStep {
     pub key: PlayerKey,
@@ -362,7 +396,7 @@ pub struct SetPlayerKeyStep {
 }
 
 /// A `tap_player_key` step sustains a gameplay control, releases it, and settles.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TapPlayerKeyStep {
     pub key: PlayerKey,
@@ -375,7 +409,7 @@ pub struct TapPlayerKeyStep {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003, REQ-SCRIPT-006
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct CaptureStep {
     pub label: String,
@@ -399,7 +433,7 @@ pub struct CaptureStep {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003, REQ-SCRIPT-004
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ActivityAssertion {
     pub mask: u16,
@@ -407,7 +441,7 @@ pub struct ActivityAssertion {
 }
 
 /// A `navigate_to_planet` step drives the real flagship via player controls.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToPlanetStep {
     pub planet: u8,
@@ -415,7 +449,7 @@ pub struct NavigateToPlanetStep {
 }
 
 /// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToMoonStep {
     pub planet: u8,
@@ -424,22 +458,31 @@ pub struct NavigateToMoonStep {
 }
 
 /// A `navigate_to_orbit` step targets the planet itself from its inner system.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToOrbitStep {
     pub planet: u8,
     pub max_ticks: u64,
 }
 
+/// A `navigate_to_hyperspace` step flies the real flagship out of the current
+/// solar system with player controls until production enters hyperspace.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToHyperspaceStep {
+    pub max_ticks: u64,
+}
+
 /// Wait until a Rust PlanetSide session has started.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForPlanetSideStartStep {
     pub max_ticks: u64,
 }
 
 /// How a PlanetSide session ended, mirroring `SessionOutcome`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PlanetSideOutcomeName {
     Returned,
     Destroyed,
@@ -484,7 +527,7 @@ impl<'de> Deserialize<'de> for PlanetSideOutcomeName {
 ///
 /// This is the oracle for behaviour that must complete without further input,
 /// such as a pickup callback that requests takeoff.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForPlanetSideEndStep {
     pub outcome: PlanetSideOutcomeName,
@@ -492,14 +535,14 @@ pub struct WaitForPlanetSideEndStep {
 }
 
 /// Select once when the requested production planet-menu phase is active.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SelectPlanetMenuStep {
     pub phase: PlanetMenuPhaseName,
     pub max_ticks: u64,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanetMenuPhaseName {
     Orbit,
@@ -513,21 +556,23 @@ pub enum PlanetMenuPhaseName {
 /// The mode is derived from the game's own observations, so this asserts what
 /// the game is doing rather than what the screen looks like. An observation
 /// that names no mode, or more than one, fails the run.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ModeAssertion {
+    #[serde(serialize_with = "serialize_mode")]
     pub mode: crate::automation::mode::GameMode,
 }
 
 /// An `assert_scene` step verifies the expected deterministic scene dispatch chain.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SceneAssertion {
+    #[serde(serialize_with = "serialize_scene")]
     pub scene: AutomationScene,
 }
 
 /// An `assert_dispatch` step validates observed encounter/dialogue IDs.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct DispatchAssertion {
     pub encounter: u32,
@@ -535,7 +580,7 @@ pub struct DispatchAssertion {
 }
 
 /// Wait for a production communication dispatch to report the requested IDs.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForDispatchStep {
     pub encounter: u32,
@@ -544,26 +589,26 @@ pub struct WaitForDispatchStep {
 }
 
 /// Assert that the nested production Game Options input loop is active.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GameOptionsAssertion {}
 
 /// Assert that a communication response list has at least `minimum` choices.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct CommunicationResponsesAssertion {
     pub minimum: usize,
 }
 
 /// Assert that the current battle has completed at least `minimum` real frames.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
 /// Wait for the current battle to complete at least `minimum` real frames.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForBattleFramesStep {
     pub minimum: u64,
@@ -571,7 +616,7 @@ pub struct WaitForBattleFramesStep {
 }
 
 /// Wait for exactly `count` committed presentation callbacks.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitPresentationsStep {
     pub count: u64,
@@ -584,7 +629,7 @@ pub struct WaitPresentationsStep {
 /// stun-bolt impacts on live creatures, and connected at least `seam_hits`
 /// collisions that only resolved across the wrapped horizontal seam. All three
 /// defaults to zero, so a script asserts exactly the semantics it runs.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PlanetSideCollisionAssertion {
     #[serde(default)]
@@ -596,7 +641,7 @@ pub struct PlanetSideCollisionAssertion {
 }
 
 /// Wait for a fresh communication response list before selecting its first entry.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SelectCommunicationResponseStep {
     pub index: usize,
@@ -604,7 +649,7 @@ pub struct SelectCommunicationResponseStep {
 }
 
 /// Wait for at least `minimum_completions` communication loops to return naturally.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForCommunicationEndStep {
     pub minimum_completions: u64,
@@ -612,7 +657,7 @@ pub struct WaitForCommunicationEndStep {
 }
 
 /// Wait for replay of the most recent alien phrase to become active.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForCommunicationReplayStep {
     pub max_ticks: u64,
@@ -622,13 +667,13 @@ pub struct WaitForCommunicationReplayStep {
 ///
 /// Kept as an empty struct with `deny_unknown_fields` so an extra JSON field
 /// on the action is rejected, not silently ignored.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanetSideCollisionFixtureStep {}
 
 /// The no-payload step that waits for the production restart menu to finish
 /// initialization and accept navigation input.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WaitForMainMenuReadyStep {}
 
@@ -636,7 +681,7 @@ pub struct WaitForMainMenuReadyStep {}
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-003
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "action")]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "snake_case")]
@@ -651,6 +696,7 @@ pub enum Action {
     NavigateToPlanet(NavigateToPlanetStep),
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
+    NavigateToHyperspace(NavigateToHyperspaceStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -679,7 +725,7 @@ pub enum Action {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-006
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct MainMenuTransitionDto {
     pub from: String,
@@ -690,7 +736,7 @@ pub struct MainMenuTransitionDto {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-002
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct ScriptStep {
     #[serde(flatten)]
@@ -701,12 +747,13 @@ pub struct ScriptStep {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 /// @requirement REQ-SCRIPT-002
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RootDocument {
     pub version: u64,
     pub name: String,
     #[serde(default)]
+    #[serde(serialize_with = "serialize_optional_scene")]
     pub start_scene: Option<AutomationScene>,
     pub budgets: Budgets,
     pub steps: Vec<Action>,
@@ -740,15 +787,19 @@ pub struct ValidatedScript {
     pub(crate) budgets: Budgets,
     pub(crate) steps: Vec<Action>,
     pub(crate) transitions: Vec<MainMenuTransition>,
-    pub(crate) seed: u64,
+    pub(crate) seed: u32,
     pub(crate) fixture: String,
 }
 
 impl ValidatedScript {
-    /// The deterministic seed this run must apply.
+    /// The u32 initialization argument supplied to each automation-owned RNG.
+    /// The generator still applies its own seed normalization internally.
     #[must_use]
-    pub fn seed(&self) -> u64 {
-        self.seed
+    pub fn seed(&self) -> u32 {
+        // Zero means inactive automation to the transitional RNG callers. The
+        // generator normally maps zero to one; resolve it here so those callers
+        // actually apply the selected seed instead of keeping a wall-clock seed.
+        self.seed.max(1)
     }
 
     /// The fixture identity isolating this run's profile and save slots.
@@ -769,8 +820,13 @@ impl ValidatedScript {
             scenario_version: CURRENT_SCHEMA_VERSION,
             name: self.name.clone(),
             fixture: self.fixture.clone(),
-            seed: self.seed,
+            requested_seed: self.seed,
+            seed: self.seed(),
             step_count: self.steps.len() as u64,
+            steps: self.steps.clone(),
+            start_scene: self.start_scene,
+            max_startup_seconds: self.budgets.startup_seconds(),
+            max_idle_seconds: self.budgets.idle_seconds(),
             max_input_ticks: self.budgets.max_input_ticks,
             max_presentations: self.budgets.max_presentations,
             max_wallclock_seconds: self.budgets.max_wallclock_seconds,
@@ -1134,14 +1190,10 @@ pub fn validate_script(
 }
 
 /// Schema identifier for the resolved scenario recorded in a proof bundle.
-pub const RESOLVED_SCENARIO_SCHEMA: &str = "uqm-resolved-scenario-v1";
+pub const RESOLVED_SCENARIO_SCHEMA: &str = "uqm-resolved-scenario-v2";
 
-/// The immutable scenario a run actually executed, plus its replay identity.
-///
-/// A proof bundle records this rather than the source file, because the file
-/// may be an older schema version whose identity was supplied by migration.
-/// Two runs that agree on [`ResolvedScenario::replay_identity`] executed the
-/// same steps under the same fixture and seed.
+/// The complete resolved scenario input. Its digest establishes input identity,
+/// not equality of observed outcomes or presented pixels.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResolvedScenario {
@@ -1149,34 +1201,72 @@ pub struct ResolvedScenario {
     pub scenario_version: u64,
     pub name: String,
     pub fixture: String,
-    pub seed: u64,
+    /// Script seed before resolving the inactive-boundary zero sentinel.
+    pub requested_seed: u32,
+    pub seed: u32,
     pub step_count: u64,
+    pub steps: Vec<Action>,
+    #[serde(serialize_with = "serialize_optional_scene")]
+    pub start_scene: Option<AutomationScene>,
     pub max_input_ticks: u64,
     pub max_presentations: u64,
     pub max_wallclock_seconds: u64,
+    pub max_startup_seconds: u64,
+    pub max_idle_seconds: u64,
 }
 
 impl ResolvedScenario {
-    /// A stable digest over every field that changes what a run does.
-    ///
-    /// Field order is fixed here rather than taken from serialization, so the
-    /// identity cannot drift if the struct is ever reordered.
-    #[must_use]
-    pub fn replay_identity(&self) -> String {
-        let material = format!(
-            "{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
-            self.schema,
-            self.scenario_version,
-            self.name,
-            self.fixture,
-            self.seed,
-            self.step_count,
-            self.max_input_ticks,
-            self.max_presentations,
-            self.max_wallclock_seconds,
-        );
-        crate::automation::identity::digest_hex(&crate::automation::identity::sha256_bytes(
-            material.as_bytes(),
+    /// Validate the resolved metadata against the same contract used at startup.
+    pub fn validate(&self) -> Result<(), AutomationError> {
+        let path = "resolved-scenario.json";
+        if self.schema != RESOLVED_SCENARIO_SCHEMA
+            || self.scenario_version != CURRENT_SCHEMA_VERSION
+            || self.step_count != self.steps.len() as u64
+        {
+            return Err(AutomationError::InvalidValue {
+                path: path.into(),
+                field: "scenario",
+                reason: "resolved schema, version or step count is inconsistent".into(),
+            });
+        }
+        let validated = validate_script(
+            RootDocument {
+                version: self.scenario_version,
+                name: self.name.clone(),
+                start_scene: self.start_scene,
+                budgets: Budgets {
+                    max_input_ticks: self.max_input_ticks,
+                    max_presentations: self.max_presentations,
+                    max_wallclock_seconds: self.max_wallclock_seconds,
+                    max_startup_seconds: Some(self.max_startup_seconds),
+                    max_idle_seconds: Some(self.max_idle_seconds),
+                },
+                steps: self.steps.clone(),
+                seed: Some(u64::from(self.requested_seed)),
+                fixture: Some(self.fixture.clone()),
+            },
+            path,
+        )?;
+        if validated.seed() != self.seed {
+            return Err(AutomationError::InvalidValue {
+                path: path.into(),
+                field: "seed",
+                reason: "applied seed differs from the resolved RNG initialization argument".into(),
+            });
+        }
+        Ok(())
+    }
+
+    /// SHA-256 of the versioned JSON serialization of all resolved inputs.
+    /// Serialization is fallible and must never substitute an empty digest.
+    pub fn replay_identity(&self) -> Result<String, AutomationError> {
+        self.validate()?;
+        let material = serde_json::to_vec(self).map_err(|error| AutomationError::InvalidJson {
+            path: "resolved-scenario.json".into(),
+            reason: error.to_string(),
+        })?;
+        Ok(crate::automation::identity::digest_hex(
+            &crate::automation::identity::sha256_bytes(&material),
         ))
     }
 }
@@ -1190,7 +1280,7 @@ pub const MINIMUM_SCHEMA_VERSION: u64 = 1;
 /// Migrate a parsed document forward to [`CURRENT_SCHEMA_VERSION`].
 ///
 /// A version 1 document declared no deterministic identity, so migration
-/// supplies the documented defaults rather than inventing values: seed 0 and
+/// supplies the existing automation RNG seed and
 /// the fixture named by the scenario itself. That keeps every existing script
 /// byte-identical on disk and behaviourally unchanged, while giving the
 /// resolved scenario a complete identity to record.
@@ -1207,7 +1297,7 @@ fn migrate_document(mut doc: RootDocument, path: &str) -> Result<RootDocument, A
     }
     if doc.version == 1 {
         if doc.seed.is_none() {
-            doc.seed = Some(0);
+            doc.seed = Some(u64::from(crate::automation::coordinator::AUTOMATION_SEED));
         }
         if doc.fixture.is_none() {
             doc.fixture = Some(doc.name.clone());
@@ -1330,9 +1420,19 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         path,
     )?;
 
-    // migrate_document guarantees both are present.
-    let seed = doc.seed.unwrap_or_default();
-    let fixture = doc.fixture.unwrap_or_default();
+    let seed = doc.seed.ok_or_else(|| AutomationError::MissingField {
+        path: path.into(),
+        field: "seed",
+    })?;
+    let seed = u32::try_from(seed).map_err(|_| AutomationError::InvalidValue {
+        path: path.into(),
+        field: "seed",
+        reason: "RNG seed must fit u32".into(),
+    })?;
+    let fixture = doc.fixture.ok_or_else(|| AutomationError::MissingField {
+        path: path.into(),
+        field: "fixture",
+    })?;
     Ok(ValidatedScript {
         name: doc.name,
         start_scene: doc.start_scene,
@@ -1343,6 +1443,48 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         fixture,
     })
 }
+
+/// Seconds the title splash waits for a key when none is pressed:
+/// `WaitForAnyButton (FALSE, ONE_SECOND * 3, TRUE)` (`fmv.c:100`).
+const SPLASH_WAIT_SECONDS: u64 = 3;
+
+/// Game time units the splash waits: `ONE_SECOND * 3` (`fmv.c:100`).
+const SPLASH_WAIT_TICKS: u64 = SPLASH_WAIT_SECONDS * ONE_SECOND as u64;
+
+/// Game time units slept per poll of the splash wait: `SleepThread
+/// (ONE_SECOND / 40)` (`util.c:241`). `ONE_SECOND` is 840, so this is 21.
+const SPLASH_POLL_TICKS: u64 = ONE_SECOND as u64 / 40;
+
+/// Automation service points the splash wait can reach, with no key pressed.
+///
+/// `WaitForAnyButtonUntil` (`util.c:222-249`) calls
+/// `rust_automation_service_boundary` once per loop pass (`util.c:239`),
+/// which is one admitted input callback, and `AnyButtonPress` before the loop
+/// services nothing. The loop runs while `GetTimeCounter () < timeOut`, and
+/// pass `k` starts no earlier than `k * SPLASH_POLL_TICKS` after `timeOut` was
+/// computed because each pass sleeps at least that long (`SleepThread` sleeps
+/// 25 ms, which `SDLWrapper_GetTimeCounter` converts to exactly 21 units). Pass
+/// `k` therefore runs only if `k * 21 < 2520`, which allows passes 0 to 119.
+const SPLASH_SERVICED_CALLBACKS: u64 = SPLASH_WAIT_TICKS.div_ceil(SPLASH_POLL_TICKS);
+
+/// The restart menu's own first `DoInput` pass: `DoInput` services automation
+/// (`gameinp.c:448`) before `DoRestart` runs its first-frame initialization,
+/// which reports readiness (`do_restart.rs`, `process_main_menu_ready`).
+const RESTART_MENU_FIRST_FRAME_CALLBACKS: u64 = 1;
+
+/// Most admitted input callbacks between run start and restart-menu readiness
+/// when no key is pressed, charged to `wait_for_main_menu_ready`.
+///
+/// Derived from source, not measured. The other startup steps before the
+/// splash wait (`LoadKernel`, `FadeScreen` with `SleepThreadUntil`, and
+/// `BackgroundInitKernel`, which only calls `UpdateInputState` and
+/// `TaskSwitch`) never call an automation service point, and the first-frame
+/// fade-in also uses `SleepThreadUntil`. So the total is the splash wait plus
+/// the menu's first pass: 120 + 1 = 121. Cross-checks: readiness was observed
+/// at input tick 112 locally and 93 hosted, and at 12 when a key skipped the
+/// splash.
+pub const MAIN_MENU_READY_MAX_INPUT_CALLBACKS: u64 =
+    SPLASH_SERVICED_CALLBACKS + RESTART_MENU_FIRST_FRAME_CALLBACKS;
 
 /// Admitted-callback and transition tallies accumulated across script steps.
 #[derive(Default)]
@@ -1410,7 +1552,14 @@ fn validate_step(
     requirements: &mut StepRequirements,
 ) -> Result<(), AutomationError> {
     if matches!(step, Action::WaitForMainMenuReady(_)) {
-        return Ok(());
+        // Readiness is a runtime observation, not a scripted callback, but the
+        // splash it waits through services automation on the way.
+        return requirements.add_input_callbacks(
+            MAIN_MENU_READY_MAX_INPUT_CALLBACKS,
+            index,
+            path,
+            ": wait_for_main_menu_ready",
+        );
     }
     // Every other action consumes at least one admitted input callback,
     // including immediate assertions, capture arming, and the final Finish action.
@@ -1625,6 +1774,16 @@ fn validate_navigation_step(
                     path,
                     index,
                     "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
+                )));
+            }
+            navigation.max_ticks
+        }
+        Action::NavigateToHyperspace(navigation) => {
+            if navigation.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_hyperspace max_ticks must be positive",
                 )));
             }
             navigation.max_ticks
@@ -1920,7 +2079,10 @@ mod tests {
         let txt = r#"{"version":1,"name":"legacy","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         let script = validate_script(doc, p()).unwrap();
-        assert_eq!(script.seed(), 0);
+        assert_eq!(
+            script.seed(),
+            crate::automation::coordinator::AUTOMATION_SEED
+        );
         assert_eq!(script.fixture(), "legacy");
         assert_eq!(script.resolved().scenario_version, CURRENT_SCHEMA_VERSION);
     }
@@ -1957,29 +2119,143 @@ mod tests {
     }
 
     #[test]
+    fn replay_identity_binds_same_count_action_and_assertion_changes() {
+        let base =
+            validate_script(parse_script(VALID_MINIMAL.as_bytes(), p()).unwrap(), p()).unwrap();
+        for (before, after) in [
+            ("\"count\": 2", "\"count\": 1"),
+            ("\"key\": \"down\"", "\"key\": \"up\""),
+            ("\"equals\": 0", "\"equals\": 4096"),
+        ] {
+            let changed = VALID_MINIMAL.replace(before, after);
+            assert_ne!(changed, VALID_MINIMAL);
+            let other =
+                validate_script(parse_script(changed.as_bytes(), p()).unwrap(), p()).unwrap();
+            assert_eq!(base.steps().len(), other.steps().len());
+            assert_ne!(
+                base.resolved().replay_identity().unwrap(),
+                other.resolved().replay_identity().unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn replay_identity_binds_scene_and_effective_watchdog_budgets() {
+        let mut doc = parse_script(VALID_MINIMAL.as_bytes(), p()).unwrap();
+        let base = validate_script(doc.clone(), p()).unwrap().resolved();
+        doc.start_scene = Some(AutomationScene::SolProbeEncounter);
+        assert_ne!(
+            base.replay_identity().unwrap(),
+            validate_script(doc.clone(), p())
+                .unwrap()
+                .resolved()
+                .replay_identity()
+                .unwrap()
+        );
+        doc.start_scene = None;
+        doc.budgets.max_startup_seconds = Some(1);
+        assert_ne!(
+            base.replay_identity().unwrap(),
+            validate_script(doc.clone(), p())
+                .unwrap()
+                .resolved()
+                .replay_identity()
+                .unwrap()
+        );
+        doc.budgets.max_startup_seconds = None;
+        doc.budgets.max_idle_seconds = Some(1);
+        assert_ne!(
+            base.replay_identity().unwrap(),
+            validate_script(doc, p())
+                .unwrap()
+                .resolved()
+                .replay_identity()
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn replay_resolved_inconsistencies_fail_instead_of_hashing_placeholders() {
+        let base = validate_script(parse_script(VALID_MINIMAL.as_bytes(), p()).unwrap(), p())
+            .unwrap()
+            .resolved();
+        let mut wrong_count = base.clone();
+        wrong_count.step_count += 1;
+        assert!(wrong_count.replay_identity().is_err());
+        let mut wrong_schema = base.clone();
+        wrong_schema.schema = "uqm-resolved-scenario-v1".into();
+        assert!(wrong_schema.replay_identity().is_err());
+        let mut wrong_budget = base;
+        wrong_budget.max_startup_seconds = 0;
+        assert!(wrong_budget.replay_identity().is_err());
+    }
+
+    #[test]
+    fn replay_serialization_roundtrips_repository_script_actions() {
+        let scripts = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut count = 0;
+        for entry in std::fs::read_dir(scripts).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+            let doc = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
+            let roundtrip = parse_script(&serde_json::to_vec(&doc).unwrap(), &path).unwrap();
+            assert_eq!(doc, roundtrip, "{}", path.display());
+            let resolved = validate_script(doc, &path).unwrap().resolved();
+            let decoded: ResolvedScenario =
+                serde_json::from_slice(&serde_json::to_vec(&resolved).unwrap()).unwrap();
+            assert_eq!(resolved, decoded);
+            assert_eq!(
+                resolved.replay_identity().unwrap(),
+                decoded.replay_identity().unwrap()
+            );
+            count += 1;
+        }
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn replay_seed_rejects_values_the_rng_cannot_apply() {
+        let mut doc = parse_script(VALID_MINIMAL.as_bytes(), p()).unwrap();
+        doc.seed = Some(u64::from(u32::MAX) + 1);
+        assert!(validate_script(doc, p()).is_err());
+    }
+
+    #[test]
+    fn replay_legacy_seed_matches_the_existing_rng_default() {
+        let script =
+            validate_script(parse_script(VALID_MINIMAL.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(
+            script.seed(),
+            crate::automation::coordinator::AUTOMATION_SEED
+        );
+    }
+
+    #[test]
     fn replay_identity_is_stable_and_separates_differing_runs() {
         let base = r#"{"version":2,"name":"x","seed":1,"fixture":"f","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
         let a = validate_script(parse_script(base.as_bytes(), p()).unwrap(), p()).unwrap();
         let b = validate_script(parse_script(base.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_eq!(
-            a.resolved().replay_identity(),
-            b.resolved().replay_identity(),
+            a.resolved().replay_identity().unwrap(),
+            b.resolved().replay_identity().unwrap(),
             "the same scenario must replay under the same identity"
         );
 
         let other_seed = base.replace(r#""seed":1"#, r#""seed":2"#);
         let c = validate_script(parse_script(other_seed.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_ne!(
-            a.resolved().replay_identity(),
-            c.resolved().replay_identity(),
+            a.resolved().replay_identity().unwrap(),
+            c.resolved().replay_identity().unwrap(),
             "a different seed is a different run"
         );
 
         let other_fixture = base.replace(r#""fixture":"f""#, r#""fixture":"g""#);
         let d = validate_script(parse_script(other_fixture.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_ne!(
-            a.resolved().replay_identity(),
-            d.resolved().replay_identity(),
+            a.resolved().replay_identity().unwrap(),
+            d.resolved().replay_identity().unwrap(),
             "a different fixture is a different run"
         );
     }
@@ -1989,12 +2265,12 @@ mod tests {
         // The identity reflects what ran, not the bytes on disk, so a v1 file
         // and the equivalent v2 file describe the same run.
         let legacy = r#"{"version":1,"name":"same","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
-        let explicit = r#"{"version":2,"name":"same","seed":0,"fixture":"same","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let explicit = r#"{"version":2,"name":"same","seed":1437213463,"fixture":"same","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
         let a = validate_script(parse_script(legacy.as_bytes(), p()).unwrap(), p()).unwrap();
         let b = validate_script(parse_script(explicit.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_eq!(
-            a.resolved().replay_identity(),
-            b.resolved().replay_identity()
+            a.resolved().replay_identity().unwrap(),
+            b.resolved().replay_identity().unwrap()
         );
     }
 
@@ -2467,7 +2743,7 @@ mod tests {
 
     #[test]
     fn main_menu_readiness_is_event_driven_and_rejects_payload_fields() {
-        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":123,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
         let document = parse_script(valid.as_bytes(), p()).unwrap();
         assert!(validate_script(document, p()).is_ok());
 
@@ -2753,6 +3029,155 @@ mod tests {
             let parsed = parse_script(&bytes, path.to_string_lossy().into_owned()).unwrap();
             validate_script(parsed, path.to_string_lossy().into_owned()).unwrap();
         }
+    }
+
+    /// #213: a fresh profile starts on the main menu with no save, so no
+    /// checked-in script may assert hyperspace without first flying there.
+    #[test]
+    fn every_hyperspace_assertion_follows_a_real_departure() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&scripts).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "json") {
+                continue;
+            }
+            let label = path.to_string_lossy().into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            if script.start_scene().is_some() {
+                continue;
+            }
+            let steps = script.steps();
+            let Some(first_hyperspace) = steps.iter().position(|step| {
+                matches!(step, Action::AssertActivity(ActivityAssertion { mask, equals })
+                    if mask & 0x00ff == 0x00ff && equals & 0x00ff == 3)
+            }) else {
+                continue;
+            };
+            checked += 1;
+            assert!(
+                steps[..first_hyperspace]
+                    .iter()
+                    .any(|step| matches!(step, Action::NavigateToHyperspace(_))),
+                "{label} asserts hyperspace at step {first_hyperspace} without flying there"
+            );
+        }
+        assert_eq!(checked, 10, "hyperspace scenarios checked");
+    }
+
+    /// #213: the restart menu only reads input after its first frame is
+    /// initialized. A fixed tick count races that startup, and a Select sent
+    /// too early was only ever rescued by the production key-repeat clock.
+    /// Every script that starts at the restart menu must wait for readiness
+    /// before its first key. Start-scene scripts begin there too: a scene
+    /// activates only after New Game is chosen (#213 amendment 7).
+    #[test]
+    fn every_restart_menu_script_waits_for_readiness_before_its_first_key() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&scripts).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "json") {
+                continue;
+            }
+            let label = path.to_string_lossy().into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            let steps = script.steps();
+            let Some(first_key) = steps
+                .iter()
+                .position(|step| matches!(step, Action::TapMenuKey(_) | Action::SetMenuKey(_)))
+            else {
+                continue;
+            };
+            checked += 1;
+            assert!(
+                steps[..first_key]
+                    .iter()
+                    .any(|step| matches!(step, Action::WaitForMainMenuReady(_))),
+                "{label} presses a menu key at step {first_key} before the restart menu is ready"
+            );
+        }
+        assert_eq!(checked, 33, "restart menu scripts checked");
+    }
+
+    /// #213 amendment 5: Rust-owned `main` presents twice per input callback
+    /// (once when the frame wakes, once after the callback), measured at 2.00
+    /// across the native suite. A scenario whose scripted waits and holds alone
+    /// need more presentations than its cap would end in `presentation_timeout`
+    /// before finishing.
+    #[test]
+    fn required_scenarios_budget_two_presentations_per_scripted_tick() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let required = crate::automation::suite::required_suite();
+        assert_eq!(required.len(), 32, "required scenarios");
+        for name in required {
+            let label = scripts
+                .join(format!("{name}.json"))
+                .to_string_lossy()
+                .into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&label).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            let scripted_ticks: u64 = script
+                .steps()
+                .iter()
+                .map(|step| match step {
+                    Action::WaitInputTicks(wait) => wait.count,
+                    Action::TapMenuKey(tap) => tap.hold + tap.settle,
+                    Action::TapPlayerKey(tap) => tap.hold + tap.settle,
+                    _ => 0,
+                })
+                .sum();
+            assert!(
+                script.budgets().max_presentations >= 2 * scripted_ticks,
+                "{name} caps presentations at {} but its scripted ticks ({scripted_ticks}) present about {}",
+                script.budgets().max_presentations,
+                2 * scripted_ticks
+            );
+        }
+    }
+
+    /// #213 amendment 8: with no key pressed the title splash waits its full
+    /// three seconds before the restart menu is ready, servicing automation
+    /// once per `ONE_SECOND / 40` pass, so the readiness wait must be charged
+    /// those input callbacks plus the menu's first `DoInput` pass.
+    #[test]
+    fn main_menu_ready_wait_is_charged_the_splash_callbacks() {
+        assert_eq!(SPLASH_WAIT_TICKS, 2520);
+        assert_eq!(SPLASH_POLL_TICKS, 21);
+        assert_eq!(SPLASH_SERVICED_CALLBACKS, 120);
+        assert_eq!(MAIN_MENU_READY_MAX_INPUT_CALLBACKS, 121);
+        // Readiness was observed at input tick 112 locally and 93 hosted.
+        const { assert!(MAIN_MENU_READY_MAX_INPUT_CALLBACKS >= 112) };
+
+        // The wait plus `finish` statically require 121 + 1 admitted
+        // callbacks, so the inclusive limit must be at least 123.
+        let script = |max_input_ticks: u64| {
+            format!(
+                r#"{{"version":1,"name":"splash-charge","budgets":{{"max_input_ticks":{max_input_ticks},"max_presentations":1000,"max_wallclock_seconds":60}},"steps":[{{"action":"wait_for_main_menu_ready"}},{{"action":"finish"}}]}}"#
+            )
+        };
+        let validate = |max_input_ticks: u64| {
+            validate_script(
+                parse_script(script(max_input_ticks).as_bytes(), p()).unwrap(),
+                p(),
+            )
+        };
+        assert!(matches!(
+            validate(122),
+            Err(AutomationError::InsufficientBudget { .. })
+        ));
+        assert!(validate(123).is_ok());
     }
 
     #[test]

@@ -392,26 +392,24 @@ impl ColorMapManager {
         let mut pending_finishes = Vec::new();
         {
             let mut xforms = self.xforms.lock().unwrap();
-            for (idx, xform) in xforms.iter_mut().take(highest).enumerate() {
+            for xform in xforms.iter_mut().take(highest) {
                 if !xform.in_use() {
                     continue;
                 }
                 if now >= xform.end_time {
-                    pending_finishes.push(idx);
+                    pending_finishes.push(xform.clone());
                     xform.cmap_index = -1;
                     continue;
                 }
-                pending_applies.push(idx);
+                pending_applies.push(xform.clone());
                 has_active = true;
             }
         }
-        for idx in pending_applies {
-            let xform = self.xforms.lock().unwrap()[idx].clone();
-            self.apply_blended_colors(&xform, now);
+        for xform in &pending_applies {
+            self.apply_blended_colors(xform, now);
         }
-        for idx in pending_finishes {
-            let xform = self.xforms.lock().unwrap()[idx].clone();
-            self.apply_target_colors(&xform);
+        for xform in &pending_finishes {
+            self.apply_target_colors(xform);
         }
         if !has_active {
             let mut highest_ref = self.highest_xform.lock().unwrap();
@@ -430,16 +428,15 @@ impl ColorMapManager {
         let mut pending = Vec::new();
         {
             let mut xforms = self.xforms.lock().unwrap();
-            for (idx, xform) in xforms.iter_mut().enumerate() {
+            for xform in xforms.iter_mut() {
                 if xform.in_use() {
-                    pending.push(idx);
+                    pending.push(xform.clone());
                     xform.cmap_index = -1;
                 }
             }
         }
-        for idx in pending {
-            let xform = self.xforms.lock().unwrap()[idx].clone();
-            self.apply_target_colors(&xform);
+        for xform in &pending {
+            self.apply_target_colors(xform);
         }
         *self.highest_xform.lock().unwrap() = 0;
     }
@@ -772,3 +769,7 @@ mod tests {
         assert!(!mgr.step_transformations());
     }
 }
+
+#[cfg(test)]
+#[path = "cmap_transform_tests.rs"]
+mod transform_tests;

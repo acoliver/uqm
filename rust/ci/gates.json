@@ -259,6 +259,202 @@
       "read_timeout_seconds": 120,
       "backoff_seconds": [1, 2]
     },
+    "scenario_scripts": [
+          {
+                "path": "rust/scripts/battle-v1.json",
+                "sha256": "8780ed08b2c4e3b45524e7ea9c5cc72e986d87eb1bb21d6e1644892fbf97e894",
+                "byte_length": 1884
+          },
+          {
+                "path": "rust/scripts/comm-encounter-v1.json",
+                "sha256": "cf866a336665af4c36519f21e7651ef3e516ff321efa7bfe02a5a1844e9abb0d",
+                "byte_length": 694
+          },
+          {
+                "path": "rust/scripts/explore-planet-v1.json",
+                "sha256": "d53ced3d29a72f684abdd2f21923473eaa3556835b8dc3daf454f3a44c5def01",
+                "byte_length": 978
+          },
+          {
+                "path": "rust/scripts/hard-hang.json",
+                "sha256": "d8a89497176b084bac7a350cba1984a03ac2926486df3f73af4de0ba4ef96c41",
+                "byte_length": 274
+          },
+          {
+                "path": "rust/scripts/inactive-smoke.json",
+                "sha256": "9b344ac0ed8fca98e57d4b67cb0bd3bd7192ec4f7626eff4987d71a56ca41931",
+                "byte_length": 277
+          },
+          {
+                "path": "rust/scripts/linked-playable-v1.json",
+                "sha256": "95aee4114081c72222f50df6ccf7b8f01bafdb954f613381a4be6457562ed934",
+                "byte_length": 2169
+          },
+          {
+                "path": "rust/scripts/load-save-v1.json",
+                "sha256": "c4d10a4d612e8260fc53f586e55ea0cf954680d9473c80a81de71c24afab8ff5",
+                "byte_length": 3457
+          },
+          {
+                "path": "rust/scripts/main-menu-v1.json",
+                "sha256": "2272565b37877d71d51de0c651c323c1826713f51524f6c1c4ea4dcc5bd6f49a",
+                "byte_length": 657
+          },
+          {
+                "path": "rust/scripts/mode-main-menu-v1.json",
+                "sha256": "ae77534d313f883cc4beefd10bf31cdffd52d89db5e5718948ae1ede6d48e742",
+                "byte_length": 836
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v1.json",
+                "sha256": "f7fe89fb7d6d55cbb086eb4155a0894ee598cc644c68b44ca266c2251aa942a1",
+                "byte_length": 2725
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v2.json",
+                "sha256": "32a5f064f05095c8df6a90761c649c5d5fb696ce278c245a57646dbf0ecb93f0",
+                "byte_length": 3350,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v3.json",
+                "sha256": "1b40fea5dcc41a7e4c7986fb74a7a0618a7aa4a395dbfeef980d2354ee45e442",
+                "byte_length": 1491,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v4.json",
+                "sha256": "8eda2ca3ee21079342dfecefd514acabe6914a3e2f910a47c977f3d3be3143a2",
+                "byte_length": 1491,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v5.json",
+                "sha256": "bad3d51f4b10b90d5714655353c59b9987520a7dd1220701a41acc7cd9222db0",
+                "byte_length": 3732,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v6.json",
+                "sha256": "58630de7ca2d8aa6e9810f49a550a471436edf43e1220e3aca5d6ddb62ac66f8",
+                "byte_length": 2592,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-v7.json",
+                "sha256": "a5773bf1e3420e059d4cfdd1c233d21b5a4ff97b2f56dd7527df67a496280bd1",
+                "byte_length": 2933,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/probe-encounter-wait.json",
+                "sha256": "041a55c766642990d22829981bd62338da8c4e1242dbd7695d9b596a4b25f594",
+                "byte_length": 1059
+          },
+          {
+                "path": "rust/scripts/quit-v1.json",
+                "sha256": "431039cc8e2519ebcfb3459275e5eb5b1fbb9d3166fa9b59211c43caaa4fd314",
+                "byte_length": 1131
+          },
+          {
+                "path": "rust/scripts/real-sol-autopilot.json",
+                "sha256": "cbe71ded1e7a7d43168a0236fac98abf2d5c37408922eb3944b357a9d5a5a487",
+                "byte_length": 695
+          },
+          {
+                "path": "rust/scripts/real-sol-commander-completion.json",
+                "sha256": "6956c7e3db97bda5147a2f5eed7277905628bd80a5c88656cbc27c1206543166",
+                "byte_length": 2176,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-earth-moon-base.json",
+                "sha256": "9eab0bf6f3277e55bee7a682c156fbfb24ddb38e770d1c87d92d81e4d683f201",
+                "byte_length": 2760,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-luna-moonbase-departure.json",
+                "sha256": "9fab2ddec32b26062e1fd0d236d2bd905fef334dc6a88f22c18f723dc2e6fbf2",
+                "byte_length": 2906,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-planetside-collision-proof.json",
+                "sha256": "30bca462cac1f0a33a6f41a06ed50ef3d0b4751f1f2365f036b0f781e5a8534f",
+                "byte_length": 3534,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-probe-completion.json",
+                "sha256": "a033df26b02daa2eb84a7813a54880a019ba44e0adc8fc0e82850616d6968601",
+                "byte_length": 1293
+          },
+          {
+                "path": "rust/scripts/real-sol-probe-held-seek-completion.json",
+                "sha256": "83126cbbd776cb285eff9d5a6f4d0ae762f0d5437f402e823de277b121e97891",
+                "byte_length": 1205
+          },
+          {
+                "path": "rust/scripts/real-sol-probe-to-commander-responses.json",
+                "sha256": "cf847af6ce13c2ad7a7d20b198fb1c0aaaa639bd4695168119db84c9ac59f37b",
+                "byte_length": 1294,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-probe-to-starbase.json",
+                "sha256": "fbed30215d984325d39872f74374d4abb935844da84ae90a30c46ebcabd19e25",
+                "byte_length": 1203,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-rust-planetside-smoke.json",
+                "sha256": "39dd688c8359f146468a8abdb92432b4ab50d0834aaee285c2dfcab7d3f9b4b0",
+                "byte_length": 1771,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-starbase-to-mars.json",
+                "sha256": "0c986e147f40a4d0fecc8fc7c2818877f4abd68f129863ce98e1633455b2fa6a",
+                "byte_length": 2262,
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/repro-comm-menu-initial.json",
+                "sha256": "26e64d6e67112d58192838852b3a65c88a79df209d0222104d8fd4336489c699",
+                "byte_length": 820
+          },
+          {
+                "path": "rust/scripts/repro-game-menu-initial.json",
+                "sha256": "909a92add8c0196bfe9d42eb7af85d1d21c4aef80e80a33b89bc60c9a5b18aeb",
+                "byte_length": 1035
+          },
+          {
+                "path": "rust/scripts/repro-sol-probe-comm-ui.json",
+                "sha256": "65f005b588fe9485553c153ba011be78ec493bb806f27bd6a3a6a5c1568e5323",
+                "byte_length": 1211
+          },
+          {
+                "path": "rust/scripts/sol-probe-scene-v1.json",
+                "sha256": "0fdd249cb2833463620e52247ef283daca5819863073bb4762f2747468a6f001",
+                "byte_length": 727
+          },
+          {
+                "path": "rust/scripts/starbase-visit-v1.json",
+                "sha256": "f8c518afeb728e840cf8950c443f5c1ecf957e92e0412030776f1fd945eb43b9",
+                "byte_length": 1020
+          },
+          {
+                "path": "rust/scripts/state-sync-v1.json",
+                "sha256": "4e71932fa770656a22cfbf2ee6c9fb6ab0b7d382c9a560faf47295d15563f158",
+                "byte_length": 716
+          },
+          {
+                "path": "rust/scripts/watchdog-v1.json",
+                "sha256": "bf903b2d79a152380ae70a99a0d4cc52631c7ef8a0c870b84307043ee5940166",
+                "byte_length": 272
+          }
+    ],
     "script": "rust/scripts/linked-playable-v1.json",
     "script_sha256": "95aee4114081c72222f50df6ccf7b8f01bafdb954f613381a4be6457562ed934",
     "script_byte_length": 2169,
@@ -292,7 +488,7 @@
     "manifest_schema": "uqm-deterministic-artifacts-v4",
     "producing_command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
     "profile": "release",
-    "cargo_manifest_sha256": "c9b26cfefaaea3b1b9c78eb1a9297cc303b63b019a3657fb0f666271b67cce28",
+    "cargo_manifest_sha256": "8ad492d95846d3176579b0b8d24f6cf4452f9e4c8ff8e39ab7f9863127df348c",
     "cargo_lock_sha256": "d000957426d30ab002ba6c200ad725ac0c967db5a43b41263c190efa4564fd07",
     "features": [
       "audio_heart",
@@ -328,7 +524,7 @@
   },
   "bootstrap_proof": {
     "profile": "rust/scripts/main-menu-v1.json",
-    "profile_sha256": "1eb2b8e6a99c661a92447556947895053de92609458a3c2f4a3f1d8631799b26",
+    "profile_sha256": "2272565b37877d71d51de0c651c323c1826713f51524f6c1c4ea4dcc5bd6f49a",
     "packaged_root": "rust/target/uqm-package",
     "packaged_executable": "uqm",
     "packaged_manifest": "production-artifacts.json"
@@ -497,20 +693,6 @@
             "rust/xtask/Cargo.toml",
             "--",
             "test"
-          ]
-        },
-        {
-          "id": "native-acceptance",
-          "timeout_seconds": 3600,
-          "cwd": ".",
-          "command": [
-            "cargo",
-            "run",
-            "--locked",
-            "--manifest-path",
-            "rust/xtask/Cargo.toml",
-            "--",
-            "native-test"
           ]
         }
       ]

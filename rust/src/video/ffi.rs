@@ -32,11 +32,16 @@ fn log_msg(msg: &str) {
 // UIO + gfx externs
 // ============================================================================
 
+// Unit tests never call the C canvas lock (see `tfb_drawcanvas_lock`), so the
+// declarations exist only outside them.
+#[cfg(not(test))]
 extern "C" {
-    // SDL screen surfaces managed by C graphics backend.
     fn TFB_DrawCanvas_Lock(canvas: *mut c_void);
     fn TFB_DrawCanvas_Unlock(canvas: *mut c_void);
+}
 
+extern "C" {
+    // SDL screen surfaces managed by C graphics backend.
     fn TFB_SwapBuffers(force_full_redraw: c_int);
 
     // Provided by C SDL backend.
@@ -86,7 +91,11 @@ pub struct SDL_PixelFormat {
 /// `canvas` must point to a valid canvas that can be locked by the current thread.
 #[inline]
 pub unsafe fn tfb_drawcanvas_lock(canvas: *mut c_void) {
+    // Unit tests hand in plain memory-backed surfaces that need no C-side lock.
+    #[cfg(not(test))]
     TFB_DrawCanvas_Lock(canvas);
+    #[cfg(test)]
+    let _ = canvas;
 }
 
 /// Unlock a legacy C canvas after direct access.
@@ -95,7 +104,10 @@ pub unsafe fn tfb_drawcanvas_lock(canvas: *mut c_void) {
 /// `canvas` must be the valid canvas pointer previously locked by this thread.
 #[inline]
 pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
+    #[cfg(not(test))]
     TFB_DrawCanvas_Unlock(canvas);
+    #[cfg(test)]
+    let _ = canvas;
 }
 
 // ============================================================================

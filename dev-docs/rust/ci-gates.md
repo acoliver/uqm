@@ -1,5 +1,16 @@
 # Clean-checkout CI gates
 
+## Native UI suite is a local gate
+
+Hosted GitHub runners do not run the native-window UI suite. The 32-scenario suite takes
+about 4500 s on arm64, the Intel runner renders at about 14 fps, and the evidence exceeds
+upload limits. Hosted CI keeps the code-quality gates (format, check, clippy, tests,
+ownership-link, harness, complexity, security, coverage, cache, workflow, mutations).
+The native suite is a local gate run on a real Mac window with
+`cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run|validate|report|gallery|replay`
+(see `dev-docs/rust/autoplay-runner.md`). Its authority data stays in `rust/ci/gates.json`
+under `native_acceptance` because the local CLI reads the pinned scenario scripts from it.
+
 Issue #27/S4 owns CI composition. It consumes S1 provider and strict-link checks,
 S2 matrix, build, determinism, verification, and package commands, and S3 fixtures,
 probes, harnesses, gameplay proof, and teardown commands. Those domains retain the
@@ -26,6 +37,28 @@ which releases before 0.22 reject outright while loading, failing the gate befor
 it examines this tree at all. Moving either pin means checking it against the
 other.
 
+Fresh native runs require clean tracked and untracked source admitted by S2.
+Workflow controllers bind the candidate checkout through `UQM_CI_SOURCE_ROOT`,
+the separately admitted exact policy bytes through `UQM_CI_AUTHORITY_PATH`, and
+the requested suite through the trusted event selection. Native compilation uses
+S4's distinct build UID; gameplay and observation retain the controller's Aqua
+session. The containment probe requires protected-file writes and controller
+signaling to be denied before candidate Cargo executes.
+
+`native-suite-validate` and workflow `native validate` apply trusted source,
+policy and shared-build correlation to successful evidence. Local `native
+validate`, report, gallery and retained replay inspect historical inputs without
+requiring the current checkout to be clean. Historical consistency does not
+establish acceptance for the current workflow event.
+
+Suite finalization retains a bounded intent tied to the preceding immutable
+journal event. An interrupted publication recovers into a failed diagnostic
+bundle without starting another child. Success also requires completed, drained,
+verified-empty controller supervision. Plan, gates and the required
+aggregate consume the base-owned `workflow_transport.py` implementation for descriptor traversal,
+content-addressed indexes and upload receipts. Bootstrap failure indexes remain
+available before that helper is installed.
+
 Coverage measures the pure profile, which is the configuration the unit suite is
 written for, and must reach 70 percent. The linked profile drives the C game
 through FFI and is covered by the linked provider fixture and native acceptance
@@ -44,10 +77,12 @@ compares each literal with authority and rejects any drift.
 
 Pull requests use `pull_request_target`, so GitHub executes the workflow body from
 the base revision. The pre-checkout plan step fetches `rust/ci/gates.json` from both
-the exact pull-request head and exact base commit and requires byte equality. It then
-builds the supervisor and xtask from the exact base commit, then checks out the
-pull-request head with persisted credentials disabled. The base-owned xtask evaluates
-the pull-request working tree. Probe and harness shell programs that decide gate results
+the exact pull-request head and workflow revision. Bootstrap uses base policy only.
+The workflow builds the supervisor and xtask from that workflow revision, then runs
+`ci admit-policy BASE CANDIDATE OUTPUT` with the base-owned executable before
+candidate policy can become the execution authority. It checks out the pull-request
+head with persisted credentials disabled. The base-owned xtask evaluates the
+pull-request working tree. Probe and harness shell programs that decide gate results
 are compiled into that base-owned xtask. The controller stages those retained bytes in a runner-owned temporary root outside
 the dedicated identity's writable evidence tree. It revalidates each selected
 controller and script by no-follow type, owner, exact mode, name, and digest
@@ -61,11 +96,11 @@ the matrix output:
 `macos/x86_64/macos-x86_64/macos-15-intel/x86_64`,
 `linux/aarch64/linux-aarch64/ubuntu-24.04-arm/aarch64`, and
 `linux/x86_64/linux-x86_64/ubuntu-24.04/x86_64`. It also requires the emitted
-authority contract to equal the retained, base-matched authority snapshot. This
+authority contract to equal the retained, base-admitted authority snapshot. This
 literal tuple set prevents pull-request code from selecting another `runs-on` label.
 Matrix values enter Bash only through quoted step environment variables.
 
-Gate-tool versions and installation identities come from the base-matched authority.
+Gate-tool versions and installation identities come from the base-admitted authority.
 The workflow checks the installed Rust compiler's full release commit. It downloads the
 `cargo-audit` and `cargo-llvm-cov` crate archives under authority-owned bounds and verifies
 each authority SHA-256 before extraction. Extraction rejects links, special files, path
@@ -93,20 +128,99 @@ before authoritative gates run, and successful transport retains
 `containment-check.result.json`. An always-running, marker-gated cleanup removes the
 identity after killing and checking its remaining processes. The outer workflow
 supervisor's receipt describes only its own process-tree boundary; dedicated-UID
-containment is established by the separate containment-check receipt. The exact
-`tests.native-acceptance` step has a narrower macOS execution rule described below.
-After untrusted gates return, a base-owned supervised check revalidates the exact
+containment is established by the separate containment-check receipt. After untrusted gates return, a base-owned supervised check revalidates the exact
 source SHA, tracked and untracked state, and authority bytes, retaining
 `source-revalidation.result.json`.
 
-Normal pull requests cannot change gate authority and production code together. An
-authority update first needs a separately reviewed base-policy change, after which
-production changes can target those bytes. Initial deployment is a one-time bootstrap:
-a maintainer must install this workflow and authority on the protected base branch
-after detached review because the previous base has neither file. Branch-protection
-administration must reserve the merge-required `Required S4 gates` context for
-`pull_request_target`; push runs publish `Required S4 gates (non-merge)` and cannot
-satisfy that context.
+Candidate-policy admission preserves every base field except one bounded addition:
+scenario pins already embedded in the installed controller's inventory. Existing pins cannot be removed, changed or reordered.
+The singleton policy used by base `212bd046ad7dccc7b695d378deac1b1c148d8be9`
+may gain `scenario_scripts`, but its original script pin must remain. Commands,
+tools, tuples, content, acceptance predicates, runtime limits, permissions and
+transport limits cannot change through this rule. Unknown fields are rejected.
+The plan and each gate job independently admit policy; rejection does not replace
+the installed policy. Supervised admission logs retain the decision and both hashes.
+Source revalidation compares the checkout with the admitted candidate bytes.
+
+Issue #210's controller-policy migration and Issue #34's runner are delivered
+together in PR #209, as authorized. This implementation does not make a candidate
+controller trusted in its own `pull_request_target` run. The currently installed
+base still performs its old byte comparison and lacks the suite consumer and
+admission command. Candidate-controller tests against the retained base policy
+are migration evidence, not evidence that the new controller is installed on main.
+Hosted validation must identify the actual workflow/controller revision and must
+not relabel a push result as merge-context acceptance. No branch-protection,
+permission, secret or checkout-reference bypass is part of this migration.
+`Required S4 gates` remains the merge-context name; push runs retain the
+`Required S4 gates (non-merge)` name.
+
+### Outer child deadline for long scenarios
+
+The native runtime contract carries one outer child deadline,
+`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A pinned
+script may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
+only value accepted is 900000 ms (15 minutes). Approval, verbatim from the
+repository owner: "yeah you can switch them to 15m", given for the proposal that
+the longer scenarios get a longer outer timeout while the short ones remain at
+300 s.
+
+Scope of the rule:
+
+- A script whose declared `max_wallclock_seconds` is above 300 must carry the
+  900000 ms pin. A script at or below 300 must not carry it. The wall budget is
+  read from the pinned script bytes during admission, so a pin that disagrees
+  with the script's own budget is refused before any build or launch. All 14
+  pinned scripts above 300 s carry the pin and the other 22 keep the default.
+- A wall budget is a failure ceiling, not a promise that every run takes that
+  long. `real-sol-earth-moon-base`, `real-sol-luna-moonbase-departure` and
+  `real-sol-starbase-to-mars` declare 900 s, carry the same 900000 ms pin, and
+  are ended by the outer deadline if a run does not finish first. The approval
+  does not cover raising the value further.
+- Every other runtime value is shared and unchanged: capture, observer and
+  acknowledgement timeouts, kill grace, stream and capture budgets, the 1 MiB
+  manifest limit and the inventory limits. The acknowledgement window stays at
+  95000 ms, below both outer deadlines.
+- The primary `native_acceptance.script` cannot carry the override because the
+  single-script gate uses the shared contract.
+- The controller hands each scenario child the contract of its own pin, the child
+  supervisor uses that value as the `ChildSession` timeout, and the proof,
+  failure-manifest, suite-success and replay consumers compare the recorded
+  contract with the one the authority declares for that script.
+- A retained bundle recorded before this change holds the 300000 ms contract for
+  its long scripts. The current authority does not declare that contract for
+  them, so such a bundle is checked by the source revision that produced it. It
+  is not reinterpreted under the new pins. This includes the earlier revision
+  a35d65d64, which covered 11 of the 14 scripts.
+
+Candidate-policy admission against a base that predates this field sees a changed
+base pin and rejects it. The installed base controller has to carry this policy
+before a candidate with the override can be admitted, and nothing in this change
+relaxes that comparison.
+
+The sections below on autoplay selection and the `native-acceptance` step describe the local
+native suite (`native run`, `native-test`); hosted CI no longer runs them (see the
+local gate section). Autoplay selection is bound to a typed `uqm-s4-selection-v1` document. The base-owned
+plan controller records event, exact source/controller/base revisions, merge base,
+raw NUL-delimited changed paths, policy digest and the derived ordered scenario set.
+Only `pull_request_target` may use changed-path selection. Empty, unmapped or
+non-UTF-8 paths select the original complete 32-scenario suite. Push, schedule and
+manual runs always select that complete suite. A Git inspection failure is an error,
+not permission to execute a smaller suite. The existing workflow now declares a
+daily schedule and manual trigger without adding another gate or tuple matrix.
+
+Gate entry independently recomputes selection from the workflow event and exact
+Git revisions, then requires equality with the plan output. It retains the binding
+inside `source-preflight.json` before untrusted execution and supplies the resulting
+script names explicitly to the native child. Ambient requested names cannot narrow
+that set. Successful S4 validation requires the exact ordered suite, all completed
+native proofs, shared descriptor/build identity, linked source and policy equality,
+and unchanged script/content/runtime checks. Flat successful native bundles are no
+longer accepted; failure transport retains its existing diagnostic layouts.
+Offline replay checks the retained event-derived selection without repository state.
+To bind downloaded evidence to an independently known workflow, provide
+`UQM_CI_EVENT_NAME`, `UQM_CI_EXPECTED_SHA`, `UQM_CI_CONTROLLER_SHA` and, for PRs,
+`UQM_CI_EVENT_BASE_SHA` to `ci validate-evidence`. Without these external inputs,
+offline validation establishes retained consistency, not GitHub event authenticity.
 
 Run focused authority checks from the repository root:
 
@@ -192,7 +306,8 @@ target dependencies. The bootstrap gate launches that package path with the fixe
 `rust/scripts/main-menu-v1.json` profile, validates its LCAR offline, and captures
 teardown.
 
-The tests gate contains a separate `native-acceptance` authority step on every tuple.
+The hosted tests gate no longer contains the `native-acceptance` step. The text that follows
+describes how the local native suite executes on a macOS Aqua session.
 Linux executes the step under the dedicated identity and records that native-window
 acceptance is not required there. On macOS, the base-owned controller permits the
 current Aqua session only for the exact hidden command derived from this step. Cocoa

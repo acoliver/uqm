@@ -16,6 +16,10 @@
 
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
+#[cfg(test)]
+#[path = "workflow_transport_tests.rs"]
+mod transport_runtime_regressions;
+
 use std::fs;
 use std::path::Path;
 
@@ -41,7 +45,7 @@ const FORBIDDEN_COMMANDS: [&str; 8] = [
     "-- prove",
 ];
 
-const TRUSTED_PLAN_TUPLES_JSON: &str = r#"[{"os":"macos","architecture":"aarch64","tuple":"macos-aarch64","runner":"macos-15","expected_uname":"arm64"},{"os":"macos","architecture":"x86_64","tuple":"macos-x86_64","runner":"macos-15-intel","expected_uname":"x86_64"},{"os":"linux","architecture":"aarch64","tuple":"linux-aarch64","runner":"ubuntu-24.04-arm","expected_uname":"aarch64"},{"os":"linux","architecture":"x86_64","tuple":"linux-x86_64","runner":"ubuntu-24.04","expected_uname":"x86_64"}]"#;
+const TRUSTED_PLAN_TUPLES_JSON: &str = "[{\"os\":\"macos\",\"architecture\":\"aarch64\",\"tuple\":\"macos-aarch64\",\"runner\":\"macos-15\",\"expected_uname\":\"arm64\"},{\"os\":\"macos\",\"architecture\":\"x86_64\",\"tuple\":\"macos-x86_64\",\"runner\":\"macos-15-intel\",\"expected_uname\":\"x86_64\"},{\"os\":\"linux\",\"architecture\":\"aarch64\",\"tuple\":\"linux-aarch64\",\"runner\":\"ubuntu-24.04-arm\",\"expected_uname\":\"aarch64\"},{\"os\":\"linux\",\"architecture\":\"x86_64\",\"tuple\":\"linux-x86_64\",\"runner\":\"ubuntu-24.04\",\"expected_uname\":\"x86_64\"}]";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct RuleResult {
@@ -317,11 +321,11 @@ fn rule_checkout_contract(document: &Yaml) -> RuleResult {
             }
         }
     }
-    if source_checkouts == 2 && controller_checkouts == 2 && failures.is_empty() {
+    if source_checkouts == 2 && controller_checkouts == 3 && failures.is_empty() {
         RuleResult {
             rule: rule.into(),
             passed: true,
-            detail: "two source checkouts pin the exact PR head and two controller checkouts pin the exact base commit; merge aggregation executes without a source checkout".into(),
+            detail: "two source checkouts pin the exact PR head and three controller checkouts pin the exact base commit; merge aggregation executes without a source checkout".into(),
         }
     } else {
         fail(
@@ -486,48 +490,10 @@ fn valid_tool_install_step(step: &Yaml) -> bool {
         })
 }
 
-fn valid_native_content_step(step: &Yaml, authority: &super::authority::Authority) -> bool {
-    step.get_str(&["env", "NATIVE_ACCEPTANCE_JSON"])
-        == Some("${{ needs.plan.outputs.native_acceptance }}")
-        && step.get_str(&["env", "MATRIX_OS"]) == Some("${{ matrix.os }}")
-        && step.get_str(&["run"]).is_some_and(|run| {
-            [
-                ".platform",
-                ".content_filename",
-                "s4-gates-workflow-supervisor.py",
-                "native-content.result.json",
-                "s4-gates-workflow-native-content.py",
-                "--authority-json",
-                "--destination",
-                "UQM_CI_NATIVE_CONTENT_ROOT",
-            ]
-            .iter()
-            .all(|needle| run.contains(needle))
-                && [
-                    "content_url",
-                    "content_byte_length",
-                    "content_sha256",
-                    "content_transport",
-                    "attempt_limit",
-                    "read_timeout_seconds",
-                    "backoff_seconds",
-                    "timeout=read_timeout",
-                    "time.sleep(backoff_seconds[attempt])",
-                    "dir_fd=directory_fd",
-                    "os.link(",
-                    "follow_symlinks=False",
-                    "os.fsync(directory_fd)",
-                ]
-                .iter()
-                .all(|needle| include_str!("workflow_native_content.py").contains(needle))
-                && !run.contains(&authority.native_acceptance.content_url)
-                && !run.contains(&authority.native_acceptance.content_sha256)
-        })
-}
-
 fn valid_plan_bootstrap(run: &str, authority: &super::authority::Authority) -> bool {
     run.contains(".tools.rust.version")
         && run.contains(".tools.rust.integrity_identity")
+        && run.contains("find -P \"${path}\" -prune -type \"${kind}\" -user \"${runner_uid}\" -perm \"${mode}\" -print")
         && run.contains("controller=\"${RUNNER_TEMP}/s4-controller-source\"")
         && run.contains("mv \"${GITHUB_WORKSPACE}/.s4-controller-source\" \"${controller}\"")
         && run.contains("rustup toolchain install \"${rust_version}\" --profile minimal")
@@ -566,9 +532,6 @@ fn valid_gate_controller_bootstrap(step: &Yaml) -> bool {
                 && run.contains("verify_trusted_path \"${RUNNER_TEMP}\" d 0750")
                 && run.contains(
                     "install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_supervisor.py\" \"${supervisor}\"",
-                )
-                && run.contains(
-                    "install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_native_content.py\" \"${native_helper}\"",
                 )
                 && run.contains(
                     "install -m 0440 \"${controller}/rust/ci/gates.json\" \"${authority}\"",
@@ -645,9 +608,6 @@ fn rule_tool_authority_consumers(
     let install_step = gate_steps
         .iter()
         .find(|step| step.get_str(&["name"]) == Some("Install pinned gate tools"));
-    let native_content_step = gate_steps.iter().find(|step| {
-        step.get_str(&["name"]) == Some("Provision authority-pinned native acceptance content")
-    });
     let mut failures = Vec::new();
     let expected_schema_check = format!(
         "test \"$(jq -er '.schema' \"${{output}}\")\" = \"{}\"",
@@ -681,11 +641,11 @@ fn rule_tool_authority_consumers(
     }
     match trusted_plan_run {
         Some(run)
-            if run.contains(r#".authority_contract.tools | select(type == "object")"#)
+            if run.contains(".authority_contract.tools | select(type == \"object\")")
                 && run.contains(
-                    r#".authority_contract.native_acceptance | select(type == "object")"#,
+                    ".authority_contract.native_acceptance | select(type == \"object\")",
                 )
-                && run.contains(r#".authority_contract.workflow | select(type == "object")"#) => {}
+                && run.contains(".authority_contract.workflow | select(type == \"object\")") => {}
         _ => failures.push("trusted plan projections disagree with authority".into()),
     }
     if !gate_bootstrap_step.is_some_and(|step| valid_gate_controller_bootstrap(step)) {
@@ -749,11 +709,6 @@ fn rule_tool_authority_consumers(
     if !install_step.is_some_and(|step| valid_tool_install_step(step)) {
         failures.push("tool installation does not consume every authority pin".into());
     }
-    if !native_content_step.is_some_and(|step| valid_native_content_step(step, authority)) {
-        failures.push(
-            "native acceptance content provisioning does not consume generated authority".into(),
-        );
-    }
     if failures.is_empty() {
         RuleResult {
             rule: rule.into(),
@@ -771,9 +726,9 @@ fn rule_precontainment_isolation(document: &Yaml) -> RuleResult {
     };
     let steps = job_steps(gates);
     let isolated_steps = [
+        "Admit candidate policy with base-owned controller",
         "Install native prerequisites",
         "Install pinned gate tools",
-        "Provision authority-pinned native acceptance content",
     ];
     let isolated = isolated_steps.iter().all(|name| {
         steps.iter().any(|step| {
@@ -822,11 +777,46 @@ fn valid_plan_authority_fetch(step: &Yaml) -> bool {
         )
         && run.contains("\"${SOURCE_REPOSITORY}\" \"${SOURCE_SHA}\"")
         && run.contains("\"${BASE_REPOSITORY}\" \"${BASE_SHA}\"")
-        && run.contains("cmp --silent \"${authority}.source\" \"${authority}.base\"")
+        && run.contains("cp \"${authority}.base\" \"${authority}\"")
         && run.contains("uqm-s4-ci-authority-v1")
         && run.contains(". == floor")
         && run.contains(". >= 1")
         && run.contains(". <= 90")
+}
+
+fn valid_event_policy_binding(document: &Yaml) -> bool {
+    let expected = [
+        ("UQM_CI_EVENT_NAME", "${{ github.event_name }}"),
+        ("UQM_CI_CONTROLLER_SHA", "${{ github.workflow_sha }}"),
+        (
+            "UQM_CI_EXPECTED_SHA",
+            "${{ github.event.pull_request.head.sha || github.sha }}",
+        ),
+        (
+            "UQM_CI_EVENT_BASE_SHA",
+            "${{ github.event.pull_request.base.sha || '' }}",
+        ),
+    ];
+    let event_bound = expected
+        .iter()
+        .all(|(key, value)| document.get_str(&["env", key]) == Some(*value));
+    let Some(gates) = document.get("jobs").and_then(|jobs| jobs.get("gates")) else {
+        return false;
+    };
+    event_bound
+        && gates.get_str(&["env", "UQM_CI_SELECTION_JSON"])
+            == Some("${{ needs.plan.outputs.selection }}")
+        && job_steps(gates).iter().any(|step| {
+            step.get_str(&["name"]) == Some("Admit candidate policy with base-owned controller")
+                && step.get_str(&["working-directory"]) == Some("${{ runner.temp }}")
+                && step.get_str(&["run"]).is_some_and(|run| {
+                    run.contains("\"${RUNNER_TEMP}/s4-gates-controller\" ci admit-policy")
+                        && run
+                            .contains("\"${RUNNER_TEMP}/s4-controller-source/rust/ci/gates.json\"")
+                        && run.contains("\"${GITHUB_WORKSPACE}/rust/ci/gates.json\"")
+                        && run.contains("\"${RUNNER_TEMP}/s4-gates-authority.json\"")
+                })
+        })
 }
 
 fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
@@ -873,6 +863,8 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
                     && run.contains(
                         "mv \"${GITHUB_WORKSPACE}/.s4-controller-source\" \"${controller}\"",
                     )
+                    && run.contains("supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy")
+                    && run.contains("\"${authority}.base\" \"${authority}.source\" \"${authority}\"")
                     && !run.contains("--manifest-path rust/xtask/Cargo.toml")
             })
         });
@@ -893,10 +885,13 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         };
         let validation = run.find("and .tuples == $trusted_tuples");
         let authority_binding = run.find("and .authority_contract == $authority[0]");
-        let publication = run.find(r#">> "${GITHUB_OUTPUT}""#);
+        let publication = run.find(">> \"${GITHUB_OUTPUT}\"");
         step.get_str(&["id"]) == Some("plan")
             && run.contains(&format!("trusted_tuples='{TRUSTED_PLAN_TUPLES_JSON}'"))
-            && run.contains(r#"--slurpfile authority "${authority}""#)
+            && run.contains("--slurpfile authority \"${authority}\"")
+            && run.contains("and .selection.event == env.UQM_CI_EVENT_NAME")
+            && run.contains("and .selection.source_sha == env.UQM_CI_EXPECTED_SHA")
+            && run.contains("and .selection.controller_sha == env.UQM_CI_CONTROLLER_SHA")
             && run.contains("jq -e")
             && run.contains("jq -cer --argjson trusted_tuples")
             && matches!(
@@ -909,7 +904,9 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         && plan.get_str(&["outputs", "tools"]) == Some("${{ steps.plan.outputs.tools }}")
         && plan.get_str(&["outputs", "native_acceptance"])
             == Some("${{ steps.plan.outputs.native_acceptance }}")
-        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}");
+        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}")
+        && plan.get_str(&["outputs", "selection"]) == Some("${{ steps.plan.outputs.selection }}")
+        && valid_event_policy_binding(document);
     if ordered
         && authority_fetch
         && controller_is_base_owned
@@ -968,11 +965,11 @@ fn rule_required_gates_fallback(
                 == Some("${{ needs.plan.outputs.retention_days }}")
             && step.get_str(&["run"]).is_some_and(|run| {
                 [
-                    r#"[[ -z "${PLAN_RETENTION_DAYS}" ]]"#,
+                    "[[ -z \"${PLAN_RETENTION_DAYS}\" ]]",
                     "=~ ^[1-9][0-9]*$",
-                    r#"<<<"${ACTIONS_JSON}""#,
+                    "<<<\"${ACTIONS_JSON}\"",
                     ".artifact_retention_days <= 90",
-                    r#"test "${retention_days}" = "${PLAN_RETENTION_DAYS}""#,
+                    "test \"${retention_days}\" = \"${PLAN_RETENTION_DAYS}\"",
                     "printf 'available=true\\n'",
                     "printf 'connect_timeout=%s\\n'",
                     "printf 'total_timeout=%s\\n'",
@@ -1011,7 +1008,7 @@ fn rule_supervised_workflow_subprocesses(document: &Yaml) -> RuleResult {
     let Some(jobs) = document.get("jobs") else {
         return fail(rule, "workflow lacks a jobs map");
     };
-    let required: [(&str, &str, &str, usize, &[&str]); 8] = [
+    let required: [(&str, &str, &str, usize, &[&str]); 7] = [
         (
             "plan",
             "Build base-owned external xtask",
@@ -1063,13 +1060,6 @@ fn rule_supervised_workflow_subprocesses(document: &Yaml) -> RuleResult {
                 "tools-actionlint",
                 "tools-component-${component}",
             ],
-        ),
-        (
-            "gates",
-            "Provision authority-pinned native acceptance content",
-            "s4-gates-workflow-supervisor.py",
-            1,
-            &["native-content.result.json"],
         ),
         (
             "gates",
@@ -1127,38 +1117,60 @@ fn rule_supervised_workflow_subprocesses(document: &Yaml) -> RuleResult {
     }
 }
 
+/// Every bootstrap that produces a base-owned controller carries the same
+/// contract, whichever job runs it: the pre-controller commands are supervised,
+/// their receipts land beside the transport evidence that job uploads, and a
+/// bootstrap failure is aliased to `xtask-build` so the causal command is the
+/// one the artifact names.
 fn rule_bootstrap_failure_receipts(document: &Yaml) -> RuleResult {
     let rule = "workflow.bootstrap_failure_receipts";
-    let run = document
-        .get("jobs")
-        .and_then(|jobs| jobs.get("gates"))
-        .map(job_steps)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|step| {
-            step.get_str(&["name"]) == Some("Build base-owned xtask outside required cache paths")
-        })
-        .and_then(|step| step.get_str(&["run"]))
-        .unwrap_or_default();
-    let required = [
-        r#"EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence""#,
+    // Shared by every controller bootstrap: supervision, receipt naming, the
+    // failure alias, the native prerequisites, the toolchain and the compile.
+    let common: [&str; 11] = [
         "supervise_bootstrap() {",
-        r#"local prefix="${EVIDENCE_DIR}/xtask-build-bootstrap-${label}""#,
-        r#"--authority "${authority}""#,
-        r#"--receipt "${prefix}.result.json""#,
-        r#"--stdout "${prefix}.stdout.log""#,
-        r#"--stderr "${prefix}.stderr.log""#,
-        r#"cp "${prefix}.result.json" "${EVIDENCE_DIR}/xtask-build.result.json""#,
-        "supervise_bootstrap prerequisites-apt-update sudo apt-get update",
-        "supervise_bootstrap prerequisites-apt-install sudo apt-get install --yes",
+        "local prefix=\"${EVIDENCE_DIR}/xtask-build-bootstrap-${label}\"",
+        "--authority \"${authority}\"",
+        "--receipt \"${prefix}.result.json\"",
+        "--stdout \"${prefix}.stdout.log\"",
+        "--stderr \"${prefix}.stderr.log\"",
+        "cp \"${prefix}.result.json\" \"${EVIDENCE_DIR}/xtask-build.result.json\"",
         "supervise_bootstrap prerequisites-brew brew install",
         "supervise_bootstrap xtask-rustup rustup toolchain install",
-        r#"--receipt "${EVIDENCE_DIR}/xtask-build.result.json""#,
-        r#"cargo "+${rust_version}" build --locked --manifest-path "${controller}/rust/xtask/Cargo.toml""#,
+        "--receipt \"${EVIDENCE_DIR}/xtask-build.result.json\"",
+        "cargo \"+${rust_version}\" build --locked --manifest-path \"${controller}/rust/xtask/Cargo.toml\"",
     ];
-    let valid = required.iter().all(|required| run.contains(required))
-        && !run.contains("s4-bootstrap-evidence");
-    if valid {
+    let bootstraps: [(&str, &str, &[&str]); 1] = [(
+        "gates",
+        "Build base-owned xtask outside required cache paths",
+        &[
+            "EVIDENCE_DIR=\"${RUNNER_TEMP}/s4-command-evidence\"",
+            // The gates matrix also runs on Linux, so its bootstrap covers
+            // both package managers.
+            "supervise_bootstrap prerequisites-apt-update sudo apt-get update",
+            "supervise_bootstrap prerequisites-apt-install sudo apt-get install --yes",
+        ],
+    )];
+    let mut failures = Vec::new();
+    for (job, step_name, job_required) in bootstraps {
+        let run = document
+            .get("jobs")
+            .and_then(|jobs| jobs.get(job))
+            .map(job_steps)
+            .unwrap_or_default()
+            .into_iter()
+            .find(|step| step.get_str(&["name"]) == Some(step_name))
+            .and_then(|step| step.get_str(&["run"]))
+            .unwrap_or_default();
+        let valid = common
+            .iter()
+            .chain(job_required.iter())
+            .all(|required| run.contains(required))
+            && !run.contains("s4-bootstrap-evidence");
+        if !valid {
+            failures.push(format!("{job}:{step_name}"));
+        }
+    }
+    if failures.is_empty() {
         RuleResult {
             rule: rule.into(),
             passed: true,
@@ -1167,7 +1179,9 @@ fn rule_bootstrap_failure_receipts(document: &Yaml) -> RuleResult {
     } else {
         fail(
             rule,
-            "base-controller bootstrap receipt location, naming, supervision, or failure alias is weakened",
+            &format!(
+                "base-controller bootstrap receipt location, naming, supervision, or failure alias is weakened: {failures:?}"
+            ),
         )
     }
 }
@@ -1326,11 +1340,10 @@ fn valid_post_gate_source_revalidation(step: &Yaml) -> bool {
             "git diff --quiet --no-ext-diff HEAD --",
             "git ls-files --others --exclude-standard",
             "cmp -- rust/ci/gates.json \\\"\\$2\\\"",
-            "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0750",
-            "find -P \\\"\\$3\\\" -prune -type f -user \\\"\\$7\\\" -perm 0500",
-            "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0550",
-            "find -P \\\"\\$5\\\" -prune -type f -user \\\"\\$7\\\" -perm 0500",
-            "find -P \\\"\\$2\\\" -prune -type f -user \\\"\\$7\\\" -perm 0440",
+            "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0750",
+            "find -P \\\"\\$3\\\" -prune -type f -user \\\"\\$6\\\" -perm 0500",
+            "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0550",
+            "find -P \\\"\\$2\\\" -prune -type f -user \\\"\\$6\\\" -perm 0440",
             "source-revalidation \"${EXPECTED_SOURCE_SHA}\"",
             "\"${RUNNER_TEMP}/s4-gates-authority.json\"",
         ]
@@ -1549,11 +1562,6 @@ fn rule_matrix_shell_transport(document: &Yaml) -> RuleResult {
         ),
         (
             "Install native prerequisites",
-            "MATRIX_OS",
-            "${{ matrix.os }}",
-        ),
-        (
-            "Provision authority-pinned native acceptance content",
             "MATRIX_OS",
             "${{ matrix.os }}",
         ),
@@ -1783,10 +1791,10 @@ fn transport_fallback_valid(id: &str, steps: &[&Yaml]) -> bool {
         .filter(|(_, step)| {
             step.get_str(&["run"]).is_some_and(|run| {
                 run.contains("uqm-s4-transport-finalizer-fallback-v1")
-                    && run.contains(r#""first_failed_contract": "transport.finalize""#)
-                    && run.contains(r#"temporary.replace(root / "index.json")"#)
+                    && run.contains("\"first_failed_contract\": \"transport.finalize\"")
+                    && run.contains("temporary.replace(root / \"index.json\")")
                     && run.contains(fallback_root)
-                    && run.contains(&format!(r#""job": "{fallback_job}""#))
+                    && run.contains(&format!("\"job\": \"{fallback_job}\""))
             })
         })
         .collect();
@@ -1821,10 +1829,11 @@ fn missing_transport_contracts(
             .any(|step| step.get_str(&["if"]) == Some("always()")),
         "required-gates" => index_steps.iter().any(|step| {
             step.get_str(&["run"]).is_some_and(|run| {
-                matches!(
-                    (run.find("index.json"), run.find("test \"${PLAN_RESULT}\"")),
-                    (Some(index), Some(test)) if index < test
-                )
+                run.find("index.json").is_some_and(|index| {
+                    ["test \"${PLAN_RESULT}\"", "test \"${GATES_RESULT}\""]
+                        .iter()
+                        .all(|assertion| run.find(assertion).is_some_and(|test| index < test))
+                })
             })
         }),
         _ => false,
@@ -1835,8 +1844,8 @@ fn missing_transport_contracts(
             step.get_str(&["run"]).is_some_and(|run| {
                 !run.contains("index_path.unlink(missing_ok=True)")
                     && run.contains("atomic_write(")
-                    && run.contains(r#""index.json","#)
-                    && run.contains(r#"".index.json.tmp""#)
+                    && run.contains("\"index.json\",")
+                    && run.contains("\".index.json.tmp\"")
                     && run.contains(
                         "os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)",
                     )
@@ -1845,7 +1854,7 @@ fn missing_transport_contracts(
     let refreshes_fallback = index_steps.iter().all(|step| {
         step.get_str(&["run"]).is_some_and(|run| {
             let boundary = if id == "required-gates" {
-                "files = []"
+                "actions = json.loads(os.environ[\"ACTIONS_JSON\"])"
             } else {
                 "setup = {"
             };
@@ -1869,7 +1878,7 @@ fn missing_transport_contracts(
             step.get_str(&["env", "JOB_STATUS"]) == Some("${{ job.status }}")
                 && step
                     .get_str(&["run"])
-                    .is_some_and(|run| run.contains(r#""job_status": os.environ["JOB_STATUS"]"#))
+                    .is_some_and(|run| run.contains("\"job_status\": os.environ[\"JOB_STATUS\"]"))
         });
     let hardened_members = hardened_transport_members(id, index_steps);
     [
@@ -1916,10 +1925,10 @@ fn hardened_transport_members(id: &str, index_steps: &[&Yaml]) -> bool {
                 common
                     && run.contains("def collect(directory_fd):")
                     && run.contains("pending = [(os.dup(directory_fd), \"\")]")
-                    && run.contains(r#"if relative == "index.json":"#)
+                    && run.contains("if relative == \"index.json\":")
                     && run.contains("members.sort(key=lambda member: member[\"path\"])")
                     && transport_authority_binding(id, run)
-                    && run.contains(r#""authority-snapshot.json","#)
+                    && run.contains("\"authority-snapshot.json\",")
             }
         })
     })
@@ -1968,13 +1977,13 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                     == Some("${{ steps.plan.outcome }}")
                 && step.get_str(&["run"]).is_some_and(|run| {
                     run.contains("uqm-s4-workflow-setup-results-v1")
-                        && run.contains(r#""job": "plan""#)
+                        && run.contains("\"job\": \"plan\"")
                         && substrings_in_order(
                             run,
                             &[
-                                r#"{"step": "plan-build", "outcome": os.environ["PLAN_BUILD_OUTCOME"]}"#,
-                                r#"{"step": "checkout", "outcome": os.environ["CHECKOUT_OUTCOME"]}"#,
-                                r#"{"step": "plan", "outcome": os.environ["PLAN_OUTCOME"]}"#,
+                                "{\"step\": \"plan-build\", \"outcome\": os.environ[\"PLAN_BUILD_OUTCOME\"]}",
+                                "{\"step\": \"checkout\", \"outcome\": os.environ[\"CHECKOUT_OUTCOME\"]}",
+                                "{\"step\": \"plan\", \"outcome\": os.environ[\"PLAN_OUTCOME\"]}",
                             ],
                         )
                         && run.contains("authority-snapshot.json")
@@ -1986,7 +1995,6 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                     ("ARCHITECTURE_OUTCOME", "steps.architecture.outcome"),
                     ("CHECKOUT_OUTCOME", "steps.checkout_gates.outcome"),
                     ("GATES_OUTCOME", "steps.authoritative_gates.outcome"),
-                    ("NATIVE_CONTENT_OUTCOME", "steps.native_content.outcome"),
                     ("PREREQUISITES_OUTCOME", "steps.prerequisites.outcome"),
                     ("TOOLS_OUTCOME", "steps.tools.outcome"),
                     ("XTASK_BUILD_OUTCOME", "steps.xtask_build.outcome"),
@@ -2006,20 +2014,19 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                 })
                 && step.get_str(&["run"]).is_some_and(|run| {
                     run.contains("uqm-s4-workflow-setup-results-v1")
-                        && run.contains(r#""job": "gates""#)
-                        && run.contains(r#""tuple": os.environ["TUPLE"]"#)
+                        && run.contains("\"job\": \"gates\"")
+                        && run.contains("\"tuple\": os.environ[\"TUPLE\"]")
                         && substrings_in_order(
                             run,
                             &[
-                                r#"{"step": "xtask-build", "outcome": os.environ["XTASK_BUILD_OUTCOME"]}"#,
-                                r#"{"step": "checkout", "outcome": os.environ["CHECKOUT_OUTCOME"]}"#,
-                                r#"{"step": "architecture", "outcome": os.environ["ARCHITECTURE_OUTCOME"]}"#,
-                                r#"{"step": "prerequisites", "outcome": os.environ["PREREQUISITES_OUTCOME"]}"#,
-                                r#"{"step": "tools", "outcome": os.environ["TOOLS_OUTCOME"]}"#,
-                                r#"{"step": "native-content", "outcome": os.environ["NATIVE_CONTENT_OUTCOME"]}"#,
-                                r#""step": "containment-check""#,
-                                r#"{"step": "authoritative-gates", "outcome": os.environ["GATES_OUTCOME"]}"#,
-                                r#""step": "source-revalidation""#,
+                                "{\"step\": \"xtask-build\", \"outcome\": os.environ[\"XTASK_BUILD_OUTCOME\"]}",
+                                "{\"step\": \"checkout\", \"outcome\": os.environ[\"CHECKOUT_OUTCOME\"]}",
+                                "{\"step\": \"architecture\", \"outcome\": os.environ[\"ARCHITECTURE_OUTCOME\"]}",
+                                "{\"step\": \"prerequisites\", \"outcome\": os.environ[\"PREREQUISITES_OUTCOME\"]}",
+                                "{\"step\": \"tools\", \"outcome\": os.environ[\"TOOLS_OUTCOME\"]}",
+                                "\"step\": \"containment-check\"",
+                                "{\"step\": \"authoritative-gates\", \"outcome\": os.environ[\"GATES_OUTCOME\"]}",
+                                "\"step\": \"source-revalidation\"",
                             ],
                         )
                         && run.contains("authority-snapshot.json")
@@ -2241,25 +2248,25 @@ fn valid_upload_receipt_script(id: &str, run: &str, retention_receipt: &str) -> 
             "select(.id == $id and .name == $name and .expired == false and .size_in_bytes > 0) | .size_in_bytes",
             "--retry-all-errors",
             "--connect-timeout \"${connect_timeout}\" --max-time \"${total_timeout}\"",
-            r#"succeeded = os.environ["UPLOAD_OUTCOME"] == "success""#,
-            r#""artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None"#,
-            r#""artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None"#,
-            r#""artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None"#,
-            retention_receipt,
-            r#""size_in_bytes": int(os.environ["ARTIFACT_SIZE"]) if succeeded else None"#,
-            r#""upload_outcome": os.environ["UPLOAD_OUTCOME"]"#,
+            "succeeded = os.environ[\"UPLOAD_OUTCOME\"] == \"success\"",
+            "\"artifact_id\": int(os.environ[\"ARTIFACT_ID\"]) if succeeded else None",
+            "\"artifact_url\": os.environ[\"ARTIFACT_URL\"] if succeeded else None",
+            "\"artifact_digest\": os.environ[\"ARTIFACT_DIGEST\"] if succeeded else None",
+            if id == "required-gates" { retention_receipt } else { "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"]) if not unavailable else None" },
+            if id == "required-gates" { "\"size_in_bytes\": int(os.environ[\"ARTIFACT_SIZE\"]) if succeeded else None" } else { "\"size_in_bytes\": int(os.environ[\"ARTIFACT_SIZE\"]) if succeeded and not unavailable else None" },
+            "\"upload_outcome\": os.environ[\"UPLOAD_OUTCOME\"]",
         ]
         .iter()
         .all(|required| run.contains(required))
         && run
             .lines()
-            .any(|line| line.trim() == format!("{retention_receipt},"))
-        && run.contains(&format!(r#""job": "{id}""#))
+            .any(|line| line.trim() == format!("{retention_receipt},") || (id != "required-gates" && line.trim() == "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"]) if not unavailable else None,"))
+        && run.contains(&format!("\"job\": \"{id}\""))
         && valid_plan_authority_unavailable_script(id, run)
-        && if id == "gates" {
-            run.contains(r#""tuple": os.environ["TUPLE"]"#)
+        && if id == "required-gates" {
+            !run.contains("\"tuple\":")
         } else {
-            !run.contains(r#""tuple":"#)
+            run.contains("if job == \"gates\":") && run.contains("receipt[\"tuple\"] = os.environ[\"TUPLE\"]")
         }
 }
 
@@ -2268,36 +2275,92 @@ fn valid_plan_authority_unavailable_script(id: &str, run: &str) -> bool {
         "plan" => &[
             "uqm-s4-upload-authority-unavailable-v1",
             "[[ ! -s \"${authority}\" || -z \"${RETENTION_DAYS}\" ]]",
-            r#""retention_days": None"#,
-            r#""failure": "exact authority could not be resolved before checkout""#,
+            "\"retention_days\": None",
+            "\"failure\": \"exact authority could not be resolved before checkout\"",
         ],
         "gates" => &[
             "uqm-s4-upload-authority-unavailable-v1",
             "[[ ! -s \"${authority}\" || -z \"${RETENTION_DAYS}\" ]]",
-            r#""retention_days": None"#,
-            r#""failure": "exact authority could not be resolved before gate execution""#,
+            "\"retention_days\": None",
+            "\"failure\": \"exact authority could not be resolved before gate execution\"",
         ],
         "required-gates" => &[
             "uqm-s4-upload-authority-unavailable-v1",
             "[[ \"${AUTHORITY_AVAILABLE}\" != \"true\" ]]",
-            r#""retention_days": None"#,
-            r#""failure": "validated required-gates retention authority is unavailable""#,
+            "\"retention_days\": None",
+            "\"failure\": \"validated required-gates retention authority is unavailable\"",
         ],
         _ => return true,
     };
     required.iter().all(|required| run.contains(required))
+        && (id == "required-gates" || ["True", "False"].iter().all(|branch| {
+            let reason = if id == "plan" { "checkout" } else { "gate execution" };
+            run.contains(&format!("upload_receipt({{\"job\": \"{id}\", \"failure\": \"exact authority could not be resolved before {reason}\"}}, {branch})"))
+        }))
+}
+
+fn document_shared_serializer_drift(document: &Yaml, expected: &str) -> bool {
+    let Some(jobs) = document.get("jobs").and_then(Yaml::as_map) else {
+        return true;
+    };
+    jobs.iter().flat_map(|(_, job)| job_steps(job)).any(|step| {
+        let run = step.get_str(&["run"]).unwrap_or_default();
+        let Some(start) = run.find("def upload_receipt(") else {
+            return false;
+        };
+        !run[start..].starts_with(
+            &expected
+                .lines()
+                .map(str::trim_start)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    })
 }
 
 fn rule_content_addressed_transport(
     document: &Yaml,
     authority: &super::authority::Authority,
 ) -> RuleResult {
+    if let Some(jobs) = document.get("jobs") {
+        for job in ["plan", "gates", "required-gates"] {
+            let steps = jobs.get(job).map(job_steps).unwrap_or_default();
+            let staging = steps.iter().position(|step| {
+                let run = step.get_str(&["run"]).unwrap_or_default();
+                run.contains("install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_transport.py\" \"${RUNNER_TEMP}/s4-workflow-transport.py\"")
+                    && run.contains("verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0500")
+            });
+            let consumer = steps.iter().position(|step| {
+                step.get_str(&["run"])
+                    .is_some_and(|run| run.contains("def collect(directory_fd):"))
+            });
+            let staged = staging
+                .zip(consumer)
+                .is_some_and(|(staging, consumer)| staging < consumer);
+            if !staged {
+                return fail("workflow.content_addressed_transport", &format!("{job} shared transport is not staged and verified from the base-owned controller"));
+            }
+        }
+    }
+    let helper = include_str!("workflow_transport.py");
+    let expected = helper[helper
+        .find("def upload_receipt(")
+        .expect("shared serializer")..]
+        .trim();
+    let serializer_drift = document_shared_serializer_drift(document, expected);
+    if serializer_drift {
+        return fail(
+            "workflow.content_addressed_transport",
+            "shared upload serializer differs from the base-owned implementation",
+        );
+    }
+
     let rule = "workflow.content_addressed_transport";
     let Some(jobs) = document.get("jobs") else {
         return fail(rule, "workflow lacks a jobs map");
     };
     let upload_action = authority.actions.upload_artifact.as_str();
-    let retention_receipt = r#""retention_days": int(os.environ["RETENTION_DAYS"])"#;
+    let retention_receipt = "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"])";
     let mut failures = Vec::new();
     if document.get_str(&["concurrency", "cancel-in-progress"]) != Some("false") {
         failures.push(
@@ -2318,7 +2381,9 @@ fn rule_content_addressed_transport(
             .copied()
             .filter(|step| {
                 step.get_str(&["run"]).is_some_and(|run| {
-                    run.contains("uqm-s4-transport-evidence-v1") && run.contains("index.json")
+                    run.contains("uqm-s4-transport-evidence-v1")
+                        && run.contains("index.json")
+                        && (id == "required-gates" || run.contains("publish_index({"))
                 })
             })
             .collect();
@@ -2385,7 +2450,7 @@ fn rule_content_addressed_transport(
                 artifact_name,
                 upload_id,
                 retention_output,
-                retention_receipt,
+                if id == "required-gates" { retention_receipt } else { "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"]) if not unavailable else None" },
             )
         });
         let receipt_upload =
@@ -2576,7 +2641,28 @@ fn validate_yaml_subset(text: &str) -> Result<(), String> {
     Ok(())
 }
 
+const TRANSPORT_IMPORT: &str = "exec(compile(Path(os.environ[\"RUNNER_TEMP\"]).joinpath(\"s4-workflow-transport.py\").read_bytes(), \"s4-workflow-transport.py\", \"exec\"))";
+
+fn expand_shared_transport(text: &str) -> String {
+    let implementation = include_str!("workflow_transport.py");
+    text.lines()
+        .map(|line| {
+            if line.trim() == TRANSPORT_IMPORT {
+                let indent = &line[..line.len() - line.trim_start().len()];
+                implementation
+                    .lines()
+                    .map(|source| format!("{indent}{source}\n"))
+                    .collect::<String>()
+            } else {
+                format!("{line}\n")
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn parse_yaml(text: &str) -> Result<Yaml, String> {
+    let expanded = expand_shared_transport(text);
+    let text = expanded.as_str();
     validate_yaml_subset(text)?;
     for (index, line) in text.lines().enumerate() {
         let bytes = line.as_bytes();
@@ -2883,7 +2969,14 @@ fn is_blank(line: &str) -> bool {
 mod tests {
     use super::*;
 
-    const WORKFLOW: &str = include_str!("../../../../.github/workflows/rust-quality.yaml");
+    static WORKFLOW: std::sync::LazyLock<&'static str> = std::sync::LazyLock::new(|| {
+        Box::leak(
+            expand_shared_transport(include_str!(
+                "../../../../.github/workflows/rust-quality.yaml"
+            ))
+            .into_boxed_str(),
+        )
+    });
 
     #[test]
     fn yaml_subset_rejects_unsupported_syntax_before_parsing() {
@@ -2935,7 +3028,7 @@ mod tests {
 
     #[test]
     fn trusted_tool_install_body_matches_authorized_digest() {
-        let document = parse_yaml(WORKFLOW).unwrap();
+        let document = parse_yaml(*WORKFLOW).unwrap();
         let gates = document
             .get("jobs")
             .and_then(|jobs| jobs.get("gates"))
@@ -2969,7 +3062,7 @@ mod tests {
         let script = temporary.path().join("trusted-plan.sh");
         fs::write(
             &script,
-            workflow_run_containing(r#"trusted_tuples='[{"os":"macos""#),
+            workflow_run_containing("trusted_tuples='[{\"os\":\"macos\""),
         )
         .unwrap();
         let output_path = temporary.path().join("github-output");
@@ -2977,6 +3070,9 @@ mod tests {
             .arg(script)
             .env("RUNNER_TEMP", temporary.path())
             .env("GITHUB_OUTPUT", &output_path)
+            .env("UQM_CI_EVENT_NAME", "push")
+            .env("UQM_CI_EXPECTED_SHA", "a".repeat(40))
+            .env("UQM_CI_CONTROLLER_SHA", "b".repeat(40))
             .output()
             .unwrap();
         let published = fs::read_to_string(output_path).unwrap_or_default();
@@ -2985,7 +3081,7 @@ mod tests {
 
     #[test]
     fn checked_in_workflow_passes_every_semantic_rule() {
-        let document = parse_yaml(WORKFLOW).unwrap();
+        let document = parse_yaml(*WORKFLOW).unwrap();
         let results = validate_semantics(&document, &tuples(), &authority());
         assert_eq!(results.len(), 19);
         assert!(results.iter().all(|result| result.passed), "{results:#?}");
@@ -3001,6 +3097,7 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value.clone(),
             "tuples": tuples,
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40)},
         }))
         .unwrap();
         let (output, published) = run_trusted_plan_validator(Some(&plan), &authority_value);
@@ -3032,6 +3129,7 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value,
             "tuples": tuples,
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40)},
         }))
         .unwrap();
         let authority_value = serde_json::to_value(authority).unwrap();
@@ -3112,32 +3210,32 @@ total_timeout=60
             "rust/ci/gates.json?ref=main",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.trusted_plan_outputs").passed);
     }
 
     #[test]
-    fn base_authority_comparison_removal_is_rejected() {
+    fn base_policy_admission_removal_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            "          cmp --silent \"${authority}.source\" \"${authority}.base\"\n",
-            "          cp \"${authority}.source\" \"${authority}.base\"\n",
+            "supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy",
+            "cp",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.trusted_plan_outputs").passed);
     }
 
     #[test]
     fn untrusted_pull_request_trigger_is_rejected() {
         let mutated = WORKFLOW.replacen("  pull_request_target:\n", "  pull_request:\n", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.unrestricted_triggers").passed);
     }
 
     #[test]
     fn plan_build_identity_mutation_is_rejected() {
         let mutated = WORKFLOW.replacen("        id: plan_build", "        id: plan", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.trusted_plan_outputs").passed);
     }
 
@@ -3148,7 +3246,7 @@ total_timeout=60
             "             and (.tuples | type) == \"array\"\n",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.trusted_plan_outputs").passed);
     }
 
@@ -3159,7 +3257,7 @@ total_timeout=60
             "    timeout-minutes: ${{ fromJSON(needs.plan.outputs.workflow).required_gates_job_timeout_minutes }}\n",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.required_gates_fallback").passed);
     }
 
@@ -3170,7 +3268,48 @@ total_timeout=60
             "always() && steps.required_authority.outputs.available == 'true'",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn shared_transport_staging_and_permissions_are_required() {
+        for marker in [
+            "install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_transport.py\" \"${RUNNER_TEMP}/s4-workflow-transport.py\"",
+            "verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0500",
+        ] {
+            let occurrences = WORKFLOW.match_indices(marker).collect::<Vec<_>>();
+            assert_eq!(occurrences.len(), 3);
+            for (offset, _) in occurrences {
+                let mut mutated = WORKFLOW.to_string();
+                mutated.replace_range(offset..offset + marker.len(), "removed-contract");
+                assert_ne!(mutated, *WORKFLOW);
+                assert!(
+                    !rule(&mutated, "workflow.content_addressed_transport").passed,
+                    "{marker} at {offset}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn required_aggregate_asserting_before_recording_is_rejected() {
+        let assertions = concat!(
+            "          test \"${PLAN_RESULT}\" = \"success\"",
+            "\n",
+            "          test \"${GATES_RESULT}\" = \"success\"",
+            "\n",
+        );
+        let anchor = concat!(
+            "          evidence=\"${RUNNER_TEMP}/s4-required-evidence\"",
+            "\n",
+        );
+        let mutated = WORKFLOW.replacen(assertions, "", 1).replacen(
+            anchor,
+            &format!("{assertions}{anchor}"),
+            1,
+        );
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -3183,7 +3322,7 @@ total_timeout=60
     #[test]
     fn scalar_branch_filter_mutation_is_rejected() {
         let mutated = WORKFLOW.replacen("  push:\n", "  push:\n    branches: main\n", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.unrestricted_triggers").passed);
     }
 
@@ -3195,7 +3334,7 @@ total_timeout=60
                 &format!("  pull_request_target:\n{filter}"),
                 1,
             );
-            assert_ne!(mutated, WORKFLOW);
+            assert_ne!(mutated, *WORKFLOW);
             assert!(!rule(&mutated, "workflow.unrestricted_triggers").passed);
         }
     }
@@ -3213,7 +3352,7 @@ total_timeout=60
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW);
+            assert_ne!(mutated, *WORKFLOW);
             assert!(!rule(&mutated, "workflow.bootstrap_failure_receipts").passed);
         }
     }
@@ -3225,7 +3364,7 @@ total_timeout=60
             "CARGO_HOME: ${{ runner.temp }}/s4-bootstrap-cargo-home",
         ] {
             let mutated = WORKFLOW.replacen(source, "HOME: ${{ github.workspace }}", 1);
-            assert_ne!(mutated, WORKFLOW, "missing mutation source: {source}");
+            assert_ne!(mutated, *WORKFLOW, "missing mutation source: {source}");
             assert!(!rule(&mutated, "workflow.tool_authority").passed);
         }
     }
@@ -3235,7 +3374,7 @@ total_timeout=60
         let relocation = "mv \"${GITHUB_WORKSPACE}/.s4-controller-source\" \"${controller}\"";
         let mutated =
             WORKFLOW.replacen(relocation, "printf '%s\\n' controller-left-in-workspace", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.trusted_plan_outputs").passed);
     }
 
@@ -3246,7 +3385,7 @@ total_timeout=60
             "${RUNNER_TEMP}/unsupervised.py",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.supervised_subprocesses").passed);
     }
 
@@ -3275,7 +3414,7 @@ total_timeout=60
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing mutation source: {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing mutation source: {from}");
             assert!(
                 !rule(&mutated, "workflow.tool_authority").passed,
                 "accepted trusted staging mutation: {from}"
@@ -3284,16 +3423,16 @@ total_timeout=60
 
         for (from, to) in [
             (
-                "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0750",
-                "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0770",
+                "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0750",
+                "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0770",
             ),
             (
-                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0550",
-                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0770",
+                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0550",
+                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0770",
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing mutation source: {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing mutation source: {from}");
             assert!(
                 !rule(&mutated, "workflow.uid_containment").passed,
                 "accepted trusted-state revalidation mutation: {from}"
@@ -3359,7 +3498,7 @@ total_timeout=60
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing mutation source: {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing mutation source: {from}");
             assert!(
                 !rule(&mutated, "workflow.uid_containment").passed,
                 "accepted Darwin containment mutation: {from}"
@@ -3441,14 +3580,14 @@ total_timeout=60
             "MATRIX_OS: ${{ matrix.os }}\n          TOOLS_JSON: '{\"lizard\":{\"version\":\"latest\"}}'",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
 
     #[test]
     fn unhashed_lizard_installation_is_rejected() {
         let mutated = WORKFLOW.replacen(" --require-hashes -r ", " -r ", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
 
@@ -3462,7 +3601,7 @@ total_timeout=60
             ),
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
     #[test]
@@ -3495,7 +3634,7 @@ total_timeout=60
         ];
         for (old, new) in mutations {
             let mutated = WORKFLOW.replacen(old, new, 1);
-            assert_ne!(mutated, WORKFLOW, "mutation source missing: {old}");
+            assert_ne!(mutated, *WORKFLOW, "mutation source missing: {old}");
             assert!(
                 !rule(&mutated, "workflow.tool_authority").passed,
                 "tool-integrity mutation survived: {old}"
@@ -3506,20 +3645,20 @@ total_timeout=60
     #[test]
     fn precheckout_authority_schema_mutation_is_rejected() {
         let mutated = WORKFLOW.replacen("uqm-s4-ci-authority-v1", "uqm-ci-gates-v1", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
     #[test]
     fn precontainment_source_working_directory_mutation_is_rejected() {
         let mutated = WORKFLOW.replacen("        working-directory: ${{ runner.temp }}\n", "", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.precontainment_isolation").passed);
     }
 
     #[test]
     fn unsafe_inline_python_mode_is_rejected() {
         let mutated = WORKFLOW.replacen("python3 -P -", "python3 -", 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.precontainment_isolation").passed);
     }
 
@@ -3530,7 +3669,7 @@ total_timeout=60
             "rust_version=\"1.97.1\"",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
 
@@ -3539,7 +3678,7 @@ total_timeout=60
         let original = "supervise bootstrap-apt-install sudo apt-get install --yes \"${packages[@]}\"\n          rust_version=\"$(jq -er '.tools.rust.version' \"${authority}\")\"\n          rust_commit=\"$(jq -er '.tools.rust.integrity_identity' \"${authority}\")\"\n          supervise bootstrap-rustup rustup toolchain install \"${rust_version}\" --profile minimal\n          test \"$(rustup run \"${rust_version}\" rustc -vV | sed -n 's/^commit-hash: //p')\" = \"${rust_commit}\"\n          supervise bootstrap-xtask-build cargo \"+${rust_version}\" build --locked \\\n            --manifest-path \"${controller}/rust/xtask/Cargo.toml\"";
         let reordered = "rust_version=\"$(jq -er '.tools.rust.version' \"${authority}\")\"\n          rust_commit=\"$(jq -er '.tools.rust.integrity_identity' \"${authority}\")\"\n          supervise bootstrap-rustup rustup toolchain install \"${rust_version}\" --profile minimal\n          test \"$(rustup run \"${rust_version}\" rustc -vV | sed -n 's/^commit-hash: //p')\" = \"${rust_commit}\"\n          supervise bootstrap-xtask-build cargo \"+${rust_version}\" build --locked \\\n            --manifest-path \"${controller}/rust/xtask/Cargo.toml\"\n          supervise bootstrap-apt-install sudo apt-get install --yes \"${packages[@]}\"";
         let mutated = WORKFLOW.replacen(original, reordered, 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
 
@@ -3550,20 +3689,7 @@ total_timeout=60
             "jq -er '.native_prerequisites.linux[]'",
             2,
         );
-        assert_ne!(mutated, WORKFLOW);
-        assert!(!rule(&mutated, "workflow.tool_authority").passed);
-    }
-
-    #[test]
-    fn native_content_authority_bypass_is_rejected() {
-        let mutated = WORKFLOW.replacen(
-            "MATRIX_OS: ${{ matrix.os }}
-          NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}",
-            "MATRIX_OS: ${{ matrix.os }}
-          NATIVE_ACCEPTANCE_JSON: '{}'",
-            1,
-        );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.tool_authority").passed);
     }
 
@@ -3579,7 +3705,7 @@ total_timeout=60
             "fromJSON(needs.plan.outputs.workflow).required_gates_job_timeout_minutes",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.timeouts").passed);
 
         for (from, to) in [
@@ -3593,7 +3719,7 @@ total_timeout=60
             (")\" -le 1048576", ")\" -le 1048577"),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing workflow fixture {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing workflow fixture {from}");
             assert!(
                 !rule(&mutated, "workflow.timeouts").passed,
                 "budget drift remained valid: {from} -> {to}"
@@ -3608,7 +3734,7 @@ total_timeout=60
             "test \"${actual}\" = \"${{ matrix.expected_uname }}\"",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.matrix_shell_transport").passed);
     }
 
@@ -3632,14 +3758,7 @@ total_timeout=60
         assert!(!output.status.success());
         assert!(!marker.exists());
 
-        let lookup = r#"
-set -euo pipefail
-packages=()
-while IFS= read -r package; do
-  packages+=("${package}")
-done < <(jq -er --arg os "${MATRIX_OS}" '.native_prerequisites[$os][]' <<<"${TOOLS_JSON}")
-test "${#packages[@]}" -eq 0
-"#;
+        let lookup = "\nset -euo pipefail\npackages=()\nwhile IFS= read -r package; do\n  packages+=(\"${package}\")\ndone < <(jq -er --arg os \"${MATRIX_OS}\" '.native_prerequisites[$os][]' <<<\"${TOOLS_JSON}\")\ntest \"${#packages[@]}\" -eq 0\n";
         let injection = format!("linux; touch {}", marker.display());
         let output = Command::new("bash")
             .arg("-c")
@@ -3647,7 +3766,7 @@ test "${#packages[@]}" -eq 0
             .env("MATRIX_OS", injection)
             .env(
                 "TOOLS_JSON",
-                r#"{"native_prerequisites":{"linux":["safe-package"]}}"#,
+                "{\"native_prerequisites\":{\"linux\":[\"safe-package\"]}}",
             )
             .output()
             .unwrap();
@@ -3657,119 +3776,6 @@ test "${#packages[@]}" -eq 0
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(!marker.exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn native_content_helper_executes_authority_transport_budgets() {
-        use std::process::Command;
-
-        let temporary = tempfile::tempdir().unwrap();
-        let destination = temporary.path().join("content.uqm");
-        let helper =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_native_content.py");
-        let source = r#"
-import hashlib
-import importlib.util
-import json
-import os
-import stat
-import sys
-sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location("uqm_workflow_native_content", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-payload = b"authority-owned-content"
-opens = []
-sleeps = []
-class Response:
-    def __init__(self):
-        self.done = False
-    def __enter__(self):
-        return self
-    def __exit__(self, *args):
-        return False
-    def read(self, _limit):
-        if self.done:
-            return b""
-        self.done = True
-        return payload
-def urlopen(_request, timeout):
-    opens.append(timeout)
-    if len(opens) < 3:
-        raise OSError("injected transport failure")
-    return Response()
-module.urllib.request.urlopen = urlopen
-module.time.sleep = sleeps.append
-destination = sys.argv[2]
-authority = {
-    "content_filename": "content.uqm",
-    "content_url": "https://example.invalid/content.uqm",
-    "content_byte_length": len(payload),
-    "content_sha256": hashlib.sha256(payload).hexdigest(),
-    "content_transport": {
-        "attempt_limit": 3,
-        "read_timeout_seconds": 17,
-        "backoff_seconds": [2, 5],
-    },
-}
-sys.argv = [sys.argv[1], "--authority-json", json.dumps(authority), "--destination", destination]
-open_descriptors_before = set(os.listdir("/dev/fd"))
-assert module.main() == 0
-assert set(os.listdir("/dev/fd")) == open_descriptors_before
-assert opens == [17, 17, 17]
-assert sleeps == [2, 5]
-assert open(destination, "rb").read() == payload
-assert stat.S_IMODE(os.stat(destination).st_mode) == 0o440
-bad_directory = destination + ".bad-dir"
-os.mkdir(bad_directory)
-bad_destination = os.path.join(bad_directory, "content.uqm")
-authority["content_sha256"] = "0" * 64
-sys.argv = [sys.argv[1], "--authority-json", json.dumps(authority), "--destination", bad_destination]
-try:
-    module.main()
-    raise AssertionError("permanent content-integrity failure was retried or accepted")
-except ValueError as error:
-    assert "SHA-256 mismatch" in str(error)
-assert opens == [17, 17, 17, 17]
-assert sleeps == [2, 5]
-assert not os.path.exists(bad_destination)
-short_directory = destination + ".short-dir"
-os.mkdir(short_directory)
-short_destination = os.path.join(short_directory, "content.uqm")
-authority["content_sha256"] = hashlib.sha256(payload).hexdigest()
-short_opens = []
-class ShortResponse(Response):
-    def read(self, _limit):
-        if self.done:
-            return b""
-        self.done = True
-        return payload[:-1]
-def short_urlopen(_request, timeout):
-    short_opens.append(timeout)
-    if len(short_opens) == 1:
-        return ShortResponse()
-    return Response()
-module.urllib.request.urlopen = short_urlopen
-sys.argv = [sys.argv[1], "--authority-json", json.dumps(authority), "--destination", short_destination]
-assert module.main() == 0
-assert short_opens == [17, 17]
-assert sleeps == [2, 5, 2]
-assert open(short_destination, "rb").read() == payload
-"#;
-        let output = Command::new("python3")
-            .env("PYTHONDONTWRITEBYTECODE", "1")
-            .arg("-c")
-            .arg(source)
-            .arg(helper)
-            .arg(&destination)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "native content helper failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
     }
 
     #[test]
@@ -3809,7 +3815,7 @@ assert open(short_destination, "rb").read() == payload
             "          set -euo pipefail # cargo test --workspace",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(parse_yaml(&mutated).is_err());
     }
 
@@ -3820,7 +3826,7 @@ assert open(short_destination, "rb").read() == payload
             "            # -- \"${XTASK}\" ci run all",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(parse_yaml(&mutated).is_err());
     }
 
@@ -3831,7 +3837,7 @@ assert open(short_destination, "rb").read() == payload
             "      - name: Upload plan evidence\n        id: upload_plan\n        if: success() && steps.plan_authority.outputs.retention_days != ''\n",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.always_uploaded_failure_evidence").passed);
     }
 
@@ -3852,7 +3858,7 @@ assert open(short_destination, "rb").read() == payload
             "Path(name).write_bytes(Path(temporary_name).read_bytes())",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -3887,7 +3893,7 @@ assert open(short_destination, "rb").read() == payload
         ];
         for (from, to) in mutations {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing plan-finalizer source: {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing plan-finalizer source: {from}");
             assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
         }
     }
@@ -3915,18 +3921,18 @@ assert open(short_destination, "rb").read() == payload
             "root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
     #[test]
     fn transport_finalizer_skipping_nested_indexes_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            r#"if relative == "index.json":"#,
-            r#"if entry.name == "index.json":"#,
+            "if relative == \"index.json\":",
+            "if entry.name == \"index.json\":",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -3937,7 +3943,7 @@ assert open(short_destination, "rb").read() == payload
             "for entry in root.rglob(\"*\"):",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -3951,7 +3957,7 @@ assert open(short_destination, "rb").read() == payload
             "evidence_snapshot_aggregate_path_limit_bytes",
         ] {
             let mutated = WORKFLOW.replacen(field, "disabled_snapshot_limit", 1);
-            assert_ne!(mutated, WORKFLOW);
+            assert_ne!(mutated, *WORKFLOW);
             assert!(
                 !rule(&mutated, "workflow.content_addressed_transport").passed,
                 "removing {field} remained valid"
@@ -3966,7 +3972,7 @@ assert open(short_destination, "rb").read() == payload
             "authority_bytes = authority.read_bytes()",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -3977,7 +3983,7 @@ assert open(short_destination, "rb").read() == payload
             "JOB_STATUS: ${{ steps.plan.outcome }}",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
     #[cfg(unix)]
@@ -4145,12 +4151,11 @@ assert open(short_destination, "rb").read() == payload
     #[test]
     fn transport_finalizer_without_a_fresh_fallback_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            "          os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)\n\n          fallback = {\n              \"schema\": \"uqm-s4-transport-finalizer-fallback-v1\"",
-
-            "          os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)\n\n          fallback = {\n              \"schema\": \"uqm-s4-transport-finalizer-fallback-disabled\"",
+            "def publish_fallback(metadata):\n              fallback = {\n                  \"schema\": \"uqm-s4-transport-finalizer-fallback-v1\"",
+            "def publish_fallback(metadata):\n              fallback = {\n                  \"schema\": \"uqm-s4-transport-finalizer-fallback-disabled\"",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -4246,7 +4251,7 @@ assert open(short_destination, "rb").read() == payload
             "      - name: Record plan upload receipt"
         );
         let mutated = WORKFLOW.replacen(marker, replacement, 1);
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -4257,7 +4262,7 @@ assert open(short_destination, "rb").read() == payload
             "always() && steps.plan_authority.outputs.retention_days != ''",
             1,
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -4278,7 +4283,7 @@ assert open(short_destination, "rb").read() == payload
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
-            assert_ne!(mutated, WORKFLOW, "missing gate fallback source: {from}");
+            assert_ne!(mutated, *WORKFLOW, "missing gate fallback source: {from}");
             assert!(
                 !rule(&mutated, "workflow.content_addressed_transport").passed,
                 "accepted gate fallback mutation: {from}"
@@ -4292,7 +4297,7 @@ assert open(short_destination, "rb").read() == payload
             "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"])",
             "\"retention_days\": int(os.environ[\"RETENTION_DAYS\"]) + 1",
         );
-        assert_ne!(mutated, WORKFLOW);
+        assert_ne!(mutated, *WORKFLOW);
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
@@ -4340,16 +4345,7 @@ assert open(short_destination, "rb").read() == payload
         .unwrap();
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let script = r#"
-import importlib.util
-import sys
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-assert module.load_limits(sys.argv[2])["timeout"] == 5.0
-assert module.load_limits(sys.argv[2], "builtin")["timeout"] == 5.0
-assert module.load_limits(sys.argv[2], "aggregate-run")["timeout"] == 6.0
-"#;
+        let script = "\nimport importlib.util\nimport sys\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nassert module.load_limits(sys.argv[2])[\"timeout\"] == 5.0\nassert module.load_limits(sys.argv[2], \"builtin\")[\"timeout\"] == 5.0\nassert module.load_limits(sys.argv[2], \"aggregate-run\")[\"timeout\"] == 6.0\n";
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .args([
@@ -4368,19 +4364,7 @@ assert module.load_limits(sys.argv[2], "aggregate-run")["timeout"] == 6.0
     fn workflow_supervisor_preserves_privilege_and_path_dependent_executable_semantics() {
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let script = r#"
-import importlib.util, stat, sys, types
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-root_setuid = types.SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | stat.S_ISUID | 0o755)
-unprivileged = types.SimpleNamespace(st_uid=501, st_mode=stat.S_IFREG | 0o755)
-assert module.executable_requires_original_path("sudo", "/opt/local/bin/sudo", root_setuid)
-assert module.executable_requires_original_path("brew", "/opt/homebrew/bin/brew", unprivileged)
-assert module.executable_requires_original_path("python3", "/opt/hostedtoolcache/Python/3.13/bin/python3", unprivileged)
-assert not module.executable_requires_original_path("cargo", "/tmp/toolchain/bin/cargo", unprivileged)
-assert not module.executable_requires_original_path("helper", "/tmp/helper", types.SimpleNamespace(st_uid=501, st_mode=stat.S_IFREG | stat.S_ISUID | 0o755))
-"#;
+        let script = "\nimport importlib.util, stat, sys, types\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nroot_setuid = types.SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | stat.S_ISUID | 0o755)\nunprivileged = types.SimpleNamespace(st_uid=501, st_mode=stat.S_IFREG | 0o755)\nassert module.executable_requires_original_path(\"sudo\", \"/opt/local/bin/sudo\", root_setuid)\nassert module.executable_requires_original_path(\"brew\", \"/opt/homebrew/bin/brew\", unprivileged)\nassert module.executable_requires_original_path(\"python3\", \"/opt/hostedtoolcache/Python/3.13/bin/python3\", unprivileged)\nassert not module.executable_requires_original_path(\"cargo\", \"/tmp/toolchain/bin/cargo\", unprivileged)\nassert not module.executable_requires_original_path(\"helper\", \"/tmp/helper\", types.SimpleNamespace(st_uid=501, st_mode=stat.S_IFREG | stat.S_ISUID | 0o755))\n";
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .args(["-c", script, supervisor.to_str().unwrap()])
@@ -4393,25 +4377,7 @@ assert not module.executable_requires_original_path("helper", "/tmp/helper", typ
     fn linux_process_inspection_fails_closed_on_unreadable_or_malformed_stat() {
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let script = r#"
-import builtins, importlib.util, io, sys
-from unittest import mock
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-with mock.patch.object(builtins, "open", side_effect=PermissionError("denied")):
-    try:
-        module.linux_identity(42)
-        raise AssertionError("permission error was ignored")
-    except PermissionError:
-        pass
-with mock.patch.object(builtins, "open", return_value=io.BytesIO(b"malformed")):
-    try:
-        module.linux_identity(42)
-        raise AssertionError("malformed stat was ignored")
-    except RuntimeError as error:
-        assert "malformed process stat" in str(error)
-"#;
+        let script = "\nimport builtins, importlib.util, io, sys\nfrom unittest import mock\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nwith mock.patch.object(builtins, \"open\", side_effect=PermissionError(\"denied\")):\n    try:\n        module.linux_identity(42)\n        raise AssertionError(\"permission error was ignored\")\n    except PermissionError:\n        pass\nwith mock.patch.object(builtins, \"open\", return_value=io.BytesIO(b\"malformed\")):\n    try:\n        module.linux_identity(42)\n        raise AssertionError(\"malformed stat was ignored\")\n    except RuntimeError as error:\n        assert \"malformed process stat\" in str(error)\n";
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .args(["-c", script, supervisor.to_str().unwrap()])
@@ -4424,88 +4390,7 @@ with mock.patch.object(builtins, "open", return_value=io.BytesIO(b"malformed")):
     fn workflow_supervisor_linux_uid_cleanup_and_refresh_cadence_are_bounded() {
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let script = r#"
-import importlib.util, os, subprocess, sys
-from unittest import mock
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-
-commands = []
-inspections = {"-U": 0, "-u": 0}
-def run(command, **kwargs):
-    commands.append(command)
-    if command[0] == "/usr/bin/pgrep":
-        selector = command[1]
-        inspections[selector] += 1
-        return subprocess.CompletedProcess(command, 0 if inspections[selector] == 1 else 1)
-    return subprocess.CompletedProcess(command, 0)
-
-with mock.patch.object(module.sys, "platform", "linux"), \
-     mock.patch.dict(os.environ, {"UQM_CI_DEDICATED_CONTAINMENT_UID": "59999"}), \
-     mock.patch.object(module.subprocess, "run", side_effect=run), \
-     mock.patch.object(module.time, "sleep", return_value=None):
-    module.cleanup_dedicated_containment_uid(1.0)
-for selector in ("-U", "-u"):
-    assert ["/usr/bin/sudo", "-n", "/usr/bin/pkill", "-KILL", selector, "59999"] in commands
-
-class Tracker:
-    def __init__(self):
-        self.refreshes = 0
-    def refresh(self):
-        self.refreshes += 1
-tracker = Tracker()
-next_refresh = 0.05
-next_refresh = module.refresh_tracker_if_due(tracker, 0.01, next_refresh)
-next_refresh = module.refresh_tracker_if_due(tracker, 0.049, next_refresh)
-assert tracker.refreshes == 0
-next_refresh = module.refresh_tracker_if_due(tracker, 0.05, next_refresh)
-assert tracker.refreshes == 1 and next_refresh == 0.1
-next_refresh = module.refresh_tracker_if_due(tracker, 0.099, next_refresh)
-assert tracker.refreshes == 1
-
-next_refresh = module.refresh_tracker_if_due(tracker, 0.1, next_refresh)
-assert tracker.refreshes == 2 and abs(next_refresh - 0.15) < 1e-9
-
-class ReapTracker:
-    def __init__(self):
-        self.tracked = {42: "start"}
-
-tracker = ReapTracker()
-with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
-     mock.patch.object(module, "process_identity", return_value={"zombie": True}):
-    assert module.reap_known_descendants(tracker, 7) == {}
-assert tracker.tracked == {}
-
-tracker = ReapTracker()
-with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
-     mock.patch.object(module, "process_identity", return_value=None):
-    assert module.reap_known_descendants(tracker, 7) == {}
-assert tracker.tracked == {}
-
-tracker = ReapTracker()
-with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
-     mock.patch.object(module, "process_identity", return_value={"zombie": False}):
-    assert module.reap_known_descendants(tracker, 7) == {}
-assert tracker.tracked == {42: "start"}
-
-tracker = module.DescendantTracker(7, 7, 1, True)
-snapshot = {
-    7: {"ppid": 1, "pgid": 7, "start": "leader", "zombie": False},
-    42: {"ppid": 1, "pgid": 42, "start": "zombie", "zombie": True},
-    43: {"ppid": 1, "pgid": 43, "start": "live", "zombie": False},
-}
-with mock.patch.object(module, "process_snapshot", return_value=snapshot):
-    tracker.refresh()
-assert tracker.tracked == {43: "live"}
-
-with mock.patch.object(module, "group_members", return_value=[7, 42, 43]), \
-     mock.patch.object(module, "process_identity", side_effect=[{"zombie": True}, None]):
-    assert module.group_clear(7, 7)
-with mock.patch.object(module, "group_members", return_value=[7, 43]), \
-     mock.patch.object(module, "process_identity", return_value={"zombie": False}):
-    assert not module.group_clear(7, 7)
-"#;
+        let script = "\nimport importlib.util, os, subprocess, sys\nfrom unittest import mock\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n\ncommands = []\ninspections = {\"-U\": 0, \"-u\": 0}\ndef run(command, **kwargs):\n    commands.append(command)\n    if command[0] == \"/usr/bin/pgrep\":\n        selector = command[1]\n        inspections[selector] += 1\n        return subprocess.CompletedProcess(command, 0 if inspections[selector] == 1 else 1)\n    return subprocess.CompletedProcess(command, 0)\n\nwith mock.patch.object(module.sys, \"platform\", \"linux\"), \\\n     mock.patch.dict(os.environ, {\"UQM_CI_DEDICATED_CONTAINMENT_UID\": \"59999\"}), \\\n     mock.patch.object(module.subprocess, \"run\", side_effect=run), \\\n     mock.patch.object(module.time, \"sleep\", return_value=None):\n    module.cleanup_dedicated_containment_uid(1.0)\nfor selector in (\"-U\", \"-u\"):\n    assert [\"/usr/bin/sudo\", \"-n\", \"/usr/bin/pkill\", \"-KILL\", selector, \"59999\"] in commands\n\nclass Tracker:\n    def __init__(self):\n        self.refreshes = 0\n    def refresh(self):\n        self.refreshes += 1\ntracker = Tracker()\nnext_refresh = 0.05\nnext_refresh = module.refresh_tracker_if_due(tracker, 0.01, next_refresh)\nnext_refresh = module.refresh_tracker_if_due(tracker, 0.049, next_refresh)\nassert tracker.refreshes == 0\nnext_refresh = module.refresh_tracker_if_due(tracker, 0.05, next_refresh)\nassert tracker.refreshes == 1 and next_refresh == 0.1\nnext_refresh = module.refresh_tracker_if_due(tracker, 0.099, next_refresh)\nassert tracker.refreshes == 1\n\nnext_refresh = module.refresh_tracker_if_due(tracker, 0.1, next_refresh)\nassert tracker.refreshes == 2 and abs(next_refresh - 0.15) < 1e-9\n\nclass ReapTracker:\n    def __init__(self):\n        self.tracked = {42: \"start\"}\n\ntracker = ReapTracker()\nwith mock.patch.object(module.os, \"waitpid\", side_effect=ChildProcessError()), \\\n     mock.patch.object(module, \"process_identity\", return_value={\"zombie\": True}):\n    assert module.reap_known_descendants(tracker, 7) == {}\nassert tracker.tracked == {}\n\ntracker = ReapTracker()\nwith mock.patch.object(module.os, \"waitpid\", side_effect=ChildProcessError()), \\\n     mock.patch.object(module, \"process_identity\", return_value=None):\n    assert module.reap_known_descendants(tracker, 7) == {}\nassert tracker.tracked == {}\n\ntracker = ReapTracker()\nwith mock.patch.object(module.os, \"waitpid\", side_effect=ChildProcessError()), \\\n     mock.patch.object(module, \"process_identity\", return_value={\"zombie\": False}):\n    assert module.reap_known_descendants(tracker, 7) == {}\nassert tracker.tracked == {42: \"start\"}\n\ntracker = module.DescendantTracker(7, 7, 1, True)\nsnapshot = {\n    7: {\"ppid\": 1, \"pgid\": 7, \"start\": \"leader\", \"zombie\": False},\n    42: {\"ppid\": 1, \"pgid\": 42, \"start\": \"zombie\", \"zombie\": True},\n    43: {\"ppid\": 1, \"pgid\": 43, \"start\": \"live\", \"zombie\": False},\n}\nwith mock.patch.object(module, \"process_snapshot\", return_value=snapshot):\n    tracker.refresh()\nassert tracker.tracked == {43: \"live\"}\n\nwith mock.patch.object(module, \"group_members\", return_value=[7, 42, 43]), \\\n     mock.patch.object(module, \"process_identity\", side_effect=[{\"zombie\": True}, None]):\n    assert module.group_clear(7, 7)\nwith mock.patch.object(module, \"group_members\", return_value=[7, 43]), \\\n     mock.patch.object(module, \"process_identity\", return_value={\"zombie\": False}):\n    assert not module.group_clear(7, 7)\n";
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .args(["-c", script, supervisor.to_str().unwrap()])
@@ -4876,19 +4761,7 @@ with mock.patch.object(module, "group_members", return_value=[7, 43]), \
         let _ = workflow_supervisor_command(&temporary, &["/bin/sleep", "30"]);
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let source = r#"
-import importlib.util
-import sys
-sys.dont_write_bytecode = True
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-def fail_refresh(self):
-    raise RuntimeError("injected refresh failure")
-module.DescendantTracker.refresh = fail_refresh
-sys.argv = [sys.argv[1], "--authority", sys.argv[2], "--receipt", sys.argv[3], "--stdout", sys.argv[4], "--stderr", sys.argv[5], "--", "/bin/sleep", "30"]
-raise SystemExit(module.main())
-"#;
+        let source = "\nimport importlib.util\nimport sys\nsys.dont_write_bytecode = True\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\ndef fail_refresh(self):\n    raise RuntimeError(\"injected refresh failure\")\nmodule.DescendantTracker.refresh = fail_refresh\nsys.argv = [sys.argv[1], \"--authority\", sys.argv[2], \"--receipt\", sys.argv[3], \"--stdout\", sys.argv[4], \"--stderr\", sys.argv[5], \"--\", \"/bin/sleep\", \"30\"]\nraise SystemExit(module.main())\n";
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
             .arg("-c")
@@ -5114,33 +4987,7 @@ raise SystemExit(module.main())
     ) -> std::process::ExitStatus {
         let supervisor =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_supervisor.py");
-        let wrapper = r#"
-import importlib.util
-import os
-import sys
-mode = sys.argv[7]
-spec = importlib.util.spec_from_file_location("uqm_workflow_supervisor", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-target_path = sys.argv[3]
-target_identity = os.stat(target_path)
-real_read = os.read
-injected = False
-def injected_read(descriptor, count):
-    global injected
-    data = real_read(descriptor, count)
-    if not injected and data and os.fstat(descriptor).st_ino == target_identity.st_ino:
-        injected = True
-        if mode == "grow":
-            with open(target_path, "ab") as handle:
-                handle.write(b"x" * 64)
-        else:
-            os.truncate(target_path, max(target_identity.st_size - 16, 0))
-    return data
-module.os.read = injected_read
-sys.argv = [sys.argv[1], "--authority", sys.argv[2], "--receipt", sys.argv[4], "--stdout", sys.argv[5], "--stderr", sys.argv[6], "--", sys.argv[8]]
-raise SystemExit(module.main())
-"#
+        let wrapper = "\nimport importlib.util\nimport os\nimport sys\nmode = sys.argv[7]\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_supervisor\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\ntarget_path = sys.argv[3]\ntarget_identity = os.stat(target_path)\nreal_read = os.read\ninjected = False\ndef injected_read(descriptor, count):\n    global injected\n    data = real_read(descriptor, count)\n    if not injected and data and os.fstat(descriptor).st_ino == target_identity.st_ino:\n        injected = True\n        if mode == \"grow\":\n            with open(target_path, \"ab\") as handle:\n                handle.write(b\"x\" * 64)\n        else:\n            os.truncate(target_path, max(target_identity.st_size - 16, 0))\n    return data\nmodule.os.read = injected_read\nsys.argv = [sys.argv[1], \"--authority\", sys.argv[2], \"--receipt\", sys.argv[4], \"--stdout\", sys.argv[5], \"--stderr\", sys.argv[6], \"--\", sys.argv[8]]\nraise SystemExit(module.main())\n"
         .to_string();
         std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")

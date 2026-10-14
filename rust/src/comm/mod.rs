@@ -21,6 +21,8 @@ pub mod animation;
 pub mod dispatch;
 pub mod encounter;
 pub mod ffi;
+#[cfg(test)]
+mod ffi_behavior_tests;
 pub mod glue;
 pub mod hail;
 pub mod locdata;

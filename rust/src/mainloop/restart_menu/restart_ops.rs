@@ -24,6 +24,23 @@ pub const MAINMENU_MUSIC: &str = "music.mainmenu";
 /// `"graphics.newgame"` (igfxres.h:251).
 pub const RESTART_PMAP_ANIM: &str = "graphics.newgame";
 
+/// Seed the generator for a new campaign (restart.c ~350-360).
+///
+/// A proof run supplies a fixed seed through the automation coordinator so a
+/// campaign replays; outside automation the coordinator returns the `0`
+/// sentinel and `clock_seed` seeds from the wall clock as before.
+pub fn seed_new_campaign(clock_seed: impl FnOnce()) {
+    let automation_seed = crate::automation::coordinator::rust_automation_seed_value(
+        crate::automation::trace::SeedDomain::NEW_GAME_ID,
+        0,
+    );
+    if automation_seed != 0 {
+        crate::math::TFB_SeedRandom(automation_seed);
+    } else {
+        clock_seed();
+    }
+}
+
 // ===========================================================================
 //  RestartMenuOps trait
 // ===========================================================================
@@ -134,7 +151,6 @@ pub trait RestartMenuOps {
     fn melee(&self);
     fn setup_menu(&self);
     fn free_game_data(&self);
-    fn introduction(&self);
     fn credits(&self, victory: bool);
     fn victory(&self);
     fn splash_screen(&self);
@@ -322,12 +338,9 @@ impl RestartMenuOps for CffiOps {
     }
 
     fn set_screen_context(&self) {
-        extern "C" {
-            static ScreenContext: *mut c_void;
-        }
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let _ = c_extern::SetContext(ScreenContext);
+            let _ = c_extern::SetContext(c_extern::ScreenContext);
         }
     }
 
@@ -370,10 +383,12 @@ impl RestartMenuOps for CffiOps {
         }
     }
     fn seed_random(&self) {
-        // SAFETY: SeedRandomNumbers is safe to call any time.
-        unsafe {
-            let _ = c_extern::SeedRandomNumbers();
-        }
+        seed_new_campaign(|| {
+            // SAFETY: SeedRandomNumbers is safe to call any time.
+            unsafe {
+                let _ = c_extern::SeedRandomNumbers();
+            }
+        });
     }
 
     fn load_menu_graphic(&self) -> usize {
@@ -534,10 +549,6 @@ impl RestartMenuOps for CffiOps {
     fn free_game_data(&self) {
         // SAFETY: FreeGameData releases game session resources.
         unsafe { c_extern::FreeGameData() }
-    }
-    fn introduction(&self) {
-        // SAFETY: Introduction plays the intro sequence.
-        unsafe { c_extern::Introduction() }
     }
     fn credits(&self, victory: bool) {
         // SAFETY: Credits displays the credits screen.

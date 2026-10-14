@@ -154,6 +154,91 @@ const DEFAULT_SCREEN_WIDTH: i32 = 320;
 #[cfg(not(feature = "linked_c_archive"))]
 const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 
+/// Read the target-independent flight state of the live solar system.
+///
+/// # Safety
+/// Must run on the game thread while `solar_system` is the live
+/// `pSolarSysState`, as the automation input hook does.
+#[cfg(feature = "linked_c_archive")]
+unsafe fn read_flight_state(solar_system: &CSolarSystemState, snapshot: &mut NavigationSnapshot) {
+    snapshot.active = 1;
+    snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
+    // Ask the game for live orbit state rather than inferring it. The
+    // authoritative flag is `SOLARSYS_STATE::InOrbit`, but it sits behind a
+    // long tail of fields this binding does not model, so it is read
+    // through the exported predicate instead of a guessed offset.
+    // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
+    // for save/load. `!InIpFlight` is not usable either: the game clears
+    // `InIpFlight` when entering an encounter as well as an orbit, so it
+    // would report orbit during encounters.
+    snapshot.in_orbit = i32::from(playerInPlanetOrbit());
+    snapshot.wait_intersect = solar_system.wait_intersect;
+    let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
+    let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
+    snapshot.ship_x = i32::from(ship_stamp.origin.x);
+    snapshot.ship_y = i32::from(ship_stamp.origin.y);
+    if !ship_stamp.frame.is_null() {
+        snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
+    }
+    let velocity = std::ptr::addr_of!((*game_state)._velocity)
+        .cast::<crate::battle::velocity::VelocityDesc>()
+        .read_unaligned();
+    (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
+
+    if !solar_system.orbital.is_null() {
+        snapshot.orbital_data_index = i32::from((*solar_system.orbital).data_index);
+        let planet_start = solar_system.planets.as_ptr() as usize;
+        let moon_start = solar_system.moons.as_ptr() as usize;
+        let desc_size = std::mem::size_of::<CPlanetDesc>();
+        let orbital_address = solar_system.orbital as usize;
+        if orbital_address >= moon_start
+            && orbital_address < moon_start + solar_system.moons.len() * desc_size
+        {
+            snapshot.orbital_moon = ((orbital_address - moon_start) / desc_size) as i32;
+        }
+        let sun = solar_system.sun.as_ptr();
+        let orbital_planet = if std::ptr::eq((*solar_system.orbital).previous.cast_const(), sun) {
+            solar_system.orbital
+        } else {
+            (*solar_system.orbital).previous
+        } as usize;
+        if orbital_planet >= planet_start {
+            snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
+        }
+    }
+}
+
+/// Sample the live solar system for flying out of it, without a target.
+///
+/// `active` is 0 whenever no solar system is live, which is how a departure
+/// observes that production has torn interplanetary flight down.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn departure_snapshot() -> NavigationSnapshot {
+    let geometry = ViewGeometry::current();
+    let mut snapshot = NavigationSnapshot {
+        inner_planet: -1,
+        orbital_moon: -1,
+        orbital_data_index: -1,
+        target_data_index: -1,
+        view_center_x: geometry.half_width,
+        view_center_y: geometry.half_height,
+        ..NavigationSnapshot::default()
+    };
+    // SAFETY: the production game invokes this hook synchronously on the game
+    // thread, so the solar-system pointer and its state cannot change here.
+    unsafe {
+        if let Some(solar_system) = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read().as_ref() {
+            read_flight_state(solar_system, &mut snapshot);
+        }
+    }
+    snapshot
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn departure_snapshot() -> NavigationSnapshot {
+    navigation_snapshot(0, None)
+}
+
 #[cfg(feature = "linked_c_archive")]
 pub(crate) fn navigation_snapshot(
     target_planet: i32,
@@ -180,53 +265,7 @@ pub(crate) fn navigation_snapshot(
         if target_planet < 0 || target_planet >= i32::from(solar_system.sun[0].num_planets) {
             return snapshot;
         }
-
-        snapshot.active = 1;
-        snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
-        // Ask the game for live orbit state rather than inferring it. The
-        // authoritative flag is `SOLARSYS_STATE::InOrbit`, but it sits behind a
-        // long tail of fields this binding does not model, so it is read
-        // through the exported predicate instead of a guessed offset.
-        // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
-        // for save/load. `!InIpFlight` is not usable either: the game clears
-        // `InIpFlight` when entering an encounter as well as an orbit, so it
-        // would report orbit during encounters.
-        snapshot.in_orbit = i32::from(playerInPlanetOrbit());
-        snapshot.wait_intersect = solar_system.wait_intersect;
-        let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
-        let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
-        snapshot.ship_x = i32::from(ship_stamp.origin.x);
-        snapshot.ship_y = i32::from(ship_stamp.origin.y);
-        if !ship_stamp.frame.is_null() {
-            snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
-        }
-        let velocity = std::ptr::addr_of!((*game_state)._velocity)
-            .cast::<crate::battle::velocity::VelocityDesc>()
-            .read_unaligned();
-        (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
-
-        if !solar_system.orbital.is_null() {
-            snapshot.orbital_data_index = i32::from((*solar_system.orbital).data_index);
-            let planet_start = solar_system.planets.as_ptr() as usize;
-            let moon_start = solar_system.moons.as_ptr() as usize;
-            let desc_size = std::mem::size_of::<CPlanetDesc>();
-            let orbital_address = solar_system.orbital as usize;
-            if orbital_address >= moon_start
-                && orbital_address < moon_start + solar_system.moons.len() * desc_size
-            {
-                snapshot.orbital_moon = ((orbital_address - moon_start) / desc_size) as i32;
-            }
-            let sun = solar_system.sun.as_ptr();
-            let orbital_planet = if std::ptr::eq((*solar_system.orbital).previous.cast_const(), sun)
-            {
-                solar_system.orbital
-            } else {
-                (*solar_system.orbital).previous
-            } as usize;
-            if orbital_planet >= planet_start {
-                snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
-            }
-        }
+        read_flight_state(solar_system, &mut snapshot);
 
         if let Some(moon) = target_moon {
             if snapshot.inner_planet == target_planet
@@ -472,6 +511,38 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
     } else {
         -1
     }
+}
+
+/// Discard the pulse the production input loop derived for a menu key.
+///
+/// `UpdateInputState` turns a key that stays down into a repeat pulse once
+/// `MENU_REPEAT_DELAY` of wall-clock time has passed since the last pulse. A
+/// scripted tap counts input updates, so on a slow host that clock fires
+/// inside one tap and the game sees several presses. Returns `false` for an
+/// index outside the menu key table.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn discard_menu_pulse(index: i32) -> bool {
+    let Some(index) = menu_key_slot(index) else {
+        return false;
+    };
+    // SAFETY: the single game thread runs `DoInput`, between
+    // `UpdateInputState` and the consumers of the pulsed state.
+    unsafe {
+        (*std::ptr::addr_of_mut!(PulsedInputState)).menu[index] = 0;
+    }
+    true
+}
+
+/// Stub for builds without the linked C archive, which have no pulsed state.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn discard_menu_pulse(index: i32) -> bool {
+    menu_key_slot(index).is_some()
+}
+
+fn menu_key_slot(index: i32) -> Option<usize> {
+    usize::try_from(index)
+        .ok()
+        .filter(|slot| *slot < usize::from(crate::automation::input::NUM_MENU_KEYS))
 }
 
 /// Set when the native owner refuses an automation input write.

@@ -13,6 +13,88 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+/// Read a bounded regular file beneath a trusted directory without following
+/// symlinks in any relative component. Each directory is pinned by its descriptor.
+#[cfg(unix)]
+pub fn read_regular_relative_nofollow(
+    root: &Path,
+    relative: &Path,
+    limit: u64,
+) -> std::io::Result<Vec<u8>> {
+    use std::ffi::CString;
+    use std::io::Read as _;
+    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::unix::{ffi::OsStrExt as _, fs::OpenOptionsExt as _};
+    use std::path::Component;
+
+    let mut directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(root)?;
+    let components = relative.components().collect::<Vec<_>>();
+    let (last, parents) = components
+        .split_last()
+        .ok_or_else(|| std::io::Error::other("regular file relative path is empty"))?;
+    for (component, is_directory) in parents
+        .iter()
+        .map(|part| (part, true))
+        .chain([(last, false)])
+    {
+        let Component::Normal(name) = component else {
+            return Err(std::io::Error::other(
+                "regular file path is not normalized relative",
+            ));
+        };
+        let name = CString::new(name.as_bytes())?;
+        let flags = libc::O_RDONLY
+            | libc::O_CLOEXEC
+            | libc::O_NOFOLLOW
+            | libc::O_NONBLOCK
+            | if is_directory { libc::O_DIRECTORY } else { 0 };
+        // SAFETY: the directory remains open and name is NUL-terminated. A fresh
+        // descriptor is immediately transferred to File ownership on success.
+        let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: openat returned a fresh descriptor owned by this call.
+        directory = unsafe { File::from_raw_fd(fd) };
+    }
+    let before = directory.metadata()?;
+    if !before.is_file() || before.len() > limit {
+        return Err(std::io::Error::other(
+            "regular file type or byte limit is invalid",
+        ));
+    }
+    let mut bytes = Vec::new();
+    (&directory)
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    let after = directory.metadata()?;
+    if bytes.len() as u64 != before.len()
+        || after.len() != before.len()
+        || after.modified()? != before.modified()?
+    {
+        return Err(std::io::Error::other(
+            "regular file changed during snapshot read",
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Unsupported platforms cannot establish the no-follow snapshot contract.
+#[cfg(not(unix))]
+pub fn read_regular_relative_nofollow(
+    _root: &Path,
+    _relative: &Path,
+    _limit: u64,
+) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "no-follow snapshots require Unix",
+    ))
+}
+
 // ===========================================================================
 //  Artifact error classification
 // ===========================================================================
@@ -308,6 +390,41 @@ mod tests {
     }
 
     // --- Safe artifact naming ---
+
+    #[cfg(unix)]
+    #[test]
+    fn nofollow_snapshot_reads_exact_bytes_and_rejects_unsafe_sources() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap();
+        fs::create_dir(root.join("nested")).unwrap();
+        fs::write(root.join("nested/file"), b"config").unwrap();
+        fs::write(root.join("empty"), b"").unwrap();
+        assert_eq!(
+            read_regular_relative_nofollow(&root, Path::new("nested/file"), 6).unwrap(),
+            b"config"
+        );
+        assert_eq!(
+            read_regular_relative_nofollow(&root, Path::new("empty"), 0).unwrap(),
+            b""
+        );
+        assert!(read_regular_relative_nofollow(&root, Path::new("nested/file"), 5).is_err());
+        symlink(root.join("nested"), root.join("link-dir")).unwrap();
+        symlink(root.join("nested/file"), root.join("link-file")).unwrap();
+        for path in [
+            "../nested/file",
+            "/nested/file",
+            "link-dir/file",
+            "link-file",
+            "nested",
+            "missing",
+        ] {
+            assert!(
+                read_regular_relative_nofollow(&root, Path::new(path), 64).is_err(),
+                "{path}"
+            );
+        }
+    }
 
     #[test]
     fn confine_valid_label() {

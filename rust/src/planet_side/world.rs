@@ -422,9 +422,12 @@ pub enum ShotCreatureOutcome {
     /// Creature's hit points reached zero and it was canned. `value` is the
     /// biological mass the canned creature is now worth.
     Canned { value: u16 },
-    /// A special non-biological creature was defeated and must be removed
-    /// without becoming collectible cargo.
-    Destroyed,
+    /// The creature has no biological value (C `LONIBBLE(ValueAndHitPoints)`
+    /// is 0, the Brainbox Bulldozer). C skips `shotCreature` for it, so hit
+    /// points are untouched and the bolt goes straight to the node pickup
+    /// callback, which retires the node and removes the creature without
+    /// leaving cargo.
+    Retrieved,
 }
 
 /// Resolve a stun-bolt impact on a creature, matching `shotCreature`.
@@ -439,20 +442,20 @@ pub fn apply_shot_hit(
     aware: &mut bool,
     shot_facing: u8,
 ) -> ShotCreatureOutcome {
+    let stats = CreatureCatalog::stats(kind);
+    if stats.value == 0 {
+        return ShotCreatureOutcome::Retrieved;
+    }
     if *hit_points == 0 {
         return ShotCreatureOutcome::AlreadyCanned;
     }
 
     *hit_points -= 1;
     if *hit_points == 0 {
-        let value = u16::from(CreatureCatalog::stats(kind).value);
-        if kind.is_brainbox_bulldozer() {
-            ShotCreatureOutcome::Destroyed
-        } else {
-            ShotCreatureOutcome::Canned { value }
+        ShotCreatureOutcome::Canned {
+            value: u16::from(stats.value),
         }
     } else {
-        let stats = CreatureCatalog::stats(kind);
         if stats.speed != CreatureSpeed::Motionless {
             let angle = facing_to_angle(u16::from(shot_facing));
             let magnitude = crate::battle::velocity::world_to_velocity(1);
@@ -517,13 +520,17 @@ pub struct WorldStepEffects {
     /// IDs of entities whose finite life expired this frame. The caller must
     /// remove their frames and masks in sync with the world.
     pub expired: Vec<SurfaceEntityId>,
+    /// IDs of creatures a stun bolt retired without `shotCreature` (value-0
+    /// creatures). The caller runs the node pickup and, when it is accepted,
+    /// persists the node and removes the entity.
+    pub retrieved: Vec<SurfaceEntityId>,
     /// Live creatures whose animation advanced this frame: `(id, kind,
     /// animation_frame)`. The caller updates the drawable frame and its collision
     /// mask atomically so hotspot and extent changes apply together.
     pub creature_frames: Vec<(SurfaceEntityId, super::creatures::CreatureKind, u16)>,
     /// IDs of creatures to which this world step gave a landed shot verdict:
     /// one verdict per firing that changed a creature this frame: one `Stunned`,
-    /// canned, or destroyed, excluding a bolt that only passed over an
+    /// canned, or retrieved, excluding a bolt that only passed over an
     /// already-canned creature.
     pub landed_shot: Vec<SurfaceEntityId>,
 }
@@ -753,7 +760,11 @@ fn check_shot_creature_collision<M: MaskLookup>(
         };
 
         let outcome = apply_shot_hit(*kind, hit_points, velocity, thrust_wait, aware, shot_facing);
-        effects.sounds.push(super::hazards::SoundCue::LanderHits);
+        // LANDER_HITS is played inside C `shotCreature`, which a retrieved
+        // creature never reaches.
+        if !matches!(outcome, ShotCreatureOutcome::Retrieved) {
+            effects.sounds.push(super::hazards::SoundCue::LanderHits);
+        }
         if !matches!(outcome, ShotCreatureOutcome::AlreadyCanned) {
             effects.landed_shot.push(creature_id);
         }
@@ -766,7 +777,7 @@ fn check_shot_creature_collision<M: MaskLookup>(
                     .sounds
                     .push(super::hazards::SoundCue::LifeformCanned);
             }
-            ShotCreatureOutcome::Destroyed => effects.expired.push(creature_id),
+            ShotCreatureOutcome::Retrieved => effects.retrieved.push(creature_id),
         }
     }
 }
@@ -1167,31 +1178,9 @@ mod tests {
     }
 
     #[test]
-    fn shot_damages_surviving_brainbox_and_keeps_it_hostile() {
+    fn stun_bolt_retrieves_brainbox_without_touching_hit_points() {
         let kind = CreatureKind::new(24).unwrap();
-        let mut hp = 2u8;
-        let mut velocity = VelocityDesc::new();
-        let mut thrust_wait = 5u8;
-        let mut aware = false;
-
-        let outcome = apply_shot_hit(
-            kind,
-            &mut hp,
-            &mut velocity,
-            &mut thrust_wait,
-            &mut aware,
-            0,
-        );
-
-        assert_eq!(outcome, ShotCreatureOutcome::Stunned);
-        assert_eq!(hp, 1);
-        assert!(aware);
-    }
-
-    #[test]
-    fn final_shot_destroys_brainbox_instead_of_canning_it() {
-        let kind = CreatureKind::new(24).unwrap();
-        let mut hp = 1u8;
+        let mut hp = 3u8;
         let mut velocity = VelocityDesc::new();
         let mut thrust_wait = 0u8;
         let mut aware = false;
@@ -1205,8 +1194,8 @@ mod tests {
             0,
         );
 
-        assert_eq!(outcome, ShotCreatureOutcome::Destroyed);
-        assert_eq!(hp, 0);
+        assert_eq!(outcome, ShotCreatureOutcome::Retrieved);
+        assert_eq!(hp, 3, "C never reaches shotCreature for a value-0 creature");
     }
 
     #[test]
@@ -1247,7 +1236,7 @@ mod tests {
     }
 
     #[test]
-    fn brainbox_bulldozer_is_destroyed_without_becoming_cargo() {
+    fn brainbox_bulldozer_is_retrieved_without_becoming_cargo() {
         let mut world = SurfaceWorld::new();
         let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 0, y: 0 }));
         let shot_id = world.insert(SurfaceEntity {
@@ -1277,10 +1266,12 @@ mod tests {
         );
 
         assert!(effects.canned.is_empty());
-        assert_eq!(effects.expired, [creature_id]);
-        assert_eq!(
-            effects.sounds,
-            [super::super::hazards::SoundCue::LanderHits]
+        assert_eq!(effects.retrieved, [creature_id]);
+        assert!(effects.expired.is_empty());
+        assert_eq!(effects.landed_shot, [creature_id]);
+        assert!(
+            effects.sounds.is_empty(),
+            "LANDER_HITS belongs to shotCreature, which C skips for a Brainbox"
         );
     }
 
@@ -1423,12 +1414,12 @@ mod tests {
             "seam hit from the right must land one shot verdict"
         );
         assert!(
-            effects.expired.contains(&creature_id),
-            "seam hit must destroy the HP1 Brainbox"
+            effects.retrieved.contains(&creature_id),
+            "seam hit must retrieve the Brainbox"
         );
         assert!(
             effects.canned.is_empty(),
-            "Brainbox destruction is never cargo"
+            "Brainbox retrieval is never cargo"
         );
     }
 
@@ -1477,12 +1468,12 @@ mod tests {
             "seam hit from the left must land one shot verdict"
         );
         assert!(
-            effects.expired.contains(&creature_id),
-            "seam hit must destroy the HP1 Brainbox"
+            effects.retrieved.contains(&creature_id),
+            "seam hit must retrieve the Brainbox"
         );
         assert!(
             effects.canned.is_empty(),
-            "Brainbox destruction is never cargo"
+            "Brainbox retrieval is never cargo"
         );
     }
 
@@ -1898,10 +1889,10 @@ mod tests {
     }
 
     #[test]
-    fn sequential_bolts_damage_then_destroy_a_brainbox_through_step_world() {
+    fn first_bolt_retrieves_a_multi_hit_point_brainbox_through_step_world() {
         let mut world = SurfaceWorld::new();
         let brainbox_id = world.insert(live_creature(24, 2, SurfacePoint { x: 0, y: 0 }));
-        let first_shot_id = world.insert(SurfaceEntity {
+        let shot_id = world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::Shot(Shot {
                 position: SurfacePoint::default(),
                 facing: 0,
@@ -1914,13 +1905,12 @@ mod tests {
         });
 
         let mut shot_masks = MapMasks::default();
-        shot_masks.0.insert(first_shot_id, solid_mask());
+        shot_masks.0.insert(shot_id, solid_mask());
         let mut creature_masks = MapMasks::default();
         creature_masks.0.insert(brainbox_id, solid_mask());
         let mut random = SeqRandom::new(&[]);
 
-        // First bolt overlaps the registered mask and lands on the HP2 Brainbox.
-        let first_effects = step_world(
+        let effects = step_world(
             &mut world,
             WorldStepInputs {
                 lander_position: SurfacePoint::default(),
@@ -1930,69 +1920,26 @@ mod tests {
             },
         );
         assert_eq!(
-            first_effects.landed_shot,
+            effects.landed_shot,
             [brainbox_id],
-            "first independent bolt must land on the HP2 Brainbox"
+            "the bolt still lands a creature verdict"
+        );
+        assert_eq!(
+            effects.retrieved,
+            [brainbox_id],
+            "the first bolt retrieves the HP2 Brainbox (C skips shotCreature)"
         );
         assert!(
-            first_effects.canned.is_empty(),
-            "surviving Brainbox damage is stun, not cargo"
+            effects.canned.is_empty(),
+            "Brainbox retrieval is never cargo"
         );
-        assert!(
-            !first_effects.expired.contains(&brainbox_id),
-            "first bolt must leave the Brainbox alive"
-        );
-        let brainbox = world.get(brainbox_id).unwrap();
-        let hp = match &brainbox.kind {
+        let hp = match &world.get(brainbox_id).unwrap().kind {
             SurfaceEntityKind::LiveCreature { hit_points, .. } => *hit_points,
             other => panic!("expected live Brainbox, got {other:?}"),
         };
-        assert_eq!(hp, 1, "first landed shot drops the Brainbox to HP1");
-        // `step_world` expires the spent bolt via `advance_lifetimes`, which is
-        // the normal per-frame world cleanup for a life-1 entity.
-        assert!(
-            !world.ids().contains(&first_shot_id),
-            "the first bolt was removed by normal test-world lifetime cleanup"
-        );
-
-        // Second independent bolt destroys the surviving HP1 Brainbox.
-        let second_shot_id = world.insert(SurfaceEntity {
-            kind: SurfaceEntityKind::Shot(Shot {
-                position: SurfacePoint::default(),
-                facing: 0,
-                velocity_x: 0,
-                velocity_y: 0,
-                life: 1,
-            }),
-            position: SurfacePoint::default(),
-            finite_life: Some(1),
-        });
-        let mut second_masks = MapMasks::default();
-        second_masks.0.insert(second_shot_id, solid_mask());
-        let mut creature_masks2 = MapMasks::default();
-        creature_masks2.0.insert(brainbox_id, solid_mask());
-
-        let second_effects = step_world(
-            &mut world,
-            WorldStepInputs {
-                lander_position: SurfacePoint::default(),
-                shot_masks: &second_masks,
-                creature_masks: &creature_masks2,
-                random: &mut random,
-            },
-        );
         assert_eq!(
-            second_effects.landed_shot,
-            [brainbox_id],
-            "second independent bolt must land on the HP1 Brainbox"
-        );
-        assert!(
-            second_effects.expired.contains(&brainbox_id),
-            "second landed shot destroys the Brainbox through the production path"
-        );
-        assert!(
-            second_effects.canned.is_empty(),
-            "Brainbox destruction never produces cargo"
+            hp, 2,
+            "hit points are not decremented for a value-0 creature"
         );
     }
 }

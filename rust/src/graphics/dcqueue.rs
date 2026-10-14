@@ -664,19 +664,29 @@ impl DrawCommandQueue {
             } => {
                 if let Some(canvas) = self.get_screen_canvas(dest) {
                     let mut canvas = canvas.write().unwrap();
+                    if rect.extent.width <= 0 || rect.extent.height <= 0 {
+                        return;
+                    }
                     let x1 = rect.corner.x;
                     let y1 = rect.corner.y;
                     let x2 = rect.corner.x + rect.extent.width - 1;
                     let y2 = rect.corner.y + rect.extent.height - 1;
-                    if let Err(err) = crate::graphics::tfb_draw::draw_rect(
-                        &mut canvas,
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        color,
-                        draw_mode,
-                    ) {
+                    // `rust_dcq_push_fillrect` marks fills with `Blended`; every other
+                    // mode is an outline (see dcq_ffi).
+                    let result = if draw_mode == DrawMode::Blended {
+                        crate::graphics::tfb_draw::fill_rect(&mut canvas, x1, y1, x2, y2, color)
+                    } else {
+                        crate::graphics::tfb_draw::draw_rect(
+                            &mut canvas,
+                            x1,
+                            y1,
+                            x2,
+                            y2,
+                            color,
+                            draw_mode,
+                        )
+                    };
+                    if let Err(err) = result {
                         warn!("DCQ rect draw failed: {}", err);
                     }
                 }
@@ -869,6 +879,10 @@ where
     let _guard = queue.batch();
     f()
 }
+
+#[cfg(test)]
+#[path = "dcqueue_render_tests.rs"]
+mod render_tests;
 
 #[cfg(test)]
 mod tests {

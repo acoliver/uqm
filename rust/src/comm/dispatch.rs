@@ -356,6 +356,14 @@ mod ffi {
         // CommData global for direct encounter function pointer calls
         pub static mut CommData: crate::comm::locdata::CLocData;
 
+        // FindStar (starmap.c): the star within the bounds of a universe point
+        pub fn FindStar(
+            last_star: *mut c_void,
+            universe: *mut CPoint,
+            x_bounds: i16,
+            y_bounds: i16,
+        ) -> *mut c_void;
+
         // CurStarDescPtr global (starmap.h: extern STAR_DESC *CurStarDescPtr)
         #[link_name = "CurStarDescPtr"]
         pub static mut CurStarDescPtr: *mut std::ffi::c_void;
@@ -954,6 +962,28 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
     Ok(())
 }
 
+/// Make the star at `location` the flagship's current star.
+///
+/// `ExploreSolarSys` does this the first time the flagship is inside a star
+/// system. A scene that starts an encounter before that point needs the same
+/// star, because the encounter screen names it.
+///
+/// # Safety
+/// The star map must be initialized.
+#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'static str> {
+    let mut universe = CPoint {
+        x: location.0,
+        y: location.1,
+    };
+    let star = ffi::FindStar(std::ptr::null_mut(), &mut universe, 1, 1);
+    if star.is_null() {
+        return Err("no star at the scene location");
+    }
+    ffi::CurStarDescPtr = star;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // NameCaptain — ported from build.c:437
 // ---------------------------------------------------------------------------
@@ -1167,6 +1197,10 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
     }
 
+    // The Commander's moon-base conversation changes resource units, and the
+    // status gauges only accept that change while they show resource units.
+    let previous_message_mode = c_extern::SetStatusMessageMode(smm::RES_UNITS as i32);
+
     if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
         // Go immediately into a conversation with the Commander
         // Time passage — DoTimePassage is static in starbase.c.
@@ -1179,6 +1213,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
             return; // You are now dead!
         }
 
+        crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
         ffi::SetCommIntroMode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
         init_communication(conv::COMMANDER);
 
@@ -1191,6 +1226,8 @@ pub unsafe extern "C" fn rust_visit_starbase() {
     // Starbase menu input loop — DoStarBase/DoInput are in starbase.c/controls.c.
     // TODO: Port starbase menu to Rust. For now, skip menu input.
     // ffi::rust_do_starbase_menu_input();
+
+    c_extern::SetStatusMessageMode(previous_message_mode);
 }
 
 // ---------------------------------------------------------------------------

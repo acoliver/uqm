@@ -413,3 +413,7 @@ unsafe fn blit_frame_to_sdl_surface(
 
     super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
 }
+
+#[cfg(test)]
+#[path = "playback_tests.rs"]
+mod playback_tests;

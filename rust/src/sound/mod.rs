@@ -16,17 +16,26 @@
 pub mod aiff;
 pub mod aiff_ffi;
 pub mod decoder;
+#[cfg(test)]
+pub(crate) mod decoder_vtable_tests;
 pub mod dukaud;
 pub mod dukaud_ffi;
+#[cfg(test)]
+mod dukaud_vtable_tests;
 pub mod ffi;
 pub mod formats;
+#[cfg(test)]
+mod heart_ffi_tests;
 pub mod mixer;
 pub mod mod_decoder;
 pub mod mod_ffi;
+#[cfg(test)]
+mod mod_vtable_tests;
 pub mod null;
 pub mod ogg;
 pub mod rodio_audio;
 pub mod rodio_backend;
+mod tracker;
 // @plan PLAN-20260225-AUDIO-HEART.P06
 pub mod control;
 pub mod fileinst;
@@ -35,6 +44,8 @@ pub mod heart_ffi;
 pub mod music;
 pub mod sfx;
 pub mod stream;
+#[cfg(test)]
+mod test_support;
 pub mod trackplayer;
 // @plan PLAN-20260225-AUDIO-HEART.P03
 // @requirement REQ-CROSS-GENERAL-07
