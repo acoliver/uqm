@@ -15,6 +15,7 @@
 
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
+use crate::mainloop::restart_menu::c_extern::ONE_SECOND;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1443,6 +1444,48 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
     })
 }
 
+/// Seconds the title splash waits for a key when none is pressed:
+/// `WaitForAnyButton (FALSE, ONE_SECOND * 3, TRUE)` (`fmv.c:100`).
+const SPLASH_WAIT_SECONDS: u64 = 3;
+
+/// Game time units the splash waits: `ONE_SECOND * 3` (`fmv.c:100`).
+const SPLASH_WAIT_TICKS: u64 = SPLASH_WAIT_SECONDS * ONE_SECOND as u64;
+
+/// Game time units slept per poll of the splash wait: `SleepThread
+/// (ONE_SECOND / 40)` (`util.c:241`). `ONE_SECOND` is 840, so this is 21.
+const SPLASH_POLL_TICKS: u64 = ONE_SECOND as u64 / 40;
+
+/// Automation service points the splash wait can reach, with no key pressed.
+///
+/// `WaitForAnyButtonUntil` (`util.c:222-249`) calls
+/// `rust_automation_service_boundary` once per loop pass (`util.c:239`),
+/// which is one admitted input callback, and `AnyButtonPress` before the loop
+/// services nothing. The loop runs while `GetTimeCounter () < timeOut`, and
+/// pass `k` starts no earlier than `k * SPLASH_POLL_TICKS` after `timeOut` was
+/// computed because each pass sleeps at least that long (`SleepThread` sleeps
+/// 25 ms, which `SDLWrapper_GetTimeCounter` converts to exactly 21 units). Pass
+/// `k` therefore runs only if `k * 21 < 2520`, which allows passes 0 to 119.
+const SPLASH_SERVICED_CALLBACKS: u64 = SPLASH_WAIT_TICKS.div_ceil(SPLASH_POLL_TICKS);
+
+/// The restart menu's own first `DoInput` pass: `DoInput` services automation
+/// (`gameinp.c:448`) before `DoRestart` runs its first-frame initialization,
+/// which reports readiness (`do_restart.rs`, `process_main_menu_ready`).
+const RESTART_MENU_FIRST_FRAME_CALLBACKS: u64 = 1;
+
+/// Most admitted input callbacks between run start and restart-menu readiness
+/// when no key is pressed, charged to `wait_for_main_menu_ready`.
+///
+/// Derived from source, not measured. The other startup steps before the
+/// splash wait (`LoadKernel`, `FadeScreen` with `SleepThreadUntil`, and
+/// `BackgroundInitKernel`, which only calls `UpdateInputState` and
+/// `TaskSwitch`) never call an automation service point, and the first-frame
+/// fade-in also uses `SleepThreadUntil`. So the total is the splash wait plus
+/// the menu's first pass: 120 + 1 = 121. Cross-checks: readiness was observed
+/// at input tick 112 locally and 93 hosted, and at 12 when a key skipped the
+/// splash.
+pub const MAIN_MENU_READY_MAX_INPUT_CALLBACKS: u64 =
+    SPLASH_SERVICED_CALLBACKS + RESTART_MENU_FIRST_FRAME_CALLBACKS;
+
 /// Admitted-callback and transition tallies accumulated across script steps.
 #[derive(Default)]
 struct StepRequirements {
@@ -1509,7 +1552,14 @@ fn validate_step(
     requirements: &mut StepRequirements,
 ) -> Result<(), AutomationError> {
     if matches!(step, Action::WaitForMainMenuReady(_)) {
-        return Ok(());
+        // Readiness is a runtime observation, not a scripted callback, but the
+        // splash it waits through services automation on the way.
+        return requirements.add_input_callbacks(
+            MAIN_MENU_READY_MAX_INPUT_CALLBACKS,
+            index,
+            path,
+            ": wait_for_main_menu_ready",
+        );
     }
     // Every other action consumes at least one admitted input callback,
     // including immediate assertions, capture arming, and the final Finish action.
@@ -2693,7 +2743,7 @@ mod tests {
 
     #[test]
     fn main_menu_readiness_is_event_driven_and_rejects_payload_fields() {
-        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":123,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
         let document = parse_script(valid.as_bytes(), p()).unwrap();
         assert!(validate_script(document, p()).is_ok());
 
@@ -3095,6 +3145,39 @@ mod tests {
                 2 * scripted_ticks
             );
         }
+    }
+
+    /// #213 amendment 8: with no key pressed the title splash waits its full
+    /// three seconds before the restart menu is ready, servicing automation
+    /// once per `ONE_SECOND / 40` pass, so the readiness wait must be charged
+    /// those input callbacks plus the menu's first `DoInput` pass.
+    #[test]
+    fn main_menu_ready_wait_is_charged_the_splash_callbacks() {
+        assert_eq!(SPLASH_WAIT_TICKS, 2520);
+        assert_eq!(SPLASH_POLL_TICKS, 21);
+        assert_eq!(SPLASH_SERVICED_CALLBACKS, 120);
+        assert_eq!(MAIN_MENU_READY_MAX_INPUT_CALLBACKS, 121);
+        // Readiness was observed at input tick 112 locally and 93 hosted.
+        const { assert!(MAIN_MENU_READY_MAX_INPUT_CALLBACKS >= 112) };
+
+        // The wait plus `finish` statically require 121 + 1 admitted
+        // callbacks, so the inclusive limit must be at least 123.
+        let script = |max_input_ticks: u64| {
+            format!(
+                r#"{{"version":1,"name":"splash-charge","budgets":{{"max_input_ticks":{max_input_ticks},"max_presentations":1000,"max_wallclock_seconds":60}},"steps":[{{"action":"wait_for_main_menu_ready"}},{{"action":"finish"}}]}}"#
+            )
+        };
+        let validate = |max_input_ticks: u64| {
+            validate_script(
+                parse_script(script(max_input_ticks).as_bytes(), p()).unwrap(),
+                p(),
+            )
+        };
+        assert!(matches!(
+            validate(122),
+            Err(AutomationError::InsufficientBudget { .. })
+        ));
+        assert!(validate(123).is_ok());
     }
 
     #[test]

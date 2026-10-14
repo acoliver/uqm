@@ -2776,7 +2776,7 @@ mod tests {
             return;
         }
         let temp = tempfile::tempdir().unwrap();
-        let source = br#"{"version":1,"name":"readiness-barrier","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let source = br#"{"version":1,"name":"readiness-barrier","budgets":{"max_input_ticks":300,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
         let script = crate::automation::validate_script(
             crate::automation::parse_script(source, "test.json").unwrap(),
             "test.json",
@@ -2828,7 +2828,7 @@ mod tests {
             return;
         }
         let temp = tempfile::tempdir().unwrap();
-        let source = br#"{"version":1,"name":"barrier-test","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"assert_main_menu_transition","from":"NewGame","to":"LoadGame"},{"action":"assert_main_menu_transition","from":"LoadGame","to":"NewGame"},{"action":"capture","label":"menu"},{"action":"finish"}]}"#;
+        let source = br#"{"version":1,"name":"barrier-test","budgets":{"max_input_ticks":200,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"assert_main_menu_transition","from":"NewGame","to":"LoadGame"},{"action":"assert_main_menu_transition","from":"LoadGame","to":"NewGame"},{"action":"capture","label":"menu"},{"action":"finish"}]}"#;
         let script = crate::automation::validate_script(
             crate::automation::parse_script(source, "test.json").unwrap(),
             "test.json",
