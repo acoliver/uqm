@@ -2966,6 +2966,73 @@ mod tests {
         assert_eq!(record.scenario.requested_seed, seed);
     }
 
+    /// `USE_RUST_RESTART` runs the Rust restart menu, so the new-campaign seed
+    /// must be applied there, not only in the retired C `RestartMenu`.
+    #[test]
+    fn rust_restart_path_applies_and_records_the_new_game_seed() {
+        const CHILD: &str = "UQM_RESTART_SEED_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "automation::coordinator::tests::rust_restart_path_applies_and_records_the_new_game_seed",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let bytes = br#"{"version":2,"name":"restart-seed","seed":1437213463,"fixture":"restart-seed","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = crate::automation::script::parse_script(bytes, "restart-seed.json").unwrap();
+        let script = crate::automation::script::validate_script(doc, "restart-seed.json").unwrap();
+
+        // Without automation the clock seeder runs and nothing is recorded.
+        let mut clock_used = false;
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| clock_used = true);
+        assert!(clock_used, "inactive automation must keep the clock seed");
+
+        Coordinator::init(script, temp.path().to_path_buf());
+        crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| {
+            panic!("the clock seed must not run while automation supplies a seed")
+        });
+        let after_restart = crate::math::TFB_Random();
+        crate::math::TFB_SeedRandom(1437213463);
+        assert_eq!(
+            after_restart,
+            crate::math::TFB_Random(),
+            "the generator must be seeded from the scenario seed"
+        );
+
+        let mut trace = Vec::new();
+        Coordinator::get()
+            .unwrap()
+            .runtime
+            .commit
+            .publish_all(&mut trace)
+            .unwrap();
+        let applications: Vec<_> = std::str::from_utf8(&trace)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .filter_map(|record| record.seed_application)
+            .collect();
+        assert_eq!(
+            applications,
+            [SeedApplication {
+                domain: SeedDomain::NewGame,
+                seed: 1437213463,
+            }]
+        );
+    }
+
     #[test]
     fn replay_stops_if_resolved_input_receipt_cannot_be_published() {
         const CHILD: &str = "UQM_REPLAY_RECEIPT_TEST_CHILD";
