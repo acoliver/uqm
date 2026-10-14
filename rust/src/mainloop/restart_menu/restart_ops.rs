@@ -338,12 +338,9 @@ impl RestartMenuOps for CffiOps {
     }
 
     fn set_screen_context(&self) {
-        extern "C" {
-            static ScreenContext: *mut c_void;
-        }
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
-            let _ = c_extern::SetContext(ScreenContext);
+            let _ = c_extern::SetContext(c_extern::ScreenContext);
         }
     }
 

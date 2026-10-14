@@ -277,6 +277,68 @@ fn observation() -> &'static parking_lot::Mutex<SceneObservation> {
     OBSERVATION.get_or_init(|| parking_lot::Mutex::new(SceneObservation::default()))
 }
 
+/// Effects a scene has when it takes over from the new game's first
+/// solar-system entry.
+pub trait SceneEntryOps {
+    fn set_last_activity(&mut self, activity: u16);
+    fn set_current_activity(&mut self, activity: u16);
+    /// Clear the screen context to black.
+    fn clear_screen(&mut self);
+    /// Queue the fade from the faded-out colormap back to full color.
+    fn fade_screen_to_color(&mut self);
+}
+
+/// Switch the main loop to the scene's activity.
+///
+/// A new game leaves the screen faded to black, and the first solar-system
+/// entry fades it back in (`solarsys.c`, "Starting a new game"). The scene
+/// replaces that entry, so it performs the same clear and fade-in; without
+/// it every frame of the scene is composited through a black colormap. The C
+/// does not wait on the fade, so neither does the scene.
+pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
+    ops.set_last_activity(crate::comm::dispatch::IN_ENCOUNTER);
+    ops.set_current_activity(plan.current_activity);
+    ops.clear_screen();
+    ops.fade_screen_to_color();
+}
+
+#[cfg(feature = "linked_c_archive")]
+struct LinkedSceneEntry;
+
+#[cfg(feature = "linked_c_archive")]
+impl SceneEntryOps for LinkedSceneEntry {
+    fn set_last_activity(&mut self, activity: u16) {
+        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(activity));
+    }
+
+    fn set_current_activity(&mut self, activity: u16) {
+        // SAFETY: writes the current-activity global on the main thread.
+        unsafe { crate::mainloop::c_extern::set_current_activity(activity) };
+    }
+
+    fn clear_screen(&mut self) {
+        use crate::mainloop::restart_menu::c_extern;
+        // SAFETY: the screen context exists once game initialization is
+        // complete, and scene activation runs on the main thread.
+        unsafe {
+            c_extern::SetContext(c_extern::ScreenContext);
+            c_extern::ClearDrawable();
+        }
+    }
+
+    fn fade_screen_to_color(&mut self) {
+        use crate::mainloop::restart_menu::c_extern;
+        // SAFETY: FadeScreen is called from the main thread; the returned
+        // completion time is deliberately not awaited, as in the C entry.
+        unsafe {
+            c_extern::FadeScreen(
+                c_extern::FADE_ALL_TO_COLOR,
+                (c_extern::ONE_SECOND / 2) as i16,
+            );
+        }
+    }
+}
+
 /// Activate a scene at the lifecycle-owned safe boundary.
 ///
 /// This prepares the real NPC queue and sets `START_ENCOUNTER`; the normal
@@ -303,10 +365,7 @@ pub fn activate(
         for (name, value) in plan.game_state {
             crate::state::game_state_keys::set_game_state(name, *value);
         }
-        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
-            crate::comm::dispatch::IN_ENCOUNTER,
-        ));
-        crate::mainloop::c_extern::set_current_activity(plan.current_activity);
+        enter_scene(&plan, &mut LinkedSceneEntry);
     }
 
     #[cfg(not(feature = "linked_c_archive"))]
@@ -450,6 +509,49 @@ mod tests {
             .game_state
             .iter()
             .all(|(key, _)| *key != "BATTLE_SEGUE"));
+    }
+
+    #[derive(Default)]
+    struct RecordingOps {
+        calls: Vec<String>,
+    }
+
+    impl SceneEntryOps for RecordingOps {
+        fn set_last_activity(&mut self, activity: u16) {
+            self.calls.push(format!("last_activity:{activity:#x}"));
+        }
+        fn set_current_activity(&mut self, activity: u16) {
+            self.calls.push(format!("current_activity:{activity:#x}"));
+        }
+        fn clear_screen(&mut self) {
+            self.calls.push("clear_screen".into());
+        }
+        fn fade_screen_to_color(&mut self) {
+            self.calls.push("fade_to_color".into());
+        }
+    }
+
+    #[test]
+    fn entering_a_scene_clears_then_fades_the_screen_back_to_color() {
+        for scene in [
+            AutomationScene::SolProbeEncounter,
+            AutomationScene::StarbaseCommander,
+        ] {
+            let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized).unwrap();
+            let mut ops = RecordingOps::default();
+            enter_scene(&plan, &mut ops);
+            assert_eq!(
+                ops.calls,
+                [
+                    format!("last_activity:{:#x}", crate::comm::dispatch::IN_ENCOUNTER),
+                    format!("current_activity:{:#x}", plan.current_activity),
+                    "clear_screen".to_string(),
+                    "fade_to_color".to_string(),
+                ],
+                "{}",
+                scene.name()
+            );
+        }
     }
 
     #[test]

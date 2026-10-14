@@ -127,6 +127,8 @@ extern "C" {
 
 extern "C" {
     // --- Graphics ---
+    /// The whole-screen drawing context created during graphics startup.
+    pub static ScreenContext: *mut c_void;
     /// `DWORD FadeScreen(ScreenFadeType, SIZE)` — SIZE = SWORD = i16.
     pub fn FadeScreen(fade_type: u32, time_interval: c_short) -> u32;
     /// `CONTEXT SetContext(CONTEXT)` — returns the previous context.
