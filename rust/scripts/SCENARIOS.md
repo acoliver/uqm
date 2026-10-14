@@ -105,6 +105,10 @@ initialized, and a fixed tick count raced that startup (#213). A
 key, and the production key-repeat pulse for it is discarded, so a slow host
 cannot turn one tap into several.
 
+Scripts with a `start_scene` begin at the restart menu too: the scene activates
+only after New Game is chosen, so they wait for readiness before that first
+Select (#213 amendment 7).
+
 ## Deterministic start scenes
 
 Scripts may alternatively declare root-level `start_scene`. A scene is consumed

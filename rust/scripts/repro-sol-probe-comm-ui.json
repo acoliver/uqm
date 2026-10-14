@@ -8,7 +8,7 @@
     "max_wallclock_seconds": 60
   },
   "steps": [
-    {"action": "wait_input_ticks", "count": 10},
+    {"action": "wait_for_main_menu_ready"},
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
     {"action": "assert_scene", "scene": "sol_probe_encounter"},
     {"action": "wait_input_ticks", "count": 10},

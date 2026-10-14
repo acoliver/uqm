@@ -421,8 +421,8 @@
           },
           {
                 "path": "rust/scripts/repro-comm-menu-initial.json",
-                "sha256": "1c928e68c7851725be24d6bf1a5c9829a19d1a719f331005d45a881ce80e29c4",
-                "byte_length": 825
+                "sha256": "26e64d6e67112d58192838852b3a65c88a79df209d0222104d8fd4336489c699",
+                "byte_length": 820
           },
           {
                 "path": "rust/scripts/repro-game-menu-initial.json",
@@ -431,13 +431,13 @@
           },
           {
                 "path": "rust/scripts/repro-sol-probe-comm-ui.json",
-                "sha256": "6e7f9d05391e4f68971d795012674d30a6cac37cf7732b8340ead92f8ebd293d",
-                "byte_length": 1216
+                "sha256": "65f005b588fe9485553c153ba011be78ec493bb806f27bd6a3a6a5c1568e5323",
+                "byte_length": 1211
           },
           {
                 "path": "rust/scripts/sol-probe-scene-v1.json",
-                "sha256": "345f6b115ac62898737d22434c489e7060f3d1bb24889f5c0531aba3af4fe2eb",
-                "byte_length": 732
+                "sha256": "c6ab4d385aa3543417245f02aa414c232bcea822b936ead08384bf2f050b3ab9",
+                "byte_length": 727
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",

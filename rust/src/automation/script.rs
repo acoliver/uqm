@@ -3023,7 +3023,8 @@ mod tests {
     /// initialized. A fixed tick count races that startup, and a Select sent
     /// too early was only ever rescued by the production key-repeat clock.
     /// Every script that starts at the restart menu must wait for readiness
-    /// before its first key.
+    /// before its first key. Start-scene scripts begin there too: a scene
+    /// activates only after New Game is chosen (#213 amendment 7).
     #[test]
     fn every_restart_menu_script_waits_for_readiness_before_its_first_key() {
         let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
@@ -3039,9 +3040,6 @@ mod tests {
                 &label,
             )
             .unwrap();
-            if script.start_scene().is_some() {
-                continue;
-            }
             let steps = script.steps();
             let Some(first_key) = steps
                 .iter()
@@ -3057,7 +3055,7 @@ mod tests {
                 "{label} presses a menu key at step {first_key} before the restart menu is ready"
             );
         }
-        assert_eq!(checked, 30, "restart menu scripts checked");
+        assert_eq!(checked, 33, "restart menu scripts checked");
     }
 
     /// #213 amendment 5: Rust-owned `main` presents twice per input callback
