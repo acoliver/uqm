@@ -2,8 +2,8 @@
   "version": 1,
   "name": "real-sol-earth-moon-base",
   "budgets": {
-    "max_input_ticks": 65361,
-    "max_presentations": 130722,
+    "max_input_ticks": 65363,
+    "max_presentations": 130726,
     "max_wallclock_seconds": 900
   },
   "steps": [
@@ -23,7 +23,9 @@
     {"action": "set_menu_key", "key": "right", "value": 1},
     {"action": "wait_input_ticks", "count": 60},
     {"action": "set_menu_key", "key": "right", "value": 0},
+    {"action": "set_menu_key", "key": "up", "value": 1},
     {"action": "wait_input_ticks", "count": 19},
+    {"action": "set_menu_key", "key": "up", "value": 0},
     {"action": "select_planet_menu", "phase": "landing_site", "max_ticks": 500},
     {"action": "wait_for_planet_side_start", "max_ticks": 5000},
     {"action": "wait_input_ticks", "count": 100},

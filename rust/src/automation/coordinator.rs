@@ -1079,7 +1079,11 @@ impl Coordinator {
                 && snapshot.in_orbit != 0
                 && snapshot.inner_planet == i32::from(navigation.planet)
                 && snapshot.orbital_moon < 0;
-            let control = crate::automation::navigation::steer_toward_target(
+            // Inside the planet's inner system the flagship is inertial, so
+            // aiming the nose alone accumulates drift and circles the planet
+            // without touching it. Drive the velocity toward the planet, which
+            // the snapshot reports at the view centre.
+            let control = crate::automation::navigation::steer_moon_navigation(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,

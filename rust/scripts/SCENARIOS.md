@@ -187,15 +187,23 @@ pin the shape of the scripts.
   `select_planet_menu dispatch` only completes once the scan has finished and
   the Dispatch menu is up; Cancel backs out of the landing site picker without
   launching the lander, and a second `assert_mode orbit` holds in the scan
-  menu. The first live run reached `navigation_reached:planet=3` but never
-  `orbit_reached` in 6000 ticks. The script had skipped the probe speech with
-  Cancel, which ended the broadcast 123 input ticks after `dispatch_verified`
-  where the uninterrupted broadcast in `real-sol-starbase-to-mars` takes 2546,
-  while `real-sol-starbase-to-mars`, which lets the broadcast run, orbits Mars.
-  The trace records no menu state, so the flagship
-  menu opened by a stray Cancel (`DoIpFlight`) is the suspected mechanism, not
-  a recorded fact. The script now pulses no Cancel and waits for the broadcast
-  to end by itself. A script test rejects a Cancel before the orbit flight.
+  menu. The live runs at `798528ddf` reached `navigation_reached:planet=3`
+  (input tick 4631) and never `orbit_reached` in 6000 ticks, with or without the
+  Cancel press, so Cancel was not the cause. The checkpoint screenshot taken at
+  `navigation_reached` shows the flagship inside Mars's inner system at its
+  entry point, flying (the STARMAP/MANIFEST/GAME/NAVIGATE list is the
+  unhighlighted flight panel, not an open menu). The cause was the navigation
+  target: `navigation_snapshot` took `PLANET_DESC::image.origin` for Mars, but
+  inside the planet's own inner system that field still holds the outer-view
+  position (`ValidateOrbit` writes it only for the outer view and moons;
+  `EnterPlanetOrbit` says so), while the planet is drawn at the view centre. The
+  flagship steered at a point outside the inner view and left it. Runs that
+  entered Mars from the Starbase happened to head that way. The snapshot now
+  reports the view centre once the ship is in the target planet's inner system,
+  and `navigate_to_orbit` uses the velocity controller that `navigate_to_moon`
+  uses, because nose-only pursuit of an inertial flagship circles its target.
+  The script keeps no Cancel and lets the broadcast end by itself; a script test
+  rejects a Cancel before the orbit flight.
   Budgets: 24710 input ticks (the validator minimum), 600 s wall with the
   approved 900000 ms outer deadline.
 - `real-sol-probe-to-starbase` (starbase) takes the `probe-encounter-v3`
@@ -218,11 +226,16 @@ pin the shape of the scripts.
   Commander conversations. The first live run landed on Luna but the lander
   never left (`planet_side_wait_unsatisfied ... active=true phase=Active` for
   6000 ticks) because the six presses were Select; the working route uses Cancel
-  six times, a 600 tick wait and `wait_for_planet_side_end returned`. After the
+  six times, a 600 tick wait and `wait_for_planet_side_end returned`. The second
+  live run still failed: `798528ddf` dropped the Up hold (19 ticks) that
+  `probe-encounter-v3` and `real-sol-starbase-to-mars` use before the landing
+  site, and the lander touched down at `position=728,148` instead of their
+  `728,68`, where the Cancel presses never launched it. The Up hold is back,
+  as in `probe-encounter-v3`, and a script test requires it. After the
   capture of the moon base report the script asserts `assert_mode orbit`, and
   proves the pickup through the Commander: the second visit pays 2500 RU only
   with `MOONBASE_ON_SHIP` set, so the run ends with `assert_mode starbase` and
-  `assert_ship_resources` 970 / 2500. Budgets: 64762 ticks, 900 s wall.
+  `assert_ship_resources` 970 / 2500. Budgets: 65363 ticks, 900 s wall.
 - `sol-probe-scene-v1` (communication choices) skips the Urquan speech with
   Cancel, then `wait_for_communication_responses` (minimum 1) and
   `assert_communication_responses` (minimum 1), the same list that

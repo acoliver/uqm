@@ -371,8 +371,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-earth-moon-base.json",
-                "sha256": "8f9dc5d9d37ec109abf4607f168f314d85ae17e1696ec89db0f501ef7453a9a9",
-                "byte_length": 3574,
+                "sha256": "765b27cc041274be2725796552e396973b7fbbe552d40946429688c4815dfa60",
+                "byte_length": 3688,
                 "outer_child_timeout_ms": 900000
           },
           {

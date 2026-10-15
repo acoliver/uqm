@@ -3297,6 +3297,38 @@ mod tests {
         let takeoff = step_index(&moon, 0, returned);
         let back_in_orbit = step_index(&moon, takeoff, orbit);
         step_index(&moon, back_in_orbit, starbase);
+        // The Luna landing site is chosen by the cursor: with Up held for 19
+        // ticks the lander lands at 728,68 where the Cancel presses launch it
+        // (probe-encounter-v3, real-sol-starbase-to-mars). Without Up it lands
+        // at 728,148 and never leaves.
+        let site_up = step_index(&moon, 0, |step| {
+            matches!(
+                step,
+                Action::SetMenuKey(SetMenuKeyStep {
+                    key: MenuKey::Up,
+                    value: 1,
+                })
+            )
+        });
+        let site_up_released = step_index(&moon, site_up, |step| {
+            matches!(
+                step,
+                Action::SetMenuKey(SetMenuKeyStep {
+                    key: MenuKey::Up,
+                    value: 0,
+                })
+            )
+        });
+        let landing_site = step_index(&moon, site_up_released, |step| {
+            matches!(
+                step,
+                Action::SelectPlanetMenu(SelectPlanetMenuStep {
+                    phase: PlanetMenuPhaseName::LandingSite,
+                    ..
+                })
+            )
+        });
+        assert!(landing_site > site_up_released);
         let mars = checked_in_steps("real-sol-starbase-to-mars");
         let docked = step_index(&mars, 0, starbase);
         // Orbit mode can already read true while the lander is on the ground,
