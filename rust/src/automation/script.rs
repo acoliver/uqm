@@ -3253,6 +3253,14 @@ mod tests {
                 })
             )
         };
+        let solar = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Solar
+                })
+            )
+        };
         let resources = |step: &Action| {
             matches!(
                 step,
@@ -3292,11 +3300,14 @@ mod tests {
             step_index(&steps, menu, resources);
         }
         // The pickup is proved by the Commander paying for it, so the moon
-        // base scenario must also see orbit again after the lander takes off.
+        // base scenario must also see the solar view again after the lander
+        // takes off. Returning from the moon base pickup leaves Luna orbit for
+        // the solar system view (a live run observed `solar`, not `orbit`);
+        // only a Mars landing still reads as orbit afterwards.
         let moon = checked_in_steps("real-sol-earth-moon-base");
         let takeoff = step_index(&moon, 0, returned);
-        let back_in_orbit = step_index(&moon, takeoff, orbit);
-        step_index(&moon, back_in_orbit, starbase);
+        let back_in_solar = step_index(&moon, takeoff, solar);
+        step_index(&moon, back_in_solar, starbase);
         // The Luna landing site is chosen by the cursor: with Up held for 19
         // ticks the lander lands at 728,68 where the Cancel presses launch it
         // (probe-encounter-v3, real-sol-starbase-to-mars). Without Up it lands

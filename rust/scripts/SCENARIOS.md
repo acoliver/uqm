@@ -232,10 +232,14 @@ pin the shape of the scripts.
   site, and the lander touched down at `position=728,148` instead of their
   `728,68`, where the Cancel presses never launched it. The Up hold is back,
   as in `probe-encounter-v3`, and a script test requires it. After the
-  capture of the moon base report the script asserts `assert_mode orbit`, and
-  proves the pickup through the Commander: the second visit pays 2500 RU only
-  with `MOONBASE_ON_SHIP` set, so the run ends with `assert_mode starbase` and
-  `assert_ship_resources` 970 / 2500. Budgets: 65363 ticks, 900 s wall.
+  capture of the moon base report the script asserts `assert_mode solar`: the
+  third live run showed `mode_mismatch:expected=orbit:observed=solar` 150 ticks
+  after the return, because the moon base pickup leaves Luna orbit for the solar
+  system view (a Mars landing still reads as orbit). The capture is labelled
+  `earth-moon-solar-after-base`. The script proves the pickup through the
+  Commander: the second visit pays 2500 RU only with `MOONBASE_ON_SHIP` set, so
+  the run ends with `assert_mode starbase` and `assert_ship_resources` 970 /
+  2500. Budgets: 65363 ticks, 900 s wall.
 - `sol-probe-scene-v1` (communication choices) skips the Urquan speech with
   Cancel, then `wait_for_communication_responses` (minimum 1) and
   `assert_communication_responses` (minimum 1), the same list that
