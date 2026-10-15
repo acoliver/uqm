@@ -109,11 +109,73 @@ Limits of this preparation:
   transaction model and by the script invariants in
   `tests/probe_encounter_flight_input.rs`. The first live run decides whether
   the `assert_ship_resources` expectations hold.
-- Shipyard, module installation and Save/Load from Outfit are not ported and
-  end the game loop with a typed `Unported` error. The scripts never select
-  them.
+- Save/Load (from Outfit and from the Shipyard) and the Shipyard ship spin are
+  not ported and end the game loop with a typed `Unported` error. No script
+  selects them. Only `starbase-visit-v1` opens the Shipyard, for crew changes.
 - `repro-comm-menu-initial` starts in the Commander conversation and finishes
   inside it, so it never reaches the Starbase menu. It is unchanged.
+
+## Starbase visit
+
+`starbase-visit-v1` is a real Starbase visit. It reuses the fuel-preparation
+route of `probe-encounter-v3` unchanged up to the Starbase menu (probe
+broadcast, Luna landing, first and second Commander conversation), so the
+Commander has paid 2500 RU and the ship has paid 30 raw fuel for the Luna
+landing. The visit then runs, using only menu input:
+
+1. `assert_mode starbase` and `assert_ship_resources` 970 raw fuel / 2500 RU at
+   the Starbase menu, capture `starbase-menu-arrival-commander-highlighted`.
+2. Down, Select opens Outfit. `assert_mode starbase` (the docked observation
+   holds while Outfit is the active input loop) and `assert_ship_resources`
+   1000 / 2500: Outfit rounds 970 up to the whole unit when it opens.
+3. Select enters fuel adjust, one Up buys 100 raw fuel for 20 RU:
+   `assert_ship_resources` 1100 / 2480. A second Up: 1200 / 2460. Select leaves
+   fuel adjust (unchanged), Cancel returns to the Starbase menu, and
+   `assert_mode starbase` plus 1200 / 2460 hold again.
+4. Down, Select opens the Shipyard, Select opens the hangar, Select edits the
+   flagship crew. A new ship has a full crew pod (50 of 50), so a hire is
+   refused until a member is dismissed. Down dismisses one crew member and
+   refunds `CrewCost` (3 RU): `assert_ship_resources` 1200 / 2463. Up hires the
+   member back for 3 RU: 1200 / 2460. No existing assertion reads
+   `CrewEnlisted`, so the crew count itself is proved only through the RU it
+   moves. Select, Cancel and Cancel leave the editor, the hangar and the
+   Shipyard; `assert_mode starbase` and 1200 / 2460 hold.
+5. Down, Select departs. After 60 ticks `assert_activity` (mask 255, equals 4)
+   proves interplanetary flight and `assert_ship_resources` 1200 / 2460
+   proves the purchases survived the departure.
+
+Budgets: `max_input_ticks` 65752 (the validator's static bound for this step
+list, the minimum it accepts), `max_presentations` 131504 (twice the ticks, as
+in `probe-encounter-v3`), `max_wallclock_seconds` 720. The script is pinned with
+the approved 900000 ms outer deadline like the other scripts above 300 s. Like
+the preparation it extends, the visit has not run live; the first live run
+decides whether the Outfit and Shipyard expectations hold.
+
+## Scenario audit limits
+
+A scenario passes when its assertions hold, so a name or domain that claims
+more than the assertions prove is a gap. Known gaps that need a new typed
+action or a live run before they can be closed:
+
+- `quit-v1` highlights Quit and asserts the main menu mode. It never confirms
+  the quit (the Quit confirmation loop bypasses the `DoInput` service).
+- `battle-v1` proves battle frames run, not a battle outcome.
+- `load-save-v1` captures the save and load screens but never compares the
+  loaded state with the saved one.
+- `real-sol-probe-to-starbase` ends at the Commander dispatch, before the
+  Starbase menu; `real-sol-starbase-to-mars` talks to the Commander but never
+  opens the Starbase menu either. Only `starbase-visit-v1` asserts the
+  `starbase` mode.
+- `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` never meet the probe.
+- `real-sol-commander-completion` never asserts that the conversation ended.
+- `comm-encounter-v1` and `sol-probe-scene-v1` assert the dispatch or scene
+  but no response choice.
+- `real-sol-earth-moon-base` captures the moon base report but asserts no
+  pickup; `real-sol-rust-planetside-smoke` asserts no planet-side state.
+- `linked-playable-v1` is registered for boot menu, new game, communication,
+  navigation and battle but only walks the main menu and runs Super Melee.
+- `explore-planet-v1` is registered for navigation, orbit and scan but only
+  flies in hyperspace. The scheduler and script tests pin that shape.
 
 ## Hyperspace flight legs
 
@@ -239,7 +301,7 @@ has itself sampled live interplanetary flight and then sees the solar system
 torn down and the hyperspace activity dispatched. It never writes activity or
 position. A fresh profile starts on the main menu with no save, so every
 script that asserts hyperspace (`explore-planet-v1`, `probe-encounter-v1` to
-`v7`, `starbase-visit-v1`, `load-save-v1`) first selects New Game, asserts
+`v7`, `load-save-v1`) first selects New Game, asserts
 interplanetary activity and flies out with it (#213). `load-save-v1` then
 saves twice through the hyperspace Game menu and loads slot 0 back through
 the same menu, because the Quit confirmation loop bypasses the `DoInput`

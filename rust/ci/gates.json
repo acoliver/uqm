@@ -348,8 +348,8 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-wait.json",
-                "sha256": "041a55c766642990d22829981bd62338da8c4e1242dbd7695d9b596a4b25f594",
-                "byte_length": 1059
+                "sha256": "2a2bd7ef9bfff3d1155b25635c3431fd71b12616707aeaab53d384d07389a65b",
+                "byte_length": 1077
           },
           {
                 "path": "rust/scripts/quit-v1.json",
@@ -409,8 +409,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-rust-planetside-smoke.json",
-                "sha256": "39dd688c8359f146468a8abdb92432b4ab50d0834aaee285c2dfcab7d3f9b4b0",
-                "byte_length": 1771,
+                "sha256": "ccd949842e62db709e7d7a428385a71001a7665d934e42b06d8d1ac7d9bdcaa9",
+                "byte_length": 1756,
                 "outer_child_timeout_ms": 900000
           },
           {
@@ -441,8 +441,9 @@
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",
-                "sha256": "f8c518afeb728e840cf8950c443f5c1ecf957e92e0412030776f1fd945eb43b9",
-                "byte_length": 1020
+                "sha256": "7d2f11ac9e70130966c56a810837616141ba859ea293e506c0c9b9869be3b6bf",
+                "byte_length": 6986,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/state-sync-v1.json",

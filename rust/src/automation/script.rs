@@ -3208,7 +3208,7 @@ mod tests {
                 "{label} asserts hyperspace at step {first_hyperspace} without flying there"
             );
         }
-        assert_eq!(checked, 10, "hyperspace scenarios checked");
+        assert_eq!(checked, 9, "hyperspace scenarios checked");
     }
 
     fn turn_script(steps: &str) -> String {
