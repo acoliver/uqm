@@ -490,3 +490,26 @@ const STARSHIP_SHIP_FACING: usize = 72;
 const ELEMENT_SIZE: usize = 176;
 const ELEMENT_STATE_FLAGS: usize = 50;
 const ELEMENT_PARENT: usize = 160;
+
+#[test]
+fn reading_the_flagship_facing_returns_the_owner_facing_and_writes_nothing() {
+    let queues = Queues::flight(9);
+    // SAFETY: both queues are pools made by `InitQueue` for these records.
+    let facing = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    assert_eq!(
+        facing,
+        Ok(Some(9)),
+        "the raw facing, not the saved plus one"
+    );
+    // SAFETY: as above.
+    let again = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    assert_eq!(again, Ok(Some(9)));
+}
+
+#[test]
+fn reading_the_facing_of_a_flight_without_a_flagship_is_none() {
+    let queues = Queues::new();
+    // SAFETY: both queues are pools made by `InitQueue` for these records.
+    let facing = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    assert_eq!(facing, Ok(None));
+}

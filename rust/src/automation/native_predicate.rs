@@ -185,6 +185,14 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
         }
         Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
         Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
+        Action::TurnFlagship(value) => {
+            shape(
+                label,
+                "flagship_turn_verified",
+                &["direction=", "facings=", "from=", "to="],
+            ) && label.contains(&format!(":direction={}:", value.direction.name()))
+                && number(label, "facings=") == Some(u64::from(value.facings))
+        }
         Action::NavigateToMoon(value) => {
             shape(
                 label,
@@ -614,5 +622,29 @@ mod tests {
         ] {
             assert!(!semantic_satisfied(&action, label), "{label}");
         }
+    }
+
+    #[test]
+    fn only_a_verified_turn_label_of_the_same_direction_and_facings_satisfies_the_action() {
+        use crate::automation::script::{TurnDirection, TurnFlagshipStep};
+        let satisfies = |direction: TurnDirection, facings: u8, label: &str| {
+            semantic_satisfied(
+                &Action::TurnFlagship(TurnFlagshipStep {
+                    direction,
+                    facings,
+                    max_ticks: 600,
+                }),
+                label,
+            )
+        };
+        let verified = "flagship_turn_verified:direction=right:facings=4:from=2:to=6";
+        assert!(satisfies(TurnDirection::Right, 4, verified));
+        assert!(!satisfies(TurnDirection::Left, 4, verified));
+        assert!(!satisfies(TurnDirection::Right, 5, verified));
+        assert!(!satisfies(
+            TurnDirection::Right,
+            4,
+            "flagship_turn_overshot:direction=right:facings=4:turned=5"
+        ));
     }
 }

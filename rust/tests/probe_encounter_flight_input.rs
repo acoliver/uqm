@@ -53,15 +53,15 @@ fn long_flight_holds_are_player_keys_not_menu_keys() {
 }
 
 #[test]
-fn flight_player_keys_are_thrust_or_turns_only() {
+fn flight_player_keys_are_thrust_only_because_turns_are_verified_actions() {
     for name in SCRIPTS {
         for (index, step) in script_steps(name).iter().enumerate() {
             if step["action"] != "tap_player_key" {
                 continue;
             }
-            assert!(
-                matches!(step["key"].as_str(), Some("thrust" | "left" | "right")),
-                "{name} step {index} uses player key {} which does not fly the ship",
+            assert_eq!(
+                step["key"], "thrust",
+                "{name} step {index} taps player key {}; a turn is a turn_flagship step",
                 step["key"]
             );
             assert_eq!(step["value"], 1, "{name} step {index} presses the key");
@@ -97,13 +97,10 @@ fn each_scenario_proves_movement_from_the_live_position() {
     }
 }
 
-/// The hyperspace flagship turns one facing (a sixteenth of a circle) every
-/// `TURN_WAIT` (17) frames plus the turning frame itself while a turn key is
-/// held, starting from `turn_wait == 0` (`ship_preprocess`, `sis_ship.c`).
-/// Holding for 55 to 72 frames therefore turns exactly four facings, a right
-/// angle. A turn hold may not exceed that window: a longer hold spins the ship
-/// an uncontrolled number of times and the next thrust points anywhere.
-const MAX_TURN_HOLD_TICKS: u64 = 72;
+/// How many ticks a `turn_flagship` step may take before it fails. A turn of
+/// four facings took about 50 input ticks when measured in a real window, so
+/// this is more than twice that.
+const MAX_TURN_TICKS: u64 = 120;
 
 /// A flight leg is one `thrust` tap. Each is bracketed by a position snapshot
 /// immediately before it and a displacement proof immediately after it, so no
@@ -136,20 +133,30 @@ fn every_thrust_leg_is_bracketed_by_a_position_record_and_a_displacement_proof()
     }
 }
 
+/// A key hold cannot say how far the ship turned: 60 input ticks turned the
+/// flagship five facings (112.5 degrees), not four. A `turn_flagship` step
+/// holds the key until the live `STARSHIP.ShipFacing` has changed by exactly
+/// the stated number of facings and fails otherwise, so a right angle is four
+/// facings of sixteen and every turn in every scenario is that proof.
 #[test]
-fn turns_are_short_exact_taps_not_spins() {
+fn every_turn_is_a_turn_flagship_step_that_proves_a_right_angle() {
     for name in SCRIPTS {
-        for (index, step) in script_steps(name).iter().enumerate() {
-            if action_of(step) != "tap_player_key" || step["key"] == "thrust" {
+        let steps = script_steps(name);
+        let mut turns = 0;
+        for (index, step) in steps.iter().enumerate() {
+            if action_of(step) != "turn_flagship" {
                 continue;
             }
-            let hold = step["hold"].as_u64().unwrap_or(0);
+            turns += 1;
+            assert_eq!(step["direction"], "right", "{name} step {index}");
+            assert_eq!(step["facings"], 4, "{name} step {index}: a right angle");
+            let max_ticks = step["max_ticks"].as_u64().unwrap_or(0);
             assert!(
-                (1..=MAX_TURN_HOLD_TICKS).contains(&hold),
-                "{name} step {index} holds a turn key for {hold} ticks; at most \
-                 {MAX_TURN_HOLD_TICKS} (a right angle)"
+                (1..=MAX_TURN_TICKS).contains(&max_ticks),
+                "{name} step {index}: bounded by {MAX_TURN_TICKS} ticks, not {max_ticks}"
             );
         }
+        assert!(turns >= 2, "{name} turns {turns} times");
     }
 }
 
@@ -176,24 +183,32 @@ fn total_thrust_stays_inside_the_fuel_and_the_edge_margin() {
 }
 
 #[test]
-fn v3_and_v4_fly_a_four_leg_square_with_exact_right_angle_turns() {
+fn v3_and_v4_fly_a_four_leg_square_with_verified_right_angle_turns() {
     for (name, hold) in [("probe-encounter-v3", 500), ("probe-encounter-v4", 550)] {
         let steps = script_steps(name);
         let legs: Vec<&Value> = steps
             .iter()
-            .filter(|step| action_of(step) == "tap_player_key")
+            .filter(|step| matches!(action_of(step), "tap_player_key" | "turn_flagship"))
             .collect();
         assert_eq!(legs.len(), 8, "{name} keeps four legs and four turns");
+        let mut turned = 0;
         for (index, leg) in legs.iter().enumerate() {
             if index % 2 == 0 {
+                assert_eq!(action_of(leg), "tap_player_key");
                 assert_eq!(leg["key"], "thrust");
                 assert_eq!(leg["hold"], hold, "{name} keeps its leg length");
+                assert_eq!(leg["settle"], 5);
             } else {
-                assert_eq!(leg["key"], "right", "{name} turns the same way");
-                assert_eq!(leg["hold"], 60, "{name} turns four facings");
+                assert_eq!(action_of(leg), "turn_flagship");
+                assert_eq!(leg["direction"], "right", "{name} turns the same way");
+                turned += leg["facings"].as_u64().unwrap();
             }
-            assert_eq!(leg["settle"], 5);
         }
+        assert_eq!(
+            turned, 16,
+            "{name}: four right angles are a full circle of sixteen facings, so the \
+             fourth leg ends on the first leg's heading"
+        );
         let captures: Vec<&str> = steps
             .iter()
             .filter(|step| action_of(step) == "capture")
@@ -201,6 +216,64 @@ fn v3_and_v4_fly_a_four_leg_square_with_exact_right_angle_turns() {
             .collect();
         assert_eq!(captures.first(), Some(&"new-game-confirmed"));
         assert_eq!(captures.last(), Some(&"probe-encounter-final"));
+    }
+}
+
+/// The flagship menu of hyperspace has no Cancel handler (`DoHyperspaceMenu`,
+/// hyper.c): Cancel opens it and only selecting NAVIGATION (or the star map)
+/// returns to flight. With the default PC menu, Up from STARMAP wraps to
+/// NAVIGATION (`PreviousMenuState`, menu.c), and Down from GAME_MENU reaches it.
+/// Every visit in v6 and v7 therefore ends with a Select on NAVIGATION, and
+/// the next thrust leg proves flight resumed.
+#[test]
+fn every_flagship_menu_visit_leaves_through_navigation() {
+    for name in ["probe-encounter-v6", "probe-encounter-v7"] {
+        let steps = script_steps(name);
+        let mut visits = 0;
+        let mut index = 0;
+        while index < steps.len() {
+            if !is_tap(&steps[index], "cancel") {
+                index += 1;
+                continue;
+            }
+            visits += 1;
+            let mut cursor = index + 1;
+            let mut keys = Vec::new();
+            while cursor < steps.len() && action_of(&steps[cursor]) != "record_hyperspace_position"
+            {
+                if action_of(&steps[cursor]) == "tap_menu_key" {
+                    keys.push(steps[cursor]["key"].as_str().unwrap().to_string());
+                }
+                if action_of(&steps[cursor]) == "turn_flagship"
+                    || action_of(&steps[cursor]) == "wait_input_ticks"
+                {
+                    break;
+                }
+                cursor += 1;
+            }
+            let expected: &[&str] = if name.ends_with("v6") {
+                &["up", "select"]
+            } else {
+                &["up", "up", "select", "cancel", "down", "select"]
+            };
+            assert_eq!(keys, expected, "{name} visit {visits}");
+            if name.ends_with("v7") {
+                assert!(
+                    steps[index..cursor]
+                        .iter()
+                        .any(|step| action_of(step) == "assert_game_options"),
+                    "{name} visit {visits} proves Game options opened"
+                );
+            }
+            index = cursor;
+        }
+        assert_eq!(visits, 5, "{name} visits the flagship menu five times");
+        assert!(
+            steps.iter().all(|step| !step["label"]
+                .as_str()
+                .is_some_and(|label| label.starts_with("after-cancel"))),
+            "{name}: a Cancel does not leave the menu, so no capture may say it did"
+        );
     }
 }
 
@@ -450,7 +523,12 @@ fn the_flight_after_preparation_is_the_square_route() {
             .iter()
             .filter(|step| action_of(step) == "tap_player_key")
             .collect();
-        assert_eq!(flight_taps.len(), 8);
+        assert_eq!(flight_taps.len(), 4, "four thrust legs");
+        let turns = steps[fly..]
+            .iter()
+            .filter(|step| action_of(step) == "turn_flagship")
+            .count();
+        assert_eq!(turns, 4, "{name} proves every turn");
         let displacement = steps[fly..]
             .iter()
             .filter(|step| action_of(step) == "assert_hyperspace_displacement")

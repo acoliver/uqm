@@ -43,6 +43,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
+        | Action::TurnFlagship(_)
         | Action::SelectPlanetMenu(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
@@ -562,7 +563,7 @@ mod tests {
                 captures += expected_captures;
             }
         }
-        assert_eq!(captures, 140);
+        assert_eq!(captures, 142);
         assert_eq!(classes.len(), 4);
     }
 }

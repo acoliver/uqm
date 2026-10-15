@@ -26,6 +26,7 @@ pub mod capture;
 pub mod child_session;
 pub mod coordinator;
 pub mod error;
+pub mod flagship_turn;
 pub mod flight_position;
 pub mod identity;
 pub mod input;
@@ -137,9 +138,9 @@ pub use script::{
     PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep, RootDocument, SceneAssertion,
     ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
     SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, ShipResourcesAssertion, TapMenuKeyStep,
-    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-    WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep, WaitForDispatchStep,
-    WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    TapPlayerKeyStep, TurnDirection, TurnFlagshipStep, ValidatedScript, WaitForBattleFramesStep,
+    WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep,
+    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
     WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};

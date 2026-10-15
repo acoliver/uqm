@@ -473,6 +473,36 @@ pub struct NavigateToHyperspaceStep {
     pub max_ticks: u64,
 }
 
+/// Which way the flagship turns.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnDirection {
+    Right,
+    Left,
+}
+
+impl TurnDirection {
+    /// The name used in scripts and trace labels.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Right => "right",
+            Self::Left => "left",
+        }
+    }
+}
+
+/// A `turn_flagship` step holds a turn key until the live hyperspace flagship
+/// has turned exactly `facings` of the sixteen facings, and fails when it has
+/// not after `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TurnFlagshipStep {
+    pub direction: TurnDirection,
+    pub facings: u8,
+    pub max_ticks: u64,
+}
+
 /// Wait until a Rust PlanetSide session has started.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -736,6 +766,7 @@ pub enum Action {
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
+    TurnFlagship(TurnFlagshipStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -1840,6 +1871,16 @@ fn validate_navigation_step(
                 )));
             }
             navigation.max_ticks
+        }
+        Action::TurnFlagship(turn) => {
+            if !(1..=15).contains(&turn.facings) || turn.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "turn_flagship requires facings 1..=15 and positive max_ticks",
+                )));
+            }
+            turn.max_ticks
         }
         Action::NavigateToPlanet(navigation) => {
             if navigation.planet > 8 {
@@ -3168,6 +3209,48 @@ mod tests {
             );
         }
         assert_eq!(checked, 10, "hyperspace scenarios checked");
+    }
+
+    fn turn_script(steps: &str) -> String {
+        format!(
+            r#"{{"version":1,"name":"turn","budgets":{{"max_input_ticks":9000,"max_presentations":18000,"max_wallclock_seconds":60}},"steps":[{steps},{{"action":"finish"}}]}}"#
+        )
+    }
+
+    fn validated_turn(steps: &str) -> Result<ValidatedScript, AutomationError> {
+        let text = turn_script(steps);
+        validate_script(
+            parse_script(text.as_bytes(), "turn.json").unwrap(),
+            "turn.json",
+        )
+    }
+
+    #[test]
+    fn turn_flagship_parses_both_directions_and_rejects_out_of_range_facings() {
+        let script = validated_turn(
+            r#"{"action":"turn_flagship","direction":"right","facings":4,"max_ticks":600},
+               {"action":"turn_flagship","direction":"left","facings":15,"max_ticks":600}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::TurnFlagship(TurnFlagshipStep {
+                direction: TurnDirection::Right,
+                facings: 4,
+                max_ticks: 600
+            })
+        );
+        for bad in [
+            r#"{"action":"turn_flagship","direction":"right","facings":0,"max_ticks":600}"#,
+            r#"{"action":"turn_flagship","direction":"right","facings":16,"max_ticks":600}"#,
+            r#"{"action":"turn_flagship","direction":"right","facings":4,"max_ticks":0}"#,
+        ] {
+            assert!(validated_turn(bad).is_err(), "{bad} must be rejected");
+        }
+        let unknown = turn_script(
+            r#"{"action":"turn_flagship","direction":"up","facings":4,"max_ticks":600}"#,
+        );
+        assert!(parse_script(unknown.as_bytes(), "turn.json").is_err());
     }
 
     /// #213: the restart menu only reads input after its first frame is

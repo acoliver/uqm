@@ -126,35 +126,76 @@ tick turn holds drove the ship into the universe edge (x=3, HUD 000.0), and the
 remaining legs passed while the ship sat still. Without fuel the flagship also
 cannot thrust (`sis_ship.c`), so a leg can fail for an empty tank.
 
-Turns are exact. The flagship turns one facing (a sixteenth of a circle) on the
-first frame a turn key is held and then every 18 frames (`ship_preprocess` in
-`ship.c`, `TURN_WAIT` 17 in `sis_ship.c`, no turn modules on a new game). A
-60 tick hold turns exactly four facings, a right angle, and every turn in the
-scripts is that same `right` tap. This assumes one input tick per game frame.
-The facing is not read back, so a real-window run is what confirms it.
+Turns are verified, not timed. A fixed key hold cannot say how far the ship
+turned: the first real-window run of v1 turned the flagship 112.5 degrees (five
+of the sixteen facings) per 60 tick hold, so the tick-to-frame assumption was
+wrong. Every turn is now a `turn_flagship` step:
 
-Routes (leg = thrust ticks, every turn a 60 tick `right` tap after the leg):
+```json
+{"action": "turn_flagship", "direction": "right", "facings": 4, "max_ticks": 120}
+```
+
+It holds the turn key through the normal player input path (the same
+`key[PlayerControls[0]]` writes as `navigate_to_hyperspace`) and releases it
+when the live `STARSHIP.ShipFacing` of the hyperspace flagship has changed by
+exactly `facings` (mod 16) in the stated direction. The facing is read with
+`savegame::runtime::hyper_save::read_flagship_facing`, the same walk of
+`race_q[RPG_PLAYER_NUM]` and `disp_q` that `SaveSisHyperState` uses, and
+nothing is written. The step fails when the ship turns past `facings`
+(`flagship_turn_overshot`), when the game is not in hyperspace or reports no
+facing, and when `max_ticks` input ticks pass first. A right angle is four
+facings. Success is recorded as
+`flagship_turn_verified:direction=right:facings=4:from=A:to=B`.
+
+Routes (leg = thrust ticks, every turn a verified four facing `right` `turn_flagship` after the leg):
 
 | Script | Legs | Turns | Fuel at start |
 | --- | --- | --- | --- |
 | v1 | 5 x 100 | 5 | 1000 raw |
 | v2 | 9 x 80 | 9 | 1000 raw |
-| v3 | 4 x 500 | 4, closes one square | 6000 raw |
-| v4 | 4 x 550 | 4, closes one square | 6000 raw |
-| v5 | 16 x 50 | 16, four squares | 1000 raw |
-| v6 | 3 x 200 | 2 | 1000 raw |
-| v7 | 3 x 200 | 2 | 1000 raw |
+| v3 | 4 x 500 | 4, four right angles | 6000 raw |
+| v4 | 4 x 550 | 4, four right angles | 6000 raw |
+| v5 | 16 x 50 | 16, four groups of four right angles | 1000 raw |
+| v6 | 3 x 200 | 2, five flagship menu visits | 1000 raw |
+| v7 | 3 x 200 | 2, five Game menu visits | 1000 raw |
 
 The start heading is whatever the solar-system exit leaves. Sol is about
 27 800 logical units from the nearest universe edges and the flagship covers
 about 12 per thrust tick, so each script's total thrust is capped (800 ticks on
 the opening tank, 2200 on the prepared tank) such that even a straight run
 cannot reach an edge or empty the tank. `tests/probe_encounter_flight_input.rs`
-enforces the bracketing, the turn bound (at most 72 ticks) and the caps.
+enforces the bracketing, that every turn is a four facing `turn_flagship`
+(bounded by 120 ticks) and the caps.
+
+v3 and v4 turn four right angles, sixteen facings in all, between four legs of
+one length. The turns are proven; the closing of the square is geometry from
+equal legs and exact right angles. No step asserts that the ship ends where it
+started, because no live run has measured the closure.
+
+### The flagship menu in v6 and v7
+
+Cancel in hyperspace opens the flagship menu and nothing in it closes on
+Cancel: `DoHyperspaceMenu` (`hyper.c`) handles only Select, and the menu is left
+by selecting NAVIGATION (returns FALSE) or STARMAP (opens the star map, then
+returns). The menu starts on STARMAP each time. With the default PC menu
+(`optWhichMenu` is `OPT_PC`), `DoMenuChooser` (`menu.c`) maps the six items to
+the four alternate entries Starmap, Manifest, Game, Navigation, and
+`PreviousMenuState` wraps Up from the first entry to the last, so one Up from
+STARMAP highlights NAVIGATION. Each v6 visit is therefore
+`cancel, up, select` (captures of the open menu and of the NAVIGATION
+highlight are kept on the first visit). Each v7 visit is
+`cancel, up, up, select` to open Game options (the sequence of
+`repro-game-menu-initial`), `assert_game_options`, `cancel` to leave Game
+options (`DoGameOptions` returns FALSE on Cancel), then `down` from GAME_MENU to
+NAVIGATION and `select`. The next `assert_hyperspace_displacement` proves flight
+resumed; no step asserts the menu state directly. The old scripts tapped Cancel
+twice and then thrust against an open menu, which moved the ship zero units.
 
 The captures that named a direction (`fly-up-long-1`, `after-fly-right-2`, ...)
 claimed a heading the scenario did not control. They are now `leg-N`/`turn-N`
-(v3, v4) and `after-leg-N`/`after-turn-N` (v1, v2, v5, v6).
+(v3, v4) and `after-leg-N`/`after-turn-N` (v1, v2, v5, v6). The v6 captures
+`after-cancel-1/2` claimed Cancel left the menu; they are now
+`flagship-menu-open` and `flagship-menu-navigation-highlighted`.
 
 ## Player controls and navigation
 

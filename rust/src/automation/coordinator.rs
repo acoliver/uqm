@@ -15,6 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
 use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
 use crate::automation::mode;
@@ -261,6 +262,8 @@ struct CoordInner {
     verified_battle_frames: u64,
     /// Hyperspace position snapshot awaiting its displacement assertion.
     flight_position: FlightPositionTracker,
+    /// Facing at which the current `turn_flagship` step began.
+    flagship_turn: FlagshipTurnTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -416,6 +419,7 @@ impl Coordinator {
                 held_repeat_key: None,
                 verified_battle_frames: 0,
                 flight_position: FlightPositionTracker::default(),
+                flagship_turn: FlagshipTurnTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -907,6 +911,51 @@ impl Coordinator {
 
     /// Fly the flagship out of the live solar system with player controls and
     /// report arrival once production has dispatched hyperspace.
+    /// Hold the turn key of a `turn_flagship` step until the live flagship
+    /// facing has changed by exactly the requested facings, then release it.
+    fn service_flagship_turn(
+        &self,
+        inner: &mut CoordInner,
+        turn: crate::automation::script::TurnFlagshipStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::navigation::NavigationControl;
+        use crate::automation::script::TurnDirection;
+
+        let progress = inner.flagship_turn.observe(
+            mode::require_live(),
+            flagship_turn::live_facing(),
+            turn.direction,
+            turn.facings,
+        );
+        let holding = NavigationControl {
+            left: turn.direction == TurnDirection::Left,
+            right: turn.direction == TurnDirection::Right,
+            ..NavigationControl::default()
+        };
+        match progress {
+            Ok(TurnProgress::Turning { .. }) => {
+                if !Self::set_navigation_controls(holding) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(TurnProgress::Complete(proof)) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
     fn service_hyperspace_departure(
         &self,
         inner: &mut CoordInner,
@@ -1069,6 +1118,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_hyperspace_departure(inner, scheduler_event);
+        } else if let Some(Action::TurnFlagship(turn)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {

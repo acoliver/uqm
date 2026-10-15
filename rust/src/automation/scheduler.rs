@@ -305,7 +305,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
-        | Action::NavigateToHyperspace(_) => {
+        | Action::NavigateToHyperspace(_)
+        | Action::TurnFlagship(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -400,6 +401,7 @@ pub fn scheduler_reduce(
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
                     | Action::NavigateToHyperspace(_)
+                    | Action::TurnFlagship(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -836,7 +838,8 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -849,18 +852,17 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::Navigating {
-                        remaining: remaining - 1,
-                    },
-                    state_version: sv,
-                    ..*state
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: remaining - 1,
                 },
-                effects: EffectPlan::none(),
-            }
-        }
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -873,6 +875,16 @@ fn reduce_navigation(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::TurnFlagship(turn), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: turn.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -3123,9 +3135,9 @@ mod budgeted_wait_tests {
     use crate::automation::script::{
         NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
         PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
-        SelectPlanetMenuStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
-        WaitForPlanetSideStartStep,
+        SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep, WaitForBattleFramesStep,
+        WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
+        WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
     };
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
@@ -3144,6 +3156,11 @@ mod budgeted_wait_tests {
                 max_ticks,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+            Action::TurnFlagship(TurnFlagshipStep {
+                direction: TurnDirection::Right,
+                facings: 4,
+                max_ticks,
+            }),
         ]
     }
 
@@ -3186,6 +3203,7 @@ mod budgeted_wait_tests {
                 | Action::NavigateToMoon(_)
                 | Action::NavigateToOrbit(_)
                 | Action::NavigateToHyperspace(_)
+                | Action::TurnFlagship(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {

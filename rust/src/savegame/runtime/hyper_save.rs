@@ -105,15 +105,15 @@ pub enum HyperFlagship {
     Facing(u16),
 }
 
-/// The flagship's facing plus one, or `None` when there is no flagship element
-/// (`getSisElement` returning NULL).
+/// The flagship's own `ShipFacing`, or `None` when there is no flagship
+/// element (`getSisElement` returning NULL). Nothing is written.
 ///
 /// # Safety
 /// `player_ships` must be the `STARSHIP` queue of the human player and
 /// `display_list` the `ELEMENT` queue; every handle either of them reaches is
 /// examined only after the queue was walked against its pool, but the pools
 /// themselves must be live memory that C is not changing during the call.
-unsafe fn flagship_facing(
+pub unsafe fn read_flagship_facing(
     player_ships: &CQueue,
     display_list: &CQueue,
 ) -> Result<Option<u16>, HyperSaveError> {
@@ -146,11 +146,25 @@ unsafe fn flagship_facing(
     else {
         return Err(HyperSaveError::OwnerNotInPlayerQueue);
     };
-    (*owner)
-        .ShipFacing
-        .checked_add(1)
-        .map(Some)
-        .ok_or(HyperSaveError::FacingOverflow)
+    Ok(Some((*owner).ShipFacing))
+}
+
+/// The flagship's facing plus one, or `None` when there is no flagship element
+/// (`getSisElement` returning NULL).
+///
+/// # Safety
+/// As [`read_flagship_facing`].
+unsafe fn flagship_facing(
+    player_ships: &CQueue,
+    display_list: &CQueue,
+) -> Result<Option<u16>, HyperSaveError> {
+    match read_flagship_facing(player_ships, display_list)? {
+        None => Ok(None),
+        Some(facing) => facing
+            .checked_add(1)
+            .map(Some)
+            .ok_or(HyperSaveError::FacingOverflow),
+    }
 }
 
 /// `SaveSisHyperState ()` over the borrowed queues: store the flagship's

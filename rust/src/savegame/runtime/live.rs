@@ -163,3 +163,15 @@ pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError
     let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
     hyper_save::save_hyper_facing(&mut glob.game_state, player_ships, display_list)
 }
+
+/// The live flagship's own `ShipFacing` (0..16), read from `race_q[RPG_PLAYER_NUM]`
+/// and `disp_q` the way `SaveSisHyperState` finds it. Nothing is written.
+///
+/// # Safety
+/// Game thread only; `race_q` and `disp_q` must have been set up by
+/// `InitQueue` (`InitKernel` and `InitSpace`).
+pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
+    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
+    let display_list = &*live_queues::display_list();
+    hyper_save::read_flagship_facing(player_ships, display_list)
+}
