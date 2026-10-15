@@ -267,13 +267,14 @@
           },
           {
                 "path": "rust/scripts/comm-encounter-v1.json",
-                "sha256": "cf866a336665af4c36519f21e7651ef3e516ff321efa7bfe02a5a1844e9abb0d",
-                "byte_length": 694
+                "sha256": "13678be3ac6e59ac88e3b59627ea3b734b162355cf22072b3c1b801770610013",
+                "byte_length": 988
           },
           {
                 "path": "rust/scripts/explore-planet-v1.json",
-                "sha256": "d53ced3d29a72f684abdd2f21923473eaa3556835b8dc3daf454f3a44c5def01",
-                "byte_length": 978
+                "sha256": "356b7d4d7dfb072179ffb8e3432ec91820707f0173f3439694285eb8479427f1",
+                "byte_length": 1588,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/hard-hang.json",
@@ -369,8 +370,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-earth-moon-base.json",
-                "sha256": "9eab0bf6f3277e55bee7a682c156fbfb24ddb38e770d1c87d92d81e4d683f201",
-                "byte_length": 2760,
+                "sha256": "6729c3e64d0e777c265a7d845762da6afb6fb4ef771add7cbabee2cca4a48cf8",
+                "byte_length": 3558,
                 "outer_child_timeout_ms": 900000
           },
           {
@@ -403,8 +404,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-probe-to-starbase.json",
-                "sha256": "fbed30215d984325d39872f74374d4abb935844da84ae90a30c46ebcabd19e25",
-                "byte_length": 1203,
+                "sha256": "7d32ab8231114ff4769316dd66a84fb3278faa1b0507071466a8066c26373fd9",
+                "byte_length": 3749,
                 "outer_child_timeout_ms": 900000
           },
           {
@@ -415,8 +416,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-starbase-to-mars.json",
-                "sha256": "0c986e147f40a4d0fecc8fc7c2818877f4abd68f129863ce98e1633455b2fa6a",
-                "byte_length": 2262,
+                "sha256": "8ff337c331a961e5a7e83d7ff6b48d8a1ce0f9fc049bed1de2289e81b1615b36",
+                "byte_length": 5259,
                 "outer_child_timeout_ms": 900000
           },
           {
@@ -436,8 +437,8 @@
           },
           {
                 "path": "rust/scripts/sol-probe-scene-v1.json",
-                "sha256": "0fdd249cb2833463620e52247ef283daca5819863073bb4762f2747468a6f001",
-                "byte_length": 727
+                "sha256": "ca63515cf28725717388fa8e93b5e091af2d6fee40c04ad63a73098f65f3b288",
+                "byte_length": 1027
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",

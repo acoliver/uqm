@@ -2,8 +2,8 @@
   "version": 1,
   "name": "real-sol-earth-moon-base",
   "budgets": {
-    "max_input_ticks": 50000,
-    "max_presentations": 55000,
+    "max_input_ticks": 64762,
+    "max_presentations": 129524,
     "max_wallclock_seconds": 900
   },
   "steps": [
@@ -40,9 +40,20 @@
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 2, "settle": 30},
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 2, "settle": 30},
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 2, "settle": 30},
-    {"action": "select_planet_menu", "phase": "dispatch", "max_ticks": 6000},
+    {"action": "wait_for_planet_side_end", "outcome": "returned", "max_ticks": 6000},
     {"action": "wait_input_ticks", "count": 150},
+    {"action": "assert_mode", "mode": "orbit"},
     {"action": "capture", "label": "earth-moon-orbit-after-base"},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 0, "max_ticks": 2000},
+    {"action": "wait_for_dispatch", "encounter": 2, "dialogue": 2, "max_ticks": 2000},
+    {"action": "wait_for_communication_responses", "minimum": 2, "max_ticks": 1000},
+    {"action": "assert_communication_responses", "minimum": 2},
+    {"action": "select_communication_response", "index": 1, "max_ticks": 5000},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 5000},
+    {"action": "wait_input_ticks", "count": 60},
+    {"action": "assert_mode", "mode": "starbase"},
+    {"action": "assert_ship_resources", "fuel_on_board": 970, "res_units": 2500},
+    {"action": "capture", "label": "earth-moon-base-paid-by-commander"},
     {"action": "finish"}
   ]
 }

@@ -162,20 +162,59 @@ action or a live run before they can be closed:
 - `battle-v1` proves battle frames run, not a battle outcome.
 - `load-save-v1` captures the save and load screens but never compares the
   loaded state with the saved one.
-- `real-sol-probe-to-starbase` ends at the Commander dispatch, before the
-  Starbase menu; `real-sol-starbase-to-mars` talks to the Commander but never
-  opens the Starbase menu either. Only `starbase-visit-v1` asserts the
-  `starbase` mode.
 - `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` never meet the probe.
 - `real-sol-commander-completion` never asserts that the conversation ended.
-- `comm-encounter-v1` and `sol-probe-scene-v1` assert the dispatch or scene
-  but no response choice.
-- `real-sol-earth-moon-base` captures the moon base report but asserts no
-  pickup; `real-sol-rust-planetside-smoke` asserts no planet-side state.
+- `real-sol-rust-planetside-smoke` asserts no planet-side state.
 - `linked-playable-v1` is registered for boot menu, new game, communication,
   navigation and battle but only walks the main menu and runs Super Melee.
-- `explore-planet-v1` is registered for navigation, orbit and scan but only
-  flies in hyperspace. The scheduler and script tests pin that shape.
+
+## Scenarios that prove their claim
+
+The scenario audit found six scenarios whose name or domain claimed more than
+their assertions proved. Each now carries the assertion that matches the claim.
+None of them has run live yet: the expectations below come from the
+`starbase-visit-v1` and `probe-encounter-v3` runs and from reading the planet
+menu observations, and the first live run decides whether they hold.
+`audited_scenarios_assert_what_they_claim` in `script.rs` and
+`explore_flies_to_mars_orbit_and_scans_with_real_menu_input` in `scheduler.rs`
+pin the shape of the scripts.
+
+- `explore-planet-v1` (navigation, orbit and scan) no longer flies in
+  hyperspace. After the probe broadcast it flies to Mars (planet 3) and enters
+  orbit with `navigate_to_planet` and `navigate_to_orbit`, then
+  `select_planet_menu orbit` and `assert_mode orbit` (the orbit menu is the
+  active planet menu phase). `select_planet_menu auto_scan` runs the scan and
+  `select_planet_menu dispatch` only completes once the scan has finished and
+  the Dispatch menu is up; Cancel backs out of the landing site picker without
+  launching the lander, and a second `assert_mode orbit` holds in the scan
+  menu. Budgets: 24710 input ticks (the validator minimum), 600 s wall with the
+  approved 900000 ms outer deadline.
+- `real-sol-probe-to-starbase` (starbase) now takes the `probe-encounter-v3`
+  route: probe broadcast, Luna landing, first and second Commander
+  conversation, then `assert_mode starbase` and `assert_ship_resources`
+  970 raw fuel / 2500 RU (30 fuel for the Luna landing, 2500 RU from the
+  Commander once the moon base is on board). The first Commander dispatch and
+  its capture are kept. Budgets: 65215 ticks, 720 s wall.
+- `real-sol-starbase-to-mars` (starbase and navigation) takes the same route to
+  the Starbase menu, asserts `starbase` mode and 970 / 2500, departs with three
+  Down presses and Select, asserts interplanetary flight and unchanged
+  resources, then flies to Mars as before. After the lander takes off it
+  asserts `assert_mode orbit` (the scan menu stays up under the lander, so the
+  planet menu phase is still active). Budgets: 83375 ticks, 900 s wall.
+- `real-sol-earth-moon-base` (navigation, orbit and scan) keeps its first
+  Commander conversation, the Luna landing and the six Select presses that read
+  the moon base report. It now requires `wait_for_planet_side_end returned`
+  (the pickup callback lifts the lander off without further input),
+  `assert_mode orbit`, and then proves the pickup through the Commander: the
+  next visit pays 2500 RU only with `MOONBASE_ON_SHIP` set, so the run ends with
+  `assert_mode starbase` and `assert_ship_resources` 970 / 2500. The trailing
+  `select_planet_menu dispatch`, which only opened the landing site picker, is
+  gone. Budgets: 64762 ticks, 900 s wall.
+- `comm-encounter-v1` and `sol-probe-scene-v1` (communication choices) skip the
+  Urquan speech with Cancel, `wait_for_communication_responses` (minimum 1) and
+  `assert_communication_responses` (minimum 1), the same list that
+  `repro-sol-probe-comm-ui` asserts. `sol-probe-scene-v1` now needs 500 input
+  ticks and a 60 s wall budget (was 192 and 30).
 
 ## Hyperspace flight legs
 
@@ -300,7 +339,7 @@ controls. Leaving the screen at maximum zoom makes the game's own
 has itself sampled live interplanetary flight and then sees the solar system
 torn down and the hyperspace activity dispatched. It never writes activity or
 position. A fresh profile starts on the main menu with no save, so every
-script that asserts hyperspace (`explore-planet-v1`, `probe-encounter-v1` to
+script that asserts hyperspace (`probe-encounter-v1` to
 `v7`, `load-save-v1`) first selects New Game, asserts
 interplanetary activity and flies out with it (#213). `load-save-v1` then
 saves twice through the hyperspace Game menu and loads slot 0 back through

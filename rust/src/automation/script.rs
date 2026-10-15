@@ -3208,7 +3208,107 @@ mod tests {
                 "{label} asserts hyperspace at step {first_hyperspace} without flying there"
             );
         }
-        assert_eq!(checked, 9, "hyperspace scenarios checked");
+        assert_eq!(checked, 8, "hyperspace scenarios checked");
+    }
+
+    fn checked_in_steps(name: &str) -> Vec<Action> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("scripts")
+            .join(format!("{name}.json"));
+        let label = path.to_string_lossy().into_owned();
+        validate_script(
+            parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+            &label,
+        )
+        .unwrap()
+        .steps()
+        .to_vec()
+    }
+
+    fn step_index(steps: &[Action], from: usize, predicate: impl Fn(&Action) -> bool) -> usize {
+        from + steps[from..]
+            .iter()
+            .position(predicate)
+            .expect("step present after the previous one")
+    }
+
+    /// The scenario audit: a scenario whose name or domain claims a Starbase
+    /// visit, a moon base pickup or a response choice must assert it.
+    #[test]
+    fn audited_scenarios_assert_what_they_claim() {
+        use crate::automation::mode::GameMode;
+        let starbase = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Starbase
+                })
+            )
+        };
+        let orbit = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Orbit
+                })
+            )
+        };
+        let resources = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertShipResources(ShipResourcesAssertion {
+                    fuel_on_board: Some(970),
+                    res_units: Some(2500),
+                })
+            )
+        };
+        let wait_responses =
+            |step: &Action| matches!(step, Action::WaitForCommunicationResponses(_));
+        let assert_responses =
+            |step: &Action| matches!(step, Action::AssertCommunicationResponses(_));
+        let returned = |step: &Action| {
+            matches!(
+                step,
+                Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                    outcome: PlanetSideOutcomeName::Returned,
+                    ..
+                })
+            )
+        };
+
+        for name in ["comm-encounter-v1", "sol-probe-scene-v1"] {
+            let steps = checked_in_steps(name);
+            let wait = step_index(&steps, 0, wait_responses);
+            step_index(&steps, wait, assert_responses);
+        }
+        for name in [
+            "real-sol-probe-to-starbase",
+            "real-sol-starbase-to-mars",
+            "real-sol-earth-moon-base",
+        ] {
+            let steps = checked_in_steps(name);
+            let landing = step_index(&steps, 0, returned);
+            let menu = step_index(&steps, landing, starbase);
+            step_index(&steps, menu, resources);
+        }
+        // The pickup is proved by the Commander paying for it, so the moon
+        // base scenario must also see orbit again after the lander takes off.
+        let moon = checked_in_steps("real-sol-earth-moon-base");
+        let takeoff = step_index(&moon, 0, returned);
+        let back_in_orbit = step_index(&moon, takeoff, orbit);
+        step_index(&moon, back_in_orbit, starbase);
+        let mars = checked_in_steps("real-sol-starbase-to-mars");
+        let docked = step_index(&mars, 0, starbase);
+        let escape = step_index(&mars, docked, |step| {
+            matches!(
+                step,
+                Action::TapPlayerKey(TapPlayerKeyStep {
+                    key: PlayerKey::Escape,
+                    ..
+                })
+            )
+        });
+        step_index(&mars, escape, orbit);
     }
 
     fn turn_script(steps: &str) -> String {
