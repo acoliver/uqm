@@ -120,7 +120,7 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
-    assert_eq!(longer.len(), 17);
+    assert_eq!(longer.len(), 18);
     for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);
