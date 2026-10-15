@@ -219,14 +219,16 @@ impl PlanetSideFixture {
     #[must_use]
     pub fn for_collision_parity(anchor: SurfacePoint) -> Self {
         let mut fixture = Self::new();
+        // Gross sizes stay in 0..=2: the C surface generator never emits more,
+        // and the visual port rejects larger values.
         for (category, gross_size, fine_quantity, x) in [
             // Non-wrapped direct overlap at the landing point.
-            (0_usize, 3_u16, 5_u16, anchor.x),
+            (0_usize, 2_u16, 5_u16, anchor.x),
             // Non-wrapped miss: a clear gap from the lander.
             (1, 1, 3, anchor.x + 24),
             // Raw deposit on the right of the seam; only the wrapped copy
             // can connect.
-            (2, 3, 7, anchor.x + WORLD_WIDTH - 1),
+            (2, 2, 7, anchor.x + WORLD_WIDTH - 1),
             // Raw deposit on the left of the seam; only the wrapped copy can
             // connect.
             (3, 1, 9, anchor.x - WORLD_WIDTH + 1),
@@ -335,6 +337,7 @@ mod tests {
     use crate::planet_side::hazards::{HazardKind, SoundCue};
     use crate::planet_side::model::{CrewCount, LanderUpgrades};
     use crate::planet_side::runtime::{PlanetSideAudio, PlanetSideCollision};
+    use crate::planet_side::scan_frames::mineral_surface_sprite;
     use crate::planet_side::simulation::{LanderState, Shot};
     use crate::planet_side::world::HazardChances;
     use crate::planet_side::{generation::ScanNodeId, generation::ScanPersistence};
@@ -539,6 +542,24 @@ mod tests {
         fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError> {
             self.played.push(cue);
             Ok(())
+        }
+    }
+
+    #[test]
+    fn collision_parity_layout_only_uses_deposits_the_surface_generator_can_produce() {
+        // The production visual port rejects a gross size above 2 (the C
+        // surface generator only emits 0..=2), and a rejected deposit aborts
+        // the whole landing, so the standard layout must stay inside the
+        // generator's range.
+        let fixture = PlanetSideFixture::for_collision_parity(SurfacePoint { x: 50, y: 80 });
+        assert_eq!(fixture.minerals.len(), 5);
+        for mineral in &fixture.minerals {
+            assert!(
+                mineral_surface_sprite(mineral.category, mineral.gross_size).is_ok(),
+                "fixture deposit category {} gross {} has no C surface sprite",
+                mineral.category,
+                mineral.gross_size
+            );
         }
     }
 
