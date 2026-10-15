@@ -2,9 +2,9 @@
   "version": 1,
   "name": "comm-encounter-v1",
   "budgets": {
-    "max_input_ticks": 3673,
-    "max_presentations": 7346,
-    "max_wallclock_seconds": 120
+    "max_input_ticks": 33170,
+    "max_presentations": 66340,
+    "max_wallclock_seconds": 400
   },
   "steps": [
     {"action": "wait_for_main_menu_ready"},
@@ -15,10 +15,18 @@
     {"action": "wait_input_ticks", "count": 200},
     {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
     {"action": "capture", "label": "real-probe-broadcast"},
-    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 4},
-    {"action": "wait_for_communication_responses", "minimum": 1, "max_ticks": 1500},
-    {"action": "assert_communication_responses", "minimum": 1},
-    {"action": "capture", "label": "real-probe-responses"},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 9000},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 0, "max_ticks": 4000},
+    {"action": "wait_for_dispatch", "encounter": 2, "dialogue": 2, "max_ticks": 2000},
+    {"action": "wait_for_communication_responses", "minimum": 2, "max_ticks": 1000},
+    {"action": "assert_communication_responses", "minimum": 2},
+    {"action": "capture", "label": "real-commander-responses"},
+    {"action": "select_communication_response", "index": 0, "max_ticks": 5000},
+    {"action": "select_communication_response", "index": 0, "max_ticks": 5000},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 5000},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "capture", "label": "real-commander-conversation-ended"},
     {"action": "finish"}
   ]
 }

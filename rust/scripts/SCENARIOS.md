@@ -172,10 +172,10 @@ action or a live run before they can be closed:
 
 The scenario audit found six scenarios whose name or domain claimed more than
 their assertions proved. Each now carries the assertion that matches the claim.
-None of them has run live yet: the expectations below come from the
-`starbase-visit-v1` and `probe-encounter-v3` runs and from reading the planet
-menu observations, and the first live run decides whether they hold.
-`audited_scenarios_assert_what_they_claim` in `script.rs` and
+The first real-window run at `e810b17c0` passed `sol-probe-scene-v1` and
+`real-sol-probe-to-starbase` and exposed four scripts that failed or proved too
+little; the entries below describe the corrected scripts, which have not run
+live since. `audited_scenarios_assert_what_they_claim` in `script.rs` and
 `explore_flies_to_mars_orbit_and_scans_with_real_menu_input` in `scheduler.rs`
 pin the shape of the scripts.
 
@@ -187,9 +187,18 @@ pin the shape of the scripts.
   `select_planet_menu dispatch` only completes once the scan has finished and
   the Dispatch menu is up; Cancel backs out of the landing site picker without
   launching the lander, and a second `assert_mode orbit` holds in the scan
-  menu. Budgets: 24710 input ticks (the validator minimum), 600 s wall with the
+  menu. The first live run reached `navigation_reached:planet=3` but never
+  `orbit_reached` in 6000 ticks. The script had skipped the probe speech with
+  Cancel, which ended the broadcast 123 input ticks after `dispatch_verified`
+  where the uninterrupted broadcast in `real-sol-starbase-to-mars` takes 2546,
+  while `real-sol-starbase-to-mars`, which lets the broadcast run, orbits Mars.
+  The trace records no menu state, so the flagship
+  menu opened by a stray Cancel (`DoIpFlight`) is the suspected mechanism, not
+  a recorded fact. The script now pulses no Cancel and waits for the broadcast
+  to end by itself. A script test rejects a Cancel before the orbit flight.
+  Budgets: 24710 input ticks (the validator minimum), 600 s wall with the
   approved 900000 ms outer deadline.
-- `real-sol-probe-to-starbase` (starbase) now takes the `probe-encounter-v3`
+- `real-sol-probe-to-starbase` (starbase) takes the `probe-encounter-v3`
   route: probe broadcast, Luna landing, first and second Commander
   conversation, then `assert_mode starbase` and `assert_ship_resources`
   970 raw fuel / 2500 RU (30 fuel for the Luna landing, 2500 RU from the
@@ -198,23 +207,35 @@ pin the shape of the scripts.
 - `real-sol-starbase-to-mars` (starbase and navigation) takes the same route to
   the Starbase menu, asserts `starbase` mode and 970 / 2500, departs with three
   Down presses and Select, asserts interplanetary flight and unchanged
-  resources, then flies to Mars as before. After the lander takes off it
-  asserts `assert_mode orbit` (the scan menu stays up under the lander, so the
-  planet menu phase is still active). Budgets: 83375 ticks, 900 s wall.
-- `real-sol-earth-moon-base` (navigation, orbit and scan) keeps its first
-  Commander conversation, the Luna landing and the six Select presses that read
-  the moon base report. It now requires `wait_for_planet_side_end returned`
-  (the pickup callback lifts the lander off without further input),
-  `assert_mode orbit`, and then proves the pickup through the Commander: the
-  next visit pays 2500 RU only with `MOONBASE_ON_SHIP` set, so the run ends with
-  `assert_mode starbase` and `assert_ship_resources` 970 / 2500. The trailing
-  `select_planet_menu dispatch`, which only opened the landing site picker, is
-  gone. Budgets: 64762 ticks, 900 s wall.
-- `comm-encounter-v1` and `sol-probe-scene-v1` (communication choices) skip the
-  Urquan speech with Cancel, `wait_for_communication_responses` (minimum 1) and
+  resources, then flies to Mars as before. The takeoff is proved the way
+  `real-sol-planetside-collision-proof` ends its session: a Special tap, then
+  `wait_for_planet_side_end returned`, and only then `assert_mode orbit`.
+  Orbit mode already reads true while the lander is on the ground (the planet
+  menu phase stays active under it), so the old Escape tap followed by an orbit
+  assert proved nothing. Budgets: 83375 ticks, 900 s wall.
+- `real-sol-earth-moon-base` (navigation, orbit and scan) follows the
+  `probe-encounter-v3` order: probe broadcast, Luna landing, then the two
+  Commander conversations. The first live run landed on Luna but the lander
+  never left (`planet_side_wait_unsatisfied ... active=true phase=Active` for
+  6000 ticks) because the six presses were Select; the working route uses Cancel
+  six times, a 600 tick wait and `wait_for_planet_side_end returned`. After the
+  capture of the moon base report the script asserts `assert_mode orbit`, and
+  proves the pickup through the Commander: the second visit pays 2500 RU only
+  with `MOONBASE_ON_SHIP` set, so the run ends with `assert_mode starbase` and
+  `assert_ship_resources` 970 / 2500. Budgets: 64762 ticks, 900 s wall.
+- `sol-probe-scene-v1` (communication choices) skips the Urquan speech with
+  Cancel, then `wait_for_communication_responses` (minimum 1) and
   `assert_communication_responses` (minimum 1), the same list that
-  `repro-sol-probe-comm-ui` asserts. `sol-probe-scene-v1` now needs 500 input
-  ticks and a 60 s wall budget (was 192 and 30).
+  `repro-sol-probe-comm-ui` asserts. It needs 500 input ticks and a 60 s wall
+  budget (was 192 and 30).
+- `comm-encounter-v1` (communication choices) cannot prove a choice with the
+  probe: its broadcast is one way. The first live run ended with
+  `communication_responses_wait_expired:minimum=1:active=false:completions=1`.
+  The script now lets the broadcast end, flies to the Commander on Luna
+  (`navigate_to_moon` 2/0, `wait_for_dispatch` 2/2), waits for and asserts the
+  response list (minimum 2), selects the first response twice and waits for the
+  conversation to end. Budgets: 12000 input ticks, 400 s wall with the approved
+  900000 ms outer deadline.
 
 ## Hyperspace flight legs
 

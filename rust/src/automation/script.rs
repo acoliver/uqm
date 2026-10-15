@@ -3299,16 +3299,48 @@ mod tests {
         step_index(&moon, back_in_orbit, starbase);
         let mars = checked_in_steps("real-sol-starbase-to-mars");
         let docked = step_index(&mars, 0, starbase);
-        let escape = step_index(&mars, docked, |step| {
+        // Orbit mode can already read true while the lander is on the ground,
+        // so the departure must end the planet-side session before the assert.
+        let takeoff_key = step_index(&mars, docked, |step| {
             matches!(
                 step,
                 Action::TapPlayerKey(TapPlayerKeyStep {
-                    key: PlayerKey::Escape,
+                    key: PlayerKey::Special,
                     ..
                 })
             )
         });
-        step_index(&mars, escape, orbit);
+        let landed_back = step_index(&mars, takeoff_key, returned);
+        step_index(&mars, landed_back, orbit);
+
+        // A response choice needs a conversation that offers a list, which
+        // the one-way probe broadcast does not.
+        let comm = checked_in_steps("comm-encounter-v1");
+        let list = step_index(&comm, 0, assert_responses);
+        let choice = step_index(&comm, list, |step| {
+            matches!(step, Action::SelectCommunicationResponse(_))
+        });
+        step_index(&comm, choice, |step| {
+            matches!(step, Action::WaitForCommunicationEnd(_))
+        });
+
+        // A Cancel outside a conversation opens the flagship menu, so the
+        // exploration route lets the probe broadcast end by itself and pulses
+        // no Cancel before it reaches the planet menu.
+        let explore = checked_in_steps("explore-planet-v1");
+        let orbit_flight = step_index(&explore, 0, |step| {
+            matches!(step, Action::NavigateToOrbit(_))
+        });
+        assert!(
+            !explore[..orbit_flight].iter().any(|step| matches!(
+                step,
+                Action::TapMenuKey(TapMenuKeyStep {
+                    key: MenuKey::Cancel,
+                    ..
+                })
+            )),
+            "explore-planet-v1 must not pulse Cancel before the orbit flight"
+        );
     }
 
     fn turn_script(steps: &str) -> String {

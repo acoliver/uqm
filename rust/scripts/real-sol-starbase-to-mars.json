@@ -2,8 +2,8 @@
   "version": 1,
   "name": "real-sol-starbase-to-mars",
   "budgets": {
-    "max_input_ticks": 83375,
-    "max_presentations": 166750,
+    "max_input_ticks": 95437,
+    "max_presentations": 190874,
     "max_wallclock_seconds": 900
   },
   "steps": [
@@ -74,7 +74,8 @@
     {"action": "capture", "label": "mars-planet-side-start"},
     {"action": "tap_player_key", "key": "thrust", "value": 1, "hold": 40, "settle": 10},
     {"action": "capture", "label": "mars-planet-side-moved"},
-    {"action": "tap_player_key", "key": "escape", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_player_key", "key": "special", "value": 1, "hold": 3, "settle": 80},
+    {"action": "wait_for_planet_side_end", "outcome": "returned", "max_ticks": 12000},
     {"action": "wait_input_ticks", "count": 100},
     {"action": "assert_mode", "mode": "orbit"},
     {"action": "capture", "label": "mars-orbit-after-takeoff"},
