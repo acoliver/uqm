@@ -9,9 +9,10 @@ use crate::ci::authority::load_authority;
 use uqm_rust::automation::native_window::NativeWindowRuntimeContract;
 
 /// Pinned scripts whose declared wall budget is above 300 s.
-pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 17] = [
+pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 18] = [
     "rust/scripts/comm-encounter-v1.json",
     "rust/scripts/explore-planet-v1.json",
+    "rust/scripts/probe-encounter-v1.json",
     "rust/scripts/probe-encounter-v2.json",
     "rust/scripts/probe-encounter-v3.json",
     "rust/scripts/probe-encounter-v4.json",

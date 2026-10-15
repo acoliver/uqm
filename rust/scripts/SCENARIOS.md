@@ -157,16 +157,43 @@ A scenario passes when its assertions hold, so a name or domain that claims
 more than the assertions prove is a gap. Known gaps that need a new typed
 action or a live run before they can be closed:
 
-- `quit-v1` highlights Quit and asserts the main menu mode. It never confirms
-  the quit (the Quit confirmation loop bypasses the `DoInput` service).
-- `battle-v1` proves battle frames run, not a battle outcome.
-- `load-save-v1` captures the save and load screens but never compares the
-  loaded state with the saved one.
-- `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` never meet the probe.
-- `real-sol-commander-completion` never asserts that the conversation ended.
-- `real-sol-rust-planetside-smoke` asserts no planet-side state.
-- `linked-playable-v1` is registered for boot menu, new game, communication,
-  navigation and battle but only walks the main menu and runs Super Melee.
+- `battle-v1` proves battle frames run, not a battle outcome. No typed
+  assertion reads the battle result (ship destroyed, melee exit); one would
+  need a new reader of the battle state and has not been added.
+- `load-save-v1` captures the save and load screens, asserts the loaded game is
+  in hyperspace with 1000 fuel / 0 RU, but never compares the loaded position
+  with the saved one. `assert_hyperspace_displacement` only checks a minimum
+  distance since `record_hyperspace_position`; an "unchanged position"
+  assertion is missing.
+- `linked-playable-v1` is registered for boot menu and battle only (it walks the
+  main menu and runs Super Melee). The cross-domain journey is
+  `real-sol-probe-to-starbase`.
+
+## Scenarios changed after the second audit
+
+These edits have not run in a real window yet.
+
+- `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` keep their names and now meet
+  the probe first: `navigate_to_planet 2`, `assert_dispatch 24/18`,
+  `wait_for_communication_end` (1 completion) and `assert_activity 4`, before
+  the hyperspace flight. A rename would touch gates, MATRIX, tests and docs for
+  scripts whose flights are pinned by `probe_encounter_flight_input`.
+  `probe-encounter-v1` now exceeds 300 s and joins the 900 s outer deadline list.
+- `real-sol-commander-completion` waits for the Commander conversation to end
+  (`wait_for_communication_end`, which counts completions since the probe wait
+  consumed its own) and asserts `assert_activity 4`.
+- `real-sol-rust-planetside-smoke` follows the Mars sequence of
+  `real-sol-starbase-to-mars`: orbit, `assert_mode orbit`, scan, dispatch,
+  landing site, `wait_for_planet_side_start`, thrust and weapon, special tap,
+  `wait_for_planet_side_end returned`, `assert_mode orbit`.
+- `quit-v1` selects Quit. The restart menu sets `CHECK_ABORT` directly for
+  Quit (`restart.c`); `DoConfirmExit` is not on this path. The script asserts
+  `assert_mode quit` (activity flag `check_abort`). Whether the harness still
+  records `finish` after the game begins exiting is unverified.
+- `load-save-v1` asserts ship resources after the load.
+- `real-sol-probe-to-starbase` is now the composed journey (new game,
+  communication, navigation, planet side, starbase); `linked-playable-v1`
+  narrows to boot menu and battle.
 
 ## Scenarios that prove their claim
 
