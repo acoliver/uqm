@@ -390,6 +390,7 @@ fn run_suite(root: &Path, options: &Options) -> Result<(), String> {
         &options.content,
         "native run requires --content DIR: the directory holding the pinned content package",
     )?;
+    let _display_awake = crate::display_awake::hold_display_awake()?;
     crate::native_test_with(
         root,
         &crate::NativeRunRequest {
@@ -627,6 +628,7 @@ fn replay(root: &Path, options: &Options) -> Result<(), String> {
         &options.output,
         "native replay requires --output DIR: a fresh directory for the replay evidence",
     )?;
+    let _display_awake = crate::display_awake::hold_display_awake()?;
     crate::native_replay::replay(
         root,
         &crate::native_replay::ReplayRequest {
