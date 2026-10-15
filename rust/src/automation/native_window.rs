@@ -179,9 +179,21 @@ pub struct ObservedNativeWindow {
 pub enum NativeWindowObserverError {
     UnsupportedPlatform,
     Os(String),
-    OutputLimit { stream: String, limit_bytes: u64 },
-    NotFound { pid: u32 },
-    Ambiguous { pid: u32, count: usize },
+    /// `screencapture` was still alive at the capture timeout and was
+    /// terminated. macOS can hang it in its post-capture metadata step after
+    /// the image is written; the killed process's output is never trusted.
+    CaptureTimedOut(String),
+    OutputLimit {
+        stream: String,
+        limit_bytes: u64,
+    },
+    NotFound {
+        pid: u32,
+    },
+    Ambiguous {
+        pid: u32,
+        count: usize,
+    },
 }
 
 impl std::fmt::Display for NativeWindowObserverError {
@@ -191,6 +203,9 @@ impl std::fmt::Display for NativeWindowObserverError {
                 formatter.write_str("native-window observation is unsupported on this platform")
             }
             Self::Os(detail) => write!(formatter, "native-window OS observation failed: {detail}"),
+            Self::CaptureTimedOut(detail) => {
+                write!(formatter, "native-window OS observation failed: {detail}")
+            }
             Self::OutputLimit {
                 stream,
                 limit_bytes,
@@ -1720,6 +1735,11 @@ pub fn capture_native_window(
                         stream: format!("{stream:?}").to_ascii_lowercase(),
                         limit_bytes: contract.observer_response_budget_bytes,
                     })
+                }
+                ChildSessionError::Timeout { .. } => {
+                    Err(NativeWindowObserverError::CaptureTimedOut(format!(
+                        "supervise screencapture: {failure}"
+                    )))
                 }
                 _ => Err(NativeWindowObserverError::Os(format!(
                     "supervise screencapture: {failure}"

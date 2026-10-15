@@ -44,6 +44,8 @@ mod native_budget;
 mod native_capture;
 #[cfg(feature = "debug-process")]
 mod native_capture_change;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_capture_retry;
 pub mod native_checkpoint;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_isolation;
