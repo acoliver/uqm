@@ -151,11 +151,11 @@ Routes (leg = thrust ticks, every turn a verified four facing `right` `turn_flag
 
 | Script | Legs | Turns | Fuel at start |
 | --- | --- | --- | --- |
-| v1 | 5 x 100 | 5 | 1000 raw |
-| v2 | 9 x 80 | 9 | 1000 raw |
-| v3 | 4 x 500 | 4, four right angles | 6000 raw |
-| v4 | 4 x 550 | 4, four right angles | 6000 raw |
-| v5 | 16 x 50 | 16, four groups of four right angles | 1000 raw |
+| v1 | 4 x 100 | 3, three right angles | 1000 raw |
+| v2 | 4 x 80 | 3, three right angles | 1000 raw |
+| v3 | 4 x 500 | 3, three right angles | 6000 raw |
+| v4 | 4 x 550 | 3, three right angles | 6000 raw |
+| v5 | 4 x 50 | 3, three right angles | 1000 raw |
 | v6 | 3 x 200 | 2, five flagship menu visits | 1000 raw |
 | v7 | 3 x 200 | 2, five Game menu visits | 1000 raw |
 
@@ -167,10 +167,20 @@ cannot reach an edge or empty the tank. `tests/probe_encounter_flight_input.rs`
 enforces the bracketing, that every turn is a four facing `turn_flagship`
 (bounded by 120 ticks) and the caps.
 
-v3 and v4 turn four right angles, sixteen facings in all, between four legs of
-one length. The turns are proven; the closing of the square is geometry from
-equal legs and exact right angles. No step asserts that the ship ends where it
-started, because no live run has measured the closure.
+v1 to v5 fly one square: four legs of one length with three right turns
+between them. The turns are proven; the closing of the square is geometry from
+equal legs and exact right angles. A real-window run of v3 flew from Sol's
+hyperspace point 27987,164141 through 23747,168357, 19475,164157 and
+23655,159881 to 27911,164065, so the fourth leg ends back at Sol and the game
+enters the Sol system. A fourth turn would run in the Solar mode and fail with
+`flagship_turn_wrong_mode:observed=Solar`, so the scripts end on the arrival
+instead: after the fourth leg's displacement proof each waits 100 input ticks
+(there is no typed wait for an activity change; the transition took a few dozen
+ticks in the trace), then `assert_activity` (mask 255, equals 4,
+IN_INTERPLANETARY) proves they are back in the Sol system, then the
+`returned-to-sol` capture, the script's final wait, `probe-encounter-final` and
+`finish`. The arrival is the asserted end of these scripts, not a failure.
+v6 and v7 fly three legs and never return to Sol.
 
 ### The flagship menu in v6 and v7
 

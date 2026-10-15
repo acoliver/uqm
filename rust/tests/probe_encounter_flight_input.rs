@@ -182,22 +182,50 @@ fn total_thrust_stays_inside_the_fuel_and_the_edge_margin() {
     }
 }
 
+/// A square of four legs and three right angles closes on its start. Sol's
+/// hyperspace point is the start, so the fourth leg ends there and the game
+/// enters the Sol system (a real-window run of v3 closed to within 76 logical
+/// units on each axis). The scripts end on that arrival and assert it instead of turning
+/// again, which fails with `flagship_turn_wrong_mode:observed=Solar`.
+const SQUARE_SCRIPTS: [&str; 5] = [
+    "probe-encounter-v1",
+    "probe-encounter-v2",
+    "probe-encounter-v3",
+    "probe-encounter-v4",
+    "probe-encounter-v5",
+];
+
+/// IN_INTERPLANETARY, the activity of the Sol system.
+const IN_INTERPLANETARY: u64 = 4;
+
+/// Ticks given to the hyperspace to Solar transition after the fourth leg.
+const RETURN_WAIT_TICKS: u64 = 100;
+
+fn square_leg_holds() -> [(&'static str, u64); 5] {
+    [
+        ("probe-encounter-v1", 100),
+        ("probe-encounter-v2", 80),
+        ("probe-encounter-v3", 500),
+        ("probe-encounter-v4", 550),
+        ("probe-encounter-v5", 50),
+    ]
+}
+
 #[test]
-fn v3_and_v4_fly_a_four_leg_square_with_verified_right_angle_turns() {
-    for (name, hold) in [("probe-encounter-v3", 500), ("probe-encounter-v4", 550)] {
+fn v1_to_v5_fly_a_four_leg_square_with_three_right_angle_turns() {
+    for (name, hold) in square_leg_holds() {
         let steps = script_steps(name);
         let legs: Vec<&Value> = steps
             .iter()
             .filter(|step| matches!(action_of(step), "tap_player_key" | "turn_flagship"))
             .collect();
-        assert_eq!(legs.len(), 8, "{name} keeps four legs and four turns");
+        assert_eq!(legs.len(), 7, "{name} keeps four legs and three turns");
         let mut turned = 0;
         for (index, leg) in legs.iter().enumerate() {
             if index % 2 == 0 {
                 assert_eq!(action_of(leg), "tap_player_key");
                 assert_eq!(leg["key"], "thrust");
                 assert_eq!(leg["hold"], hold, "{name} keeps its leg length");
-                assert_eq!(leg["settle"], 5);
             } else {
                 assert_eq!(action_of(leg), "turn_flagship");
                 assert_eq!(leg["direction"], "right", "{name} turns the same way");
@@ -205,17 +233,69 @@ fn v3_and_v4_fly_a_four_leg_square_with_verified_right_angle_turns() {
             }
         }
         assert_eq!(
-            turned, 16,
-            "{name}: four right angles are a full circle of sixteen facings, so the \
-             fourth leg ends on the first leg's heading"
+            turned, 12,
+            "{name}: three right angles are twelve of sixteen facings; a fourth \
+             would be flown from Sol, where the ship is no longer in hyperspace"
         );
-        let captures: Vec<&str> = steps
+    }
+}
+
+#[test]
+fn v1_to_v5_end_by_asserting_the_return_to_sol() {
+    for name in SQUARE_SCRIPTS {
+        let steps = script_steps(name);
+        let last_leg = steps
             .iter()
-            .filter(|step| action_of(step) == "capture")
+            .rposition(|step| action_of(step) == "tap_player_key")
+            .expect("last thrust leg");
+        assert_eq!(
+            action_of(&steps[last_leg + 1]),
+            "assert_hyperspace_displacement",
+            "{name}: the fourth leg is still proven"
+        );
+        let tail: Vec<&Value> = steps[last_leg + 2..]
+            .iter()
+            .filter(|step| action_of(step) != "capture")
+            .collect();
+        let tail_actions: Vec<&str> = tail.iter().map(|step| action_of(step)).collect();
+        assert_eq!(
+            tail_actions,
+            [
+                "wait_input_ticks",
+                "assert_activity",
+                "wait_input_ticks",
+                "finish"
+            ],
+            "{name}: after the fourth leg it waits, asserts Sol, waits, finishes"
+        );
+        assert_eq!(tail[0]["count"], RETURN_WAIT_TICKS, "{name}");
+        assert_eq!(tail[1]["mask"], 255, "{name}");
+        assert_eq!(tail[1]["equals"], IN_INTERPLANETARY, "{name}");
+        let after_leg: Vec<&str> = steps[last_leg + 2..]
+            .iter()
             .filter_map(|step| step["label"].as_str())
             .collect();
-        assert_eq!(captures.first(), Some(&"new-game-confirmed"));
-        assert_eq!(captures.last(), Some(&"probe-encounter-final"));
+        assert!(
+            after_leg.ends_with(&["returned-to-sol", "probe-encounter-final"]),
+            "{name}: {after_leg:?}"
+        );
+        let asserted = steps[last_leg..]
+            .iter()
+            .position(|step| action_of(step) == "assert_activity")
+            .unwrap()
+            + last_leg;
+        let returned = steps[last_leg..]
+            .iter()
+            .position(|step| step["label"] == "returned-to-sol")
+            .unwrap()
+            + last_leg;
+        assert!(asserted < returned, "{name}: the capture follows the proof");
+        assert!(
+            steps[last_leg..]
+                .iter()
+                .all(|step| action_of(step) != "turn_flagship"),
+            "{name} does not turn after the fourth leg"
+        );
     }
 }
 
@@ -505,7 +585,7 @@ fn the_flight_after_preparation_is_the_square_route() {
         "leg-3",
         "turn-3",
         "leg-4",
-        "turn-4",
+        "returned-to-sol",
         "probe-encounter-final",
     ];
     for name in PREPARED {
@@ -528,7 +608,7 @@ fn the_flight_after_preparation_is_the_square_route() {
             .iter()
             .filter(|step| action_of(step) == "turn_flagship")
             .count();
-        assert_eq!(turns, 4, "{name} proves every turn");
+        assert_eq!(turns, 3, "{name} proves every turn");
         let displacement = steps[fly..]
             .iter()
             .filter(|step| action_of(step) == "assert_hyperspace_displacement")

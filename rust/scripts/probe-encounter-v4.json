@@ -142,8 +142,9 @@
     {"action": "tap_player_key", "key": "thrust", "value": 1, "hold": 550, "settle": 5},
     {"action": "assert_hyperspace_displacement", "minimum_logical_units": 16},
     {"action": "capture", "label": "leg-4"},
-    {"action": "turn_flagship", "direction": "right", "facings": 4, "max_ticks": 120},
-    {"action": "capture", "label": "turn-4"},
+    {"action": "wait_input_ticks", "count": 100},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "capture", "label": "returned-to-sol"},
     {"action": "wait_input_ticks", "count": 200},
     {"action": "capture", "label": "probe-encounter-final"},
     {"action": "finish"}

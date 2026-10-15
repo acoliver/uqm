@@ -307,31 +307,31 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-v1.json",
-                "sha256": "38df64222209f5ca65dafd5cfcfdbfd27d869845b8738a356e5e39e1e6c057ef",
-                "byte_length": 3342
+                "sha256": "60e0ab4f47a8ada57cd62559ce24ed9c6bbb618edcab968dd2daa9af9e4167c2",
+                "byte_length": 2965
           },
           {
                 "path": "rust/scripts/probe-encounter-v2.json",
-                "sha256": "273b7437cf8bb3fb0505c037cf60509a9d48ea0becc71d1bfb0a54b5b22b9f9e",
-                "byte_length": 4525,
+                "sha256": "852460509ac8f74a06af50d35ce5d8df765299e96d892531d6c3a2b5297677df",
+                "byte_length": 2527,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v3.json",
-                "sha256": "8cae38474ac5eb4df48d25cba82d52c10f4996f4983fa77192be28e398bfe03d",
-                "byte_length": 10525,
+                "sha256": "189916ad7a3b7e67ac61755bb8d6fec8c04b1ffd1a721cc0a09a7becf8184461",
+                "byte_length": 10558,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v4.json",
-                "sha256": "619767cc3612f01fb6c5908effa16ccbab14d60c7dcd2f80e0f9b1e78554fba8",
-                "byte_length": 10525,
+                "sha256": "3e760eeb166676f04f9d2a1973851a077e38b633e65c55c63fab5e8293df01ed",
+                "byte_length": 10558,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v5.json",
-                "sha256": "e8f6b47006172a0220fb6f7eb9e5e0850f735abebdc0a55aa7d654db540dc435",
-                "byte_length": 5804,
+                "sha256": "a447696b53af17f75d65d1c7daaa71397ddbbf4334f5facef2e431ddaa8e9bf6",
+                "byte_length": 2214,
                 "outer_child_timeout_ms": 900000
           },
           {
