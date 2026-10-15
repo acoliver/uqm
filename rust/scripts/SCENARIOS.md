@@ -179,17 +179,36 @@ These edits have not run in a real window yet.
   the hyperspace flight. A rename would touch gates, MATRIX, tests and docs for
   scripts whose flights are pinned by `probe_encounter_flight_input`.
   `probe-encounter-v1` now exceeds 300 s and joins the 900 s outer deadline list.
-- `real-sol-commander-completion` waits for the Commander conversation to end
+- `real-sol-commander-completion` selects Commander responses with typed
+  `select_communication_response` (index 0 twice, as in
+  `real-sol-planetside-collision-proof`) after
+  `wait_for_communication_responses 3`, then waits for the conversation to end
   (`wait_for_communication_end`, which counts completions since the probe wait
-  consumed its own) and asserts `assert_activity 4`.
+  consumed its own) and asserts `assert_activity 4`. The earlier blind
+  cancel/select taps never ended the conversation in a real window
+  (`communication_responses_active:count=3`, then a 334 s timeout): the first
+  list is 3 responses and the next is 2, as in the `comm-encounter-v1` and
+  `real-sol-starbase-to-mars` traces.
 - `real-sol-rust-planetside-smoke` follows the Mars sequence of
   `real-sol-starbase-to-mars`: orbit, `assert_mode orbit`, scan, dispatch,
   landing site, `wait_for_planet_side_start`, thrust and weapon, special tap,
   `wait_for_planet_side_end returned`, `assert_mode orbit`.
-- `quit-v1` selects Quit. The restart menu sets `CHECK_ABORT` directly for
-  Quit (`restart.c`); `DoConfirmExit` is not on this path. The script asserts
-  `assert_mode quit` (activity flag `check_abort`). Whether the harness still
-  records `finish` after the game begins exiting is unverified.
+- `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
+  `CHECK_ABORT` directly for Quit (`restart.c`; `DoConfirmExit` is not on this
+  path) and the game exits before the next input callback, so the scripted
+  `assert_mode quit` never ran and finalization recorded an unlabelled
+  `semantic_mismatch` at input 146 (real-window run: `mode_verified:main_menu`
+  at 145, one input tick at 146, then `run_end semantic_mismatch`, teardown
+  `game_status 0`). `expect_quit` is a typed terminal step: it must directly
+  follow a `tap_menu_key select` and directly precede `finish`. The restart
+  menu reports the Quit selection (`quit_selected:activity=0x4000`) and
+  finalization turns it into `quit_verified:activity=0x4000` and a `success`
+  run end only when the script declares `expect_quit` at the step the run
+  stopped on. An exit without the report, or a reported quit in a script that
+  does not declare it, is still a `semantic_mismatch` with its own label
+  (`quit_expected:...`, `quit_unexpected:...`). The step needs no OS
+  checkpoint (the window is gone); the native acceptance instead requires the
+  `quit_verified` record in the trace of any script that declares it.
 - `load-save-v1` asserts ship resources after the load.
 - `real-sol-probe-to-starbase` is now the composed journey (new game,
   communication, navigation, planet side, starbase); `linked-playable-v1`
@@ -321,7 +340,7 @@ Routes (leg = thrust ticks, every turn a verified four facing `right` `turn_flag
 | v2 | 4 x 80 | 3, three right angles | 1000 raw |
 | v3 | 4 x 500 | 3, three right angles | 6000 raw |
 | v4 | 4 x 550 | 3, three right angles | 6000 raw |
-| v5 | 4 x 50 | 3, three right angles | 1000 raw |
+| v5 | 4 x 100 | 3, three right angles | 1000 raw |
 | v6 | 3 x 200 | 2, five flagship menu visits | 1000 raw |
 | v7 | 3 x 200 | 2, five Game menu visits | 1000 raw |
 
@@ -347,6 +366,20 @@ IN_INTERPLANETARY) proves they are back in the Sol system, then the
 `returned-to-sol` capture, the script's final wait, `probe-encounter-final` and
 `finish`. The arrival is the asserted end of these scripts, not a failure.
 v6 and v7 fly three legs and never return to Sol.
+
+Whether the square re-enters Sol depends on how closely it closes, and the
+simulation is deterministic for the fixed new-game seed. v5 at 4 x 50 ticks
+(real-window run after the probe meeting) ended its last leg at 27967,164221
+against the start 27987,164141 while travelling along the line y = x +
+136254, which passes 100 units above Sol's point on that diagonal (about 71
+perpendicular), so the ship coasted past Sol and `assert_activity 4` failed.
+Before the probe meeting the same legs happened to close. v5 now flies v1's
+flight section exactly (40 ticks before `hyperspace-start`, 4 x 100 thrust
+ticks, settle 5): in the real-window v1 run the last leg is the line through
+Sol (27171,163325 to 27935,164089, y = x + 136154, Sol at 27987,164141) and
+ends 52 units short of it on each axis, so the coasting ship enters Sol. v2
+(80 ticks, 27275,163429 to 27923,164077) closes the same way. The v5 return is
+that recorded v1 trajectory rather than a fresh tiny square.
 
 ### The flagship menu in v6 and v7
 

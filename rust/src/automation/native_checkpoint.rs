@@ -54,6 +54,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::SetPlayerKey(_)
         | Action::TapPlayerKey(_)
         | Action::RecordHyperspacePosition(_)
+        | Action::ExpectQuit(_)
         | Action::Finish => None,
     }
 }
@@ -76,6 +77,9 @@ pub struct NativeCheckpointPlan {
     pub resolved_sha256: String,
     pub checkpoints: Vec<NativeCheckpoint>,
     pub linked_floors: bool,
+    /// The script declares `expect_quit`: the game exits before an OS
+    /// checkpoint is possible, so the trace must carry the game's own quit proof.
+    pub expects_quit: bool,
 }
 
 impl NativeCheckpointPlan {
@@ -103,6 +107,10 @@ impl NativeCheckpointPlan {
             // This additional proof is an explicit existing scenario obligation.
             // General actions never inherit its battle or presentation floors.
             linked_floors: script.name() == "linked-playable-v1",
+            expects_quit: script
+                .steps()
+                .iter()
+                .any(|action| matches!(action, Action::ExpectQuit(_))),
         })
     }
 
@@ -312,6 +320,14 @@ pub fn validate_correlations(
         .checkpoint_plan
         .as_ref()
         .ok_or("native checkpoint plan is missing")?;
+    if plan.expects_quit
+        && !records.iter().any(|record| {
+            record.kind == RecordKind::SemanticAssertion
+                && record.label.as_deref() == Some(super::coordinator::QUIT_VERIFIED_LABEL)
+        })
+    {
+        return Err("script declares expect_quit but the trace has no quit_verified record".into());
+    }
     let committed = plan.committed(records)?;
     if committed.len() != plan.checkpoints.len() {
         return Err("native run omitted selected checkpoint obligations".into());
@@ -437,6 +453,27 @@ mod tests {
         assert!(
             plan.committed(&trace).is_err(),
             "assertion happened after its purported commit"
+        );
+    }
+
+    #[test]
+    fn expect_quit_needs_no_os_checkpoint_but_binds_the_trace_proof() {
+        let (source, quit) = script(serde_json::json!([
+            {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 1},
+            {"action": "expect_quit"},
+            {"action": "finish"}
+        ]));
+        let plan = NativeCheckpointPlan::derive(&source, &quit).unwrap();
+        assert!(plan.expects_quit);
+        assert!(
+            plan.checkpoints.is_empty(),
+            "the game exits before any capture"
+        );
+        let (source, other) = script(serde_json::json!([{"action": "finish"}]));
+        assert!(
+            !NativeCheckpointPlan::derive(&source, &other)
+                .unwrap()
+                .expects_quit
         );
     }
 

@@ -207,7 +207,7 @@ fn square_leg_holds() -> [(&'static str, u64); 5] {
         ("probe-encounter-v2", 80),
         ("probe-encounter-v3", 500),
         ("probe-encounter-v4", 550),
-        ("probe-encounter-v5", 50),
+        ("probe-encounter-v5", 100),
     ]
 }
 
@@ -238,6 +238,33 @@ fn v1_to_v5_fly_a_four_leg_square_with_three_right_angle_turns() {
              would be flown from Sol, where the ship is no longer in hyperspace"
         );
     }
+}
+
+/// Whether the square re-enters Sol is decided by how closely it closes, and
+/// the simulation is deterministic for the fixed seed. v1's recorded real-window
+/// flight closes on Sol, so v5 reuses its flight section action for action;
+/// v5's earlier 4 x 50 square missed Sol by about 71 units after the probe
+/// meeting.
+#[test]
+fn v5_flies_the_flight_section_recorded_for_v1() {
+    let flight = |name: &str| -> Vec<Value> {
+        let steps = script_steps(name);
+        let start = steps
+            .iter()
+            .position(|step| action_of(step) == "navigate_to_hyperspace")
+            .expect("hyperspace departure");
+        let end = start
+            + steps[start..]
+                .iter()
+                .position(|step| action_of(step) == "assert_activity" && step["equals"] == 4)
+                .expect("return to Sol assertion");
+        steps[start..=end]
+            .iter()
+            .filter(|step| action_of(step) != "capture")
+            .cloned()
+            .collect()
+    };
+    assert_eq!(flight("probe-encounter-v5"), flight("probe-encounter-v1"));
 }
 
 #[test]

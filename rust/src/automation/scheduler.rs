@@ -529,13 +529,17 @@ fn reduce_input_timing(
     sv: u64,
 ) -> Option<SchedulerTransition> {
     Some(match (action, state.phase) {
-        (Action::WaitForMainMenuReady(_), ActionPhase::WaitingForInput) => SchedulerTransition {
-            new_state: SchedulerState {
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
+        // ExpectQuit holds like a readiness wait: the quit the game reports at
+        // finalization ends the run, and a game that never quits times out.
+        (Action::WaitForMainMenuReady(_) | Action::ExpectQuit(_), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) if w.count == 0 => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }

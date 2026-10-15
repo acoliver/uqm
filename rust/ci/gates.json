@@ -333,7 +333,7 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-v5.json",
-                "sha256": "9d2140a392875b9efd5c4b91feeffec53df569e625486894c12bbc99c829dcd4",
+                "sha256": "4e58e8e490173f818039e49dd36a66e063ee45a00bdf538b30491b4bd7c6425c",
                 "byte_length": 2554,
                 "outer_child_timeout_ms": 900000
           },
@@ -356,8 +356,8 @@
           },
           {
                 "path": "rust/scripts/quit-v1.json",
-                "sha256": "131d1a4ddb3632eecd819e2758213b177528f12cae03cf0ac7f2ed377d027940",
-                "byte_length": 1288
+                "sha256": "1e79e7955a1175c2c970c38bd89ef1c848b58f2986357aab1e9a2d08085937db",
+                "byte_length": 1269
           },
           {
                 "path": "rust/scripts/real-sol-autopilot.json",
@@ -366,8 +366,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-commander-completion.json",
-                "sha256": "17f2e2f7f26ca28c9f189ede2a25e99eb7e84fc7abfc64750604c72798533a8a",
-                "byte_length": 2328,
+                "sha256": "6df2c7b7036a31624c8756137ff3a340fb7d55615153b1d91216af094933e837",
+                "byte_length": 1491,
                 "outer_child_timeout_ms": 900000
           },
           {

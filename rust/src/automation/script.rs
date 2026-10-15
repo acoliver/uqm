@@ -746,6 +746,15 @@ pub struct SetupPlanetSideCollisionFixtureStep {}
 #[serde(deny_unknown_fields)]
 pub struct WaitForMainMenuReadyStep {}
 
+/// The no-payload terminal step declaring that the script ends with the game
+/// quitting. It must directly follow the `select` tap on the restart menu's
+/// Quit entry and directly precede `finish`: the game exits before any later
+/// input callback, so the step is proven by the quit the game itself reports
+/// at finalization rather than by a scheduled assertion.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExpectQuitStep {}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -790,6 +799,7 @@ pub enum Action {
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
+    ExpectQuit(ExpectQuitStep),
     Finish,
 }
 
@@ -1466,6 +1476,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
 
     // Final finish semantics (REQ-SCRIPT-004).
     validate_finish_semantics(&steps, path)?;
+    validate_expect_quit_placement(&steps, path)?;
 
     // Per-step validation.
     let mut requirements = StepRequirements::default();
@@ -2059,6 +2070,37 @@ fn validate_finish_semantics(steps: &[Action], path: &str) -> Result<(), Automat
     Ok(())
 }
 
+/// `expect_quit` is only meaningful as the quit selection's outcome: it follows
+/// a `select` tap and is followed directly by `finish`.
+fn validate_expect_quit_placement(steps: &[Action], path: &str) -> Result<(), AutomationError> {
+    for (index, step) in steps.iter().enumerate() {
+        if !matches!(step, Action::ExpectQuit(_)) {
+            continue;
+        }
+        let after_select = index
+            .checked_sub(1)
+            .and_then(|previous| steps.get(previous))
+            .is_some_and(|previous| {
+                matches!(
+                    previous,
+                    Action::TapMenuKey(TapMenuKeyStep {
+                        key: MenuKey::Select,
+                        ..
+                    })
+                )
+            });
+        let before_finish = matches!(steps.get(index + 1), Some(Action::Finish));
+        if !after_select || !before_finish {
+            return Err(AutomationError::step(
+                path,
+                index,
+                "expect_quit must directly follow a tap_menu_key select and directly precede finish",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Parse a `RestartMenuItem` from its canonical name, rejecting unknown
 /// stringly-typed values and raw indices.
 fn parse_menu_item(
@@ -2384,6 +2426,34 @@ mod tests {
             a.resolved().replay_identity().unwrap(),
             b.resolved().replay_identity().unwrap()
         );
+    }
+
+    #[test]
+    fn expect_quit_must_follow_a_select_tap_and_precede_finish() {
+        let tap = |key: &str| {
+            format!(r#"{{"action":"tap_menu_key","key":"{key}","value":1,"hold":1,"settle":1}}"#)
+        };
+        let script = |steps: String| {
+            let txt = format!(
+                r#"{{"version":1,"name":"q","budgets":{{"max_input_ticks":50,"max_presentations":10,"max_wallclock_seconds":1}},"steps":[{steps}]}}"#
+            );
+            validate_script(parse_script(txt.as_bytes(), "q.json").unwrap(), "q.json")
+        };
+        let quit = r#"{"action":"expect_quit"}"#;
+        let finish = r#"{"action":"finish"}"#;
+        assert!(script(format!("{},{quit},{finish}", tap("select"))).is_ok());
+        for bad in [
+            format!("{},{quit},{finish}", tap("down")),
+            format!("{quit},{finish}"),
+            format!("{},{quit},{},{finish}", tap("select"), tap("down")),
+            format!("{},{quit},{quit},{finish}", tap("select")),
+        ] {
+            let error = script(bad.clone()).expect_err(&bad).to_string();
+            assert!(
+                error.contains("expect_quit must directly follow"),
+                "{error}"
+            );
+        }
     }
 
     #[test]
