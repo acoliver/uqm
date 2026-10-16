@@ -145,7 +145,7 @@ fn dispatch(request: PlanetSideRequest) -> PlanetSideReply {
 }
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
-    fn GetFrameCount(frame: *mut c_void) -> libc::c_int;
+    fn GetFrameCount(frame: *mut c_void) -> u16;
 }
 
 const fn failure(status: i32) -> PlanetSideReply {
@@ -251,9 +251,9 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             persistence,
             world_visuals,
             earthquake_frame_count: unsafe {
-                GetFrameCount(assets.graphic(LanderGraphic::Earthquake)) as u16
+                GetFrameCount(assets.graphic(LanderGraphic::Earthquake))
             },
-            lava_frame_count: unsafe { GetFrameCount(assets.graphic(LanderGraphic::Lava)) as u16 },
+            lava_frame_count: unsafe { GetFrameCount(assets.graphic(LanderGraphic::Lava)) },
         };
         let graphics = CffiPlanetSideGraphics {
             surface,

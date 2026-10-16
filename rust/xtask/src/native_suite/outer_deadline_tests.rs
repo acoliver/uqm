@@ -9,7 +9,7 @@ use crate::ci::authority::load_authority;
 use uqm_rust::automation::native_window::NativeWindowRuntimeContract;
 
 /// Pinned scripts whose declared wall budget is above 300 s.
-pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 14] = [
+pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 15] = [
     "rust/scripts/probe-encounter-v2.json",
     "rust/scripts/probe-encounter-v3.json",
     "rust/scripts/probe-encounter-v4.json",
@@ -24,6 +24,7 @@ pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 14] = [
     "rust/scripts/real-sol-probe-to-starbase.json",
     "rust/scripts/real-sol-rust-planetside-smoke.json",
     "rust/scripts/real-sol-starbase-to-mars.json",
+    "rust/scripts/starbase-visit-v1.json",
 ];
 
 /// Pinned scripts that declare a 900 s wall budget.
@@ -116,7 +117,7 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
-    assert_eq!(longer.len(), 14);
+    assert_eq!(longer.len(), 15);
     for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);

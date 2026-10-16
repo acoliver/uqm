@@ -4603,6 +4603,17 @@ mod tests {
         wait_for_owner();
     }
 
+    /// Whether a failed group `SIGKILL` means the group no longer has a live
+    /// member. `leader_ended` is only meaningful for `EPERM`.
+    #[cfg(unix)]
+    fn group_is_already_gone(errno: Option<i32>, leader_ended: bool) -> bool {
+        match errno {
+            Some(libc::ESRCH) => true,
+            Some(libc::EPERM) => leader_ended,
+            _ => false,
+        }
+    }
+
     /// A helper process that cannot outlive the test that spawned it.
     ///
     /// These helpers ignore `SIGTERM`, lead their own process groups and run
@@ -4790,11 +4801,52 @@ mod tests {
             // cannot have had its identity reused.
             if unsafe { libc::kill(-pid, libc::SIGKILL) } == -1 {
                 let error = std::io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
+                // Darwin answers EPERM, not ESRCH, for a group whose members
+                // are all unreaped zombies, so that errno only means "already
+                // gone" once the leader is seen to have ended. Any other EPERM
+                // is a real permission failure and stays one.
+                let leader_ended = if error.raw_os_error() == Some(libc::EPERM) {
+                    self.has_exited_unreaped()?
+                } else {
+                    false
+                };
+                if !group_is_already_gone(error.raw_os_error(), leader_ended) {
                     return Err(format!("cannot kill owned helper group {pid}: {error}"));
                 }
             }
             self.reap()
+        }
+
+        /// Fail unless the helper is still running.
+        ///
+        /// A zombie stays in the process table and still answers `kill(pid, 0)`,
+        /// so `process_exists` cannot show that a helper was left alone. A helper
+        /// that has ended is killed and reaped here, which names how it ended.
+        fn assert_still_running(&mut self, what: &str) {
+            let pid = self.pid();
+            match self.exited_early() {
+                Ok(None) => {}
+                Ok(Some(status)) => panic!("{what}: helper {pid} had already ended with {status}"),
+                Err(error) => panic!("{what}: helper {pid} could not be supervised: {error}"),
+            }
+        }
+
+        /// Kill the helper's group, and fail unless this call's `SIGKILL` is
+        /// what ended it.
+        fn terminate_by_sigkill(&mut self) -> Result<(), String> {
+            use std::os::unix::process::ExitStatusExt as _;
+
+            let pid = self.pid();
+            if self.reaped {
+                return Err(format!("owned helper {pid} was already reaped"));
+            }
+            let status = self.kill_group_and_reap()?;
+            match status.signal() {
+                Some(libc::SIGKILL) => Ok(()),
+                _ => Err(format!(
+                    "owned helper {pid} ended with {status} instead of the SIGKILL sent to it"
+                )),
+            }
         }
     }
 
@@ -4865,6 +4917,89 @@ mod tests {
             }
             thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    /// Wait for a helper that ends on its own to become an unreaped zombie.
+    #[cfg(unix)]
+    fn wait_until_ended_unreaped(helper: &OwnedHelper) {
+        let deadline = Instant::now() + HELPER_REGISTRATION_TIMEOUT;
+        while !helper.has_exited_unreaped().expect("poll helper") {
+            assert!(
+                Instant::now() < deadline,
+                "helper {} did not end on its own",
+                helper.pid()
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_group_of_zombies_is_reaped_and_reported_rather_than_failed() {
+        let mut helper = OwnedHelper::spawn_anchor_target("exit");
+        wait_until_ended_unreaped(&helper);
+        let status = helper
+            .kill_group_and_reap()
+            .expect("a group with no live member is already gone");
+        assert!(status.success(), "helper ended with {status}");
+    }
+
+    /// Darwin is the platform that reports `EPERM` here; this pins the
+    /// behavior `kill_group_and_reap` has to tell apart from a real refusal.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn darwin_refuses_to_signal_a_group_whose_only_member_is_a_zombie() {
+        let mut helper = OwnedHelper::spawn_anchor_target("exit");
+        wait_until_ended_unreaped(&helper);
+        // SAFETY: the helper leads its own group and is an unreaped child, so
+        // the negated PID names that group and cannot have been reused.
+        assert_eq!(unsafe { libc::kill(-helper.pid(), libc::SIGKILL) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        );
+        helper.wait().expect("reap the zombie leader");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn only_a_group_that_has_ended_excuses_a_failed_group_kill() {
+        assert!(group_is_already_gone(Some(libc::ESRCH), false));
+        assert!(group_is_already_gone(Some(libc::EPERM), true));
+        assert!(!group_is_already_gone(Some(libc::EPERM), false));
+        assert!(!group_is_already_gone(Some(libc::EINVAL), true));
+        assert!(!group_is_already_gone(None, true));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_ended_helper_is_not_counted_as_still_running() {
+        let mut helper = OwnedHelper::spawn_anchor_target("exit");
+        wait_until_ended_unreaped(&helper);
+        let refusal = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            helper.assert_still_running("zombie check");
+        }))
+        .expect_err("a zombie is not a running helper");
+        let message = refusal
+            .downcast_ref::<String>()
+            .expect("formatted panic message");
+        assert!(message.contains("had already ended with"), "{message}");
+        assert!(helper.reaped, "the ended helper must be reaped");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_helper_that_ended_otherwise_is_not_credited_to_our_sigkill() {
+        let mut helper = OwnedHelper::spawn_anchor_target("exit");
+        wait_until_ended_unreaped(&helper);
+        let error = helper
+            .terminate_by_sigkill()
+            .expect_err("the helper ended before any SIGKILL was sent");
+        assert!(error.contains("instead of the SIGKILL"), "{error}");
+        let mut live = OwnedHelper::spawn_anchor_target("wait");
+        live.assert_still_running("a waiting helper is running");
+        live.terminate_by_sigkill()
+            .expect("a running helper dies by our SIGKILL");
     }
 
     /// A test that fails must still take its helper with it.
@@ -5010,10 +5145,9 @@ mod tests {
             MonitorAnchor::spawn_checked(candidate_pid, start, || Some(start.wrapping_add(1)))
                 .expect_err("changed identity must reject registration");
         assert!(error.contains("changed identity"));
-        assert!(process_exists(candidate_pid));
-        assert!(process_exists(unrelated.pid()));
         for helper in [&mut candidate, &mut unrelated] {
-            helper.terminate().expect("release test helper");
+            helper.assert_still_running("registration rejection signaled a helper");
+            helper.terminate_by_sigkill().expect("release test helper");
         }
     }
 
@@ -5085,12 +5219,9 @@ mod tests {
             captured.succeeded(),
             "nested lifecycle failed: {captured:?}"
         );
-        assert!(
-            process_exists(unrelated.pid()),
-            "nested cleanup signaled an unrelated process group"
-        );
+        unrelated.assert_still_running("nested cleanup signaled an unrelated process group");
         unrelated
-            .terminate()
+            .terminate_by_sigkill()
             .expect("release unrelated test helper");
         std::fs::remove_dir_all(directory).expect("remove test directory");
     }
@@ -5153,12 +5284,10 @@ mod tests {
                 "registered process {pid} survived outer supervisor termination"
             );
         }
-        assert!(
-            process_exists(unrelated.pid()),
-            "outer-controller cleanup signaled an unrelated process group"
-        );
         unrelated
-            .terminate()
+            .assert_still_running("outer-controller cleanup signaled an unrelated process group");
+        unrelated
+            .terminate_by_sigkill()
             .expect("release unrelated test helper");
         let _ = std::fs::remove_dir_all(directory);
     }

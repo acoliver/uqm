@@ -116,6 +116,7 @@ fn run() -> Result<(), String> {
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
+    generate_global_state_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
@@ -707,6 +708,89 @@ fn generate_input_abi_bindings() -> Result<(), String> {
         bindings.to_string(),
     )
     .map_err(|error| format!("cannot write generated controller-input ABI bindings: {error}"))
+}
+
+/// Bindgen layout of the live game-state record the Save/Load runtime reads
+/// and writes: `GAME_STATE`, `GLOBDATA`, `CLOCK_STATE`, `EVENT`,
+/// `VELOCITY_DESC`, the `FLEET_INFO`, `SHIP_FRAGMENT`, `IP_GROUP` and
+/// `ENCOUNTER` queue elements (with `BRIEF_SHIP_INFO`), the `NUM_EVENTS` pool
+/// size and the `MAX_BATTLE_GROUPS`, `MAX_ENCOUNTERS` and `MAX_HYPER_SHIPS`
+/// bounds. The solar-system state (`SOLARSYS_STATE`, `PLANET_DESC`) the
+/// Save/Load summary reads comes from `planets.h`, with the game-string bases
+/// of `gamestr.h` and the star-index enum of `gendef.h` that name its worlds.
+/// `FRAME_DESC` comes from `drawable.h`, where it is defined: every other
+/// header only forward-declares it, which bindgen renders as an empty struct.
+/// The image and parent drawable it points at are never dereferenced from
+/// Rust, so they stay opaque rather than pulling the graphics driver types in.
+///
+/// `ELEMENT` (element.h) and `STARSHIP` (races.h) are the display-list element
+/// and the ship record the save of a hyperspace flagship follows; the race
+/// descriptor a `STARSHIP` points at is never dereferenced from Rust, so it
+/// stays opaque with the drawables.
+///
+/// Bindgen's layout tests are on: each one compares a generated type's size,
+/// alignment and member offsets with what clang computed from the header, which
+/// is the check that a Rust read of a C struct (such as `FRAME_DESC.Index`)
+/// lands on the field C means.
+///
+/// The hand-written mirrors in `comm/locdata.rs` and `time/clock_bridge.rs`
+/// compare every offset, size and alignment against these at compile time, so
+/// a header change that moves a field stops the build instead of corrupting a
+/// save.
+fn generate_global_state_abi_bindings() -> Result<(), String> {
+    let out_dir = output_directory()?;
+    let globdata = "../sc2/src/uqm/globdata.h";
+    let events = "../sc2/src/uqm/gameev.h";
+    let races = "../sc2/src/uqm/races.h";
+    let groups = "../sc2/src/uqm/grpinfo.h";
+    let encounters = "../sc2/src/uqm/encount.h";
+    let planets = "../sc2/src/uqm/planets/planets.h";
+    let game_strings = "../sc2/src/uqm/gamestr.h";
+    let star_indexes = "../sc2/src/uqm/gendef.h";
+    let drawable = "../sc2/src/libs/graphics/drawable.h";
+    for header in [
+        globdata,
+        events,
+        races,
+        groups,
+        encounters,
+        planets,
+        game_strings,
+        star_indexes,
+        drawable,
+    ] {
+        println!("cargo:rerun-if-changed={header}");
+    }
+    let bindings = bindgen::Builder::default()
+        .header(globdata)
+        .header(events)
+        .header(races)
+        .header(groups)
+        .header(encounters)
+        .header(planets)
+        .header(game_strings)
+        .header(star_indexes)
+        .header(drawable)
+        .clang_arg("-I../sc2")
+        .clang_arg("-I../sc2/src")
+        .allowlist_type(
+            "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
+             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC|ELEMENT\
+             |STARSHIP)",
+        )
+        .opaque_type("(tfb_image|drawable_desc|race_desc|RACE_DESC)")
+        .allowlist_var(
+            "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
+             |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
+             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM)",
+        )
+        .generate_comments(false)
+        .layout_tests(true)
+        .formatter(ABI_BINDING_FORMATTER)
+        .generate()
+        .map_err(|error| format!("cannot generate global-state ABI bindings: {error}"))?;
+    fs::write(out_dir.join("global_state_abi.rs"), bindings.to_string())
+        .map_err(|error| format!("cannot write generated global-state ABI bindings: {error}"))
 }
 
 /// Rename the generated hash-table ABI to this crate's spelling, and restore

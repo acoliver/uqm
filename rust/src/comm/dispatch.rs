@@ -11,6 +11,7 @@
 
 use std::os::raw::c_void;
 
+use crate::c_bindings::{assert_c_layout, global_state};
 use crate::collections::queue::{AllocLink, CountLinks, HLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::locdata::rust_sync_comm_data;
 use crate::mainloop::c_extern;
@@ -124,6 +125,78 @@ pub struct CFleetInfo {
     pub func_index: u8,
     pub dest_loc: CPoint,
 }
+
+assert_c_layout!(
+    CShipFragment,
+    global_state::SHIP_FRAGMENT {
+        pred: pred,
+        succ: succ,
+        species_id: SpeciesID,
+        captains_name_index: captains_name_index,
+        race_id: race_id,
+        index: index,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        energy_level: energy_level,
+        max_energy: max_energy,
+        race_strings: race_strings,
+        icons: icons,
+        melee_icon: melee_icon,
+    }
+);
+assert_c_layout!(
+    CFleetInfo,
+    global_state::FLEET_INFO {
+        pred: pred,
+        succ: succ,
+        species_id: SpeciesID,
+        allied_state: allied_state,
+        days_left: days_left,
+        growth_fract: growth_fract,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        growth: growth,
+        max_energy: max_energy,
+        loc: loc,
+        race_strings: race_strings,
+        icons: icons,
+        melee_icon: melee_icon,
+        actual_strength: actual_strength,
+        known_strength: known_strength,
+        known_loc: known_loc,
+        growth_err_term: growth_err_term,
+        func_index: func_index,
+        dest_loc: dest_loc,
+    }
+);
+assert_c_layout!(
+    BriefShipInfo,
+    global_state::BRIEF_SHIP_INFO {
+        race_id: race_id,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        max_energy: max_energy,
+    }
+);
+assert_c_layout!(
+    CEncounter,
+    global_state::ENCOUNTER {
+        pred: pred,
+        succ: succ,
+        h_element: hElement,
+        transition_state: transition_state,
+        origin: origin,
+        radius: radius,
+        race_id: race_id,
+        num_ships: num_ships,
+        flags: flags,
+        loc_pt: loc_pt,
+        ship_list: ShipList,
+        log_x: log_x,
+        log_y: log_y,
+    }
+);
+const _: () = assert!(MAX_HYPER_SHIPS == global_state::MAX_HYPER_SHIPS as usize);
 
 // ---------------------------------------------------------------------------
 // C constants
@@ -245,7 +318,8 @@ pub mod ship {
     pub const BLACK_URQUAN_SHIP: u8 = 21;
     pub const YEHAT_REBEL_SHIP: u8 = 22;
     pub const URQUAN_DRONE_SHIP: u8 = 23;
-    pub const SAMATRA_SHIP: u8 = 24;
+    /// `SAMATRA_SHIP = URQUAN_DRONE_SHIP` (races.h).
+    pub const SAMATRA_SHIP: u8 = URQUAN_DRONE_SHIP;
 }
 
 /// C: `NPC_PLAYER_NUM`
@@ -349,9 +423,6 @@ mod ffi {
 
         // TFB_Random for PickCaptainName (libs/misc.h)
         pub fn TFB_Random() -> u32;
-
-        // CommIntroMode (comm.c) — C: SetCommIntroMode(mode, howLong)
-        pub fn SetCommIntroMode(mode: u32, how_long: u32);
 
         // CommData global for direct encounter function pointer calls
         pub static mut CommData: crate::comm::locdata::CLocData;
@@ -890,8 +961,39 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
 ///
 /// Creates a SHIP_FRAGMENT in the destination queue by copying template
 /// data from the fleet queue (avail_race_q).
-unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level: u16) -> HLink {
-    let avail_q = avail_race_queue();
+pub(crate) unsafe fn clone_ship_fragment(
+    ship_index: u8,
+    dst_queue: *mut Queue,
+    crew_level: u16,
+) -> HLink {
+    clone_ship_fragment_from(
+        avail_race_queue(),
+        ship_index,
+        dst_queue,
+        crew_level,
+        &mut production_captain_name,
+    )
+}
+
+/// `PickCaptainName ()` as the running game draws it.
+pub(crate) fn production_captain_name() -> u8 {
+    // SAFETY: `TFB_Random` takes no arguments and touches only the game's
+    // random state.
+    unsafe { pick_captain_name() }
+}
+
+/// `CloneShipFragment` against an explicit fleet queue and captain-name draw.
+///
+/// # Safety
+/// `avail_q` is a queue of `FLEET_INFO` links and `dst_queue` a queue of
+/// `SHIP_FRAGMENT` slots; both are well formed.
+pub(crate) unsafe fn clone_ship_fragment_from(
+    avail_q: *mut Queue,
+    ship_index: u8,
+    dst_queue: *mut Queue,
+    crew_level: u16,
+    pick_name: &mut dyn FnMut() -> u8,
+) -> HLink {
     let h_fleet = get_star_ship_from_index(avail_q, ship_index);
     if h_fleet.is_null() {
         return std::ptr::null_mut();
@@ -902,7 +1004,7 @@ unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level:
     let captains_name_index = if ship_index == ship::SAMATRA_SHIP {
         0
     } else {
-        name_captain(dst_queue, (*template_ptr).species_id)
+        name_captain(dst_queue, (*template_ptr).species_id, pick_name)
     };
 
     // Build a new link in the destination queue
@@ -990,10 +1092,14 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
 
 /// Port of C `NameCaptain(pQueue, SpeciesID)`. Picks a random captain name
 /// index, retrying if it matches an existing ship of the same species.
-unsafe fn name_captain(p_queue: *mut Queue, species_id: CSpeciesId) -> u8 {
+unsafe fn name_captain(
+    p_queue: *mut Queue,
+    species_id: CSpeciesId,
+    pick_name: &mut dyn FnMut() -> u8,
+) -> u8 {
     let mut name_index: u8;
     loop {
-        name_index = pick_captain_name();
+        name_index = pick_name();
 
         let mut h_star_ship = get_head_link(p_queue);
         let mut found_match = false;
@@ -1141,11 +1247,18 @@ pub mod smm {
 pub const ONE_SECOND: u32 = 840;
 
 /// Port of C `VisitStarBase()`. Handles the starbase dispatch logic:
-/// unallied conversations, Ilwrath encounter, time passage, and starbase menu.
+/// unallied conversations, Ilwrath encounter, time passage, the starbase
+/// menu and the cleanup that returns the ship to interplanetary space.
+///
+/// # Errors
+/// Returns the error of a Starbase or Outfit route that this port cannot
+/// serve; the game loop ends on it.
 ///
 /// # Safety
 /// Calls C FFI functions that access global state and rendering.
-pub unsafe extern "C" fn rust_visit_starbase() {
+#[cfg(not(test))]
+pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError> {
+    let platform = crate::starbase::cffi::CffiPlatform;
     // CHMMR_BOMB_STATE == 2: transported by Chmmr to Starbase
     if get_game_state("CHMMR_BOMB_STATE") == 2 {
         ffi::CurStarDescPtr = std::ptr::null_mut();
@@ -1155,7 +1268,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
     if get_game_state("STARBASE_AVAILABLE") == 0 {
         // Unallied Starbase conversation
         crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
-        ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
+        crate::comm::ffi::set_comm_intro_mode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
         // Check if the Ur-Quan probe Ilwrath encounter should happen
@@ -1168,7 +1281,8 @@ pub unsafe extern "C" fn rust_visit_starbase() {
             set_game_state("STARBASE_AVAILABLE", 1);
             set_game_state("STARBASE_VISITED", 1);
             crate::automation::input_ffi::rust_automation_service_boundary();
-            return;
+            crate::starbase::cleanup_after_visit(&platform);
+            return Ok(());
         }
 
         // Create an Ilwrath ship responding to the Ur-Quan probe's broadcast
@@ -1183,15 +1297,15 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
 
         // After Ilwrath battle, about-to-ally Starbase conversation
-        ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
+        crate::comm::ffi::set_comm_intro_mode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
         // This marks that we are in Starbase.
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
@@ -1199,35 +1313,40 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
     // The Commander's moon-base conversation changes resource units, and the
     // status gauges only accept that change while they show resource units.
-    let previous_message_mode = c_extern::SetStatusMessageMode(smm::RES_UNITS as i32);
+    let message_mode = crate::starbase::StatusModeGuard::enter(
+        &platform,
+        crate::starbase::platform::StatusMessageMode::ResUnits,
+    );
 
-    if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
-        // Go immediately into a conversation with the Commander
-        // Time passage — DoTimePassage is static in starbase.c.
-        // TODO: Port DoTimePassage to Rust.
-        // For now, skip time passage (the C archive handles this when
-        // starbase is entered via the C path).
+    if let Some(passage) = crate::starbase::entry_time_passage(
+        get_game_state("MOONBASE_ON_SHIP") != 0,
+        get_game_state("CHMMR_BOMB_STATE") as u8,
+    ) {
+        // Go immediately into a conversation with the Commander when the
+        // Starbase becomes available for the first time, or after Chmmr
+        // install the bomb.
+        crate::starbase::do_time_passage(&platform, passage);
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF {
-            return; // You are now dead!
+            return Ok(()); // You are now dead!
         }
 
         crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
-        ffi::SetCommIntroMode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
+        crate::comm::ffi::set_comm_intro_mode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
     }
 
-    // Starbase menu input loop — DoStarBase/DoInput are in starbase.c/controls.c.
-    // TODO: Port starbase menu to Rust. For now, skip menu input.
-    // ffi::rust_do_starbase_menu_input();
+    crate::starbase::run_starbase_menu(&platform)?;
 
-    c_extern::SetStatusMessageMode(previous_message_mode);
+    drop(message_mode);
+    crate::starbase::cleanup_after_visit(&platform);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1285,12 +1404,16 @@ mod tests {
     }
 
     #[test]
-    fn race_communication_maps_samatra_to_invalid() {
-        // SAMATRA_SHIP = 24, which is the last entry
+    fn samatra_ship_is_the_urquan_drone_slot_of_avail_race_q() {
+        // races.h: `SAMATRA_SHIP = URQUAN_DRONE_SHIP`, the last of the 24
+        // `avail_race_q` entries; index 24 names no fleet at all.
+        assert_eq!(ship::SAMATRA_SHIP, ship::URQUAN_DRONE_SHIP);
+        assert_eq!(ship::SAMATRA_SHIP, 23);
         assert_eq!(
             RACE_COMMUNICATION[ship::SAMATRA_SHIP as usize],
-            conv::INVALID
+            conv::URQUAN_DRONE
         );
+        assert_eq!(RACE_COMMUNICATION[24], conv::INVALID);
     }
 
     #[test]
@@ -1382,7 +1505,7 @@ mod tests {
     fn ship_type_ids_match_c_enum() {
         assert_eq!(ship::ARILOU_SHIP, 0);
         assert_eq!(ship::HUMAN_SHIP, 2);
-        assert_eq!(ship::SAMATRA_SHIP, 24);
+        assert_eq!(ship::SAMATRA_SHIP, 23);
     }
 
     #[test]

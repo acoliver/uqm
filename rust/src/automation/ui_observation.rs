@@ -9,6 +9,7 @@ static COMMUNICATION_RESPONSES_READY: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_REPLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_REPLAY_GENERATION: AtomicU64 = AtomicU64::new(0);
+static STARBASE_MENU_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PLANET_MENU_PHASE: AtomicUsize = AtomicUsize::new(0);
 static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -54,6 +55,18 @@ pub fn planet_menu_phase() -> PlanetMenuPhase {
 }
 
 static COMMUNICATION_COMPLETIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Record whether the Starbase menu, or the Outfit screen it opens, is the
+/// active input loop.
+pub fn observe_starbase_menu(active: bool) {
+    STARBASE_MENU_ACTIVE.store(active, Ordering::Release);
+}
+
+/// Whether the Starbase menu or the Outfit screen is the active input loop.
+#[must_use]
+pub fn starbase_menu_active() -> bool {
+    STARBASE_MENU_ACTIVE.load(Ordering::Acquire)
+}
 
 /// Record entry to or exit from the production Game Options input loop.
 #[no_mangle]
@@ -130,6 +143,51 @@ pub extern "C" fn rust_automation_observe_communication_responses(count: u32) {
     observe_communication_responses(count as usize);
 }
 
+/// The production communication state a response wait inspects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConversationSnapshot {
+    pub active: bool,
+    pub completions: u64,
+    pub response_generation: u64,
+    pub response_count: usize,
+}
+
+impl ConversationSnapshot {
+    /// Whether the conversation that began after the last consumed completion
+    /// has registered a response list, newer than any a selection consumed,
+    /// holding at least `minimum` choices.
+    ///
+    /// The NPC callback registers choices one at a time after the hail is
+    /// dispatched, so the count is only meaningful once it reaches the
+    /// minimum. A finished conversation clears its list, but the completion
+    /// and generation checks keep a stale list from ever satisfying the wait.
+    #[must_use]
+    pub fn has_fresh_responses(
+        &self,
+        minimum: usize,
+        consumed_completions: u64,
+        consumed_generation: u64,
+    ) -> bool {
+        self.active
+            && self.completions == consumed_completions
+            && self.response_generation > consumed_generation
+            && self.response_count >= minimum
+    }
+}
+
+/// Read the communication loop's current lifecycle and response list.
+#[must_use]
+pub fn conversation_snapshot() -> ConversationSnapshot {
+    let (active, completions) = communication_lifecycle();
+    let (response_generation, response_count, _) = communication_responses();
+    ConversationSnapshot {
+        active,
+        completions,
+        response_generation,
+        response_count,
+    }
+}
+
 /// Verify that the nested production Game Options loop is currently active.
 pub fn verify_game_options_active() -> Result<(), &'static str> {
     if GAME_OPTIONS_ACTIVE.load(Ordering::Acquire) {
@@ -154,6 +212,10 @@ pub fn verify_communication_responses(minimum: usize) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// The observations are process-wide; tests that drive them take turns.
+    static OBSERVATIONS: Mutex<()> = Mutex::new(());
 
     #[test]
     fn game_options_observation_tracks_entry_and_exit() {
@@ -166,7 +228,18 @@ mod tests {
     }
 
     #[test]
+    fn starbase_menu_observation_tracks_entry_and_exit() {
+        observe_starbase_menu(false);
+        assert!(!starbase_menu_active());
+        observe_starbase_menu(true);
+        assert!(starbase_menu_active());
+        observe_starbase_menu(false);
+        assert!(!starbase_menu_active());
+    }
+
+    #[test]
     fn response_observation_requires_the_requested_minimum() {
+        let _turn = OBSERVATIONS.lock().unwrap_or_else(|e| e.into_inner());
         observe_communication_responses(0);
         let (before, _, _) = communication_responses();
         observe_communication_responses(3);
@@ -204,6 +277,7 @@ mod tests {
 
     #[test]
     fn communication_lifecycle_counts_completed_loops() {
+        let _turn = OBSERVATIONS.lock().unwrap_or_else(|e| e.into_inner());
         let (_, before) = communication_lifecycle();
         begin_communication();
         assert_eq!(communication_lifecycle(), (true, before));
@@ -223,5 +297,65 @@ mod tests {
         assert_eq!(communication_replay_observation(), (before + 1, true));
         observe_communication_replay(false);
         assert_eq!(communication_replay_observation(), (before + 1, false));
+    }
+
+    fn snapshot(
+        active: bool,
+        completions: u64,
+        generation: u64,
+        count: usize,
+    ) -> ConversationSnapshot {
+        ConversationSnapshot {
+            active,
+            completions,
+            response_generation: generation,
+            response_count: count,
+        }
+    }
+
+    #[test]
+    fn fresh_responses_need_the_current_conversation_and_the_minimum() {
+        // Two conversations finished and were consumed; two lists were selected.
+        let (done, consumed) = (2, 2);
+        assert!(!snapshot(true, done, 2, 0).has_fresh_responses(2, done, consumed));
+        assert!(!snapshot(true, done, 3, 1).has_fresh_responses(2, done, consumed));
+        assert!(snapshot(true, done, 3, 2).has_fresh_responses(2, done, consumed));
+        assert!(snapshot(true, done, 3, 3).has_fresh_responses(2, done, consumed));
+        // A list a selection already consumed is stale, whatever its size.
+        assert!(!snapshot(true, done, 2, 3).has_fresh_responses(2, done, consumed));
+        // A conversation whose completion nobody consumed is another conversation.
+        assert!(!snapshot(true, done + 1, 3, 3).has_fresh_responses(2, done, consumed));
+        // No live communication loop, no menu.
+        assert!(!snapshot(false, done, 3, 3).has_fresh_responses(2, done, consumed));
+    }
+
+    #[test]
+    fn responses_registered_after_the_hail_satisfy_the_wait_only_when_they_arrive() {
+        let _turn = OBSERVATIONS.lock().unwrap_or_else(|e| e.into_inner());
+        // The previous conversation ended with its list selected and cleared.
+        observe_communication_responses(0);
+        set_communication_responses_ready(false);
+        let (_, completions) = communication_lifecycle();
+        let (selected_generation, _, _) = communication_responses();
+
+        // The new hail is dispatched and speech plays: the loop is live but
+        // the NPC callback has not registered any choice yet.
+        begin_communication();
+        let reached =
+            || conversation_snapshot().has_fresh_responses(2, completions, selected_generation);
+        assert!(verify_communication_responses(2).is_err());
+        assert!(!reached());
+
+        // The callback registers its choices one at a time.
+        observe_communication_responses(1);
+        assert!(!reached());
+        observe_communication_responses(2);
+        assert!(reached());
+        assert_eq!(verify_communication_responses(2), Ok(2));
+
+        // Once the conversation closes nothing from it can satisfy a wait.
+        observe_communication_responses(0);
+        complete_communication();
+        assert!(!reached());
     }
 }

@@ -1,12 +1,13 @@
 // FFI bindings for state management.
 
 use std::ffi::CStr;
+use std::fmt;
 use std::os::raw::{c_char, c_int, c_uchar};
 use std::sync::Mutex;
 
 use super::game_state::{
     copy_state_bits_raw, get_state_32_raw, get_state_bits_raw, set_state_32_raw,
-    set_state_bits_raw, GameState, NUM_GAME_STATE_BITS,
+    set_state_bits_raw, GameState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
 use super::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
 use super::state_file::{FileMode, StateFileManager};
@@ -339,8 +340,6 @@ pub unsafe extern "C" fn rust_get_game_state_size() -> usize {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_restore_game_state_from_bytes(bytes: *const u8, size: usize) {
-    use super::game_state::NUM_GAME_STATE_BYTES;
-
     if bytes.is_null() || size < NUM_GAME_STATE_BYTES {
         return;
     }
@@ -348,13 +347,81 @@ pub unsafe extern "C" fn rust_restore_game_state_from_bytes(bytes: *const u8, si
     let mut arr = [0u8; NUM_GAME_STATE_BYTES];
     std::ptr::copy_nonoverlapping(bytes, arr.as_mut_ptr(), NUM_GAME_STATE_BYTES);
 
-    let mut global = GLOBAL_GAME_STATE.lock().unwrap();
-    if global.is_none() {
-        *global = Some(GameState::new());
+    replace_game_state(&arr).expect("game-state singleton poisoned");
+}
+
+/// Why the game-state singleton could not be read or replaced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameStateOwnerError {
+    /// `rust_init_game_state` has not run, so there is no state to read.
+    NotInitialized,
+    /// A thread panicked while holding the singleton.
+    Poisoned,
+}
+
+impl fmt::Display for GameStateOwnerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotInitialized => f.write_str("the game-state singleton is not initialised"),
+            Self::Poisoned => f.write_str("the game-state singleton is poisoned"),
+        }
     }
-    if let Some(state) = global.as_mut() {
-        *state = GameState::from_bytes(&arr);
-    }
+}
+
+impl std::error::Error for GameStateOwnerError {}
+
+/// Copy of the singleton's bytes: the game state a save writes as "GmSt".
+pub fn snapshot_game_state() -> Result<[u8; NUM_GAME_STATE_BYTES], GameStateOwnerError> {
+    let guard = GLOBAL_GAME_STATE
+        .lock()
+        .map_err(|_| GameStateOwnerError::Poisoned)?;
+    guard
+        .as_ref()
+        .map(|state| *state.as_bytes())
+        .ok_or(GameStateOwnerError::NotInitialized)
+}
+
+/// Run `f` with the game-state singleton and the state files, both locked
+/// for the whole call so that a caller can validate and then change both
+/// without another thread seeing or changing either in between.
+///
+/// Locks in the order `rust_init_game_state` does. The state files are created
+/// when absent, as every state-file export does.
+pub fn with_state_owners<R>(
+    f: impl FnOnce(&mut GameState, &mut StateFileManager) -> R,
+) -> Result<R, GameStateOwnerError> {
+    let mut game = GLOBAL_GAME_STATE
+        .lock()
+        .map_err(|_| GameStateOwnerError::Poisoned)?;
+    let mut files = GLOBAL_STATE_FILES
+        .lock()
+        .map_err(|_| GameStateOwnerError::Poisoned)?;
+    ensure_state_files_init(&mut files);
+    let game = game.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
+    let files = files.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
+    Ok(f(game, files))
+}
+
+/// Run `f` with the state files locked. They are created when absent.
+pub fn with_state_files<R>(
+    f: impl FnOnce(&mut StateFileManager) -> R,
+) -> Result<R, GameStateOwnerError> {
+    let mut files = GLOBAL_STATE_FILES
+        .lock()
+        .map_err(|_| GameStateOwnerError::Poisoned)?;
+    ensure_state_files_init(&mut files);
+    let files = files.as_mut().ok_or(GameStateOwnerError::NotInitialized)?;
+    Ok(f(files))
+}
+
+/// Replace the whole singleton with `bytes`, creating it when absent: a load
+/// defines the game state whether or not a New Game ran first.
+pub fn replace_game_state(bytes: &[u8; NUM_GAME_STATE_BYTES]) -> Result<(), GameStateOwnerError> {
+    let mut guard = GLOBAL_GAME_STATE
+        .lock()
+        .map_err(|_| GameStateOwnerError::Poisoned)?;
+    *guard = Some(GameState::from_bytes(bytes));
+    Ok(())
 }
 
 ///

@@ -101,6 +101,17 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "battle_frames_verified", &["count="])
                 && at_least(label, "count=", value.minimum)
         }
+        Action::AssertHyperspaceDisplacement(value) => {
+            shape(
+                label,
+                "hyperspace_displacement_verified",
+                &["from=", "to=", "moved=", "minimum="],
+            ) && number(label, "minimum=") == Some(u64::from(value.minimum_logical_units))
+                && at_least(label, "moved=", u64::from(value.minimum_logical_units))
+        }
+        Action::AssertShipResources(value) => {
+            super::ship_resources::verified_label_satisfies(label, *value)
+        }
         Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
         Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
         _ => wait_or_navigation_satisfied(action, label),
@@ -132,6 +143,15 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             ) && at_least(label, "generation=", 1)
                 && number(label, "encounter=") == Some(u64::from(value.encounter))
                 && number(label, "dialogue=") == Some(u64::from(value.dialogue))
+        }
+        Action::WaitForCommunicationResponses(value) => {
+            shape(
+                label,
+                "communication_responses_reached",
+                &["generation=", "count=", "minimum="],
+            ) && at_least(label, "generation=", 1)
+                && at_least(label, "count=", value.minimum as u64)
+                && number(label, "minimum=") == Some(value.minimum as u64)
         }
         Action::WaitForCommunicationEnd(value) => {
             shape(label, "communication_completed", &["count=", "minimum="])
@@ -165,6 +185,14 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
         }
         Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
         Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
+        Action::TurnFlagship(value) => {
+            shape(
+                label,
+                "flagship_turn_verified",
+                &["direction=", "facings=", "from=", "to="],
+            ) && label.contains(&format!(":direction={}:", value.direction.name()))
+                && number(label, "facings=") == Some(u64::from(value.facings))
+        }
         Action::NavigateToMoon(value) => {
             shape(
                 label,
@@ -238,6 +266,11 @@ impl PredicateHistory {
             Action::WaitForDispatch(_) => advance(&mut self.dispatch, number(label, "generation=")),
             Action::SelectCommunicationResponse(_) => {
                 advance(&mut self.response, number(label, "generation="))
+            }
+            // Waiting observes a list but consumes nothing: only a list newer
+            // than the last one a selection consumed belongs to this conversation.
+            Action::WaitForCommunicationResponses(_) => {
+                number(label, "generation=").is_some_and(|observed| observed > self.response)
             }
             Action::WaitForCommunicationReplay(_) => {
                 advance(&mut self.replay, number(label, "generation="))
@@ -356,6 +389,10 @@ mod tests {
                 "dispatch_observed:generation=1:encounter=1:dialogue=2",
             ),
             (
+                json!({"action":"wait_for_communication_responses","minimum":2,"max_ticks":100}),
+                "communication_responses_reached:generation=1:count=2:minimum=2",
+            ),
+            (
                 json!({"action":"wait_for_communication_end","minimum_completions":2,"max_ticks":100}),
                 "communication_completed:count=2:minimum=2",
             ),
@@ -454,6 +491,44 @@ mod tests {
     }
 
     #[test]
+    fn a_response_wait_is_not_satisfied_by_a_list_a_selection_already_consumed() {
+        let select: Action = serde_json::from_value(
+            json!({"action":"select_communication_response","index":0,"max_ticks":100}),
+        )
+        .unwrap();
+        let wait: Action = serde_json::from_value(
+            json!({"action":"wait_for_communication_responses","minimum":2,"max_ticks":100}),
+        )
+        .unwrap();
+        let mut history = PredicateHistory::default();
+        assert!(history.verify(
+            &select,
+            &[record(
+                "communication_response_selected:generation=2:count=3:index=0"
+            )],
+            &frame()
+        ));
+        let reached = |generation: u64, count: u64| {
+            record(&format!(
+                "communication_responses_reached:generation={generation}:count={count}:minimum=2"
+            ))
+        };
+        assert!(!history.verify(&wait, &[reached(2, 3)], &frame()));
+        assert!(!history.verify(&wait, &[reached(1, 3)], &frame()));
+        assert!(history.verify(&wait, &[reached(3, 2)], &frame()));
+        // Waiting consumes nothing, so the selection of that list still counts.
+        assert!(history.verify(
+            &select,
+            &[record(
+                "communication_response_selected:generation=3:count=2:index=0"
+            )],
+            &frame()
+        ));
+        // A count below the declared minimum never satisfies the wait.
+        assert!(!history.verify(&wait, &[reached(4, 1)], &frame()));
+    }
+
+    #[test]
     fn planet_trip_and_communication_waits_consume_their_own_observations() {
         let start: Action =
             serde_json::from_value(json!({"action":"wait_for_planet_side_start","max_ticks":100}))
@@ -496,6 +571,80 @@ mod tests {
             &wait,
             &[record("communication_completed:count=4:minimum=2")],
             &frame()
+        ));
+    }
+    #[test]
+    fn only_a_verified_displacement_label_that_meets_the_minimum_satisfies_the_action() {
+        let satisfies = |minimum: u32, label: &str| {
+            semantic_satisfied(
+                &Action::AssertHyperspaceDisplacement(
+                    crate::automation::script::HyperspaceDisplacementAssertion {
+                        minimum_logical_units: minimum,
+                    },
+                ),
+                label,
+            )
+        };
+        let verified = "hyperspace_displacement_verified:from=0,0:to=0,40:moved=40:minimum=16";
+        assert!(satisfies(16, verified));
+        assert!(
+            !satisfies(32, verified),
+            "a different minimum is another assertion"
+        );
+        assert!(!satisfies(
+            16,
+            "hyperspace_displacement_verified:from=0,0:to=0,4:moved=4:minimum=16"
+        ));
+        assert!(!satisfies(
+            16,
+            "hyperspace_displacement_failed:from=0,0:to=0,0:moved=0:minimum=16"
+        ));
+        assert!(!satisfies(16, "hyperspace_position_recorded:x=0:y=0"));
+    }
+
+    #[test]
+    fn only_the_verified_label_of_the_same_resource_expectation_satisfies_the_action() {
+        use crate::automation::script::ShipResourcesAssertion;
+        let action = Action::AssertShipResources(ShipResourcesAssertion {
+            fuel_on_board: Some(6000),
+            res_units: Some(1500),
+        });
+        assert!(semantic_satisfied(
+            &action,
+            "ship_resources_verified:fuel=6000:ru=1500:expected_fuel=6000:expected_ru=1500"
+        ));
+        for label in [
+            "ship_resources_failed:fuel=5900:ru=1500:expected_fuel=6000:expected_ru=1500",
+            "ship_resources_verified:fuel=5900:ru=1500:expected_fuel=6000:expected_ru=1500",
+            "ship_resources_verified:fuel=6000:ru=1500:expected_fuel=6000:expected_ru=any",
+            "ship_resources_verified:fuel=1000:ru=2500:expected_fuel=1000:expected_ru=2500",
+            "ship_resources_unavailable",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn only_a_verified_turn_label_of_the_same_direction_and_facings_satisfies_the_action() {
+        use crate::automation::script::{TurnDirection, TurnFlagshipStep};
+        let satisfies = |direction: TurnDirection, facings: u8, label: &str| {
+            semantic_satisfied(
+                &Action::TurnFlagship(TurnFlagshipStep {
+                    direction,
+                    facings,
+                    max_ticks: 600,
+                }),
+                label,
+            )
+        };
+        let verified = "flagship_turn_verified:direction=right:facings=4:from=2:to=6";
+        assert!(satisfies(TurnDirection::Right, 4, verified));
+        assert!(!satisfies(TurnDirection::Left, 4, verified));
+        assert!(!satisfies(TurnDirection::Right, 5, verified));
+        assert!(!satisfies(
+            TurnDirection::Right,
+            4,
+            "flagship_turn_overshot:direction=right:facings=4:turned=5"
         ));
     }
 }

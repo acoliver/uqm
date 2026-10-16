@@ -15,7 +15,10 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
+use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
+use crate::automation::mode;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
@@ -24,6 +27,7 @@ use crate::automation::scheduler::{
     SchedulerState, TerminalOutcome,
 };
 use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
+use crate::automation::ship_resources;
 use crate::automation::trace::{
     ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
 };
@@ -256,6 +260,10 @@ struct CoordInner {
     /// Menu key a scripted tap held down this update after its press.
     held_repeat_key: Option<crate::automation::script::MenuKey>,
     verified_battle_frames: u64,
+    /// Hyperspace position snapshot awaiting its displacement assertion.
+    flight_position: FlightPositionTracker,
+    /// Facing at which the current `turn_flagship` step began.
+    flagship_turn: FlagshipTurnTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -410,6 +418,8 @@ impl Coordinator {
                 pending_player_input: None,
                 held_repeat_key: None,
                 verified_battle_frames: 0,
+                flight_position: FlightPositionTracker::default(),
+                flagship_turn: FlagshipTurnTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -757,6 +767,42 @@ impl Coordinator {
                     format!("communication_replay_active:generation={generation}"),
                 );
             }
+        } else if let Some(Action::WaitForCommunicationResponses(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let snapshot = crate::automation::ui_observation::conversation_snapshot();
+            if snapshot.has_fresh_responses(
+                wait.minimum,
+                inner.consumed_communication_completions,
+                inner.consumed_response_generation,
+            ) {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "communication_responses_reached:generation={}:count={}:minimum={}",
+                        snapshot.response_generation, snapshot.response_count, wait.minimum
+                    ),
+                );
+            } else if inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 }) {
+                // The scheduler ends the proof on this tick; say what the
+                // production state was instead of leaving a bare mismatch.
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "communication_responses_wait_expired:minimum={}:active={}:completions={}:consumed_completions={}:response_generation={}:consumed_generation={}:count={}",
+                        wait.minimum,
+                        snapshot.active,
+                        snapshot.completions,
+                        inner.consumed_communication_completions,
+                        snapshot.response_generation,
+                        inner.consumed_response_generation,
+                        snapshot.response_count
+                    ),
+                );
+            }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -865,6 +911,51 @@ impl Coordinator {
 
     /// Fly the flagship out of the live solar system with player controls and
     /// report arrival once production has dispatched hyperspace.
+    /// Hold the turn key of a `turn_flagship` step until the live flagship
+    /// facing has changed by exactly the requested facings, then release it.
+    fn service_flagship_turn(
+        &self,
+        inner: &mut CoordInner,
+        turn: crate::automation::script::TurnFlagshipStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::navigation::NavigationControl;
+        use crate::automation::script::TurnDirection;
+
+        let progress = inner.flagship_turn.observe(
+            mode::require_live(),
+            flagship_turn::live_facing(),
+            turn.direction,
+            turn.facings,
+        );
+        let holding = NavigationControl {
+            left: turn.direction == TurnDirection::Left,
+            right: turn.direction == TurnDirection::Right,
+            ..NavigationControl::default()
+        };
+        match progress {
+            Ok(TurnProgress::Turning { .. }) => {
+                if !Self::set_navigation_controls(holding) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(TurnProgress::Complete(proof)) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "turn_flagship", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
     fn service_hyperspace_departure(
         &self,
         inner: &mut CoordInner,
@@ -918,6 +1009,7 @@ impl Coordinator {
                 velocity_y: snapshot.velocity_y,
                 view_center_x: snapshot.view_center_x,
                 view_center_y: snapshot.view_center_y,
+                target_guard_active: false,
             },
         );
         if !Self::set_navigation_controls(control) {
@@ -956,6 +1048,7 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    target_guard_active: false,
                 },
             );
             if reached {
@@ -1000,6 +1093,7 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    target_guard_active: false,
                 },
             );
             if reached {
@@ -1024,6 +1118,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_hyperspace_departure(inner, scheduler_event);
+        } else if let Some(Action::TurnFlagship(turn)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1059,6 +1157,13 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    // The collision guard still holds this moon, so the ship is sitting in
+                    // it without having entered orbit.
+                    target_guard_active: snapshot.wait_intersect
+                        == crate::automation::navigation::moon_wait_intersect(
+                            navigation.planet,
+                            navigation.moon,
+                        ),
                 },
             );
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
@@ -1456,6 +1561,77 @@ impl Coordinator {
                 }
                 Err(error) => {
                     self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::RecordHyperspacePosition(_)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner
+                .flight_position
+                .record(mode::require_live(), flight_position::live_position())
+            {
+                Ok(position) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    flight_position::recorded_trace_label(position),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertHyperspaceDisplacement(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner.flight_position.assert_displacement(
+                mode::require_live(),
+                flight_position::live_position(),
+                assertion.minimum_logical_units,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertShipResources(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match ship_resources::assert_ship_resources(
+                mode::require_live(),
+                ship_resources::live_resources(),
+                *assertion,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
                     return true;
                 }

@@ -198,7 +198,7 @@ static RESOURCE_STATE: Mutex<Option<ResourceState>> = Mutex::new(None);
 pub static mut _cur_resfile_name: *const c_char = ptr::null();
 
 /// Sentinel value for directory handles passed as file streams
-const STREAM_SENTINEL: *mut c_void = !0usize as *mut c_void;
+pub(crate) const STREAM_SENTINEL: *mut c_void = !0usize as *mut c_void;
 
 // =============================================================================
 // Internal helpers

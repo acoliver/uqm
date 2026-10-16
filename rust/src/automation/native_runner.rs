@@ -1,4 +1,7 @@
 use super::native_capture::{normalize_native_capture, validate_playable_screenshot_difference};
+use super::native_capture_retry::{
+    capture_with_bounded_retry, CaptureAttemptRecord, CaptureAttemptSource,
+};
 use super::native_trace_cursor::{PrefixClaim, PrefixError};
 #[cfg(test)]
 use crate::automation::command_executable_digest;
@@ -31,8 +34,7 @@ use std::fs;
 use std::io::{self, Read as _, Seek as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-#[cfg(test)]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const NATIVE_OBSERVER_HELPER_SCHEMA: &str = "uqm-native-observer-helper-v1";
 const MAX_CONTENT_ARCHIVE_ENTRIES: usize = 100_000;
@@ -54,6 +56,36 @@ enum NativeObserverHelperResult {
     Captured(Result<(), NativeWindowObserverError>),
 }
 
+/// The committed presentation the game is held on, and when that hold began.
+struct HeldPresentation {
+    barrier_started: Instant,
+    committed_presentation: u64,
+    semantic: crate::automation::NativeWindowSemanticSnapshot,
+}
+
+/// A validated-by-the-caller OS capture and the attempts that produced it.
+struct CapturedNativeWindow {
+    bytes: Vec<u8>,
+    attempts: Vec<CaptureAttemptRecord>,
+}
+
+/// Captures through the observer while the game is held at its barrier, so a
+/// retry sees the same committed presentation.
+struct HeldBarrierCapture<'a> {
+    observer: &'a mut BoundedNativeObserver,
+    deadline: Instant,
+}
+
+impl CaptureAttemptSource for HeldBarrierCapture<'_> {
+    fn capture_attempt(&mut self, window_id: u64) -> Result<Vec<u8>, NativeWindowObserverError> {
+        self.observer.capture_attempt(window_id)
+    }
+
+    fn remaining_budget(&self) -> Duration {
+        self.deadline.saturating_duration_since(Instant::now())
+    }
+}
+
 struct BoundedNativeObserver {
     executable: PathBuf,
     executable_digest: String,
@@ -71,7 +103,8 @@ impl BoundedNativeObserver {
         if !contract.has_valid_deadline_order() {
             return Err("native observer runtime contract has invalid deadline order".to_string());
         }
-        let scratch_root = std::env::temp_dir().join(format!("uqm-native-observer-{nonce}"));
+        let scratch_root =
+            std::env::temp_dir().join(format!("uqm-native-observer-{nonce}.noindex"));
         fs::create_dir(&scratch_root).map_err(|error| {
             format!(
                 "create native observer scratch {}: {error}",
@@ -143,26 +176,91 @@ impl BoundedNativeObserver {
         }
     }
 
-    fn capture(&mut self, window_id: u64) -> Result<Vec<u8>, NativeWindowObserverError> {
+    /// Captures `window_id`, retrying once when `screencapture` hangs, while
+    /// the presentation barrier's acknowledgement deadline still has room.
+    fn capture(
+        &mut self,
+        window_id: u64,
+        barrier_started: Instant,
+    ) -> Result<CapturedNativeWindow, NativeWindowObserverError> {
+        let deadline = barrier_started
+            .checked_add(self.contract.acknowledgement_timeout())
+            .ok_or_else(|| {
+                NativeWindowObserverError::Os(
+                    "native acknowledgement deadline overflowed".to_string(),
+                )
+            })?;
+        let retry_reserve = self
+            .contract
+            .observer_timeout()
+            .saturating_add(self.contract.observer_kill_grace());
+        let report = capture_with_bounded_retry(
+            &mut HeldBarrierCapture {
+                observer: self,
+                deadline,
+            },
+            window_id,
+            retry_reserve,
+        );
+        match report.result {
+            Ok(bytes) => Ok(CapturedNativeWindow {
+                bytes,
+                attempts: report.attempts,
+            }),
+            Err(error) if report.attempts.len() > 1 => {
+                let attempts = serde_json::to_string(&report.attempts).map_err(|serialize| {
+                    NativeWindowObserverError::Os(format!(
+                        "serialize native capture attempts: {serialize}"
+                    ))
+                })?;
+                Err(NativeWindowObserverError::Os(format!(
+                    "{error}; capture attempts: {attempts}"
+                )))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn capture_attempt(&mut self, window_id: u64) -> Result<Vec<u8>, NativeWindowObserverError> {
         let capture_path = self.next_path("capture", "png")?;
         let response_sequence = self.sequence;
         let response_path = self.next_path("capture", "json")?;
+        let result =
+            self.run_capture_helper(window_id, &capture_path, &response_path, response_sequence);
+        if let Err(error) = &result {
+            self.discard_capture_attempt(&capture_path, &response_path)
+                .map_err(|discard| {
+                    NativeWindowObserverError::Os(format!(
+                        "{error}; discard failed capture attempt: {discard}"
+                    ))
+                })?;
+        }
+        result
+    }
+
+    fn run_capture_helper(
+        &mut self,
+        window_id: u64,
+        capture_path: &Path,
+        response_path: &Path,
+        response_sequence: u64,
+    ) -> Result<Vec<u8>, NativeWindowObserverError> {
         let mut command = Command::new(&self.executable);
         command
             .arg("observer-helper")
             .arg("capture")
             .arg(window_id.to_string())
-            .arg(&capture_path)
+            .arg(capture_path)
             .arg(serde_json::to_string(&self.contract).map_err(|error| {
                 NativeWindowObserverError::Os(format!(
                     "serialize native capture runtime contract: {error}"
                 ))
             })?)
-            .arg(&response_path);
+            .arg(response_path);
         self.run_helper(command, "capture", response_sequence)?;
         let response: NativeObserverHelperResponse =
-            self.read_json_member(&response_path, self.contract.observer_response_budget_bytes)?;
-        self.remove_path(&response_path)?;
+            self.read_json_member(response_path, self.contract.observer_response_budget_bytes)?;
+        self.remove_path(response_path)?;
         if response.schema != NATIVE_OBSERVER_HELPER_SCHEMA {
             return Err(NativeWindowObserverError::Os(
                 "native capture helper response schema mismatch".to_string(),
@@ -177,9 +275,32 @@ impl BoundedNativeObserver {
                 ));
             }
         }
-        let bytes = self.read_member(&capture_path, self.contract.capture_budget_bytes)?;
-        self.remove_path(&capture_path)?;
+        let bytes = self.read_member(capture_path, self.contract.capture_budget_bytes)?;
+        self.remove_path(capture_path)?;
         Ok(bytes)
+    }
+
+    /// Removes everything a failed capture attempt can leave behind: the output,
+    /// the dot-prefixed temporary file `screencapture` writes beside it, the
+    /// helper response and the helper's supervision logs. A killed
+    /// `screencapture` can leave a complete temporary image that must never be
+    /// mistaken for a capture.
+    fn discard_capture_attempt(
+        &mut self,
+        capture_path: &Path,
+        response_path: &Path,
+    ) -> Result<(), NativeWindowObserverError> {
+        let capture_name = self.member_name(capture_path)?.to_os_string();
+        let mut temporary = std::ffi::OsString::from(".");
+        temporary.push(&capture_name);
+        let supervision = Path::new(&capture_name).with_extension("capture-supervision");
+        self.remove_member(&capture_name)?;
+        self.unlink_member(&temporary, 0)?;
+        self.remove_path(response_path)?;
+        for log in ["stdout.log", "stderr.log"] {
+            self.unlink_member(&supervision.join(log).into_os_string(), 0)?;
+        }
+        self.unlink_member(&supervision.into_os_string(), libc::AT_REMOVEDIR)
     }
 
     fn next_path(
@@ -312,12 +433,26 @@ impl BoundedNativeObserver {
     }
 
     fn remove_member(&mut self, name: &std::ffi::OsStr) -> Result<(), NativeWindowObserverError> {
+        self.unlink_member(name, 0)?;
+        self.members.remove(name);
+        Ok(())
+    }
+
+    /// Unlinks `name` relative to the bound scratch directory; an absent entry
+    /// is already removed.
+    fn unlink_member(
+        &self,
+        name: &std::ffi::OsStr,
+        flags: libc::c_int,
+    ) -> Result<(), NativeWindowObserverError> {
         use std::os::fd::AsRawFd as _;
         use std::os::unix::ffi::OsStrExt as _;
         let name_c = std::ffi::CString::new(name.as_bytes()).map_err(|_| {
             NativeWindowObserverError::Os("native observer member contains NUL".to_string())
         })?;
-        if unsafe { libc::unlinkat(self.scratch_directory.as_raw_fd(), name_c.as_ptr(), 0) } != 0 {
+        if unsafe { libc::unlinkat(self.scratch_directory.as_raw_fd(), name_c.as_ptr(), flags) }
+            != 0
+        {
             let error = io::Error::last_os_error();
             if error.kind() != io::ErrorKind::NotFound {
                 return Err(NativeWindowObserverError::Os(format!(
@@ -326,7 +461,6 @@ impl BoundedNativeObserver {
                 )));
             }
         }
-        self.members.remove(name);
         Ok(())
     }
 
@@ -713,6 +847,9 @@ impl NativeObservationSession {
         identity: &ProcessIdentity,
         observer: &mut BoundedNativeObserver,
     ) -> io::Result<()> {
+        // The game blocks on the acknowledgement from the moment it published,
+        // which is no later than this poll.
+        let barrier_started = Instant::now();
         if let Err(error) = &self.backing_verification {
             return Err(io::Error::other(error.clone()));
         }
@@ -816,8 +953,11 @@ impl NativeObservationSession {
                 observer,
                 &observed,
                 binding.clone(),
-                state.committed_presentation,
-                state.semantic,
+                HeldPresentation {
+                    barrier_started,
+                    committed_presentation: state.committed_presentation,
+                    semantic: state.semantic,
+                },
                 stage,
             )?;
         }
@@ -826,8 +966,11 @@ impl NativeObservationSession {
                 observer,
                 &observed,
                 binding.clone(),
-                state.committed_presentation,
-                state.semantic,
+                HeldPresentation {
+                    barrier_started,
+                    committed_presentation: state.committed_presentation,
+                    semantic: state.semantic,
+                },
                 NativeScreenshotStage::Checkpoint { action_index },
             )?;
             self.checkpoint_count += 1;
@@ -892,10 +1035,14 @@ impl NativeObservationSession {
         observer: &mut BoundedNativeObserver,
         observed: &ObservedNativeWindow,
         binding: NativeWindowBinding,
-        committed_presentation: u64,
-        semantic: crate::automation::NativeWindowSemanticSnapshot,
+        held: HeldPresentation,
         stage: NativeScreenshotStage,
     ) -> io::Result<()> {
+        let HeldPresentation {
+            barrier_started,
+            committed_presentation,
+            semantic,
+        } = held;
         let filename = match stage {
             NativeScreenshotStage::Stable => "stable.png".to_string(),
             NativeScreenshotStage::Playable => "playable.png".to_string(),
@@ -905,9 +1052,28 @@ impl NativeObservationSession {
         };
         let path = self.screenshots.join(filename);
         let capture_budget = observer.contract.capture_budget_bytes;
-        let captured = observer
-            .capture(observed.window_id)
+        let CapturedNativeWindow {
+            bytes: captured,
+            attempts,
+        } = observer
+            .capture(observed.window_id, barrier_started)
             .map_err(io::Error::other)?;
+        if attempts.len() > 1 {
+            let record = serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "uqm-native-capture-attempts-v1",
+                "committed_presentation": committed_presentation,
+                "attempts": attempts,
+            }))
+            .map_err(io::Error::other)?;
+            write_bytes_atomic_noclobber(
+                &self.evidence_root.join(format!(
+                    "os-capture-attempts-{committed_presentation}-{}.json",
+                    path.file_stem().unwrap_or_default().to_string_lossy()
+                )),
+                &record,
+            )
+            .map_err(io::Error::other)?;
+        }
         let raw_path = path.with_extension("os.png");
         write_bytes_atomic_noclobber(&raw_path, &captured).map_err(io::Error::other)?;
         let original_os_capture =
@@ -4656,6 +4822,76 @@ mod tests {
 
         assert!(error.to_string().contains("term=true, kill=true"));
         assert!(started.elapsed() < Duration::from_secs(2));
+        observer.finish().unwrap();
+        assert!(!scratch.path().exists());
+    }
+
+    /// A helper whose first capture reports a `screencapture` timeout after
+    /// leaving the dot-prefixed temporary image behind, and whose later
+    /// captures succeed.
+    fn hung_then_healthy_capture_helper(directory: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = directory.join("helper.sh");
+        let script = format!(
+            "#!/bin/sh\nmarker='{marker}'\ncapture=\"$4\"\nresponse=\"$6\"\n\
+             if [ ! -e \"$marker\" ]; then\n\
+             : > \"$marker\"\n\
+             printf complete > \"$(dirname \"$capture\")/.$(basename \"$capture\")\"\n\
+             printf '%s' '{timeout}' > \"$response\"\n\
+             else\n\
+             printf png > \"$capture\"\n\
+             printf '%s' '{ok}' > \"$response\"\n\
+             fi\n",
+            marker = directory.join("first-attempt-ran").display(),
+            timeout = r#"{"schema":"uqm-native-observer-helper-v1","result":{"captured":{"Err":{"capture_timed_out":"supervise screencapture: child timed out (term=true, kill=false)"}}}}"#,
+            ok = r#"{"schema":"uqm-native-observer-helper-v1","result":{"captured":{"Ok":null}}}"#,
+        );
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[test]
+    fn hung_screencapture_is_discarded_and_retried_once_inside_the_barrier() {
+        let helper_directory = tempfile::tempdir().unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let mut observer = observer_for_helper_test(
+            scratch.path(),
+            hung_then_healthy_capture_helper(helper_directory.path()),
+            runtime_contract(),
+        );
+
+        let captured = observer.capture(7, Instant::now()).unwrap();
+
+        assert_eq!(captured.bytes, b"png");
+        assert_eq!(captured.attempts.len(), 2);
+        assert!(captured.attempts[0].retried);
+        assert!(!scratch.path().join(".capture-0.png").exists());
+        assert!(!scratch.path().join("capture-0.png").exists());
+        observer.finish().unwrap();
+        assert!(!scratch.path().exists());
+    }
+
+    #[test]
+    fn hung_screencapture_without_barrier_budget_fails_and_leaves_nothing_behind() {
+        let helper_directory = tempfile::tempdir().unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let mut observer = observer_for_helper_test(
+            scratch.path(),
+            hung_then_healthy_capture_helper(helper_directory.path()),
+            runtime_contract(),
+        );
+        let barrier_started = Instant::now()
+            .checked_sub(Duration::from_secs(60))
+            .expect("monotonic clock has run for a minute");
+
+        let error = observer.capture(7, barrier_started).err().unwrap();
+
+        assert!(matches!(
+            error,
+            NativeWindowObserverError::CaptureTimedOut(_)
+        ));
+        assert!(!scratch.path().join(".capture-0.png").exists());
         observer.finish().unwrap();
         assert!(!scratch.path().exists());
     }

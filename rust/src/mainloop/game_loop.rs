@@ -65,7 +65,7 @@ pub trait GameLoopOps {
 
     // --- Activity dispatch (primitive C calls) ---
     fn install_bomb_at_earth(&self);
-    fn visit_starbase(&self);
+    fn visit_starbase(&self) -> Result<(), MainLoopError>;
     fn race_communication(&self);
     fn explore_solar_sys(&self);
     fn battle_with_frame_callback(&self);
@@ -101,14 +101,17 @@ pub trait GameLoopOps {
 ///
 /// @plan PLAN-20260707-MAINLOOP.P06
 /// @requirement REQ-ML-007
-fn execute_activity<O: GameLoopOps + ?Sized>(ops: &O, decision: ActivityDecision) {
+fn execute_activity<O: GameLoopOps + ?Sized>(
+    ops: &O,
+    decision: ActivityDecision,
+) -> Result<(), MainLoopError> {
     let activity = ops.get_current_activity();
     let mutated = state_machine::pre_dispatch_mutate(activity, decision);
     ops.set_current_activity(mutated);
 
     match decision {
         ActivityDecision::InstallBombAtEarth => ops.install_bomb_at_earth(),
-        ActivityDecision::VisitStarBase => ops.visit_starbase(),
+        ActivityDecision::VisitStarBase => ops.visit_starbase()?,
         ActivityDecision::RaceCommunication => ops.race_communication(),
         ActivityDecision::ExploreSolarSystem => {
             ops.draw_autopilot_message(true);
@@ -121,6 +124,7 @@ fn execute_activity<O: GameLoopOps + ?Sized>(ops: &O, decision: ActivityDecision
             ops.battle_with_frame_callback();
         }
     }
+    Ok(())
 }
 
 /// Game-kernel cleanup — matches `starcon.c:313-318`.
@@ -204,7 +208,7 @@ pub fn run_game_lifecycle_impl<O: GameLoopOps + ?Sized>(ops: &O) -> Result<(), M
                     | ActivityDecision::RaceCommunication
             );
 
-            execute_activity(ops, decision);
+            execute_activity(ops, decision)?;
 
             // CRITICAL: re-read CurrentActivity — C dispatch mutated it
             let mut activity = ops.get_current_activity();
@@ -360,9 +364,9 @@ mod cffi {
             unsafe { c_extern::InstallBombAtEarth() }
         }
 
-        fn visit_starbase(&self) {
+        fn visit_starbase(&self) -> Result<(), MainLoopError> {
             // P16: Ported to Rust — dispatch logic in comm::dispatch
-            unsafe { crate::comm::dispatch::rust_visit_starbase() }
+            unsafe { crate::comm::dispatch::rust_visit_starbase() }.map_err(MainLoopError::from)
         }
 
         fn race_communication(&self) {
@@ -498,6 +502,11 @@ mod tests {
         load_kernel_fail: bool,
         /// Max inner-loop iterations before forcing CHECK_ABORT (safety valve).
         max_iterations: usize,
+        /// Error `visit_starbase` reports, if any.
+        visit_starbase_error: Option<MainLoopError>,
+        /// Activity `explore_solar_sys` leaves behind instead of
+        /// `post_dispatch_activity`.
+        explore_solar_sys_activity: Option<ActivityValue>,
     }
 
     impl MockOps {
@@ -509,6 +518,8 @@ mod tests {
                     next_activity: ActivityValue::new(0),
                     game_state: GameStateInfo::default(),
                     post_dispatch_activity: None,
+                    visit_starbase_error: None,
+                    explore_solar_sys_activity: None,
                     pre_loop_activity: None,
                     calls: Vec::new(),
                     load_kernel_fail: false,
@@ -598,12 +609,13 @@ mod tests {
                 s.current_activity = a;
             }
         }
-        fn visit_starbase(&self) {
+        fn visit_starbase(&self) -> Result<(), MainLoopError> {
             let mut s = self.inner.borrow_mut();
             s.calls.push("visit_starbase");
             if let Some(a) = s.post_dispatch_activity {
                 s.current_activity = a;
             }
+            s.visit_starbase_error.clone().map_or(Ok(()), Err)
         }
         fn race_communication(&self) {
             let mut s = self.inner.borrow_mut();
@@ -615,7 +627,7 @@ mod tests {
         fn explore_solar_sys(&self) {
             let mut s = self.inner.borrow_mut();
             s.calls.push("explore_solar_sys");
-            if let Some(a) = s.post_dispatch_activity {
+            if let Some(a) = s.explore_solar_sys_activity.or(s.post_dispatch_activity) {
                 s.current_activity = a;
             }
         }
@@ -951,5 +963,62 @@ mod tests {
         run_game_lifecycle_impl(&ops).unwrap();
 
         assert!(!ops.calls().contains(&"zero_velocity"));
+    }
+
+    #[test]
+    fn test_visit_starbase_error_ends_the_lifecycle_with_that_error() {
+        let ops = MockOps::new();
+        let error = MainLoopError::Starbase(crate::starbase::StarbaseError::Unported(
+            crate::starbase::UnportedRoute::SaveLoad,
+        ));
+        {
+            let mut state = ops.inner.borrow_mut();
+            state.start_game_returns = vec![true, false];
+            state.game_state.global_flags_and_data = 0xFF;
+            state.pre_loop_activity = Some(ActivityValue::from_kind_and_flags(
+                ActivityKind::InInterplanetary,
+                activity_flags::START_ENCOUNTER,
+            ));
+            state.visit_starbase_error = Some(error.clone());
+        }
+
+        assert_eq!(run_game_lifecycle_impl(&ops), Err(error));
+        assert!(ops.calls().contains(&"visit_starbase"));
+        assert!(!ops.calls().contains(&"explore_solar_sys"));
+    }
+
+    #[test]
+    fn test_starbase_cleanup_load_continues_into_solar_system_exploration() {
+        // CleanupAfterStarBase fakes a load: CHECK_LOAD with the next
+        // activity set to interplanetary flight.
+        let ops = MockOps::new();
+        {
+            let mut state = ops.inner.borrow_mut();
+            state.start_game_returns = vec![true, false];
+            state.game_state.global_flags_and_data = 0xFF;
+            state.pre_loop_activity = Some(ActivityValue::from_kind_and_flags(
+                ActivityKind::InInterplanetary,
+                activity_flags::START_ENCOUNTER,
+            ));
+            state.post_dispatch_activity = Some(ActivityValue::new(activity_flags::CHECK_LOAD));
+            state.next_activity = ActivityValue::from_kind_and_flags(
+                ActivityKind::InInterplanetary,
+                activity_flags::START_INTERPLANETARY,
+            );
+            state.explore_solar_sys_activity = Some(ActivityValue::from_kind_and_flags(
+                ActivityKind::InInterplanetary,
+                activity_flags::CHECK_ABORT,
+            ));
+        }
+
+        run_game_lifecycle_impl(&ops).unwrap();
+
+        let calls = ops.calls();
+        let visit = calls.iter().position(|c| *c == "visit_starbase").unwrap();
+        let explore = calls
+            .iter()
+            .position(|c| *c == "explore_solar_sys")
+            .unwrap();
+        assert!(visit < explore);
     }
 }

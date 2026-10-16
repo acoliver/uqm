@@ -473,6 +473,36 @@ pub struct NavigateToHyperspaceStep {
     pub max_ticks: u64,
 }
 
+/// Which way the flagship turns.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnDirection {
+    Right,
+    Left,
+}
+
+impl TurnDirection {
+    /// The name used in scripts and trace labels.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Right => "right",
+            Self::Left => "left",
+        }
+    }
+}
+
+/// A `turn_flagship` step holds a turn key until the live hyperspace flagship
+/// has turned exactly `facings` of the sixteen facings, and fails when it has
+/// not after `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TurnFlagshipStep {
+    pub direction: TurnDirection,
+    pub facings: u8,
+    pub max_ticks: u64,
+}
+
 /// Wait until a Rust PlanetSide session has started.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -607,6 +637,34 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// The no-payload step that snapshots the hyperspace ship's logical position.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordHyperspacePositionStep {}
+
+/// Assert the hyperspace ship moved at least `minimum_logical_units` since
+/// the last `record_hyperspace_position`, measured on `GLOBAL_SIS(log_x/log_y)`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HyperspaceDisplacementAssertion {
+    pub minimum_logical_units: u32,
+}
+
+/// Assert the flagship's live `FuelOnBoard` and `ResUnits` equal the stated
+/// values. A field left out is not checked; at least one must be stated.
+///
+/// Both are read from `GLOBAL_SIS`, the state `DeltaSISGauges` changes, so
+/// the assertion proves a reward or purchase the game really applied. It can
+/// only read: nothing here grants fuel or resource units.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ShipResourcesAssertion {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuel_on_board: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub res_units: Option<u32>,
+}
+
 /// Wait for the current battle to complete at least `minimum` real frames.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -645,6 +703,17 @@ pub struct PlanetSideCollisionAssertion {
 #[serde(deny_unknown_fields)]
 pub struct SelectCommunicationResponseStep {
     pub index: usize,
+    pub max_ticks: u64,
+}
+
+/// Wait until the current conversation has registered at least `minimum`
+/// response choices. The production NPC callback registers them after the
+/// dispatch is observed, while speech is still playing; this wait observes
+/// that registration and neither selects nor skips anything.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForCommunicationResponsesStep {
+    pub minimum: usize,
     pub max_ticks: u64,
 }
 
@@ -697,6 +766,7 @@ pub enum Action {
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
+    TurnFlagship(TurnFlagshipStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -709,9 +779,13 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    RecordHyperspacePosition(RecordHyperspacePositionStep),
+    AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
+    AssertShipResources(ShipResourcesAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
+    WaitForCommunicationResponses(WaitForCommunicationResponsesStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
@@ -1718,6 +1792,16 @@ fn validate_wait_step(
             }
             (select.max_ticks, "select_communication_response")
         }
+        Action::WaitForCommunicationResponses(wait) => {
+            if wait.minimum == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_communication_responses minimum must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_communication_responses")
+        }
         Action::WaitForCommunicationEnd(wait) => {
             if wait.minimum_completions == 0 {
                 return Some(Err(AutomationError::step(
@@ -1787,6 +1871,16 @@ fn validate_navigation_step(
                 )));
             }
             navigation.max_ticks
+        }
+        Action::TurnFlagship(turn) => {
+            if !(1..=15).contains(&turn.facings) || turn.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "turn_flagship requires facings 1..=15 and positive max_ticks",
+                )));
+            }
+            turn.max_ticks
         }
         Action::NavigateToPlanet(navigation) => {
             if navigation.planet > 8 {
@@ -1861,6 +1955,24 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_battle_frames: minimum must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertHyperspaceDisplacement(assertion) => {
+            if assertion.minimum_logical_units == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_hyperspace_displacement: minimum_logical_units must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertShipResources(assertion) => {
+            if assertion.fuel_on_board.is_none() && assertion.res_units.is_none() {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_ship_resources: state fuel_on_board, res_units or both",
                 ));
             }
         }
@@ -2380,10 +2492,40 @@ mod tests {
     }
 
     #[test]
+    fn communication_response_wait_is_bounded_and_needs_a_positive_minimum() {
+        let ok = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":9,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"wait_for_communication_responses","minimum":2,"max_ticks":6},{"action":"finish"}]}"#;
+        let script = validate_script(parse_script(ok.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 2,
+                max_ticks: 6
+            })
+        );
+        // 6 ticks for the wait plus the finish callback need a max of 8; 7 is too small.
+        let tight = ok.replace("\"max_input_ticks\":9", "\"max_input_ticks\":7");
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+        for (field, message) in [
+            ("\"minimum\":0,\"max_ticks\":6", "minimum must be positive"),
+            (
+                "\"minimum\":2,\"max_ticks\":0",
+                "max_ticks must be positive",
+            ),
+        ] {
+            let bad = ok.replace("\"minimum\":2,\"max_ticks\":6", field);
+            let err = validate_script(parse_script(bad.as_bytes(), p()).unwrap(), p()).unwrap_err();
+            assert!(format!("{err}").contains(message), "{err}");
+        }
+        let unknown = ok.replace("\"minimum\":2", "\"minimum\":2,\"bogus\":1");
+        assert!(parse_script(unknown.as_bytes(), p()).is_err());
+    }
+
+    #[test]
     fn rejects_zero_budgets_for_real_gameplay_waits() {
         for action in [
             r#"{"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":0}"#,
             r#"{"action":"wait_for_communication_replay","max_ticks":0}"#,
+            r#"{"action":"wait_for_communication_responses","minimum":1,"max_ticks":0}"#,
             r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
@@ -3066,7 +3208,49 @@ mod tests {
                 "{label} asserts hyperspace at step {first_hyperspace} without flying there"
             );
         }
-        assert_eq!(checked, 10, "hyperspace scenarios checked");
+        assert_eq!(checked, 9, "hyperspace scenarios checked");
+    }
+
+    fn turn_script(steps: &str) -> String {
+        format!(
+            r#"{{"version":1,"name":"turn","budgets":{{"max_input_ticks":9000,"max_presentations":18000,"max_wallclock_seconds":60}},"steps":[{steps},{{"action":"finish"}}]}}"#
+        )
+    }
+
+    fn validated_turn(steps: &str) -> Result<ValidatedScript, AutomationError> {
+        let text = turn_script(steps);
+        validate_script(
+            parse_script(text.as_bytes(), "turn.json").unwrap(),
+            "turn.json",
+        )
+    }
+
+    #[test]
+    fn turn_flagship_parses_both_directions_and_rejects_out_of_range_facings() {
+        let script = validated_turn(
+            r#"{"action":"turn_flagship","direction":"right","facings":4,"max_ticks":600},
+               {"action":"turn_flagship","direction":"left","facings":15,"max_ticks":600}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::TurnFlagship(TurnFlagshipStep {
+                direction: TurnDirection::Right,
+                facings: 4,
+                max_ticks: 600
+            })
+        );
+        for bad in [
+            r#"{"action":"turn_flagship","direction":"right","facings":0,"max_ticks":600}"#,
+            r#"{"action":"turn_flagship","direction":"right","facings":16,"max_ticks":600}"#,
+            r#"{"action":"turn_flagship","direction":"right","facings":4,"max_ticks":0}"#,
+        ] {
+            assert!(validated_turn(bad).is_err(), "{bad} must be rejected");
+        }
+        let unknown = turn_script(
+            r#"{"action":"turn_flagship","direction":"up","facings":4,"max_ticks":600}"#,
+        );
+        assert!(parse_script(unknown.as_bytes(), "turn.json").is_err());
     }
 
     /// #213: the restart menu only reads input after its first frame is
@@ -3206,6 +3390,79 @@ mod tests {
         let roomy = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
         let roomy = validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_eq!(roomy.steps().len(), 2);
+    }
+
+    // --- assert_ship_resources ---
+
+    fn resource_script(step: &str) -> String {
+        format!(
+            r#"{{"version":1,"name":"r","budgets":{{"max_input_ticks":4,"max_presentations":4,"max_wallclock_seconds":1}},"steps":[{step},{{"action":"finish"}}]}}"#
+        )
+    }
+
+    #[test]
+    fn assert_ship_resources_parses_either_or_both_fields() {
+        for (step, fuel, ru) in [
+            (
+                r#"{"action":"assert_ship_resources","fuel_on_board":6000,"res_units":1500}"#,
+                Some(6000),
+                Some(1500),
+            ),
+            (
+                r#"{"action":"assert_ship_resources","fuel_on_board":1000}"#,
+                Some(1000),
+                None,
+            ),
+            (
+                r#"{"action":"assert_ship_resources","res_units":0}"#,
+                None,
+                Some(0),
+            ),
+        ] {
+            let text = resource_script(step);
+            let validated =
+                validate_script(parse_script(text.as_bytes(), p()).unwrap(), p()).unwrap();
+            assert_eq!(
+                validated.steps()[0],
+                Action::AssertShipResources(ShipResourcesAssertion {
+                    fuel_on_board: fuel,
+                    res_units: ru,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn assert_ship_resources_with_nothing_to_check_is_rejected() {
+        let text = resource_script(r#"{"action":"assert_ship_resources"}"#);
+        let error = validate_script(parse_script(text.as_bytes(), p()).unwrap(), p()).unwrap_err();
+        assert!(
+            error.to_string().contains("assert_ship_resources"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn assert_ship_resources_rejects_unknown_negative_and_oversized_values() {
+        for step in [
+            r#"{"action":"assert_ship_resources","fuel_on_board":1,"grant":5}"#,
+            r#"{"action":"assert_ship_resources","fuel_on_board":-1}"#,
+            r#"{"action":"assert_ship_resources","res_units":4294967296}"#,
+            r#"{"action":"assert_ship_resources","res_units":"2500"}"#,
+        ] {
+            let text = resource_script(step);
+            assert!(parse_script(text.as_bytes(), p()).is_err(), "{step}");
+        }
+    }
+
+    #[test]
+    fn assert_ship_resources_costs_one_input_callback_like_every_assertion() {
+        // The assertion and `finish` are two callbacks, so a cap of 3 admits
+        // exactly two and a cap of 2 admits one.
+        let tight = r#"{"version":1,"name":"r","budgets":{"max_input_ticks":2,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"assert_ship_resources","res_units":0},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+        let roomy = tight.replace("\"max_input_ticks\":2", "\"max_input_ticks\":3");
+        assert!(validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).is_ok());
     }
 
     // --- capability contract ---

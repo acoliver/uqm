@@ -307,49 +307,49 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-v1.json",
-                "sha256": "f7fe89fb7d6d55cbb086eb4155a0894ee598cc644c68b44ca266c2251aa942a1",
-                "byte_length": 2725
+                "sha256": "60e0ab4f47a8ada57cd62559ce24ed9c6bbb618edcab968dd2daa9af9e4167c2",
+                "byte_length": 2965
           },
           {
                 "path": "rust/scripts/probe-encounter-v2.json",
-                "sha256": "32a5f064f05095c8df6a90761c649c5d5fb696ce278c245a57646dbf0ecb93f0",
-                "byte_length": 3350,
+                "sha256": "852460509ac8f74a06af50d35ce5d8df765299e96d892531d6c3a2b5297677df",
+                "byte_length": 2527,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v3.json",
-                "sha256": "1b40fea5dcc41a7e4c7986fb74a7a0618a7aa4a395dbfeef980d2354ee45e442",
-                "byte_length": 1491,
+                "sha256": "189916ad7a3b7e67ac61755bb8d6fec8c04b1ffd1a721cc0a09a7becf8184461",
+                "byte_length": 10558,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v4.json",
-                "sha256": "8eda2ca3ee21079342dfecefd514acabe6914a3e2f910a47c977f3d3be3143a2",
-                "byte_length": 1491,
+                "sha256": "3e760eeb166676f04f9d2a1973851a077e38b633e65c55c63fab5e8293df01ed",
+                "byte_length": 10558,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v5.json",
-                "sha256": "bad3d51f4b10b90d5714655353c59b9987520a7dd1220701a41acc7cd9222db0",
-                "byte_length": 3732,
+                "sha256": "a447696b53af17f75d65d1c7daaa71397ddbbf4334f5facef2e431ddaa8e9bf6",
+                "byte_length": 2214,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v6.json",
-                "sha256": "58630de7ca2d8aa6e9810f49a550a471436edf43e1220e3aca5d6ddb62ac66f8",
-                "byte_length": 2592,
+                "sha256": "70fc2766c309d6d3a1451ce1ad09834ea20154544529e889efd1dec2318b9db0",
+                "byte_length": 3408,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v7.json",
-                "sha256": "a5773bf1e3420e059d4cfdd1c233d21b5a4ff97b2f56dd7527df67a496280bd1",
-                "byte_length": 2933,
+                "sha256": "f6f34960351a65fcc17b6fc6672a195167bbdca5432e0db985caff19777f1488",
+                "byte_length": 4919,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-wait.json",
-                "sha256": "041a55c766642990d22829981bd62338da8c4e1242dbd7695d9b596a4b25f594",
-                "byte_length": 1059
+                "sha256": "2a2bd7ef9bfff3d1155b25635c3431fd71b12616707aeaab53d384d07389a65b",
+                "byte_length": 1077
           },
           {
                 "path": "rust/scripts/quit-v1.json",
@@ -409,8 +409,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-rust-planetside-smoke.json",
-                "sha256": "39dd688c8359f146468a8abdb92432b4ab50d0834aaee285c2dfcab7d3f9b4b0",
-                "byte_length": 1771,
+                "sha256": "ccd949842e62db709e7d7a428385a71001a7665d934e42b06d8d1ac7d9bdcaa9",
+                "byte_length": 1756,
                 "outer_child_timeout_ms": 900000
           },
           {
@@ -441,8 +441,9 @@
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",
-                "sha256": "f8c518afeb728e840cf8950c443f5c1ecf957e92e0412030776f1fd945eb43b9",
-                "byte_length": 1020
+                "sha256": "7d2f11ac9e70130966c56a810837616141ba859ea293e506c0c9b9869be3b6bf",
+                "byte_length": 6986,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/state-sync-v1.json",

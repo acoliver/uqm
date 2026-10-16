@@ -21,6 +21,8 @@ use crate::automation::coordinator::Coordinator;
 use crate::automation::runtime::RuntimeModel;
 #[cfg(feature = "linked_c_archive")]
 use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -50,39 +52,9 @@ pub(crate) struct NavigationSnapshot {
 }
 
 #[cfg(feature = "linked_c_archive")]
-#[repr(C)]
-struct CPlanetDesc {
-    _rand_seed: u32,
-    data_index: u8,
-    num_planets: u8,
-    radius: i16,
-    _location: crate::comm::locdata::CPoint,
-    _temp_color: crate::comm::locdata::CColor,
-    _next_index: u16,
-    image: crate::comm::locdata::CStamp,
-    previous: *mut CPlanetDesc,
-}
-
-#[cfg(feature = "linked_c_archive")]
-#[repr(C)]
-struct CSolarSystemState {
-    _input_func: *mut std::ffi::c_void,
-    in_ip_flight: i32,
-    wait_intersect: u16,
-    _wait_intersect_pad: [u8; 2],
-    sun: [CPlanetDesc; 1],
-    planets: [CPlanetDesc; 16],
-    moons: [CPlanetDesc; 4],
-    _base: *mut CPlanetDesc,
-    orbital: *mut CPlanetDesc,
-}
-
-#[cfg(feature = "linked_c_archive")]
 extern "C" {
     fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
     fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
-    #[link_name = "pSolarSysState"]
-    static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
     #[allow(non_snake_case)]
@@ -160,19 +132,18 @@ const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 /// Must run on the game thread while `solar_system` is the live
 /// `pSolarSysState`, as the automation input hook does.
 #[cfg(feature = "linked_c_archive")]
-unsafe fn read_flight_state(solar_system: &CSolarSystemState, snapshot: &mut NavigationSnapshot) {
+unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut NavigationSnapshot) {
     snapshot.active = 1;
-    snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
+    snapshot.in_ip_flight = i32::from(solar_system.InIpFlight != 0);
     // Ask the game for live orbit state rather than inferring it. The
-    // authoritative flag is `SOLARSYS_STATE::InOrbit`, but it sits behind a
-    // long tail of fields this binding does not model, so it is read
-    // through the exported predicate instead of a guessed offset.
+    // authoritative flag is `SOLARSYS_STATE::InOrbit`, which the exported
+    // predicate reads.
     // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
     // for save/load. `!InIpFlight` is not usable either: the game clears
     // `InIpFlight` when entering an encounter as well as an orbit, so it
     // would report orbit during encounters.
     snapshot.in_orbit = i32::from(playerInPlanetOrbit());
-    snapshot.wait_intersect = solar_system.wait_intersect;
+    snapshot.wait_intersect = solar_system.WaitIntersect;
     let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
     let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
     snapshot.ship_x = i32::from(ship_stamp.origin.x);
@@ -180,32 +151,97 @@ unsafe fn read_flight_state(solar_system: &CSolarSystemState, snapshot: &mut Nav
     if !ship_stamp.frame.is_null() {
         snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
     }
-    let velocity = std::ptr::addr_of!((*game_state)._velocity)
-        .cast::<crate::battle::velocity::VelocityDesc>()
-        .read_unaligned();
+    let velocity = std::ptr::addr_of!((*game_state).velocity).read();
     (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
 
-    if !solar_system.orbital.is_null() {
-        snapshot.orbital_data_index = i32::from((*solar_system.orbital).data_index);
-        let planet_start = solar_system.planets.as_ptr() as usize;
-        let moon_start = solar_system.moons.as_ptr() as usize;
-        let desc_size = std::mem::size_of::<CPlanetDesc>();
-        let orbital_address = solar_system.orbital as usize;
+    if !solar_system.pOrbitalDesc.is_null() {
+        snapshot.orbital_data_index = i32::from((*solar_system.pOrbitalDesc).data_index);
+        let planet_start = solar_system.PlanetDesc.as_ptr() as usize;
+        let moon_start = solar_system.MoonDesc.as_ptr() as usize;
+        let desc_size = std::mem::size_of::<PLANET_DESC>();
+        let orbital_address = solar_system.pOrbitalDesc as usize;
         if orbital_address >= moon_start
-            && orbital_address < moon_start + solar_system.moons.len() * desc_size
+            && orbital_address < moon_start + solar_system.MoonDesc.len() * desc_size
         {
             snapshot.orbital_moon = ((orbital_address - moon_start) / desc_size) as i32;
         }
-        let sun = solar_system.sun.as_ptr();
-        let orbital_planet = if std::ptr::eq((*solar_system.orbital).previous.cast_const(), sun) {
-            solar_system.orbital
-        } else {
-            (*solar_system.orbital).previous
-        } as usize;
+        let sun = solar_system.SunDesc.as_ptr();
+        let orbital_planet =
+            if std::ptr::eq((*solar_system.pOrbitalDesc).pPrevDesc.cast_const(), sun) {
+                solar_system.pOrbitalDesc
+            } else {
+                (*solar_system.pOrbitalDesc).pPrevDesc
+            } as usize;
         if orbital_planet >= planet_start {
             snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
         }
     }
+}
+
+/// The flagship's authoritative logical coordinates, `GLOBAL_SIS(log_x/log_y)`.
+///
+/// Hyperspace flight moves exactly these fields (`hyper.c`), so they are the
+/// position a movement assertion must read.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some((
+            std::ptr::addr_of!((*sis_state).log_x).read(),
+            std::ptr::addr_of!((*sis_state).log_y).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no position to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+    None
+}
+
+/// The hyperspace flagship's own `ShipFacing`, read from the player's
+/// `STARSHIP` as `SaveSisHyperState` finds it. `None` when no flagship is in
+/// flight or its queues are inconsistent. Nothing is written.
+#[cfg(all(feature = "linked_c_archive", not(test)))]
+pub(crate) fn hyperspace_facing() -> Option<u8> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, after `InitKernel` and `InitSpace` set up the queues.
+    let facing = unsafe { crate::savegame::runtime::live::live_flagship_facing() };
+    facing
+        .ok()
+        .flatten()
+        .and_then(|facing| u8::try_from(facing).ok())
+}
+
+/// Without the linked game there is no facing to read.
+#[cfg(not(all(feature = "linked_c_archive", not(test))))]
+pub(crate) fn hyperspace_facing() -> Option<u8> {
+    None
+}
+
+/// The flagship's authoritative `FuelOnBoard` and `ResUnits`, in that order.
+///
+/// `DeltaSISGauges` changes exactly these `SIS_STATE` fields, so a reward or
+/// a purchase is visible here only after the game applied it.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some((
+            std::ptr::addr_of!((*sis_state).fuel_on_board).read(),
+            std::ptr::addr_of!((*sis_state).res_units).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no flagship state to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    None
 }
 
 /// Sample the live solar system for flying out of it, without a target.
@@ -227,7 +263,7 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     // SAFETY: the production game invokes this hook synchronously on the game
     // thread, so the solar-system pointer and its state cannot change here.
     unsafe {
-        if let Some(solar_system) = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read().as_ref() {
+        if let Some(solar_system) = crate::c_bindings::solar_system::current().as_ref() {
             read_flight_state(solar_system, &mut snapshot);
         }
     }
@@ -258,11 +294,11 @@ pub(crate) fn navigation_snapshot(
     unsafe {
         // The production game invokes this hook synchronously on the game
         // thread, so these mutable C globals cannot change during a snapshot.
-        let solar_system_ptr = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read();
+        let solar_system_ptr = crate::c_bindings::solar_system::current();
         let Some(solar_system) = solar_system_ptr.as_ref() else {
             return snapshot;
         };
-        if target_planet < 0 || target_planet >= i32::from(solar_system.sun[0].num_planets) {
+        if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].NumPlanets) {
             return snapshot;
         }
         read_flight_state(solar_system, &mut snapshot);
@@ -270,9 +306,9 @@ pub(crate) fn navigation_snapshot(
         if let Some(moon) = target_moon {
             if snapshot.inner_planet == target_planet
                 && moon >= 0
-                && moon < i32::from(solar_system.planets[target_planet as usize].num_planets)
+                && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].NumPlanets)
             {
-                let target = &solar_system.moons[moon as usize];
+                let target = &solar_system.MoonDesc[moon as usize];
                 snapshot.target_data_index = i32::from(target.data_index);
                 let target_origin = target.image.origin;
                 snapshot.target_x = i32::from(target_origin.x);
@@ -281,8 +317,8 @@ pub(crate) fn navigation_snapshot(
             }
         }
 
-        let target_origin = solar_system.planets[target_planet as usize].image.origin;
-        let radius = i32::from(solar_system.sun[0].radius);
+        let target_origin = solar_system.PlanetDesc[target_planet as usize].image.origin;
+        let radius = i32::from(solar_system.SunDesc[0].radius);
         if radius != 0 {
             // Match displayToLocation followed by locationToDisplay exactly.
             // C integer division truncates toward zero, as Rust's does.

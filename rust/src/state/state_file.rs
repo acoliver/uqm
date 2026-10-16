@@ -69,6 +69,21 @@ impl StateFile {
         self.ptr
     }
 
+    /// The logical contents: the first `length()` bytes, without the zero
+    /// padding `open` pre-allocates. Does not touch the position or open count.
+    pub fn contents(&self) -> &[u8] {
+        &self.data[..self.used]
+    }
+
+    /// Make `bytes` the whole file, as opening for write and writing them
+    /// from the start does, and leave the file at position 0.
+    fn replace_contents(&mut self, bytes: &[u8]) {
+        self.data.clear();
+        self.data.extend_from_slice(bytes);
+        self.used = bytes.len();
+        self.ptr = 0;
+    }
+
     /// Read data from the file
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, StateFileError> {
         if self.ptr >= self.data.len() {
@@ -259,6 +274,19 @@ impl StateFileManager {
             return Err(StateFileError::InvalidFile);
         }
         self.files[file_index].delete();
+        Ok(())
+    }
+
+    /// Replace the whole contents of a state file in one step.
+    pub fn replace_contents(
+        &mut self,
+        file_index: usize,
+        bytes: &[u8],
+    ) -> Result<(), StateFileError> {
+        if file_index >= NUM_STATE_FILES {
+            return Err(StateFileError::InvalidFile);
+        }
+        self.files[file_index].replace_contents(bytes);
         Ok(())
     }
 

@@ -27,6 +27,8 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertGameOptions(_)
         | Action::AssertCommunicationResponses(_)
         | Action::AssertBattleFrames(_)
+        | Action::AssertHyperspaceDisplacement(_)
+        | Action::AssertShipResources(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
         Action::WaitForMainMenuReady(_)
@@ -34,12 +36,14 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::WaitForPlanetSideEnd(_)
         | Action::WaitForDispatch(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
+        | Action::TurnFlagship(_)
         | Action::SelectPlanetMenu(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
@@ -49,6 +53,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::TapMenuKey(_)
         | Action::SetPlayerKey(_)
         | Action::TapPlayerKey(_)
+        | Action::RecordHyperspacePosition(_)
         | Action::Finish => None,
     }
 }
@@ -169,7 +174,7 @@ impl CheckpointScan {
         };
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix, feature = "debug-process"))]
     pub(crate) const fn visits(&self) -> u64 {
         self.visits
     }
@@ -179,7 +184,9 @@ impl CheckpointScan {
         self.committed
     }
 
-    /// Positions of the committed markers, in trace order.
+    /// Positions of the committed markers, in trace order. Only the
+    /// controller's trace cursor reads them.
+    #[cfg(all(unix, feature = "debug-process"))]
     pub(crate) fn marker_positions(&self) -> &[usize] {
         &self.marker_positions
     }
@@ -556,7 +563,7 @@ mod tests {
                 captures += expected_captures;
             }
         }
-        assert_eq!(captures, 132);
+        assert_eq!(captures, 138);
         assert_eq!(classes.len(), 4);
     }
 }

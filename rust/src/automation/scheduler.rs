@@ -305,7 +305,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
-        | Action::NavigateToHyperspace(_) => {
+        | Action::NavigateToHyperspace(_)
+        | Action::TurnFlagship(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -317,6 +318,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::WaitForBattleFrames(_)
         | Action::WaitForDispatch(_)
         | Action::SelectCommunicationResponse(_)
+        | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => matches!(
             phase,
@@ -399,6 +401,7 @@ pub fn scheduler_reduce(
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
                     | Action::NavigateToHyperspace(_)
+                    | Action::TurnFlagship(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -432,6 +435,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForBattleFrames(_)
                     | Action::WaitForDispatch(_)
                     | Action::SelectCommunicationResponse(_)
+                    | Action::WaitForCommunicationResponses(_)
                     | Action::WaitForPlanetSideStart(_)
                     | Action::WaitForPlanetSideEnd(_)
                     | Action::SelectPlanetMenu(_)
@@ -834,7 +838,8 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -847,18 +852,17 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::Navigating {
-                        remaining: remaining - 1,
-                    },
-                    state_version: sv,
-                    ..*state
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: remaining - 1,
                 },
-                effects: EffectPlan::none(),
-            }
-        }
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -871,6 +875,16 @@ fn reduce_navigation(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::TurnFlagship(turn), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: turn.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -1101,6 +1115,41 @@ fn reduce_condition_wait(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::WaitForCommunicationResponses(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (
+            Action::WaitForCommunicationResponses(_),
+            ActionPhase::WaitingCondition { remaining: 0 },
+        ) => SchedulerTransition {
+            new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::SemanticMismatch),
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitForCommunicationResponses(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::WaitForCommunicationEnd(wait), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -1260,6 +1309,9 @@ fn reduce_capture_and_assertion(
         | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
         | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)
         | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
+        | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
+        | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
+        | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -1868,6 +1920,92 @@ mod tests {
         assert_eq!(release.effects.release_player_key, Some(PlayerKey::Thrust));
         assert_eq!(release.new_state.step_index, 1);
     }
+    /// Issue #214: a menu tap reaches `menu[]` and a player tap reaches the
+    /// ship's `key[]`. Neither routes through the other's effect for the
+    /// whole hold, release and settle.
+    #[test]
+    fn menu_and_player_taps_never_cross_input_classes() {
+        let drive = |action: Action| {
+            let actions = [action, Action::Finish];
+            let config = cfg(&actions);
+            let mut state = SchedulerState::initial();
+            let mut effects = Vec::new();
+            while state.step_index == 0 {
+                let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+                effects.push(t.effects);
+                state = t.new_state;
+            }
+            effects
+        };
+        let menu = drive(Action::TapMenuKey(TapMenuKeyStep {
+            key: MenuKey::Up,
+            value: 1,
+            hold: 3,
+            settle: 2,
+        }));
+        assert!(menu.iter().any(|e| e.write_key == Some((MenuKey::Up, 1))));
+        assert!(menu
+            .iter()
+            .all(|e| e.write_player_key.is_none() && e.release_player_key.is_none()));
+
+        let player = drive(Action::TapPlayerKey(TapPlayerKeyStep {
+            key: PlayerKey::Thrust,
+            value: 1,
+            hold: 3,
+            settle: 2,
+        }));
+        let writes = player
+            .iter()
+            .filter(|e| e.write_player_key == Some((PlayerKey::Thrust, 1)))
+            .count();
+        assert_eq!(writes, 3, "thrust is written on every held update");
+        assert!(player
+            .iter()
+            .any(|e| e.release_player_key == Some(PlayerKey::Thrust)));
+        assert!(player
+            .iter()
+            .all(|e| e.write_key.is_none() && e.release_key.is_none()));
+    }
+
+    #[test]
+    fn ship_resources_assertion_advances_without_input_effects() {
+        use crate::automation::script::ShipResourcesAssertion;
+        let actions = [
+            Action::AssertShipResources(ShipResourcesAssertion {
+                fuel_on_board: Some(1000),
+                res_units: Some(0),
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let state = SchedulerState::initial();
+        let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(t.new_state.step_index, 1);
+        assert_eq!(t.effects, EffectPlan::none());
+    }
+
+    #[test]
+    fn position_record_and_displacement_assertion_advance_without_input_effects() {
+        use crate::automation::script::{
+            HyperspaceDisplacementAssertion, RecordHyperspacePositionStep,
+        };
+        let actions = [
+            Action::RecordHyperspacePosition(RecordHyperspacePositionStep {}),
+            Action::AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion {
+                minimum_logical_units: 16,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        for expected in [1, 2] {
+            let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            assert_eq!(t.new_state.step_index, expected);
+            assert_eq!(t.effects, EffectPlan::none());
+            state = t.new_state;
+        }
+    }
+
     /// The production input loop turns a key that stays down into a repeat
     /// pulse once half a second of wall-clock time has passed. A scripted tap
     /// is one press, so every update after the first one only holds the key
@@ -2759,6 +2897,50 @@ mod tests {
     }
 
     #[test]
+    fn communication_response_wait_holds_until_condition_and_expires_as_a_mismatch() {
+        use crate::automation::script::WaitForCommunicationResponsesStep;
+        let actions = [
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 2,
+                max_ticks: 3,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        )
+        .new_state;
+        assert_eq!(state.phase, ActionPhase::WaitingCondition { remaining: 2 });
+        for remaining in [1, 0] {
+            state = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput).new_state;
+            assert_eq!(state.step_index, 0, "ticks alone never satisfy the wait");
+            assert_eq!(state.terminal, None);
+            assert_eq!(state.phase, ActionPhase::WaitingCondition { remaining });
+        }
+        let expired = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
     fn semantic_response_selection_advances_on_condition() {
         let actions = [
             Action::SelectCommunicationResponse(
@@ -2953,9 +3135,9 @@ mod budgeted_wait_tests {
     use crate::automation::script::{
         NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
         PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
-        SelectPlanetMenuStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
-        WaitForPlanetSideStartStep,
+        SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep, WaitForBattleFramesStep,
+        WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
+        WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
     };
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
@@ -2974,6 +3156,11 @@ mod budgeted_wait_tests {
                 max_ticks,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+            Action::TurnFlagship(TurnFlagshipStep {
+                direction: TurnDirection::Right,
+                facings: 4,
+                max_ticks,
+            }),
         ]
     }
 
@@ -3016,6 +3203,7 @@ mod budgeted_wait_tests {
                 | Action::NavigateToMoon(_)
                 | Action::NavigateToOrbit(_)
                 | Action::NavigateToHyperspace(_)
+                | Action::TurnFlagship(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {

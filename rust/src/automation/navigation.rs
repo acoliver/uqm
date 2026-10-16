@@ -18,6 +18,11 @@ pub struct NavigationObservation {
     /// they are sampled rather than assumed.
     pub view_center_x: i32,
     pub view_center_y: i32,
+    /// The collision guard (`WaitIntersect`) currently names the moon being
+    /// navigated to. `CheckIntersect` keeps it until the ship stops
+    /// intersecting any body, so the guard being set while the ship has not
+    /// entered orbit means the moon cannot be entered from where the ship is.
+    pub target_guard_active: bool,
 }
 
 /// Player-one controls to apply for one admitted input callback.
@@ -195,16 +200,58 @@ pub fn steer_moon_navigation(observation: NavigationObservation) -> NavigationCo
     let dy = f64::from(observation.target_y - observation.ship_y);
     let distance = dx.hypot(dy);
 
-    // Sitting exactly on the target without the game having committed an orbit
-    // means the collision guard still suppresses this moon. Hold station: the
-    // guard clears on its own once CheckIntersect stops matching, and thrusting
-    // blindly here would only add drift to correct later.
+    if observation.target_guard_active {
+        return steer_out_of_target(observation);
+    }
+
+    // Sitting exactly on the target with no guard held is a transient: the
+    // next frame either commits the orbit or sets the guard.
     if distance == 0.0 {
         return NavigationControl::default();
     }
 
-    let desired_velocity_x = dx * MOON_APPROACH_SPEED / distance;
-    let desired_velocity_y = dy * MOON_APPROACH_SPEED / distance;
+    steer_to_velocity(
+        dx * MOON_APPROACH_SPEED / distance,
+        dy * MOON_APPROACH_SPEED / distance,
+        observation,
+    )
+}
+
+/// Speed held while leaving a moon whose collision guard is still set.
+const MOON_BACKOFF_SPEED: f64 = 8.0;
+
+/// Fly out of a moon that `CheckIntersect` is suppressing.
+///
+/// The guard that keeps a just-left moon from being entered again is released
+/// only once the ship no longer intersects any body, so a ship that stops on
+/// the moon (the Starbase puts the ship back there when it is left) stays
+/// locked out. Backing away is what a player does. The heading is directly
+/// away from the moon; a ship exactly on it leaves along the line from the
+/// view centre, since moons orbit the centre.
+fn steer_out_of_target(observation: NavigationObservation) -> NavigationControl {
+    let mut away_x = f64::from(observation.ship_x - observation.target_x);
+    let mut away_y = f64::from(observation.ship_y - observation.target_y);
+    if away_x == 0.0 && away_y == 0.0 {
+        away_x = f64::from(observation.ship_x - observation.view_center_x);
+        away_y = f64::from(observation.ship_y - observation.view_center_y);
+    }
+    if away_x == 0.0 && away_y == 0.0 {
+        away_y = -1.0;
+    }
+    let length = away_x.hypot(away_y);
+    steer_to_velocity(
+        away_x * MOON_BACKOFF_SPEED / length,
+        away_y * MOON_BACKOFF_SPEED / length,
+        observation,
+    )
+}
+
+/// Steer so that thrust moves the current velocity toward `desired`.
+fn steer_to_velocity(
+    desired_velocity_x: f64,
+    desired_velocity_y: f64,
+    observation: NavigationObservation,
+) -> NavigationControl {
     let correction_x = desired_velocity_x - f64::from(observation.velocity_x);
     let correction_y = desired_velocity_y - f64::from(observation.velocity_y);
     let correction_magnitude_squared =
@@ -259,6 +306,7 @@ mod tests {
             // 242x227, so the centre is (121, 113).
             view_center_x: 121,
             view_center_y: 113,
+            target_guard_active: false,
         }
     }
 
@@ -498,14 +546,114 @@ mod tests {
     }
 
     #[test]
-    fn moon_controller_holds_station_when_already_at_the_target() {
-        // Coincident with the target but production has not committed an
-        // orbit: the collision guard is still suppressing this moon, so
-        // adding velocity would only have to be undone later.
+    fn moon_controller_backs_away_when_the_guard_holds_the_moon_under_the_ship() {
+        // Leaving the Starbase puts the ship back on the moon it just left and
+        // `CheckIntersect` suppresses that moon until the ship stops
+        // intersecting it. Standing still never clears the guard, so the ship
+        // must fly out of the moon, which lies left of the view centre.
+        let mut state = observation(86, 113, 12, 86, 113);
+        state.target_guard_active = true;
         assert_eq!(
-            steer_moon_navigation(observation(86, 113, 4, 86, 113)),
-            NavigationControl::default()
+            steer_moon_navigation(state),
+            NavigationControl {
+                thrust: true,
+                ..NavigationControl::default()
+            }
         );
+    }
+
+    #[test]
+    fn moon_controller_turns_away_from_the_view_centre_before_backing_off() {
+        let mut state = observation(86, 113, 4, 86, 113);
+        state.target_guard_active = true;
+        let control = steer_moon_navigation(state);
+        assert!(!control.thrust, "must not thrust into the view centre");
+        assert!(control.left ^ control.right);
+    }
+
+    #[test]
+    fn moon_controller_backs_away_along_the_line_from_the_target() {
+        // Off-centre inside the guard: leave along target -> ship.
+        let mut state = observation(86, 119, 8, 86, 113);
+        state.target_guard_active = true;
+        assert!(steer_moon_navigation(state).thrust);
+    }
+
+    /// The guard holds from the moment a collision is ignored until the ship
+    /// clears the moon image; only then can the moon be entered again.
+    #[test]
+    fn moon_controller_re_enters_a_moon_whose_guard_holds_it_under_the_ship() {
+        const TURN_WAIT: u32 = 2;
+        const THRUST_INCREMENT: f64 = 6.0;
+        const MAX_SPEED: f64 = 60.0;
+        const HIT_RADIUS: f64 = 4.0;
+        const GUARD_CLEARS_BEYOND: f64 = 8.0;
+
+        let target = (86.0_f64, 113.0_f64);
+        for start_facing in 0..16 {
+            let mut x = target.0;
+            let mut y = target.1;
+            let mut velocity_x = 0.0_f64;
+            let mut velocity_y = 0.0_f64;
+            let mut facing: i32 = start_facing;
+            let mut turn_counter: u32 = 0;
+            let mut guard_active = true;
+            let mut cleared_guard = false;
+            let mut hit = false;
+
+            for _ in 0..4000 {
+                let distance = (x - target.0).hypot(y - target.1);
+                if guard_active && distance > GUARD_CLEARS_BEYOND {
+                    guard_active = false;
+                    cleared_guard = true;
+                }
+                if !guard_active && distance <= HIT_RADIUS {
+                    hit = true;
+                    break;
+                }
+
+                let control = steer_moon_navigation(NavigationObservation {
+                    ship_x: x.round() as i32,
+                    ship_y: y.round() as i32,
+                    ship_facing: facing as u8,
+                    velocity_x: velocity_x.round() as i32,
+                    velocity_y: velocity_y.round() as i32,
+                    target_guard_active: guard_active,
+                    ..observation(0, 0, 0, target.0 as i32, target.1 as i32)
+                });
+
+                if turn_counter > 0 {
+                    turn_counter -= 1;
+                } else if control.left || control.right {
+                    facing = (facing + if control.right { 1 } else { -1 }).rem_euclid(16);
+                    turn_counter = TURN_WAIT;
+                }
+
+                if control.thrust {
+                    let angle = f64::from(facing) * std::f64::consts::TAU / 16.0
+                        - std::f64::consts::FRAC_PI_2;
+                    velocity_x += angle.cos() * THRUST_INCREMENT;
+                    velocity_y += angle.sin() * THRUST_INCREMENT;
+                    let speed = velocity_x.hypot(velocity_y);
+                    if speed > MAX_SPEED {
+                        velocity_x = velocity_x * MAX_SPEED / speed;
+                        velocity_y = velocity_y * MAX_SPEED / speed;
+                    }
+                }
+
+                x += velocity_x / 16.0;
+                y += velocity_y / 16.0;
+            }
+
+            assert!(
+                cleared_guard,
+                "ship never left the moon (start facing {start_facing})"
+            );
+            assert!(
+                hit,
+                "ship left the moon but never re-entered it (start facing {start_facing})"
+            );
+        }
     }
 
     #[test]

@@ -791,6 +791,15 @@ pub unsafe extern "C" fn rust_SetCommIntroMode(mode: c_uint) {
     COMM_STATE.write().set_intro_mode(CommIntroMode::from(mode));
 }
 
+/// C `SetCommIntroMode (mode, howLong)` (comm.c:1357): the mode and fade time
+/// that the talk segue's intro transition reads. Callers that run in Rust set
+/// them here, not through the C function, whose statics Rust never reads.
+pub fn set_comm_intro_mode(mode: u32, how_long: u32) {
+    let mut state = COMM_STATE.write();
+    state.set_intro_mode(CommIntroMode::from(mode));
+    state.set_fade_time(how_long);
+}
+
 /// Get fade time
 /// # Safety
 ///
@@ -1405,7 +1414,7 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 #[cfg(not(test))]
 extern "C" {
     // Direct C functions for phrase access (replacing c_get_* wrappers)
-    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: c_int) -> *mut std::ffi::c_void;
+    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
     fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
     fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
@@ -1437,7 +1446,7 @@ pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
     if phrases.is_null() {
         return std::ptr::null();
     }
-    let s = SetAbsStringTableIndex(phrases, index + i);
+    let s = SetAbsStringTableIndex(phrases, (index + i) as u16);
     GetStringAddress(s).cast::<u8>()
 }
 
@@ -1456,7 +1465,7 @@ unsafe fn get_alliance_name_full(
     }
 
     let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
-    let s = SetAbsStringTableIndex(phrases, (adjusted_index - 1) + i);
+    let s = SetAbsStringTableIndex(phrases, ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
         return std::ptr::null();
@@ -1583,12 +1592,12 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             }
 
             // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-            let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+            let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
             let text = GetStringAddress(s);
             if text.is_null() {
                 return;
             }
-            let table_idx = index - 1;
+            let table_idx = (index - 1) as u16;
             let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
             let clip = GetStringSoundClip(s2);
             let s3 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
@@ -1644,13 +1653,13 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
         }
 
         // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-        let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+        let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
         let text = GetStringAddress(s);
         if text.is_null() {
             return;
         }
 
-        let table_idx = index - 1;
+        let table_idx = (index - 1) as u16;
         let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
         let clip = GetStringSoundClip(s2);
 
@@ -1875,6 +1884,28 @@ mod tests {
             rust_SpliceTrackText(std::ptr::null(), 0.0, 1.0);
             assert_eq!(rust_DoResponsePhrase(1, std::ptr::null(), None), 0);
             rust_AddOscilloscopeSamples(std::ptr::null(), 0);
+
+            rust_UninitCommunication();
+        }
+    }
+
+    /// The Rust-ported `VisitStarBase` sets the intro mode for the Commander
+    /// conversation that follows its time passage. That mode must be the one
+    /// the talk segue reads, and it must survive the hail's state reset.
+    #[test]
+    #[serial]
+    fn set_comm_intro_mode_feeds_the_mode_the_talk_segue_reads() {
+        unsafe {
+            reset_state();
+            rust_InitCommunication();
+
+            set_comm_intro_mode(3, 1680);
+            assert_eq!(rust_GetCommIntroMode(), 3);
+            assert_eq!(rust_GetCommFadeTime(), 1680);
+
+            COMM_STATE.write().reset_for_encounter();
+            assert_eq!(rust_GetCommIntroMode(), 3);
+            assert_eq!(rust_GetCommFadeTime(), 1680);
 
             rust_UninitCommunication();
         }

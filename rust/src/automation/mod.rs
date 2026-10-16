@@ -26,6 +26,8 @@ pub mod capture;
 pub mod child_session;
 pub mod coordinator;
 pub mod error;
+pub mod flagship_turn;
+pub mod flight_position;
 pub mod identity;
 pub mod input;
 pub mod input_ffi;
@@ -42,6 +44,8 @@ mod native_budget;
 mod native_capture;
 #[cfg(feature = "debug-process")]
 mod native_capture_change;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_capture_retry;
 pub mod native_checkpoint;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_isolation;
@@ -65,6 +69,7 @@ pub mod scenario;
 pub mod scheduler;
 pub mod script;
 pub mod setup;
+pub mod ship_resources;
 pub mod suite;
 pub mod sync_model;
 pub mod trace;
@@ -129,15 +134,16 @@ pub use proof::{
 pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePlan};
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
-    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
-    MenuKey, NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep,
-    NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RootDocument,
-    SceneAssertion, ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep,
-    SetMenuKeyStep, SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep,
-    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-    WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
-    WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
-    CAPABILITY_REQUIRED_FLAGS,
+    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion,
+    HyperspaceDisplacementAssertion, MainMenuTransition, MenuKey, NavigateToHyperspaceStep,
+    NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
+    PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep, RootDocument, SceneAssertion,
+    ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
+    SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, ShipResourcesAssertion, TapMenuKeyStep,
+    TapPlayerKeyStep, TurnDirection, TurnFlagshipStep, ValidatedScript, WaitForBattleFramesStep,
+    WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep,
+    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{

@@ -28,11 +28,14 @@ pub mod hail;
 pub mod locdata;
 pub mod oscilloscope;
 pub mod phrase_state;
+pub mod player_font;
 pub mod races;
 pub mod response;
 pub mod response_ui;
 pub mod segue;
 pub mod sis_graphics;
+#[cfg(test)]
+mod sis_graphics_font_tests;
 pub mod speech_graphics;
 pub mod state;
 pub mod subtitle;
