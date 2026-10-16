@@ -123,6 +123,11 @@ path = "probes/menu_binding_probe.rs"
 required-features = ["linked_c_archive"]
 
 [[test]]
+name = "planets_parity"
+path = "tests/planets_parity.rs"
+required-features = ["linked_c_archive"]
+
+[[test]]
 name = "linked_provider_fixture"
 path = "tests/linked_provider_fixture.rs"
 required-features = ["linked_c_archive"]

@@ -117,6 +117,26 @@ pub extern "C" fn RandomContext_Copy(source: *const RandomContext) -> *mut Rando
     }
 }
 
+impl RandomContext {
+    /// A context seeded the way `RandomContext_SeedRandom` would seed it.
+    pub fn with_seed(seed: u32) -> Self {
+        Self {
+            seed: coerce_seed(seed),
+        }
+    }
+
+    /// Advance the stream and return the next value (`RandomContext_Random`).
+    pub fn next_random(&mut self) -> u32 {
+        self.seed = park_miller(self.seed);
+        self.seed
+    }
+
+    /// Reseed the stream (`RandomContext_SeedRandom`), returning the old seed.
+    pub fn reseed(&mut self, new_seed: u32) -> u32 {
+        std::mem::replace(&mut self.seed, coerce_seed(new_seed))
+    }
+}
+
 /// C: `DWORD RandomContext_Random(RandomContext *context)`
 #[no_mangle]
 #[allow(

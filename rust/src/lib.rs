@@ -23,6 +23,7 @@ pub mod io;
 pub mod logging;
 pub mod mainloop;
 pub mod math;
+pub mod planets;
 pub mod memory;
 pub mod planet_side;
 pub mod resource;
