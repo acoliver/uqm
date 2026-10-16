@@ -455,6 +455,13 @@
                 "byte_length": 272
           }
     ],
+    "start_saves": [
+      {
+        "path": "rust/scripts/saves/allied-starbase.sav",
+        "sha256": "f899d079a97f6d19944dd0db328e733504eb4a667d933853ee4ac8d481dee510",
+        "byte_length": 3276
+      }
+    ],
     "script": "rust/scripts/linked-playable-v1.json",
     "script_sha256": "95aee4114081c72222f50df6ccf7b8f01bafdb954f613381a4be6457562ed934",
     "script_byte_length": 2169,
