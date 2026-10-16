@@ -85,8 +85,13 @@ impl ZipIndex {
                 )
             })?;
 
-            let raw_name = entry.name();
-            let normalized = normalize_zip_path(raw_name);
+            let raw_name = entry.name().map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid name for ZIP entry {}: {}", i, e),
+                )
+            })?;
+            let normalized = normalize_zip_path(&raw_name);
 
             // Skip empty paths
             if normalized.is_empty() {
@@ -102,13 +107,20 @@ impl ZipIndex {
                 _ => 99, // Unknown/unsupported methods
             };
 
+            let local_header_offset = entry.data_start().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("ZIP entry {} has no data offset", i),
+                )
+            })?;
+
             let zip_entry = ZipEntry {
                 path: normalized.clone(),
                 compressed_size: entry.compressed_size(),
                 uncompressed_size: entry.size(),
                 compression_method,
                 crc32: entry.crc32(),
-                local_header_offset: entry.data_start(),
+                local_header_offset,
                 is_directory: is_dir,
                 index: i,
             };
