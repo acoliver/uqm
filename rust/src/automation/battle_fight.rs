@@ -21,13 +21,24 @@ const PLAYER_SIDE: usize = 0;
 const ENEMY_SIDE: usize = 1;
 
 /// The flagship's ion bolt flies `BLASTER_SPEED` (24 display units, 96 world
-/// units) for `BLASTER_LIFE` (12) frames, 1152 world units. Firing stops short
-/// of that.
-const FIRE_RANGE: i64 = 1100;
-/// How far the bolt's line may pass from the enemy's centre and still hit it,
-/// in world units (about twelve space pixels). Real runs report the facing
-/// error and distance every `TRACE_INTERVAL` ticks so this can be tuned.
-const HIT_RADIUS: i64 = 48;
+/// units) for `BLASTER_LIFE` (12) frames: 1152 world units.
+const BOLT_RANGE: i64 = 1152;
+/// Hull radius of the Avenger in world units: about 16 space pixels from its
+/// large avenger frame at 4 world units a pixel. The frame sizes are in the
+/// content package, which the Rust side does not read, so this is a
+/// conservative estimate and not a measured extent.
+const ENEMY_RADIUS: i64 = 64;
+/// Radius of the ion bolt in world units: about 4 space pixels at 4 world
+/// units a pixel (same caveat as `ENEMY_RADIUS`).
+const BOLT_RADIUS: i64 = 16;
+/// A bolt whose line passes this close to the enemy's centre can touch it.
+const HIT_RADIUS: i64 = ENEMY_RADIUS + BOLT_RADIUS;
+/// One facing off is still a hit on a ship-sized target at any bolt range
+/// the fight can fire at: a missed bolt costs one energy, a withheld one
+/// costs the fight.
+const NEAR_FACING_ERROR: i32 = 1;
+/// Two facings off only counts as aimed when the enemy is this close.
+const POINT_BLANK: i64 = 250;
 /// The Avenger covers 25 world units a frame, so while the flagship needs
 /// 18 frames per facing it closes the bolt range in about 46 frames. Only an
 /// enemy farther than twice the bolt range is approached.
@@ -139,26 +150,35 @@ pub fn bearing_facing(dx: i32, dy: i32) -> Option<u8> {
     u8::try_from(facing).ok()
 }
 
-/// Whether a bolt fired along `facing` now would pass within `HIT_RADIUS` of
-/// an enemy at `(dx, dy)` before it burns out.
-fn bolt_would_hit(facing: u8, dx: i32, dy: i32) -> bool {
+/// Whether a bolt fired along `facing` now can hit an enemy at `(dx, dy)`.
+///
+/// It can when the facing line passes within `HIT_RADIUS` of the enemy's
+/// centre before the bolt burns out, or when the facing is within one of the
+/// bearing and the enemy is inside bolt range, or within two and at point
+/// blank. `error` is the bearing's clockwise offset from the facing, 0..16.
+fn bolt_can_hit(facing: u8, error: i32, dx: i32, dy: i32) -> bool {
     let angle = facing_to_angle(u16::from(facing));
     let (fx, fy) = (i64::from(cosine(angle, UNIT)), i64::from(sine(angle, UNIT)));
     let (dx, dy) = (i64::from(dx), i64::from(dy));
     let ahead = dx * fx + dy * fy;
     let miss = (dx * fy - dy * fx).abs();
     let unit = i64::from(UNIT);
-    ahead > 0 && ahead <= FIRE_RANGE * unit && miss <= HIT_RADIUS * unit
+    let on_the_line = ahead > 0 && ahead <= BOLT_RANGE * unit && miss <= HIT_RADIUS * unit;
+    let distance = (dx * dx + dy * dy).isqrt();
+    let off = error.min(FACINGS - error);
+    let near_facing = off <= NEAR_FACING_ERROR && distance <= BOLT_RANGE;
+    let point_blank = off == NEAR_FACING_ERROR + 1 && distance < POINT_BLANK;
+    on_the_line || near_facing || point_blank
 }
 
 /// Choose the keys that face the enemy and fire.
 ///
 /// The flagship cannot kite the Avenger (thrust 10 against 25, one facing per
 /// 18 frames against one per 3), so it stands its ground and trades blows at
-/// range. It turns toward the bearing along the shorter way round, fires only
-/// when the bolt's line would hit, and never thrusts inside twice the bolt
-/// range: speed it gains cannot be shed and spoils the aim. Turning is left
-/// alone while the bolt already lines up.
+/// range. It turns toward the bearing along the shorter way round and fires
+/// whenever the bolt can plausibly hit (`bolt_can_hit`), turning and firing
+/// together. It never thrusts inside twice the bolt range: speed it gains
+/// cannot be shed and spoils the aim.
 #[must_use]
 pub fn engage(player: &ShipState, enemy: &ShipState, arena: (i32, i32)) -> Engagement {
     let (dx, dy) = wrapped_delta(player, enemy, arena);
@@ -175,9 +195,8 @@ pub fn engage(player: &ShipState, enemy: &ShipState, arena: (i32, i32)) -> Engag
         };
     };
     let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(FACINGS);
-    let weapon = bolt_would_hit(player.facing, dx, dy);
+    let weapon = bolt_can_hit(player.facing, error, dx, dy);
     let (right, left) = match error {
-        _ if weapon => (false, false),
         1..=8 => (true, false),
         9..=15 => (false, true),
         _ => (false, false),
@@ -653,27 +672,95 @@ mod tests {
         assert!(!out_of_reach.weapon);
     }
 
-    #[test]
-    fn a_bolt_that_would_miss_is_held_back_even_at_the_neighbouring_facing() {
-        // Facing 3 against a bearing of facing 4, 600 units away: the bolt
-        // passes about 230 units wide of the Avenger.
-        let enemy = ship(4000 + 600, 4000, 0);
-        let control = fight(&ship(4000, 4000, 3), &enemy, ARENA);
-        assert!(control.right && !control.weapon && !control.thrust);
+    // Real-window telemetry of the flagship against the Avenger: enemy due
+    // east (bearing facing 4), so a player facing of `4 - error` has that
+    // facing error.
+    fn east_duel(distance: i32, error: i32) -> FightControl {
+        let facing = u8::try_from((4 - error).rem_euclid(16)).unwrap();
+        fight(
+            &ship(4000, 4000, facing),
+            &ship(4000 + distance, 4000, 0),
+            ARENA,
+        )
     }
 
     #[test]
-    fn a_close_enemy_that_the_bolt_already_lines_up_with_is_shot_without_turning() {
-        // 100 units away, one facing off: still inside the hit radius.
-        let enemy = ship(4000 + 100, 4000, 0);
-        let control = fight(&ship(4000, 4000, 3), &enemy, ARENA);
+    fn telemetry_close_and_one_facing_off_fires_and_keeps_turning() {
+        // tick 91: distance 147, facing error 15 and the flagship never fired.
         assert_eq!(
-            control,
+            east_duel(147, 15),
+            FightControl {
+                left: true,
+                weapon: true,
+                ..FightControl::default()
+            }
+        );
+    }
+
+    #[test]
+    fn telemetry_far_off_facings_turn_without_firing() {
+        // tick 31: distance 424, facing error 12.
+        assert_eq!(
+            east_duel(424, 12),
+            FightControl {
+                left: true,
+                ..FightControl::default()
+            }
+        );
+        // tick 1: distance 1067, facing error 9.
+        assert_eq!(
+            east_duel(1067, 9),
+            FightControl {
+                left: true,
+                ..FightControl::default()
+            }
+        );
+    }
+
+    #[test]
+    fn telemetry_aimed_at_300_fires_and_holds_still() {
+        assert_eq!(
+            east_duel(300, 0),
             FightControl {
                 weapon: true,
                 ..FightControl::default()
             }
         );
+    }
+
+    #[test]
+    fn one_facing_off_fires_at_any_distance_inside_bolt_range() {
+        for distance in [120, 600, 1000, 1152] {
+            let control = east_duel(distance, 1);
+            assert!(control.weapon && control.right, "clockwise {distance}");
+            let control = east_duel(distance, 15);
+            assert!(control.weapon && control.left, "anticlockwise {distance}");
+        }
+        assert!(!east_duel(1153, 1).weapon);
+    }
+
+    #[test]
+    fn two_facings_off_fires_only_at_point_blank() {
+        assert!(east_duel(249, 2).weapon);
+        assert!(east_duel(249, 14).weapon);
+        assert!(!east_duel(250, 2).weapon);
+        assert!(!east_duel(600, 14).weapon);
+    }
+
+    #[test]
+    fn an_enemy_off_the_bolt_line_by_more_than_both_radii_is_not_shot_at() {
+        // Three facings off, 300 units away: the line passes about 277 units
+        // from the Avenger, wider than the 80 unit hit radius.
+        assert!(!east_duel(300, 3).weapon);
+        assert!(!east_duel(600, 3).weapon);
+    }
+
+    #[test]
+    fn a_bolt_line_through_the_hull_fires_even_when_the_facings_differ() {
+        // Three facings off at 80 units passes about 74 units wide, inside
+        // the 80 unit hit radius; at 100 units it passes 92 wide.
+        assert!(east_duel(80, 3).weapon);
+        assert!(!east_duel(100, 3).weapon);
     }
 
     #[test]

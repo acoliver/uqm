@@ -853,14 +853,15 @@ Backing off cannot open a gap, and the old rule "thrust only while facing
 away" spent those frames turning the flagship's back to the Avenger with the
 gun pointing the wrong way.
 
-*Damage race at contact.* The flagship has 51 crew and the Avenger 22. One ion
-bolt does `BLASTER_DAMAGE` 2 once per `WEAPON_WAIT` 6 frames, so killing the
-Avenger takes 11 hits, at least 66 frames of continuous accurate fire. In the
-flame the flagship loses about one crew a frame, so 51 crew last about 51
-frames of contact. A face-and-fire duel at point blank is close to even, which
-fits the real runs (run A won with 14 of 51 crew left, run C lost the flagship
-as well). What decides it is how many bolts land before the Avenger gets
-inside flame reach.
+*Damage race at contact.* The flagship has 51 crew. The Avenger of the Starbase
+fight has 7: `starbase.c` builds it with `CloneShipFragment (ILWRATH_SHIP, ...,
+7)`, not the 22 of a stock Avenger (the live battle shows `enemy_crew=7`). One
+ion bolt does `BLASTER_DAMAGE` 2 once per `WEAPON_WAIT` 6 frames, so killing
+the Avenger takes 4 hits, at least 24 frames of continuous accurate fire. In
+the flame the flagship loses about one crew a frame, so 51 crew last about 51
+frames of contact. The duel is therefore decided by getting 4 bolts home, and
+a flagship that does not fire at all dies. What decides it is how many bolts
+land before the Avenger gets inside flame reach.
 
 *Policy.* Face the Avenger and shoot it while it comes; spend no frame on
 anything else.
@@ -871,16 +872,19 @@ anything else.
   approached, and only when within two facings of the bearing. From 1100 to
   the Avenger's arrival that is about 40 frames, so about 6 bolts (12 damage,
   more than half its crew) before the first flame if they all land.
-- Fire when the bolt would hit, not when the quantised facing is within one
-  facing of the bearing. The bolt flies straight along the facing, so the
-  test is geometric: the Avenger is ahead, within 1100 units (the bolt's 1152
-  less a margin), and its centre is within `HIT_RADIUS` 48 world units of the
-  facing's line. A facing off by one (22.5 degrees) misses by 230 units at 600
-  and wastes energy (1 per shot, regenerated at 1 per 10 frames), so it is
-  held back except at point blank, where the radius covers it.
-- Turn along the shorter way round toward the bearing only while the bolt does
-  not already line up. Turning never stops while the bolt misses, because the
-  Avenger moves faster than the flagship turns.
+- Fire whenever the bolt can plausibly hit (`bolt_can_hit`). A miss costs one
+  energy (regenerated at 1 per 10 frames); a withheld shot cost the first
+  tuned rule the fight. The bolt fires when any of these holds:
+  the facing's line passes within `HIT_RADIUS` 80 world units of the Avenger's
+  centre with the Avenger ahead and within the bolt's 1152; or the bearing is
+  within one facing of the heading and the Avenger is within 1152 (one facing
+  off is a hit on a ship-sized target at close range, and the cheap shot is
+  worth it further out); or the bearing is two facings off and the Avenger is
+  under 250 units away (point blank).
+- Turn along the shorter way round toward the bearing whenever the facing
+  differs from it, and keep firing while turning when the rule above allows.
+  Turning never stops until the facing matches, because the Avenger moves
+  faster than the flagship turns.
 - Enemy close behind or cloaked: a cloaked Avenger still has an element and a
   location, so nothing changes. Behind the flagship the bolt cannot hit, so it
   turns toward the Avenger by the shorter way, with no thrust and no fire.
@@ -889,7 +893,30 @@ anything else.
   frames a facing), so there is nothing to steer toward; it keeps observing
   until the battle ends and fails at once if it dies meanwhile.
 
-`HIT_RADIUS` is an estimate from the sprite size. Every 30 ticks the action
+`HIT_RADIUS` is `ENEMY_RADIUS` 64 (about 16 space pixels of hull) plus
+`BOLT_RADIUS` 16 (about 4 pixels), at 4 world units a pixel. These are
+conservative estimates: the frame sizes are in the content package, which the
+Rust side does not read, so no measured extent is available.
+
+*Real-window telemetry that tuned it* (flagship against the 7-crew Avenger
+under the first geometric rule, `HIT_RADIUS` 48, which ignored the target's
+size and never fired):
+
+```
+tick=1  distance=1067 facing_error=9  player_crew=51 enemy_crew=7 action=turn_left
+tick=31 distance=424  facing_error=12 player_crew=51 enemy_crew=7 action=turn_left
+tick=61 distance=164  facing_error=14 player_crew=27 enemy_crew=7 action=turn_left
+tick=91 distance=147  facing_error=15 player_crew=13 enemy_crew=7 action=turn_left
+battle_fight_failed:reason=player_ship_lost
+```
+
+The flagship turned the whole fight, was never within one facing at a range
+where the narrow line test passed, and died. The earlier rule (fire at facing
+error 15, 0 or 1 within 1000 units, commit `a82490f87`) won 2 of 3 runs in
+109 to 166 ticks. Unit tests pin these four situations: (147, error 15) fires
+and turns left, (424, 12) and (1067, 9) turn without firing, (300, 0) fires.
+
+Every 30 ticks the action
 writes `battle_fight_state:tick=T:distance=D:facing_error=E:player_crew=P:
 enemy_crew=C:action=A` (`A` is `hold`, or `turn_left`, `turn_right`, `thrust`
 and `fire` joined by `+`), at most one label per 30 ticks, so real runs give
