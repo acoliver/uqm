@@ -213,7 +213,7 @@ pub(crate) fn read_bundle(
     bundle: &Path,
     authority: &Authority,
 ) -> Result<(ReplayIdentity, ReplayOutcome), String> {
-    let snapshot = EvidenceSnapshot::open(bundle)
+    let snapshot = EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
     let selection: Vec<PinnedScript> = serde_json::from_slice(
         snapshot
@@ -470,7 +470,7 @@ fn compare_outcome(recorded: &ReplayOutcome, produced: &ReplayOutcome) -> Result
 }
 
 fn shared_members(bundle: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
-    let snapshot = EvidenceSnapshot::open(bundle)
+    let snapshot = EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
     let members = native_suite::shared_members(&snapshot)?;
     if members.is_empty() {

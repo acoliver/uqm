@@ -1852,8 +1852,18 @@ pub(crate) struct EvidenceSnapshot {
 }
 
 impl EvidenceSnapshot {
+    /// Snapshot bounded by the hosted CI evidence-upload limits.
     pub(crate) fn open(root: &Path) -> std::io::Result<Self> {
-        let snapshot = Self::open_validation(root)?;
+        Self::open_rejecting_paths(root, SnapshotLimits::hosted_from_checked_in_authority()?)
+    }
+
+    /// Snapshot bounded by the local native suite's inventory limits.
+    pub(crate) fn open_native(root: &Path) -> std::io::Result<Self> {
+        Self::open_rejecting_paths(root, SnapshotLimits::native_from_checked_in_authority()?)
+    }
+
+    fn open_rejecting_paths(root: &Path, limits: SnapshotLimits) -> std::io::Result<Self> {
+        let snapshot = Self::open_with_limits(root, limits)?;
         if snapshot.active.rejected_paths.is_empty() {
             Ok(snapshot)
         } else {
@@ -1868,9 +1878,12 @@ impl EvidenceSnapshot {
     }
 
     fn open_validation(root: &Path) -> std::io::Result<Self> {
+        Self::open_with_limits(root, SnapshotLimits::hosted_from_checked_in_authority()?)
+    }
+
+    fn open_with_limits(root: &Path, limits: SnapshotLimits) -> std::io::Result<Self> {
         let root = lexical_absolute(root)?;
         let opened = OpenedRoot::open(&root)?;
-        let limits = SnapshotLimits::from_checked_in_authority()?;
         let (files, rejected_paths) = opened.snapshot_files(limits)?;
         Ok(Self {
             active: ActiveSnapshot {
@@ -2074,6 +2087,16 @@ pub(crate) fn regular_file_inventory(root: &Path) -> std::io::Result<Vec<Regular
     EvidenceSnapshot::open(root).map(|snapshot| snapshot.files())
 }
 
+/// Inventory of a native suite bundle, bounded by the native inventory limits.
+pub(crate) fn native_regular_file_inventory(
+    root: &Path,
+) -> std::io::Result<Vec<RegularFileSnapshot>> {
+    if let Some(files) = active_inventory(root)? {
+        return Ok(files);
+    }
+    EvidenceSnapshot::open_native(root).map(|snapshot| snapshot.files())
+}
+
 pub(crate) struct EvidencePublisher {
     root: OpenedRoot,
 }
@@ -2133,7 +2156,7 @@ struct SnapshotLimits {
 }
 
 impl SnapshotLimits {
-    fn from_checked_in_authority() -> std::io::Result<Self> {
+    fn checked_in_authority() -> std::io::Result<Authority> {
         let authority: Authority = serde_json::from_slice(include_bytes!("../../../ci/gates.json"))
             .map_err(|error| {
                 std::io::Error::new(
@@ -2147,6 +2170,12 @@ impl SnapshotLimits {
                 format!("invalid snapshot authority: {error}"),
             )
         })?;
+        Ok(authority)
+    }
+
+    /// Limits of the evidence a hosted CI job uploads (`actions.evidence_snapshot_*`).
+    fn hosted_from_checked_in_authority() -> std::io::Result<Self> {
+        let authority = Self::checked_in_authority()?;
         Ok(Self {
             member_count: u64::from(authority.actions.evidence_snapshot_member_count_limit),
             member_bytes: authority.actions.evidence_snapshot_member_limit_bytes,
@@ -2156,6 +2185,37 @@ impl SnapshotLimits {
                 .actions
                 .evidence_snapshot_aggregate_path_limit_bytes,
         })
+    }
+
+    /// Limits of the evidence the local native suite retains
+    /// (`native_acceptance.runtime_contract.inventory_limits`). They are
+    /// independent of the hosted upload limits.
+    fn native_from_checked_in_authority() -> std::io::Result<Self> {
+        let authority = Self::checked_in_authority()?;
+        Ok(Self::from_native_inventory(
+            authority.native_runtime_contract().inventory_limits,
+        ))
+    }
+
+    fn from_native_inventory(
+        limits: uqm_rust::automation::native_window::NativeInventoryLimits,
+    ) -> Self {
+        Self {
+            member_count: u64::from(limits.member_count),
+            member_bytes: limits.member_bytes,
+            aggregate_bytes: limits.aggregate_bytes,
+            path_bytes: u64::from(limits.path_bytes),
+            aggregate_path_bytes: limits.aggregate_path_bytes,
+        }
+    }
+
+    /// Bound for reading one already-admitted member outside a snapshot. The
+    /// admitting snapshot enforced its own member limit, so the read accepts the
+    /// larger of the two kinds.
+    fn point_read_member_bytes() -> std::io::Result<u64> {
+        Ok(Self::hosted_from_checked_in_authority()?
+            .member_bytes
+            .max(Self::native_from_checked_in_authority()?.member_bytes))
     }
 }
 
@@ -2255,10 +2315,7 @@ impl OpenedRoot {
         let (parent, name) = self.open_parent(relative, false)?;
         let file = openat_regular(&parent, &name)?;
         adversarial_hook(&format!("snapshot-entry:{relative}"));
-        read_owned_file_bounded(
-            file,
-            SnapshotLimits::from_checked_in_authority()?.member_bytes,
-        )
+        read_owned_file_bounded(file, SnapshotLimits::point_read_member_bytes()?)
     }
 
     fn snapshot_files(&self, limits: SnapshotLimits) -> std::io::Result<FileSnapshot> {
@@ -2675,7 +2732,7 @@ impl OpenedRoot {
     fn read_file(&self, relative: &str) -> std::io::Result<Vec<u8>> {
         validate_snapshot_relative(relative)?;
         let path = checked_portable_path(&self.root, relative, false)?;
-        let limit = SnapshotLimits::from_checked_in_authority()?.member_bytes;
+        let limit = SnapshotLimits::point_read_member_bytes()?;
         let file = fs::File::open(path)?;
         if file.metadata()?.len() > limit {
             return Err(invalid_path(
@@ -10494,6 +10551,53 @@ mod tests {
         assert!(opened
             .snapshot_files(snapshot_limits(1, 4, 6, 1, 2))
             .is_err());
+    }
+
+    const MIB: u64 = 1024 * 1024;
+
+    fn admit_members(limits: SnapshotLimits, members: u64, member_bytes: u64) -> bool {
+        let mut budget = SnapshotBudget::new(limits);
+        (0..members).all(|_| budget.admit_file(member_bytes).is_ok())
+    }
+
+    #[test]
+    fn hosted_snapshot_limits_still_come_from_the_evidence_upload_authority() {
+        let limits = SnapshotLimits::hosted_from_checked_in_authority().unwrap();
+        assert_eq!(limits.aggregate_bytes, 256 * MIB);
+        assert_eq!(limits.member_bytes, 64 * MIB);
+        // 700 MB of evidence is far over what a hosted upload may carry.
+        assert!(admit_members(limits, 4, 64 * MIB));
+        assert!(!admit_members(limits, 11, 64 * MIB));
+        assert!(!admit_members(limits, 5, 64 * MIB));
+    }
+
+    #[test]
+    fn native_snapshot_limits_come_from_the_native_inventory_authority() {
+        let authority = SnapshotLimits::checked_in_authority().unwrap();
+        let inventory = authority.native_runtime_contract().inventory_limits;
+        let limits = SnapshotLimits::native_from_checked_in_authority().unwrap();
+        assert_eq!(limits.aggregate_bytes, inventory.aggregate_bytes);
+        assert_eq!(limits.member_bytes, inventory.member_bytes);
+        assert_eq!(limits.member_count, u64::from(inventory.member_count));
+        assert_eq!(limits.path_bytes, u64::from(inventory.path_bytes));
+        assert_eq!(limits.aggregate_path_bytes, inventory.aggregate_path_bytes);
+        assert_ne!(
+            limits.aggregate_bytes,
+            authority.actions.evidence_snapshot_aggregate_limit_bytes
+        );
+    }
+
+    #[test]
+    fn native_snapshot_budget_accepts_700_mb_and_rejects_over_one_gib() {
+        let limits = SnapshotLimits::native_from_checked_in_authority().unwrap();
+        // 11 members of 64 MiB is 704 MiB, which the hosted limit refuses.
+        assert!(admit_members(limits, 11, 64 * MIB));
+        assert!(admit_members(limits, 16, 64 * MIB));
+        // 17 members of 64 MiB is 1088 MiB, over the 1 GiB native limit.
+        assert!(!admit_members(limits, 17, 64 * MIB));
+        let mut budget = SnapshotBudget::new(limits);
+        budget.admit_file(64 * MIB).unwrap();
+        assert!(budget.admit_file(64 * MIB + 1).is_err());
     }
 
     fn fixture_tuples() -> Vec<String> {
