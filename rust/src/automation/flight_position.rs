@@ -28,6 +28,13 @@ pub enum FlightPositionError {
     NotHyperspace { observed: String },
     /// The assertion ran with no snapshot from the same flight leg.
     NoBaseline,
+    /// The restore assertion ran with no saved position to compare with.
+    NoSavedPosition,
+    /// The loaded position differs from the one recorded before the save.
+    NotRestored {
+        saved: HyperspacePosition,
+        observed: HyperspacePosition,
+    },
     /// The ship moved less than the required distance.
     Insufficient {
         from: HyperspacePosition,
@@ -47,6 +54,11 @@ impl FlightPositionError {
                 format!("hyperspace_position_wrong_mode:observed={observed}")
             }
             Self::NoBaseline => "hyperspace_displacement_no_baseline".to_string(),
+            Self::NoSavedPosition => "hyperspace_position_restore_no_saved_position".to_string(),
+            Self::NotRestored { saved, observed } => format!(
+                "hyperspace_position_restore_failed:saved={},{}:observed={},{}",
+                saved.log_x, saved.log_y, observed.log_x, observed.log_y
+            ),
             Self::Insufficient {
                 from,
                 to,
@@ -94,10 +106,36 @@ pub fn recorded_trace_label(position: HyperspacePosition) -> String {
     )
 }
 
-/// Holds the snapshot between a record step and its assertion.
+/// The semantic trace label that records the position kept for a later load.
+#[must_use]
+pub fn saved_trace_label(position: HyperspacePosition) -> String {
+    format!(
+        "hyperspace_position_saved:x={}:y={}",
+        position.log_x, position.log_y
+    )
+}
+
+/// The semantic trace label that proves a loaded game is where it was saved.
+///
+/// Both coordinate pairs are spelled out so a reader of the trace alone can see
+/// that they are equal.
+#[must_use]
+pub fn restored_trace_label(saved: HyperspacePosition, observed: HyperspacePosition) -> String {
+    format!(
+        "hyperspace_position_restored:x={}:y={}:saved_x={}:saved_y={}",
+        observed.log_x, observed.log_y, saved.log_x, saved.log_y
+    )
+}
+
+/// Holds the snapshots between a record step and the assertion that uses it.
+///
+/// The displacement baseline and the position kept for a load are separate so
+/// a verified thrust leg can happen between the save and the load without
+/// consuming the position the load must restore.
 #[derive(Debug, Default)]
 pub struct FlightPositionTracker {
     baseline: Option<HyperspacePosition>,
+    saved: Option<HyperspacePosition>,
 }
 
 impl FlightPositionTracker {
@@ -116,6 +154,47 @@ impl FlightPositionTracker {
         let position = require_hyperspace(mode, position)?;
         self.baseline = Some(position);
         Ok(position)
+    }
+
+    /// Keep the ship's position for a later `assert_restored`. A failed record
+    /// leaves nothing behind.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the game is not in hyperspace or exposes no
+    /// position.
+    pub fn record_saved(
+        &mut self,
+        mode: Result<GameMode, String>,
+        position: Option<HyperspacePosition>,
+    ) -> Result<HyperspacePosition, FlightPositionError> {
+        self.saved = None;
+        let position = require_hyperspace(mode, position)?;
+        self.saved = Some(position);
+        Ok(position)
+    }
+
+    /// Require the ship to be exactly where `record_saved` kept it, consuming
+    /// the kept position whether or not the requirement holds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when nothing was kept, the game is not in hyperspace,
+    /// or the coordinates differ on either axis.
+    pub fn assert_restored(
+        &mut self,
+        mode: Result<GameMode, String>,
+        position: Option<HyperspacePosition>,
+    ) -> Result<(HyperspacePosition, HyperspacePosition), FlightPositionError> {
+        let saved = self
+            .saved
+            .take()
+            .ok_or(FlightPositionError::NoSavedPosition)?;
+        let observed = require_hyperspace(mode, position)?;
+        if observed != saved {
+            return Err(FlightPositionError::NotRestored { saved, observed });
+        }
+        Ok((saved, observed))
     }
 
     /// Require at least `minimum` logical units of movement since the snapshot,
@@ -413,6 +492,90 @@ mod tests {
         assert_eq!(
             proof.trace_label(),
             "hyperspace_displacement_verified:from=0,0:to=3,4:moved=5:minimum=1"
+        );
+    }
+
+    #[test]
+    fn a_load_that_restores_the_saved_position_is_accepted() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record_saved(hyperspace(), at(1752, 1450)).unwrap();
+        tracker.record(hyperspace(), at(1752, 1450)).unwrap();
+        tracker
+            .assert_displacement(hyperspace(), at(1752, 1520), 16)
+            .unwrap();
+        let (saved, observed) = tracker
+            .assert_restored(hyperspace(), at(1752, 1450))
+            .unwrap();
+        assert_eq!(saved, observed);
+        assert_eq!(
+            restored_trace_label(saved, observed),
+            "hyperspace_position_restored:x=1752:y=1450:saved_x=1752:saved_y=1450"
+        );
+    }
+
+    #[test]
+    fn a_load_that_never_happened_leaves_the_moved_position_and_is_rejected() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record_saved(hyperspace(), at(1752, 1450)).unwrap();
+        let error = tracker
+            .assert_restored(hyperspace(), at(1752, 1520))
+            .unwrap_err();
+        assert_eq!(
+            error.trace_label(),
+            "hyperspace_position_restore_failed:saved=1752,1450:observed=1752,1520"
+        );
+    }
+
+    #[test]
+    fn one_unit_of_difference_on_either_axis_is_not_restored() {
+        for observed in [(1753, 1450), (1752, 1451), (1751, 1450), (1752, 1449)] {
+            let mut tracker = FlightPositionTracker::default();
+            tracker.record_saved(hyperspace(), at(1752, 1450)).unwrap();
+            assert!(matches!(
+                tracker.assert_restored(hyperspace(), at(observed.0, observed.1)),
+                Err(FlightPositionError::NotRestored { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn restore_without_a_kept_position_or_outside_hyperspace_is_rejected() {
+        let mut tracker = FlightPositionTracker::default();
+        assert_eq!(
+            tracker.assert_restored(hyperspace(), at(1, 1)).unwrap_err(),
+            FlightPositionError::NoSavedPosition
+        );
+        tracker.record_saved(hyperspace(), at(1, 1)).unwrap();
+        assert!(matches!(
+            tracker.assert_restored(Ok(GameMode::Solar), at(1, 1)),
+            Err(FlightPositionError::NotHyperspace { .. })
+        ));
+        // The kept position is consumed by the failed attempt.
+        assert_eq!(
+            tracker.assert_restored(hyperspace(), at(1, 1)).unwrap_err(),
+            FlightPositionError::NoSavedPosition
+        );
+    }
+
+    #[test]
+    fn displacement_does_not_consume_the_position_kept_for_a_load() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record_saved(hyperspace(), at(10, 10)).unwrap();
+        tracker.record(hyperspace(), at(10, 10)).unwrap();
+        tracker
+            .assert_displacement(hyperspace(), at(10, 90), 16)
+            .unwrap();
+        assert!(tracker.assert_restored(hyperspace(), at(10, 10)).is_ok());
+    }
+
+    #[test]
+    fn a_failed_save_record_keeps_nothing() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record_saved(hyperspace(), at(5, 5)).unwrap();
+        assert!(tracker.record_saved(Ok(GameMode::Solar), at(5, 5)).is_err());
+        assert_eq!(
+            tracker.assert_restored(hyperspace(), at(5, 5)).unwrap_err(),
+            FlightPositionError::NoSavedPosition
         );
     }
 }
