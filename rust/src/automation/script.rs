@@ -3403,6 +3403,41 @@ mod tests {
         ));
     }
 
+    /// The allied Commander talk (`starbas.c` `NormalStarbase` with
+    /// `MOONBASE_ON_SHIP`) offers `have_minerals`, `need_info` and
+    /// `goodbye_commander`; only the last one (`ByeBye`) ends the conversation.
+    #[test]
+    fn alliance_scenario_ends_the_allied_talk_with_goodbye() {
+        let steps = checked_in_steps("real-sol-starbase-alliance");
+        let menu = step_index(&steps, 0, |step| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: crate::automation::mode::GameMode::Starbase
+                })
+            )
+        });
+        assert!(matches!(
+            steps[menu - 1],
+            Action::WaitInputTicks(WaitInputTicksStep { count: 60 })
+        ));
+        assert!(matches!(
+            steps[menu - 2],
+            Action::WaitForCommunicationEnd(_)
+        ));
+        assert!(matches!(
+            steps[menu - 3],
+            Action::SelectCommunicationResponse(SelectCommunicationResponseStep { index: 2, .. })
+        ));
+        assert!(matches!(
+            steps[menu - 4],
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 3,
+                ..
+            })
+        ));
+    }
+
     /// The scenario audit: a scenario whose name or domain claims a Starbase
     /// visit, a moon base pickup or a response choice must assert it.
     #[test]

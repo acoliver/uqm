@@ -226,7 +226,9 @@ These edits have not run in a real window yet.
   `assert_mode battle`, `fight_battle` fights it to a win, and the
   Commander's `VERY_IMPRESSIVE` talk (3 options, then the 4 alliance names)
   sets `STARBASE_AVAILABLE`. The same visit continues into time passage and the
-  allied Commander talk (2 options, pick 1), then `assert_mode starbase` proves
+  allied Commander talk (3 options `have_minerals`, `need_info`,
+  `goodbye_commander`; pick 2 ends it, `starbas.c:1647-1736`, `ByeBye`
+  `starbas.c:163`), then `assert_mode starbase` proves
   the menu. Captures: `commander-first-visit-done`, the three Mercury captures,
   `luna-moonbase-collected`, `commander-radioactives-offer`, `ilwrath-battle`,
   `ilwrath-defeated`, `allied-starbase-menu`. It asserts no resource numbers,
