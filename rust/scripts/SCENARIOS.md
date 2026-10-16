@@ -529,3 +529,110 @@ purchases). Expected values change: the radioactives trade refuels the ship,
 and the 14-day time passage and 2500 RU arrive on the visit after
 `STARBASE_AVAILABLE` is set. Re-derive the `assert_ship_resources` numbers from
 a real-window run. Until then these scripts are expected to stop at visit 2.
+
+### #226 research: the C chain, verified against the sources
+
+All `comandr.c` lines are `sc2/src/uqm/comm/comandr/comandr.c`. Response indices
+are the zero-based order in which the conversation offers its options, so they
+are the `select_communication_response` indices. The lander-loss and fuel
+options appear first when they apply (`NumLanders == 0`, fuel under two tanks);
+the indices below assume a fresh game where neither does.
+
+Flags: `STARBASE_VISITED` (set at `comandr.c:636`), `RADIOACTIVES_PROVIDED`
+(`comandr.c:566`), `MOONBASE_DESTROYED` + `MOONBASE_ON_SHIP` (both set by the
+Luna pickup, `planets/generate/gensol.c:594-595`), `WILL_DESTROY_BASE`
+(`comandr.c:108`, informational only), `PROBE_ILWRATH_ENCOUNTER`
+(`comandr.c:117/124/131`), `STARBASE_AVAILABLE` (`comandr.c:159`).
+
+1. **Visit 1** (unallied, `Intro` first-visit branch, `comandr.c:630-648`).
+   Options: `[0]` `no_but_well_help0`, `[1]` `yes_this_is_supply_ship`,
+   `[2]` `what_slave_planet`. Pick `[0]` -> `NoRadioactives` (`comandr.c:197`).
+   Options: `[0]` `ok_i_will_get_radios` (ends, `THANKS_FOR_HELPING`),
+   `[1]` `where_can_i_get_radios` (`RADIOS_ON_MERCURY`, then the same two
+   again). Pick `[0]` to end. This matches the live run ("We will leave now to
+   find the elements you require").
+2. **Radioactives**: `RADIOACTIVES_PROVIDED` is only checked against
+   `GLOBAL_SIS (ElementAmounts[RADIOACTIVE])` being nonzero
+   (`comandr.c:203/256/625`), so any one unit of the RADIOACTIVE element
+   category is enough. `RADIOACTIVE` is element category 6
+   (`planets/elemdata.h:37`), worth 8 RU per unit
+   (`globdata.c:381`, `ElementWorth[RADIOACTIVE]`). Mercury is `METAL_WORLD`
+   (`planets/generate/gensol.c:129`), and `METAL_WORLD` in `plandata.c:839-856`
+   lists `{URANIUM, HEAVY_USEFUL}` (uranium is in the radioactive category);
+   `HEAVY_USEFUL` is `MINERAL_DEPOSIT (MODERATE, HEAVY)`
+   (`plandata.c:720`). Mineral generation is
+   `GenerateDefault_generateMinerals` (`gensol.c:61`), so the deposit
+   positions come from the system seed. Io (Jupiter moon 0) is also a
+   `RADIOACTIVE_WORLD` (`gensol.c:221`) but the Commander points at Mercury
+   (`comandr.c:216`). The commander does not take the units: nothing in
+   `GiveRadios` subtracts `ElementAmounts`, it only sets
+   `RADIOACTIVES_PROVIDED` and plays the refuel speech.
+   Rust side: `rust/src/planet_side/cargo.rs` `MineralCargo` accumulates per
+   category (`categories()[6]`), the lander cargo is returned in
+   `ShipDelta::element_amounts` (`session.rs:211`) and added to the ship on
+   return, so the amount is readable after the trip from the ship resources.
+3. **Luna moonbase**: the lander landing at 728,68 in `probe-encounter-v3`
+   (a 19 tick Up hold) is the moonbase energy node
+   (`gensol.c:545-596`: node at `MAP_WIDTH*3/4, MAP_HEIGHT/4`), not a mineral.
+   Its pickup sets `MOONBASE_DESTROYED` and `MOONBASE_ON_SHIP` regardless of
+   `WILL_DESTROY_BASE`. So the existing Luna landing already does the moonbase
+   mission; it gives no radioactives. It must happen before the turn-in talk
+   below, because `RevealSelf` routes `we_are_here_to_help` to `BaseDestroyed`
+   only when `MOONBASE_DESTROYED` is set (`comandr.c:552-555`); otherwise to
+   `TellMoonBase`, which never sets `PROBE_ILWRATH_ENCOUNTER`.
+4. **Visit 2** (radioactives aboard, Luna done). `Intro` (`comandr.c:606-627`)
+   says `DO_YOU_HAVE_RADIO_THIS_TIME`, then `GiveRadios (0)`
+   (`comandr.c:585-592`): `[0]` `we_will_transfer_now` (sets
+   `RADIOACTIVES_PROVIDED`, plays `FUEL_UP0/1`, goes to `RevealSelf (0)`),
+   `[1]` `what_will_you_give_us`, `[2]` `before_radios_we_need_info`.
+   `RevealSelf` (`comandr.c:466-558`) then offers `[0]` `we_are_vindicator0`,
+   `[1]` `first_give_info`. Pick `[0]` each time (the `first_give_info` family
+   flips the stack and re-orders the list): after `we_are_vindicator0` the
+   list is `[0]` `our_mission_was_secret`, `[1]` `first_give_info`; after that
+   it is `[0]` `we_are_here_to_help`, `[1]` `first_give_info`. So the picks are
+   `[0], [0], [0], [0]`: transfer, vindicator, secret, here_to_help.
+   `we_are_here_to_help` -> `BaseDestroyed` (`comandr.c:349`, Luna done):
+   `[0]` `base_was_abandoned` (-> `ByeBye`, `PROBE_ILWRATH_ENCOUNTER` = 1,
+   `HERE_COMES_ILWRATH`, conversation ends) or `[1]` `we_fought_them`
+   (-> `[0]` `oh_yes_big_fight`, `[1]` `i_lied_it_was_abandoned`,
+   `[2]` `i_cant_talk_about_it`, each also sets the flag). Pick `[0]`.
+   If radioactives are NOT aboard on this visit: `AskAfterRadios`
+   (`comandr.c:286`): `[0]` `well_go_get_them_now`, `[1]` `where_get_radios`.
+   The live run showed one option ("Where can we acquire radioactives?")
+   and the leave line; reconcile against the Rust comm option list before
+   scripting indices for that visit.
+5. **Ilwrath fight** (`starbase.c:446-476`): with the flag set,
+   `VisitStarBase` clones one `ILWRATH_SHIP` into `npc_built_ship_q`
+   (`starbase.c:463`) and runs `ILWRATH_CONVERSATION`. The Ilwrath comm
+   (`comm/ilwrath/ilwrathc.c:544-552`) offers four options
+   `[0..3]` (`where_you_come_from`, `it_will_be_a_pleasure`, `surrender`,
+   `be_reasonable`), all `CombatIsInevitable` (`ilwrathc.c:104`,
+   `Segue_hostile`), so any index starts the battle; the comm init picks
+   `Segue_peace` only when the flag is clear (`ilwrathc.c:634-646`), so with
+   the flag set it is hostile. The battle is the flagship against one Ilwrath
+   Avenger; the battle ends when one side has no ship. Losing sets
+   `CrewEnlisted == ~0` and the game ends (`starbase.c:472-474`). There is no
+   scripted outcome. Winning reliably is not established: the flagship needs
+   flight and fire input against the cloaking Avenger, which no action
+   provides.
+6. **After the battle** (`starbase.c:477-483`): `Intro` sees
+   `PROBE_ILWRATH_ENCOUNTER` and says `VERY_IMPRESSIVE` with `[0]`
+   `cook_their_butts`, `[1]` `overthrow_evil_aliens`,
+   `[2]` `annihilate_those_monsters` (`comandr.c:598-605`); any of them resets
+   the flag and sets `STARBASE_AVAILABLE` (`comandr.c:137,159`), then offers
+   the alliance-name list `[0]` `name_1`, `[1]` `name_2`, `[2]` `name_3`,
+   `[3]` `name_40` (`comandr.c:150-157`); any pick ends it with
+   `STARBASE_WILL_BE_READY`. `commglue.c:390-394` now routes the Commander to
+   the allied `init_starbase_comm`.
+7. **Allied visit start** (`starbase.c:488-507`): `MOONBASE_ON_SHIP` is still
+   set, so `DoTimePassage` (14 days) runs and the allied Commander talks
+   (`starbas.c:1644`, `STARBASE_IS_READY_A`; `post_starbase_enc` clears
+   `MOONBASE_ON_SHIP`, `starbas.c:1932`), then `DoStarBase` shows the menu
+   with Outfit. So the same visit that ends the Ilwrath fight is the one that
+   shows the allied menu; no extra visit is required.
+
+What the automation lacks, in order: (a) the lander mineral pickup for
+Mercury (radioactive category 6), (b) driving the Ilwrath battle to a win,
+(c) the script rewrite of visit 2 using the indices above. `rust/src/planet_side`
+currently publishes lander position and crew to the automation (telemetry),
+but not facing, per-category cargo, or deposit positions.
