@@ -21,6 +21,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P01..P05
 
 pub mod artifact;
+pub mod battle_fight;
 pub mod battle_observer;
 pub mod capture;
 pub mod child_session;
@@ -136,7 +137,7 @@ pub use proof::{
 pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePlan};
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
-    CollectPlanetMineralsStep, CommunicationResponsesAssertion, DispatchAssertion,
+    CollectPlanetMineralsStep, CommunicationResponsesAssertion, DispatchAssertion, FightBattleStep,
     GameOptionsAssertion, HyperspaceDisplacementAssertion, MainMenuTransition, MenuKey,
     NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
     PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep,

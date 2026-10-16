@@ -515,6 +515,16 @@ pub struct CollectPlanetMineralsStep {
     pub max_ticks: u64,
 }
 
+/// A `fight_battle` step fights the running full-game battle with player
+/// input: it aims the flagship at the opposing ship and fires until the
+/// opposing side loses a ship and the player's side has not, and fails when
+/// that does not happen within `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FightBattleStep {
+    pub max_ticks: u64,
+}
+
 /// An `assert_ship_element` step requires the flagship to hold at least
 /// `minimum` units of an element category, as `GLOBAL_SIS` records it after
 /// the lander returned.
@@ -799,6 +809,7 @@ pub enum Action {
     NavigateToHyperspace(NavigateToHyperspaceStep),
     TurnFlagship(TurnFlagshipStep),
     CollectPlanetMinerals(CollectPlanetMineralsStep),
+    FightBattle(FightBattleStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -1926,6 +1937,16 @@ fn validate_navigation_step(
                 )));
             }
             collect.max_ticks
+        }
+        Action::FightBattle(fight) => {
+            if fight.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "fight_battle requires positive max_ticks",
+                )));
+            }
+            fight.max_ticks
         }
         Action::NavigateToPlanet(navigation) => {
             if navigation.planet > 8 {
@@ -3800,6 +3821,30 @@ mod tests {
     #[test]
     fn collect_planet_minerals_counts_against_the_input_budget() {
         let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn fight_battle_parses_requires_positive_ticks_and_rejects_unknown_fields() {
+        let script = validated_steps(r#"{"action":"fight_battle","max_ticks":3000}"#).unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::FightBattle(FightBattleStep { max_ticks: 3000 })
+        );
+        assert!(validated_steps(r#"{"action":"fight_battle","max_ticks":0}"#).is_err());
+        for bad in [
+            r#"{"action":"fight_battle"}"#,
+            r#"{"action":"fight_battle","max_ticks":-1}"#,
+            r#"{"action":"fight_battle","max_ticks":10,"ship":"avenger"}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn fight_battle_counts_against_the_input_budget() {
+        let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"fight_battle","max_ticks":3000},{"action":"finish"}]}"#;
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
     }
 

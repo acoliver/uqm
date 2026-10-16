@@ -46,6 +46,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
         | Action::CollectPlanetMinerals(_)
+        | Action::FightBattle(_)
         | Action::SelectPlanetMenu(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
@@ -422,6 +423,15 @@ mod tests {
         } else {
             vec![evidence, present, checkpoint]
         }
+    }
+
+    #[test]
+    fn fighting_a_battle_is_navigation() {
+        let fight = serde_json::json!({"action":"fight_battle","max_ticks":600});
+        let (source, script) = script(serde_json::json!([fight, {"action":"finish"}]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let classes: Vec<_> = plan.checkpoints.iter().map(|item| item.class).collect();
+        assert_eq!(classes, vec![CheckpointClass::Navigation]);
     }
 
     #[test]

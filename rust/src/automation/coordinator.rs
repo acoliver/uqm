@@ -15,6 +15,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::battle_fight::{
+    BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
+};
 use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
 use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
@@ -272,6 +275,8 @@ struct CoordInner {
     flagship_turn: FlagshipTurnTracker,
     /// Ticks and trip of the current `collect_planet_minerals` step.
     planet_minerals: PlanetMineralsTracker,
+    /// Ticks and starting ship counts of the current `fight_battle` step.
+    battle_fight: BattleFightTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -433,6 +438,7 @@ impl Coordinator {
                 flight_position: FlightPositionTracker::default(),
                 flagship_turn: FlagshipTurnTracker::default(),
                 planet_minerals: PlanetMineralsTracker::default(),
+                battle_fight: BattleFightTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -1014,6 +1020,42 @@ impl Coordinator {
         }
     }
 
+    /// Aim the flagship at the opposing ship and fire until the opposing side
+    /// loses a ship, holding only the keys a player would press.
+    fn service_battle_fight(
+        &self,
+        inner: &mut CoordInner,
+        fight: crate::automation::script::FightBattleStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        let progress = inner.battle_fight.observe(&BattleSnapshot::live(), &fight);
+        match progress {
+            Ok(FightProgress::Fighting(control)) => {
+                if !Self::set_fight_controls(control) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(FightProgress::Won(proof)) => {
+                if !Self::set_fight_controls(FightControl::default()) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                if !Self::set_fight_controls(FightControl::default()) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
     fn service_hyperspace_departure(
         &self,
         inner: &mut CoordInner,
@@ -1188,6 +1230,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_planet_minerals(inner, *collect, scheduler_event);
+        } else if let Some(Action::FightBattle(fight)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_battle_fight(inner, *fight, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -2335,6 +2381,20 @@ impl Coordinator {
             observation.generation, observation.returned_crew, observation.returned_minerals
         ));
         result
+    }
+
+    /// Hold exactly the thrust, turn and fire keys of `control`.
+    fn set_fight_controls(control: FightControl) -> bool {
+        use crate::automation::script::PlayerKey;
+
+        [
+            (PlayerKey::Thrust, control.thrust),
+            (PlayerKey::Left, control.left),
+            (PlayerKey::Right, control.right),
+            (PlayerKey::Weapon, control.weapon),
+        ]
+        .into_iter()
+        .all(|(key, active)| inject_player_key(i32::from(key.index()), i32::from(active)))
     }
 
     fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) -> bool {

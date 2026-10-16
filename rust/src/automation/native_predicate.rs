@@ -217,6 +217,15 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "minimum=") == Some(u64::from(value.minimum_units))
                 && at_least(label, "units=", u64::from(value.minimum_units))
         }
+        Action::FightBattle(value) => {
+            shape(
+                label,
+                "battle_won",
+                &["player_left=", "enemy_left=", "ticks="],
+            ) && at_least(label, "player_left=", 1)
+                && at_least(label, "ticks=", 1)
+                && number(label, "ticks=").is_some_and(|ticks| ticks <= value.max_ticks)
+        }
         Action::NavigateToMoon(value) => {
             shape(
                 label,
@@ -691,6 +700,32 @@ mod tests {
             "planet_minerals_collected:category=radioactive:units=3:minimum=1",
             "planet_minerals_collected:category=radioactive:units=3",
             "planet_minerals_collect_failed:category=radioactive:minimum=2:reason=timeout:units=0",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn only_a_won_label_within_the_budget_with_a_surviving_player_satisfies_fight_battle() {
+        use crate::automation::script::FightBattleStep;
+        let action = Action::FightBattle(FightBattleStep { max_ticks: 900 });
+        assert!(semantic_satisfied(
+            &action,
+            "battle_won:player_left=1:enemy_left=0:ticks=412"
+        ));
+        assert!(semantic_satisfied(
+            &action,
+            "battle_won:player_left=2:enemy_left=0:ticks=900"
+        ));
+        for label in [
+            "battle_won:player_left=0:enemy_left=0:ticks=412",
+            "battle_won:player_left=1:enemy_left=0:ticks=901",
+            "battle_won:player_left=1:enemy_left=0:ticks=0",
+            "battle_won:player_left=1:enemy_left=0",
+            "battle_won:player_left=1:enemy_left=0:ticks=4:extra=1",
+            "battle_fight_failed:reason=timeout",
+            "battle_fight_failed:reason=player_ship_lost",
+            "battle_fight_failed:reason=not_in_battle",
         ] {
             assert!(!semantic_satisfied(&action, label), "{label}");
         }

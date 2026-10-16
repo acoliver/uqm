@@ -107,16 +107,28 @@ impl ViewGeometry {
     /// Read the geometry from the live C screen-size globals.
     #[cfg(feature = "linked_c_archive")]
     fn current() -> Self {
-        // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
-        // init and are read-only thereafter; this hook runs on the game thread.
-        let (width, height) = unsafe {
-            (
-                std::ptr::addr_of!(SCREEN_WIDTH).read(),
-                std::ptr::addr_of!(SCREEN_HEIGHT).read(),
-            )
-        };
+        let (width, height) = screen_size();
         Self::from_screen(width, height)
     }
+}
+
+/// The live `ScreenWidth` and `ScreenHeight`.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn screen_size() -> (i32, i32) {
+    // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
+    // init and are read-only thereafter; this runs on the game thread.
+    unsafe {
+        (
+            std::ptr::addr_of!(SCREEN_WIDTH).read(),
+            std::ptr::addr_of!(SCREEN_HEIGHT).read(),
+        )
+    }
+}
+
+/// Without the linked game the screen is the baseline size.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn screen_size() -> (i32, i32) {
+    (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 }
 
 /// The game's baseline screen size, used only when the C globals are absent.

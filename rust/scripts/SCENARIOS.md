@@ -653,3 +653,105 @@ Mercury (radioactive category 6), (b) driving the Ilwrath battle to a win,
 (c) the script rewrite of visit 2 using the indices above. `rust/src/planet_side`
 currently publishes lander position and crew to the automation (telemetry),
 but not facing, per-category cargo, or deposit positions.
+
+### #226 battle: `fight_battle`
+
+`fight_battle {max_ticks}` fights a full-game battle with the player-one keys
+until the opposing side has lost a ship and the player's side has not. It is
+for the Starbase fight (step 5 above): the flagship against one Ilwrath
+Avenger. Nothing in the game is written; the action only holds
+thrust, left, right and weapon.
+
+**How the battle reads player input.** `DoBattle` runs the ship input of each
+side through `PlayerControls[playerNr]`. In the full game side 0 is the human
+player (`RPG_PLAYER_NUM`) and side 1 the NPC (`NPC_PLAYER_NUM`,
+`races.h:STARSHIP.playerNr`, `element.h:ELEMENT.playerNr`). The automation key
+setter writes `ImmediateInputState.key[PlayerControls[0]][index]`
+(`gameinp.c:c_automation_set_immediate_player_key`), so the same
+`inject_player_key` used for flight drives the battle ship: `thrust` (0),
+`left` (2), `right` (3), `weapon` (4), `special` (5). The battle loop is
+already entered through the input hook every frame, which is how the
+`set_player_key` holds of `battle-v1` work.
+
+**What exposes the ships.** The battle is still C-owned, so the reader borrows
+the same queues the hyperspace facing reader borrows. `disp_q` holds every
+live `ELEMENT`; the ship elements carry `PLAYER_SHIP`, `playerNr`,
+`current.location` (world units) and the live crew in `crew_level`, and
+`pParent` is the owning `STARSHIP`, whose `ShipFacing` is the facing 0..15
+(0 is north, clockwise, `ShipFacing` is kept current by `ship.c`). Ship
+counts are `battle_counter[2]` (`battle.c`, `pickship.c`, `tactrans.c`: a ship
+death does `battle_counter[deadStarShip->playerNr]--`), declared once in
+`c_bindings::live_queues`. `battle_counter[0]` is the player side in a full-game
+battle as well, because `Battle ()` sets it from `CountLinks (&race_q[0])` and
+`race_q[RPG_PLAYER_NUM]` is the human fleet; the `battle-v1` Super Melee run
+(11,9 then 10,9 when the player's own ship died) shows the same ordering. The
+walk of `disp_q` is the existing `savegame::runtime::queues::walk`, which
+checks every link against the pool before it is followed.
+The cloak flag (`OBJECT_CLOAKED`) lives in `DisplayArray[PrimIndex]`, which the
+generated bindings do not expose; the fight does not need it, because a
+cloaked Avenger's element and `current.location` are still in `disp_q`.
+
+**The arena.** The battle space is a torus of `LOG_SPACE_WIDTH` by
+`LOG_SPACE_HEIGHT` world units (`units.h`: `DISPLAY_TO_WORLD (SPACE) <<
+MAX_REDUCTION`, so 32 world units per space pixel). The space is the screen
+less the 64 pixel status panel, so the arena depends on `ScreenWidth` and
+`ScreenHeight`: 8192 by 7680 at 320x240. The `battle_types` constants assume
+8192 by 8192, which is only right for a square space, so the action takes the
+size from the live screen (`battle_fight::arena_size`) and wraps deltas with
+`shortest_path_delta`, the same rule as `WRAP_DELTA_X/Y`.
+
+**The ships.** The flagship's primary weapon is the ion blaster
+(`sis_ship.c`): `BLASTER_SPEED` 24 display units (96 world units) for
+`BLASTER_LIFE` 12 frames, so about 1150 world units, forward only (a tracker
+module only bends it), `WEAPON_WAIT` 6, one energy per shot, energy regeneration
+1 per `ENERGY_WAIT` 10 frames. Holding fire all the time drains energy, so the
+fight fires only when aimed and in range. Maximum thrust 10, `TURN_WAIT` 17.
+The Avenger (`ilwrath.c`) has a short hellfire (`MISSILE_SPEED` 25,
+`MISSILE_LIFE` 8, `ILWRATH_OFFSET` 29: about 230 world units), maximum thrust
+25, `TURN_WAIT` 2, and a cloak on `special` (`SPECIAL_ENERGY_COST` 3,
+`SPECIAL_WAIT` 13). Its intelligence cloaks when it has no target in
+reach and no flame going, and decloaks to flame when the flagship is within
+about six turns of its aim. It out-runs and out-turns the flagship, so the
+flagship cannot kite it; the only way to win is to out-shoot it at range while
+not sitting in front of its flame.
+
+**Strategy** (`rust/src/automation/battle_fight.rs`, `fight`): each tick, take
+the wrapped delta to the enemy and the facing it points along (the same
+`arctan`/`angle_to_facing` rule as the lander steering).
+- Turn along the shorter way round until the heading is exactly the bearing.
+- Fire when within one facing of the bearing and within 1000 world units.
+- Close in (thrust) when farther than 800 units and roughly aimed (within two
+  facings).
+- Inside 400 units (well inside hellfire reach plus the Avenger's speed) thrust
+  only while facing away (5..=11 facings off), so the flagship backs off and
+  turns back to aim rather than driving into the flame.
+- Otherwise coast and keep aiming.
+- If either ship element is missing (before the ships spawn) hold every key; a
+  cloaked enemy still has an element and a location, so the aim is unchanged.
+
+**Outcome.** The first observation in a battle records both `battle_counter`
+values. The fight is won as soon as the enemy side is below its starting count
+and the player's side is not, and records
+`battle_won:player_left=N:enemy_left=M:ticks=T`. It fails as a semantic
+mismatch with `battle_fight_failed:reason=player_ship_lost` (the player's side
+is below its start, even if the enemy side fell too), `reason=timeout`
+(`max_ticks` observations passed) or `reason=not_in_battle` (no battle at the
+start, or it ended with neither side losing a ship). Every key is released on
+completion and on failure. `max_ticks` must be at least 1.
+
+**Steps from the Ilwrath conversation to the won fight** (indices from step 5;
+any of the four picks starts the battle, `[0]` is `where_you_come_from`):
+
+```json
+{"action": "wait_for_communication_responses", "minimum": 4, "max_ticks": 2000},
+{"action": "select_communication_response", "index": 0, "max_ticks": 5000},
+{"action": "wait_for_battle_frames", "minimum": 30, "max_ticks": 3000},
+{"action": "assert_mode", "mode": "battle"},
+{"action": "fight_battle", "max_ticks": 6000},
+{"action": "wait_for_communication_responses", "minimum": 3, "max_ticks": 6000}
+```
+
+The last step is the Commander's `VERY_IMPRESSIVE` reply of step 6 (three
+options). The scenario budget `max_input_ticks` must cover the 6000 ticks.
+This was not run against the live game here; it is verified by unit tests of
+the decision, tracker, script, scheduler, predicate and checkpoint.

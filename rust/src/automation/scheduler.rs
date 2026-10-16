@@ -307,7 +307,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
-        | Action::CollectPlanetMinerals(_) => {
+        | Action::CollectPlanetMinerals(_)
+        | Action::FightBattle(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -404,6 +405,7 @@ pub fn scheduler_reduce(
                     | Action::NavigateToHyperspace(_)
                     | Action::TurnFlagship(_)
                     | Action::CollectPlanetMinerals(_)
+                    | Action::FightBattle(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -846,7 +848,8 @@ fn reduce_navigation(
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::FightBattle(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -861,18 +864,17 @@ fn reduce_navigation(
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining })
-        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::Navigating {
-                        remaining: remaining - 1,
-                    },
-                    state_version: sv,
-                    ..*state
+        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining })
+        | (Action::FightBattle(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: remaining - 1,
                 },
-                effects: EffectPlan::none(),
-            }
-        }
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -907,6 +909,16 @@ fn reduce_navigation(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::FightBattle(fight), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: fight.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -3210,7 +3222,7 @@ mod tests {
 mod budgeted_wait_tests {
     use super::*;
     use crate::automation::script::{
-        CollectPlanetMineralsStep, NavigateToHyperspaceStep, NavigateToMoonStep,
+        CollectPlanetMineralsStep, FightBattleStep, NavigateToHyperspaceStep, NavigateToMoonStep,
         NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName,
         SelectCommunicationResponseStep, SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep,
         WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
@@ -3245,6 +3257,7 @@ mod budgeted_wait_tests {
                 minimum_units: 1,
                 max_ticks,
             }),
+            Action::FightBattle(FightBattleStep { max_ticks }),
         ]
     }
 
@@ -3289,6 +3302,7 @@ mod budgeted_wait_tests {
                 | Action::NavigateToHyperspace(_)
                 | Action::TurnFlagship(_)
                 | Action::CollectPlanetMinerals(_)
+                | Action::FightBattle(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {
