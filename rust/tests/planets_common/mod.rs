@@ -6,9 +6,7 @@
 
 use std::fmt::Write as _;
 
-use uqm_rust::c_bindings::global_state::{
-    NODE_INFO, PLANET_DESC, PlanetFrame, SYSTEM_INFO,
-};
+use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 
 pub const NODE_SENTINEL_DENSITY: u16 = 0xBEEF;
 pub const NODE_SENTINEL_TYPE: u16 = 0xCAFE;
@@ -88,12 +86,7 @@ pub trait Generators {
     fn minerals(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
     fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
     fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
-    fn random_nodes(
-        &mut self,
-        info: &SYSTEM_INFO,
-        which: u16,
-        node: &mut NODE_INFO,
-    ) -> u16;
+    fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8>;
 }
 
@@ -127,13 +120,17 @@ fn write_node(out: &mut String, ret: u16, node: &NODE_INFO) {
 }
 
 /// Run one world case and render every observable output as a line.
-pub fn world_line<G: Generators>(generators: &mut G, case: &WorldCase, table_base: usize) -> String {
+pub fn world_line<G: Generators>(
+    generators: &mut G,
+    case: &WorldCase,
+    table_base: usize,
+) -> String {
     let mut info = generators.analyze(case);
     info.PlanetInfo.ScanSeed = scan_seeds(case.rand_seed);
 
     let planet = &info.PlanetInfo;
-    let frame_index = (planet.PlanDataPtr as usize).wrapping_sub(table_base)
-        / std::mem::size_of::<PlanetFrame>();
+    let frame_index =
+        (planet.PlanDataPtr as usize).wrapping_sub(table_base) / std::mem::size_of::<PlanetFrame>();
     let mut out = format!(
         "w c{} s{} t{} seed{} r{} p{:?} o{} | {} {} {} | {} {} {} {} {} {} {} {} {} {} {} f{} |",
         case.star_color,
@@ -334,6 +331,13 @@ pub fn orbit_cases(golden: bool) -> Vec<OrbitCase> {
         for star_size in 0..3u8 {
             for seed in 0..seeds {
                 for mode in OrbitMode::ALL {
+                    // C relocates a planet until its orbit is 2+ steps from every
+                    // earlier one. A supergiant's gas-giant range (33..124) holds
+                    // six such orbits, so up to nine drawn planets can leave C
+                    // looping forever on some streams (colour 2, seed 419708).
+                    if mode == OrbitMode::DrawnPlanets && star_size == 2 {
+                        continue;
+                    }
                     cases.push(OrbitCase {
                         star_color,
                         star_size,
@@ -355,11 +359,7 @@ pub struct Records {
 
 /// Run `lines_for` over the full domain, keeping the golden subset and an
 /// FNV-1a digest of every line.
-pub fn collect<T>(
-    full: Vec<T>,
-    golden: Vec<T>,
-    mut line_for: impl FnMut(&T) -> String,
-) -> Records {
+pub fn collect<T>(full: Vec<T>, golden: Vec<T>, mut line_for: impl FnMut(&T) -> String) -> Records {
     let mut digest = 0xcbf2_9ce4_8422_2325u64;
     for case in &full {
         fnv(&mut digest, &line_for(case));
@@ -380,8 +380,6 @@ pub fn render_fixture(records: &Records) -> String {
     }
     text
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Rust backend
@@ -441,15 +439,7 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
-        uqm_rust::planets::surface::generate_random_nodes(
-            &mut self.rng,
-            info,
-            1,
-            4,
-            9,
-            which,
-            node,
-        )
+        uqm_rust::planets::surface::generate_random_nodes(&mut self.rng, info, 1, 4, 9, which, node)
     }
 
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8> {
@@ -485,4 +475,3 @@ pub fn orbit_records() -> Records {
         orbit_line(&mut generators, case)
     })
 }
-

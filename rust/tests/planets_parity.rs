@@ -11,12 +11,11 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use planets_common::{
-    collect, orbit_cases, orbit_line, orbit_records, render_fixture,
-    star_type_byte, world_cases, world_line, world_records, Generators, OrbitCase, WorldCase,
-    PRESET_LIFE,
+    collect, orbit_cases, orbit_line, orbit_records, render_fixture, star_type_byte, world_cases,
+    world_line, world_records, Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
 use uqm_rust::c_bindings::global_state::{
-    NODE_INFO, PLANET_DESC, POINT, PlanetFrame, SOLARSYS_STATE, SYSTEM_INFO,
+    PlanetFrame, NODE_INFO, PLANET_DESC, POINT, SOLARSYS_STATE, SYSTEM_INFO,
 };
 use uqm_rust::math::RandomContext;
 
@@ -34,8 +33,11 @@ unsafe extern "C" {
 
     fn DoPlanetaryAnalysis(sys_info: *mut SYSTEM_INFO, desc: *mut PLANET_DESC);
     fn CalcGravity(info: *const c_void) -> u16;
-    fn GenerateMineralDeposits(sys_info: *const SYSTEM_INFO, which: u16, info: *mut NODE_INFO)
-        -> u16;
+    fn GenerateMineralDeposits(
+        sys_info: *const SYSTEM_INFO,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
     fn GenerateLifeForms(sys_info: *const SYSTEM_INFO, which: u16, info: *mut NODE_INFO) -> u16;
     fn GeneratePresetLife(
         sys_info: *const SYSTEM_INFO,
@@ -243,7 +245,7 @@ fn rust_planet_port_matches_c_exactly() {
         assert_eq!(c_line, rust_line, "orbit case {case:?}");
         orbit_checked += 1;
     }
-    assert!(orbit_checked > 4_000, "domain shrank: {orbit_checked}");
+    assert_eq!(orbit_checked, 3_960, "orbit domain changed");
 
     // Fixtures come from the C side.
     let c_worlds = collect(world_cases(false), world_cases(true), |case| {
@@ -289,6 +291,10 @@ fn gravity_and_random_locations_agree() {
         }
         rng.reseed(seed);
         uqm_rust::planets::surface::generate_random_location(&mut rng, &mut rust_point);
-        assert_eq!((c_point.x, c_point.y), (rust_point.x, rust_point.y), "seed {seed}");
+        assert_eq!(
+            (c_point.x, c_point.y),
+            (rust_point.x, rust_point.y),
+            "seed {seed}"
+        );
     }
 }

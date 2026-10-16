@@ -7,7 +7,7 @@
 mod planets_common;
 
 use planets_common::{orbit_records, render_fixture, world_records};
-use uqm_rust::c_bindings::global_state::{ELEMENT_ENTRY, PlanetFrame};
+use uqm_rust::c_bindings::global_state::{PlanetFrame, ELEMENT_ENTRY};
 
 const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");

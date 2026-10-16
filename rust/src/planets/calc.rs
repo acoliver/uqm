@@ -168,7 +168,7 @@ fn calc_temp(
 fn calc_rotation(rng: &mut RandomContext, plan_data: &PlanetFrame) -> u16 {
     if planet_size(plan_data.Type) == 2 {
         calc_from_base(rng, 80, 80)
-    } else if (rng.next_random() as u8) % 10 == 0 {
+    } else if (rng.next_random() as u8).is_multiple_of(10) {
         calc_from_base(rng, 50 * 240, 200 * 240)
     } else {
         calc_from_base(rng, 150, 150)
