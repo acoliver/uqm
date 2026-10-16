@@ -915,3 +915,20 @@ scenarios start from the save it makes.
   `start_saves`, and commit the save, the provenance and the pin together.
   `extract-save` refuses a run whose `terminal_reason` is not `success` or
   whose alliance script is not the pinned one.
+
+### Scripts that start from the alliance save
+
+`starbase-visit-v1`, `real-sol-starbase-to-mars`, `probe-encounter-v3` and
+`probe-encounter-v4` declare the `start_save` and open with the main menu
+sequence `wait_for_main_menu_ready`, Down (Load Game), Select (slot list), Select
+(slot 0, the picker opens on slot 0 in a fresh process). They then assert
+interplanetary activity and 896 fuel / 2500 RU (the values recorded in the
+save's provenance), re-dock with `navigate_to_moon 2/0` (the allied Starbase
+opens its menu with no conversation) and assert `starbase` mode and the same
+resources again, followed by their own earlier steps unchanged. Their budgets
+shrank to the validator minimum with a 300 s wall budget, so they no longer carry the
+900000 ms outer deadline pin: `starbase-visit-v1` 2897 ticks,
+`real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
+`probe-encounter-v4` 7856 (presentations twice that). Until the save is
+generated and pinned, admission of these scripts, and so `native run`, fails
+closed. None of this has run live.

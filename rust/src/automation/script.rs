@@ -3790,10 +3790,23 @@ mod tests {
             let wait = step_index(&steps, 0, wait_responses);
             step_index(&steps, wait, assert_responses);
         }
-        for name in ["real-sol-starbase-to-mars", "real-sol-starbase-alliance"] {
-            let steps = checked_in_steps(name);
+        {
+            let steps = checked_in_steps("real-sol-starbase-alliance");
             let landing = step_index(&steps, 0, returned);
             let menu = step_index(&steps, landing, starbase);
+            step_index(&steps, menu, resources);
+        }
+        // The downstream Starbase scenarios start from the alliance save, so
+        // the Starbase menu is reached by loading it, not by a planet return.
+        for name in [
+            "real-sol-starbase-to-mars",
+            "starbase-visit-v1",
+            "probe-encounter-v3",
+            "probe-encounter-v4",
+        ] {
+            let steps = checked_in_steps(name);
+            let load = step_index(&steps, 0, |step| matches!(step, Action::AssertActivity(_)));
+            let menu = step_index(&steps, load, starbase);
             step_index(&steps, menu, resources);
         }
         // The pickup is proved by the Commander paying for it: the moon base

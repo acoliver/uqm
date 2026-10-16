@@ -2988,14 +2988,14 @@ mod tests {
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
                 .count(),
-            20
+            24
         );
         assert_eq!(
             admitted
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
                 .count(),
-            18
+            14
         );
         for admission in &admitted {
             let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS

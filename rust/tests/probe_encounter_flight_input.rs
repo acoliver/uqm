@@ -423,6 +423,18 @@ fn every_candidate_script_validates_and_binds_displacement_checkpoints() {
 /// The scripts that fly more hyperspace than the opening tank allows.
 const PREPARED: [&str; 2] = ["probe-encounter-v3", "probe-encounter-v4"];
 
+/// The scenario that plays the Starbase chain once and saves; the prepared
+/// scripts load that save instead of replaying the chain.
+const CHAIN: &str = "real-sol-starbase-alliance";
+
+/// Scripts that start from the alliance save through the real Load menu.
+const LOADS_ALLIED_SAVE: [&str; 4] = [
+    "probe-encounter-v3",
+    "probe-encounter-v4",
+    "real-sol-starbase-to-mars",
+    "starbase-visit-v1",
+];
+
 fn action_of(step: &Value) -> &str {
     step["action"].as_str().unwrap_or_default()
 }
@@ -447,10 +459,18 @@ fn position(steps: &[Value], from: usize, wanted: impl Fn(&Value) -> bool) -> us
 /// Everything before the first flight step: the preparation.
 fn prep_of(name: &str) -> Vec<Value> {
     let steps = script_steps(name);
-    let fly = position(&steps, 0, |step| {
-        action_of(step) == "navigate_to_hyperspace"
-    });
+    let fly = steps
+        .iter()
+        .position(|step| action_of(step) == "navigate_to_hyperspace")
+        .unwrap_or(steps.len());
     steps[..fly].to_vec()
+}
+
+/// The `assert_ship_resources` that follows the Starbase menu being active.
+fn menu_proof(steps: &[Value]) -> usize {
+    position(steps, 0, |step| {
+        action_of(step) == "assert_mode" && step["mode"] == "starbase"
+    }) + 1
 }
 
 #[test]
@@ -468,10 +488,10 @@ fn prepared_flights_start_from_the_real_opening_state_and_end_with_the_purchased
             .collect();
         assert_eq!(
             all.first().map(|(_, found)| *found),
-            Some((Some(1000), Some(0))),
-            "{name} must first prove the new-game tank and zero RU"
+            Some(post_landing_state()),
+            "{name} must first prove the tank and RU the alliance save holds"
         );
-        assert!(all[0].0 > new_game, "{name} checks resources in a new game");
+        assert!(all[0].0 > new_game, "{name} checks resources after loading");
         assert_eq!(
             all.last().map(|(_, found)| *found),
             Some((Some(5900), Some(1500))),
@@ -487,10 +507,11 @@ fn prepared_flights_start_from_the_real_opening_state_and_end_with_the_purchased
 
 #[test]
 fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
-    for name in PREPARED {
+    let name = CHAIN;
+    {
         let steps = prep_of(name);
         let reward = position(&steps, 0, |step| {
-            resources(step) == Some(post_landing_state(name))
+            resources(step) == Some(post_landing_state())
         });
         let docked = steps[..reward]
             .iter()
@@ -538,9 +559,8 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
 fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
     for name in PREPARED {
         let steps = prep_of(name);
-        let enter = position(&steps, 0, |step| {
-            resources(step) == Some(post_landing_state(name))
-        });
+        let enter = menu_proof(&steps);
+        assert_eq!(resources(&steps[enter]), Some(post_landing_state()));
         let leave = position(&steps, enter, |step| {
             resources(step) == Some((Some(5900), Some(1500)))
         });
@@ -550,7 +570,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
             .count();
         assert_eq!(purchases, 50, "{name}: +100 raw per press, 20 RU per press");
         // Outfit entry rounds the post-landing fuel to a whole unit first.
-        let (landed_fuel, reward_ru) = post_landing_state(name);
+        let (landed_fuel, reward_ru) = post_landing_state();
         let rounded = round_fuel_on_outfit_entry(u32::try_from(landed_fuel.unwrap()).unwrap())
             .expect("rounds");
         assert_eq!(rounded as usize + purchases * 100, 5900);
@@ -620,15 +640,7 @@ fn preparation_uses_only_player_and_menu_inputs_and_queries() {
 #[test]
 fn the_flight_after_preparation_is_the_square_route() {
     let captures: &[&str] = &[
-        "new-game-confirmed",
-        "commander-first-visit-done",
-        "mercury-surface",
-        "mercury-radioactive-collected",
-        "mercury-orbit-with-radioactives",
-        "luna-moonbase-collected",
-        "commander-radioactives-offer",
-        "ilwrath-battle",
-        "ilwrath-defeated",
+        "loaded-allied-start-save",
         "hyperspace-start",
         "leg-1",
         "turn-1",
@@ -666,27 +678,26 @@ fn the_flight_after_preparation_is_the_square_route() {
             .filter(|step| action_of(step) == "assert_hyperspace_displacement")
             .count();
         assert_eq!(displacement, 4, "{name} proves every leg");
-        // The preparation captures only the opening and the allied chain's
-        // own milestones, in the order `real-sol-starbase-alliance` plays them.
+        // The preparation captures only the loaded allied save.
         let prep = prep_of(name);
         let prep_labels: Vec<&str> = prep
             .iter()
             .filter(|step| action_of(step) == "capture")
             .filter_map(|step| step["label"].as_str())
             .collect();
-        assert_eq!(prep_labels, captures[..9].to_vec(), "{name}");
+        assert_eq!(prep_labels, captures[..1].to_vec(), "{name}");
     }
 }
 
 #[test]
-fn the_wall_clock_watchdog_is_the_approved_nine_hundred_seconds_for_the_allied_chain() {
+fn the_prepared_scripts_fit_the_default_wall_clock_watchdog_because_they_load_a_save() {
     for name in PREPARED {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("scripts")
             .join(format!("{name}.json"));
         let document: Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(document["budgets"]["max_wallclock_seconds"], 900, "{name}");
+        assert_eq!(document["budgets"]["max_wallclock_seconds"], 300, "{name}");
         let ticks = document["budgets"]["max_input_ticks"].as_u64().unwrap();
         let presentations = document["budgets"]["max_presentations"].as_u64().unwrap();
         assert_eq!(
@@ -712,7 +723,8 @@ fn both_prepared_scripts_share_one_identical_preparation() {
 /// first choice.
 #[test]
 fn the_second_commander_visit_waits_for_its_offer_before_the_first_pick() {
-    for name in PREPARED {
+    let name = CHAIN;
+    {
         let steps = prep_of(name);
         let dispatches: Vec<usize> = steps
             .iter()
@@ -861,8 +873,8 @@ impl DerivedPreparation {
     }
 }
 
-fn derived_preparation(name: &str) -> DerivedPreparation {
-    let steps = prep_of(name);
+fn derived_preparation() -> DerivedPreparation {
+    let steps = prep_of(CHAIN);
     let opening = steps
         .iter()
         .find_map(resources)
@@ -872,7 +884,7 @@ fn derived_preparation(name: &str) -> DerivedPreparation {
         Some(u64::from(
             DerivedPreparation::from_game_data(0).opening_fuel
         )),
-        "{name} opens with the game's starting tank"
+        "the alliance chain opens with the game's starting tank"
     );
     DerivedPreparation::from_game_data(
         u32::try_from(opening.1.expect("opening RU")).expect("RU fits"),
@@ -880,8 +892,8 @@ fn derived_preparation(name: &str) -> DerivedPreparation {
 }
 
 /// The fuel and RU the script must expect once the Starbase menu is up.
-fn post_landing_state(name: &str) -> (Option<u64>, Option<u64>) {
-    let (fuel, res_units) = derived_preparation(name).after_landing_and_reward();
+fn post_landing_state() -> (Option<u64>, Option<u64>) {
+    let (fuel, res_units) = derived_preparation().after_landing_and_reward();
     (Some(u64::from(fuel)), Some(u64::from(res_units)))
 }
 
@@ -906,7 +918,8 @@ fn mercury_landing_costs_seventy_four_raw_fuel() {
 /// one Luna landing.
 #[test]
 fn the_starbase_menu_check_expects_the_opening_tank_minus_the_mercury_and_luna_landings() {
-    for name in PREPARED {
+    let name = CHAIN;
+    {
         let steps = prep_of(name);
         let docked = position(&steps, 0, |step| {
             action_of(step) == "assert_mode" && step["mode"] == "starbase"
@@ -919,7 +932,7 @@ fn the_starbase_menu_check_expects_the_opening_tank_minus_the_mercury_and_luna_l
             landings, 2,
             "{name} lands on Mercury and Luna before the check"
         );
-        let derived = derived_preparation(name);
+        let derived = derived_preparation();
         let (fuel, res_units) = derived.after_landing_and_reward();
         assert_eq!(
             resources(&steps[docked + 1]),
@@ -937,7 +950,7 @@ fn the_starbase_menu_check_expects_the_opening_tank_minus_the_mercury_and_luna_l
 #[test]
 fn outfit_entry_rounding_and_fifty_purchases_conserve_to_the_final_proof() {
     for name in PREPARED {
-        let derived = derived_preparation(name);
+        let derived = derived_preparation();
         let (fuel, res_units) = derived.after_landing_and_reward();
         let rounded = round_fuel_on_outfit_entry(fuel).expect("rounds");
         assert_eq!(rounded, 900, "{name}: 896 rounds half up to the unit");
@@ -947,9 +960,11 @@ fn outfit_entry_rounding_and_fifty_purchases_conserve_to_the_final_proof() {
         };
         let capacity = FUEL_RESERVE + FUEL_TANK_CAPACITY;
         let steps = prep_of(name);
-        let enter = position(&steps, 0, |step| {
-            resources(step).is_some_and(|found| found.1 == Some(u64::from(res_units)))
-        });
+        let enter = menu_proof(&steps);
+        assert_eq!(
+            resources(&steps[enter]).and_then(|found| found.1),
+            Some(u64::from(res_units))
+        );
         let leave = steps
             .iter()
             .rposition(|step| resources(step).is_some())
@@ -974,6 +989,46 @@ fn outfit_entry_rounding_and_fifty_purchases_conserve_to_the_final_proof() {
                 Some(u64::from(state.res_units))
             )),
             "{name} final proof is what the purchases really leave"
+        );
+    }
+}
+
+/// The chain is played once; every other Starbase scenario loads its save
+/// through the real main menu (Load Game, slot 0) and proves what it loaded.
+#[test]
+fn downstream_scripts_load_the_alliance_save_through_the_main_menu() {
+    for name in LOADS_ALLIED_SAVE {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("scripts")
+            .join(format!("{name}.json"));
+        let document: Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(
+            document["start_save"],
+            serde_json::json!({"path": "saves/allied-starbase.sav", "slot": 0}),
+            "{name}"
+        );
+        let steps = script_steps(name);
+        assert_eq!(action_of(&steps[0]), "wait_for_main_menu_ready", "{name}");
+        assert!(
+            is_tap(&steps[1], "down"),
+            "{name}: Load Game is below New Game"
+        );
+        assert!(is_tap(&steps[2], "select"), "{name}: open the slot list");
+        assert!(is_tap(&steps[3], "select"), "{name}: slot 0 loads");
+        let load = position(&steps, 0, |step| action_of(step) == "assert_activity");
+        assert_eq!(steps[load]["equals"], 4, "{name}: loaded into flight");
+        assert_eq!(
+            resources(&steps[load + 1]),
+            Some(post_landing_state()),
+            "{name} proves the resources the save holds"
+        );
+        let docked = position(&steps, load, |step| action_of(step) == "navigate_to_moon");
+        assert!(
+            position(&steps, docked, |step| action_of(step) == "assert_mode"
+                && step["mode"] == "starbase")
+                > docked,
+            "{name} re-docks at the moon base"
         );
     }
 }
