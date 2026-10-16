@@ -1513,6 +1513,29 @@ fn retain_runtime_inputs(
     Ok(())
 }
 
+/// Retain the committed save with the run's inputs and place it in the slot
+/// file the game reads, so the scenario starts from it through the real Load
+/// menu. The save directory is `<configdir>/save`, which the game would
+/// otherwise create empty.
+fn install_start_save(
+    source: &Path,
+    start_save: &super::script::StartSave,
+    inputs: &Path,
+    config_root: &Path,
+    limit: u64,
+) -> Result<(), String> {
+    let save_directory = config_root.join("save");
+    super::native_budget::reserve_directory(&save_directory)?;
+    fs::create_dir_all(&save_directory)
+        .map_err(|error| format!("create {}: {error}", save_directory.display()))?;
+    copy_regular_bounded(source, &inputs.join("start-save.sav"), limit)?;
+    copy_regular_bounded(
+        source,
+        &save_directory.join(start_save.slot_file_name()),
+        limit,
+    )
+}
+
 fn run(inputs: RunInputs<'_>) -> Result<(), String> {
     let RunInputs {
         executable,
@@ -1536,6 +1559,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         std::env::var("UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT").as_deref(),
         Ok("1")
     );
+    let script_source_dir = script.parent().map(Path::to_path_buf);
     let fresh_root = create_fresh_root(root, precreated_root)?;
     let root = fresh_root.path();
     let _budget = super::native_budget::begin(root, runtime_contract.inventory_limits)?;
@@ -1600,6 +1624,18 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             .map_err(|error| format!("parse script: {error}"))?;
         let validated_script = validate_script(document, &retained_script)
             .map_err(|error| format!("validate script: {error}"))?;
+        if let Some(start_save) = validated_script.start_save() {
+            let source_dir = script_source_dir
+                .as_deref()
+                .ok_or("script has no directory to resolve start_save against")?;
+            install_start_save(
+                &source_dir.join(&start_save.path),
+                start_save,
+                &inputs,
+                &config_root,
+                linked_build_member_limit,
+            )?;
+        }
         let checkpoint_plan = super::native_checkpoint::NativeCheckpointPlan::derive(
             &script_bytes,
             &validated_script,

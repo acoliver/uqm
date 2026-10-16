@@ -926,6 +926,58 @@ pub struct RootDocument {
     /// Fixture isolation identity, introduced at schema version 2.
     #[serde(default)]
     pub fixture: Option<String>,
+    /// A committed save game the harness places in the run's save directory
+    /// before launch. Absent for a script that starts from a fresh profile.
+    #[serde(default)]
+    pub start_save: Option<StartSave>,
+}
+
+/// A committed, hash-pinned save file a scenario starts with.
+///
+/// `path` is relative to the directory holding the script and must name a
+/// `.sav` file under `saves/`. `slot` is the game's own slot number, so the
+/// harness installs the file as `uqmsave.NN` in the run's save directory.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StartSave {
+    pub path: String,
+    pub slot: u8,
+}
+
+/// Number of save slots the game offers (`MAX_SAVED_GAMES`).
+pub const START_SAVE_SLOT_COUNT: u8 = 50;
+
+impl StartSave {
+    /// The file name the game reads this slot from.
+    #[must_use]
+    pub fn slot_file_name(&self) -> String {
+        format!("uqmsave.{:02}", self.slot)
+    }
+
+    fn validate(&self, script_path: &str) -> Result<(), AutomationError> {
+        let invalid = |reason: &str| AutomationError::InvalidValue {
+            path: script_path.to_string(),
+            field: "start_save",
+            reason: reason.to_string(),
+        };
+        let relative = self
+            .path
+            .strip_prefix("saves/")
+            .ok_or_else(|| invalid("path must be under saves/ next to the script"))?;
+        if !std::path::Path::new(relative)
+            .extension()
+            .is_some_and(|extension| extension == "sav")
+            || relative.contains('/')
+            || relative.contains('\\')
+            || relative.starts_with('.')
+        {
+            return Err(invalid("path must name one saves/<name>.sav file"));
+        }
+        if self.slot >= START_SAVE_SLOT_COUNT {
+            return Err(invalid("slot must be below 50"));
+        }
+        Ok(())
+    }
 }
 
 // ===========================================================================
@@ -949,9 +1001,16 @@ pub struct ValidatedScript {
     pub(crate) transitions: Vec<MainMenuTransition>,
     pub(crate) seed: u32,
     pub(crate) fixture: String,
+    pub(crate) start_save: Option<StartSave>,
 }
 
 impl ValidatedScript {
+    /// The committed save this scenario starts with, if it declares one.
+    #[must_use]
+    pub fn start_save(&self) -> Option<&StartSave> {
+        self.start_save.as_ref()
+    }
+
     /// The u32 initialization argument supplied to each automation-owned RNG.
     /// The generator still applies its own seed normalization internally.
     #[must_use]
@@ -1404,6 +1463,7 @@ impl ResolvedScenario {
                 steps: self.steps.clone(),
                 seed: Some(u64::from(self.requested_seed)),
                 fixture: Some(self.fixture.clone()),
+                start_save: None,
             },
             path,
         )?;
@@ -1594,6 +1654,9 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         path: path.into(),
         field: "fixture",
     })?;
+    if let Some(start_save) = &doc.start_save {
+        start_save.validate(path)?;
+    }
     Ok(ValidatedScript {
         name: doc.name,
         start_scene: doc.start_scene,
@@ -1602,6 +1665,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         transitions,
         seed,
         fixture,
+        start_save: doc.start_save,
     })
 }
 
@@ -3726,11 +3790,7 @@ mod tests {
             let wait = step_index(&steps, 0, wait_responses);
             step_index(&steps, wait, assert_responses);
         }
-        for name in [
-            "real-sol-probe-to-starbase",
-            "real-sol-starbase-to-mars",
-            "real-sol-earth-moon-base",
-        ] {
+        for name in ["real-sol-starbase-to-mars", "real-sol-starbase-alliance"] {
             let steps = checked_in_steps(name);
             let landing = step_index(&steps, 0, returned);
             let menu = step_index(&steps, landing, starbase);
@@ -3742,7 +3802,7 @@ mod tests {
         // interplanetary activity of the solar view (a live run observed the
         // solar view, not orbit, after the moon base pickup) and only then by
         // the Starbase menu.
-        let moon = checked_in_steps("real-sol-earth-moon-base");
+        let moon = checked_in_steps("real-sol-starbase-alliance");
         let mercury_return = step_index(&moon, 0, returned);
         let luna_return = step_index(&moon, mercury_return + 1, returned);
         let back_in_solar = step_index(&moon, luna_return, |step| {
@@ -3905,7 +3965,7 @@ mod tests {
                 "{label} presses a menu key at step {first_key} before the restart menu is ready"
             );
         }
-        assert_eq!(checked, 35, "restart menu scripts checked");
+        assert_eq!(checked, 33, "restart menu scripts checked");
     }
 
     /// #213 amendment 5: Rust-owned `main` presents twice per input callback
@@ -3917,7 +3977,7 @@ mod tests {
     fn required_scenarios_budget_two_presentations_per_scripted_tick() {
         let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
         let required = crate::automation::suite::required_suite();
-        assert_eq!(required.len(), 34, "required scenarios");
+        assert_eq!(required.len(), 32, "required scenarios");
         for name in required {
             let label = scripts
                 .join(format!("{name}.json"))

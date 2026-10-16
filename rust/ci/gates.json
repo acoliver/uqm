@@ -371,12 +371,6 @@
                 "outer_child_timeout_ms": 900000
           },
           {
-                "path": "rust/scripts/real-sol-earth-moon-base.json",
-                "sha256": "d1ee30a81274636a296d9b3a44f2daa4982c7202aa8416a7118ed9d08d5eddb0",
-                "byte_length": 6932,
-                "outer_child_timeout_ms": 900000
-          },
-          {
                 "path": "rust/scripts/real-sol-luna-moonbase-departure.json",
                 "sha256": "9fab2ddec32b26062e1fd0d236d2bd905fef334dc6a88f22c18f723dc2e6fbf2",
                 "byte_length": 2906,
@@ -411,12 +405,6 @@
                 "outer_child_timeout_ms": 900000
           },
           {
-                "path": "rust/scripts/real-sol-probe-to-starbase.json",
-                "sha256": "63a0e63a02651bbfa202dbb08f793584d241faf03d71b178eb90ee645c3dfd14",
-                "byte_length": 7048,
-                "outer_child_timeout_ms": 900000
-          },
-          {
                 "path": "rust/scripts/real-sol-rust-planetside-smoke.json",
                 "sha256": "3f6b2c78a55dea5478b832ffb3351fa17c1aeb318be1c65328583d99b9e35023",
                 "byte_length": 2197,
@@ -424,8 +412,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-starbase-alliance.json",
-                "sha256": "662a7a4225bb08925414f19b5f9028f822b22cb8e6b8155747343cb38ac09b8f",
-                "byte_length": 6839,
+                "sha256": "8a350ecb2787a435fc0416b158fe71997cdcb695d4e67dcf8c8b93ad8ec37ba0",
+                "byte_length": 8524,
                 "outer_child_timeout_ms": 900000
           },
           {

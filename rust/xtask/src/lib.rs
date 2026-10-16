@@ -24,6 +24,7 @@ mod display_awake;
 pub mod native_cli;
 mod native_gallery;
 mod native_replay;
+mod native_save;
 mod native_suite;
 use uqm_rust::automation::native_runner as native_acceptance_runner;
 
@@ -3391,7 +3392,7 @@ mod tests {
                 short_seen += 1;
             }
         }
-        assert_eq!((long_seen, short_seen), (20, 18));
+        assert_eq!((long_seen, short_seen), (18, 18));
 
         let mut forged = authority.native_acceptance.scenario_scripts[0].clone();
         forged.outer_child_timeout_ms = Some(900_000);

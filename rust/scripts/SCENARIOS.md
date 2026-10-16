@@ -268,7 +268,7 @@ These edits have not run in a real window yet.
 - `load-save-v1` asserts ship resources after the load and, with
   `record_saved_hyperspace_position` / `assert_hyperspace_position_restored`,
   that the loaded hyperspace position equals the saved one (see below).
-- `real-sol-probe-to-starbase` is now the composed journey (new game,
+- `real-sol-starbase-alliance` is now the composed journey (new game,
   communication, navigation, planet side, starbase); `linked-playable-v1`
   narrows to boot menu and battle.
 
@@ -599,8 +599,9 @@ C code and need one real-window run. The paragraph below describes the state
 before the rewrite.
 
 Scripts that reached `assert_mode starbase` through the shortcut:
-`probe-encounter-v3`, `probe-encounter-v4`, `real-sol-earth-moon-base`,
-`real-sol-probe-to-starbase`, `real-sol-starbase-to-mars`, `starbase-visit-v1`
+`probe-encounter-v3`, `probe-encounter-v4`, `real-sol-starbase-to-mars`,
+`starbase-visit-v1` (and the since deleted `real-sol-earth-moon-base` and
+`real-sol-probe-to-starbase`)
 (visit 2 in each, steps 38-45 in v3). Expect them to stop at the second visit (not played live): the
 Starbase is still unallied, so visit 2 is the unallied Commander talk again
 (`comandr.c` `Intro`: `STARBASE_VISITED` set, `RADIOACTIVES_PROVIDED` 0, so
@@ -876,3 +877,41 @@ The last step is the Commander's `VERY_IMPRESSIVE` reply of step 6 (three
 options). The scenario budget `max_input_ticks` must cover the 6000 ticks.
 This was not run against the live game here; it is verified by unit tests of
 the decision, tracker, script, scheduler, predicate and checkpoint.
+
+## Start saves: the Starbase chain is played once
+
+Six scripts used to replay the same eight-minute chain (new game, probe,
+Commander, Mercury, Luna moon base, Ilwrath battle, alliance) before their own
+steps. The chain is now played once, by `real-sol-starbase-alliance`, and later
+scenarios start from the save it makes.
+
+- `real-sol-earth-moon-base` and `real-sol-probe-to-starbase` were strict
+  subsets of the alliance script (they differed only in two captures and the
+  896 fuel / 2500 RU assertion at the menu). Those captures and the assertion
+  moved into the alliance script and the two scripts are deleted.
+- The Starbase menu has no Game options, so the alliance script departs the
+  Starbase (Down x3, Select), asserts interplanetary activity and 896 fuel /
+  2500 RU, then saves to slot 0 through the flight Game menu
+  (`cancel, up, up, select`, `assert_game_options`, Select to open Save, Select
+  for slot 0, Select to confirm). The save is therefore taken in interplanetary
+  flight beside Earth. The Starbase is allied by then, so a visit goes straight
+  to the Starbase menu with no conversation.
+- A script declares `"start_save": {"path": "saves/allied-starbase.sav",
+  "slot": 0}`. The path is relative to the script's directory and must be one
+  `saves/<name>.sav` file. Before launch the harness copies it to
+  `<configdir>/save/uqmsave.00` (`uqmsave.NN` for slot NN) and keeps a copy as
+  `inputs/start-save.sav` in the run. The script then loads it through the real
+  main menu: Down, Select (Load Game), Select (slot 0). The final config the run
+  retains (`config-final/save/`) holds whatever saves the run wrote.
+- `rust/ci/gates.json` pins each save (`native_acceptance.start_saves`: path,
+  sha256, byte_length) the way it pins scripts. Admission refuses a script whose
+  save is unpinned, missing or different, and refuses a pinned save whose
+  provenance (`saves/allied-starbase.provenance.json`) names a different
+  `real-sol-starbase-alliance.json` digest than the one pinned now.
+- Regeneration rule: any change to `real-sol-starbase-alliance.json` changes
+  its pin and makes the save stale. Run the alliance scenario in a real window,
+  then `native extract-save --artifacts <run dir> --slot 0 --output
+  rust/scripts/saves/allied-starbase.sav`, paste the printed pin into
+  `start_saves`, and commit the save, the provenance and the pin together.
+  `extract-save` refuses a run whose `terminal_reason` is not `success` or
+  whose alliance script is not the pinned one.

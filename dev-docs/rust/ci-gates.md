@@ -169,10 +169,10 @@ Scope of the rule:
 - A script whose declared `max_wallclock_seconds` is above 300 must carry the
   900000 ms pin. A script at or below 300 must not carry it. The wall budget is
   read from the pinned script bytes during admission, so a pin that disagrees
-  with the script's own budget is refused before any build or launch. All 20
+  with the script's own budget is refused before any build or launch. All 18
   pinned scripts above 300 s carry the pin and the other 18 keep the default.
 - A wall budget is a failure ceiling, not a promise that every run takes that
-  long. `real-sol-earth-moon-base`, `real-sol-luna-moonbase-departure`,
+  long. `real-sol-luna-moonbase-departure`,
   `real-sol-starbase-alliance` and `real-sol-starbase-to-mars` declare 900 s, carry the same 900000 ms pin, and
   are ended by the outer deadline if a run does not finish first. The approval
   does not cover raising the value further.

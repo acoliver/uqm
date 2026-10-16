@@ -408,7 +408,7 @@ mod external_controller_regressions {
                     std::env::var("UQM_CI_EXPECTED_SHA").unwrap()
                 );
                 assert_ne!(binding.source_sha, binding.controller_sha);
-                assert_eq!(plan.autoplay.scenarios.len(), 34);
+                assert_eq!(plan.autoplay.scenarios.len(), 32);
             } else {
                 let error = result.unwrap_err().to_string();
                 assert!(

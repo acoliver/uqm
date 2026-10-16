@@ -102,16 +102,6 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("quit-v1", &[Domain::Quit]),
     row("repro-game-menu-initial", &[Domain::BootMenu]),
     row("starbase-visit-v1", &[Domain::Starbase]),
-    journey(
-        "real-sol-probe-to-starbase",
-        &[
-            Domain::NewGame,
-            Domain::CommunicationChoices,
-            Domain::NavigationOrbitScan,
-            Domain::PlanetSideResults,
-            Domain::Starbase,
-        ],
-    ),
     row(
         "real-sol-starbase-to-mars",
         &[Domain::Starbase, Domain::NavigationOrbitScan],
@@ -145,7 +135,6 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("probe-encounter-v7", &[Domain::NewGame]),
     row("explore-planet-v1", &[Domain::NavigationOrbitScan]),
     row("real-sol-autopilot", &[Domain::NavigationOrbitScan]),
-    row("real-sol-earth-moon-base", &[Domain::NavigationOrbitScan]),
     row(
         "real-sol-luna-moonbase-departure",
         &[Domain::NavigationOrbitScan],
@@ -154,7 +143,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         "real-sol-mercury-radioactives",
         &[Domain::NavigationOrbitScan, Domain::PlanetSideResults],
     ),
-    row(
+    journey(
         "real-sol-starbase-alliance",
         &[
             Domain::NewGame,
