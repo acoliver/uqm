@@ -34,6 +34,9 @@
 #include "libs/mathlib.h"
 
 
+// Read-only automation observation implemented in Rust.
+extern void rust_automation_observe_ship_picker (int active);
+
 #define NUM_PICK_SHIP_ROWS 2
 #define NUM_PICK_SHIP_COLUMNS 6
 
@@ -61,6 +64,9 @@ DoPickBattleShip (MENU_STATE *pMS)
 		pMS->Initialized = TRUE;
 		pMS->InputFunc = DoPickBattleShip;
 
+		// The flagship selection below is made in this same call, so a
+		// Select injected after this observation confirms a real choice.
+		rust_automation_observe_ship_picker (1);
 
 		goto ChangeSelection;
 	}
@@ -277,6 +283,7 @@ OldContext = SetContext (SpaceContext);
 
 		SetMenuSounds (MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
 		DoInput (&MenuState, FALSE);
+		rust_automation_observe_ship_picker (0);
 
 		SetFlashRect (NULL);
 

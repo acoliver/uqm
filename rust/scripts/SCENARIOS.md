@@ -676,6 +676,31 @@ Mercury (radioactive category 6), (b) driving the Ilwrath battle to a win,
 currently publishes lander position and crew to the automation (telemetry),
 but not facing, per-category cargo, or deposit positions.
 
+### #226 battle: `pick_battle_ship`
+
+After the Ilwrath hail the full game enters `Battle ()` and `selectAllShips`
+(`battle.c:387`) calls `GetInitialStarShips`, which asks `GetEncounterStarShip`
+for each side (`pickship.c`). The NPC side takes the head of its fleet with no
+input. For the human side (`pickship.c`, full game, `RPG_PLAYER_NUM`) the C
+code returns the flagship without any screen only when this is the first pick
+and `battle_counter[0] == 1`, that is, the player has no escorts. Otherwise it
+runs `GetArmadaStarShip`, whose `DoPickBattleShip` loop waits for
+`KEY_MENU_SELECT` (the flagship column is preselected). After the Commander
+visit the player owns escorts, so the picker is shown and the battle never
+starts without a Select. The real-window run of 77b6c8f16 stalled there: the
+NPC assets loaded, then nothing until the step timed out. There is no Rust
+port of `selectAllShips` or the picker, so no Rust/C divergence.
+
+`pick_battle_ship {max_ticks}` waits until the picker has run its first
+iteration, then presses the real menu Select once and records
+`battle_ship_picked:generation=N`. It fails as a semantic mismatch when no
+picker appears within `max_ticks`, so it also fails if the player has no
+escorts. The observation is `rust_automation_observe_ship_picker` in
+`ui_observation.rs`, called from `pickship.c` (a read-only `1` after the
+picker initialises, a `0` after `DoInput` returns; this is the only C touched,
+and only as observation). Each entry starts a new generation, so one pick
+cannot be reused for a later picker.
+
 ### #226 battle: `fight_battle`
 
 `fight_battle {max_ticks}` fights a full-game battle with the player-one keys
@@ -767,6 +792,7 @@ any of the four picks starts the battle, `[0]` is `where_you_come_from`):
 ```json
 {"action": "wait_for_communication_responses", "minimum": 4, "max_ticks": 2000},
 {"action": "select_communication_response", "index": 0, "max_ticks": 5000},
+{"action": "pick_battle_ship", "max_ticks": 5000},
 {"action": "wait_for_battle_frames", "minimum": 30, "max_ticks": 3000},
 {"action": "assert_mode", "mode": "battle"},
 {"action": "fight_battle", "max_ticks": 6000},

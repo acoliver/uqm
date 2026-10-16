@@ -424,8 +424,8 @@
           },
           {
                 "path": "rust/scripts/real-sol-starbase-alliance.json",
-                "sha256": "d0bec94ccf85a05401956f9dbb1160baf9292608afe74a7d5f17f7695dc6dc9a",
-                "byte_length": 6693,
+                "sha256": "a4ff0c2fba4a74bd9d5c25850a6a004d2ba71164fee1c766b0fb486ab4677481",
+                "byte_length": 6748,
                 "outer_child_timeout_ms": 900000
           },
           {

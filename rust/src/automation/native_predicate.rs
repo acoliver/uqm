@@ -241,6 +241,10 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && at_least(label, "generation=", 1)
                 && label.ends_with(&format!(":phase={:?}", value.phase))
         }
+        Action::PickBattleShip(_) => {
+            shape(label, "battle_ship_picked", &["generation="])
+                && at_least(label, "generation=", 1)
+        }
         Action::SelectCommunicationResponse(value) => {
             shape(
                 label,
@@ -276,6 +280,7 @@ pub(super) struct PredicateHistory {
     response: u64,
     replay: u64,
     menu: u64,
+    ship_pick: u64,
     completions: u64,
     last_planet_side: u64,
     awaited_planet_side: Option<u64>,
@@ -309,6 +314,7 @@ impl PredicateHistory {
                 advance(&mut self.replay, number(label, "generation="))
             }
             Action::SelectPlanetMenu(_) => advance(&mut self.menu, number(label, "generation=")),
+            Action::PickBattleShip(_) => advance(&mut self.ship_pick, number(label, "generation=")),
             Action::WaitForCommunicationEnd(value) => {
                 let (Some(target), Some(actual)) = (
                     self.completions.checked_add(value.minimum_completions),
@@ -462,6 +468,10 @@ mod tests {
                 "planet_menu_selected:generation=1:phase=Dispatch",
             ),
             (
+                json!({"action":"pick_battle_ship","max_ticks":100}),
+                "battle_ship_picked:generation=1",
+            ),
+            (
                 json!({"action":"select_communication_response","index":1,"max_ticks":100}),
                 "communication_response_selected:generation=1:count=3:index=1",
             ),
@@ -500,6 +510,10 @@ mod tests {
             (
                 json!({"action":"select_planet_menu","phase":"dispatch","max_ticks":100}),
                 "planet_menu_selected:generation=1:phase=Dispatch",
+            ),
+            (
+                json!({"action":"pick_battle_ship","max_ticks":100}),
+                "battle_ship_picked:generation=1",
             ),
             (
                 json!({"action":"select_communication_response","index":1,"max_ticks":100}),

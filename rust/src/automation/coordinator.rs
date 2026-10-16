@@ -320,6 +320,8 @@ struct CoordInner {
     consumed_replay_generation: u64,
     /// Most recent planet-menu generation selected semantically.
     consumed_planet_menu_generation: u64,
+    /// Most recent battle ship picker generation confirmed semantically.
+    consumed_ship_picker_generation: u64,
     /// Require one callback after orbit navigation before accepting menu ownership.
     orbit_transition_pending: bool,
     /// Whether the current `navigate_to_hyperspace` step has sampled live
@@ -463,6 +465,7 @@ impl Coordinator {
                 consumed_response_generation: 0,
                 consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
+                consumed_ship_picker_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
                 hyperspace_flight_observed: false,
@@ -896,6 +899,29 @@ impl Coordinator {
                         "planet_menu_selected:generation={generation}:phase={:?}",
                         select.phase
                     ),
+                );
+            }
+        } else if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::PickBattleShip(_))
+        ) {
+            let (generation, active) = crate::automation::ui_observation::ship_picker_observation();
+            if !released_semantic_select
+                && active
+                && generation > inner.consumed_ship_picker_generation
+            {
+                let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
+                if !inject_menu_key(key_index, 1) {
+                    self.reject_input(inner, "menu", key_index, 1);
+                    return scheduler_event;
+                }
+                inner.release_semantic_select = true;
+                inner.consumed_ship_picker_generation = generation;
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("battle_ship_picked:generation={generation}"),
                 );
             }
         } else if let Some(result) = self.service_planet_side_wait(inner) {

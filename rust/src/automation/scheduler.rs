@@ -317,6 +317,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         Action::WaitForPlanetSideStart(_)
         | Action::WaitForPlanetSideEnd(_)
         | Action::SelectPlanetMenu(_)
+        | Action::PickBattleShip(_)
         | Action::WaitForBattleFrames(_)
         | Action::WaitForDispatch(_)
         | Action::SelectCommunicationResponse(_)
@@ -443,6 +444,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForPlanetSideStart(_)
                     | Action::WaitForPlanetSideEnd(_)
                     | Action::SelectPlanetMenu(_)
+                    | Action::PickBattleShip(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput
@@ -962,6 +964,38 @@ fn reduce_condition_wait(
             },
             effects: EffectPlan::none(),
         },
+        (Action::PickBattleShip(pick), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: pick.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::PickBattleShip(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::PickBattleShip(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::SelectPlanetMenu(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -3223,10 +3257,11 @@ mod budgeted_wait_tests {
     use super::*;
     use crate::automation::script::{
         CollectPlanetMineralsStep, FightBattleStep, NavigateToHyperspaceStep, NavigateToMoonStep,
-        NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName,
-        SelectCommunicationResponseStep, SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep,
-        WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
-        WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
+        NavigateToOrbitStep, NavigateToPlanetStep, PickBattleShipStep, PlanetMenuPhaseName,
+        PlanetSideOutcomeName, SelectCommunicationResponseStep, SelectPlanetMenuStep,
+        TurnDirection, TurnFlagshipStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
+        WaitForPlanetSideStartStep,
     };
 
     use crate::planet_side::cargo::ElementCategory;
@@ -3272,6 +3307,7 @@ mod budgeted_wait_tests {
                 phase: PlanetMenuPhaseName::Orbit,
                 max_ticks,
             }),
+            Action::PickBattleShip(PickBattleShipStep { max_ticks }),
             Action::WaitForBattleFrames(WaitForBattleFramesStep {
                 minimum: 1,
                 max_ticks,

@@ -80,6 +80,7 @@
     {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 5000},
     {"action": "wait_for_communication_responses", "minimum": 4, "max_ticks": 3000},
     {"action": "select_communication_response", "index": 0, "max_ticks": 1000},
+    {"action": "pick_battle_ship", "max_ticks": 5000},
     {"action": "wait_for_battle_frames", "minimum": 30, "max_ticks": 5000},
     {"action": "assert_mode", "mode": "battle"},
     {"action": "capture", "label": "ilwrath-battle"},

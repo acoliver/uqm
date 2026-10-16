@@ -604,6 +604,16 @@ pub struct SelectPlanetMenuStep {
     pub max_ticks: u64,
 }
 
+/// Confirm the flagship once the production battle ship picker is active.
+///
+/// The full game shows the picker only when the player has escorts, so this
+/// step fails when no picker appears within `max_ticks`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PickBattleShipStep {
+    pub max_ticks: u64,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanetMenuPhaseName {
@@ -813,6 +823,7 @@ pub enum Action {
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
+    PickBattleShip(PickBattleShipStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
     AssertScene(SceneAssertion),
@@ -1828,6 +1839,7 @@ fn validate_wait_step(
         Action::WaitForPlanetSideStart(wait) => (wait.max_ticks, "wait_for_planet_side_start"),
         Action::WaitForPlanetSideEnd(wait) => (wait.max_ticks, "wait_for_planet_side_end"),
         Action::SelectPlanetMenu(select) => (select.max_ticks, "select_planet_menu"),
+        Action::PickBattleShip(pick) => (pick.max_ticks, "pick_battle_ship"),
         Action::SelectCommunicationResponse(select) => {
             if select.index >= 8 {
                 return Some(Err(AutomationError::step(
@@ -2572,7 +2584,7 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":85,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":95,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
                 {"action":"wait_for_communication_replay","max_ticks":10},
@@ -2580,6 +2592,7 @@ mod tests {
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
                 {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
                 {"action":"wait_for_planet_side_start","max_ticks":10},
+                {"action":"pick_battle_ship","max_ticks":10},
                 {"action":"wait_for_battle_frames","minimum":1,"max_ticks":10},
                 {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
                 {"action":"finish"}
@@ -2611,6 +2624,7 @@ mod tests {
                     max_ticks: 10
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
+                Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),
                 Action::WaitForBattleFrames(WaitForBattleFramesStep {
                     minimum: 1,
                     max_ticks: 10
@@ -2664,6 +2678,7 @@ mod tests {
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
             r#"{"action":"wait_for_battle_frames","minimum":1,"max_ticks":0}"#,
+            r#"{"action":"pick_battle_ship","max_ticks":0}"#,
         ] {
             let txt = format!(
                 "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":2,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
@@ -3364,6 +3379,22 @@ mod tests {
             .iter()
             .position(predicate)
             .expect("step present after the previous one")
+    }
+
+    /// With escorts aboard the full game shows the ship picker after the
+    /// Ilwrath hail, and the battle frames only start once Select confirms it.
+    #[test]
+    fn alliance_scenario_picks_the_flagship_before_waiting_for_battle_frames() {
+        let steps = checked_in_steps("real-sol-starbase-alliance");
+        let battle_wait = step_index(&steps, 0, |step| {
+            matches!(step, Action::WaitForBattleFrames(_))
+        });
+        let pick = step_index(&steps, 0, |step| matches!(step, Action::PickBattleShip(_)));
+        assert_eq!(pick + 1, battle_wait);
+        assert!(matches!(
+            steps[pick - 1],
+            Action::SelectCommunicationResponse(_)
+        ));
     }
 
     /// The scenario audit: a scenario whose name or domain claims a Starbase
