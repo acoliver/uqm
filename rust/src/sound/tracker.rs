@@ -756,10 +756,10 @@ mod tests {
         let mut count = 0;
         for index in 0..archive.len() {
             let mut resource = archive.by_index(index).unwrap();
-            if !resource.name().ends_with(".mod") {
+            let name = resource.name().unwrap().into_owned();
+            if !name.ends_with(".mod") {
                 continue;
             }
-            let name = resource.name().to_owned();
             let mut bytes = Vec::new();
             resource.read_to_end(&mut bytes).unwrap();
             let song = Song::parse(&bytes).unwrap_or_else(|error| panic!("{name}: {error:?}"));

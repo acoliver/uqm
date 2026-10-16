@@ -15,4 +15,4 @@ sha2 = "0.10"
 tempfile = "3"
 uqm-rust = { package = "uqm", path = "..", default-features = false, features = ["audio_heart", "debug-process"] }
 uqm-ownership = { path = "../ownership" }
-zip = "2"
+zip = "9"
