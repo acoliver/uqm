@@ -500,7 +500,7 @@
     "producing_command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
     "profile": "release",
     "cargo_manifest_sha256": "928038030d3141285dd2be8e5bbe5ba5f90272ddc42be8e803dbf4cbe5315b87",
-    "cargo_lock_sha256": "46668e88037f70a48aa12fde50a54e4501072470ba3f3aee5a1b691a26647e35",
+    "cargo_lock_sha256": "5b135d50e6e8b10f245ad307fc29b518dc1178b6fcb1798409782784af056404",
     "features": [
       "audio_heart",
       "linked_c_archive"
