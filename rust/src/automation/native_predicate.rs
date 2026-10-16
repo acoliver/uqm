@@ -239,8 +239,9 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             shape(
                 label,
                 "battle_won",
-                &["player_left=", "enemy_left=", "ticks="],
+                &["player_left=", "enemy_left=", "ticks=", "player_crew="],
             ) && at_least(label, "player_left=", 1)
+                && at_least(label, "player_crew=", 1)
                 && at_least(label, "ticks=", 1)
                 && number(label, "ticks=").is_some_and(|ticks| ticks <= value.max_ticks)
         }
@@ -784,18 +785,20 @@ mod tests {
         let action = Action::FightBattle(FightBattleStep { max_ticks: 900 });
         assert!(semantic_satisfied(
             &action,
-            "battle_won:player_left=1:enemy_left=0:ticks=412"
+            "battle_won:player_left=1:enemy_left=0:ticks=412:player_crew=14"
         ));
         assert!(semantic_satisfied(
             &action,
-            "battle_won:player_left=2:enemy_left=0:ticks=900"
+            "battle_won:player_left=2:enemy_left=0:ticks=900:player_crew=3"
         ));
         for label in [
-            "battle_won:player_left=0:enemy_left=0:ticks=412",
-            "battle_won:player_left=1:enemy_left=0:ticks=901",
-            "battle_won:player_left=1:enemy_left=0:ticks=0",
+            "battle_won:player_left=0:enemy_left=0:ticks=412:player_crew=14",
+            "battle_won:player_left=1:enemy_left=0:ticks=412:player_crew=0",
+            "battle_won:player_left=1:enemy_left=0:ticks=412",
+            "battle_won:player_left=1:enemy_left=0:ticks=901:player_crew=14",
+            "battle_won:player_left=1:enemy_left=0:ticks=0:player_crew=14",
             "battle_won:player_left=1:enemy_left=0",
-            "battle_won:player_left=1:enemy_left=0:ticks=4:extra=1",
+            "battle_won:player_left=1:enemy_left=0:ticks=4:player_crew=14:extra=1",
             "battle_fight_failed:reason=timeout",
             "battle_fight_failed:reason=player_ship_lost",
             "battle_fight_failed:reason=not_in_battle",

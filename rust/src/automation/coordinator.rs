@@ -1087,8 +1087,9 @@ impl Coordinator {
         }
     }
 
-    /// Aim the flagship at the opposing ship and fire until the opposing side
-    /// loses a ship, holding only the keys a player would press.
+    /// Aim the flagship at the opposing ship and fire until the battle ends
+    /// with the opposing side a ship down, holding only the keys a player
+    /// would press.
     fn service_battle_fight(
         &self,
         inner: &mut CoordInner,
@@ -1097,9 +1098,16 @@ impl Coordinator {
     ) -> SchedulerEvent {
         let progress = inner.battle_fight.observe(&BattleSnapshot::live(), &fight);
         match progress {
-            Ok(FightProgress::Fighting(control)) => {
+            Ok(FightProgress::Fighting { control, report }) => {
                 if !Self::set_fight_controls(control) {
                     self.reject_input(inner, "fight_battle", -1, -1);
+                }
+                if let Some(report) = report {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        report.trace_label(),
+                    );
                 }
                 scheduler_event
             }

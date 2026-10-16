@@ -778,7 +778,8 @@ cannot be reused for a later picker.
 ### #226 battle: `fight_battle`
 
 `fight_battle {max_ticks}` fights a full-game battle with the player-one keys
-until the opposing side has lost a ship and the player's side has not. It is
+until the battle has ended with the opposing side a ship down and the
+player's flagship alive. It is
 for the Starbase fight (step 5 above): the flagship against one Ilwrath
 Avenger. Nothing in the game is written; the action only holds
 thrust, left, right and weapon.
@@ -827,38 +828,97 @@ size from the live screen (`battle_fight::arena_size`) and wraps deltas with
 module only bends it), `WEAPON_WAIT` 6, one energy per shot, energy regeneration
 1 per `ENERGY_WAIT` 10 frames. Holding fire all the time drains energy, so the
 fight fires only when aimed and in range. Maximum thrust 10, `TURN_WAIT` 17.
-The Avenger (`ilwrath.c`) has a short hellfire (`MISSILE_SPEED` 25,
-`MISSILE_LIFE` 8, `ILWRATH_OFFSET` 29: about 230 world units), maximum thrust
-25, `TURN_WAIT` 2, and a cloak on `special` (`SPECIAL_ENERGY_COST` 3,
-`SPECIAL_WAIT` 13). Its intelligence cloaks when it has no target in
-reach and no flame going, and decloaks to flame when the flagship is within
-about six turns of its aim. It out-runs and out-turns the flagship, so the
-flagship cannot kite it; the only way to win is to out-shoot it at range while
-not sitting in front of its flame.
+The Avenger (`ilwrath.c`) has a short hellfire: `MISSILE_SPEED` 25 world
+units a frame (`initialize_missile` takes the speed in world units) for
+`MISSILE_LIFE` 8 frames, from `ILWRATH_OFFSET` 29 display units (116 world
+units) ahead of the ship, so a flame reaches about 290 world units, more
+while the Avenger flies toward its target because the flame inherits its
+velocity. `WEAPON_WAIT` is 0 and `ENERGY_REGENERATION` 4 every `ENERGY_WAIT` 4
+frames pays the 1 energy of each flame, so it can flame every frame without
+running dry; every flame does `MISSILE_DAMAGE` 1 once, so a flagship held in
+the flame loses about one crew a frame. Its maximum thrust is 25, `TURN_WAIT`
+2, and it has a cloak on `special` (`SPECIAL_ENERGY_COST` 3, `SPECIAL_WAIT`
+13). Its intelligence (`ilwrath_intelligence` over `ship_intelligence`) always
+PURSUEs, cloaks when it has no target within about six turns of its aim and no
+flame going, and decloaks to flame when the flagship is within that reach.
 
-**Strategy** (`rust/src/automation/battle_fight.rs`, `fight`): each tick, take
-the wrapped delta to the enemy and the facing it points along (the same
-`arctan`/`angle_to_facing` rule as the lander steering).
-- Turn along the shorter way round until the heading is exactly the bearing.
-- Fire when within one facing of the bearing and within 1000 world units.
-- Close in (thrust) when farther than 800 units and roughly aimed (within two
-  facings).
-- Inside 400 units (well inside hellfire reach plus the Avenger's speed) thrust
-  only while facing away (5..=11 facings off), so the flagship backs off and
-  turns back to aim rather than driving into the flame.
-- Otherwise coast and keep aiming.
-- If either ship element is missing (before the ships spawn) hold every key; a
-  cloaked enemy still has an element and a location, so the aim is unchanged.
+**Strategy** (`rust/src/automation/battle_fight.rs`, `engage`).
 
-**Outcome.** The first observation in a battle records both `battle_counter`
-values. The fight is won as soon as the enemy side is below its starting count
-and the player's side is not, and records
-`battle_won:player_left=N:enemy_left=M:ticks=T`. It fails as a semantic
-mismatch with `battle_fight_failed:reason=player_ship_lost` (the player's side
-is below its start, even if the enemy side fell too), `reason=timeout`
-(`max_ticks` observations passed) or `reason=not_in_battle` (no battle at the
-start, or it ended with neither side losing a ship). Every key is released on
-completion and on failure. `max_ticks` must be at least 1.
+*Can the flagship kite?* No. The starting flagship has thrust 10 world units a
+frame against the Avenger's 25, and turns one facing per 18 frames
+(`TURN_WAIT` 17 plus the turn itself) against one per 3 for the Avenger, so a
+half turn costs the flagship 8 x 18 = 144 frames. The Avenger crosses the
+bolt's 1152 world units in 46 frames and the 290 unit flame reach in 12 more.
+Backing off cannot open a gap, and the old rule "thrust only while facing
+away" spent those frames turning the flagship's back to the Avenger with the
+gun pointing the wrong way.
+
+*Damage race at contact.* The flagship has 51 crew and the Avenger 22. One ion
+bolt does `BLASTER_DAMAGE` 2 once per `WEAPON_WAIT` 6 frames, so killing the
+Avenger takes 11 hits, at least 66 frames of continuous accurate fire. In the
+flame the flagship loses about one crew a frame, so 51 crew last about 51
+frames of contact. A face-and-fire duel at point blank is close to even, which
+fits the real runs (run A won with 14 of 51 crew left, run C lost the flagship
+as well). What decides it is how many bolts land before the Avenger gets
+inside flame reach.
+
+*Policy.* Face the Avenger and shoot it while it comes; spend no frame on
+anything else.
+- Never thrust inside twice the bolt range (2300 world units). The Avenger
+  closes 25 units a frame by itself, so every frame of its approach is a free
+  shot; thrust adds speed the flagship cannot shed (there is no reverse
+  thrust) and spoils the aim. Only an enemy farther than 2300 units is
+  approached, and only when within two facings of the bearing. From 1100 to
+  the Avenger's arrival that is about 40 frames, so about 6 bolts (12 damage,
+  more than half its crew) before the first flame if they all land.
+- Fire when the bolt would hit, not when the quantised facing is within one
+  facing of the bearing. The bolt flies straight along the facing, so the
+  test is geometric: the Avenger is ahead, within 1100 units (the bolt's 1152
+  less a margin), and its centre is within `HIT_RADIUS` 48 world units of the
+  facing's line. A facing off by one (22.5 degrees) misses by 230 units at 600
+  and wastes energy (1 per shot, regenerated at 1 per 10 frames), so it is
+  held back except at point blank, where the radius covers it.
+- Turn along the shorter way round toward the bearing only while the bolt does
+  not already line up. Turning never stops while the bolt misses, because the
+  Avenger moves faster than the flagship turns.
+- Enemy close behind or cloaked: a cloaked Avenger still has an element and a
+  location, so nothing changes. Behind the flagship the bolt cannot hit, so it
+  turns toward the Avenger by the shorter way, with no thrust and no fire.
+- After the enemy side has lost its ship the flagship releases every key. The
+  flames in flight cannot be outrun (25 units a frame against 10, turning 18
+  frames a facing), so there is nothing to steer toward; it keeps observing
+  until the battle ends and fails at once if it dies meanwhile.
+
+`HIT_RADIUS` is an estimate from the sprite size. Every 30 ticks the action
+writes `battle_fight_state:tick=T:distance=D:facing_error=E:player_crew=P:
+enemy_crew=C:action=A` (`A` is `hold`, or `turn_left`, `turn_right`, `thrust`
+and `fire` joined by `+`), at most one label per 30 ticks, so real runs give
+the distance, aim and crew curves to tune it against.
+
+**Outcome.** The battle is over when `IN_BATTLE` clears: the last ship's
+explosion has finished (`cleanup_dead_ship`, `tactrans.c`) or
+`rust_bridge_uninit_ships` ran. A ship death does `battle_counter[side]--` at
+the moment it dies (`RecordShipDeath`), about 75 frames before the battle
+ends, so the enemy's counter dropping is not the end: a run-C flagship died in
+that window and the next step waited 6000 ticks for a Commander who never
+came. The ship queue is freed with the battle, so the tracker keeps the
+counters and the flagship's crew from the last tick the battle was running.
+- The first observation records both `battle_counter` values.
+- It fails as a semantic mismatch with
+  `battle_fight_failed:reason=player_ship_lost` as soon as the player's
+  counter is below its start, or the flagship's crew falls to 0 after it has
+  been seen with crew (a ship element starts with crew 0 until its first
+  preprocess, which is not a death). That is the same tick the C code
+  registers the death, not the step timeout.
+- When `IN_BATTLE` clears, the fight is won when the last running tick had the
+  enemy side below its start and the flagship with crew. It records
+  `battle_won:player_left=N:enemy_left=M:ticks=T:player_crew=C`, with `C` the
+  flagship's crew at the last running tick, and the scenario predicate needs
+  `player_crew` of at least 1.
+- A battle that ends with neither side a ship down fails with
+  `reason=not_in_battle`, as does no battle at the start; `reason=timeout`
+  when `max_ticks` observations pass first. Every key is released on
+  completion and on failure. `max_ticks` must be at least 1.
 
 **Steps from the Ilwrath conversation to the won fight** (indices from step 5;
 any of the four picks starts the battle, `[0]` is `where_you_come_from`):
