@@ -997,11 +997,14 @@ scenarios start from the save it makes.
   `real-sol-starbase-alliance.json` digest than the one pinned now.
 - Regeneration rule: any change to `real-sol-starbase-alliance.json` changes
   its pin and makes the save stale. Run the alliance scenario in a real window,
-  then `native extract-save --artifacts <run dir> --slot 0 --output
-  rust/scripts/saves/allied-starbase.sav`, paste the printed pin into
+  then `native extract-save --artifacts <suite bundle or its scenarios/NNNN dir>
+  --slot 0 --output rust/scripts/saves/allied-starbase.sav`, paste the printed pin into
   `start_saves`, and commit the save, the provenance and the pin together.
-  `extract-save` refuses a run whose `terminal_reason` is not `success` or
-  whose alliance script is not the pinned one.
+  `extract-save` reads the script identity from the suite manifest and the
+  scenario's `native-acceptance.json`, checks the trace, manifest and save
+  against the digests the run recorded, and refuses a run whose
+  `terminal_reason` is not `success`, whose bundle holds anything but the
+  alliance scenario, or whose alliance script is not the pinned one.
 
 ### Scripts that start from the alliance save
 

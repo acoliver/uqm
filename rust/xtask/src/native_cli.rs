@@ -249,7 +249,7 @@ pub fn usage() -> String {
      report BUNDLE [--json]\n  \
      replay BUNDLE --output DIR [--scenario NAME]... [--seed N]\n  \
      gallery BUNDLE --output DIR [--json]\n  \
-     extract-save --artifacts RUN_DIR --slot N --output rust/scripts/saves/NAME.sav"
+     extract-save --artifacts SUITE_OR_SCENARIO_DIR --slot N --output rust/scripts/saves/NAME.sav"
         .into()
 }
 
@@ -691,7 +691,7 @@ fn extract_save(root: &Path, options: &Options) -> Result<(), String> {
     options.require_only("extract-save", &["--artifacts", "--slot", "--output"])?;
     let run = options.required_path(
         &options.artifacts,
-        "native extract-save requires --artifacts RUN_DIR: the alliance run directory",
+        "native extract-save requires --artifacts DIR: the alliance suite bundle or its scenarios/NNNN directory",
     )?;
     let out = options.required_path(
         &options.output,
