@@ -1265,10 +1265,10 @@ impl Coordinator {
                 && snapshot.inner_planet == i32::from(navigation.planet)
                 && snapshot.orbital_moon == i32::from(navigation.moon)
                 && snapshot.orbital_data_index == snapshot.target_data_index;
-            let control = crate::automation::navigation::steer_moon_navigation(
+            let control = crate::automation::navigation::steer_moon_route(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
-                    inner_planet: None,
+                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
                     in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
@@ -1287,6 +1287,7 @@ impl Coordinator {
                             navigation.moon,
                         ),
                 },
+                navigation.planet,
             );
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
                 if remaining % 250 == 0 {
