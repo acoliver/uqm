@@ -130,7 +130,28 @@ impl TryFrom<u8> for NestedGroupOperation {
 pub struct NestedGroupRequest {
     pub operation: NestedGroupOperation,
     pub pid: libc::pid_t,
+    /// Chosen by the requester and echoed in the reply, so a reply that
+    /// belongs to another exchange is detected rather than mistaken for this one.
+    pub nonce: u64,
 }
+
+/// Wire size of one request: operation, three zero bytes, PID, nonce.
+#[cfg(unix)]
+const NESTED_GROUP_REQUEST_LEN: usize = 16;
+/// Wire size of one reply: status, PID, anchor PID, echoed nonce.
+#[cfg(unix)]
+const NESTED_GROUP_RESPONSE_LEN: usize = 20;
+/// Budget for an exchange to hand the token back once it has finished.
+#[cfg(unix)]
+const TOKEN_RELEASE_BUDGET_MS: u64 = 100;
+/// How long a written request waits for its reply, whatever the caller's
+/// budget. The reply must be consumed before the token is released or the
+/// stream is out of step for the next requester.
+#[cfg(unix)]
+const REPLY_HARD_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
+/// The least a monitor handshake is given, independent of the run deadline.
+#[cfg(unix)]
+pub const MONITOR_HANDSHAKE_FLOOR: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Inherited descriptors for token-serialized containment-monitor exchanges.
 #[cfg(unix)]
@@ -244,11 +265,27 @@ impl NestedGroupProtocol {
     }
 
     /// Perform one exchange within a single timeout budget.
+    ///
+    /// The budget bounds waiting for the token and writing the request. Once
+    /// the request is written its reply is always consumed (up to
+    /// [`REPLY_HARD_LIMIT`]) before the token is released, so a slow monitor
+    /// cannot leave a stale reply for the next requester. A reply that
+    /// arrives after the budget is reported as `ETIMEDOUT`.
     pub fn exchange_with_timeout(
         self,
         operation: NestedGroupOperation,
         pid: libc::pid_t,
         timeout: std::time::Duration,
+    ) -> io::Result<libc::pid_t> {
+        self.exchange_with_limits(operation, pid, timeout, REPLY_HARD_LIMIT)
+    }
+
+    fn exchange_with_limits(
+        self,
+        operation: NestedGroupOperation,
+        pid: libc::pid_t,
+        timeout: std::time::Duration,
+        reply_hard_limit: std::time::Duration,
     ) -> io::Result<libc::pid_t> {
         let started = monotonic_millis()?;
         let budget = duration_millis(timeout);
@@ -257,13 +294,47 @@ impl NestedGroupProtocol {
         let operation_deadline = deadline.saturating_sub(release_reserve);
         let mut token = [0_u8; 1];
         fd_io_until(self.token_read, &mut token, false, operation_deadline)?;
-        let result = exchange_locked_until(self.registration, operation, pid, operation_deadline);
-        let release = fd_io_until(self.token_write, &mut token, true, deadline);
+        let result = exchange_locked_until(
+            self.registration,
+            operation,
+            pid,
+            next_nonce(),
+            operation_deadline,
+            duration_millis(reply_hard_limit),
+        );
+        // The release gets its own budget: the token must go back even when
+        // the exchange ran past the caller's deadline.
+        let release = monotonic_millis().and_then(|now| {
+            fd_io_until(
+                self.token_write,
+                &mut token,
+                true,
+                now.saturating_add(TOKEN_RELEASE_BUDGET_MS),
+            )
+        });
         match (result, release) {
             (Ok(anchor), Ok(())) => Ok(anchor),
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         }
     }
+}
+
+/// A nonce unique to this process and exchange. It uses only atomics and
+/// `getpid`, so it is safe in `pre_exec`.
+#[cfg(unix)]
+fn next_nonce() -> u64 {
+    static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    // SAFETY: getpid has no preconditions.
+    let pid = u32::from_ne_bytes(unsafe { libc::getpid() }.to_ne_bytes());
+    let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    (u64::from(pid) << 32) | u64::from(count)
+}
+
+/// How long a monitor handshake may take for a run with this timeout.
+#[cfg(unix)]
+#[must_use]
+pub fn monitor_handshake_timeout(run_timeout: std::time::Duration) -> std::time::Duration {
+    run_timeout.max(MONITOR_HANDSHAKE_FLOOR)
 }
 
 #[cfg(unix)]
@@ -357,22 +428,51 @@ fn exchange_locked_until(
     registration_fd: RawFd,
     operation: NestedGroupOperation,
     pid: libc::pid_t,
+    nonce: u64,
     deadline: u64,
+    reply_hard_limit_millis: u64,
 ) -> io::Result<libc::pid_t> {
-    let mut request = [0_u8; 8];
+    let mut request = [0_u8; NESTED_GROUP_REQUEST_LEN];
     request[0] = operation as u8;
     request[4..8].copy_from_slice(&pid.to_ne_bytes());
+    request[8..16].copy_from_slice(&nonce.to_ne_bytes());
     fd_io_until(registration_fd, &mut request, true, deadline)?;
-    let mut response = [0_u8; 12];
-    fd_io_until(registration_fd, &mut response, false, deadline)?;
+    // The request is out, so its reply is read to completion even past the
+    // caller's deadline; abandoning it would leave it in front of the next reply.
+    let reply_deadline = monotonic_millis()?
+        .saturating_add(reply_hard_limit_millis)
+        .max(deadline);
+    let mut response = [0_u8; NESTED_GROUP_RESPONSE_LEN];
+    fd_io_until(registration_fd, &mut response, false, reply_deadline)?;
     let status = i32::from_ne_bytes([response[0], response[1], response[2], response[3]]);
     let response_pid = i32::from_ne_bytes([response[4], response[5], response[6], response[7]]);
     let anchor_pid = i32::from_ne_bytes([response[8], response[9], response[10], response[11]]);
+    let response_nonce = u64::from_ne_bytes([
+        response[12],
+        response[13],
+        response[14],
+        response[15],
+        response[16],
+        response[17],
+        response[18],
+        response[19],
+    ]);
+    if response_nonce != nonce {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "nested-group protocol desynchronized: reply {response_nonce:#x} (pid {response_pid}) answers a different exchange than request {nonce:#x} (pid {pid})"
+            ),
+        ));
+    }
     if response_pid != pid
         || status != 0
         || (operation != NestedGroupOperation::Unregister && anchor_pid <= 0)
     {
         return Err(io::Error::from_raw_os_error(libc::EPROTO));
+    }
+    if monotonic_millis()? >= deadline {
+        return Err(io::Error::from_raw_os_error(libc::ETIMEDOUT));
     }
     Ok(anchor_pid)
 }
@@ -380,7 +480,7 @@ fn exchange_locked_until(
 /// Read and validate one fixed-size registration request.
 #[cfg(unix)]
 pub fn read_nested_group_request(fd: RawFd) -> io::Result<NestedGroupRequest> {
-    let mut request = [0_u8; 8];
+    let mut request = [0_u8; NESTED_GROUP_REQUEST_LEN];
     fd_io(fd, &mut request, false)?;
     if request[1..4] != [0; 3] {
         return Err(io::Error::from_raw_os_error(libc::EPROTO));
@@ -388,21 +488,33 @@ pub fn read_nested_group_request(fd: RawFd) -> io::Result<NestedGroupRequest> {
     Ok(NestedGroupRequest {
         operation: NestedGroupOperation::try_from(request[0])?,
         pid: i32::from_ne_bytes([request[4], request[5], request[6], request[7]]),
+        nonce: u64::from_ne_bytes([
+            request[8],
+            request[9],
+            request[10],
+            request[11],
+            request[12],
+            request[13],
+            request[14],
+            request[15],
+        ]),
     })
 }
 
-/// Write one fixed-size registration acknowledgment.
+/// Write one fixed-size registration acknowledgment, echoing the request's `nonce`.
 #[cfg(unix)]
 pub fn write_nested_group_response(
     fd: RawFd,
     status: i32,
     pid: libc::pid_t,
     anchor: libc::pid_t,
+    nonce: u64,
 ) -> io::Result<()> {
-    let mut response = [0_u8; 12];
+    let mut response = [0_u8; NESTED_GROUP_RESPONSE_LEN];
     response[..4].copy_from_slice(&status.to_ne_bytes());
     response[4..8].copy_from_slice(&pid.to_ne_bytes());
     response[8..12].copy_from_slice(&anchor.to_ne_bytes());
+    response[12..20].copy_from_slice(&nonce.to_ne_bytes());
     fd_io(fd, &mut response, true)
 }
 // ===========================================================================
@@ -2379,13 +2491,32 @@ mod os {
 
         /// Spawn under an explicit containment-monitor protocol.
         ///
-        /// Both monitor exchanges are bounded by `config.timeout`, the same
-        /// budget the session's run is allowed, rather than a private constant.
+        /// The monitor handshake is its own budget, never shorter than
+        /// [`super::MONITOR_HANDSHAKE_FLOOR`], so a short run deadline cannot
+        /// cut a monitor round-trip short.
         pub(super) fn spawn_with_protocol(
+            command: Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+            protocol: Option<NestedGroupProtocol>,
+        ) -> Result<Self, ChildSessionError> {
+            let handshake_timeout = super::monitor_handshake_timeout(config.timeout);
+            Self::spawn_with_handshake(
+                command,
+                config,
+                inherit_protocol,
+                protocol,
+                handshake_timeout,
+            )
+        }
+
+        /// Spawn under an explicit protocol and monitor handshake budget.
+        pub(super) fn spawn_with_handshake(
             mut command: Command,
             config: ChildSessionConfig,
             inherit_protocol: bool,
             protocol: Option<NestedGroupProtocol>,
+            handshake_timeout: Duration,
         ) -> Result<Self, ChildSessionError> {
             if !inherit_protocol {
                 for name in [
@@ -2410,7 +2541,7 @@ mod os {
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null());
             // Captured by value so pre_exec only reads a Copy Duration after fork.
-            let exchange_timeout = config.timeout;
+            let exchange_timeout = handshake_timeout;
             // SAFETY: setsid, setpgid, fcntl, read, write, and getpid are
             // async-signal-safe. A nested group stays in the monitor's session
             // so its stable anchor can join; an unmonitored child owns a session.
@@ -3592,6 +3723,198 @@ mod tests {
         }
     }
 
+    /// A containment monitor that answers on a socketpair, with the first
+    /// reply held back until the test releases it.
+    #[cfg(unix)]
+    struct FakeMonitor {
+        protocol: NestedGroupProtocol,
+        release_first_reply: std::sync::mpsc::Sender<()>,
+        served: std::thread::JoinHandle<()>,
+        // Keep the client-side descriptors open for the protocol's lifetime.
+        _client: std::os::unix::net::UnixStream,
+        _token_read: std::io::PipeReader,
+        _token_write: std::io::PipeWriter,
+    }
+
+    #[cfg(unix)]
+    impl FakeMonitor {
+        fn start() -> Self {
+            use std::io::Write as _;
+            use std::os::fd::AsRawFd as _;
+
+            let (client, monitor) = std::os::unix::net::UnixStream::pair().expect("socketpair");
+            let (token_read, mut token_write) = std::io::pipe().expect("token pipe");
+            token_write.write_all(&[0]).expect("seed the token");
+            let protocol = NestedGroupProtocol::new(
+                client.as_raw_fd(),
+                token_read.as_raw_fd(),
+                token_write.as_raw_fd(),
+            );
+            let (release_first_reply, first_reply_gate) = std::sync::mpsc::channel::<()>();
+            let served = std::thread::spawn(move || {
+                let fd = monitor.as_raw_fd();
+                let first = read_nested_group_request(fd).expect("first request");
+                // A closed gate means the test ended without answering.
+                if first_reply_gate.recv().is_err() {
+                    return;
+                }
+                if write_nested_group_response(fd, 0, first.pid, first.pid + 1_000, first.nonce)
+                    .is_err()
+                {
+                    return;
+                }
+                let Ok(second) = read_nested_group_request(fd) else {
+                    return;
+                };
+                let _ = write_nested_group_response(
+                    fd,
+                    0,
+                    second.pid,
+                    second.pid + 1_000,
+                    second.nonce,
+                );
+            });
+            Self {
+                protocol,
+                release_first_reply,
+                served,
+                _client: client,
+                _token_read: token_read,
+                _token_write: token_write,
+            }
+        }
+
+        fn finish(self) {
+            drop(self.release_first_reply);
+            self.served.join().expect("fake monitor thread");
+        }
+    }
+
+    /// Spin on the clock until `window` has passed since `from`.
+    ///
+    /// The monitor must answer only after the client's deadline, and the
+    /// client's deadline is a clock reading, so the clock is the condition.
+    #[cfg(unix)]
+    fn wait_until_elapsed(from: std::time::Instant, window: std::time::Duration) {
+        while from.elapsed() < window {
+            std::thread::yield_now();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_reply_arriving_after_a_timed_out_exchange_is_not_read_as_the_next_reply() {
+        let monitor = FakeMonitor::start();
+        let protocol = monitor.protocol;
+        let timeout = std::time::Duration::from_millis(20);
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let first = std::thread::spawn(move || {
+            started_tx
+                .send(std::time::Instant::now())
+                .expect("report start");
+            protocol.exchange_with_timeout(NestedGroupOperation::Register, 111, timeout)
+        });
+        let started = started_rx.recv().expect("first exchange started");
+        wait_until_elapsed(started, timeout * 5);
+        monitor.release_first_reply.send(()).expect("release reply");
+
+        let first = first.join().expect("first exchange thread");
+        assert_eq!(
+            first
+                .expect_err("the first exchange outlived its budget")
+                .raw_os_error(),
+            Some(libc::ETIMEDOUT)
+        );
+        let anchor = protocol
+            .exchange_with_timeout(
+                NestedGroupOperation::Query,
+                222,
+                std::time::Duration::from_secs(5),
+            )
+            .expect("the second exchange must read its own reply");
+        assert_eq!(anchor, 1_222);
+        monitor.finish();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_reply_that_never_arrives_is_abandoned_at_the_hard_limit_and_a_late_one_is_detected() {
+        let monitor = FakeMonitor::start();
+        let protocol = monitor.protocol;
+        let error = protocol
+            .exchange_with_limits(
+                NestedGroupOperation::Register,
+                111,
+                std::time::Duration::from_millis(20),
+                std::time::Duration::from_millis(50),
+            )
+            .expect_err("the monitor never answered within the hard limit");
+        assert_eq!(error.raw_os_error(), Some(libc::ETIMEDOUT));
+
+        // The abandoned request's reply now lands in front of the next one.
+        monitor.release_first_reply.send(()).expect("release reply");
+        let error = protocol
+            .exchange_with_timeout(
+                NestedGroupOperation::Query,
+                222,
+                std::time::Duration::from_secs(5),
+            )
+            .expect_err("a reply to another exchange must not be accepted");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(
+            error.to_string().contains("desynchronized"),
+            "unexpected message: {error}"
+        );
+        monitor.finish();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_reply_with_the_right_pid_but_another_nonce_is_rejected() {
+        use std::os::fd::AsRawFd as _;
+
+        let (client, monitor) = std::os::unix::net::UnixStream::pair().expect("socketpair");
+        let (token_read, mut token_write) = std::io::pipe().expect("token pipe");
+        std::io::Write::write_all(&mut token_write, &[0]).expect("seed the token");
+        let protocol = NestedGroupProtocol::new(
+            client.as_raw_fd(),
+            token_read.as_raw_fd(),
+            token_write.as_raw_fd(),
+        );
+        let served = std::thread::spawn(move || {
+            let fd = monitor.as_raw_fd();
+            let request = read_nested_group_request(fd).expect("request");
+            write_nested_group_response(fd, 0, request.pid, 4_242, request.nonce ^ 1)
+                .expect("reply");
+        });
+        let error = protocol
+            .exchange_with_timeout(
+                NestedGroupOperation::Query,
+                111,
+                std::time::Duration::from_secs(5),
+            )
+            .expect_err("a foreign nonce must be rejected");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        served.join().expect("fake monitor thread");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nonces_differ_between_exchanges() {
+        assert_ne!(next_nonce(), next_nonce());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_short_run_timeout_does_not_shorten_the_monitor_handshake() {
+        assert_eq!(
+            monitor_handshake_timeout(std::time::Duration::from_millis(10)),
+            MONITOR_HANDSHAKE_FLOOR
+        );
+        let long = MONITOR_HANDSHAKE_FLOOR + std::time::Duration::from_secs(1);
+        assert_eq!(monitor_handshake_timeout(long), long);
+    }
+
     // --- State machine (REQ-PROOF-002) ---
 
     #[test]
@@ -4062,9 +4385,9 @@ mod os_tests {
     }
 
     #[test]
-    fn nested_registration_is_bounded_by_the_session_timeout_not_a_fixed_constant() {
+    fn nested_registration_is_bounded_by_the_handshake_budget_not_a_fixed_constant() {
         let dir = TempDir::new().expect("tempdir");
-        let config = make_config(&dir, Duration::from_millis(50), Duration::from_secs(1));
+        let config = make_config(&dir, Duration::from_secs(60), Duration::from_secs(1));
         let mut registration = [0; 2];
         let mut token = [0; 2];
         // SAFETY: each array has storage for both descriptors of one pipe.
@@ -4073,8 +4396,13 @@ mod os_tests {
         // Nothing ever writes the token, so the monitor "never answers".
         let protocol = NestedGroupProtocol::new(registration[1], token[0], token[1]);
         let started = std::time::Instant::now();
-        let result =
-            ChildSession::spawn_with_protocol(Command::new("sh"), config, true, Some(protocol));
+        let result = ChildSession::spawn_with_handshake(
+            Command::new("sh"),
+            config,
+            true,
+            Some(protocol),
+            Duration::from_millis(50),
+        );
         let elapsed = started.elapsed();
         // SAFETY: all four descriptors were returned by pipe and are closed once.
         unsafe {
@@ -4099,7 +4427,7 @@ mod os_tests {
         );
         assert!(
             elapsed < Duration::from_secs(4),
-            "registration must honour the 50ms session timeout, not a fixed 5s: {elapsed:?}"
+            "registration must honour the 50ms handshake budget, not a fixed 5s: {elapsed:?}"
         );
     }
 
