@@ -511,8 +511,8 @@
     "manifest_schema": "uqm-deterministic-artifacts-v4",
     "producing_command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
     "profile": "release",
-    "cargo_manifest_sha256": "8ad492d95846d3176579b0b8d24f6cf4452f9e4c8ff8e39ab7f9863127df348c",
-    "cargo_lock_sha256": "d000957426d30ab002ba6c200ad725ac0c967db5a43b41263c190efa4564fd07",
+    "cargo_manifest_sha256": "928038030d3141285dd2be8e5bbe5ba5f90272ddc42be8e803dbf4cbe5315b87",
+    "cargo_lock_sha256": "46668e88037f70a48aa12fde50a54e4501072470ba3f3aee5a1b691a26647e35",
     "features": [
       "audio_heart",
       "linked_c_archive"
