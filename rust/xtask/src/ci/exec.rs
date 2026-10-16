@@ -1869,8 +1869,9 @@ fn monitor_reply(
     status: i32,
     pid: libc::pid_t,
     anchor: libc::pid_t,
+    nonce: u64,
 ) -> Result<(), String> {
-    write_nested_group_response(fd, status, pid, anchor)
+    write_nested_group_response(fd, status, pid, anchor, nonce)
         .map_err(|error| format!("cannot reply to registration: {error}"))
 }
 
@@ -1883,7 +1884,7 @@ fn monitor_request(
     let operation = request.operation;
     let pid = request.pid;
     if pid <= 0 {
-        monitor_reply(fd, -1, pid, 0)?;
+        monitor_reply(fd, -1, pid, 0, request.nonce)?;
         return Err("nested process-group registration has nonpositive PID".into());
     }
     let result = match operation {
@@ -1914,9 +1915,9 @@ fn monitor_request(
             .and_then(|anchor| anchor.release().map(|()| 0)),
     };
     match result {
-        Ok(anchor_pid) => monitor_reply(fd, 0, pid, anchor_pid),
+        Ok(anchor_pid) => monitor_reply(fd, 0, pid, anchor_pid, request.nonce),
         Err(error) => {
-            monitor_reply(fd, -1, pid, 0)?;
+            monitor_reply(fd, -1, pid, 0, request.nonce)?;
             Err(error)
         }
     }
