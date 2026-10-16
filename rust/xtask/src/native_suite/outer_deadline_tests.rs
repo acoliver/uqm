@@ -9,7 +9,7 @@ use crate::ci::authority::load_authority;
 use uqm_rust::automation::native_window::NativeWindowRuntimeContract;
 
 /// Pinned scripts whose declared wall budget is above 300 s.
-pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 19] = [
+pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 20] = [
     "rust/scripts/comm-encounter-v1.json",
     "rust/scripts/explore-planet-v1.json",
     "rust/scripts/probe-encounter-v1.json",
@@ -27,14 +27,16 @@ pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 19] = [
     "rust/scripts/real-sol-probe-to-commander-responses.json",
     "rust/scripts/real-sol-probe-to-starbase.json",
     "rust/scripts/real-sol-rust-planetside-smoke.json",
+    "rust/scripts/real-sol-starbase-alliance.json",
     "rust/scripts/real-sol-starbase-to-mars.json",
     "rust/scripts/starbase-visit-v1.json",
 ];
 
 /// Pinned scripts that declare a 900 s wall budget.
-const WALL_900_SCRIPTS: [&str; 3] = [
+const WALL_900_SCRIPTS: [&str; 4] = [
     "rust/scripts/real-sol-earth-moon-base.json",
     "rust/scripts/real-sol-luna-moonbase-departure.json",
+    "rust/scripts/real-sol-starbase-alliance.json",
     "rust/scripts/real-sol-starbase-to-mars.json",
 ];
 
@@ -121,7 +123,7 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
-    assert_eq!(longer.len(), 19);
+    assert_eq!(longer.len(), 20);
     for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);
@@ -270,7 +272,7 @@ fn a_900_second_budget_without_the_override_is_refused() {
 }
 
 #[test]
-fn the_three_900_second_scripts_carry_the_override_in_the_authority() {
+fn the_four_900_second_scripts_carry_the_override_in_the_authority() {
     let authority = authority();
     for path in WALL_900_SCRIPTS {
         assert_eq!(

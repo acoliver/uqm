@@ -423,6 +423,12 @@
                 "outer_child_timeout_ms": 900000
           },
           {
+                "path": "rust/scripts/real-sol-starbase-alliance.json",
+                "sha256": "d0bec94ccf85a05401956f9dbb1160baf9292608afe74a7d5f17f7695dc6dc9a",
+                "byte_length": 6693,
+                "outer_child_timeout_ms": 900000
+          },
+          {
                 "path": "rust/scripts/real-sol-starbase-to-mars.json",
                 "sha256": "c61abec74de55804120d6d981bede22efa76afe6ad2a2924859157049389ba39",
                 "byte_length": 5347,

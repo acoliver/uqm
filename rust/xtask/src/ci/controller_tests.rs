@@ -39,9 +39,9 @@ fn successful_full_and_pr_selection_require_exact_ordered_original_pins() {
         assert_eq!(
             selected.len(),
             if event == WorkflowEvent::PullRequestTarget {
-                2
+                3
             } else {
-                33
+                34
             }
         );
         assert!(selected
@@ -142,7 +142,7 @@ fn non_utf8_empty_and_unmapped_diffs_preserve_full_coverage() {
                 .selected(&authority, &bound.source_sha, policy)
                 .unwrap()
                 .len(),
-            33
+            34
         );
     }
 }

@@ -210,6 +210,28 @@ These edits have not run in a real window yet.
   Budgets: 50000 ticks, 600 s wall, so it joins the 900 s outer deadline list.
   Not played live: whether the lander reaches a radioactive deposit within
   3000 ticks of the default landing site on Mercury is unconfirmed.
+- `real-sol-starbase-alliance` (new game, communication choices, navigation,
+  planet-side results, battle outcomes, Starbase; #226) plays the complete C
+  chain to an allied Starbase in one run, so it can be played in a real window.
+  It handles the probe broadcast, talks to the Commander (visit 1, picks `[0]`
+  then `[0]`), lands on Mercury and collects a radioactive unit exactly as
+  `real-sol-mercury-radioactives` does, takes the Luna moonbase with the
+  `probe-encounter-v3` landing (19 tick Up hold, six Cancels), then revisits the
+  Commander (picks `we_will_transfer_now`, `we_are_vindicator0`,
+  `our_mission_was_secret`, `we_are_here_to_help`, `base_was_abandoned`, all
+  index 0, each after `wait_for_communication_responses`). The Ilwrath
+  conversation (`wait_for_communication_responses` 4, pick 0) starts the
+  battle, `assert_mode battle`, `fight_battle` fights it to a win, and the
+  Commander's `VERY_IMPRESSIVE` talk (3 options, then the 4 alliance names)
+  sets `STARBASE_AVAILABLE`. The same visit continues into time passage and the
+  allied Commander talk (2 options, pick 1), then `assert_mode starbase` proves
+  the menu. Captures: `commander-first-visit-done`, the three Mercury captures,
+  `luna-moonbase-collected`, `commander-radioactives-offer`, `ilwrath-battle`,
+  `ilwrath-defeated`, `allied-starbase-menu`. It asserts no resource numbers,
+  since the refuel and 14 day passage values have not been observed live.
+  Budgets: 160000 ticks, 900 s wall (outer deadline pin 900000 ms). Not played
+  live: every step after the Luna return, and whether `fight_battle` wins the
+  Ilwrath fight within 6000 ticks.
 - `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
   `CHECK_ABORT` directly for Quit (`restart.c`; `DoConfirmExit` is not on this
   path) and the game exits before the next input callback, so the scripted

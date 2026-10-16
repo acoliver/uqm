@@ -155,6 +155,17 @@ pub const MATRIX: &[ScenarioRow] = &[
         &[Domain::NavigationOrbitScan, Domain::PlanetSideResults],
     ),
     row(
+        "real-sol-starbase-alliance",
+        &[
+            Domain::NewGame,
+            Domain::CommunicationChoices,
+            Domain::NavigationOrbitScan,
+            Domain::PlanetSideResults,
+            Domain::BattleOutcomes,
+            Domain::Starbase,
+        ],
+    ),
+    row(
         "real-sol-planetside-collision-proof",
         &[Domain::PlanetSideResults],
     ),
