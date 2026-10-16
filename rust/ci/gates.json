@@ -480,6 +480,13 @@
       "observer_response_budget_bytes": 65536,
       "capture_budget_bytes": 67108864,
       "content_expansion_budget_bytes": 33554432,
+      "inventory_limits": {
+        "member_count": 10000,
+        "member_bytes": 67108864,
+        "aggregate_bytes": 1073741824,
+        "path_bytes": 4096,
+        "aggregate_path_bytes": 8388608
+      },
       "expected_client_bounds": {
         "x": 80,
         "y": 80,
