@@ -53,7 +53,7 @@ unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
 
 /// A caller that does not want the node still gets the draws, so the stream
 /// stays in step: C wrote into a local in that case.
-unsafe fn node_or<'a>(info: *mut NODE_INFO, spare: &'a mut NODE_INFO) -> &'a mut NODE_INFO {
+unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mut NODE_INFO {
     if info.is_null() {
         spare
     } else {
