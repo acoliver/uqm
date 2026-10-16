@@ -19,11 +19,6 @@ else
 	uqm_CFILES="$uqm_CFILES clock.c"
 fi
 
-# Exclude rust_comm.c when USE_RUST_COMM is disabled
-if [ "$uqm_USE_RUST_COMM" = "1" ]; then
-	uqm_CFILES="$uqm_CFILES rust_comm.c"
-fi
-
 # Include Rust bridge helpers when Rust subsystems are enabled
 if [ "$uqm_USE_RUST_SHIPS" = "1" ]; then
 	uqm_CFILES="$uqm_CFILES rust_bridge_ships.c"

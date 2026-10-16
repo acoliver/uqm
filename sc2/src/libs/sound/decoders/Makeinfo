@@ -1,5 +1,5 @@
-uqm_CFILES="decoder.c aiffaud.c wav.c dukaud.c modaud.c"
-uqm_HFILES="aiffaud.h decoder.h dukaud.h modaud.h wav.h"
+uqm_CFILES="decoder.c aiffaud.c wav.c dukaud.c"
+uqm_HFILES="aiffaud.h decoder.h dukaud.h wav.h"
 
 if [ "$uqm_OGGVORBIS" '!=' "none" ]; then
 	# When USE_RUST_OGG is set, we use the Rust Ogg decoder instead of oggaud.c
