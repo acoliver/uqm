@@ -244,6 +244,26 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
     None
 }
 
+/// The flagship's authoritative `ElementAmounts`, indexed by element category.
+///
+/// The lander hold is added to these when it returns to the ship, so they
+/// change only after the trip. Nothing is written.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some(std::ptr::addr_of!((*sis_state).element_amounts).read())
+    }
+}
+
+/// Without the linked game there is no flagship state to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
+    None
+}
+
 /// Sample the live solar system for flying out of it, without a target.
 ///
 /// `active` is 0 whenever no solar system is live, which is how a departure

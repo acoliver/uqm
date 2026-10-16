@@ -63,12 +63,14 @@ mod native_trace_oracle;
 pub mod native_window;
 pub mod navigation;
 pub mod outcome;
+pub mod planet_minerals;
 pub mod proof;
 pub mod runtime;
 pub mod scenario;
 pub mod scheduler;
 pub mod script;
 pub mod setup;
+pub mod ship_element;
 pub mod ship_resources;
 pub mod suite;
 pub mod sync_model;
@@ -134,15 +136,16 @@ pub use proof::{
 pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePlan};
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
-    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion,
-    HyperspaceDisplacementAssertion, MainMenuTransition, MenuKey, NavigateToHyperspaceStep,
-    NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
-    PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep, RootDocument, SceneAssertion,
-    ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
-    SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, ShipResourcesAssertion, TapMenuKeyStep,
-    TapPlayerKeyStep, TurnDirection, TurnFlagshipStep, ValidatedScript, WaitForBattleFramesStep,
-    WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep,
-    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    CollectPlanetMineralsStep, CommunicationResponsesAssertion, DispatchAssertion,
+    GameOptionsAssertion, HyperspaceDisplacementAssertion, MainMenuTransition, MenuKey,
+    NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
+    PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep,
+    RootDocument, SceneAssertion, ScriptStep, SelectCommunicationResponseStep,
+    SelectPlanetMenuStep, SetMenuKeyStep, SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep,
+    ShipElementAssertion, ShipResourcesAssertion, TapMenuKeyStep, TapPlayerKeyStep, TurnDirection,
+    TurnFlagshipStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+    WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep, WaitForDispatchStep,
+    WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
     WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};

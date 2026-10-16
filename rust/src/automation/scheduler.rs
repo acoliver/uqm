@@ -306,7 +306,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
-        | Action::TurnFlagship(_) => {
+        | Action::TurnFlagship(_)
+        | Action::CollectPlanetMinerals(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -402,6 +403,7 @@ pub fn scheduler_reduce(
                     | Action::NavigateToOrbit(_)
                     | Action::NavigateToHyperspace(_)
                     | Action::TurnFlagship(_)
+                    | Action::CollectPlanetMinerals(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -843,7 +845,8 @@ fn reduce_navigation(
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -857,16 +860,19 @@ fn reduce_navigation(
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
-        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
-            new_state: SchedulerState {
-                phase: ActionPhase::Navigating {
-                    remaining: remaining - 1,
+        | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining })
+        | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
                 },
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -889,6 +895,18 @@ fn reduce_navigation(
             },
             effects: EffectPlan::none(),
         },
+        (Action::CollectPlanetMinerals(collect), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: collect.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -1316,6 +1334,7 @@ fn reduce_capture_and_assertion(
         | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
         | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
+        | (Action::AssertShipElement(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -2014,6 +2033,24 @@ mod tests {
             Action::AssertShipResources(ShipResourcesAssertion {
                 fuel_on_board: Some(1000),
                 res_units: Some(0),
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let state = SchedulerState::initial();
+        let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(t.new_state.step_index, 1);
+        assert_eq!(t.effects, EffectPlan::none());
+    }
+
+    #[test]
+    fn ship_element_assertion_advances_without_input_effects() {
+        use crate::automation::script::ShipElementAssertion;
+        use crate::planet_side::cargo::ElementCategory;
+        let actions = [
+            Action::AssertShipElement(ShipElementAssertion {
+                category: ElementCategory::Radioactive,
+                minimum: 1,
             }),
             Action::Finish,
         ];
@@ -3173,12 +3210,14 @@ mod tests {
 mod budgeted_wait_tests {
     use super::*;
     use crate::automation::script::{
-        NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
-        PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
-        SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep, WaitForBattleFramesStep,
-        WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
-        WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
+        CollectPlanetMineralsStep, NavigateToHyperspaceStep, NavigateToMoonStep,
+        NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName,
+        SelectCommunicationResponseStep, SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep,
+        WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
+        WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
     };
+
+    use crate::planet_side::cargo::ElementCategory;
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
         vec![
@@ -3199,6 +3238,11 @@ mod budgeted_wait_tests {
             Action::TurnFlagship(TurnFlagshipStep {
                 direction: TurnDirection::Right,
                 facings: 4,
+                max_ticks,
+            }),
+            Action::CollectPlanetMinerals(CollectPlanetMineralsStep {
+                category: ElementCategory::Radioactive,
+                minimum_units: 1,
                 max_ticks,
             }),
         ]
@@ -3244,6 +3288,7 @@ mod budgeted_wait_tests {
                 | Action::NavigateToOrbit(_)
                 | Action::NavigateToHyperspace(_)
                 | Action::TurnFlagship(_)
+                | Action::CollectPlanetMinerals(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {

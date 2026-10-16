@@ -17,6 +17,7 @@ use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::c_extern::ONE_SECOND;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
+use crate::planet_side::cargo::ElementCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
@@ -503,6 +504,27 @@ pub struct TurnFlagshipStep {
     pub max_ticks: u64,
 }
 
+/// A `collect_planet_minerals` step drives the planet-side lander with
+/// player input until its hold carries `minimum_units` units of `category`,
+/// and fails when it does not within `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CollectPlanetMineralsStep {
+    pub category: ElementCategory,
+    pub minimum_units: u16,
+    pub max_ticks: u64,
+}
+
+/// An `assert_ship_element` step requires the flagship to hold at least
+/// `minimum` units of an element category, as `GLOBAL_SIS` records it after
+/// the lander returned.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ShipElementAssertion {
+    pub category: ElementCategory,
+    pub minimum: u16,
+}
+
 /// Wait until a Rust PlanetSide session has started.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -776,6 +798,7 @@ pub enum Action {
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
     TurnFlagship(TurnFlagshipStep),
+    CollectPlanetMinerals(CollectPlanetMineralsStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -791,6 +814,7 @@ pub enum Action {
     RecordHyperspacePosition(RecordHyperspacePositionStep),
     AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
     AssertShipResources(ShipResourcesAssertion),
+    AssertShipElement(ShipElementAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
@@ -1893,6 +1917,16 @@ fn validate_navigation_step(
             }
             turn.max_ticks
         }
+        Action::CollectPlanetMinerals(collect) => {
+            if collect.minimum_units == 0 || collect.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "collect_planet_minerals requires positive minimum_units and max_ticks",
+                )));
+            }
+            collect.max_ticks
+        }
         Action::NavigateToPlanet(navigation) => {
             if navigation.planet > 8 {
                 return Some(Err(AutomationError::step(
@@ -1984,6 +2018,15 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_ship_resources: state fuel_on_board, res_units or both",
+                ));
+            }
+        }
+        Action::AssertShipElement(assertion) => {
+            if assertion.minimum == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_ship_element: minimum must be greater than zero",
                 ));
             }
         }
@@ -3708,6 +3751,83 @@ mod tests {
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
         let roomy = tight.replace("\"max_input_ticks\":2", "\"max_input_ticks\":3");
         assert!(validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).is_ok());
+    }
+
+    // --- collect_planet_minerals / assert_ship_element ---
+
+    fn validated_steps(steps: &str) -> Result<ValidatedScript, AutomationError> {
+        let text = turn_script(steps);
+        validate_script(parse_script(text.as_bytes(), "m.json").unwrap(), "m.json")
+    }
+
+    #[test]
+    fn collect_planet_minerals_parses_the_category_by_name() {
+        let script = validated_steps(
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::CollectPlanetMinerals(CollectPlanetMineralsStep {
+                category: ElementCategory::Radioactive,
+                minimum_units: 1,
+                max_ticks: 2400,
+            })
+        );
+    }
+
+    #[test]
+    fn collect_planet_minerals_rejects_zero_bounds_unknown_categories_and_fields() {
+        for bad in [
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":0,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":0}"#,
+        ] {
+            assert!(validated_steps(bad).is_err(), "{bad} must be rejected");
+        }
+        for bad in [
+            r#"{"action":"collect_planet_minerals","category":"uranium","minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"Radioactive","minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":6,"minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":-1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":10,"grant":5}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn collect_planet_minerals_counts_against_the_input_budget() {
+        let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn assert_ship_element_parses_and_requires_a_positive_minimum() {
+        let script = validated_steps(
+            r#"{"action":"assert_ship_element","category":"radioactive","minimum":1}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::AssertShipElement(ShipElementAssertion {
+                category: ElementCategory::Radioactive,
+                minimum: 1,
+            })
+        );
+        assert!(validated_steps(
+            r#"{"action":"assert_ship_element","category":"radioactive","minimum":0}"#
+        )
+        .is_err());
+        for bad in [
+            r#"{"action":"assert_ship_element","category":"plutonium","minimum":1}"#,
+            r#"{"action":"assert_ship_element","minimum":1}"#,
+            r#"{"action":"assert_ship_element","category":"exotic","minimum":1,"grant":1}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
     }
 
     // --- capability contract ---

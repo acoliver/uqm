@@ -20,6 +20,7 @@ use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
 use crate::automation::mode;
 use crate::automation::outcome::TerminalClass;
+use crate::automation::planet_minerals::{self, CollectProgress, PlanetMineralsTracker};
 use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
@@ -27,6 +28,7 @@ use crate::automation::scheduler::{
     SchedulerState, TerminalOutcome,
 };
 use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
+use crate::automation::ship_element;
 use crate::automation::ship_resources;
 use crate::automation::trace::{
     ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
@@ -268,6 +270,8 @@ struct CoordInner {
     flight_position: FlightPositionTracker,
     /// Facing at which the current `turn_flagship` step began.
     flagship_turn: FlagshipTurnTracker,
+    /// Ticks and trip of the current `collect_planet_minerals` step.
+    planet_minerals: PlanetMineralsTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -428,6 +432,7 @@ impl Coordinator {
                 verified_battle_frames: 0,
                 flight_position: FlightPositionTracker::default(),
                 flagship_turn: FlagshipTurnTracker::default(),
+                planet_minerals: PlanetMineralsTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -965,6 +970,50 @@ impl Coordinator {
         }
     }
 
+    /// Drive the planet-side lander toward the nearest deposit of the
+    /// requested category until its hold carries the requested units.
+    fn service_planet_minerals(
+        &self,
+        inner: &mut CoordInner,
+        collect: crate::automation::script::CollectPlanetMineralsStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::navigation::NavigationControl;
+
+        let progress = inner
+            .planet_minerals
+            .observe(&planet_minerals::PlanetSnapshot::live(), &collect);
+        match progress {
+            Ok(CollectProgress::Steering(control)) => {
+                if !Self::set_navigation_controls(control) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(CollectProgress::Complete(proof)) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    error.trace_label(&collect),
+                );
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
     fn service_hyperspace_departure(
         &self,
         inner: &mut CoordInner,
@@ -1135,6 +1184,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
+        } else if let Some(Action::CollectPlanetMinerals(collect)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_planet_minerals(inner, *collect, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1632,6 +1685,30 @@ impl Coordinator {
             match ship_resources::assert_ship_resources(
                 mode::require_live(),
                 ship_resources::live_resources(),
+                *assertion,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertShipElement(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match ship_element::assert_ship_element(
+                mode::require_live(),
+                ship_element::live_amounts(),
                 *assertion,
             ) {
                 Ok(proof) => self.write_trace_labeled(

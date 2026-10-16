@@ -29,6 +29,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertBattleFrames(_)
         | Action::AssertHyperspaceDisplacement(_)
         | Action::AssertShipResources(_)
+        | Action::AssertShipElement(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
         Action::WaitForMainMenuReady(_)
@@ -44,6 +45,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
+        | Action::CollectPlanetMinerals(_)
         | Action::SelectPlanetMenu(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
@@ -420,6 +422,24 @@ mod tests {
         } else {
             vec![evidence, present, checkpoint]
         }
+    }
+
+    #[test]
+    fn mineral_collection_is_navigation_and_the_element_assertion_is_an_assertion() {
+        let collect = serde_json::json!({
+            "action":"collect_planet_minerals","category":"radioactive",
+            "minimum_units":1,"max_ticks":600
+        });
+        let element = serde_json::json!({
+            "action":"assert_ship_element","category":"radioactive","minimum":1
+        });
+        let (source, script) = script(serde_json::json!([collect, element, {"action":"finish"}]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let classes: Vec<_> = plan.checkpoints.iter().map(|item| item.class).collect();
+        assert_eq!(
+            classes,
+            vec![CheckpointClass::Navigation, CheckpointClass::Assertion]
+        );
     }
 
     #[test]
