@@ -1271,17 +1271,12 @@ pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError
         crate::comm::ffi::set_comm_intro_mode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
-        // Check if the Ur-Quan probe Ilwrath encounter should happen
-        if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
-            || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0
+        // Without the Ilwrath chain the visit ends here and the Starbase stays
+        // unavailable (starbase.c:454-459).
+        if crate::starbase::finish_unallied_commander_talk(&platform)
+            == crate::starbase::UnalliedVisit::LeftForSpace
         {
-            // The unallied commander conversation is complete. Marking the
-            // starbase available prevents the opening probe from being rebuilt
-            // on every return to interplanetary flight.
-            set_game_state("STARBASE_AVAILABLE", 1);
-            set_game_state("STARBASE_VISITED", 1);
             crate::automation::input_ffi::rust_automation_service_boundary();
-            crate::starbase::cleanup_after_visit(&platform);
             return Ok(());
         }
 

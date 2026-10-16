@@ -217,6 +217,27 @@ pub fn steer_moon_navigation(observation: NavigationObservation) -> NavigationCo
     )
 }
 
+/// Route toward a moon of `target_planet`, wherever the ship currently is.
+///
+/// Moons exist only inside their planet's inner system, so the moon controller
+/// is only meaningful once the ship is in that inner system. From the outer
+/// system, or from another planet's inner system, the ship first flies to the
+/// planet exactly as `navigate_to_planet` does: `steer_toward_target` leaves a
+/// wrong inner system outward, then closes on the planet in the outer view
+/// (whose position the observation reports as the target) to enter its inner
+/// system.
+#[must_use]
+pub fn steer_moon_route(
+    observation: NavigationObservation,
+    target_planet: u8,
+) -> NavigationControl {
+    if observation.inner_planet == Some(target_planet) {
+        steer_moon_navigation(observation)
+    } else {
+        steer_toward_target(observation)
+    }
+}
+
 /// Speed held while leaving a moon whose collision guard is still set.
 const MOON_BACKOFF_SPEED: f64 = 8.0;
 
@@ -700,6 +721,71 @@ mod tests {
                 ..NavigationControl::default()
             }
         );
+    }
+
+    #[test]
+    fn moon_route_leaves_another_planets_inner_system_instead_of_chasing_the_moon_point() {
+        // Mercury (0) inner system while Earth (2) is the target planet. The
+        // ship sits down-left of the view centre; the reported target is a
+        // meaningless point to its right. Facing 4 points at that point, so a
+        // moon controller would thrust; the route must instead turn outward.
+        let mut state = observation(77, 145, 4, 82, 145);
+        state.inner_planet = Some(0);
+        let control = steer_moon_route(state, 2);
+        assert_eq!(control, steer_toward_target(state));
+        assert!(!control.thrust);
+        assert!(control.left ^ control.right);
+    }
+
+    #[test]
+    fn moon_route_thrusts_outward_once_aligned_in_another_planets_inner_system() {
+        // Outward from (121, 113) through (77, 145) is facing 10 or 11.
+        let mut state = observation(77, 145, 11, 82, 145);
+        state.inner_planet = Some(0);
+        assert!(steer_moon_route(state, 2).thrust);
+    }
+
+    #[test]
+    fn moon_route_flies_to_the_planet_from_the_outer_system() {
+        // Outer system: the target is the planet's display position.
+        let state = observation(100, 200, 0, 100, 100);
+        assert_eq!(
+            steer_moon_route(state, 2),
+            NavigationControl {
+                thrust: true,
+                ..NavigationControl::default()
+            }
+        );
+        let turning = observation(100, 100, 0, 200, 100);
+        assert!(steer_moon_route(turning, 2).right);
+    }
+
+    #[test]
+    fn moon_route_uses_the_moon_controller_inside_the_target_planets_inner_system() {
+        let mut state = observation(100, 200, 0, 100, 100);
+        state.inner_planet = Some(2);
+        assert_eq!(steer_moon_route(state, 2), steer_moon_navigation(state));
+        // Pure pursuit would fly outward from the view centre here; the moon
+        // controller closes on the moon instead.
+        assert_ne!(steer_moon_route(state, 2), steer_toward_target(state));
+        let mut guarded = observation(100, 100, 0, 100, 100);
+        guarded.inner_planet = Some(2);
+        guarded.target_guard_active = true;
+        assert_eq!(steer_moon_route(guarded, 2), steer_moon_navigation(guarded));
+    }
+
+    #[test]
+    fn moon_route_leaves_a_wrong_orbit_in_any_system() {
+        let mut state = observation(111, 160, 0, 86, 113);
+        state.in_orbit = true;
+        let leave = NavigationControl {
+            leave_orbit: true,
+            ..NavigationControl::default()
+        };
+        state.inner_planet = Some(0);
+        assert_eq!(steer_moon_route(state, 2), leave);
+        state.inner_planet = Some(2);
+        assert_eq!(steer_moon_route(state, 2), leave);
     }
 
     #[test]

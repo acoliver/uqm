@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "b0ca66f327475151c15dc0560ba4252d0b1068054a10cca03c2192df24ca3e5d",
+    "projection_sha256": "f1b46a6efa1c41de1c155ad4903c14c946e1f16f940260f99fe75170c55b3f90",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2571,7 +2571,7 @@
       "issue": "CORE_NATIVE",
       "canonical_source": "sc2/src/uqm/pickship.c",
       "scan_root": "native",
-      "sha256": "639f4d1d7c90a64b0d1db7ab8965a537d3956ec2801d89b21fcd32bad2ea8561",
+      "sha256": "f4362292d461e84e1921d037d033c3f385c81100c521a3fe262b5847fae6af9c",
       "archive_decision": "include",
       "provider": "native_object:native/pickship.c.o",
       "reason": "Transitional C ambient archive member",

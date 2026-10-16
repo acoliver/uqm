@@ -47,7 +47,10 @@ captures, logs, and teardown receipt.
 the normal menu path, asserts the full activity word has the `SUPER_MELEE` base
 and `IN_BATTLE` flag, selects the human combatant through player-one weapon
 input, waits for real combat, captures the exact composited frame committed by
-the renderer, and requires at least 30 monotonic observations from the real
+the renderer (`super-melee-battle-start` is taken right after
+`assert_battle_frames` proves frames are being drawn, because a fixed delay
+after Select sometimes still showed the team selection screen), and requires at
+least 30 monotonic observations from the real
 production battle loop. The observer counts completed battle-loop frames; it
 does not claim combat elapsed time, animation frames, or unique pixel output.
 
@@ -83,29 +86,31 @@ distance than the opening tank (1000 raw fuel) can pay for, so they prepare the
 ship before the original flight sequence, using only the inputs a player has:
 
 1. `assert_ship_resources` requires the new-game state, 1000 raw fuel and 0 RU.
-2. The opening probe broadcast, then a Luna landing on the moon base node. The
-   lander picks the node up, which sets `MOONBASE_ON_SHIP`.
-3. A first Starbase visit (the unallied Commander conversation), then a second
-   visit. With the moon base on board the Commander pays 2500 RU through
-   `DeltaSISGauges`, and `assert_ship_resources` requires 970 raw fuel and
-   2500 RU once the Starbase menu is up. The 30 raw fuel are the one Luna
-   landing that precedes it: `DispatchLander` pays
-   `min(SurfaceGravity << 1, 3 * FUEL_TANK_SCALE)`, Luna's gravity is
-   60 * 25 / 100 = 15, so the cost is 30. No hyperspace flight happens before
-   this check.
-   The second visit's dispatch only starts the conversation; the Commander's
-   callback registers its response choices afterwards, while the greeting plays.
-   `wait_for_communication_responses` (minimum 2, at most 1000 ticks) waits for a
-   response list of the current conversation, newer than any list already
-   selected, with that many choices. Only then does the unchanged
-   `assert_communication_responses` (minimum 2) run. The wait never selects or
-   skips speech, and a timeout ends the run with a trace record naming the
-   observed state.
+2. Since #226 the Starbase menu is only reachable through the complete C chain
+   that `real-sol-starbase-alliance` plays (the earlier shortcut that allied the
+   Starbase after the first Commander talk is gone): probe broadcast, Commander
+   visit 1, a Mercury landing that carries a radioactive unit aboard, the Luna
+   moon base landing (the lander picks the node up, which sets
+   `MOONBASE_ON_SHIP`), Commander visit 2, the Ilwrath conversation and fight,
+   the Commander's alliance talk and the allied talk ended with goodbye. The
+   chain is copied verbatim from the alliance script.
+3. With the moon base on board the allied Commander pays 2500 RU through
+   `DeltaSISGauges` (`starbas.c:1659`; the Ilwrath fragment suppresses the
+   salvage tally, `encount.c`, so the fight pays nothing; nothing is sold), and
+   `assert_ship_resources` requires 896 raw fuel and 2500 RU once the Starbase
+   menu is up. The 104 raw fuel are the two landings that precede it:
+   `getLandingFuelNeeded` pays `min(SurfaceGravity << 1, 3 * FUEL_TANK_SCALE)`.
+   Luna's gravity is 60 * 25 / 100 = 15 (30 raw, confirmed in a real window by
+   the earlier 970 proof); Mercury's `gensol.c` overrides are density 98 and
+   radius 38, gravity 98 * 38 / 100 = 37, so 74 raw. No hyperspace flight
+   happens before this check, and the Commander gives no fuel on this path
+   (`need_fuel_*` is never picked). The 896 is derived from the C code, not
+   observed: it needs a real-window confirmation.
 4. In the Outfit screen, 50 presses of Up each buy 100 raw fuel for 20 RU.
-   `assert_ship_resources` requires 6000 raw fuel (reserve 1000 plus the
-   5000 tank) and 1500 RU. Entering Outfit first rounds the 970 raw fuel to
-   the nearest whole unit, 1000, so the 50 purchases end at
-   1000 + 50 * 100 = 6000 and 2500 - 50 * 20 = 1500.
+   `assert_ship_resources` requires 5900 raw fuel and 1500 RU. Entering Outfit
+   first rounds the 896 raw fuel to the nearest whole unit, 900, so the 50
+   purchases end at 900 + 50 * 100 = 5900 and 2500 - 50 * 20 = 1500. The
+   tank can hold 6000, so the last 100 raw fuel are simply not bought.
 5. Depart, then require the same state again before the flight starts.
 
 `assert_ship_resources` reads `GLOBAL_SIS(FuelOnBoard)` and
@@ -116,6 +121,7 @@ observed and the expected values.
 Limits of this preparation:
 
 - Only `probe-encounter-v3` and `probe-encounter-v4` carry the preparation.
+  Both now declare 900 s wall budgets and the 900000 ms outer deadline pin.
   `probe-encounter-v1`, `-v2`, `-v5`, `-v6` and `-v7` still start from the
   opening 1000 raw fuel, which pays for about 1100 thrust ticks (0.009 HUD
   fuel per tick, derived from one real-window run). Their total thrust is
@@ -133,39 +139,38 @@ Limits of this preparation:
 
 ## Starbase visit
 
-`starbase-visit-v1` is a real Starbase visit. It reuses the fuel-preparation
-route of `probe-encounter-v3` unchanged up to the Starbase menu (probe
-broadcast, Luna landing, first and second Commander conversation), so the
-Commander has paid 2500 RU and the ship has paid 30 raw fuel for the Luna
-landing. The visit then runs, using only menu input:
+`starbase-visit-v1` is a real Starbase visit. It plays the allied chain of
+`real-sol-starbase-alliance` up to the Starbase menu (see "Fuel preparation"),
+so the allied Commander has paid 2500 RU and the ship has paid 104 raw fuel for
+the Mercury and Luna landings (derived from C, not yet observed live). The
+visit then runs, using only menu input:
 
-1. `assert_mode starbase` and `assert_ship_resources` 970 raw fuel / 2500 RU at
+1. `assert_mode starbase` and `assert_ship_resources` 896 raw fuel / 2500 RU at
    the Starbase menu, capture `starbase-menu-arrival-commander-highlighted`.
 2. Down, Select opens Outfit. `assert_mode starbase` (the docked observation
    holds while Outfit is the active input loop) and `assert_ship_resources`
-   1000 / 2500: Outfit rounds 970 up to the whole unit when it opens.
+   900 / 2500: Outfit rounds 896 to the nearest whole unit when it opens.
 3. Select enters fuel adjust, one Up buys 100 raw fuel for 20 RU:
-   `assert_ship_resources` 1100 / 2480. A second Up: 1200 / 2460. Select leaves
+   `assert_ship_resources` 1000 / 2480. A second Up: 1100 / 2460. Select leaves
    fuel adjust (unchanged), Cancel returns to the Starbase menu, and
-   `assert_mode starbase` plus 1200 / 2460 hold again.
+   `assert_mode starbase` plus 1100 / 2460 hold again.
 4. Down, Select opens the Shipyard, Select opens the hangar, Select edits the
    flagship crew. A new ship has a full crew pod (50 of 50), so a hire is
    refused until a member is dismissed. Down dismisses one crew member and
-   refunds `CrewCost` (3 RU): `assert_ship_resources` 1200 / 2463. Up hires the
-   member back for 3 RU: 1200 / 2460. No existing assertion reads
+   refunds `CrewCost` (3 RU): `assert_ship_resources` 1100 / 2463. Up hires the
+   member back for 3 RU: 1100 / 2460. No existing assertion reads
    `CrewEnlisted`, so the crew count itself is proved only through the RU it
    moves. Select, Cancel and Cancel leave the editor, the hangar and the
-   Shipyard; `assert_mode starbase` and 1200 / 2460 hold.
+   Shipyard; `assert_mode starbase` and 1100 / 2460 hold.
 5. Down, Select departs. After 60 ticks `assert_activity` (mask 255, equals 4)
-   proves interplanetary flight and `assert_ship_resources` 1200 / 2460
+   proves interplanetary flight and `assert_ship_resources` 1100 / 2460
    proves the purchases survived the departure.
 
-Budgets: `max_input_ticks` 65752 (the validator's static bound for this step
-list, the minimum it accepts), `max_presentations` 131504 (twice the ticks, as
-in `probe-encounter-v3`), `max_wallclock_seconds` 720. The script is pinned with
-the approved 900000 ms outer deadline like the other scripts above 300 s. Like
-the preparation it extends, the visit has not run live; the first live run
-decides whether the Outfit and Shipyard expectations hold.
+Budgets: `max_input_ticks` 161743 (the validator's static bound for this step
+list, the minimum it accepts), `max_presentations` 323486 (twice the ticks),
+`max_wallclock_seconds` 900. The script is pinned with the approved 900000 ms
+outer deadline. Neither the allied chain's tail nor the visit has run live; the
+first live run decides whether the Outfit and Shipyard expectations hold.
 
 ## Scenario audit limits
 
@@ -201,6 +206,49 @@ These edits have not run in a real window yet.
   `real-sol-starbase-to-mars`: orbit, `assert_mode orbit`, scan, dispatch,
   landing site, `wait_for_planet_side_start`, thrust and weapon, special tap,
   `wait_for_planet_side_end returned`, `assert_mode orbit`.
+- `real-sol-mercury-radioactives` (navigation, orbit and scan, planet-side
+  results; #226) handles the probe broadcast first (`wait_for_communication_end`
+  then `assert_activity 4`, as in `real-sol-probe-to-starbase`), flies to
+  Mercury (Sol planet index 0, accepted by `navigate_to_planet` and
+  `navigate_to_orbit` for 0..=8; the navigation snapshot only rejects an index
+  at or above the system's planet count), then orbit, `assert_mode orbit`,
+  scan, dispatch, landing site and `wait_for_planet_side_start`. On the surface
+  `collect_planet_minerals` drives the lander with player input until the hold
+  carries one radioactive unit, a Special tap launches it,
+  `wait_for_planet_side_end returned` ends the session, and
+  `assert_ship_element radioactive >= 1` proves the unit reached `GLOBAL_SIS`
+  after the lander docked. Captures: `mercury-surface`,
+  `mercury-radioactive-collected`, `mercury-orbit-with-radioactives`. It never
+  visits the Starbase, so it does not depend on the Commander chain below.
+  Budgets: 50000 ticks, 600 s wall, so it joins the 900 s outer deadline list.
+  Not played live: whether the lander reaches a radioactive deposit within
+  3000 ticks of the default landing site on Mercury is unconfirmed.
+- `real-sol-starbase-alliance` (new game, communication choices, navigation,
+  planet-side results, battle outcomes, Starbase; #226) plays the complete C
+  chain to an allied Starbase in one run, so it can be played in a real window.
+  It handles the probe broadcast, talks to the Commander (visit 1, picks `[0]`
+  then `[0]`), lands on Mercury and collects a radioactive unit exactly as
+  `real-sol-mercury-radioactives` does, takes the Luna moonbase with the
+  `probe-encounter-v3` landing (19 tick Up hold, six Cancels), then revisits the
+  Commander (picks `we_will_transfer_now`, `we_are_vindicator0`,
+  `our_mission_was_secret`, `we_are_here_to_help`, `base_was_abandoned`, all
+  index 0, each after `wait_for_communication_responses`). The Ilwrath
+  conversation (`wait_for_communication_responses` 4, pick 0,
+  `wait_for_communication_end` so its completion is consumed before the
+  post-battle response waits) starts the battle, `pick_battle_ship`,
+  `assert_mode battle`, `fight_battle` fights it to a win, and the
+  Commander's `VERY_IMPRESSIVE` talk (3 options, then the 4 alliance names)
+  sets `STARBASE_AVAILABLE`. The same visit continues into time passage and the
+  allied Commander talk (3 options `have_minerals`, `need_info`,
+  `goodbye_commander`; pick 2 ends it, `starbas.c:1647-1736`, `ByeBye`
+  `starbas.c:163`), then `assert_mode starbase` proves
+  the menu. Captures: `commander-first-visit-done`, the three Mercury captures,
+  `luna-moonbase-collected`, `commander-radioactives-offer`, `ilwrath-battle`,
+  `ilwrath-defeated`, `allied-starbase-menu`. It asserts no resource numbers,
+  since the refuel and 14 day passage values have not been observed live.
+  Budgets: 164000 ticks, 900 s wall (outer deadline pin 900000 ms). Not played
+  live: every step after the Luna return, and whether `fight_battle` wins the
+  Ilwrath fight within 6000 ticks.
 - `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
   `CHECK_ABORT` directly for Quit (`restart.c`; `DoConfirmExit` is not on this
   path) and the game exits before the next input callback, so the scripted
@@ -220,7 +268,7 @@ These edits have not run in a real window yet.
 - `load-save-v1` asserts ship resources after the load and, with
   `record_saved_hyperspace_position` / `assert_hyperspace_position_restored`,
   that the loaded hyperspace position equals the saved one (see below).
-- `real-sol-probe-to-starbase` is now the composed journey (new game,
+- `real-sol-starbase-alliance` is now the composed journey (new game,
   communication, navigation, planet side, starbase); `linked-playable-v1`
   narrows to boot menu and battle.
 
@@ -265,21 +313,28 @@ pin the shape of the scripts.
 - `real-sol-probe-to-starbase` (starbase) takes the `probe-encounter-v3`
   route: probe broadcast, Luna landing, first and second Commander
   conversation, then `assert_mode starbase` and `assert_ship_resources`
-  970 raw fuel / 2500 RU (30 fuel for the Luna landing, 2500 RU from the
-  Commander once the moon base is on board). The first Commander dispatch and
-  its capture are kept. Budgets: 65215 ticks, 720 s wall.
-- `real-sol-starbase-to-mars` (starbase and navigation) takes the same route to
-  the Starbase menu, asserts `starbase` mode and 970 / 2500, departs with three
-  Down presses and Select, asserts interplanetary flight and unchanged
-  resources, then flies to Mars as before. The takeoff is proved the way
+  896 raw fuel / 2500 RU (104 fuel for the Mercury and Luna landings, 2500 RU
+  from the allied Commander once the moon base is on board). Since #226 it
+  plays the alliance chain verbatim (the probe captures `real-probe-broadcast`
+  and `real-probe-returned-to-flight` are kept; `real-starbase-commander` went
+  with the shortcut visit). Budgets: 161210 ticks, 900 s wall.
+- `real-sol-starbase-to-mars` (starbase and navigation) plays the alliance
+  chain to the Starbase menu (since #226), asserts `starbase` mode and
+  896 / 2500 (derived from C, not yet observed), departs with three Down
+  presses and Select, asserts interplanetary flight and unchanged resources,
+  then flies to Mars as before. The takeoff is proved the way
   `real-sol-planetside-collision-proof` ends its session: a Special tap, then
   `wait_for_planet_side_end returned`, and only then `assert_mode orbit`.
   Orbit mode already reads true while the lander is on the ground (the planet
   menu phase stays active under it), so the old Escape tap followed by an orbit
-  assert proved nothing. Budgets: 83375 ticks, 900 s wall.
-- `real-sol-earth-moon-base` (navigation, orbit and scan) follows the
-  `probe-encounter-v3` order: probe broadcast, Luna landing, then the two
-  Commander conversations. The first live run landed on Luna but the lander
+  assert proved nothing. Budgets: 191435 ticks, 900 s wall.
+- `real-sol-earth-moon-base` (navigation, orbit and scan) followed the
+  `probe-encounter-v3` order (probe broadcast, Luna landing, then the two
+  Commander conversations) until #226; it now plays the alliance chain (the
+  Luna landing details below still apply to that chain's Luna step, but the
+  `earth-moon-base-report` capture and the `assert_mode solar` /
+  `earth-moon-solar-after-base` pair went with the old prefix; the chain's
+  `assert_activity 4` after the Luna return covers the solar view). The first live run landed on Luna but the lander
   never left (`planet_side_wait_unsatisfied ... active=true phase=Active` for
   6000 ticks) because the six presses were Select; the working route uses Cancel
   six times, a 600 tick wait and `wait_for_planet_side_end returned`. The second
@@ -294,8 +349,10 @@ pin the shape of the scripts.
   system view (a Mars landing still reads as orbit). The capture is labelled
   `earth-moon-solar-after-base`. The script proves the pickup through the
   Commander: the second visit pays 2500 RU only with `MOONBASE_ON_SHIP` set, so
-  the run ends with `assert_mode starbase` and `assert_ship_resources` 970 /
-  2500. Budgets: 65363 ticks, 900 s wall.
+  the run ends with `assert_mode starbase` and `assert_ship_resources` 896 /
+  2500 (derived, not yet observed). Budgets: 161208 ticks, 900 s wall. This
+  script is now the alliance scenario plus a two-step tail; it stays as a
+  separate required scenario.
 - `sol-probe-scene-v1` (communication choices) skips the Urquan speech with
   Cancel, then `wait_for_communication_responses` (minimum 1) and
   `assert_communication_responses` (minimum 1), the same list that
@@ -524,3 +581,444 @@ requires encounter conversation 24 and dialogue conversation 18.
 4. Add parsing, unknown-value, one-shot, safe-boundary, setup-plan, and wrong-
    dispatch tests.
 5. Add a script containing both `assert_scene` and `capture`.
+
+## #226: the Starbase no longer becomes available after the first Commander talk
+
+`rust_visit_starbase` used to set `STARBASE_AVAILABLE` and `STARBASE_VISITED`
+after the unallied Commander conversation. C never did. The shortcut was added
+(8f10ba814) while `CleanupAfterStarBase` was not ported: the visit returned
+with `START_ENCOUNTER` and `GLOBAL_FLAGS_AND_DATA` still set, so the game kept
+re-entering the visit. `cleanup_after_visit` now ports that function, and the
+shortcut is gone (`starbase::finish_unallied_commander_talk`).
+
+Done (this branch): the scripts below now play the alliance chain verbatim
+from `navigate_to_planet 2` through `assert_mode starbase`, keep every
+post-menu step, and expect 896 raw fuel (1000 minus the 74 raw Mercury and
+30 raw Luna landings) and 2500 RU at the menu. The values are derived from the
+C code and need one real-window run. The paragraph below describes the state
+before the rewrite.
+
+Scripts that reached `assert_mode starbase` through the shortcut:
+`probe-encounter-v3`, `probe-encounter-v4`, `real-sol-starbase-to-mars`,
+`starbase-visit-v1` (and the since deleted `real-sol-earth-moon-base` and
+`real-sol-probe-to-starbase`)
+(visit 2 in each, steps 38-45 in v3). Expect them to stop at the second visit (not played live): the
+Starbase is still unallied, so visit 2 is the unallied Commander talk again
+(`comandr.c` `Intro`: `STARBASE_VISITED` set, `RADIOACTIVES_PROVIDED` 0, so
+"do you have radioactives this time"), never the menu. `repro-comm-menu-initial`
+and the `StarbaseCommander` start scene set `STARBASE_AVAILABLE` themselves and
+are unaffected.
+
+The real C sequence the scripts must play (none of it is scriptable by the
+existing prep, and none of it has been played live):
+
+1. First Commander talk (sets `STARBASE_VISITED`).
+2. Fetch radioactives: land on a world with radioactive elements (the
+   Commander points to Mercury), pick up at least one unit with the lander
+   (`select_planet_menu`/`wait_for_planet_side_*` already drive a landing, but
+   there is no typed action to steer the lander onto a mineral deposit), return,
+   `we_will_transfer_now` sets `RADIOACTIVES_PROVIDED` and refuels.
+3. Revisit: `TellMoonBase`, then Luna. Luna's base conversation or fight sets
+   `MOONBASE_DESTROYED`; `MOONBASE_ON_SHIP` is set by the Luna pickup.
+4. Revisit: `BaseDestroyed` offers `base_was_abandoned` / `we_fought_them`
+   (-> `oh_yes_big_fight` / `i_lied_it_was_abandoned` / `i_cant_talk_about_it`).
+   `ByeBye` sets `PROBE_ILWRATH_ENCOUNTER`; the visit goes on.
+5. `VisitStarBase` clones one Ilwrath Avenger into the NPC queue
+   (`starbase.c:462`) and runs `ILWRATH_CONVERSATION`, which starts a one ship
+   battle against the flagship (the Ilwrath cloak and flame; the flagship is
+   the only player ship). Winning needs flight and fire input in a battle that
+   has no typed action yet. `wait_for_battle_ship_loss` can end the wait, but
+   nothing steers or aims. Losing ends the game (`CrewEnlisted == ~0`).
+6. After the battle the Commander talks again (`PROBE_ILWRATH_ENCOUNTER` still
+   1): `cook_their_butts` / `overthrow_evil_aliens` / `annihilate_those_monsters`
+   reset `PROBE_ILWRATH_ENCOUNTER` to 0 and set `STARBASE_AVAILABLE` to 1
+   (`comandr.c:159`). The next visit is the allied one with the menu.
+
+Plan: add a battle driving action (hold thrust/fire toward the Ilwrath until
+`wait_for_battle_ship_loss` for the enemy) and a lander mineral-pickup action,
+then replace the visit-2 block of the six scripts with steps 2-6, keeping every
+existing assertion (`assert_mode starbase`, 970 raw fuel / 2500 RU, Outfit
+purchases). Expected values change: the radioactives trade refuels the ship,
+and the 14-day time passage and 2500 RU arrive on the visit after
+`STARBASE_AVAILABLE` is set. Re-derive the `assert_ship_resources` numbers from
+a real-window run. Until then these scripts are expected to stop at visit 2.
+
+### #226 research: the C chain, verified against the sources
+
+All `comandr.c` lines are `sc2/src/uqm/comm/comandr/comandr.c`. Response indices
+are the zero-based order in which the conversation offers its options, so they
+are the `select_communication_response` indices. The lander-loss and fuel
+options appear first when they apply (`NumLanders == 0`, fuel under two tanks);
+the indices below assume a fresh game where neither does.
+
+Flags: `STARBASE_VISITED` (set at `comandr.c:636`), `RADIOACTIVES_PROVIDED`
+(`comandr.c:566`), `MOONBASE_DESTROYED` + `MOONBASE_ON_SHIP` (both set by the
+Luna pickup, `planets/generate/gensol.c:594-595`), `WILL_DESTROY_BASE`
+(`comandr.c:108`, informational only), `PROBE_ILWRATH_ENCOUNTER`
+(`comandr.c:117/124/131`), `STARBASE_AVAILABLE` (`comandr.c:159`).
+
+1. **Visit 1** (unallied, `Intro` first-visit branch, `comandr.c:630-648`).
+   Options: `[0]` `no_but_well_help0`, `[1]` `yes_this_is_supply_ship`,
+   `[2]` `what_slave_planet`. Pick `[0]` -> `NoRadioactives` (`comandr.c:197`).
+   Options: `[0]` `ok_i_will_get_radios` (ends, `THANKS_FOR_HELPING`),
+   `[1]` `where_can_i_get_radios` (`RADIOS_ON_MERCURY`, then the same two
+   again). Pick `[0]` to end. This matches the live run ("We will leave now to
+   find the elements you require").
+2. **Radioactives**: `RADIOACTIVES_PROVIDED` is only checked against
+   `GLOBAL_SIS (ElementAmounts[RADIOACTIVE])` being nonzero
+   (`comandr.c:203/256/625`), so any one unit of the RADIOACTIVE element
+   category is enough. `RADIOACTIVE` is element category 6
+   (`planets/elemdata.h:37`), worth 8 RU per unit
+   (`globdata.c:381`, `ElementWorth[RADIOACTIVE]`). Mercury is `METAL_WORLD`
+   (`planets/generate/gensol.c:129`), and `METAL_WORLD` in `plandata.c:839-856`
+   lists `{URANIUM, HEAVY_USEFUL}` (uranium is in the radioactive category);
+   `HEAVY_USEFUL` is `MINERAL_DEPOSIT (MODERATE, HEAVY)`
+   (`plandata.c:720`). Mineral generation is
+   `GenerateDefault_generateMinerals` (`gensol.c:61`), so the deposit
+   positions come from the system seed. Io (Jupiter moon 0) is also a
+   `RADIOACTIVE_WORLD` (`gensol.c:221`) but the Commander points at Mercury
+   (`comandr.c:216`). The commander does not take the units: nothing in
+   `GiveRadios` subtracts `ElementAmounts`, it only sets
+   `RADIOACTIVES_PROVIDED` and plays the refuel speech.
+   Rust side: `rust/src/planet_side/cargo.rs` `MineralCargo` accumulates per
+   category (`categories()[6]`), the lander cargo is returned in
+   `ShipDelta::element_amounts` (`session.rs:211`) and added to the ship on
+   return, so the amount is readable after the trip from the ship resources.
+3. **Luna moonbase**: the lander landing at 728,68 in `probe-encounter-v3`
+   (a 19 tick Up hold) is the moonbase energy node
+   (`gensol.c:545-596`: node at `MAP_WIDTH*3/4, MAP_HEIGHT/4`), not a mineral.
+   Its pickup sets `MOONBASE_DESTROYED` and `MOONBASE_ON_SHIP` regardless of
+   `WILL_DESTROY_BASE`. So the existing Luna landing already does the moonbase
+   mission; it gives no radioactives. It must happen before the turn-in talk
+   below, because `RevealSelf` routes `we_are_here_to_help` to `BaseDestroyed`
+   only when `MOONBASE_DESTROYED` is set (`comandr.c:552-555`); otherwise to
+   `TellMoonBase`, which never sets `PROBE_ILWRATH_ENCOUNTER`.
+4. **Visit 2** (radioactives aboard, Luna done). `Intro` (`comandr.c:606-627`)
+   says `DO_YOU_HAVE_RADIO_THIS_TIME`, then `GiveRadios (0)`
+   (`comandr.c:585-592`): `[0]` `we_will_transfer_now` (sets
+   `RADIOACTIVES_PROVIDED`, plays `FUEL_UP0/1`, goes to `RevealSelf (0)`),
+   `[1]` `what_will_you_give_us`, `[2]` `before_radios_we_need_info`.
+   `RevealSelf` (`comandr.c:466-558`) then offers `[0]` `we_are_vindicator0`,
+   `[1]` `first_give_info`. Pick `[0]` each time (the `first_give_info` family
+   flips the stack and re-orders the list): after `we_are_vindicator0` the
+   list is `[0]` `our_mission_was_secret`, `[1]` `first_give_info`; after that
+   it is `[0]` `we_are_here_to_help`, `[1]` `first_give_info`. So the picks are
+   `[0], [0], [0], [0]`: transfer, vindicator, secret, here_to_help.
+   `we_are_here_to_help` -> `BaseDestroyed` (`comandr.c:349`, Luna done):
+   `[0]` `base_was_abandoned` (-> `ByeBye`, `PROBE_ILWRATH_ENCOUNTER` = 1,
+   `HERE_COMES_ILWRATH`, conversation ends) or `[1]` `we_fought_them`
+   (-> `[0]` `oh_yes_big_fight`, `[1]` `i_lied_it_was_abandoned`,
+   `[2]` `i_cant_talk_about_it`, each also sets the flag). Pick `[0]`.
+   If radioactives are NOT aboard on this visit: `AskAfterRadios`
+   (`comandr.c:286`): `[0]` `well_go_get_them_now`, `[1]` `where_get_radios`.
+   The live run showed one option ("Where can we acquire radioactives?")
+   and the leave line; reconcile against the Rust comm option list before
+   scripting indices for that visit.
+5. **Ilwrath fight** (`starbase.c:446-476`): with the flag set,
+   `VisitStarBase` clones one `ILWRATH_SHIP` into `npc_built_ship_q`
+   (`starbase.c:463`) and runs `ILWRATH_CONVERSATION`. The Ilwrath comm
+   (`comm/ilwrath/ilwrathc.c:544-552`) offers four options
+   `[0..3]` (`where_you_come_from`, `it_will_be_a_pleasure`, `surrender`,
+   `be_reasonable`), all `CombatIsInevitable` (`ilwrathc.c:104`,
+   `Segue_hostile`), so any index starts the battle; the comm init picks
+   `Segue_peace` only when the flag is clear (`ilwrathc.c:634-646`), so with
+   the flag set it is hostile. The battle is the flagship against one Ilwrath
+   Avenger; the battle ends when one side has no ship. Losing sets
+   `CrewEnlisted == ~0` and the game ends (`starbase.c:472-474`). There is no
+   scripted outcome. Winning reliably is not established: the flagship needs
+   flight and fire input against the cloaking Avenger, which no action
+   provides.
+6. **After the battle** (`starbase.c:477-483`): `Intro` sees
+   `PROBE_ILWRATH_ENCOUNTER` and says `VERY_IMPRESSIVE` with `[0]`
+   `cook_their_butts`, `[1]` `overthrow_evil_aliens`,
+   `[2]` `annihilate_those_monsters` (`comandr.c:598-605`); any of them resets
+   the flag and sets `STARBASE_AVAILABLE` (`comandr.c:137,159`), then offers
+   the alliance-name list `[0]` `name_1`, `[1]` `name_2`, `[2]` `name_3`,
+   `[3]` `name_40` (`comandr.c:150-157`); any pick ends it with
+   `STARBASE_WILL_BE_READY`. `commglue.c:390-394` now routes the Commander to
+   the allied `init_starbase_comm`.
+7. **Allied visit start** (`starbase.c:488-507`): `MOONBASE_ON_SHIP` is still
+   set, so `DoTimePassage` (14 days) runs and the allied Commander talks
+   (`starbas.c:1644`, `STARBASE_IS_READY_A`; `post_starbase_enc` clears
+   `MOONBASE_ON_SHIP`, `starbas.c:1932`), then `DoStarBase` shows the menu
+   with Outfit. So the same visit that ends the Ilwrath fight is the one that
+   shows the allied menu; no extra visit is required.
+
+What the automation lacks, in order: (a) the lander mineral pickup for
+Mercury (radioactive category 6), (b) driving the Ilwrath battle to a win,
+(c) the script rewrite of visit 2 using the indices above. `rust/src/planet_side`
+currently publishes lander position and crew to the automation (telemetry),
+but not facing, per-category cargo, or deposit positions.
+
+### #226 battle: `pick_battle_ship`
+
+After the Ilwrath hail the full game enters `Battle ()` and `selectAllShips`
+(`battle.c:387`) calls `GetInitialStarShips`, which asks `GetEncounterStarShip`
+for each side (`pickship.c`). The NPC side takes the head of its fleet with no
+input. For the human side (`pickship.c`, full game, `RPG_PLAYER_NUM`) the C
+code returns the flagship without any screen only when this is the first pick
+and `battle_counter[0] == 1`, that is, the player has no escorts. Otherwise it
+runs `GetArmadaStarShip`, whose `DoPickBattleShip` loop waits for
+`KEY_MENU_SELECT` (the flagship column is preselected). After the Commander
+visit the player owns escorts, so the picker is shown and the battle never
+starts without a Select. The real-window run of 77b6c8f16 stalled there: the
+NPC assets loaded, then nothing until the step timed out. There is no Rust
+port of `selectAllShips` or the picker, so no Rust/C divergence.
+
+`pick_battle_ship {max_ticks}` waits until the picker has run its first
+iteration, then presses the real menu Select once and records
+`battle_ship_picked:generation=N`. It fails as a semantic mismatch when no
+picker appears within `max_ticks`, so it also fails if the player has no
+escorts. The observation is `rust_automation_observe_ship_picker` in
+`ui_observation.rs`, called from `pickship.c` (a read-only `1` after the
+picker initialises, a `0` after `DoInput` returns; this is the only C touched,
+and only as observation). Each entry starts a new generation, so one pick
+cannot be reused for a later picker.
+
+### #226 battle: `fight_battle`
+
+`fight_battle {max_ticks}` fights a full-game battle with the player-one keys
+until the battle has ended with the opposing side a ship down and the
+player's flagship alive. It is
+for the Starbase fight (step 5 above): the flagship against one Ilwrath
+Avenger. Nothing in the game is written; the action only holds
+thrust, left, right and weapon.
+
+**How the battle reads player input.** `DoBattle` runs the ship input of each
+side through `PlayerControls[playerNr]`. In the full game side 0 is the human
+player (`RPG_PLAYER_NUM`) and side 1 the NPC (`NPC_PLAYER_NUM`,
+`races.h:STARSHIP.playerNr`, `element.h:ELEMENT.playerNr`). The automation key
+setter writes `ImmediateInputState.key[PlayerControls[0]][index]`
+(`gameinp.c:c_automation_set_immediate_player_key`), so the same
+`inject_player_key` used for flight drives the battle ship: `thrust` (0),
+`left` (2), `right` (3), `weapon` (4), `special` (5). The battle loop is
+already entered through the input hook every frame, which is how the
+`set_player_key` holds of `battle-v1` work.
+
+**What exposes the ships.** The battle is still C-owned, so the reader borrows
+the same queues the hyperspace facing reader borrows. `disp_q` holds every
+live `ELEMENT`; the ship elements carry `PLAYER_SHIP`, `playerNr`,
+`current.location` (world units) and the live crew in `crew_level`, and
+`pParent` is the owning `STARSHIP`, whose `ShipFacing` is the facing 0..15
+(0 is north, clockwise, `ShipFacing` is kept current by `ship.c`). Ship
+counts are `battle_counter[2]` (`battle.c`, `pickship.c`, `tactrans.c`: a ship
+death does `battle_counter[deadStarShip->playerNr]--`), declared once in
+`c_bindings::live_queues`. `battle_counter[0]` is the player side in a full-game
+battle as well, because `Battle ()` sets it from `CountLinks (&race_q[0])` and
+`race_q[RPG_PLAYER_NUM]` is the human fleet; the `battle-v1` Super Melee run
+(11,9 then 10,9 when the player's own ship died) shows the same ordering. The
+walk of `disp_q` is the existing `savegame::runtime::queues::walk`, which
+checks every link against the pool before it is followed.
+The cloak flag (`OBJECT_CLOAKED`) lives in `DisplayArray[PrimIndex]`, which the
+generated bindings do not expose; the fight does not need it, because a
+cloaked Avenger's element and `current.location` are still in `disp_q`.
+
+**The arena.** The battle space is a torus of `LOG_SPACE_WIDTH` by
+`LOG_SPACE_HEIGHT` world units (`units.h`: `DISPLAY_TO_WORLD (SPACE) <<
+MAX_REDUCTION`, so 32 world units per space pixel). The space is the screen
+less the 64 pixel status panel, so the arena depends on `ScreenWidth` and
+`ScreenHeight`: 8192 by 7680 at 320x240. The `battle_types` constants assume
+8192 by 8192, which is only right for a square space, so the action takes the
+size from the live screen (`battle_fight::arena_size`) and wraps deltas with
+`shortest_path_delta`, the same rule as `WRAP_DELTA_X/Y`.
+
+**The ships.** The flagship's primary weapon is the ion blaster
+(`sis_ship.c`): `BLASTER_SPEED` 24 display units (96 world units) for
+`BLASTER_LIFE` 12 frames, so about 1150 world units, forward only (a tracker
+module only bends it), `WEAPON_WAIT` 6, one energy per shot, energy regeneration
+1 per `ENERGY_WAIT` 10 frames. Holding fire all the time drains energy, so the
+fight fires only when aimed and in range. Maximum thrust 10, `TURN_WAIT` 17.
+The Avenger (`ilwrath.c`) has a short hellfire: `MISSILE_SPEED` 25 world
+units a frame (`initialize_missile` takes the speed in world units) for
+`MISSILE_LIFE` 8 frames, from `ILWRATH_OFFSET` 29 display units (116 world
+units) ahead of the ship, so a flame reaches about 290 world units, more
+while the Avenger flies toward its target because the flame inherits its
+velocity. `WEAPON_WAIT` is 0 and `ENERGY_REGENERATION` 4 every `ENERGY_WAIT` 4
+frames pays the 1 energy of each flame, so it can flame every frame without
+running dry; every flame does `MISSILE_DAMAGE` 1 once, so a flagship held in
+the flame loses about one crew a frame. Its maximum thrust is 25, `TURN_WAIT`
+2, and it has a cloak on `special` (`SPECIAL_ENERGY_COST` 3, `SPECIAL_WAIT`
+13). Its intelligence (`ilwrath_intelligence` over `ship_intelligence`) always
+PURSUEs, cloaks when it has no target within about six turns of its aim and no
+flame going, and decloaks to flame when the flagship is within that reach.
+
+**Strategy** (`rust/src/automation/battle_fight.rs`, `engage`).
+
+*Can the flagship kite?* No. The starting flagship has thrust 10 world units a
+frame against the Avenger's 25, and turns one facing per 18 frames
+(`TURN_WAIT` 17 plus the turn itself) against one per 3 for the Avenger, so a
+half turn costs the flagship 8 x 18 = 144 frames. The Avenger crosses the
+bolt's 1152 world units in 46 frames and the 290 unit flame reach in 12 more.
+Backing off cannot open a gap, and the old rule "thrust only while facing
+away" spent those frames turning the flagship's back to the Avenger with the
+gun pointing the wrong way.
+
+*Damage race at contact.* The flagship has 51 crew. The Avenger of the Starbase
+fight has 7: `starbase.c` builds it with `CloneShipFragment (ILWRATH_SHIP, ...,
+7)`, not the 22 of a stock Avenger (the live battle shows `enemy_crew=7`). One
+ion bolt does `BLASTER_DAMAGE` 2 once per `WEAPON_WAIT` 6 frames, so killing
+the Avenger takes 4 hits, at least 24 frames of continuous accurate fire. In
+the flame the flagship loses about one crew a frame, so 51 crew last about 51
+frames of contact. The duel is therefore decided by getting 4 bolts home, and
+a flagship that does not fire at all dies. What decides it is how many bolts
+land before the Avenger gets inside flame reach.
+
+*Policy.* Face the Avenger and shoot it while it comes; spend no frame on
+anything else.
+- Never thrust inside twice the bolt range (2300 world units). The Avenger
+  closes 25 units a frame by itself, so every frame of its approach is a free
+  shot; thrust adds speed the flagship cannot shed (there is no reverse
+  thrust) and spoils the aim. Only an enemy farther than 2300 units is
+  approached, and only when within two facings of the bearing. From 1100 to
+  the Avenger's arrival that is about 40 frames, so about 6 bolts (12 damage,
+  more than half its crew) before the first flame if they all land.
+- Fire whenever the bolt can plausibly hit (`bolt_can_hit`). A miss costs one
+  energy (regenerated at 1 per 10 frames); a withheld shot cost the first
+  tuned rule the fight. The bolt fires when any of these holds:
+  the facing's line passes within `HIT_RADIUS` 80 world units of the Avenger's
+  centre with the Avenger ahead and within the bolt's 1152; or the bearing is
+  within one facing of the heading and the Avenger is within 1152 (one facing
+  off is a hit on a ship-sized target at close range, and the cheap shot is
+  worth it further out); or the bearing is two facings off and the Avenger is
+  under 250 units away (point blank).
+- Turn along the shorter way round toward the bearing whenever the facing
+  differs from it, and keep firing while turning when the rule above allows.
+  Turning never stops until the facing matches, because the Avenger moves
+  faster than the flagship turns.
+- Enemy close behind or cloaked: a cloaked Avenger still has an element and a
+  location, so nothing changes. Behind the flagship the bolt cannot hit, so it
+  turns toward the Avenger by the shorter way, with no thrust and no fire.
+- After the enemy side has lost its ship the flagship releases every key. The
+  flames in flight cannot be outrun (25 units a frame against 10, turning 18
+  frames a facing), so there is nothing to steer toward; it keeps observing
+  until the battle ends and fails at once if it dies meanwhile.
+
+`HIT_RADIUS` is `ENEMY_RADIUS` 64 (about 16 space pixels of hull) plus
+`BOLT_RADIUS` 16 (about 4 pixels), at 4 world units a pixel. These are
+conservative estimates: the frame sizes are in the content package, which the
+Rust side does not read, so no measured extent is available.
+
+*Real-window telemetry that tuned it* (flagship against the 7-crew Avenger
+under the first geometric rule, `HIT_RADIUS` 48, which ignored the target's
+size and never fired):
+
+```
+tick=1  distance=1067 facing_error=9  player_crew=51 enemy_crew=7 action=turn_left
+tick=31 distance=424  facing_error=12 player_crew=51 enemy_crew=7 action=turn_left
+tick=61 distance=164  facing_error=14 player_crew=27 enemy_crew=7 action=turn_left
+tick=91 distance=147  facing_error=15 player_crew=13 enemy_crew=7 action=turn_left
+battle_fight_failed:reason=player_ship_lost
+```
+
+The flagship turned the whole fight, was never within one facing at a range
+where the narrow line test passed, and died. The earlier rule (fire at facing
+error 15, 0 or 1 within 1000 units, commit `a82490f87`) won 2 of 3 runs in
+109 to 166 ticks. Unit tests pin these four situations: (147, error 15) fires
+and turns left, (424, 12) and (1067, 9) turn without firing, (300, 0) fires.
+
+Every 30 ticks the action
+writes `battle_fight_state:tick=T:distance=D:facing_error=E:player_crew=P:
+enemy_crew=C:action=A` (`A` is `hold`, or `turn_left`, `turn_right`, `thrust`
+and `fire` joined by `+`), at most one label per 30 ticks, so real runs give
+the distance, aim and crew curves to tune it against.
+
+**Outcome.** The battle is over when `IN_BATTLE` clears: the last ship's
+explosion has finished (`cleanup_dead_ship`, `tactrans.c`) or
+`rust_bridge_uninit_ships` ran. A ship death does `battle_counter[side]--` at
+the moment it dies (`RecordShipDeath`), about 75 frames before the battle
+ends, so the enemy's counter dropping is not the end: a run-C flagship died in
+that window and the next step waited 6000 ticks for a Commander who never
+came. The ship queue is freed with the battle, so the tracker keeps the
+counters and the flagship's crew from the last tick the battle was running.
+- The first observation records both `battle_counter` values.
+- It fails as a semantic mismatch with
+  `battle_fight_failed:reason=player_ship_lost` as soon as the player's
+  counter is below its start, or the flagship's crew falls to 0 after it has
+  been seen with crew (a ship element starts with crew 0 until its first
+  preprocess, which is not a death). That is the same tick the C code
+  registers the death, not the step timeout.
+- When `IN_BATTLE` clears, the fight is won when the last running tick had the
+  enemy side below its start and the flagship with crew. It records
+  `battle_won:player_left=N:enemy_left=M:ticks=T:player_crew=C`, with `C` the
+  flagship's crew at the last running tick, and the scenario predicate needs
+  `player_crew` of at least 1.
+- A battle that ends with neither side a ship down fails with
+  `reason=not_in_battle`, as does no battle at the start; `reason=timeout`
+  when `max_ticks` observations pass first. Every key is released on
+  completion and on failure. `max_ticks` must be at least 1.
+
+**Steps from the Ilwrath conversation to the won fight** (indices from step 5;
+any of the four picks starts the battle, `[0]` is `where_you_come_from`):
+
+```json
+{"action": "wait_for_communication_responses", "minimum": 4, "max_ticks": 2000},
+{"action": "select_communication_response", "index": 0, "max_ticks": 5000},
+{"action": "pick_battle_ship", "max_ticks": 5000},
+{"action": "wait_for_battle_frames", "minimum": 30, "max_ticks": 3000},
+{"action": "assert_mode", "mode": "battle"},
+{"action": "fight_battle", "max_ticks": 6000},
+{"action": "wait_for_communication_responses", "minimum": 3, "max_ticks": 6000}
+```
+
+The last step is the Commander's `VERY_IMPRESSIVE` reply of step 6 (three
+options). The scenario budget `max_input_ticks` must cover the 6000 ticks.
+This was not run against the live game here; it is verified by unit tests of
+the decision, tracker, script, scheduler, predicate and checkpoint.
+
+## Start saves: the Starbase chain is played once
+
+Six scripts used to replay the same eight-minute chain (new game, probe,
+Commander, Mercury, Luna moon base, Ilwrath battle, alliance) before their own
+steps. The chain is now played once, by `real-sol-starbase-alliance`, and later
+scenarios start from the save it makes.
+
+- `real-sol-earth-moon-base` and `real-sol-probe-to-starbase` were strict
+  subsets of the alliance script (they differed only in two captures and the
+  896 fuel / 2500 RU assertion at the menu). Those captures and the assertion
+  moved into the alliance script and the two scripts are deleted.
+- The Starbase menu has no Game options, so the alliance script departs the
+  Starbase (Down x3, Select), asserts interplanetary activity and 896 fuel /
+  2500 RU, then saves to slot 0 through the flight Game menu
+  (`cancel, up, up, select`, `assert_game_options`, Select to open Save, Select
+  for slot 0, Select to confirm). The save is therefore taken in interplanetary
+  flight beside Earth. The Starbase is allied by then, so a visit goes straight
+  to the Starbase menu with no conversation.
+- A script declares `"start_save": {"path": "saves/allied-starbase.sav",
+  "slot": 0}`. The path is relative to the script's directory and must be one
+  `saves/<name>.sav` file. Before launch the harness copies it to
+  `<configdir>/save/uqmsave.00` (`uqmsave.NN` for slot NN) and keeps a copy as
+  `inputs/start-save.sav` in the run. The script then loads it through the real
+  main menu: Down, Select (Load Game), Select (slot 0). The final config the run
+  retains (`config-final/save/`) holds whatever saves the run wrote.
+- `rust/ci/gates.json` pins each save (`native_acceptance.start_saves`: path,
+  sha256, byte_length) the way it pins scripts. Admission refuses a script whose
+  save is unpinned, missing or different, and refuses a pinned save whose
+  provenance (`saves/allied-starbase.provenance.json`) names a different
+  `real-sol-starbase-alliance.json` digest than the one pinned now.
+- Regeneration rule: any change to `real-sol-starbase-alliance.json` changes
+  its pin and makes the save stale. Run the alliance scenario in a real window,
+  then `native extract-save --artifacts <suite bundle or its scenarios/NNNN dir>
+  --slot 0 --output rust/scripts/saves/allied-starbase.sav`, paste the printed pin into
+  `start_saves`, and commit the save, the provenance and the pin together.
+  `extract-save` reads the script identity from the suite manifest and the
+  scenario's `native-acceptance.json`, checks the trace, manifest and save
+  against the digests the run recorded, and refuses a run whose
+  `terminal_reason` is not `success`, whose bundle holds anything but the
+  alliance scenario, or whose alliance script is not the pinned one.
+
+### Scripts that start from the alliance save
+
+`starbase-visit-v1`, `real-sol-starbase-to-mars`, `probe-encounter-v3` and
+`probe-encounter-v4` declare the `start_save` and open with the main menu
+sequence `wait_for_main_menu_ready`, Down (Load Game), Select (slot list), Select
+(slot 0, the picker opens on slot 0 in a fresh process). They then assert
+interplanetary activity and 896 fuel / 2500 RU (the values recorded in the
+save's provenance), re-dock with `navigate_to_moon 2/0` (the allied Starbase
+opens its menu with no conversation) and assert `starbase` mode and the same
+resources again, followed by their own earlier steps unchanged. Their budgets
+shrank to the validator minimum with a 300 s wall budget, so they no longer carry the
+900000 ms outer deadline pin: `starbase-visit-v1` 2897 ticks,
+`real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
+`probe-encounter-v4` 7856 (presentations twice that). Until the save is
+generated and pinned, admission of these scripts, and so `native run`, fails
+closed. None of this has run live.
