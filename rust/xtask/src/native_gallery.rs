@@ -166,7 +166,7 @@ pub(crate) fn publish(bundle: &Path, output: &Path) -> Result<Gallery, String> {
 
 /// Build the catalog from a retained suite without writing anything.
 pub(crate) fn build(bundle: &Path) -> Result<Gallery, String> {
-    let snapshot = EvidenceSnapshot::open(bundle)
+    let snapshot = EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
     let manifest: SuiteManifest = serde_json::from_slice(
         snapshot
@@ -1187,7 +1187,7 @@ mod tests {
         }]))
         .unwrap();
 
-        let snapshot = EvidenceSnapshot::open(fixture.root()).unwrap();
+        let snapshot = EvidenceSnapshot::open_native(fixture.root()).unwrap();
         let retained = retained_inventory(&snapshot);
         let scripts = shared_scripts(&snapshot).unwrap();
         let row = row(ScenarioState::Completed {

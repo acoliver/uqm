@@ -157,25 +157,148 @@ A scenario passes when its assertions hold, so a name or domain that claims
 more than the assertions prove is a gap. Known gaps that need a new typed
 action or a live run before they can be closed:
 
-- `quit-v1` highlights Quit and asserts the main menu mode. It never confirms
-  the quit (the Quit confirmation loop bypasses the `DoInput` service).
-- `battle-v1` proves battle frames run, not a battle outcome.
-- `load-save-v1` captures the save and load screens but never compares the
-  loaded state with the saved one.
-- `real-sol-probe-to-starbase` ends at the Commander dispatch, before the
-  Starbase menu; `real-sol-starbase-to-mars` talks to the Commander but never
-  opens the Starbase menu either. Only `starbase-visit-v1` asserts the
-  `starbase` mode.
-- `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` never meet the probe.
-- `real-sol-commander-completion` never asserts that the conversation ended.
-- `comm-encounter-v1` and `sol-probe-scene-v1` assert the dispatch or scene
-  but no response choice.
-- `real-sol-earth-moon-base` captures the moon base report but asserts no
-  pickup; `real-sol-rust-planetside-smoke` asserts no planet-side state.
-- `linked-playable-v1` is registered for boot menu, new game, communication,
-  navigation and battle but only walks the main menu and runs Super Melee.
-- `explore-planet-v1` is registered for navigation, orbit and scan but only
-  flies in hyperspace. The scheduler and script tests pin that shape.
+- `battle-v1` proves battle frames run, not a battle outcome. No typed
+  assertion reads the battle result (ship destroyed, melee exit); one would
+  need a new reader of the battle state and has not been added.
+- `load-save-v1` captures the save and load screens, asserts the loaded game is
+  in hyperspace with 1000 fuel / 0 RU, but never compares the loaded position
+  with the saved one. `assert_hyperspace_displacement` only checks a minimum
+  distance since `record_hyperspace_position`; an "unchanged position"
+  assertion is missing.
+- `linked-playable-v1` is registered for boot menu and battle only (it walks the
+  main menu and runs Super Melee). The cross-domain journey is
+  `real-sol-probe-to-starbase`.
+
+## Scenarios changed after the second audit
+
+These edits have not run in a real window yet.
+
+- `probe-encounter-v1`, `-v2`, `-v5`, `-v6`, `-v7` keep their names and now meet
+  the probe first: `navigate_to_planet 2`, `assert_dispatch 24/18`,
+  `wait_for_communication_end` (1 completion) and `assert_activity 4`, before
+  the hyperspace flight. A rename would touch gates, MATRIX, tests and docs for
+  scripts whose flights are pinned by `probe_encounter_flight_input`.
+  `probe-encounter-v1` now exceeds 300 s and joins the 900 s outer deadline list.
+- `real-sol-commander-completion` selects Commander responses with typed
+  `select_communication_response` (index 0 twice, as in
+  `real-sol-planetside-collision-proof`) after
+  `wait_for_communication_responses 3`, then waits for the conversation to end
+  (`wait_for_communication_end`, which counts completions since the probe wait
+  consumed its own) and asserts `assert_activity 4`. The earlier blind
+  cancel/select taps never ended the conversation in a real window
+  (`communication_responses_active:count=3`, then a 334 s timeout): the first
+  list is 3 responses and the next is 2, as in the `comm-encounter-v1` and
+  `real-sol-starbase-to-mars` traces.
+- `real-sol-rust-planetside-smoke` follows the Mars sequence of
+  `real-sol-starbase-to-mars`: orbit, `assert_mode orbit`, scan, dispatch,
+  landing site, `wait_for_planet_side_start`, thrust and weapon, special tap,
+  `wait_for_planet_side_end returned`, `assert_mode orbit`.
+- `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
+  `CHECK_ABORT` directly for Quit (`restart.c`; `DoConfirmExit` is not on this
+  path) and the game exits before the next input callback, so the scripted
+  `assert_mode quit` never ran and finalization recorded an unlabelled
+  `semantic_mismatch` at input 146 (real-window run: `mode_verified:main_menu`
+  at 145, one input tick at 146, then `run_end semantic_mismatch`, teardown
+  `game_status 0`). `expect_quit` is a typed terminal step: it must directly
+  follow a `tap_menu_key select` and directly precede `finish`. The restart
+  menu reports the Quit selection (`quit_selected:activity=0x4000`) and
+  finalization turns it into `quit_verified:activity=0x4000` and a `success`
+  run end only when the script declares `expect_quit` at the step the run
+  stopped on. An exit without the report, or a reported quit in a script that
+  does not declare it, is still a `semantic_mismatch` with its own label
+  (`quit_expected:...`, `quit_unexpected:...`). The step needs no OS
+  checkpoint (the window is gone); the native acceptance instead requires the
+  `quit_verified` record in the trace of any script that declares it.
+- `load-save-v1` asserts ship resources after the load.
+- `real-sol-probe-to-starbase` is now the composed journey (new game,
+  communication, navigation, planet side, starbase); `linked-playable-v1`
+  narrows to boot menu and battle.
+
+## Scenarios that prove their claim
+
+The scenario audit found six scenarios whose name or domain claimed more than
+their assertions proved. Each now carries the assertion that matches the claim.
+The first real-window run at `e810b17c0` passed `sol-probe-scene-v1` and
+`real-sol-probe-to-starbase` and exposed four scripts that failed or proved too
+little; the entries below describe the corrected scripts, which have not run
+live since. `audited_scenarios_assert_what_they_claim` in `script.rs` and
+`explore_flies_to_mars_orbit_and_scans_with_real_menu_input` in `scheduler.rs`
+pin the shape of the scripts.
+
+- `explore-planet-v1` (navigation, orbit and scan) no longer flies in
+  hyperspace. After the probe broadcast it flies to Mars (planet 3) and enters
+  orbit with `navigate_to_planet` and `navigate_to_orbit`, then
+  `select_planet_menu orbit` and `assert_mode orbit` (the orbit menu is the
+  active planet menu phase). `select_planet_menu auto_scan` runs the scan and
+  `select_planet_menu dispatch` only completes once the scan has finished and
+  the Dispatch menu is up; Cancel backs out of the landing site picker without
+  launching the lander, and a second `assert_mode orbit` holds in the scan
+  menu. The live runs at `798528ddf` reached `navigation_reached:planet=3`
+  (input tick 4631) and never `orbit_reached` in 6000 ticks, with or without the
+  Cancel press, so Cancel was not the cause. The checkpoint screenshot taken at
+  `navigation_reached` shows the flagship inside Mars's inner system at its
+  entry point, flying (the STARMAP/MANIFEST/GAME/NAVIGATE list is the
+  unhighlighted flight panel, not an open menu). The cause was the navigation
+  target: `navigation_snapshot` took `PLANET_DESC::image.origin` for Mars, but
+  inside the planet's own inner system that field still holds the outer-view
+  position (`ValidateOrbit` writes it only for the outer view and moons;
+  `EnterPlanetOrbit` says so), while the planet is drawn at the view centre. The
+  flagship steered at a point outside the inner view and left it. Runs that
+  entered Mars from the Starbase happened to head that way. The snapshot now
+  reports the view centre once the ship is in the target planet's inner system,
+  and `navigate_to_orbit` uses the velocity controller that `navigate_to_moon`
+  uses, because nose-only pursuit of an inertial flagship circles its target.
+  The script keeps no Cancel and lets the broadcast end by itself; a script test
+  rejects a Cancel before the orbit flight.
+  Budgets: 24710 input ticks (the validator minimum), 600 s wall with the
+  approved 900000 ms outer deadline.
+- `real-sol-probe-to-starbase` (starbase) takes the `probe-encounter-v3`
+  route: probe broadcast, Luna landing, first and second Commander
+  conversation, then `assert_mode starbase` and `assert_ship_resources`
+  970 raw fuel / 2500 RU (30 fuel for the Luna landing, 2500 RU from the
+  Commander once the moon base is on board). The first Commander dispatch and
+  its capture are kept. Budgets: 65215 ticks, 720 s wall.
+- `real-sol-starbase-to-mars` (starbase and navigation) takes the same route to
+  the Starbase menu, asserts `starbase` mode and 970 / 2500, departs with three
+  Down presses and Select, asserts interplanetary flight and unchanged
+  resources, then flies to Mars as before. The takeoff is proved the way
+  `real-sol-planetside-collision-proof` ends its session: a Special tap, then
+  `wait_for_planet_side_end returned`, and only then `assert_mode orbit`.
+  Orbit mode already reads true while the lander is on the ground (the planet
+  menu phase stays active under it), so the old Escape tap followed by an orbit
+  assert proved nothing. Budgets: 83375 ticks, 900 s wall.
+- `real-sol-earth-moon-base` (navigation, orbit and scan) follows the
+  `probe-encounter-v3` order: probe broadcast, Luna landing, then the two
+  Commander conversations. The first live run landed on Luna but the lander
+  never left (`planet_side_wait_unsatisfied ... active=true phase=Active` for
+  6000 ticks) because the six presses were Select; the working route uses Cancel
+  six times, a 600 tick wait and `wait_for_planet_side_end returned`. The second
+  live run still failed: `798528ddf` dropped the Up hold (19 ticks) that
+  `probe-encounter-v3` and `real-sol-starbase-to-mars` use before the landing
+  site, and the lander touched down at `position=728,148` instead of their
+  `728,68`, where the Cancel presses never launched it. The Up hold is back,
+  as in `probe-encounter-v3`, and a script test requires it. After the
+  capture of the moon base report the script asserts `assert_mode solar`: the
+  third live run showed `mode_mismatch:expected=orbit:observed=solar` 150 ticks
+  after the return, because the moon base pickup leaves Luna orbit for the solar
+  system view (a Mars landing still reads as orbit). The capture is labelled
+  `earth-moon-solar-after-base`. The script proves the pickup through the
+  Commander: the second visit pays 2500 RU only with `MOONBASE_ON_SHIP` set, so
+  the run ends with `assert_mode starbase` and `assert_ship_resources` 970 /
+  2500. Budgets: 65363 ticks, 900 s wall.
+- `sol-probe-scene-v1` (communication choices) skips the Urquan speech with
+  Cancel, then `wait_for_communication_responses` (minimum 1) and
+  `assert_communication_responses` (minimum 1), the same list that
+  `repro-sol-probe-comm-ui` asserts. It needs 500 input ticks and a 60 s wall
+  budget (was 192 and 30).
+- `comm-encounter-v1` (communication choices) cannot prove a choice with the
+  probe: its broadcast is one way. The first live run ended with
+  `communication_responses_wait_expired:minimum=1:active=false:completions=1`.
+  The script now lets the broadcast end, flies to the Commander on Luna
+  (`navigate_to_moon` 2/0, `wait_for_dispatch` 2/2), waits for and asserts the
+  response list (minimum 2), selects the first response twice and waits for the
+  conversation to end. Budgets: 12000 input ticks, 400 s wall with the approved
+  900000 ms outer deadline.
 
 ## Hyperspace flight legs
 
@@ -217,7 +340,7 @@ Routes (leg = thrust ticks, every turn a verified four facing `right` `turn_flag
 | v2 | 4 x 80 | 3, three right angles | 1000 raw |
 | v3 | 4 x 500 | 3, three right angles | 6000 raw |
 | v4 | 4 x 550 | 3, three right angles | 6000 raw |
-| v5 | 4 x 50 | 3, three right angles | 1000 raw |
+| v5 | 4 x 100 | 3, three right angles | 1000 raw |
 | v6 | 3 x 200 | 2, five flagship menu visits | 1000 raw |
 | v7 | 3 x 200 | 2, five Game menu visits | 1000 raw |
 
@@ -243,6 +366,20 @@ IN_INTERPLANETARY) proves they are back in the Sol system, then the
 `returned-to-sol` capture, the script's final wait, `probe-encounter-final` and
 `finish`. The arrival is the asserted end of these scripts, not a failure.
 v6 and v7 fly three legs and never return to Sol.
+
+Whether the square re-enters Sol depends on how closely it closes, and the
+simulation is deterministic for the fixed new-game seed. v5 at 4 x 50 ticks
+(real-window run after the probe meeting) ended its last leg at 27967,164221
+against the start 27987,164141 while travelling along the line y = x +
+136254, which passes 100 units above Sol's point on that diagonal (about 71
+perpendicular), so the ship coasted past Sol and `assert_activity 4` failed.
+Before the probe meeting the same legs happened to close. v5 now flies v1's
+flight section exactly (40 ticks before `hyperspace-start`, 4 x 100 thrust
+ticks, settle 5): in the real-window v1 run the last leg is the line through
+Sol (27171,163325 to 27935,164089, y = x + 136154, Sol at 27987,164141) and
+ends 52 units short of it on each axis, so the coasting ship enters Sol. v2
+(80 ticks, 27275,163429 to 27923,164077) closes the same way. The v5 return is
+that recorded v1 trajectory rather than a fresh tiny square.
 
 ### The flagship menu in v6 and v7
 
@@ -300,7 +437,7 @@ controls. Leaving the screen at maximum zoom makes the game's own
 has itself sampled live interplanetary flight and then sees the solar system
 torn down and the hyperspace activity dispatched. It never writes activity or
 position. A fresh profile starts on the main menu with no save, so every
-script that asserts hyperspace (`explore-planet-v1`, `probe-encounter-v1` to
+script that asserts hyperspace (`probe-encounter-v1` to
 `v7`, `load-save-v1`) first selects New Game, asserts
 interplanetary activity and flies out with it (#213). `load-save-v1` then
 saves twice through the hyperspace Game menu and loads slot 0 back through

@@ -529,13 +529,17 @@ fn reduce_input_timing(
     sv: u64,
 ) -> Option<SchedulerTransition> {
     Some(match (action, state.phase) {
-        (Action::WaitForMainMenuReady(_), ActionPhase::WaitingForInput) => SchedulerTransition {
-            new_state: SchedulerState {
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
+        // ExpectQuit holds like a readiness wait: the quit the game reports at
+        // finalization ends the run, and a game that never quits times out.
+        (Action::WaitForMainMenuReady(_) | Action::ExpectQuit(_), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) if w.count == 0 => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -1590,15 +1594,27 @@ mod tests {
         );
     }
 
-    /// #213: interplanetary flight is asserted, then the flagship flies out
-    /// with production controls, and only then are the unchanged hyperspace
-    /// capture and assertion evaluated.
+    /// The explore scenario claims navigation, orbit and scan, so it must fly
+    /// from the opening interplanetary state to Mars, enter orbit, run the
+    /// auto scan from the planet menu and assert orbit mode afterwards. It
+    /// never leaves the solar system, so it asserts no hyperspace.
     #[test]
-    fn explore_reaches_hyperspace_by_real_flight_before_its_unchanged_assertions() {
+    fn explore_flies_to_mars_orbit_and_scans_with_real_menu_input() {
+        use crate::automation::mode::GameMode;
+        use crate::automation::script::{
+            ModeAssertion, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
+            SelectPlanetMenuStep,
+        };
         let script = explore_script();
         let steps = script.steps();
         let position = |predicate: &dyn Fn(&Action) -> bool| {
             steps.iter().position(predicate).expect("step present")
+        };
+        let phase = |wanted: PlanetMenuPhaseName| {
+            position(&|step| {
+                matches!(step, Action::SelectPlanetMenu(SelectPlanetMenuStep { phase, .. })
+                    if *phase == wanted)
+            })
         };
         let interplanetary = position(&|step| {
             matches!(
@@ -1609,20 +1625,46 @@ mod tests {
                 })
             )
         });
-        let departure = position(&|step| matches!(step, Action::NavigateToHyperspace(_)));
-        let first_capture = position(&|step| matches!(step, Action::Capture(_)));
-        let hyperspace = position(&|step| {
+        let to_mars = position(&|step| {
             matches!(
                 step,
-                Action::AssertActivity(ActivityAssertion {
-                    mask: 255,
-                    equals: 3
-                })
+                Action::NavigateToPlanet(NavigateToPlanetStep { planet: 3, .. })
             )
         });
-        assert!(interplanetary < departure);
-        assert!(departure < first_capture);
-        assert!(first_capture < hyperspace);
+        let to_orbit = position(&|step| {
+            matches!(
+                step,
+                Action::NavigateToOrbit(NavigateToOrbitStep { planet: 3, .. })
+            )
+        });
+        let orbit_menu = phase(PlanetMenuPhaseName::Orbit);
+        let auto_scan = phase(PlanetMenuPhaseName::AutoScan);
+        let dispatch = phase(PlanetMenuPhaseName::Dispatch);
+        let orbit_modes: Vec<usize> = steps
+            .iter()
+            .enumerate()
+            .filter_map(|(index, step)| {
+                matches!(
+                    step,
+                    Action::AssertMode(ModeAssertion {
+                        mode: GameMode::Orbit
+                    })
+                )
+                .then_some(index)
+            })
+            .collect();
+        assert!(interplanetary < to_mars);
+        assert!(to_mars < to_orbit);
+        assert!(to_orbit < orbit_menu);
+        assert!(orbit_menu < auto_scan);
+        assert!(auto_scan < dispatch);
+        assert_eq!(
+            orbit_modes.len(),
+            2,
+            "orbit asserted at the menu and after the scan"
+        );
+        assert!(orbit_menu < orbit_modes[0] && orbit_modes[0] < auto_scan);
+        assert!(dispatch < orbit_modes[1]);
         let captures: Vec<&str> = steps
             .iter()
             .filter_map(|step| match step {
@@ -1632,21 +1674,19 @@ mod tests {
             .collect();
         assert_eq!(
             captures,
-            [
-                "hyperspace-initial",
-                "hyperspace-after-navigation",
-                "hyperspace-final"
-            ]
+            ["mars-reached", "mars-orbit-menu", "mars-orbit-scanned"]
         );
         assert!(!steps.iter().any(|step| matches!(
             step,
-            Action::TapMenuKey(TapMenuKeyStep {
-                key: MenuKey::Down,
-                ..
-            }) | Action::SetMenuKey(SetMenuKeyStep {
-                key: MenuKey::Down,
-                ..
-            })
+            Action::NavigateToHyperspace(_)
+                | Action::TapMenuKey(TapMenuKeyStep {
+                    key: MenuKey::Down,
+                    ..
+                })
+                | Action::SetMenuKey(SetMenuKeyStep {
+                    key: MenuKey::Down,
+                    ..
+                })
         )));
     }
 

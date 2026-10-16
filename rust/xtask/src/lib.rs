@@ -829,7 +829,10 @@ fn build_linked_test_proof(
         .map_err(|error| format!("create linked-build proof directory: {error}"))?;
     ci::exec::permit_containment_directory(directory.path())
         .map_err(|error| format!("permit linked-build proof directory: {error}"))?;
-    let member_limit = authority.actions.evidence_snapshot_member_limit_bytes;
+    let member_limit = authority
+        .native_runtime_contract()
+        .inventory_limits
+        .member_bytes;
     let messages = stage_linked_build_bytes(
         directory.path(),
         "cargo-messages.jsonl",
@@ -1187,8 +1190,9 @@ pub(crate) fn execute_native_scenarios(
                     .display()
                     .to_string(),
                 &authority
-                    .actions
-                    .evidence_snapshot_member_limit_bytes
+                    .native_runtime_contract()
+                    .inventory_limits
+                    .member_bytes
                     .to_string(),
             ]);
             // The Aqua child inherits only an allowlisted environment, so the
@@ -1234,19 +1238,36 @@ pub(crate) fn execute_native_scenarios(
         // grows rather than after the upload fails, and name the scenario that
         // crossed the line rather than reporting a total nobody can act on.
         let (bytes, files) = measure_tree(launch.evidence_root)?;
-        if bytes > authority.actions.evidence_snapshot_aggregate_limit_bytes {
-            return Err(format!(
-                "autoplay evidence reached {bytes} bytes after {}, over the {} byte aggregate limit",
-                pinned.path, authority.actions.evidence_snapshot_aggregate_limit_bytes
-            ));
-        }
-        if files > u64::from(authority.actions.evidence_snapshot_member_count_limit) {
-            return Err(format!(
-                "autoplay evidence reached {files} files after {}, over the {} member limit",
-                pinned.path, authority.actions.evidence_snapshot_member_count_limit
-            ));
-        }
+        check_native_suite_evidence(
+            bytes,
+            files,
+            &pinned.path,
+            authority.native_runtime_contract().inventory_limits,
+        )?;
         suite.complete(index)?;
+    }
+    Ok(())
+}
+
+/// The running total of a native suite's retained evidence, against the native
+/// inventory limits that every other native check also uses.
+fn check_native_suite_evidence(
+    bytes: u64,
+    files: u64,
+    after: &str,
+    limits: uqm_rust::automation::native_window::NativeInventoryLimits,
+) -> Result<(), String> {
+    if bytes > limits.aggregate_bytes {
+        return Err(format!(
+            "native suite evidence reached {bytes} bytes after {after}, over the {} byte aggregate limit",
+            limits.aggregate_bytes
+        ));
+    }
+    if files > u64::from(limits.member_count) {
+        return Err(format!(
+            "native suite evidence reached {files} files after {after}, over the {} member limit",
+            limits.member_count
+        ));
     }
     Ok(())
 }
@@ -1314,7 +1335,10 @@ fn prepare_native_shared_inputs(
         fs::set_permissions(evidence, fs::Permissions::from_mode(0o700))
             .map_err(|error| error.to_string())?;
     }
-    let limit = authority.actions.evidence_snapshot_member_limit_bytes;
+    let limit = authority
+        .native_runtime_contract()
+        .inventory_limits
+        .member_bytes;
     let mut snapshot = SharedSnapshot::create(&evidence.join("shared"), budget)?;
     snapshot.insert(
         "inputs/uqm",
@@ -3277,6 +3301,34 @@ mod tests {
             .unwrap()
     }
 
+    #[test]
+    fn native_suite_total_uses_the_native_inventory_limit_not_the_upload_limit() {
+        let root = checkout_root();
+        let authority = ci::authority::load_authority(root).unwrap();
+        let limits = authority.native_runtime_contract().inventory_limits;
+        assert_eq!(limits.aggregate_bytes, 1024 * 1024 * 1024);
+        assert_eq!(
+            authority.actions.evidence_snapshot_aggregate_limit_bytes,
+            256 * 1024 * 1024
+        );
+        let script = "rust/scripts/probe-encounter-v6.json";
+        // The total that stopped the suite after the thirteenth scenario.
+        check_native_suite_evidence(273_050_446, 3_000, script, limits).unwrap();
+        check_native_suite_evidence(700_000_000, 3_000, script, limits).unwrap();
+        check_native_suite_evidence(limits.aggregate_bytes, 3_000, script, limits).unwrap();
+        let error = check_native_suite_evidence(limits.aggregate_bytes + 1, 3_000, script, limits)
+            .unwrap_err();
+        assert!(
+            error.starts_with("native suite evidence reached"),
+            "{error}"
+        );
+        assert!(error.contains(script), "{error}");
+        assert!(
+            check_native_suite_evidence(1, u64::from(limits.member_count) + 1, script, limits)
+                .is_err()
+        );
+    }
+
     /// A gate step has no workflow event in its cleared environment. It is
     /// handed the names the trusted controller retained and runs exactly those.
     #[test]
@@ -3339,7 +3391,7 @@ mod tests {
                 short_seen += 1;
             }
         }
-        assert_eq!((long_seen, short_seen), (15, 21));
+        assert_eq!((long_seen, short_seen), (18, 18));
 
         let mut forged = authority.native_acceptance.scenario_scripts[0].clone();
         forged.outer_child_timeout_ms = Some(900_000);

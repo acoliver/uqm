@@ -3,9 +3,9 @@
   "name": "sol-probe-scene-v1",
   "start_scene": "sol_probe_encounter",
   "budgets": {
-    "max_input_ticks": 192,
-    "max_presentations": 264,
-    "max_wallclock_seconds": 30
+    "max_input_ticks": 500,
+    "max_presentations": 1000,
+    "max_wallclock_seconds": 60
   },
   "steps": [
     {"action": "wait_for_main_menu_ready"},
@@ -15,6 +15,10 @@
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
     {"action": "wait_input_ticks", "count": 12},
     {"action": "capture", "label": "sol-probe-urquan"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 4},
+    {"action": "wait_for_communication_responses", "minimum": 1, "max_ticks": 300},
+    {"action": "assert_communication_responses", "minimum": 1},
+    {"action": "capture", "label": "sol-probe-urquan-responses"},
     {"action": "wait_input_ticks", "count": 12},
     {"action": "finish"}
   ]

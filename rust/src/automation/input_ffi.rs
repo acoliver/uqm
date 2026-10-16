@@ -275,6 +275,39 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     navigation_snapshot(0, None)
 }
 
+/// Where a planet is on the display right now.
+///
+/// In the outer system `PLANET_DESC::image.origin` is the planet's display
+/// position, converted the way `displayToLocation` followed by
+/// `locationToDisplay` would round it. Inside the planet's own inner system
+/// that field is not updated (`ValidateOrbit` only writes it for the outer
+/// view and for moons, and `EnterPlanetOrbit` documents it as "for the outer
+/// view"), while the planet is drawn at the view centre. Steering at the stale
+/// origin sends the flagship out of the inner system instead of into the
+/// planet.
+///
+/// C integer division truncates toward zero, as Rust's does.
+#[cfg(any(test, feature = "linked_c_archive"))]
+fn planet_display_target(
+    inside_target_inner_system: bool,
+    outer_origin: (i32, i32),
+    radius: i32,
+    geometry: &ViewGeometry,
+) -> (i32, i32) {
+    if inside_target_inner_system {
+        return (geometry.half_width, geometry.half_height);
+    }
+    if radius == 0 {
+        return (0, 0);
+    }
+    let location_x = (outer_origin.0 - geometry.half_width) * radius / geometry.display_to_loc;
+    let location_y = (outer_origin.1 - geometry.half_height) * radius / geometry.display_to_loc;
+    (
+        geometry.half_width + location_x * geometry.display_to_loc / radius,
+        geometry.half_height + location_y * geometry.display_to_loc / radius,
+    )
+}
+
 #[cfg(feature = "linked_c_archive")]
 pub(crate) fn navigation_snapshot(
     target_planet: i32,
@@ -318,18 +351,14 @@ pub(crate) fn navigation_snapshot(
         }
 
         let target_origin = solar_system.PlanetDesc[target_planet as usize].image.origin;
-        let radius = i32::from(solar_system.SunDesc[0].radius);
-        if radius != 0 {
-            // Match displayToLocation followed by locationToDisplay exactly.
-            // C integer division truncates toward zero, as Rust's does.
-            let location_x = (i32::from(target_origin.x) - geometry.half_width) * radius
-                / geometry.display_to_loc;
-            let location_y = (i32::from(target_origin.y) - geometry.half_height) * radius
-                / geometry.display_to_loc;
-            snapshot.target_x = geometry.half_width + location_x * geometry.display_to_loc / radius;
-            snapshot.target_y =
-                geometry.half_height + location_y * geometry.display_to_loc / radius;
-        }
+        let (target_x, target_y) = planet_display_target(
+            snapshot.inner_planet == target_planet,
+            (i32::from(target_origin.x), i32::from(target_origin.y)),
+            i32::from(solar_system.SunDesc[0].radius),
+            &geometry,
+        );
+        snapshot.target_x = target_x;
+        snapshot.target_y = target_y;
     }
     snapshot
 }
@@ -753,5 +782,30 @@ mod tests {
         let geometry = ViewGeometry::from_screen(320, 240);
         assert_eq!(geometry.half_height, 113);
         assert_eq!(geometry.half_width - 35, 86);
+    }
+
+    #[test]
+    fn planet_target_inside_its_own_inner_system_is_the_view_centre() {
+        let geometry = ViewGeometry::from_screen(320, 240);
+        // Mars's stale outer-view origin must not be steered at once the ship
+        // is inside Mars's inner system, where the planet is at the centre.
+        assert_eq!(
+            planet_display_target(true, (200, 40), 56, &geometry),
+            (121, 113)
+        );
+    }
+
+    #[test]
+    fn planet_target_in_the_outer_system_is_the_rounded_outer_origin() {
+        let geometry = ViewGeometry::from_screen(320, 240);
+        // (200 - 121) * 112 / 56 = 158; 121 + 158 * 56 / 112 = 200.
+        assert_eq!(
+            planet_display_target(false, (200, 40), 112, &geometry),
+            (200, 40)
+        );
+        assert_eq!(
+            planet_display_target(false, (200, 40), 0, &geometry),
+            (0, 0)
+        );
     }
 }

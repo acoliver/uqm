@@ -225,6 +225,10 @@ pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 /// What the main-menu readiness record reports as having become ready.
 pub const MAIN_MENU_READINESS_SUBJECT: &str = "main_menu";
 
+/// The trace label that proves a scripted quit: the game set `CHECK_ABORT`
+/// from the restart menu's Quit entry and the script declared `expect_quit`.
+pub const QUIT_VERIFIED_LABEL: &str = "quit_verified:activity=0x4000";
+
 /// The production observation that proves main-menu readiness: the restart
 /// menu finished initialization and accepts input.
 pub const MAIN_MENU_READINESS_OBSERVATION: &str = "restart_menu_first_frame_initialized";
@@ -270,6 +274,10 @@ struct CoordInner {
     /// was not in WaitingSemantic. Replayed when the scheduler enters
     /// WaitingSemantic.
     pending_transitions: Vec<(u8, u8)>,
+    /// The restart menu reported that Quit was selected (activity set to
+    /// `CHECK_ABORT`). The game exits right after, before another input
+    /// callback, so finalization settles whether the script expected it.
+    quit_selected: bool,
     pending_main_menu_ready: bool,
     /// The label of the currently armed capture step, if any.
     /// Used when the capture completes to write a PNG artifact.
@@ -423,6 +431,7 @@ impl Coordinator {
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
+                quit_selected: false,
                 pending_main_menu_ready: false,
                 armed_capture_label: None,
                 pending_start_scene: PendingStartScene::new(start_scene),
@@ -1079,7 +1088,11 @@ impl Coordinator {
                 && snapshot.in_orbit != 0
                 && snapshot.inner_planet == i32::from(navigation.planet)
                 && snapshot.orbital_moon < 0;
-            let control = crate::automation::navigation::steer_toward_target(
+            // Inside the planet's inner system the flagship is inertial, so
+            // aiming the nose alone accumulates drift and circles the planet
+            // without touching it. Drive the velocity toward the planet, which
+            // the snapshot reports at the view centre.
+            let control = crate::automation::navigation::steer_moon_navigation(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,
@@ -1989,6 +2002,58 @@ impl Coordinator {
         false
     }
 
+    /// The restart menu set `CHECK_ABORT` for the Quit entry. Records the
+    /// observation; whether the script declared it is decided at finalization.
+    pub fn observe_quit_selected() {
+        let Some(coord) = Self::get() else {
+            return;
+        };
+        let mut inner = coord.inner.lock();
+        if inner.terminal_class.is_some() {
+            return;
+        }
+        inner.quit_selected = true;
+        coord.write_trace_labeled(
+            &mut inner,
+            RecordKind::SemanticAssertion,
+            "quit_selected:activity=0x4000".to_string(),
+        );
+    }
+
+    /// Settle a run that ended with no terminal outcome. A quit is a success
+    /// only when the restart menu reported it and the script declares
+    /// `expect_quit` at the step the run stopped on (the select tap or the
+    /// expectation itself). Any other early exit is a semantic mismatch.
+    fn settle_exit_without_terminal(&self, inner: &mut CoordInner) {
+        let step = inner.sched_state.step_index;
+        let declared = match self.actions.get(step) {
+            Some(Action::ExpectQuit(_)) => true,
+            Some(Action::TapMenuKey(_)) => {
+                matches!(self.actions.get(step + 1), Some(Action::ExpectQuit(_)))
+            }
+            _ => false,
+        };
+        let label = match (inner.quit_selected, declared) {
+            (true, true) => {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    QUIT_VERIFIED_LABEL.to_string(),
+                );
+                self.set_terminal(inner, TerminalClass::Success);
+                return;
+            }
+            (true, false) => "quit_unexpected:script_did_not_declare_expect_quit",
+            (false, true) => "quit_expected:game_exited_without_quit_selection",
+            (false, false) => {
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                return;
+            }
+        };
+        self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label.to_string());
+        self.set_terminal(inner, TerminalClass::SemanticMismatch);
+    }
+
     /// Process an observed main-menu transition. Returns true if the game
     /// loop should stop (e.g., semantic assertion mismatch).
     pub fn process_menu_transition(from_index: u8, to_index: u8) -> bool {
@@ -2042,7 +2107,7 @@ impl Coordinator {
             }
             self.reject_unobserved_player_input(&mut inner);
             if inner.terminal_class.is_none() {
-                self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                self.settle_exit_without_terminal(&mut inner);
             }
             inner.finalized = true;
             self.write_terminal_trace(&mut inner);
@@ -2856,6 +2921,81 @@ mod tests {
             SchedulerState::initial(),
             true,
         ));
+    }
+
+    /// A game that exits right after the restart menu sets `CHECK_ABORT` never
+    /// reaches another input callback. Only a script that declares
+    /// `expect_quit` and a quit the menu reported settle as a success.
+    #[test]
+    fn a_quit_is_a_success_only_when_declared_and_reported() {
+        const CHILD: &str = "UQM_QUIT_SETTLEMENT_TEST";
+        const CASES: [&str; 3] = [
+            "declared_and_reported",
+            "undeclared",
+            "declared_not_reported",
+        ];
+        let Some(case) = std::env::var_os(CHILD) else {
+            for case in CASES {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "automation::coordinator::tests::a_quit_is_a_success_only_when_declared_and_reported", "--nocapture"])
+                    .env(CHILD, case)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{case}\n{}\n{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        };
+        let case = case.to_string_lossy().into_owned();
+        let tap = r#"{"action":"tap_menu_key","key":"select","value":1,"hold":1,"settle":1}"#;
+        let steps = if case == "undeclared" {
+            format!("[{tap},{{\"action\":\"finish\"}}]")
+        } else {
+            format!("[{tap},{{\"action\":\"expect_quit\"}},{{\"action\":\"finish\"}}]")
+        };
+        let source = format!(
+            r#"{{"version":1,"name":"quit-settlement","budgets":{{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60}},"steps":{steps}}}"#
+        );
+        let temp = tempfile::tempdir().unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source.as_bytes(), "quit.json").unwrap(),
+            "quit.json",
+        )
+        .unwrap();
+        Coordinator::init(script, temp.path().to_path_buf());
+        if case != "declared_not_reported" {
+            Coordinator::observe_quit_selected();
+        }
+        let status = Coordinator::finalize(0).unwrap();
+        let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .collect();
+        let labels: Vec<&str> = records
+            .iter()
+            .filter_map(|record| record.label.as_deref())
+            .collect();
+        let terminal = records.last().unwrap().terminal_reason.as_deref();
+        if case == "declared_and_reported" {
+            assert_eq!(status, 0);
+            assert_eq!(terminal, Some("success"));
+            assert!(labels.contains(&QUIT_VERIFIED_LABEL), "{labels:?}");
+        } else {
+            assert_ne!(status, 0, "{case}: an unproven exit must fail");
+            assert_eq!(terminal, Some("semantic_mismatch"));
+            assert!(!labels.contains(&QUIT_VERIFIED_LABEL), "{labels:?}");
+            let expected = if case == "undeclared" {
+                "quit_unexpected:script_did_not_declare_expect_quit"
+            } else {
+                "quit_expected:game_exited_without_quit_selection"
+            };
+            assert!(labels.contains(&expected), "{labels:?}");
+        }
     }
 
     #[test]

@@ -127,7 +127,8 @@ pub fn validate_success(
     if !manifest.passed {
         return Err("native suite did not complete the required selection".into());
     }
-    let snapshot = crate::ci::evidence::EvidenceSnapshot::open(root).map_err(|e| e.to_string())?;
+    let snapshot =
+        crate::ci::evidence::EvidenceSnapshot::open_native(root).map_err(|e| e.to_string())?;
     let mut shared_identity = None;
     for row in &manifest.scenarios {
         let proof: uqm_rust::automation::NativeAcceptanceManifest = serde_json::from_slice(
@@ -144,7 +145,10 @@ pub fn validate_success(
                 .ok_or("S4 success requires protected suite shared descriptors")?;
         let identity = (shared.descriptor.clone(), proof.executable.clone());
         correlate_shared_identity(&mut shared_identity, identity)?;
-        let limit = authority.actions.evidence_snapshot_member_limit_bytes;
+        let limit = authority
+            .native_runtime_contract()
+            .inventory_limits
+            .member_bytes;
         let receipt = shared.read(
             &scenario,
             "inputs/linked-build/linked-build-receipt.json",
@@ -213,8 +217,8 @@ fn validate_success_policy(
 /// Validate a failed suite for diagnostic transport. Its recorded selection must
 /// be pinned, but this does not establish that it was the event-required selection.
 pub fn validate_failure_diagnostics(root: &Path, authority: &Authority) -> Result<(), String> {
-    let snapshot =
-        crate::ci::evidence::EvidenceSnapshot::open(root).map_err(|error| error.to_string())?;
+    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(root)
+        .map_err(|error| error.to_string())?;
     let selected: Vec<PinnedScript> = serde_json::from_slice(
         snapshot
             .read("suite-request.json")
@@ -740,7 +744,7 @@ mod journal_regressions {
             .publisher
             .create("scenarios/0001/foreign.log", b"not selected")
             .unwrap();
-        let snapshot = crate::ci::evidence::EvidenceSnapshot::open(&root).unwrap();
+        let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(&root).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         let retained = materialize_member(&snapshot, "scenarios/0000").unwrap();
         let scenario = retained.path().join("scenarios/0000");
@@ -2118,7 +2122,7 @@ fn validate_teardown(
 
 /// The checked teardown receipt of a finalized bundle, for reporting.
 pub fn read_teardown(bundle: &Path, manifest: &SuiteManifest) -> Result<SuiteTeardown, String> {
-    let snapshot = crate::ci::evidence::EvidenceSnapshot::open(bundle)
+    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
     snapshot.scoped(|| validate_teardown(&snapshot, manifest))
 }
@@ -2191,7 +2195,7 @@ impl SuiteAccounting {
         }
         let publisher = crate::ci::evidence::EvidencePublisher::open(root)
             .map_err(|error| error.to_string())?;
-        if !crate::ci::evidence::regular_file_inventory(root)
+        if !crate::ci::evidence::native_regular_file_inventory(root)
             .map_err(|error| error.to_string())?
             .is_empty()
             || std::fs::read_dir(root)
@@ -2664,7 +2668,7 @@ fn millis(duration: std::time::Duration) -> Result<u64, String> {
 }
 
 fn inventory(root: &Path) -> Result<Vec<uqm_rust::automation::NativeRetainedInput>, String> {
-    Ok(crate::ci::evidence::regular_file_inventory(root)
+    Ok(crate::ci::evidence::native_regular_file_inventory(root)
         .map_err(|error| error.to_string())?
         .iter()
         .filter(|file| file.relative_path != "suite-index.json")
@@ -2688,8 +2692,8 @@ pub fn validate_accounting(
     {
         return Err("native suite expected selection must be nonempty and unique".into());
     }
-    let snapshot =
-        crate::ci::evidence::EvidenceSnapshot::open(root).map_err(|error| error.to_string())?;
+    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(root)
+        .map_err(|error| error.to_string())?;
     snapshot.scoped(|| {
         let read = |path: &str| {
             crate::ci::evidence::read_regular_relative(root, path)
@@ -2980,14 +2984,14 @@ mod tests {
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
                 .count(),
-            17
+            20
         );
         assert_eq!(
             admitted
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
                 .count(),
-            15
+            18
         );
         for admission in &admitted {
             let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS
@@ -3051,7 +3055,7 @@ mod finalization_regressions {
         let mut suite = SuiteAccounting::create(root, &selected, false).unwrap();
         suite.begin(0).unwrap();
         let publisher = crate::ci::evidence::EvidencePublisher::open(root).unwrap();
-        for file in crate::ci::evidence::regular_file_inventory(source).unwrap() {
+        for file in crate::ci::evidence::native_regular_file_inventory(source).unwrap() {
             if file.relative_path.starts_with("shared/")
                 || file.relative_path.starts_with("scenarios/0000/")
             {
@@ -3425,7 +3429,7 @@ mod finalization_regressions {
                     &serde_json::to_vec_pretty(&receipt).unwrap(),
                 )
                 .unwrap();
-            let snapshot = crate::ci::evidence::EvidenceSnapshot::open(&root).unwrap();
+            let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(&root).unwrap();
             assert_eq!(
                 validate_teardown(&snapshot, &manifest).is_ok(),
                 mutation == 4,

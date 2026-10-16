@@ -67,6 +67,16 @@
    "mode": "main_menu"
   },
   {
+   "action": "tap_menu_key",
+   "key": "select",
+   "value": 1,
+   "hold": 1,
+   "settle": 1
+  },
+  {
+   "action": "expect_quit"
+  },
+  {
    "action": "finish"
   }
  ]

@@ -746,6 +746,15 @@ pub struct SetupPlanetSideCollisionFixtureStep {}
 #[serde(deny_unknown_fields)]
 pub struct WaitForMainMenuReadyStep {}
 
+/// The no-payload terminal step declaring that the script ends with the game
+/// quitting. It must directly follow the `select` tap on the restart menu's
+/// Quit entry and directly precede `finish`: the game exits before any later
+/// input callback, so the step is proven by the quit the game itself reports
+/// at finalization rather than by a scheduled assertion.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExpectQuitStep {}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -790,6 +799,7 @@ pub enum Action {
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
+    ExpectQuit(ExpectQuitStep),
     Finish,
 }
 
@@ -1466,6 +1476,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
 
     // Final finish semantics (REQ-SCRIPT-004).
     validate_finish_semantics(&steps, path)?;
+    validate_expect_quit_placement(&steps, path)?;
 
     // Per-step validation.
     let mut requirements = StepRequirements::default();
@@ -2059,6 +2070,37 @@ fn validate_finish_semantics(steps: &[Action], path: &str) -> Result<(), Automat
     Ok(())
 }
 
+/// `expect_quit` is only meaningful as the quit selection's outcome: it follows
+/// a `select` tap and is followed directly by `finish`.
+fn validate_expect_quit_placement(steps: &[Action], path: &str) -> Result<(), AutomationError> {
+    for (index, step) in steps.iter().enumerate() {
+        if !matches!(step, Action::ExpectQuit(_)) {
+            continue;
+        }
+        let after_select = index
+            .checked_sub(1)
+            .and_then(|previous| steps.get(previous))
+            .is_some_and(|previous| {
+                matches!(
+                    previous,
+                    Action::TapMenuKey(TapMenuKeyStep {
+                        key: MenuKey::Select,
+                        ..
+                    })
+                )
+            });
+        let before_finish = matches!(steps.get(index + 1), Some(Action::Finish));
+        if !after_select || !before_finish {
+            return Err(AutomationError::step(
+                path,
+                index,
+                "expect_quit must directly follow a tap_menu_key select and directly precede finish",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Parse a `RestartMenuItem` from its canonical name, rejecting unknown
 /// stringly-typed values and raw indices.
 fn parse_menu_item(
@@ -2384,6 +2426,34 @@ mod tests {
             a.resolved().replay_identity().unwrap(),
             b.resolved().replay_identity().unwrap()
         );
+    }
+
+    #[test]
+    fn expect_quit_must_follow_a_select_tap_and_precede_finish() {
+        let tap = |key: &str| {
+            format!(r#"{{"action":"tap_menu_key","key":"{key}","value":1,"hold":1,"settle":1}}"#)
+        };
+        let script = |steps: String| {
+            let txt = format!(
+                r#"{{"version":1,"name":"q","budgets":{{"max_input_ticks":50,"max_presentations":10,"max_wallclock_seconds":1}},"steps":[{steps}]}}"#
+            );
+            validate_script(parse_script(txt.as_bytes(), "q.json").unwrap(), "q.json")
+        };
+        let quit = r#"{"action":"expect_quit"}"#;
+        let finish = r#"{"action":"finish"}"#;
+        assert!(script(format!("{},{quit},{finish}", tap("select"))).is_ok());
+        for bad in [
+            format!("{},{quit},{finish}", tap("down")),
+            format!("{quit},{finish}"),
+            format!("{},{quit},{},{finish}", tap("select"), tap("down")),
+            format!("{},{quit},{quit},{finish}", tap("select")),
+        ] {
+            let error = script(bad.clone()).expect_err(&bad).to_string();
+            assert!(
+                error.contains("expect_quit must directly follow"),
+                "{error}"
+            );
+        }
     }
 
     #[test]
@@ -3208,7 +3278,182 @@ mod tests {
                 "{label} asserts hyperspace at step {first_hyperspace} without flying there"
             );
         }
-        assert_eq!(checked, 9, "hyperspace scenarios checked");
+        assert_eq!(checked, 8, "hyperspace scenarios checked");
+    }
+
+    fn checked_in_steps(name: &str) -> Vec<Action> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("scripts")
+            .join(format!("{name}.json"));
+        let label = path.to_string_lossy().into_owned();
+        validate_script(
+            parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+            &label,
+        )
+        .unwrap()
+        .steps()
+        .to_vec()
+    }
+
+    fn step_index(steps: &[Action], from: usize, predicate: impl Fn(&Action) -> bool) -> usize {
+        from + steps[from..]
+            .iter()
+            .position(predicate)
+            .expect("step present after the previous one")
+    }
+
+    /// The scenario audit: a scenario whose name or domain claims a Starbase
+    /// visit, a moon base pickup or a response choice must assert it.
+    #[test]
+    fn audited_scenarios_assert_what_they_claim() {
+        use crate::automation::mode::GameMode;
+        let starbase = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Starbase
+                })
+            )
+        };
+        let orbit = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Orbit
+                })
+            )
+        };
+        let solar = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: GameMode::Solar
+                })
+            )
+        };
+        let resources = |step: &Action| {
+            matches!(
+                step,
+                Action::AssertShipResources(ShipResourcesAssertion {
+                    fuel_on_board: Some(970),
+                    res_units: Some(2500),
+                })
+            )
+        };
+        let wait_responses =
+            |step: &Action| matches!(step, Action::WaitForCommunicationResponses(_));
+        let assert_responses =
+            |step: &Action| matches!(step, Action::AssertCommunicationResponses(_));
+        let returned = |step: &Action| {
+            matches!(
+                step,
+                Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                    outcome: PlanetSideOutcomeName::Returned,
+                    ..
+                })
+            )
+        };
+
+        for name in ["comm-encounter-v1", "sol-probe-scene-v1"] {
+            let steps = checked_in_steps(name);
+            let wait = step_index(&steps, 0, wait_responses);
+            step_index(&steps, wait, assert_responses);
+        }
+        for name in [
+            "real-sol-probe-to-starbase",
+            "real-sol-starbase-to-mars",
+            "real-sol-earth-moon-base",
+        ] {
+            let steps = checked_in_steps(name);
+            let landing = step_index(&steps, 0, returned);
+            let menu = step_index(&steps, landing, starbase);
+            step_index(&steps, menu, resources);
+        }
+        // The pickup is proved by the Commander paying for it, so the moon
+        // base scenario must also see the solar view again after the lander
+        // takes off. Returning from the moon base pickup leaves Luna orbit for
+        // the solar system view (a live run observed `solar`, not `orbit`);
+        // only a Mars landing still reads as orbit afterwards.
+        let moon = checked_in_steps("real-sol-earth-moon-base");
+        let takeoff = step_index(&moon, 0, returned);
+        let back_in_solar = step_index(&moon, takeoff, solar);
+        step_index(&moon, back_in_solar, starbase);
+        // The Luna landing site is chosen by the cursor: with Up held for 19
+        // ticks the lander lands at 728,68 where the Cancel presses launch it
+        // (probe-encounter-v3, real-sol-starbase-to-mars). Without Up it lands
+        // at 728,148 and never leaves.
+        let site_up = step_index(&moon, 0, |step| {
+            matches!(
+                step,
+                Action::SetMenuKey(SetMenuKeyStep {
+                    key: MenuKey::Up,
+                    value: 1,
+                })
+            )
+        });
+        let site_up_released = step_index(&moon, site_up, |step| {
+            matches!(
+                step,
+                Action::SetMenuKey(SetMenuKeyStep {
+                    key: MenuKey::Up,
+                    value: 0,
+                })
+            )
+        });
+        let landing_site = step_index(&moon, site_up_released, |step| {
+            matches!(
+                step,
+                Action::SelectPlanetMenu(SelectPlanetMenuStep {
+                    phase: PlanetMenuPhaseName::LandingSite,
+                    ..
+                })
+            )
+        });
+        assert!(landing_site > site_up_released);
+        let mars = checked_in_steps("real-sol-starbase-to-mars");
+        let docked = step_index(&mars, 0, starbase);
+        // Orbit mode can already read true while the lander is on the ground,
+        // so the departure must end the planet-side session before the assert.
+        let takeoff_key = step_index(&mars, docked, |step| {
+            matches!(
+                step,
+                Action::TapPlayerKey(TapPlayerKeyStep {
+                    key: PlayerKey::Special,
+                    ..
+                })
+            )
+        });
+        let landed_back = step_index(&mars, takeoff_key, returned);
+        step_index(&mars, landed_back, orbit);
+
+        // A response choice needs a conversation that offers a list, which
+        // the one-way probe broadcast does not.
+        let comm = checked_in_steps("comm-encounter-v1");
+        let list = step_index(&comm, 0, assert_responses);
+        let choice = step_index(&comm, list, |step| {
+            matches!(step, Action::SelectCommunicationResponse(_))
+        });
+        step_index(&comm, choice, |step| {
+            matches!(step, Action::WaitForCommunicationEnd(_))
+        });
+
+        // A Cancel outside a conversation opens the flagship menu, so the
+        // exploration route lets the probe broadcast end by itself and pulses
+        // no Cancel before it reaches the planet menu.
+        let explore = checked_in_steps("explore-planet-v1");
+        let orbit_flight = step_index(&explore, 0, |step| {
+            matches!(step, Action::NavigateToOrbit(_))
+        });
+        assert!(
+            !explore[..orbit_flight].iter().any(|step| matches!(
+                step,
+                Action::TapMenuKey(TapMenuKeyStep {
+                    key: MenuKey::Cancel,
+                    ..
+                })
+            )),
+            "explore-planet-v1 must not pulse Cancel before the orbit flight"
+        );
     }
 
     fn turn_script(steps: &str) -> String {

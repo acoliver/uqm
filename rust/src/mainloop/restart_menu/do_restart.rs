@@ -247,6 +247,9 @@ fn handle_select<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState
             );
             ops.sleep_thread_until(fade_result);
             ops.set_current_activity(CHECK_ABORT);
+            if crate::automation::coordinator::Coordinator::is_active() {
+                crate::automation::coordinator::Coordinator::observe_quit_selected();
+            }
             ops.flash_pause(state.flash_context);
             false
         }

@@ -478,7 +478,7 @@ mod tests {
             observe(Observations::from_activity(4)).require(),
             Ok(GameMode::Solar)
         );
-        // explore-planet-v1 and load-save-v1: state 3.
+        // load-save-v1: state 3.
         assert_eq!(
             observe(Observations::from_activity(3)).require(),
             Ok(GameMode::Starmap)

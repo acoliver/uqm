@@ -102,7 +102,16 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("quit-v1", &[Domain::Quit]),
     row("repro-game-menu-initial", &[Domain::BootMenu]),
     row("starbase-visit-v1", &[Domain::Starbase]),
-    row("real-sol-probe-to-starbase", &[Domain::Starbase]),
+    journey(
+        "real-sol-probe-to-starbase",
+        &[
+            Domain::NewGame,
+            Domain::CommunicationChoices,
+            Domain::NavigationOrbitScan,
+            Domain::PlanetSideResults,
+            Domain::Starbase,
+        ],
+    ),
     row(
         "real-sol-starbase-to-mars",
         &[Domain::Starbase, Domain::NavigationOrbitScan],
@@ -151,15 +160,9 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("battle-v1", &[Domain::BattleOutcomes]),
     row("load-save-v1", &[Domain::SaveLoad]),
-    journey(
+    row(
         "linked-playable-v1",
-        &[
-            Domain::BootMenu,
-            Domain::NewGame,
-            Domain::CommunicationChoices,
-            Domain::NavigationOrbitScan,
-            Domain::BattleOutcomes,
-        ],
+        &[Domain::BootMenu, Domain::BattleOutcomes],
     ),
     fixture("hard-hang", FixtureKind::HangFixture),
     fixture("inactive-smoke", FixtureKind::IdleFixture),

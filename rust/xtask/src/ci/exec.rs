@@ -4600,6 +4600,11 @@ mod tests {
         unsafe {
             libc::signal(libc::SIGTERM, libc::SIG_IGN);
         }
+        // A test that needs the helper parked on its lifeline, rather than
+        // somewhere in exec, asks to be told when it has got there.
+        if let Some(ready) = std::env::var_os("UQM_TEST_ANCHOR_READY_FILE") {
+            publish_pid_file(Path::new(&ready), 0);
+        }
         wait_for_owner();
     }
 
@@ -4793,8 +4798,12 @@ mod tests {
 
         /// Kill the group while the unreaped leader still pins its number, then
         /// reap the leader.
+        ///
+        /// The lifeline stays open until the leader is reaped. Closing it first
+        /// wakes a parked helper with the end-of-file it answers by exiting 0,
+        /// and on a loaded runner the helper wins the race against this
+        /// `SIGKILL`, so it ends on its own instead of by the kill.
         fn kill_group_and_reap(&mut self) -> Result<std::process::ExitStatus, String> {
-            self.release_lifeline();
             let pid = self.pid();
             // SAFETY: the helper leads its own process group, so the negated
             // PID names that group and nothing else, and an unreaped child
@@ -4814,7 +4823,9 @@ mod tests {
                     return Err(format!("cannot kill owned helper group {pid}: {error}"));
                 }
             }
-            self.reap()
+            let status = self.reap();
+            self.release_lifeline();
+            status
         }
 
         /// Fail unless the helper is still running.
@@ -4985,6 +4996,32 @@ mod tests {
             .expect("formatted panic message");
         assert!(message.contains("had already ended with"), "{message}");
         assert!(helper.reaped, "the ended helper must be reaped");
+    }
+
+    /// Releasing the lifeline wakes a parked helper with an end-of-file it
+    /// answers by exiting 0, so the release has to follow the group `SIGKILL`.
+    /// The helper reports when it is parked, and each round then kills it; a
+    /// release that came first would let a promptly scheduled helper end on its
+    /// own, which `terminate_by_sigkill` reports.
+    #[cfg(unix)]
+    #[test]
+    fn a_waiting_helper_always_dies_by_our_sigkill() {
+        let directory = tempfile::tempdir().expect("test directory");
+        for round in 0..40 {
+            let ready = directory.path().join(format!("ready-{round}"));
+            let mut helper = OwnedHelper::spawn(
+                "ci::exec::tests::anchor_target_helper_process",
+                &[
+                    ("UQM_TEST_ANCHOR_TARGET", "wait".into()),
+                    ("UQM_TEST_ANCHOR_READY_FILE", ready.clone().into()),
+                ],
+            );
+            wait_for_published(&mut helper, &[&ready], &[], "helper never parked");
+            helper.assert_still_running("a waiting helper is running");
+            helper
+                .terminate_by_sigkill()
+                .expect("a running helper dies by our SIGKILL, not by its own exit");
+        }
     }
 
     #[cfg(unix)]
