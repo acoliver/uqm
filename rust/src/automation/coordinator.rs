@@ -209,18 +209,28 @@ fn planet_side_wait_mismatch_label(
 /// Rotating phase for the orbital-exit key sequence.
 static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
 
-/// Menu keys that leave the orbital screen, one admitted callback at a time.
+/// Callbacks in one repetition of the orbital-exit key sequence.
+const ORBIT_EXIT_PERIOD: u64 = 6;
+
+/// Menu keys `(cancel, up, select)` that leave orbit, one admitted callback
+/// at a time.
 ///
-/// `DoPlanetOrbit` is a menu, not ship flight. `PlanetOrbitMenu` always opens
-/// on the first item (SCAN), and NAVIGATION is the last, so one Up wraps the
-/// cursor straight onto it and Select confirms. `DoMenuChooser` honours Up in
-/// both the PC and 3DO menu layouts. Both keys are pulsed, so each press needs
-/// an intervening release to register as a new press.
-fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
-    match phase % 4 {
-        0 => (true, false),
-        2 => (false, true),
-        _ => (false, false),
+/// Orbit may be left from two menus. `DoScan` (scan.c) is open right after a
+/// lander returns: Cancel exits it back to `DoPlanetOrbit`, whereas Up and
+/// Select there would move within the scan items and scan or dispatch again.
+/// Cancel is ignored by the `DoPlanetOrbit` menu itself (`DoMenuChooser`
+/// only reacts to it in the alternate cargo menu), so it is safe to press
+/// first from either state. `PlanetOrbitMenu` always opens on the first item
+/// (SCAN), and NAVIGATION is the last, so one Up wraps the cursor straight
+/// onto it and Select confirms. `DoMenuChooser` honours Up in both the PC and
+/// 3DO menu layouts. Every key is pulsed, so each press needs an intervening
+/// release to register as a new press.
+fn orbit_exit_menu_keys(phase: u64) -> (bool, bool, bool) {
+    match phase % ORBIT_EXIT_PERIOD {
+        0 => (true, false, false),
+        2 => (false, true, false),
+        4 => (false, false, true),
+        _ => (false, false, false),
     }
 }
 
@@ -1187,7 +1197,7 @@ impl Coordinator {
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,
-                    in_orbit: false,
+                    in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
@@ -2410,13 +2420,17 @@ impl Coordinator {
             }
         }
 
-        let (up, select) = if control.leave_orbit {
+        let (cancel, up, select) = if control.leave_orbit {
             orbit_exit_menu_keys(ORBIT_EXIT_PHASE.fetch_add(1, Ordering::AcqRel))
         } else {
             ORBIT_EXIT_PHASE.store(0, Ordering::Release);
-            (false, false)
+            (false, false, false)
         };
-        for (key, active) in [(MenuKey::Up, up), (MenuKey::Select, select)] {
+        for (key, active) in [
+            (MenuKey::Cancel, cancel),
+            (MenuKey::Up, up),
+            (MenuKey::Select, select),
+        ] {
             if !inject_menu_key(i32::from(key.index()), i32::from(active)) {
                 return false;
             }
@@ -3754,25 +3768,43 @@ mod tests {
     }
 
     #[test]
-    fn orbit_exit_presses_up_then_select_with_a_release_between_them() {
+    fn orbit_exit_cancels_then_presses_up_then_select_with_releases_between() {
         // `DoMenuChooser` only sees a new press when the pulsed key was
         // released on an intervening callback, so the sequence must be
-        // press-Up, release, press-Select, release.
-        assert_eq!(orbit_exit_menu_keys(0), (true, false));
-        assert_eq!(orbit_exit_menu_keys(1), (false, false));
-        assert_eq!(orbit_exit_menu_keys(2), (false, true));
-        assert_eq!(orbit_exit_menu_keys(3), (false, false));
+        // press-Cancel, release, press-Up, release, press-Select, release.
+        // Cancel comes first because the ship can be inside the scan menu
+        // (for example right after a lander returns), where Up and Select
+        // would scan instead of leaving orbit.
+        assert_eq!(orbit_exit_menu_keys(0), (true, false, false));
+        assert_eq!(orbit_exit_menu_keys(1), (false, false, false));
+        assert_eq!(orbit_exit_menu_keys(2), (false, true, false));
+        assert_eq!(orbit_exit_menu_keys(3), (false, false, false));
+        assert_eq!(orbit_exit_menu_keys(4), (false, false, true));
+        assert_eq!(orbit_exit_menu_keys(5), (false, false, false));
     }
 
     #[test]
-    fn orbit_exit_never_presses_both_keys_on_one_callback() {
+    fn orbit_exit_never_presses_two_keys_on_one_callback() {
         for phase in 0..64 {
-            let (up, select) = orbit_exit_menu_keys(phase);
+            let (cancel, up, select) = orbit_exit_menu_keys(phase);
             assert!(
-                !(up && select),
-                "phase {phase} pressed Up and Select together"
+                u8::from(cancel) + u8::from(up) + u8::from(select) <= 1,
+                "phase {phase} pressed more than one key together"
             );
         }
+    }
+
+    #[test]
+    fn orbit_exit_never_selects_before_cancel_and_up_have_been_pressed() {
+        let first_press = |wanted: fn((bool, bool, bool)) -> bool| {
+            (0..ORBIT_EXIT_PERIOD)
+                .find(|phase| wanted(orbit_exit_menu_keys(*phase)))
+                .expect("every key is pressed once per period")
+        };
+        let cancel = first_press(|keys| keys.0);
+        let up = first_press(|keys| keys.1);
+        let select = first_press(|keys| keys.2);
+        assert!(cancel < up && up < select);
     }
 
     #[test]
@@ -3780,23 +3812,23 @@ mod tests {
         for phase in 0..64 {
             assert_eq!(
                 orbit_exit_menu_keys(phase),
-                orbit_exit_menu_keys(phase + 4),
-                "phase {phase} did not repeat with period four"
+                orbit_exit_menu_keys(phase + ORBIT_EXIT_PERIOD),
+                "phase {phase} did not repeat after one period"
             );
         }
     }
 
     #[test]
-    fn orbit_exit_phase_restarts_at_the_up_press_after_a_reset() {
+    fn orbit_exit_phase_restarts_at_the_cancel_press_after_a_reset() {
         // `set_navigation_controls` stores zero whenever `leave_orbit` is
-        // false, so the next orbit exit must begin with the Up press again
-        // rather than resuming mid-sequence.
+        // false, so the next orbit exit must begin with the Cancel press
+        // again rather than resuming mid-sequence.
         let phase = ORBIT_EXIT_PHASE.load(Ordering::Acquire);
         assert_eq!(
             orbit_exit_menu_keys(phase.wrapping_sub(phase)),
-            (true, false)
+            (true, false, false)
         );
-        assert_eq!(orbit_exit_menu_keys(0), (true, false));
+        assert_eq!(orbit_exit_menu_keys(0), (true, false, false));
     }
 
     #[test]
