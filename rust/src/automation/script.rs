@@ -3261,11 +3261,19 @@ mod tests {
         script.steps().iter().position(matches).unwrap()
     }
 
-    #[test]
-    fn load_save_proves_the_load_restored_the_saved_position_after_a_verified_move() {
+    fn count_steps(script: &ValidatedScript, matches: impl Fn(&Action) -> bool) -> usize {
+        script.steps().iter().filter(|a| matches(a)).count()
+    }
+
+    fn load_save_script() -> ValidatedScript {
         let bytes = include_bytes!("../../scripts/load-save-v1.json");
         let document = parse_script(bytes, "rust/scripts/load-save-v1.json").unwrap();
-        let script = validate_script(document, "rust/scripts/load-save-v1.json").unwrap();
+        validate_script(document, "rust/scripts/load-save-v1.json").unwrap()
+    }
+
+    #[test]
+    fn load_save_asserts_the_restored_position_only_after_choosing_load() {
+        let script = load_save_script();
 
         let saved = position_of(&script, |a| {
             matches!(a, Action::RecordSavedHyperspacePosition(_))
@@ -3285,18 +3293,39 @@ mod tests {
         // verified leg, and only after choosing Load does equality get asserted.
         assert!(saved < moved && moved < load_menu && load_menu < restored);
         assert!(restored < resources);
-        // Exactly one kept position and one restore assertion, so a restore can
-        // never be satisfied by a different record.
-        let count =
-            |wanted: fn(&Action) -> bool| script.steps().iter().filter(|a| wanted(a)).count();
+    }
+
+    #[test]
+    fn load_save_keeps_exactly_one_position_and_one_restore_assertion() {
+        let script = load_save_script();
+
+        // A restore can never be satisfied by a different record.
         assert_eq!(
-            count(|a| matches!(a, Action::RecordSavedHyperspacePosition(_))),
+            count_steps(&script, |a| matches!(
+                a,
+                Action::RecordSavedHyperspacePosition(_)
+            )),
             1
         );
         assert_eq!(
-            count(|a| matches!(a, Action::AssertHyperspacePositionRestored(_))),
+            count_steps(&script, |a| matches!(
+                a,
+                Action::AssertHyperspacePositionRestored(_)
+            )),
             1
         );
+    }
+
+    #[test]
+    fn load_save_records_the_displacement_baseline_right_before_the_thrust_leg() {
+        let script = load_save_script();
+
+        let saved = position_of(&script, |a| {
+            matches!(a, Action::RecordSavedHyperspacePosition(_))
+        });
+        let moved = position_of(&script, |a| {
+            matches!(a, Action::AssertHyperspaceDisplacement(_))
+        });
         // The displacement baseline is recorded after the save screens and
         // immediately before the thrust leg it measures.
         assert!(matches!(

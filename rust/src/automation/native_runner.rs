@@ -1536,6 +1536,64 @@ fn install_start_save(
     )
 }
 
+/// Install the script's committed start save, when it declares one. The save
+/// path is relative to the directory the script was read from.
+fn install_script_start_save(
+    validated_script: &super::script::ValidatedScript,
+    script_source_dir: Option<&Path>,
+    inputs: &Path,
+    config_root: &Path,
+    limit: u64,
+) -> Result<(), String> {
+    let Some(start_save) = validated_script.start_save() else {
+        return Ok(());
+    };
+    let source_dir =
+        script_source_dir.ok_or("script has no directory to resolve start_save against")?;
+    install_start_save(
+        &source_dir.join(&start_save.path),
+        start_save,
+        inputs,
+        config_root,
+        limit,
+    )
+}
+
+/// The directory that holds the shared runtime inputs, when the run uses them.
+fn shared_runtime_root(
+    shared: Option<&super::native_artifacts::SharedInputs>,
+    root: &Path,
+    limit: u64,
+) -> Result<Option<PathBuf>, String> {
+    shared
+        .map(|shared| {
+            shared.path(root, "inputs/uqm", limit).and_then(|path| {
+                path.parent()
+                    .and_then(Path::parent)
+                    .map(Path::to_path_buf)
+                    .ok_or("missing shared root".into())
+            })
+        })
+        .transpose()
+}
+
+/// Read the final native publication, but only after the child exited cleanly.
+fn observe_final_if_clean_exit(
+    observation: &mut NativeObservationSession,
+    session_result: &Result<ChildSessionReceipt, ChildSessionFailure>,
+    identity: &ProcessIdentity,
+) -> Result<(), String> {
+    let exited_cleanly = session_result
+        .as_ref()
+        .is_ok_and(|receipt| receipt.exit_code == Some(0) && receipt.signal.is_none());
+    if !exited_cleanly {
+        return Ok(());
+    }
+    observation
+        .observe_final_publication(identity)
+        .map_err(|error| format!("observe final native publication: {error}"))
+}
+
 fn run(inputs: RunInputs<'_>) -> Result<(), String> {
     let RunInputs {
         executable,
@@ -1624,18 +1682,13 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             .map_err(|error| format!("parse script: {error}"))?;
         let validated_script = validate_script(document, &retained_script)
             .map_err(|error| format!("validate script: {error}"))?;
-        if let Some(start_save) = validated_script.start_save() {
-            let source_dir = script_source_dir
-                .as_deref()
-                .ok_or("script has no directory to resolve start_save against")?;
-            install_start_save(
-                &source_dir.join(&start_save.path),
-                start_save,
-                &inputs,
-                &config_root,
-                linked_build_member_limit,
-            )?;
-        }
+        install_script_start_save(
+            &validated_script,
+            script_source_dir.as_deref(),
+            &inputs,
+            &config_root,
+            linked_build_member_limit,
+        )?;
         let checkpoint_plan = super::native_checkpoint::NativeCheckpointPlan::derive(
             &script_bytes,
             &validated_script,
@@ -1688,19 +1741,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             .args(&command_arguments[1..])
             .env_clear()
             .env("SDL_AUDIODRIVER", "dummy");
-        let shared_root = shared
-            .as_ref()
-            .map(|shared| {
-                shared
-                    .path(root, "inputs/uqm", linked_build_member_limit)
-                    .and_then(|path| {
-                        path.parent()
-                            .and_then(Path::parent)
-                            .map(Path::to_path_buf)
-                            .ok_or("missing shared root".into())
-                    })
-            })
-            .transpose()?;
+        let shared_root = shared_runtime_root(shared.as_ref(), root, linked_build_member_limit)?;
         super::native_isolation::restrict_candidate(
             &mut command,
             &config_root,
@@ -1756,16 +1797,8 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             &state_wake,
         );
 
-        let final_observation_result = if session_result
-            .as_ref()
-            .is_ok_and(|receipt| receipt.exit_code == Some(0) && receipt.signal.is_none())
-        {
-            observation
-                .observe_final_publication(&child_process_identity)
-                .map_err(|error| format!("observe final native publication: {error}"))
-        } else {
-            Ok(())
-        };
+        let final_observation_result =
+            observe_final_if_clean_exit(&mut observation, &session_result, &child_process_identity);
         let observer_finish_result = finish_observer(observer);
         let observer_result = final_observation_result.and(observer_finish_result);
         finalize_run(FinalizeRun {
