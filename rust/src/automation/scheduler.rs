@@ -316,6 +316,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::WaitForPlanetSideEnd(_)
         | Action::SelectPlanetMenu(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForBattleShipLoss(_)
         | Action::WaitForDispatch(_)
         | Action::SelectCommunicationResponse(_)
         | Action::WaitForCommunicationResponses(_)
@@ -433,6 +434,7 @@ pub fn scheduler_reduce(
                 Action::WaitForCommunicationEnd(_)
                     | Action::WaitForCommunicationReplay(_)
                     | Action::WaitForBattleFrames(_)
+                    | Action::WaitForBattleShipLoss(_)
                     | Action::WaitForDispatch(_)
                     | Action::SelectCommunicationResponse(_)
                     | Action::WaitForCommunicationResponses(_)
@@ -1052,6 +1054,40 @@ fn reduce_condition_wait(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::WaitForBattleShipLoss(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForBattleShipLoss(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForBattleShipLoss(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::WaitForDispatch(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::WaitingCondition {
@@ -1315,6 +1351,8 @@ fn reduce_capture_and_assertion(
         | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
         | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
+        | (Action::RecordSavedHyperspacePosition(_), ActionPhase::WaitingForInput)
+        | (Action::AssertHyperspacePositionRestored(_), ActionPhase::WaitingForInput)
         | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
@@ -2034,6 +2072,26 @@ mod tests {
             Action::AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion {
                 minimum_logical_units: 16,
             }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        for expected in [1, 2] {
+            let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            assert_eq!(t.new_state.step_index, expected);
+            assert_eq!(t.effects, EffectPlan::none());
+            state = t.new_state;
+        }
+    }
+
+    #[test]
+    fn saved_position_steps_advance_without_input_effects() {
+        use crate::automation::script::{
+            HyperspacePositionRestoredAssertion, RecordSavedHyperspacePositionStep,
+        };
+        let actions = [
+            Action::RecordSavedHyperspacePosition(RecordSavedHyperspacePositionStep {}),
+            Action::AssertHyperspacePositionRestored(HyperspacePositionRestoredAssertion {}),
             Action::Finish,
         ];
         let config = cfg(&actions);
@@ -3176,8 +3234,8 @@ mod budgeted_wait_tests {
         NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
         PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
         SelectPlanetMenuStep, TurnDirection, TurnFlagshipStep, WaitForBattleFramesStep,
-        WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
-        WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
+        WaitForBattleShipLossStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
+        WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep,
     };
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
@@ -3213,6 +3271,10 @@ mod budgeted_wait_tests {
             }),
             Action::SelectPlanetMenu(SelectPlanetMenuStep {
                 phase: PlanetMenuPhaseName::Orbit,
+                max_ticks,
+            }),
+            Action::WaitForBattleShipLoss(WaitForBattleShipLossStep {
+                minimum_ships: 1,
                 max_ticks,
             }),
             Action::WaitForBattleFrames(WaitForBattleFramesStep {

@@ -262,8 +262,8 @@
     "scenario_scripts": [
           {
                 "path": "rust/scripts/battle-v1.json",
-                "sha256": "8780ed08b2c4e3b45524e7ea9c5cc72e986d87eb1bb21d6e1644892fbf97e894",
-                "byte_length": 1884
+                "sha256": "7f8b0553a8319ea2e114b99904f1ed594add859b928333143634abe5a908bb6e",
+                "byte_length": 2336
           },
           {
                 "path": "rust/scripts/comm-encounter-v1.json",
@@ -294,8 +294,8 @@
           },
           {
                 "path": "rust/scripts/load-save-v1.json",
-                "sha256": "b608ef89cf8974d01fdd627a11535f4f48e387f24c8f93cb71ee477ef556baa0",
-                "byte_length": 3537
+                "sha256": "293fd1f7c1107e61ae9e28e95a8e5f6b9d1d316fb1f8feabe3e28f8a74b03c0d",
+                "byte_length": 4445
           },
           {
                 "path": "rust/scripts/main-menu-v1.json",

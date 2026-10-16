@@ -650,6 +650,22 @@ pub struct HyperspaceDisplacementAssertion {
     pub minimum_logical_units: u32,
 }
 
+/// The no-payload step that keeps the hyperspace ship's position for a later
+/// `assert_hyperspace_position_restored`. It is separate from
+/// `record_hyperspace_position` so a displacement leg between a save and its
+/// load does not consume it.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordSavedHyperspacePositionStep {}
+
+/// Assert the hyperspace ship is exactly (no tolerance, both axes) where
+/// `record_saved_hyperspace_position` found it, measured on
+/// `GLOBAL_SIS(log_x/log_y)`. After a load this can only hold when the game
+/// really restored the saved coordinates.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HyperspacePositionRestoredAssertion {}
+
 /// Assert the flagship's live `FuelOnBoard` and `ResUnits` equal the stated
 /// values. A field left out is not checked; at least one must be stated.
 ///
@@ -670,6 +686,17 @@ pub struct ShipResourcesAssertion {
 #[serde(deny_unknown_fields)]
 pub struct WaitForBattleFramesStep {
     pub minimum: u64,
+    pub max_ticks: u64,
+}
+
+/// Wait until the running battle has destroyed at least `minimum_ships` ships,
+/// counted on `battle_counter` (ships left per side) since the first sample of
+/// the battle. Fails when `max_ticks` pass first or the wait did not begin in a
+/// battle.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForBattleShipLossStep {
+    pub minimum_ships: u32,
     pub max_ticks: u64,
 }
 
@@ -790,8 +817,11 @@ pub enum Action {
     AssertBattleFrames(BattleFramesAssertion),
     RecordHyperspacePosition(RecordHyperspacePositionStep),
     AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
+    RecordSavedHyperspacePosition(RecordSavedHyperspacePositionStep),
+    AssertHyperspacePositionRestored(HyperspacePositionRestoredAssertion),
     AssertShipResources(ShipResourcesAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
+    WaitForBattleShipLoss(WaitForBattleShipLossStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationResponses(WaitForCommunicationResponsesStep),
@@ -1786,6 +1816,16 @@ fn validate_wait_step(
                 )));
             }
             (wait.max_ticks, "wait_for_battle_frames")
+        }
+        Action::WaitForBattleShipLoss(wait) => {
+            if wait.minimum_ships == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_battle_ship_loss minimum_ships must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_battle_ship_loss")
         }
         Action::WaitForCommunicationReplay(wait) => {
             (wait.max_ticks, "wait_for_communication_replay")
@@ -3072,6 +3112,115 @@ mod tests {
                 Action::AssertBattleFrames(BattleFramesAssertion { minimum: 300 })
             )
         }));
+    }
+
+    fn position_of(script: &ValidatedScript, matches: impl Fn(&Action) -> bool) -> usize {
+        script.steps().iter().position(matches).unwrap()
+    }
+
+    #[test]
+    fn load_save_proves_the_load_restored_the_saved_position_after_a_verified_move() {
+        let bytes = include_bytes!("../../scripts/load-save-v1.json");
+        let document = parse_script(bytes, "rust/scripts/load-save-v1.json").unwrap();
+        let script = validate_script(document, "rust/scripts/load-save-v1.json").unwrap();
+
+        let saved = position_of(&script, |a| {
+            matches!(a, Action::RecordSavedHyperspacePosition(_))
+        });
+        let moved = position_of(&script, |a| {
+            matches!(a, Action::AssertHyperspaceDisplacement(_))
+        });
+        let load_menu = position_of(
+            &script,
+            |a| matches!(a, Action::Capture(CaptureStep { label, .. }) if label == "menu-load-game"),
+        );
+        let restored = position_of(&script, |a| {
+            matches!(a, Action::AssertHyperspacePositionRestored(_))
+        });
+        let resources = position_of(&script, |a| matches!(a, Action::AssertShipResources(_)));
+        // The position is kept before the first save, the ship then moves by a
+        // verified leg, and only after choosing Load does equality get asserted.
+        assert!(saved < moved && moved < load_menu && load_menu < restored);
+        assert!(restored < resources);
+        // Exactly one kept position and one restore assertion, so a restore can
+        // never be satisfied by a different record.
+        let count =
+            |wanted: fn(&Action) -> bool| script.steps().iter().filter(|a| wanted(a)).count();
+        assert_eq!(
+            count(|a| matches!(a, Action::RecordSavedHyperspacePosition(_))),
+            1
+        );
+        assert_eq!(
+            count(|a| matches!(a, Action::AssertHyperspacePositionRestored(_))),
+            1
+        );
+        // The displacement baseline is recorded after the save screens and
+        // immediately before the thrust leg it measures.
+        assert!(matches!(
+            script.steps()[moved - 2],
+            Action::RecordHyperspacePosition(_)
+        ));
+        assert!(matches!(script.steps()[moved - 1], Action::TapPlayerKey(_)));
+        assert!(saved < moved - 2);
+    }
+
+    #[test]
+    fn battle_proves_a_ship_was_destroyed_after_the_battle_started() {
+        let bytes = include_bytes!("../../scripts/battle-v1.json");
+        let document = parse_script(bytes, "rust/scripts/battle-v1.json").unwrap();
+        let script = validate_script(document, "rust/scripts/battle-v1.json").unwrap();
+
+        let frames = position_of(&script, |a| matches!(a, Action::AssertBattleFrames(_)));
+        let loss = position_of(&script, |a| matches!(a, Action::WaitForBattleShipLoss(_)));
+        let last_capture = position_of(
+            &script,
+            |a| matches!(a, Action::Capture(CaptureStep { label, .. }) if label == "battle-final"),
+        );
+        assert!(frames < loss && loss < last_capture);
+        let Action::WaitForBattleShipLoss(wait) = &script.steps()[loss] else {
+            unreachable!()
+        };
+        assert_eq!(wait.minimum_ships, 1);
+        assert!(wait.max_ticks <= script.budgets.max_input_ticks);
+        // The player fights while it waits: weapon held down, released after.
+        let fires = |value: u8| {
+            script.steps().iter().position(|a| {
+                matches!(a, Action::SetPlayerKey(SetPlayerKeyStep { key: PlayerKey::Weapon, value: v }) if *v == value)
+            })
+        };
+        assert!(fires(1).unwrap() < loss && loss < fires(0).unwrap());
+    }
+
+    #[test]
+    fn rejects_a_ship_loss_wait_that_asks_for_no_loss_or_no_time() {
+        for (minimum_ships, max_ticks) in [(0u32, 100u64), (1, 0)] {
+            let txt = format!(
+                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":10}},"steps":[{{"action":"wait_for_battle_ship_loss","minimum_ships":{minimum_ships},"max_ticks":{max_ticks}}},{{"action":"finish"}}]}}"#
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            assert!(
+                validate_script(doc, p()).is_err(),
+                "{minimum_ships} {max_ticks}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_new_position_steps_take_no_payload() {
+        for name in [
+            "record_saved_hyperspace_position",
+            "assert_hyperspace_position_restored",
+        ] {
+            let ok = format!(
+                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":10}},"steps":[{{"action":"{name}"}},{{"action":"finish"}}]}}"#
+            );
+            let doc = parse_script(ok.as_bytes(), p()).unwrap();
+            assert!(validate_script(doc, p()).is_ok(), "{name}");
+            let extra = format!(
+                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":10}},"steps":[{{"action":"{name}","tolerance":5}},{{"action":"finish"}}]}}"#
+            );
+            assert!(parse_script(extra.as_bytes(), p()).is_err(), "{name}");
+        }
     }
 
     #[test]

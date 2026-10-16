@@ -51,6 +51,22 @@ the renderer, and requires at least 30 monotonic observations from the real
 production battle loop. The observer counts completed battle-loop frames; it
 does not claim combat elapsed time, animation frames, or unique pixel output.
 
+The script then holds `weapon` and `left` (the ship turns while it fires) and
+runs `wait_for_battle_ship_loss` (`minimum_ships` 1, `max_ticks` 3000). The
+step reads `battle_counter[0]` and `battle_counter[1]`, the ships left on each
+side that `tactrans.c` decrements when a ship dies and Super Melee never
+raises. Its first sample must be taken inside a battle; the step succeeds
+when a counter has dropped by `minimum_ships` since that sample, and fails
+when `max_ticks` pass first or the first sample is outside a battle. A battle
+that merely runs frames cannot pass, since no ship dies without a real
+destroyed ship. The trace records
+`battle_ship_loss_reached:lost=N:minimum=M:start=A,B:left=C,D`. The proof is
+"a ship was destroyed", not a winner: ending a Super Melee needs one fleet to
+lose every ship, which the scripted input and the computer opponent do not
+reach deterministically inside the budget, so the script never claims which
+side won. Which side lost the ship is visible in the `start`/`left` fields.
+This has not run live; the first live run decides whether 3000 ticks is enough.
+
 Successful trace evidence includes:
 
 ```text
@@ -157,14 +173,6 @@ A scenario passes when its assertions hold, so a name or domain that claims
 more than the assertions prove is a gap. Known gaps that need a new typed
 action or a live run before they can be closed:
 
-- `battle-v1` proves battle frames run, not a battle outcome. No typed
-  assertion reads the battle result (ship destroyed, melee exit); one would
-  need a new reader of the battle state and has not been added.
-- `load-save-v1` captures the save and load screens, asserts the loaded game is
-  in hyperspace with 1000 fuel / 0 RU, but never compares the loaded position
-  with the saved one. `assert_hyperspace_displacement` only checks a minimum
-  distance since `record_hyperspace_position`; an "unchanged position"
-  assertion is missing.
 - `linked-playable-v1` is registered for boot menu and battle only (it walks the
   main menu and runs Super Melee). The cross-domain journey is
   `real-sol-probe-to-starbase`.
@@ -209,7 +217,9 @@ These edits have not run in a real window yet.
   (`quit_expected:...`, `quit_unexpected:...`). The step needs no OS
   checkpoint (the window is gone); the native acceptance instead requires the
   `quit_verified` record in the trace of any script that declares it.
-- `load-save-v1` asserts ship resources after the load.
+- `load-save-v1` asserts ship resources after the load and, with
+  `record_saved_hyperspace_position` / `assert_hyperspace_position_restored`,
+  that the loaded hyperspace position equals the saved one (see below).
 - `real-sol-probe-to-starbase` is now the composed journey (new game,
   communication, navigation, planet side, starbase); `linked-playable-v1`
   narrows to boot menu and battle.
@@ -443,6 +453,26 @@ interplanetary activity and flies out with it (#213). `load-save-v1` then
 saves twice through the hyperspace Game menu and loads slot 0 back through
 the same menu, because the Quit confirmation loop bypasses the `DoInput`
 automation service.
+
+### Saved equals loaded
+
+`record_saved_hyperspace_position` keeps `GLOBAL_SIS(log_x/log_y)` while the
+Game menu is open (the game is paused, so the ship cannot drift) before the
+first save. It is a separate slot from `record_hyperspace_position`, so a
+displacement leg does not consume it. After the second save the script leaves
+the menu with `cancel`, records a displacement baseline, thrusts for 100 ticks
+and requires `assert_hyperspace_displacement` of 16 units, so the ship is
+verified to be somewhere else when the load starts. It then reopens the Game
+menu, loads slot 0, and `assert_hyperspace_position_restored` requires both
+coordinates to equal the kept ones exactly (no tolerance). The ship cannot
+return to the saved coordinates unless the game really loaded the save, because
+nothing moves it while the menus are open. The trace records
+`hyperspace_position_restored:x=:y=:saved_x=:saved_y=`, and the existing
+`assert_ship_resources` (1000 fuel, 0 RU) follows. Game date and crew have no
+Rust reader, so they are not compared. This has not run live: how many
+`cancel` taps leave the Game submenu is decided by the first live run, and a
+wrong count fails loudly at the displacement assertion, since a ship under a
+menu does not move.
 
 ## Restart menu readiness and tap semantics
 
