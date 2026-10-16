@@ -2,8 +2,8 @@
   "schema": "uqm-native-input-trend-v1",
   "baseline_assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
   "baseline_observed_objects": 339,
-  "current_transitional_inputs": 321,
-  "maximum_transitional_inputs": 321,
+  "current_transitional_inputs": 318,
+  "maximum_transitional_inputs": 318,
   "tracked_native_file_delta": 0,
   "infrastructure_delta": {
     "recursive_cargo_invocations": -1,

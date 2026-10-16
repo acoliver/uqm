@@ -1,8 +1,9 @@
 //! The Rust planet port against checked-in outputs of the C original.
 //!
-//! These fixtures were generated from the C code by `planets_parity`
-//! (`UQM_REGEN_PLANET_FIXTURES=1`), so this test needs no C and keeps proving
-//! parity after `calc.c`, `surface.c` and `orbits.c` are deleted.
+//! These fixtures were captured from the C code before `calc.c`, `surface.c`
+//! and `orbits.c` were deleted, so this test needs no C and remains the
+//! permanent parity proof. `planets_parity` replays them through the exported
+//! C symbols.
 
 mod planets_common;
 

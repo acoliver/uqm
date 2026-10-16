@@ -5,6 +5,8 @@
 
 pub mod calc;
 pub mod consts;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod ffi;
 pub mod orbit_tables;
 pub mod orbits;
 pub mod surface;

@@ -1,8 +1,13 @@
-//! Differential test: the C `calc.c`/`surface.c`/`orbits.c` against the Rust
-//! port on the same inputs, with exact equality on every output field.
+//! Linked test of the C-ABI exports that replaced `calc.c`, `surface.c` and
+//! `orbits.c`.
 //!
-//! Also the generator for `tests/fixtures/planets/*`: run with
-//! `UQM_REGEN_PLANET_FIXTURES=1` to rewrite them from the C results.
+//! C callers reach the planet port through `DoPlanetaryAnalysis`,
+//! `GenerateMineralDeposits`, `FillOrbits` and friends, which read the C-owned
+//! `SysGenRNG`, `pSolarSysState`, `CurStarDescPtr` and `PlanData`. This test
+//! drives those exact symbols over the whole input domain and requires the
+//! results to equal the golden fixtures captured from the C originals in
+//! `tests/fixtures/planets/*`, so it proves the adapters wire that state the
+//! way the C did.
 
 mod planets_common;
 
@@ -11,8 +16,8 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use planets_common::{
-    collect, orbit_cases, orbit_line, orbit_records, render_fixture, star_type_byte, world_cases,
-    world_line, world_records, Generators, OrbitCase, WorldCase, PRESET_LIFE,
+    collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
+    Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
 use uqm_rust::c_bindings::global_state::{
     PlanetFrame, NODE_INFO, PLANET_DESC, POINT, SOLARSYS_STATE, SYSTEM_INFO,
@@ -27,7 +32,6 @@ unsafe extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;
     static mut CurStarDescPtr: *mut c_void;
-    static mut PlanData: *const PlanetFrame;
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
 
@@ -62,13 +66,13 @@ unsafe extern "C" {
     );
 }
 
-struct CGenerators {
+struct ExportedGenerators {
     state: Box<SOLARSYS_STATE>,
     /// Fake `STAR_DESC`: `POINT` then `Type`.
     star: Box<[u8; 8]>,
 }
 
-impl CGenerators {
+impl ExportedGenerators {
     fn new() -> Self {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         let star = Box::new([0u8; 8]);
@@ -76,7 +80,7 @@ impl CGenerators {
             SysGenRNG = uqm_rust::math::RandomContext_New();
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
-            PlanData = planet_array.as_ptr();
+            uqm_rust::planets::ffi::PLAN_DATA = planet_array.as_ptr();
             pSolarSysState = &mut *state;
         }
         Self { state, star }
@@ -89,7 +93,7 @@ impl CGenerators {
     }
 }
 
-impl Generators for CGenerators {
+impl Generators for ExportedGenerators {
     fn analyze(&mut self, case: &WorldCase) -> SYSTEM_INFO {
         self.set_star(case.star_size, star_type_byte(case));
 
@@ -186,7 +190,7 @@ fn render_plan_data(table: &[PlanetFrame]) -> String {
     text
 }
 
-/// Reseed a C-owned `RandomContext` through the exported C symbol.
+/// Reseed the `RandomContext` the exports use, through the exported C symbol.
 fn reseed_c(context: *mut uqm_rust::math::RandomContext, seed: u32) {
     uqm_rust::math::RandomContext_SeedRandom(context, seed);
 }
@@ -197,73 +201,31 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn check_or_write(name: &str, text: &str) {
-    let path = fixture_path(name);
-    if std::env::var_os("UQM_REGEN_PLANET_FIXTURES").is_some() {
-        std::fs::write(&path, text).expect("write fixture");
-    } else {
-        let stored = std::fs::read_to_string(&path).expect("read fixture");
-        assert_eq!(stored, text, "{name} is stale; regenerate from C");
-    }
+fn check_fixture(name: &str, text: &str) {
+    let stored = std::fs::read_to_string(fixture_path(name)).expect("read fixture");
+    assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
-fn first_difference(c_lines: &[String], rust_lines: &[String]) -> Option<String> {
-    c_lines
-        .iter()
-        .zip(rust_lines)
-        .find(|(c, rust)| c != rust)
-        .map(|(c, rust)| format!("C:    {c}\nRust: {rust}"))
-}
-
-/// One test: the C side shares process-global state (`pSolarSysState`,
+/// One test: the exports share process-global state (`pSolarSysState`,
 /// `SysGenRNG`), so the comparisons must not run in parallel.
 #[test]
-fn rust_planet_port_matches_c_exactly() {
+fn exported_symbols_reproduce_the_c_fixtures() {
     let table = unsafe { &planet_array }.as_slice();
-    let mut c = CGenerators::new();
+    let mut exports = ExportedGenerators::new();
     let base = table.as_ptr() as usize;
     gravity_and_random_locations_agree();
 
     // The planet-frame table the fixtures carry must be the C table.
-    check_or_write("plan_data.txt", &render_plan_data(table));
+    check_fixture("plan_data.txt", &render_plan_data(table));
 
-    // Every world case, line by line, so a mismatch names the input.
-    let mut rust = planets_common::RustGenerators::new(table);
-    let mut checked = 0usize;
-    for case in world_cases(false) {
-        let c_line = world_line(&mut c, &case, base);
-        let rust_line = world_line(&mut rust, &case, base);
-        assert_eq!(c_line, rust_line, "world case {case:?}");
-        checked += 1;
-    }
-    assert!(checked > 30_000, "domain shrank: {checked}");
-
-    let mut orbit_checked = 0usize;
-    for case in orbit_cases(false) {
-        let c_line = orbit_line(&mut c, &case);
-        let rust_line = orbit_line(&mut rust, &case);
-        assert_eq!(c_line, rust_line, "orbit case {case:?}");
-        orbit_checked += 1;
-    }
-    assert_eq!(orbit_checked, 3_960, "orbit domain changed");
-
-    // Fixtures come from the C side.
-    let c_worlds = collect(world_cases(false), world_cases(true), |case| {
-        world_line(&mut c, case, base)
+    let worlds = collect(world_cases(false), world_cases(true), |case| {
+        world_line(&mut exports, case, base)
     });
-    let c_orbits = collect(orbit_cases(false), orbit_cases(true), |case| {
-        orbit_line(&mut c, case)
+    let orbits = collect(orbit_cases(false), orbit_cases(true), |case| {
+        orbit_line(&mut exports, case)
     });
-    check_or_write("worlds.txt", &render_fixture(&c_worlds));
-    check_or_write("orbits.txt", &render_fixture(&c_orbits));
-
-    let rust_worlds = world_records(table);
-    assert_eq!(
-        first_difference(&c_worlds.golden_lines, &rust_worlds.golden_lines),
-        None
-    );
-    assert_eq!(c_worlds.digest, rust_worlds.digest);
-    assert_eq!(c_orbits.digest, orbit_records().digest);
+    check_fixture("worlds.txt", &render_fixture(&worlds));
+    check_fixture("orbits.txt", &render_fixture(&orbits));
 }
 
 fn gravity_and_random_locations_agree() {
@@ -273,9 +235,9 @@ fn gravity_and_random_locations_agree() {
             let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
             info.PlanetInfo.PlanetDensity = density;
             info.PlanetInfo.PlanetRadius = radius;
-            let from_c = unsafe { CalcGravity((&raw const info.PlanetInfo).cast()) };
+            let exported = unsafe { CalcGravity((&raw const info.PlanetInfo).cast()) };
             assert_eq!(
-                from_c,
+                exported,
                 uqm_rust::planets::calc::calc_gravity(&info.PlanetInfo),
                 "density {density} radius {radius}"
             );
@@ -283,17 +245,17 @@ fn gravity_and_random_locations_agree() {
     }
 
     for seed in 1..2000u32 {
-        let mut c_point = POINT { x: 0, y: 0 };
-        let mut rust_point = POINT { x: 0, y: 0 };
+        let mut exported_point = POINT { x: 0, y: 0 };
+        let mut direct_point = POINT { x: 0, y: 0 };
         unsafe {
             reseed_c(SysGenRNG, seed);
-            GenerateRandomLocation(&mut c_point);
+            GenerateRandomLocation(&mut exported_point);
         }
         rng.reseed(seed);
-        uqm_rust::planets::surface::generate_random_location(&mut rng, &mut rust_point);
+        uqm_rust::planets::surface::generate_random_location(&mut rng, &mut direct_point);
         assert_eq!(
-            (c_point.x, c_point.y),
-            (rust_point.x, rust_point.y),
+            (exported_point.x, exported_point.y),
+            (direct_point.x, direct_point.y),
             "seed {seed}"
         );
     }
