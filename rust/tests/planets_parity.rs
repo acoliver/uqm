@@ -23,6 +23,8 @@ use uqm_rust::c_bindings::global_state::{
     PlanetFrame, NODE_INFO, PLANET_DESC, POINT, SOLARSYS_STATE, SYSTEM_INFO,
 };
 use uqm_rust::math::RandomContext;
+use uqm_rust::planets::tables;
+use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
 #[cfg_attr(
     target_os = "macos",
@@ -34,6 +36,8 @@ unsafe extern "C" {
     static mut CurStarDescPtr: *mut c_void;
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
+    static element_array: [u8; 133];
+    static mut starmap_array: [CStarDesc; CATALOG_LEN];
 
     fn DoPlanetaryAnalysis(sys_info: *mut SYSTEM_INFO, desc: *mut PLANET_DESC);
     fn CalcGravity(info: *const c_void) -> u16;
@@ -259,4 +263,84 @@ fn gravity_and_random_locations_agree() {
             "seed {seed}"
         );
     }
+}
+
+fn render_star_catalog(table: &[CStarDesc]) -> String {
+    let mut text = String::new();
+    for star in table {
+        let _ = writeln!(
+            text,
+            "{} {} {} {} {} {}",
+            star.star_pt.x, star.star_pt.y, star.star_type, star.index, star.prefix, star.postfix
+        );
+    }
+    text
+}
+
+fn render_element_array(table: &[u8]) -> String {
+    table
+        .iter()
+        .map(|category| format!("{category}\n"))
+        .collect()
+}
+
+fn render_plan_resources(table: &[PlanetFrame]) -> String {
+    let name = |resource: *const std::ffi::c_char| {
+        unsafe { std::ffi::CStr::from_ptr(resource) }
+            .to_str()
+            .expect("resource names are ASCII")
+            .to_owned()
+    };
+    table
+        .iter()
+        .map(|frame| {
+            format!(
+                "{} {}\n",
+                name(frame.CMapInstance),
+                name(frame.XlatTabInstance)
+            )
+        })
+        .collect()
+}
+
+/// The `plandata.c` tables, read through the exported C symbols, must equal the
+/// fixtures captured from the C originals field for field (strings included),
+/// and the Rust tables must equal the same fixtures.
+#[test]
+fn plandata_tables_equal_the_c_originals() {
+    let c_stars = unsafe { &*(&raw const starmap_array) };
+    let c_frames = unsafe { &planet_array }.as_slice();
+    let c_elements = unsafe { &element_array }.as_slice();
+
+    let rust_stars = unsafe { &*(&raw const tables::STARMAP_ARRAY) };
+    let rust_frames = tables::PLANET_ARRAY.0.as_slice();
+    let rust_elements = tables::ELEMENT_ARRAY.as_slice();
+
+    assert_eq!(c_stars.len(), rust_stars.len());
+    assert_eq!(c_frames.len(), rust_frames.len());
+    assert_eq!(c_elements.len(), rust_elements.len());
+
+    for (name, text) in [
+        ("star_catalog.txt", render_star_catalog(c_stars)),
+        ("star_catalog.txt", render_star_catalog(rust_stars)),
+        ("element_array.txt", render_element_array(c_elements)),
+        ("element_array.txt", render_element_array(rust_elements)),
+        ("plan_resources.txt", render_plan_resources(c_frames)),
+        ("plan_resources.txt", render_plan_resources(rust_frames)),
+        ("plan_data.txt", render_plan_data(c_frames)),
+        ("plan_data.txt", render_plan_data(rust_frames)),
+    ] {
+        check_fixture(name, &text);
+    }
+
+    // Beyond the rendered fields, the bytes of the pointer-free tables match.
+    let bytes = |ptr: *const u8, len: usize| unsafe { std::slice::from_raw_parts(ptr, len) };
+    assert_eq!(
+        bytes(c_stars.as_ptr().cast(), std::mem::size_of_val(c_stars)),
+        bytes(
+            rust_stars.as_ptr().cast(),
+            std::mem::size_of_val(rust_stars)
+        ),
+    );
+    assert_eq!(c_elements, rust_elements);
 }
