@@ -476,3 +476,56 @@ requires encounter conversation 24 and dialogue conversation 18.
 4. Add parsing, unknown-value, one-shot, safe-boundary, setup-plan, and wrong-
    dispatch tests.
 5. Add a script containing both `assert_scene` and `capture`.
+
+## #226: the Starbase no longer becomes available after the first Commander talk
+
+`rust_visit_starbase` used to set `STARBASE_AVAILABLE` and `STARBASE_VISITED`
+after the unallied Commander conversation. C never did. The shortcut was added
+(8f10ba814) while `CleanupAfterStarBase` was not ported: the visit returned
+with `START_ENCOUNTER` and `GLOBAL_FLAGS_AND_DATA` still set, so the game kept
+re-entering the visit. `cleanup_after_visit` now ports that function, and the
+shortcut is gone (`starbase::finish_unallied_commander_talk`).
+
+Scripts that reach `assert_mode starbase` through the shortcut:
+`probe-encounter-v3`, `probe-encounter-v4`, `real-sol-earth-moon-base`,
+`real-sol-probe-to-starbase`, `real-sol-starbase-to-mars`, `starbase-visit-v1`
+(visit 2 in each, steps 38-45 in v3). Expect them to stop at the second visit (not played live): the
+Starbase is still unallied, so visit 2 is the unallied Commander talk again
+(`comandr.c` `Intro`: `STARBASE_VISITED` set, `RADIOACTIVES_PROVIDED` 0, so
+"do you have radioactives this time"), never the menu. `repro-comm-menu-initial`
+and the `StarbaseCommander` start scene set `STARBASE_AVAILABLE` themselves and
+are unaffected.
+
+The real C sequence the scripts must play (none of it is scriptable by the
+existing prep, and none of it has been played live):
+
+1. First Commander talk (sets `STARBASE_VISITED`).
+2. Fetch radioactives: land on a world with radioactive elements (the
+   Commander points to Mercury), pick up at least one unit with the lander
+   (`select_planet_menu`/`wait_for_planet_side_*` already drive a landing, but
+   there is no typed action to steer the lander onto a mineral deposit), return,
+   `we_will_transfer_now` sets `RADIOACTIVES_PROVIDED` and refuels.
+3. Revisit: `TellMoonBase`, then Luna. Luna's base conversation or fight sets
+   `MOONBASE_DESTROYED`; `MOONBASE_ON_SHIP` is set by the Luna pickup.
+4. Revisit: `BaseDestroyed` offers `base_was_abandoned` / `we_fought_them`
+   (-> `oh_yes_big_fight` / `i_lied_it_was_abandoned` / `i_cant_talk_about_it`).
+   `ByeBye` sets `PROBE_ILWRATH_ENCOUNTER`; the visit goes on.
+5. `VisitStarBase` clones one Ilwrath Avenger into the NPC queue
+   (`starbase.c:462`) and runs `ILWRATH_CONVERSATION`, which starts a one ship
+   battle against the flagship (the Ilwrath cloak and flame; the flagship is
+   the only player ship). Winning needs flight and fire input in a battle that
+   has no typed action yet. `wait_for_battle_ship_loss` can end the wait, but
+   nothing steers or aims. Losing ends the game (`CrewEnlisted == ~0`).
+6. After the battle the Commander talks again (`PROBE_ILWRATH_ENCOUNTER` still
+   1): `cook_their_butts` / `overthrow_evil_aliens` / `annihilate_those_monsters`
+   reset `PROBE_ILWRATH_ENCOUNTER` to 0 and set `STARBASE_AVAILABLE` to 1
+   (`comandr.c:159`). The next visit is the allied one with the menu.
+
+Plan: add a battle driving action (hold thrust/fire toward the Ilwrath until
+`wait_for_battle_ship_loss` for the enemy) and a lander mineral-pickup action,
+then replace the visit-2 block of the six scripts with steps 2-6, keeping every
+existing assertion (`assert_mode starbase`, 970 raw fuel / 2500 RU, Outfit
+purchases). Expected values change: the radioactives trade refuels the ship,
+and the 14-day time passage and 2500 RU arrive on the visit after
+`STARBASE_AVAILABLE` is set. Re-derive the `assert_ship_resources` numbers from
+a real-window run. Until then these scripts are expected to stop at visit 2.

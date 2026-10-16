@@ -611,3 +611,27 @@ pub fn cleanup_after_visit<P: Platform + ?Sized>(platform: &P) {
         platform.set_next_activity(next_activity);
     }
 }
+
+/// What follows the unallied Commander conversation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnalliedVisit {
+    /// The visit is over and the ship is back on its way to interplanetary
+    /// space (or an abort is pending).
+    LeftForSpace,
+    /// The Commander has sent the Ilwrath: fight them next.
+    IlwrathEncounter,
+}
+
+/// The branch of `VisitStarBase` right after the unallied Commander
+/// conversation (`starbase.c:454-459`). It writes no `STARBASE_AVAILABLE` and
+/// no `STARBASE_VISITED`: the conversation owns `STARBASE_VISITED`
+/// (`comandr.c:636`) and only the Ilwrath chain makes the Starbase available
+/// (`comandr.c:159`).
+pub fn finish_unallied_commander_talk<P: Platform + ?Sized>(platform: &P) -> UnalliedVisit {
+    let abort_pending = platform.current_activity().0 & activity_flags::CHECK_ABORT != 0;
+    if platform.game_state(StateKey::ProbeIlwrathEncounter) == 0 || abort_pending {
+        cleanup_after_visit(platform);
+        return UnalliedVisit::LeftForSpace;
+    }
+    UnalliedVisit::IlwrathEncounter
+}
