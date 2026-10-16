@@ -19,7 +19,7 @@ const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");
 const ORBITS: &str = include_str!("fixtures/planets/orbits.txt");
 
-/// The Rust side has no planet-frame table until `plandata.c` is ported.
+/// Parses the golden planet-frame table captured from the C original.
 fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
     text.lines()
         .map(|line| {

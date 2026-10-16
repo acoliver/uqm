@@ -7,8 +7,7 @@
 //! that point or NULL when there is none.
 //!
 //! The pointer itself is a C global and the catalog is `starmap_array`
-//! (plandata.c), a static C table that `star_array` points at; neither has a
-//! Rust owner yet. This module reads them as borrowed data: `catalog` is the
+//! (`planets::tables`), a Rust table that the C global `star_array` points at. This module reads them as borrowed data: `catalog` is the
 //! live table (`CATALOG_LEN` entries, both sentinels included), `current` is
 //! `CurStarDescPtr`. Capture requires the pointer to lie in that table, so the
 //! chunk always names a real catalog entry. Restore does not move the player:

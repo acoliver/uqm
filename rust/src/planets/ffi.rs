@@ -15,17 +15,16 @@ use crate::planets::calc::{self, AnalysisSite, StarDescription};
 use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::orbits::{self, OrbitRequest};
 use crate::planets::surface;
+use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
 use crate::savegame::runtime::star::CStarDesc;
 
-/// `PlanData` (formerly defined in `surface.c`): the planet-frame table,
-/// assigned by C at startup (`restart.c`, `rust_bridge_restart.c`).
+/// `PlanData` (formerly defined in `surface.c`): the planet-frame table.
 #[export_name = "PlanData"]
-pub static mut PLAN_DATA: *const PlanetFrame = std::ptr::null();
+pub static mut PLAN_DATA: *const PlanetFrame = PLANET_ARRAY.0.as_ptr();
 
-/// `Elements` (formerly defined in `surface.c`): the element category table,
-/// assigned by C at startup next to `PlanData`.
+/// `Elements` (formerly defined in `surface.c`): the element category table.
 #[export_name = "Elements"]
-pub static mut ELEMENTS: *const u8 = std::ptr::null();
+pub static mut ELEMENTS: *const u8 = ELEMENT_ARRAY.as_ptr();
 
 extern "C" {
     #[link_name = "SysGenRNG"]
@@ -46,7 +45,7 @@ unsafe fn sys_gen_rng<'a>() -> &'a mut RandomContext {
 /// `PlanData[0..NUMBER_OF_PLANET_TYPES]`.
 ///
 /// # Safety
-/// `PlanData` must point at the C planet-frame table.
+/// `PlanData` must point at the planet-frame table.
 unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
     std::slice::from_raw_parts(std::ptr::addr_of!(PLAN_DATA).read(), NUMBER_OF_PLANET_TYPES)
 }

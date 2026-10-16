@@ -80,6 +80,7 @@ const fn frame(
 }
 
 /// `starmap_array`: every star of the universe, then the end sentinel.
+#[export_name = "starmap_array"]
 pub static mut STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
     star(5007, 35, 0x27, 0, 6, 74),
     star(708, 41, 0x87, 0, 7, 91),
@@ -604,6 +605,7 @@ pub static mut STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
 ];
 
 /// `element_array`: the category of each element, in element order.
+#[export_name = "element_array"]
 pub static ELEMENT_ARRAY: [u8; ELEMENT_COUNT] = [
     0, 0, 0, 2, 2, 0, 0, 1, 1, 3, 2, 2, 2, 0, 0, 1, 1, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     0, 0, 1, 3, 2, 2, 2, 2, 2, 2, 6, 2, 2, 5, 5, 2, 2, 2, 2, 2, 1, 3, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -613,6 +615,7 @@ pub static ELEMENT_ARRAY: [u8; ELEMENT_COUNT] = [
 ];
 
 /// `planet_array`: one frame per world type.
+#[export_name = "planet_array"]
 pub static PLANET_ARRAY: SharedTable<[PlanetFrame; PLANET_TYPE_COUNT]> = SharedTable([
     frame(
         0x84,

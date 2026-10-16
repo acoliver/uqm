@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "da921d1d0bd8c8b5bcf2721e9c9c45357ae14e57b83e7bfe7e224459ac1538bb",
+    "projection_sha256": "343fb5c4a1287a41ad4370f29797e4bfdc9c955ff765ee5c31d20f779734e70f",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2579,18 +2579,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/plandata.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/uqm/plandata.c",
-      "scan_root": "native",
-      "sha256": "09bcdc468f525f862334054377a5cdb12a1bb697d2f07baac90f0639970da338",
-      "archive_decision": "include",
-      "provider": "native_object:native/plandata.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/cargo.c.o",
       "issue": "PLANETSIDE_INTEGRATION",
       "canonical_source": "sc2/src/uqm/planets/cargo.c",
@@ -3110,7 +3098,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/uqm/restart.c",
       "scan_root": "native",
-      "sha256": "f1bab5775ee716fedd3ed490346544fc6b5949bf2e3eced084c80d9d9e5ce18c",
+      "sha256": "05a5f40c39ad9511cae97d919540af5b0cd0ff63a544e5b9f995b9ca452b8bec",
       "archive_decision": "include",
       "provider": "native_object:native/restart.c.o",
       "reason": "Transitional C ambient archive member",
@@ -3158,7 +3146,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/uqm/rust_bridge_restart.c",
       "scan_root": "native",
-      "sha256": "4a024df35cbf7e0cb40966ba9e1ef5e656918057c2cc9525f7abfdb58cd739a6",
+      "sha256": "3d70c874b7f1ff0e0eb740bc3bfb586ea959f1798742e15e34fc9673b67e245d",
       "archive_decision": "include",
       "provider": "native_object:native/rust_bridge_restart.c.o",
       "reason": "Transitional C ambient archive member",

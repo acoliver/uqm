@@ -78,9 +78,9 @@ pub const EXPECTED_LEDGER_GIST_REVISION: &str = "5aece912bec7e8a2a646bd1bfc95d18
 pub const EXPECTED_LEDGER_SHA256: &str =
     "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
-    "da921d1d0bd8c8b5bcf2721e9c9c45357ae14e57b83e7bfe7e224459ac1538bb";
+    "343fb5c4a1287a41ad4370f29797e4bfdc9c955ff765ee5c31d20f779734e70f";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
-pub const EXPECTED_OBJECT_COUNT: usize = 335;
+pub const EXPECTED_OBJECT_COUNT: usize = 334;
 pub const DISPLIST_OBJECT: &str = "native/displist.c.o";
 pub const REMOVED_HEAP_OBJECT: &str = "native/heap.c.o";
 pub const QUEUE_RUST_PROVIDER: &str = "rust/src/collections/queue.rs";

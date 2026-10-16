@@ -1,6 +1,6 @@
 {
   "schema": "uqm-native-dependencies-v2",
-  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 318 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
+  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 317 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
   "dependencies": [
     {
       "path": "sc2/config_unix.h",
@@ -2284,7 +2284,7 @@
     },
     {
       "path": "sc2/src/uqm/hyper.h",
-      "sha256": "25104eea1c58ded1894ff7deda964ee64f2406ae3679d4462ba4a12f0e2e37b4",
+      "sha256": "72debf71fbaac7a0ae2cc7d5c19bfd727cd13f133d42029eb78b7437697706f4",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",

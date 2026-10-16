@@ -143,12 +143,8 @@ void
 uqm_assign_star_planet_globals (void)
 {
 	extern STAR_DESC starmap_array[];
-	extern const BYTE element_array[];
-	extern const PlanetFrame planet_array[];
 
 	star_array = starmap_array;
-	Elements = element_array;
-	PlanData = planet_array;
 }
 
 // ---------------------------------------------------------------------------
