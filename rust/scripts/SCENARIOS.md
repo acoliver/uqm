@@ -220,8 +220,10 @@ These edits have not run in a real window yet.
   Commander (picks `we_will_transfer_now`, `we_are_vindicator0`,
   `our_mission_was_secret`, `we_are_here_to_help`, `base_was_abandoned`, all
   index 0, each after `wait_for_communication_responses`). The Ilwrath
-  conversation (`wait_for_communication_responses` 4, pick 0) starts the
-  battle, `assert_mode battle`, `fight_battle` fights it to a win, and the
+  conversation (`wait_for_communication_responses` 4, pick 0,
+  `wait_for_communication_end` so its completion is consumed before the
+  post-battle response waits) starts the battle, `pick_battle_ship`,
+  `assert_mode battle`, `fight_battle` fights it to a win, and the
   Commander's `VERY_IMPRESSIVE` talk (3 options, then the 4 alliance names)
   sets `STARBASE_AVAILABLE`. The same visit continues into time passage and the
   allied Commander talk (2 options, pick 1), then `assert_mode starbase` proves
@@ -229,7 +231,7 @@ These edits have not run in a real window yet.
   `luna-moonbase-collected`, `commander-radioactives-offer`, `ilwrath-battle`,
   `ilwrath-defeated`, `allied-starbase-menu`. It asserts no resource numbers,
   since the refuel and 14 day passage values have not been observed live.
-  Budgets: 160000 ticks, 900 s wall (outer deadline pin 900000 ms). Not played
+  Budgets: 164000 ticks, 900 s wall (outer deadline pin 900000 ms). Not played
   live: every step after the Luna return, and whether `fight_battle` wins the
   Ilwrath fight within 6000 ticks.
 - `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets

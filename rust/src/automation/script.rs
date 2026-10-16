@@ -3391,8 +3391,14 @@ mod tests {
         });
         let pick = step_index(&steps, 0, |step| matches!(step, Action::PickBattleShip(_)));
         assert_eq!(pick + 1, battle_wait);
+        // The Ilwrath conversation ends into the battle; its completion must be
+        // consumed before the post-battle conversation's response waits.
         assert!(matches!(
             steps[pick - 1],
+            Action::WaitForCommunicationEnd(_)
+        ));
+        assert!(matches!(
+            steps[pick - 2],
             Action::SelectCommunicationResponse(_)
         ));
     }
