@@ -193,6 +193,23 @@ These edits have not run in a real window yet.
   `real-sol-starbase-to-mars`: orbit, `assert_mode orbit`, scan, dispatch,
   landing site, `wait_for_planet_side_start`, thrust and weapon, special tap,
   `wait_for_planet_side_end returned`, `assert_mode orbit`.
+- `real-sol-mercury-radioactives` (navigation, orbit and scan, planet-side
+  results; #226) handles the probe broadcast first (`wait_for_communication_end`
+  then `assert_activity 4`, as in `real-sol-probe-to-starbase`), flies to
+  Mercury (Sol planet index 0, accepted by `navigate_to_planet` and
+  `navigate_to_orbit` for 0..=8; the navigation snapshot only rejects an index
+  at or above the system's planet count), then orbit, `assert_mode orbit`,
+  scan, dispatch, landing site and `wait_for_planet_side_start`. On the surface
+  `collect_planet_minerals` drives the lander with player input until the hold
+  carries one radioactive unit, a Special tap launches it,
+  `wait_for_planet_side_end returned` ends the session, and
+  `assert_ship_element radioactive >= 1` proves the unit reached `GLOBAL_SIS`
+  after the lander docked. Captures: `mercury-surface`,
+  `mercury-radioactive-collected`, `mercury-orbit-with-radioactives`. It never
+  visits the Starbase, so it does not depend on the Commander chain below.
+  Budgets: 50000 ticks, 600 s wall, so it joins the 900 s outer deadline list.
+  Not played live: whether the lander reaches a radioactive deposit within
+  3000 ticks of the default landing site on Mercury is unconfirmed.
 - `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
   `CHECK_ABORT` directly for Quit (`restart.c`; `DoConfirmExit` is not on this
   path) and the game exits before the next input callback, so the scripted

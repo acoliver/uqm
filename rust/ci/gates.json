@@ -383,6 +383,12 @@
                 "outer_child_timeout_ms": 900000
           },
           {
+                "path": "rust/scripts/real-sol-mercury-radioactives.json",
+                "sha256": "c5513a379d9f62a1efba35b77e77078ce14b43cc469500ba924f2eac3e7d7e28",
+                "byte_length": 2101,
+                "outer_child_timeout_ms": 900000
+          },
+          {
                 "path": "rust/scripts/real-sol-planetside-collision-proof.json",
                 "sha256": "30bca462cac1f0a33a6f41a06ed50ef3d0b4751f1f2365f036b0f781e5a8534f",
                 "byte_length": 3534,

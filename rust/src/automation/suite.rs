@@ -151,6 +151,10 @@ pub const MATRIX: &[ScenarioRow] = &[
         &[Domain::NavigationOrbitScan],
     ),
     row(
+        "real-sol-mercury-radioactives",
+        &[Domain::NavigationOrbitScan, Domain::PlanetSideResults],
+    ),
+    row(
         "real-sol-planetside-collision-proof",
         &[Domain::PlanetSideResults],
     ),
