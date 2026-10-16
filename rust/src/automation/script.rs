@@ -3164,6 +3164,89 @@ mod tests {
         assert!(saved < moved - 2);
     }
 
+    fn menu_key_run(script: &ValidatedScript, from: usize, keys: &[MenuKey]) -> bool {
+        keys.iter().enumerate().all(|(offset, wanted)| {
+            matches!(
+                script.steps().get(from + offset),
+                Some(Action::TapMenuKey(TapMenuKeyStep { key, .. })) if key == wanted
+            )
+        })
+    }
+
+    #[test]
+    fn load_save_navigates_the_flagship_menu_the_way_the_game_does() {
+        let bytes = include_bytes!("../../scripts/load-save-v1.json");
+        let document = parse_script(bytes, "rust/scripts/load-save-v1.json").unwrap();
+        let script = validate_script(document, "rust/scripts/load-save-v1.json").unwrap();
+        let steps = script.steps();
+
+        // Every Game-options visit from flight opens the flagship menu with
+        // Cancel (cursor on STARMAP), reaches GAME with Up twice (PC menu wraps
+        // through NAVIGATION), selects it with a one-tick tap and asserts it.
+        let opens: Vec<usize> = (0..steps.len())
+            .filter(|&at| {
+                menu_key_run(
+                    &script,
+                    at,
+                    &[MenuKey::Cancel, MenuKey::Up, MenuKey::Up, MenuKey::Select],
+                )
+            })
+            .collect();
+        assert_eq!(opens.len(), 2, "one visit before the saves, one for Load");
+        for &open in &opens {
+            assert!(matches!(steps[open + 4], Action::AssertGameOptions(_)));
+        }
+        // No visit uses Down to reach GAME, which would land on CARGO or later.
+        assert!(!(0..steps.len()).any(|at| menu_key_run(
+            &script,
+            at,
+            &[MenuKey::Cancel, MenuKey::Down, MenuKey::Down]
+        )));
+
+        // A completed save closes Game options back to the flagship menu with
+        // GAME highlighted, so each save is followed by Select to reopen it and
+        // an assertion that it is open. Leaving after the second save is
+        // Cancel (to the flagship menu), Down (NAVIGATION), Select (flight),
+        // and only then the displacement baseline and thrust leg.
+        let moved = position_of(&script, |a| {
+            matches!(a, Action::AssertHyperspaceDisplacement(_))
+        });
+        let leave = (0..moved)
+            .rev()
+            .find(|&at| {
+                menu_key_run(
+                    &script,
+                    at,
+                    &[MenuKey::Cancel, MenuKey::Down, MenuKey::Select],
+                )
+            })
+            .expect("a Cancel, Down, Select return to flight before the thrust leg");
+        assert!(opens[0] < leave);
+        assert!(matches!(steps[leave - 1], Action::AssertGameOptions(_)));
+        assert!(steps[leave + 3..moved]
+            .iter()
+            .any(|a| matches!(a, Action::AssertActivity(_))));
+        assert!(!steps[leave + 3..moved]
+            .iter()
+            .any(|a| matches!(a, Action::TapMenuKey(_) | Action::AssertGameOptions(_))));
+
+        // Load picks slot 0: the picker opens on the last used slot (1, the
+        // second save), Up moves to slot 0 and Select loads it.
+        let load_menu = position_of(
+            &script,
+            |a| matches!(a, Action::Capture(CaptureStep { label, .. }) if label == "menu-load-game"),
+        );
+        assert!(matches!(steps[opens[1] + 4], Action::AssertGameOptions(_)));
+        assert!(menu_key_run(&script, opens[1] + 5, &[MenuKey::Down]));
+        assert!(opens[1] + 6 == load_menu);
+        let slot_zero = position_of(
+            &script,
+            |a| matches!(a, Action::Capture(CaptureStep { label, .. }) if label == "save-slot-0"),
+        );
+        assert!(menu_key_run(&script, slot_zero - 1, &[MenuKey::Up]));
+        assert!(menu_key_run(&script, slot_zero + 1, &[MenuKey::Select]));
+    }
+
     #[test]
     fn battle_proves_a_ship_was_destroyed_after_the_battle_started() {
         let bytes = include_bytes!("../../scripts/battle-v1.json");

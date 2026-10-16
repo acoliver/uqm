@@ -459,14 +459,32 @@ automation service.
 `record_saved_hyperspace_position` keeps `GLOBAL_SIS(log_x/log_y)` while the
 Game menu is open (the game is paused, so the ship cannot drift) before the
 first save. It is a separate slot from `record_hyperspace_position`, so a
-displacement leg does not consume it. After the second save the script leaves
-the menu with `cancel`, records a displacement baseline, thrusts for 100 ticks
-and requires `assert_hyperspace_displacement` of 16 units, so the ship is
-verified to be somewhere else when the load starts. It then reopens the Game
-menu, loads slot 0, and `assert_hyperspace_position_restored` requires both
-coordinates to equal the kept ones exactly (no tolerance). The ship cannot
-return to the saved coordinates unless the game really loaded the save, because
-nothing moves it while the menus are open. The trace records
+displacement leg does not consume it.
+
+The script navigates the flagship menu the way the game does (verified in real
+windows for `probe-encounter-v6`/`v7`, and read from `gameopt.c`/`hyper.c`).
+In hyperspace Cancel opens the flagship menu with the cursor on STARMAP; Cancel
+inside it does not close it, and only selecting NAVIGATION (or STARMAP) returns
+to flight. In PC menu mode Up from STARMAP wraps to NAVIGATION and Up twice
+reaches GAME, so every Game-options visit is `cancel, up, up, select` (one-tick
+select) followed by `assert_game_options`. A completed Save is not a Game-options
+exit that stays open: `PickGame` returns success, `DoGameOptions` returns FALSE
+and `GameOptions` hands control back to `DoHyperspaceMenu`, which redraws the
+flagship menu with GAME still highlighted. The script therefore presses Select
+after each save to reopen Game options and asserts it is open again before the
+next save. After the second save it leaves with Cancel (back to the flagship
+menu, GAME highlighted), Down (NAVIGATION) and Select (flight), asserts
+hyperspace activity again, records a displacement baseline,
+thrusts for 100 ticks and requires `assert_hyperspace_displacement` of 16
+units, so the ship is verified to be somewhere else when the load starts. It
+then reopens Game options with the same key sequence, asserts it, moves Down to
+Load and selects it. The picker opens on the last used slot (slot 1, from the
+second save), Up moves to slot 0 and Select loads it; a successful Load sets
+`CHECK_LOAD`, which closes every menu on the way out.
+`assert_hyperspace_position_restored` requires both coordinates to equal the
+kept ones exactly (no tolerance). The ship cannot return to the saved
+coordinates unless the game really loaded the save, because nothing moves it
+while the menus are open. The trace records
 `hyperspace_position_restored:x=:y=:saved_x=:saved_y=`, and the existing
 `assert_ship_resources` (1000 fuel, 0 RU) follows. Game date and crew have no
 Rust reader, so they are not compared. This has not run live: how many

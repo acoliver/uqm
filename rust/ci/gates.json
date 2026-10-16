@@ -294,8 +294,8 @@
           },
           {
                 "path": "rust/scripts/load-save-v1.json",
-                "sha256": "293fd1f7c1107e61ae9e28e95a8e5f6b9d1d316fb1f8feabe3e28f8a74b03c0d",
-                "byte_length": 4445
+                "sha256": "ec3962e03f04a645e6e81525e73f518ec5ff4071c1b994ebad1805afdd7b976e",
+                "byte_length": 4667
           },
           {
                 "path": "rust/scripts/main-menu-v1.json",
