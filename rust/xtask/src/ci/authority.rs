@@ -594,6 +594,9 @@ pub struct NativeRuntimeAuthority {
     pub observer_response_budget_bytes: u64,
     pub capture_budget_bytes: u64,
     pub content_expansion_budget_bytes: u64,
+    /// Evidence a native run may retain. Sized for the local suite on a HiDPI
+    /// display, independent of the hosted CI evidence-upload limits in `actions`.
+    pub inventory_limits: uqm_rust::automation::native_window::NativeInventoryLimits,
     pub expected_client_bounds: uqm_rust::automation::native_window::NativeWindowBounds,
 }
 
@@ -743,13 +746,7 @@ impl Authority {
             observer_response_budget_bytes: runtime.observer_response_budget_bytes,
             capture_budget_bytes: runtime.capture_budget_bytes,
             content_expansion_budget_bytes: runtime.content_expansion_budget_bytes,
-            inventory_limits: uqm_rust::automation::native_window::NativeInventoryLimits {
-                member_count: self.actions.evidence_snapshot_member_count_limit,
-                member_bytes: self.actions.evidence_snapshot_member_limit_bytes,
-                aggregate_bytes: self.actions.evidence_snapshot_aggregate_limit_bytes,
-                path_bytes: self.actions.evidence_snapshot_path_limit_bytes,
-                aggregate_path_bytes: self.actions.evidence_snapshot_aggregate_path_limit_bytes,
-            },
+            inventory_limits: runtime.inventory_limits,
             expected_client_bounds: runtime.expected_client_bounds,
         }
     }
@@ -1400,6 +1397,9 @@ fn validate_native_acceptance(authority: &Authority) -> Result<(), String> {
         || !valid_sha256(&native.script_sha256)
         || native.script_byte_length == 0
         || !native.acceptance_policy.is_valid()
+        || !native.runtime_contract.inventory_limits.is_valid()
+        || native.runtime_contract.capture_budget_bytes
+            > native.runtime_contract.inventory_limits.member_bytes
         || !authority
             .native_runtime_contract()
             .has_valid_deadline_order()
@@ -1618,6 +1618,13 @@ mod tests {
             observer_response_budget_bytes: 1,
             capture_budget_bytes: 1,
             content_expansion_budget_bytes: 1,
+            inventory_limits: uqm_rust::automation::native_window::NativeInventoryLimits {
+                member_count: 1,
+                member_bytes: 1,
+                aggregate_bytes: 1,
+                path_bytes: 1,
+                aggregate_path_bytes: 1,
+            },
             expected_client_bounds: uqm_rust::automation::native_window::NativeWindowBounds {
                 x: 1,
                 y: 1,
@@ -1635,6 +1642,78 @@ mod tests {
             .native_acceptance
             .runtime_contract
             .content_expansion_budget_bytes = 0;
+        assert!(validate_authority(&authority).is_err());
+    }
+
+    /// Raw RGBA size of one HiDPI (2x) window capture, 2560x1984. A PNG of it
+    /// cannot be larger than the raw pixels plus a small header overhead.
+    const HIDPI_CAPTURE_RGBA_BYTES: u64 = 2560 * 1984 * 4;
+    /// Measured 1x total for the 32-scenario local suite: shared inputs 55 MB
+    /// plus scenarios 112 MB, rounded up.
+    const MEASURED_1X_SUITE_BYTES: u64 = 168_000_000;
+
+    #[test]
+    fn native_suite_allowance_is_its_own_authority_value_not_the_hosted_upload_limit() {
+        let authority = fixture_authority();
+        let limits = authority.native_runtime_contract().inventory_limits;
+        assert_eq!(limits.aggregate_bytes, 1024 * 1024 * 1024);
+        assert_eq!(
+            authority.actions.evidence_snapshot_aggregate_limit_bytes,
+            256 * 1024 * 1024
+        );
+        assert_ne!(
+            limits.aggregate_bytes,
+            authority.actions.evidence_snapshot_aggregate_limit_bytes
+        );
+        // The whole suite at 1x grows at most 4x when every capture is 2x.
+        assert!(limits.aggregate_bytes >= 4 * MEASURED_1X_SUITE_BYTES);
+    }
+
+    #[test]
+    fn native_suite_budgets_accept_a_hidpi_capture_and_still_reject_excess() {
+        let authority = fixture_authority();
+        let contract = authority.native_runtime_contract();
+        let limits = contract.inventory_limits;
+        assert!(contract.capture_budget_bytes >= 2 * HIDPI_CAPTURE_RGBA_BYTES);
+        assert!(limits.member_bytes >= contract.capture_budget_bytes);
+
+        let budget = uqm_rust::automation::native_artifacts::ArtifactBudget::new(limits);
+        budget
+            .reserve(
+                "screenshots/checkpoint-0116.os.png",
+                HIDPI_CAPTURE_RGBA_BYTES,
+            )
+            .unwrap();
+        let oversized_member = limits.member_bytes + 1;
+        assert!(budget
+            .reserve("screenshots/too-big-member.png", oversized_member)
+            .is_err());
+        let remaining = budget.remaining().unwrap().aggregate_bytes;
+        assert!(budget
+            .reserve("screenshots/exhausts-suite.png", remaining + 1)
+            .is_err());
+    }
+
+    #[test]
+    fn native_capture_budget_must_fit_the_inventory_member_limit() {
+        let mut authority = fixture_authority();
+        authority
+            .native_acceptance
+            .runtime_contract
+            .capture_budget_bytes = authority
+            .native_acceptance
+            .runtime_contract
+            .inventory_limits
+            .member_bytes
+            + 1;
+        assert!(validate_authority(&authority).is_err());
+
+        let mut authority = fixture_authority();
+        authority
+            .native_acceptance
+            .runtime_contract
+            .inventory_limits
+            .aggregate_bytes = 0;
         assert!(validate_authority(&authority).is_err());
     }
 
