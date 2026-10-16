@@ -115,6 +115,16 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             ) && number(label, "minimum=") == Some(u64::from(value.minimum_logical_units))
                 && at_least(label, "moved=", u64::from(value.minimum_logical_units))
         }
+        Action::AssertHyperspacePositionRestored(_) => {
+            shape(
+                label,
+                "hyperspace_position_restored",
+                &["x=", "y=", "saved_x=", "saved_y="],
+            ) && number(label, "x=").is_some()
+                && number(label, "x=") == number(label, "saved_x=")
+                && number(label, "y=").is_some()
+                && number(label, "y=") == number(label, "saved_y=")
+        }
         Action::AssertShipResources(value) => {
             super::ship_resources::verified_label_satisfies(label, *value)
         }
@@ -149,6 +159,14 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "battle_frames_reached", &["count=", "minimum="])
                 && at_least(label, "count=", value.minimum)
                 && number(label, "minimum=") == Some(value.minimum)
+        }
+        Action::WaitForBattleShipLoss(value) => {
+            shape(
+                label,
+                "battle_ship_loss_reached",
+                &["lost=", "minimum=", "start=", "left="],
+            ) && number(label, "minimum=") == Some(u64::from(value.minimum_ships))
+                && at_least(label, "lost=", u64::from(value.minimum_ships))
         }
         Action::WaitForDispatch(value) => {
             shape(
@@ -647,6 +665,47 @@ mod tests {
             "hyperspace_displacement_failed:from=0,0:to=0,0:moved=0:minimum=16"
         ));
         assert!(!satisfies(16, "hyperspace_position_recorded:x=0:y=0"));
+    }
+
+    #[test]
+    fn only_a_restored_label_with_equal_coordinates_satisfies_the_restore_assertion() {
+        let action = Action::AssertHyperspacePositionRestored(
+            crate::automation::script::HyperspacePositionRestoredAssertion {},
+        );
+        assert!(semantic_satisfied(
+            &action,
+            "hyperspace_position_restored:x=1752:y=1450:saved_x=1752:saved_y=1450"
+        ));
+        for label in [
+            "hyperspace_position_restored:x=1752:y=1520:saved_x=1752:saved_y=1450",
+            "hyperspace_position_restored:x=1753:y=1450:saved_x=1752:saved_y=1450",
+            "hyperspace_position_restore_failed:saved=1752,1450:observed=1752,1520",
+            "hyperspace_position_restored:x=1752:y=1450",
+            "hyperspace_position_saved:x=1752:y=1450",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn only_a_ship_loss_label_that_meets_the_requested_minimum_satisfies_the_wait() {
+        let action = |minimum_ships: u32| {
+            Action::WaitForBattleShipLoss(crate::automation::script::WaitForBattleShipLossStep {
+                minimum_ships,
+                max_ticks: 100,
+            })
+        };
+        let label = "battle_ship_loss_reached:lost=2:minimum=2:start=14,14:left=13,13";
+        assert!(semantic_satisfied(&action(2), label));
+        assert!(!semantic_satisfied(&action(3), label));
+        assert!(!semantic_satisfied(
+            &action(1),
+            "battle_ship_loss_reached:lost=0:minimum=1:start=14,14:left=14,14"
+        ));
+        assert!(!semantic_satisfied(
+            &action(1),
+            "battle_frames_reached:count=40:minimum=1"
+        ));
     }
 
     #[test]

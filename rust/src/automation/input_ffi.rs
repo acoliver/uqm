@@ -62,6 +62,9 @@ extern "C" {
     /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
     #[allow(non_snake_case)]
     fn playerInPlanetOrbit() -> bool;
+    /// Ships left per side, `BYTE battle_counter[NUM_SIDES]` in `battle.c`.
+    #[link_name = "battle_counter"]
+    static BATTLE_COUNTER: [u8; 2];
     #[link_name = "ScreenWidth"]
     static SCREEN_WIDTH: std::ffi::c_int;
     #[link_name = "ScreenHeight"]
@@ -273,6 +276,23 @@ pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
 /// Without the linked game there is no flagship state to read.
 #[cfg(not(feature = "linked_c_archive"))]
 pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
+    None
+}
+
+/// The ships left on each side of the live or last battle, in player order.
+///
+/// `tactrans.c` decrements these when a ship dies. Nothing is written.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so the counters cannot change during this read.
+    let counters = unsafe { std::ptr::addr_of!(BATTLE_COUNTER).read() };
+    Some((counters[0], counters[1]))
+}
+
+/// Without the linked game there are no fleets to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
     None
 }
 

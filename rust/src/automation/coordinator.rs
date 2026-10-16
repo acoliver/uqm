@@ -18,6 +18,7 @@
 use crate::automation::battle_fight::{
     BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
 };
+use crate::automation::battle_outcome::{self, BattleLossTracker};
 use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
 use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
@@ -281,6 +282,8 @@ struct CoordInner {
     verified_battle_frames: u64,
     /// Hyperspace position snapshot awaiting its displacement assertion.
     flight_position: FlightPositionTracker,
+    /// Fleet sizes at the start of the battle a ship-loss wait is watching.
+    battle_loss: BattleLossTracker,
     /// Facing at which the current `turn_flagship` step began.
     flagship_turn: FlagshipTurnTracker,
     /// Ticks and trip of the current `collect_planet_minerals` step.
@@ -448,6 +451,7 @@ impl Coordinator {
                 held_repeat_key: None,
                 verified_battle_frames: 0,
                 flight_position: FlightPositionTracker::default(),
+                battle_loss: BattleLossTracker::default(),
                 flagship_turn: FlagshipTurnTracker::default(),
                 planet_minerals: PlanetMineralsTracker::default(),
                 battle_fight: BattleFightTracker::default(),
@@ -941,6 +945,33 @@ impl Coordinator {
                         wait.minimum
                     ),
                 );
+            }
+        } else if let Some(Action::WaitForBattleShipLoss(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner.battle_loss.observe(
+                mode::require_live(),
+                crate::automation::battle_observer::current_frame(),
+                battle_outcome::live_fleets(),
+                wait.minimum_ships,
+            ) {
+                Ok(Some(proof)) => {
+                    scheduler_event = SchedulerEvent::ConditionReached;
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        proof.trace_label(),
+                    );
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                }
             }
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
@@ -1750,6 +1781,52 @@ impl Coordinator {
                     inner,
                     RecordKind::SemanticAssertion,
                     proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::RecordSavedHyperspacePosition(_)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner
+                .flight_position
+                .record_saved(mode::require_live(), flight_position::live_position())
+            {
+                Ok(position) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    flight_position::saved_trace_label(position),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertHyperspacePositionRestored(_)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner
+                .flight_position
+                .assert_restored(mode::require_live(), flight_position::live_position())
+            {
+                Ok((saved, observed)) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    flight_position::restored_trace_label(saved, observed),
                 ),
                 Err(error) => {
                     self.write_trace_labeled(

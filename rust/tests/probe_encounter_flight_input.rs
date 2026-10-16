@@ -56,7 +56,9 @@ fn long_flight_holds_are_player_keys_not_menu_keys() {
 fn flight_player_keys_are_thrust_only_because_turns_are_verified_actions() {
     for name in SCRIPTS {
         for (index, step) in script_steps(name).iter().enumerate() {
-            if step["action"] != "tap_player_key" {
+            // Special is the lander launch of the Mercury trip in the allied
+            // chain, not a flight key.
+            if step["action"] != "tap_player_key" || step["key"] == "special" {
                 continue;
             }
             assert_eq!(
@@ -217,7 +219,10 @@ fn v1_to_v5_fly_a_four_leg_square_with_three_right_angle_turns() {
         let steps = script_steps(name);
         let legs: Vec<&Value> = steps
             .iter()
-            .filter(|step| matches!(action_of(step), "tap_player_key" | "turn_flagship"))
+            .filter(|step| {
+                matches!(action_of(step), "tap_player_key" | "turn_flagship")
+                    && step["key"] != "special"
+            })
             .collect();
         assert_eq!(legs.len(), 7, "{name} keeps four legs and three turns");
         let mut turned = 0;
@@ -449,7 +454,7 @@ fn prep_of(name: &str) -> Vec<Value> {
 }
 
 #[test]
-fn prepared_flights_start_from_the_real_opening_state_and_end_with_a_full_tank() {
+fn prepared_flights_start_from_the_real_opening_state_and_end_with_the_purchased_tank() {
     for name in PREPARED {
         let steps = script_steps(name);
         let fly = position(&steps, 0, |step| {
@@ -469,8 +474,8 @@ fn prepared_flights_start_from_the_real_opening_state_and_end_with_a_full_tank()
         assert!(all[0].0 > new_game, "{name} checks resources in a new game");
         assert_eq!(
             all.last().map(|(_, found)| *found),
-            Some((Some(6000), Some(1500))),
-            "{name} must prove 6000 raw fuel and 1500 RU right before it flies"
+            Some((Some(5900), Some(1500))),
+            "{name} must prove 5900 raw fuel and 1500 RU right before it flies"
         );
         assert_eq!(
             fly - all.last().unwrap().0,
@@ -496,19 +501,23 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
             .rposition(|step| action_of(step) == "select_communication_response")
             .expect("goodbye response");
         assert_eq!(
-            steps[farewell]["index"], 1,
-            "{name} says goodbye to the Commander"
+            steps[farewell]["index"], 2,
+            "{name} says goodbye_commander to the allied Commander"
         );
         let first_purchase = position(&steps, 0, |step| is_tap(step, "up"));
         assert!(
             reward < first_purchase,
             "{name} must hold the 2500 RU reward before buying fuel"
         );
-        // The reward is only paid when the Commander greets the moon base, so
-        // the visit that pays it must come after the Luna pickup visit.
-        let pickup = position(&steps, 0, |step| {
-            action_of(step) == "wait_for_planet_side_end" && step["outcome"] == "returned"
-        });
+        // The reward is only paid when the allied Commander greets the moon
+        // base, so the visit that pays it must come after the Luna pickup (the
+        // last planet-side return, after the Mercury trip).
+        let pickup = steps[..reward]
+            .iter()
+            .rposition(|step| {
+                action_of(step) == "wait_for_planet_side_end" && step["outcome"] == "returned"
+            })
+            .expect("Luna pickup return");
         let commander_visits: Vec<usize> = steps
             .iter()
             .enumerate()
@@ -520,7 +529,8 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
             2,
             "{name} visits the Commander twice"
         );
-        assert!(pickup < commander_visits[0] && commander_visits[1] < reward);
+        assert!(commander_visits[0] < pickup && pickup < commander_visits[1]);
+        assert!(commander_visits[1] < reward);
     }
 }
 
@@ -532,7 +542,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
             resources(step) == Some(post_landing_state(name))
         });
         let leave = position(&steps, enter, |step| {
-            resources(step) == Some((Some(6000), Some(1500)))
+            resources(step) == Some((Some(5900), Some(1500)))
         });
         let purchases = steps[enter..leave]
             .iter()
@@ -543,7 +553,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
         let (landed_fuel, reward_ru) = post_landing_state(name);
         let rounded = round_fuel_on_outfit_entry(u32::try_from(landed_fuel.unwrap()).unwrap())
             .expect("rounds");
-        assert_eq!(rounded as usize + purchases * 100, 6000);
+        assert_eq!(rounded as usize + purchases * 100, 5900);
         assert_eq!(reward_ru.unwrap() as usize - purchases * 20, 1500);
         // Nothing other than Outfit navigation and purchases happens in between.
         for step in &steps[enter + 1..leave] {
@@ -559,7 +569,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
 
 #[test]
 fn preparation_uses_only_player_and_menu_inputs_and_queries() {
-    const ALLOWED: [&str; 19] = [
+    const ALLOWED: [&str; 26] = [
         "wait_for_main_menu_ready",
         "tap_menu_key",
         "set_menu_key",
@@ -579,6 +589,13 @@ fn preparation_uses_only_player_and_menu_inputs_and_queries() {
         "wait_for_communication_end",
         "wait_for_communication_responses",
         "select_communication_response",
+        "navigate_to_orbit",
+        "tap_player_key",
+        "collect_planet_minerals",
+        "assert_ship_element",
+        "pick_battle_ship",
+        "wait_for_battle_frames",
+        "fight_battle",
     ];
     for name in PREPARED {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -604,6 +621,14 @@ fn preparation_uses_only_player_and_menu_inputs_and_queries() {
 fn the_flight_after_preparation_is_the_square_route() {
     let captures: &[&str] = &[
         "new-game-confirmed",
+        "commander-first-visit-done",
+        "mercury-surface",
+        "mercury-radioactive-collected",
+        "mercury-orbit-with-radioactives",
+        "luna-moonbase-collected",
+        "commander-radioactives-offer",
+        "ilwrath-battle",
+        "ilwrath-defeated",
         "hyperspace-start",
         "leg-1",
         "turn-1",
@@ -641,24 +666,27 @@ fn the_flight_after_preparation_is_the_square_route() {
             .filter(|step| action_of(step) == "assert_hyperspace_displacement")
             .count();
         assert_eq!(displacement, 4, "{name} proves every leg");
-        // The preparation adds no capture of its own.
-        assert!(prep_of(name)
+        // The preparation captures only the opening and the allied chain's
+        // own milestones, in the order `real-sol-starbase-alliance` plays them.
+        let prep = prep_of(name);
+        let prep_labels: Vec<&str> = prep
             .iter()
-            .all(|step| action_of(step) != "capture" || {
-                matches!(step["label"].as_str(), Some("new-game-confirmed"))
-            }));
+            .filter(|step| action_of(step) == "capture")
+            .filter_map(|step| step["label"].as_str())
+            .collect();
+        assert_eq!(prep_labels, captures[..9].to_vec(), "{name}");
     }
 }
 
 #[test]
-fn the_wall_clock_watchdog_is_not_raised_to_fit_the_preparation() {
+fn the_wall_clock_watchdog_is_the_approved_nine_hundred_seconds_for_the_allied_chain() {
     for name in PREPARED {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("scripts")
             .join(format!("{name}.json"));
         let document: Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert_eq!(document["budgets"]["max_wallclock_seconds"], 720, "{name}");
+        assert_eq!(document["budgets"]["max_wallclock_seconds"], 900, "{name}");
         let ticks = document["budgets"]["max_input_ticks"].as_u64().unwrap();
         let presentations = document["budgets"]["max_presentations"].as_u64().unwrap();
         assert_eq!(
@@ -678,11 +706,12 @@ fn both_prepared_scripts_share_one_identical_preparation() {
 
 /// The second Commander dispatch only starts the conversation: the NPC
 /// callback registers its response choices afterwards, while speech plays.
-/// The immediate response-count assertion must therefore follow a bounded
-/// wait for the current conversation's choices, and the assertion itself must
-/// stay exactly as strict as before.
+/// The radioactives offer (three choices: `we_will_transfer_now`,
+/// `what_will_you_give_us`, `before_radios_we_need_info`) must therefore be
+/// awaited with a bounded wait before the first pick, and the pick takes the
+/// first choice.
 #[test]
-fn the_second_commander_response_assertion_follows_a_bounded_response_wait() {
+fn the_second_commander_visit_waits_for_its_offer_before_the_first_pick() {
     for name in PREPARED {
         let steps = prep_of(name);
         let dispatches: Vec<usize> = steps
@@ -691,35 +720,25 @@ fn the_second_commander_response_assertion_follows_a_bounded_response_wait() {
             .filter(|(_, step)| action_of(step) == "wait_for_dispatch" && step["encounter"] == 2)
             .map(|(index, _)| index)
             .collect();
+        assert_eq!(dispatches.len(), 2, "{name} visits the Commander twice");
         let second_dispatch = dispatches[1];
-        let assertion = position(&steps, second_dispatch, |step| {
-            action_of(step) == "assert_communication_responses"
-        });
-        assert_eq!(
-            steps[assertion],
-            serde_json::json!({"action": "assert_communication_responses", "minimum": 2}),
-            "{name} keeps the original assertion unchanged"
-        );
-        assert_eq!(
-            assertion - second_dispatch,
-            2,
-            "{name}: exactly one step separates the dispatch from the assertion"
-        );
         let wait = &steps[second_dispatch + 1];
         assert_eq!(
             action_of(wait),
             "wait_for_communication_responses",
             "{name}"
         );
-        assert_eq!(wait["minimum"], 2, "{name} waits for as many as it asserts");
-        let max_ticks = wait["max_ticks"].as_u64().expect("bounded wait");
-        assert!((1..=2000).contains(&max_ticks), "{name}: bounded wait");
         assert_eq!(
-            steps[assertion + 1]["action"],
-            "select_communication_response",
-            "{name} still chooses only after the assertion"
+            wait["minimum"], 3,
+            "{name} waits for the three-choice offer"
         );
-        assert_eq!(steps[assertion + 1]["index"], 1, "{name} says goodbye");
+        let max_ticks = wait["max_ticks"].as_u64().expect("bounded wait");
+        assert!((1..=3000).contains(&max_ticks), "{name}: bounded wait");
+        let pick = position(&steps, second_dispatch, |step| {
+            action_of(step) == "select_communication_response"
+        });
+        assert!(pick > second_dispatch + 1, "{name} picks after the wait");
+        assert_eq!(steps[pick]["index"], 0, "{name} transfers the radioactives");
     }
 }
 
@@ -769,6 +788,7 @@ struct DerivedPreparation {
     opening_res_units: u32,
     fuel_price: u8,
     landing_cost: u32,
+    mercury_landing_cost: u32,
     reward: u32,
 }
 
@@ -799,6 +819,26 @@ impl DerivedPreparation {
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
+        // Mercury is planet 0 of Sol; `gensol.c` fixes its density and radius
+        // the same way.
+        let world_properties = &gensol[gensol
+            .find("if (worldIsPlanet (solarSys, world))")
+            .expect("planet properties block")..];
+        let planets = &world_properties[world_properties
+            .find("case 0: /* MERCURY */")
+            .expect("Mercury block")..];
+        let mercury = &planets[..planets.find("case 1: /* VENUS */").expect("Venus block")];
+        let mercury_gravity = u16::try_from(
+            number_after(mercury, "PlanetInfo.PlanetDensity = ")
+                * number_after(mercury, "PlanetInfo.PlanetRadius = ")
+                / 100,
+        )
+        .expect("gravity fits");
+        let mercury_landing_cost = u32::from(landing_fuel_needed(
+            mercury_gravity,
+            u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
+        ));
+
         let reward = number_after(
             &c_source("comm/starbas/starbas.c"),
             "DeltaSISGauges (0, 0, ",
@@ -808,13 +848,14 @@ impl DerivedPreparation {
             opening_res_units,
             fuel_price,
             landing_cost,
+            mercury_landing_cost,
             reward,
         }
     }
 
     fn after_landing_and_reward(&self) -> (u32, u32) {
         (
-            self.opening_fuel - self.landing_cost,
+            self.opening_fuel - self.mercury_landing_cost - self.landing_cost,
             self.opening_res_units + self.reward,
         )
     }
@@ -851,11 +892,20 @@ fn luna_landing_costs_thirty_raw_fuel() {
     assert_eq!(derived.landing_cost, 30);
 }
 
+/// Mercury: density 98 and radius 38 give gravity 37 (3724 / 100), twice that.
+#[test]
+fn mercury_landing_costs_seventy_four_raw_fuel() {
+    assert_eq!(
+        DerivedPreparation::from_game_data(0).mercury_landing_cost,
+        74
+    );
+}
+
 /// The preparation lands on Luna exactly once and flies no hyperspace before
 /// the Starbase menu, so the only fuel deduction that precedes the check is
 /// one Luna landing.
 #[test]
-fn the_starbase_menu_check_expects_the_opening_tank_minus_one_luna_landing() {
+fn the_starbase_menu_check_expects_the_opening_tank_minus_the_mercury_and_luna_landings() {
     for name in PREPARED {
         let steps = prep_of(name);
         let docked = position(&steps, 0, |step| {
@@ -865,14 +915,18 @@ fn the_starbase_menu_check_expects_the_opening_tank_minus_one_luna_landing() {
             .iter()
             .filter(|step| action_of(step) == "wait_for_planet_side_start")
             .count();
-        assert_eq!(landings, 1, "{name} lands exactly once before the check");
+        assert_eq!(
+            landings, 2,
+            "{name} lands on Mercury and Luna before the check"
+        );
         let derived = derived_preparation(name);
         let (fuel, res_units) = derived.after_landing_and_reward();
         assert_eq!(
             resources(&steps[docked + 1]),
             Some((Some(u64::from(fuel)), Some(u64::from(res_units)))),
-            "{name} must expect {} raw fuel less one {}-raw Luna landing and the reward",
+            "{name} must expect {} raw fuel less the {}-raw Mercury and {}-raw Luna landings and the reward",
             derived.opening_fuel,
+            derived.mercury_landing_cost,
             derived.landing_cost
         );
     }
@@ -886,7 +940,7 @@ fn outfit_entry_rounding_and_fifty_purchases_conserve_to_the_final_proof() {
         let derived = derived_preparation(name);
         let (fuel, res_units) = derived.after_landing_and_reward();
         let rounded = round_fuel_on_outfit_entry(fuel).expect("rounds");
-        assert_eq!(rounded, 1000, "{name}: 970 rounds half up to the unit");
+        assert_eq!(rounded, 900, "{name}: 896 rounds half up to the unit");
         let mut state = FuelRuState {
             fuel_on_board: rounded,
             res_units,

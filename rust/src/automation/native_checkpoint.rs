@@ -28,6 +28,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertCommunicationResponses(_)
         | Action::AssertBattleFrames(_)
         | Action::AssertHyperspaceDisplacement(_)
+        | Action::AssertHyperspacePositionRestored(_)
         | Action::AssertShipResources(_)
         | Action::AssertShipElement(_)
         | Action::AssertPlanetSideCollisions(_)
@@ -37,6 +38,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::WaitForPlanetSideEnd(_)
         | Action::WaitForDispatch(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForBattleShipLoss(_)
         | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
@@ -58,6 +60,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::SetPlayerKey(_)
         | Action::TapPlayerKey(_)
         | Action::RecordHyperspacePosition(_)
+        | Action::RecordSavedHyperspacePosition(_)
         | Action::ExpectQuit(_)
         | Action::Finish => None,
     }
@@ -631,7 +634,7 @@ mod tests {
                 captures += expected_captures;
             }
         }
-        assert_eq!(captures, 156);
+        assert_eq!(captures, 203);
         assert_eq!(classes.len(), 4);
     }
 }

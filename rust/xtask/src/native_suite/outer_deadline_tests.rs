@@ -33,11 +33,15 @@ pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 20] = [
 ];
 
 /// Pinned scripts that declare a 900 s wall budget.
-const WALL_900_SCRIPTS: [&str; 4] = [
+const WALL_900_SCRIPTS: [&str; 8] = [
+    "rust/scripts/probe-encounter-v3.json",
+    "rust/scripts/probe-encounter-v4.json",
     "rust/scripts/real-sol-earth-moon-base.json",
     "rust/scripts/real-sol-luna-moonbase-departure.json",
+    "rust/scripts/real-sol-probe-to-starbase.json",
     "rust/scripts/real-sol-starbase-alliance.json",
     "rust/scripts/real-sol-starbase-to-mars.json",
+    "rust/scripts/starbase-visit-v1.json",
 ];
 
 const DEFAULT_OUTER_MS: u64 = 300_000;
@@ -272,7 +276,7 @@ fn a_900_second_budget_without_the_override_is_refused() {
 }
 
 #[test]
-fn the_four_900_second_scripts_carry_the_override_in_the_authority() {
+fn the_eight_900_second_scripts_carry_the_override_in_the_authority() {
     let authority = authority();
     for path in WALL_900_SCRIPTS {
         assert_eq!(
