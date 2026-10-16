@@ -2637,7 +2637,10 @@ fn extract_archive(
     Ok(())
 }
 
-fn validate_archive_entry(index: usize, entry: &zip::read::ZipFile<'_>) -> Result<PathBuf, String> {
+fn validate_archive_entry(
+    index: usize,
+    entry: &zip::read::ZipFile<'_, fs::File>,
+) -> Result<PathBuf, String> {
     let relative = entry
         .enclosed_name()
         .ok_or_else(|| format!("content package entry {index} has an unsafe path"))?
