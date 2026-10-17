@@ -18,6 +18,7 @@ use uqm_rust::c_bindings::global_state::{
 const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");
 const ORBITS: &str = include_str!("fixtures/planets/orbits.txt");
+const TOPOGRAPHY: &str = include_str!("fixtures/planets/topography.txt");
 
 /// Parses the golden planet-frame table captured from the C original.
 fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
@@ -57,6 +58,14 @@ fn planetary_analysis_and_nodes_match_the_c_fixture() {
     assert_eq!(table.len(), 59);
     let records = world_records(&table);
     assert_eq!(render_fixture(&records), WORLDS);
+}
+
+#[test]
+fn fault_line_topography_matches_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let text =
+        planets_common::topography::render(&mut planets_common::topography::RustTopography, &table);
+    assert_eq!(text, TOPOGRAPHY);
 }
 
 #[test]

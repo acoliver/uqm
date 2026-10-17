@@ -15,6 +15,7 @@ use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use planets_common::topography::{self, TopoCase, Topography};
 use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, WorldCase, PRESET_LIFE,
@@ -38,6 +39,7 @@ unsafe extern "C" {
     static element_array: [u8; 133];
     static mut starmap_array: [CStarDesc; CATALOG_LEN];
 
+    fn DeltaTopography(num_iterations: u16, depth: *mut i8, rect: *const Rect, depth_delta: i16);
     fn DoPlanetaryAnalysis(sys_info: *mut SYSTEM_INFO, desc: *mut PLANET_DESC);
     fn CalcGravity(info: *const c_void) -> u16;
     fn GenerateMineralDeposits(
@@ -66,6 +68,57 @@ unsafe extern "C" {
         num_planets: u8,
         base: *mut PLANET_DESC,
         types_defined: u32,
+    );
+}
+
+/// `RECT` as `{ corner.x, corner.y, extent.width, extent.height }`; only the
+/// extent matters to `DeltaTopography`.
+type Rect = [i16; 4];
+
+/// Cells past the map the C side gets, so an overrun reads as a mismatch
+/// instead of corrupting memory.
+const GUARD_CELLS: usize = 4096;
+
+/// The linked C `DeltaTopography`, over the C-owned `SysGenRNG`.
+struct CTopography;
+
+impl Topography for CTopography {
+    fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32 {
+        let rect: Rect = [0, 0, case.width, case.height];
+        let mut padded = map.to_vec();
+        padded.resize(map.len() + GUARD_CELLS, 0);
+        unsafe {
+            reseed_c(SysGenRNG, case.seed);
+            DeltaTopography(
+                case.iterations,
+                padded.as_mut_ptr(),
+                &rect,
+                case.depth_delta,
+            );
+        }
+        assert!(
+            padded[map.len()..].iter().all(|cell| *cell == 0),
+            "C wrote past the map for {case:?}"
+        );
+        map.copy_from_slice(&padded[..map.len()]);
+        unsafe { uqm_rust::math::RandomContext_GetSeed(SysGenRNG) }
+    }
+}
+
+/// The Rust port and the C original agree on every case, whole depth map and
+/// RNG position, and the C results are the checked-in fixture.
+fn topography_agrees_with_c(table: &[PlanetFrame]) {
+    let mut checked = 0;
+    for case in topography::cases(table) {
+        let c_line = topography::case_line(&mut CTopography, &case);
+        let rust_line = topography::case_line(&mut topography::RustTopography, &case);
+        assert_eq!(c_line, rust_line, "topography case {case:?}");
+        checked += 1;
+    }
+    assert_eq!(checked, 171, "topography domain changed");
+    check_or_write(
+        "topography.txt",
+        &topography::render(&mut CTopography, table),
     );
 }
 
@@ -208,6 +261,16 @@ fn check_fixture(name: &str, text: &str) {
     assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
+/// Compares with the checked-in fixture; `UQM_REGEN_PLANET_FIXTURES=1`
+/// rewrites it from the C results instead.
+fn check_or_write(name: &str, text: &str) {
+    if std::env::var_os("UQM_REGEN_PLANET_FIXTURES").is_some() {
+        std::fs::write(fixture_path(name), text).expect("write fixture");
+    } else {
+        check_fixture(name, text);
+    }
+}
+
 /// One test: the exports share process-global state (`pSolarSysState`,
 /// `SysGenRNG`), so the comparisons must not run in parallel.
 #[test]
@@ -219,6 +282,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
 
     // The planet-frame table the fixtures carry must be the C table.
     check_fixture("plan_data.txt", &render_plan_data(table));
+    topography_agrees_with_c(table);
 
     let worlds = collect(world_cases(false), world_cases(true), |case| {
         world_line(&mut exports, case, base)
