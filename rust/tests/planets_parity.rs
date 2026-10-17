@@ -10,6 +10,8 @@
 //! way the C did.
 
 mod planets_common;
+#[path = "planets_special/mod.rs"]
+mod planets_special;
 
 use std::ffi::c_void;
 use std::fmt::Write as _;
@@ -412,6 +414,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     check_fixture("worlds.txt", &render_fixture(&worlds));
     check_fixture("orbits.txt", &render_fixture(&orbits));
     exported_default_generator_reproduces_the_fixtures(&mut exports);
+    planets_special::special_generators_match_the_c_originals();
     assert!(unsafe {
         GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
             && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
