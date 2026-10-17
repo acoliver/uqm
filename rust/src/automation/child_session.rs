@@ -2736,15 +2736,30 @@ mod os {
         /// when `wake` reports a change. `wake` is never given more than one
         /// poll interval, so a missed change costs one interval, not a hang.
         pub fn finish_observing_with_wake<F, W>(
-            mut self,
-            mut observer: F,
+            self,
+            observer: F,
             wake: &W,
         ) -> Result<ChildSessionReceipt, ChildSessionFailure>
         where
             F: FnMut(&ProcessIdentity) -> io::Result<()>,
             W: ChangeWait,
         {
-            let event = self.wait_for_event(self.config.timeout, &mut observer, wake);
+            self.finish_observing_with_clock(observer, wake, &Instant::now)
+        }
+
+        /// [`Self::finish_observing_with_wake`] with the clock supplied by the
+        /// caller.
+        pub(super) fn finish_observing_with_clock<F, W>(
+            mut self,
+            mut observer: F,
+            wake: &W,
+            now: &impl Fn() -> Instant,
+        ) -> Result<ChildSessionReceipt, ChildSessionFailure>
+        where
+            F: FnMut(&ProcessIdentity) -> io::Result<()>,
+            W: ChangeWait,
+        {
+            let event = self.wait_for_event(self.config.timeout, &mut observer, wake, now);
             let outcome = match event {
                 Ok(SupervisorEvent::Exited) => self.teardown_and_reap(None),
                 Ok(SupervisorEvent::Reader(fault)) => {
@@ -2796,16 +2811,17 @@ mod os {
             duration: Duration,
             observer: &mut impl FnMut(&ProcessIdentity) -> io::Result<()>,
             wake: &impl ChangeWait,
+            now: &impl Fn() -> Instant,
         ) -> Result<SupervisorEvent, ChildSessionError> {
-            let deadline = Instant::now()
+            let deadline = now()
                 .checked_add(duration)
                 .ok_or_else(|| ChildSessionError::Wait(io::Error::other("deadline overflow")))?;
             loop {
-                if Instant::now() >= deadline {
+                if now() >= deadline {
                     return Ok(SupervisorEvent::Deadline);
                 }
                 observer(&self.identity).map_err(ChildSessionError::Observer)?;
-                if Instant::now() >= deadline {
+                if now() >= deadline {
                     return Ok(SupervisorEvent::Deadline);
                 }
                 match self.reader_faults.try_recv() {
@@ -2815,14 +2831,17 @@ mod os {
                 }
                 match self.anchor.observe() {
                     Ok(true) => return Ok(SupervisorEvent::Exited),
-                    Ok(false) if Instant::now() >= deadline => {
-                        return Ok(SupervisorEvent::Deadline)
+                    Ok(false) => {
+                        let now = now();
+                        if now >= deadline {
+                            return Ok(SupervisorEvent::Deadline);
+                        }
+                        match wake.wait(poll_timeout(deadline, now)) {
+                            Ok(()) => {}
+                            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                            Err(error) => return Err(ChildSessionError::Observer(error)),
+                        }
                     }
-                    Ok(false) => match wake.wait(poll_timeout(deadline, Instant::now())) {
-                        Ok(()) => {}
-                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                        Err(error) => return Err(ChildSessionError::Observer(error)),
-                    },
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}
                     Err(error) => return Err(ChildSessionError::Wait(error)),
                 }
@@ -4243,10 +4262,9 @@ mod os_tests {
         assert!(failure.receipt.orphan_check_passed);
     }
 
-    /// Records when each wait started and the timeout it was given, and
-    /// answers with `respond`.
+    /// Records the timeout each wait was given and answers with `respond`.
     struct ScriptedWake<F: Fn(Duration) -> io::Result<()>> {
-        calls: std::sync::Mutex<Vec<(std::time::Instant, Duration)>>,
+        calls: std::sync::Mutex<Vec<Duration>>,
         respond: F,
     }
 
@@ -4258,17 +4276,14 @@ mod os_tests {
             }
         }
 
-        fn calls(&self) -> Vec<(std::time::Instant, Duration)> {
+        fn calls(&self) -> Vec<Duration> {
             self.calls.lock().unwrap().clone()
         }
     }
 
     impl<F: Fn(Duration) -> io::Result<()>> ChangeWait for ScriptedWake<F> {
         fn wait(&self, timeout: Duration) -> io::Result<()> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((std::time::Instant::now(), timeout));
+            self.calls.lock().unwrap().push(timeout);
             (self.respond)(timeout)
         }
     }
@@ -4281,10 +4296,30 @@ mod os_tests {
         command.args(["-c", "sleep 10"]);
         let session = ChildSession::spawn(command, config).expect("spawn");
         let wake = ScriptedWake::new(|_| Ok(()));
+        let micros = Duration::from_micros;
+        // The first read starts the deadline; each iteration then reads the
+        // clock for the pre-observer check, the post-observer check and the
+        // wait. The last iteration is cut short by the deadline.
+        let base = std::time::Instant::now();
+        let offsets = [
+            micros(0),
+            micros(0),
+            micros(0),
+            micros(0),
+            micros(10_000),
+            micros(10_000),
+            micros(49_500),
+            micros(50_000),
+        ];
+        let reads = std::cell::Cell::new(0);
+        let clock = || {
+            let read = reads.get();
+            reads.set(read + 1);
+            base + offsets[read]
+        };
         let failure = session
-            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .finish_observing_with_clock(|_| Ok(()), &wake, &clock)
             .expect_err("an always-ready wake must still time out");
-        let end = std::time::Instant::now();
         assert!(matches!(
             failure.error,
             ChildSessionError::Timeout {
@@ -4293,13 +4328,14 @@ mod os_tests {
             }
         ));
         assert!(failure.receipt.orphan_check_passed);
-        let calls = wake.calls();
-        assert!(!calls.is_empty());
-        for (called, timeout) in &calls {
-            assert!(*timeout <= os::OBSERVER_POLL_INTERVAL);
-            // The deadline had passed by the time the timeout was reported, so
-            // a wait clamped to the time left also ends before `end`.
-            assert!(*called + *timeout <= end);
+        assert_eq!(reads.get(), offsets.len());
+        let deadline = base + micros(50_000);
+        let timeouts = wake.calls();
+        assert_eq!(timeouts, vec![os::OBSERVER_POLL_INTERVAL, micros(500)]);
+        for (offset, timeout) in [micros(0), micros(49_500)].into_iter().zip(&timeouts) {
+            let now = base + offset;
+            assert_eq!(*timeout, os::poll_timeout(deadline, now));
+            assert!(now + *timeout <= deadline);
         }
     }
 
