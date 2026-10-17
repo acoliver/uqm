@@ -381,6 +381,14 @@
           },
           {
                 "path": "rust/scripts/watchdog-v1.json"
+          },
+          {
+                "path": "rust/scripts/real-sol-alliance-from-mercury.json",
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-alliance-from-luna.json",
+                "outer_child_timeout_ms": 900000
           }
     ],
     "script": "rust/scripts/linked-playable-v1.json",

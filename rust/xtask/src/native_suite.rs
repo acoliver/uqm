@@ -2953,12 +2953,16 @@ mod tests {
             .parent()
             .unwrap();
         let authority = crate::ci::authority::load_authority(root).unwrap();
-        let admitted = preflight(
-            root,
-            &authority.native_acceptance.scenario_scripts,
-            &authority,
-        )
-        .unwrap();
+        let present: Vec<_> = authority
+            .native_acceptance
+            .scenario_scripts
+            .iter()
+            .filter(|pin| {
+                !crate::native_save::SAVES_PENDING_FIRST_CHAIN_RUN.contains(&pin.path.as_str())
+            })
+            .cloned()
+            .collect();
+        let admitted = preflight(root, &present, &authority).unwrap();
         assert_eq!(admitted.len(), 36);
         assert_eq!(
             admitted

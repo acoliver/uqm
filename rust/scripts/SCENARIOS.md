@@ -1016,3 +1016,64 @@ shrank to the validator minimum with a 300 s wall budget, so they no longer carr
 900000 ms outer deadline: `starbase-visit-v1` 2897 ticks,
 `real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
 `probe-encounter-v4` 7856 (presentations twice that). None of this has run live.
+
+## Checkpoint saves: fix a late step without replaying the chain
+
+The alliance chain (`real-sol-starbase-alliance`) takes three in-flight saves in
+one run, each through the flight Game menu (`cancel, up, up, select`,
+`assert_game_options`, Select to open Save, the slot, Select, Select):
+
+| Slot | Taken | Save file | Used by |
+| ---- | ----- | --------- | ------- |
+| 1 | Flying beside Earth after the Mercury takeoff, radioactives aboard (chain steps 36-58) | `saves/alliance-after-mercury.sav` | `real-sol-alliance-from-mercury` |
+| 2 | Back in the solar system after the Luna moonbase landing, before visit 2 (chain steps 82-101) | `saves/alliance-after-luna.sav` | `real-sol-alliance-from-luna` |
+| 0 | Departing the allied Starbase, the last step of the chain | `saves/allied-starbase.sav` | `starbase-visit-v1`, `real-sol-starbase-to-mars`, `load-save-v1` family, `probe-encounter-v3`/`v4` |
+
+Notes on how the saves are taken:
+
+- The Mercury save is taken after `navigate_to_planet 2` leaves Mercury orbit. The
+  orbit menu is a different menu from the flight Game menu and no script has
+  opened Game options from orbit, so the checkpoint is placed in flight. The
+  chain then resumes with its own `navigate_to_moon 2/1`.
+- `PickGame` opens the picker on the last used slot (`lastUsedSlot` in
+  `gameopt.c`). A fresh game starts on slot 0, so slot 1 is one Down from there,
+  slot 2 is one Down from slot 1, and the final slot 0 save needs two Ups from
+  slot 2. After each save the script presses Select (reopens Game options),
+  asserts it, then Cancel, Down, Select to return to flight, the sequence
+  `load-save-v1` uses, and asserts interplanetary activity.
+- The two from-checkpoint scenarios declare `"start_save": {"slot": 0}`: the
+  harness installs the file as `uqmsave.00` whichever slot it was extracted from,
+  and the script loads it with the same main-menu sequence as
+  `starbase-visit-v1`.
+- The provenance file written by `extract-save` records the chain's last
+  `assert_ship_resources` (896 fuel / 2500 RU). That is right for slot 0 and only
+  documentation for slots 1 and 2.
+
+Regenerating all three from one chain run (a real window, passing run):
+
+```
+xtask native extract-save --artifacts <suite bundle> --slot 0 --output rust/scripts/saves/allied-starbase.sav
+xtask native extract-save --artifacts <suite bundle> --slot 1 --output rust/scripts/saves/alliance-after-mercury.sav
+xtask native extract-save --artifacts <suite bundle> --slot 2 --output rust/scripts/saves/alliance-after-luna.sav
+```
+
+Commit each save with its `.provenance.json`.
+
+The rule: when fixing a late step, run the from-checkpoint scenario that starts
+before it (`real-sol-alliance-from-luna` for visit 2, the Ilwrath fight, the
+alliance and the Starbase menu; `real-sol-alliance-from-mercury` when the Luna
+landing is also in question; `starbase-visit-v1` and the other slot 0 scenarios
+after the Starbase menu). Do not replay the whole chain for that. Run the full
+chain only to regenerate the saves, which is needed when a step before a
+checkpoint changes (conversations, purchases, the Mercury or Luna routes).
+
+The from-checkpoint scripts copy their steps from the chain verbatim (chain steps
+36-95 for Mercury, 59-95 for Luna, original numbering). After the load they
+assert interplanetary activity and at least one radioactive unit aboard. Their
+tick budgets are the validator minimum and their saves do not exist until the
+first chain run that produced slots 1 and 2 is extracted. Until then admission
+fails with `start save missing: ... regenerate with ...` (`native list` and
+`native run --all` stop there); the xtask tests list the two scripts in
+`SAVES_PENDING_FIRST_CHAIN_RUN` and leave them out of the suite-wide admission
+checks. Remove them from that list in the commit that adds the saves. None of
+this has run live.
