@@ -2115,7 +2115,31 @@ fn wait_for_native_window_ack(
     timeout: std::time::Duration,
     byte_limit: u64,
 ) -> Result<(), String> {
-    let deadline = std::time::Instant::now()
+    wait_for_native_window_ack_with_clock(
+        output_directory,
+        wake,
+        &std::time::Instant::now,
+        nonce,
+        committed_presentation,
+        timeout,
+        byte_limit,
+    )
+}
+
+/// The acknowledgement wait with its clock supplied by the caller. Each
+/// iteration reads the clock once and uses that instant both for the deadline
+/// check and for the length of the wait, so a wait never reaches past the
+/// deadline.
+fn wait_for_native_window_ack_with_clock(
+    output_directory: &BoundOutputDirectory,
+    wake: &impl super::child_session::ChangeWait,
+    now: &impl Fn() -> std::time::Instant,
+    nonce: &str,
+    committed_presentation: u64,
+    timeout: std::time::Duration,
+    byte_limit: u64,
+) -> Result<(), String> {
+    let deadline = now()
         .checked_add(timeout)
         .ok_or_else(|| "native-window acknowledgement deadline overflowed".to_string())?;
     loop {
@@ -2133,15 +2157,14 @@ fn wait_for_native_window_ack(
                 }
             }
         }
-        if std::time::Instant::now() >= deadline {
+        let now = now();
+        if now >= deadline {
             return Err(format!(
                 "native-window state presentation {committed_presentation} was not acknowledged"
             ));
         }
-        wake.wait(
-            ACK_POLL_INTERVAL.min(deadline.saturating_duration_since(std::time::Instant::now())),
-        )
-        .map_err(|error| format!("wait for native-window acknowledgement: {error}"))?;
+        wake.wait(ACK_POLL_INTERVAL.min(deadline.saturating_duration_since(now)))
+            .map_err(|error| format!("wait for native-window acknowledgement: {error}"))?;
     }
 }
 
@@ -6189,7 +6212,7 @@ mod tests {
 
     /// Answers every wait at once, or fails it, and records the timeouts.
     struct ScriptedAckWake {
-        calls: std::sync::Mutex<Vec<(std::time::Instant, std::time::Duration)>>,
+        calls: std::sync::Mutex<Vec<std::time::Duration>>,
         failure: Option<&'static str>,
     }
 
@@ -6204,14 +6227,35 @@ mod tests {
 
     impl super::super::child_session::ChangeWait for ScriptedAckWake {
         fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((std::time::Instant::now(), timeout));
+            self.calls.lock().unwrap().push(timeout);
             match self.failure {
                 Some(message) => Err(std::io::Error::other(message)),
                 None => Ok(()),
             }
+        }
+    }
+
+    /// Reads a scripted instant per call and fails once the script runs out,
+    /// so a loop that reads the clock more often than expected is caught.
+    struct ScriptedClock {
+        base: std::time::Instant,
+        offsets: Vec<std::time::Duration>,
+        reads: std::cell::Cell<usize>,
+    }
+
+    impl ScriptedClock {
+        fn new(offsets: Vec<std::time::Duration>) -> Self {
+            Self {
+                base: std::time::Instant::now(),
+                offsets,
+                reads: std::cell::Cell::new(0),
+            }
+        }
+
+        fn now(&self) -> std::time::Instant {
+            let read = self.reads.get();
+            self.reads.set(read + 1);
+            self.base + self.offsets[read]
         }
     }
 
@@ -6222,13 +6266,26 @@ mod tests {
         let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
         let wake = ScriptedAckWake::new(None);
         acknowledge_native_window_state(&path, &"b".repeat(64), 41).unwrap();
+        let micros = std::time::Duration::from_micros;
+        // The first read starts the deadline; every later read is one loop
+        // iteration. The last reads fall inside the final poll interval and
+        // exactly on the deadline.
+        let clock = ScriptedClock::new(vec![
+            micros(0),
+            micros(0),
+            micros(150),
+            micros(500),
+            micros(900),
+            micros(1000),
+        ]);
 
-        let error = wait_for_native_window_ack(
+        let error = wait_for_native_window_ack_with_clock(
             &output_directory,
             &wake,
+            &|| clock.now(),
             &"a".repeat(64),
             41,
-            std::time::Duration::from_millis(20),
+            micros(1000),
             4096,
         )
         .unwrap_err();
@@ -6237,14 +6294,20 @@ mod tests {
             error,
             "native-window state presentation 41 was not acknowledged"
         );
-        let returned = std::time::Instant::now();
-        let calls = wake.calls.lock().unwrap();
-        assert!(!calls.is_empty());
-        for (called, timeout) in calls.iter() {
-            assert!(*timeout <= ACK_POLL_INTERVAL);
-            // The deadline had passed by the time the wait returned an error,
-            // so a wait that fits before the deadline also ends before then.
-            assert!(*called + *timeout <= returned);
+        assert_eq!(clock.reads.get(), 6);
+        let deadline = clock.base + micros(1000);
+        let timeouts = wake.calls.lock().unwrap().clone();
+        assert_eq!(
+            timeouts,
+            vec![micros(200), micros(200), micros(200), micros(100)]
+        );
+        for (offset, timeout) in [0, 150, 500, 900].into_iter().zip(&timeouts) {
+            let now = clock.base + micros(offset);
+            assert_eq!(
+                *timeout,
+                ACK_POLL_INTERVAL.min(deadline.saturating_duration_since(now))
+            );
+            assert!(now + *timeout <= deadline);
         }
     }
 
