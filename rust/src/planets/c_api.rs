@@ -5,7 +5,7 @@ use std::ffi::c_void;
 
 use crate::c_bindings::global_state::IP_GROUP;
 use crate::collections::queue::{Queue, ReinitQueue};
-use crate::comm::locdata::{CGlobData, CQueue};
+use crate::comm::locdata::CGlobData;
 use crate::planets::generate::default::{Npcs, PlanetNames};
 
 extern "C" {
@@ -17,7 +17,6 @@ extern "C" {
     fn PutGroupInfo(offset: u32, which_group: u8) -> u32;
     fn BuildGroups();
     fn LoadPlanet(surf_def_frame: *mut c_void);
-    fn LockLink(queue: *const CQueue, link: *mut c_void) -> *mut c_void;
     fn utf8StringCopy(dst: *mut u8, size: usize, src: *const std::ffi::c_char);
     fn rust_get_game_state_bits(start: i32, end: i32) -> u8;
     fn rust_set_game_state_bits(start: i32, end: i32, value: u8);
@@ -91,12 +90,13 @@ impl Npcs for LiveGame {
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         // SAFETY: walks the live `ip_group_q`; the successor is read before
-        // the visit, as C does. Queue links are the elements themselves.
+        // the visit, as C does. `LockLink` on a table queue is a cast: the
+        // links are the elements themselves.
         unsafe {
             let queue = std::ptr::addr_of!((*glob()).game_state.ip_group_q);
             let mut handle = (*queue).head;
             while !handle.is_null() {
-                let group = LockLink(queue, handle).cast::<IP_GROUP>();
+                let group = handle.cast::<IP_GROUP>();
                 let next = (*group).succ;
                 visit(&mut *group);
                 handle = next;

@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "cbf386f4a38376e6895250df76a44b9038a525ff31f719a91c5eda88df62d2e4",
+    "projection_sha256": "803a8833afd056fc7ca2148845b4f4ac9ef60881b1ec5b0cb5a6414bde982ea7",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2646,18 +2646,6 @@
       "sha256": "e2b3e6f3ad806377b22564ff147d318b9fb4708cbaad20fe1e5e63173193203c",
       "archive_decision": "include",
       "provider": "native_object:native/gencol.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gendefault.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/generate/gendefault.c",
-      "scan_root": "native",
-      "sha256": "be5d0175f5a193b48e4cd17869a4a09dfaacca2791ca0ec1f07c8602ca014910",
-      "archive_decision": "include",
-      "provider": "native_object:native/gendefault.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"

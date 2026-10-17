@@ -5,6 +5,8 @@ use crate::c_bindings::assert_c_layout;
 use crate::c_bindings::global_state::{
     GenerateFunctions as CGenerateFunctions, NODE_INFO, PLANET_DESC, SOLARSYS_STATE,
 };
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+use crate::planets::generate::exports;
 
 /// `bool (*)(SOLARSYS_STATE *)`: `initNpcs`, `reinitNpcs`, `uninitNpcs` and
 /// `generatePlanets`.
@@ -58,3 +60,22 @@ assert_c_layout!(
         pickup_life: pickupLife,
     }
 );
+
+/// `generateDefaultFunctions`: what a system without a special generator uses.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[export_name = "generateDefaultFunctions"]
+pub static GENERATE_DEFAULT_FUNCTIONS: GenerateFunctions = GenerateFunctions {
+    init_npcs: Some(exports::init_npcs_c),
+    reinit_npcs: Some(exports::reinit_npcs_c),
+    uninit_npcs: Some(exports::uninit_npcs_c),
+    generate_planets: Some(exports::generate_planets_c),
+    generate_moons: Some(exports::generate_moons_c),
+    generate_name: Some(exports::generate_name_c),
+    generate_orbital: Some(exports::generate_orbital_c),
+    generate_minerals: Some(exports::generate_minerals_c),
+    generate_energy: Some(exports::generate_energy_c),
+    generate_life: Some(exports::generate_life_c),
+    pickup_minerals: Some(exports::pickup_minerals_c),
+    pickup_energy: Some(exports::pickup_energy_c),
+    pickup_life: Some(exports::pickup_life_c),
+};

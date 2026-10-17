@@ -236,9 +236,9 @@ pub fn pickup_minerals() -> bool {
 }
 
 /// `GenerateDefault_pickupEnergy`: every energy node needs a special handler,
-/// so a default system never reaches this (C asserts and returns false).
-pub fn pickup_energy() -> bool {
-    false
+/// so a default system never reaches this. C asserts; so does this.
+pub fn pickup_energy() -> ! {
+    panic!("GenerateDefault_pickupEnergy called: every energy node needs its own pickup handler")
 }
 
 /// `GenerateDefault_pickupLife`: bio needs no extra handling.
@@ -462,6 +462,11 @@ mod tests {
         assert_eq!(generate_energy(), 0);
         assert!(pickup_minerals());
         assert!(pickup_life());
-        assert!(!pickup_energy());
+    }
+
+    #[test]
+    #[should_panic(expected = "every energy node needs its own pickup handler")]
+    fn default_energy_pickup_fails_fast() {
+        pickup_energy();
     }
 }

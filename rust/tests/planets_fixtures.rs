@@ -105,7 +105,7 @@ fn default_generator_layout_matches_the_c_fixture() {
         moons_line(&mut ops, case)
     });
     let text = format!("{}{}", render_fixture(&planets), render_fixture(&moons));
-    check_default("default_layout.txt", &text, DEFAULT_LAYOUT);
+    assert_eq!(text, DEFAULT_LAYOUT);
 }
 
 #[test]
@@ -116,24 +116,7 @@ fn default_generator_nodes_match_the_c_fixture() {
     let records = collect(world_cases(false), world_cases(true), |case| {
         nodes_line(&mut ops, case, generators.analyze(case))
     });
-    check_default(
-        "default_nodes.txt",
-        &render_fixture(&records),
-        DEFAULT_NODES,
-    );
-}
-
-/// With `UQM_BLESS_DEFAULT_FIXTURES` set, write the fixture instead of
-/// checking it; `planets_parity` then holds the Rust output to the C original.
-fn check_default(name: &str, text: &str, stored: &str) {
-    if std::env::var_os("UQM_BLESS_DEFAULT_FIXTURES").is_some() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/planets")
-            .join(name);
-        std::fs::write(path, text).expect("write fixture");
-        return;
-    }
-    assert_eq!(text, stored);
+    assert_eq!(render_fixture(&records), DEFAULT_NODES);
 }
 
 /// `uqm_rust::planets::generate::default` called directly.

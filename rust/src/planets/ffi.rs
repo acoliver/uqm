@@ -39,7 +39,7 @@ extern "C" {
 /// # Safety
 /// `SysGenRNG` must have been created, and no other reference to the stream
 /// may be live.
-unsafe fn sys_gen_rng<'a>() -> &'a mut RandomContext {
+pub(crate) unsafe fn sys_gen_rng<'a>() -> &'a mut RandomContext {
     &mut *std::ptr::addr_of!(SYS_GEN_RNG).read()
 }
 
@@ -47,13 +47,13 @@ unsafe fn sys_gen_rng<'a>() -> &'a mut RandomContext {
 ///
 /// # Safety
 /// `PlanData` must point at the planet-frame table.
-unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
+pub(crate) unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
     std::slice::from_raw_parts(std::ptr::addr_of!(PLAN_DATA).read(), NUMBER_OF_PLANET_TYPES)
 }
 
 /// A caller that does not want the node still gets the draws, so the stream
 /// stays in step: C wrote into a local in that case.
-unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mut NODE_INFO {
+pub(crate) unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mut NODE_INFO {
     if info.is_null() {
         spare
     } else {
@@ -61,9 +61,46 @@ unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mut NODE_INFO
     }
 }
 
-fn blank_node() -> NODE_INFO {
+pub(crate) fn blank_node() -> NODE_INFO {
     // SAFETY: `NODE_INFO` is plain integers.
     unsafe { std::mem::zeroed() }
+}
+
+/// `*CurStarDescPtr`'s `Type` byte.
+///
+/// # Safety
+/// `CurStarDescPtr` must point at a valid star description.
+pub(crate) unsafe fn current_star_type() -> u8 {
+    (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_type
+}
+
+/// The star and the orbit `DoPlanetaryAnalysis` reads for `desc`: the sun and
+/// the star description come from `pSolarSysState` and `CurStarDescPtr`, the
+/// parent radius from `desc.pPrevDesc`.
+///
+/// # Safety
+/// As [`do_planetary_analysis_c`].
+pub(crate) unsafe fn analysis_context(
+    sys_info: *mut SYSTEM_INFO,
+    desc: *const PLANET_DESC,
+) -> (StarDescription, AnalysisSite) {
+    let state = crate::c_bindings::solar_system::current();
+    let sun = std::ptr::addr_of_mut!((*state).SunDesc[0]);
+    let parent = (*desc).pPrevDesc;
+    let parent_radius = if parent == sun {
+        None
+    } else {
+        Some((*parent).radius)
+    };
+    let star = StarDescription {
+        size: (*sun).data_index,
+        star_type: current_star_type(),
+    };
+    let site = AnalysisSite {
+        parent_radius,
+        is_orbit_entry: sys_info == std::ptr::addr_of_mut!((*state).SysInfo),
+    };
+    (star, site)
 }
 
 /// C: `UWORD CalcGravity (const PLANET_INFO *PlanetInfoPtr)`.
@@ -89,22 +126,7 @@ pub unsafe extern "C" fn do_planetary_analysis_c(
     sys_info: *mut SYSTEM_INFO,
     desc: *mut PLANET_DESC,
 ) {
-    let state = crate::c_bindings::solar_system::current();
-    let sun = std::ptr::addr_of_mut!((*state).SunDesc[0]);
-    let parent = (*desc).pPrevDesc;
-    let parent_radius = if parent == sun {
-        None
-    } else {
-        Some((*parent).radius)
-    };
-    let star = StarDescription {
-        size: (*sun).data_index,
-        star_type: (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_type,
-    };
-    let site = AnalysisSite {
-        parent_radius,
-        is_orbit_entry: sys_info == std::ptr::addr_of_mut!((*state).SysInfo),
-    };
+    let (star, site) = analysis_context(sys_info, desc);
     calc::do_planetary_analysis(
         sys_gen_rng(),
         plan_data(),
@@ -279,9 +301,7 @@ pub unsafe extern "C" fn fill_orbits_c(
     };
     let request = OrbitRequest {
         star_size: (*system).SunDesc[0].data_index,
-        star_color: crate::planets::consts::star_color(
-            (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_type,
-        ),
+        star_color: crate::planets::consts::star_color(current_star_type()),
         num_planets,
         generating_moons: base == (*system).MoonDesc.as_mut_ptr(),
         types_defined: types_defined != 0,

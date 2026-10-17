@@ -1839,15 +1839,6 @@
       "provider": "native_object:native/gencol.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/gendefault.c",
-      "source_sha256": "be5d0175f5a193b48e4cd17869a4a09dfaacca2791ca0ec1f07c8602ca014910",
-      "object_output": "gendefault.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "PLANET_GEN",
-      "production_profile": "production",
-      "provider": "native_object:native/gendefault.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/gendru.c",
       "source_sha256": "dc73997dd1c2a33e6f07406d8e4c8572afcf18a32d6c8d4ec97e757b35e92a16",
       "object_output": "gendru.c.o",

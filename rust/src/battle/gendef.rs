@@ -1,8 +1,12 @@
 // gendef.c port — dispatches BYTE index to GenerateFunctions struct pointer
-// The GenerateFunctions structs live in C planets/generate.c.
+// The special-system GenerateFunctions structs live in C planets/generate/*.c;
+// the default one is Rust (planets::generate::vtable).
 // We declare them as extern C statics and return raw pointers.
 
 use std::os::raw::c_void;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
 
 /// Opaque GenerateFunctions type — C struct with function pointers
 pub type GenerateFunctions = c_void;
@@ -58,8 +62,8 @@ pub const MYCON_TRAP_DEFINED: u8 = 45;
 
 // UMGAH_DEFINED = TALKING_PET_DEFINED (macro in C)
 
+#[cfg(any(not(test), feature = "linked_c_archive"))]
 extern "C" {
-    static generateDefaultFunctions: GenerateFunctions;
     static generateAndrosynthFunctions: GenerateFunctions;
     static generateBurvixeseFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
@@ -95,6 +99,7 @@ extern "C" {
 /// Returns a pointer to the appropriate GenerateFunctions struct based
 /// on the solar system type index. Default falls back to
 /// generateDefaultFunctions.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
 #[no_mangle]
 pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
     unsafe {
@@ -130,7 +135,7 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             SUPOX_DEFINED => &generateSupoxFunctions as *const _,
             RAINBOW_DEFINED => &generateRainbowWorldFunctions as *const _,
             ILWRATH_DEFINED => &generateIlwrathFunctions as *const _,
-            _ => &generateDefaultFunctions as *const _,
+            _ => &GENERATE_DEFAULT_FUNCTIONS as *const _ as *const GenerateFunctions,
         }
     }
 }
