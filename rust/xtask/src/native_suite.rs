@@ -2821,11 +2821,11 @@ fn validate_completed_snapshot(
             .map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
-    uqm_rust::automation::validate_native_acceptance_bundle(
-        &temporary.path().join(directory),
-        &proof,
-    )
-    .map_err(|error| format!("offline native scenario proof: {error:?}"))
+    let scenario = temporary.path().join(directory);
+    uqm_rust::automation::validate_native_acceptance_bundle(&scenario, &proof)
+        .map_err(|error| format!("offline native scenario proof: {error:?}"))?;
+    crate::native_frames::validate_scenario(&scenario, &proof)
+        .map_err(|error| format!("native scenario screen check ({directory}): {error}"))
 }
 
 fn validate_outcome(manifest: &SuiteManifest) -> Result<(), String> {
