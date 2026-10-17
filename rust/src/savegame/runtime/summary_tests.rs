@@ -781,117 +781,15 @@ fn no_solar_system_summarises_as_plain_interplanetary_flight() {
 }
 
 // ---------------------------------------------------------------------------
-// The star catalog, from the text of plandata.c
+// The star catalog
 // ---------------------------------------------------------------------------
 
-/// `(x, y, prefix, postfix)` of the first `NUM_SOLAR_SYSTEMS` rows of
-/// `starmap_array`, read from the source text.
-/// A row of `starmap_array`: x, y and, when the row is on one line, its prefix
-/// and postfix.
-type SystemRow = (i16, i16, Option<(u8, u8)>);
-
-fn systems_from_plandata() -> Vec<SystemRow> {
-    let text = include_str!("../../../../sc2/src/uqm/plandata.c");
-    let body = &text[text.find("STAR_DESC starmap_array[] =").unwrap()..];
-    let end = body.find("{{MAX_X_UNIVERSE << 1").unwrap();
-    let mut rows = Vec::new();
-    for line in body[..end].lines() {
-        let line = line.trim();
-        let Some(rest) = line.strip_prefix("{{") else {
-            continue;
-        };
-        let (point, tail) = rest.split_once('}').unwrap();
-        let (x, y) = point.split_once(',').unwrap();
-        let names = tail.trim_end().strip_suffix("},").map(|tail| {
-            let numbers: Vec<&str> = tail.rsplitn(3, ',').collect();
-            (
-                numbers[1].trim().parse::<u8>().unwrap(),
-                numbers[0].trim().parse::<u8>().unwrap(),
-            )
-        });
-        rows.push((x.trim().parse().unwrap(), y.trim().parse().unwrap(), names));
-    }
-    rows
-}
-
-fn vortices_from_plandata() -> Vec<(i16, i16)> {
-    let text = include_str!("../../../../sc2/src/uqm/plandata.c");
-    let start = text.find("#define VORTEX_SCALE 20").unwrap();
-    let body = &text[start..];
-    let end = body.find("{{MAX_X_UNIVERSE << 1").unwrap();
-    let mut points = Vec::new();
-    for line in body[..end].lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("{{") {
-            if rest.starts_with('(') {
-                let scaled = |part: &str| -> i16 {
-                    let n: i16 = part
-                        .trim()
-                        .trim_start_matches('(')
-                        .split('*')
-                        .next()
-                        .unwrap()
-                        .trim()
-                        .parse()
-                        .unwrap();
-                    n * 20 + 5000
-                };
-                let (x, y) = rest
-                    .split_once("},")
-                    .unwrap()
-                    .0
-                    .split_once("+ 5000,")
-                    .unwrap();
-                points.push((scaled(x), scaled(y.trim_end_matches("+ 5000"))));
-            } else {
-                // The one portal given as plain numbers.
-                let (x, y) = rest.split_once('}').unwrap().0.split_once(',').unwrap();
-                points.push((x.trim().parse().unwrap(), y.trim().parse().unwrap()));
-            }
-        }
-    }
-    points
-}
-
-/// A catalog laid out as `starmap_array` is, with the points of the real one
-/// and type, index and names made up from the row number (the real ones are
-/// macros and enum names), except for the rows `fixed` replaces.
+/// A copy of the real `starmap_array`, so tests can alter entries.
 fn catalog() -> Vec<CStarDesc> {
-    let entry = |index: usize, x: i16, y: i16| CStarDesc {
-        star_pt: crate::comm::dispatch::CPoint { x, y },
-        star_type: (index % 251) as u8,
-        index: (index * 3 % 256) as u8,
-        prefix: (index % 13) as u8,
-        postfix: (index % 133) as u8,
-    };
-    let sentinel = crate::comm::dispatch::CPoint {
-        x: 9999 << 1,
-        y: 9999 << 1,
-    };
-    let mut table = Vec::new();
-    for (index, (x, y, _)) in systems_from_plandata().into_iter().enumerate() {
-        table.push(entry(index, x, y));
-    }
-    assert_eq!(table.len(), NUM_SOLAR_SYSTEMS);
-    table.push(CStarDesc {
-        star_pt: sentinel,
-        star_type: 0,
-        index: 0,
-        prefix: 0,
-        postfix: 0,
-    });
-    for (offset, (x, y)) in vortices_from_plandata().into_iter().enumerate() {
-        table.push(entry(NUM_SOLAR_SYSTEMS + 1 + offset, x, y));
-    }
-    table.push(CStarDesc {
-        star_pt: sentinel,
-        star_type: 0,
-        index: 0,
-        prefix: 0,
-        postfix: 0,
-    });
-    assert_eq!(table.len(), CATALOG_LEN);
-    table
+    // SAFETY: the table is only written by the game thread, which these tests
+    // do not start.
+    let table = unsafe { (&raw const crate::planets::tables::STARMAP_ARRAY).read() };
+    table.to_vec()
 }
 
 fn wire(star: &CStarDesc) -> StarDesc {
@@ -1006,21 +904,12 @@ fn the_star_chunk_of_the_c_save_is_what_the_catalog_entry_gives() {
         postfix: raw[15],
     };
 
-    // plandata.c names the same prefix and postfix for the row at that point.
-    let rows = systems_from_plandata();
-    let row = rows
+    // The catalog entry at the saved point is the star the C game saved.
+    let table = catalog();
+    let row = table[..NUM_SOLAR_SYSTEMS]
         .iter()
-        .position(|row| (row.0, row.1) == (saved.star_pt.x, saved.star_pt.y))
+        .position(|star| (star.star_pt.x, star.star_pt.y) == (saved.star_pt.x, saved.star_pt.y))
         .expect("the saved star is a system");
-    assert_eq!(rows[row].2, Some((saved.prefix, saved.postfix)));
-
-    // Make that entry carry the type and index the C game saved (the source
-    // spells them as macros) and capture it through a pointer into the table.
-    let mut table = catalog();
-    table[row].star_type = saved.star_type;
-    table[row].index = saved.index;
-    table[row].prefix = saved.prefix;
-    table[row].postfix = saved.postfix;
     let captured = capture_star(&table, &table[row]).unwrap();
     assert_eq!(captured, saved);
 

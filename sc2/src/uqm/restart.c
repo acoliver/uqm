@@ -426,12 +426,8 @@ StartGame (void)
 
 	{
 		extern STAR_DESC starmap_array[];
-		extern const BYTE element_array[];
-		extern const PlanetFrame planet_array[];
 
 		star_array = starmap_array;
-		Elements = element_array;
-		PlanData = planet_array;
 	}
 
 	PlayerControl[0] = HUMAN_CONTROL | STANDARD_RATING;

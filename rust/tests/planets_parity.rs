@@ -23,6 +23,7 @@ use uqm_rust::c_bindings::global_state::{
     PlanetFrame, NODE_INFO, PLANET_DESC, POINT, SOLARSYS_STATE, SYSTEM_INFO,
 };
 use uqm_rust::math::RandomContext;
+use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
 #[cfg_attr(
     target_os = "macos",
@@ -34,6 +35,8 @@ unsafe extern "C" {
     static mut CurStarDescPtr: *mut c_void;
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
+    static element_array: [u8; 133];
+    static mut starmap_array: [CStarDesc; CATALOG_LEN];
 
     fn DoPlanetaryAnalysis(sys_info: *mut SYSTEM_INFO, desc: *mut PLANET_DESC);
     fn CalcGravity(info: *const c_void) -> u16;
@@ -80,7 +83,6 @@ impl ExportedGenerators {
             SysGenRNG = uqm_rust::math::RandomContext_New();
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
-            uqm_rust::planets::ffi::PLAN_DATA = planet_array.as_ptr();
             pSolarSysState = &mut *state;
         }
         Self { state, star }
@@ -258,5 +260,62 @@ fn gravity_and_random_locations_agree() {
             (direct_point.x, direct_point.y),
             "seed {seed}"
         );
+    }
+}
+
+fn render_star_catalog(table: &[CStarDesc]) -> String {
+    let mut text = String::new();
+    for star in table {
+        let _ = writeln!(
+            text,
+            "{} {} {} {} {} {}",
+            star.star_pt.x, star.star_pt.y, star.star_type, star.index, star.prefix, star.postfix
+        );
+    }
+    text
+}
+
+fn render_element_array(table: &[u8]) -> String {
+    table
+        .iter()
+        .map(|category| format!("{category}\n"))
+        .collect()
+}
+
+fn render_plan_resources(table: &[PlanetFrame]) -> String {
+    let name = |resource: *const std::ffi::c_char| {
+        unsafe { std::ffi::CStr::from_ptr(resource) }
+            .to_str()
+            .expect("resource names are ASCII")
+            .to_owned()
+    };
+    table
+        .iter()
+        .map(|frame| {
+            format!(
+                "{} {}\n",
+                name(frame.CMapInstance),
+                name(frame.XlatTabInstance)
+            )
+        })
+        .collect()
+}
+
+/// The tables the game links against (`starmap_array`, `element_array` and
+/// `planet_array`), read through their exported symbols, must equal the
+/// fixtures captured from the C originals field for field (strings included).
+#[test]
+fn plandata_tables_equal_the_c_originals() {
+    let stars = unsafe { &*(&raw const starmap_array) };
+    let frames = unsafe { &planet_array }.as_slice();
+    let elements = unsafe { &element_array }.as_slice();
+
+    for (name, text) in [
+        ("star_catalog.txt", render_star_catalog(stars)),
+        ("element_array.txt", render_element_array(elements)),
+        ("plan_resources.txt", render_plan_resources(frames)),
+        ("plan_data.txt", render_plan_data(frames)),
+    ] {
+        check_fixture(name, &text);
     }
 }
