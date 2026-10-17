@@ -3154,8 +3154,6 @@ fn validate_shared_linked_build(
         &read("native-build-evidence.json")?,
         &read("gates.json")?,
         &read("canonical-toolchain.json")?,
-        &read("Cargo.toml")?,
-        &read("Cargo.lock")?,
     )
     .map_err(|error| format!("shared linked-build semantics: {error:?}"))
 }
@@ -3184,10 +3182,6 @@ fn retain_linked_build_proof(
         member_limit,
     )
     .map_err(|error| format!("read linked-build native build evidence: {error:?}"))?;
-    let cargo_manifest = read_bounded_regular(&source_root.join("Cargo.toml"), member_limit)
-        .map_err(|error| format!("read linked-build Cargo manifest: {error:?}"))?;
-    let cargo_lock = read_bounded_regular(&source_root.join("Cargo.lock"), member_limit)
-        .map_err(|error| format!("read linked-build Cargo lock: {error:?}"))?;
     let authority = read_bounded_regular(&source_root.join("gates.json"), member_limit)
         .map_err(|error| format!("read linked-build authority: {error:?}"))?;
     let canonical_toolchain =
@@ -3198,8 +3192,6 @@ fn retain_linked_build_proof(
         &build_evidence,
         &authority,
         &canonical_toolchain,
-        &cargo_manifest,
-        &cargo_lock,
     )
     .map_err(|error| format!("linked-build semantic validation failed: {error:?}"))?;
     let members = [
