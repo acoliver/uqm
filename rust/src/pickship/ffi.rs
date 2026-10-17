@@ -146,8 +146,8 @@ fn escort_links() -> Vec<(*mut c_void, Escort)> {
         found.push((
             link,
             Escort {
-                index: ship.index as u16,
-                alive: ship.SpeciesID as u32 != NO_ID,
+                index: ship.index,
+                alive: ship.SpeciesID != NO_ID,
             },
         ));
         link = ship.succ;
@@ -230,7 +230,7 @@ unsafe fn change_selection(state: &mut PickerState) {
             };
             // SAFETY: `entry` came from `SetAbsStringTableIndex`.
             let (text, length) = unsafe { (GetStringAddress(entry), GetStringLength(entry)) };
-            (text, length, ship.crew_level as u16, ship.max_crew as u16)
+            (text, length, ship.crew_level, ship.max_crew)
         };
         set_color(Rgba::rgb15(0x14, 0x0A, 0x00));
         draw_text(baseline_x, baseline_y, text, length);
@@ -492,8 +492,8 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         crate::battle::c_bridge::GetFrameRect(stamp.frame, std::ptr::addr_of_mut!(pick).cast());
         GetContextClipRect(&mut clip);
     }
-    pick.corner.x = ((clip.width >> 1) - (pick.width >> 1)) as i16;
-    pick.corner.y = ((clip.height >> 1) - (pick.height >> 1)) as i16;
+    pick.corner.x = (clip.width >> 1) - (pick.width >> 1);
+    pick.corner.y = (clip.height >> 1) - (pick.height >> 1);
 
     if draw_salvage_frame == 0 {
         // SAFETY: the caller's contract.
@@ -547,7 +547,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
             // SIS, not an escort
             continue;
         }
-        let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index as u16);
+        let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
         stamp.origin = CPoint { x, y };
         stamp.frame = ship.icons as usize as *mut c_void;
         set_color(Rgba::BLACK);
@@ -557,7 +557,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
             width: ICON_WIDTH,
             height: ICON_HEIGHT,
         });
-        let species = ship.SpeciesID as u32;
+        let species = ship.SpeciesID;
         if species != NO_ID || ship.crew_level == 0 {
             // SAFETY: the icon frame belongs to the ship.
             unsafe { DrawStamp(&mut stamp) };
