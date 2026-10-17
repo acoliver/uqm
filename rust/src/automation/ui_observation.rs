@@ -80,10 +80,9 @@ pub extern "C" fn rust_automation_observe_game_options(active: i32) {
 ///
 /// Each entry starts a new generation so a pick consumed for one battle cannot
 /// satisfy the picker of the next.
-#[no_mangle]
-pub extern "C" fn rust_automation_observe_ship_picker(active: i32) {
-    let previous = SHIP_PICKER_ACTIVE.swap(active != 0, Ordering::AcqRel);
-    if active != 0 && !previous {
+pub fn observe_ship_picker(active: bool) {
+    let previous = SHIP_PICKER_ACTIVE.swap(active, Ordering::AcqRel);
+    if active && !previous {
         SHIP_PICKER_GENERATION.fetch_add(1, Ordering::AcqRel);
     }
 }
@@ -253,18 +252,18 @@ mod tests {
     #[test]
     fn ship_picker_observation_starts_a_generation_per_entry() {
         let _turn = OBSERVATIONS.lock().unwrap_or_else(|e| e.into_inner());
-        rust_automation_observe_ship_picker(0);
+        observe_ship_picker(false);
         let (before, active) = ship_picker_observation();
         assert!(!active);
-        rust_automation_observe_ship_picker(1);
+        observe_ship_picker(true);
         assert_eq!(ship_picker_observation(), (before + 1, true));
-        rust_automation_observe_ship_picker(1);
+        observe_ship_picker(true);
         assert_eq!(ship_picker_observation(), (before + 1, true));
-        rust_automation_observe_ship_picker(0);
+        observe_ship_picker(false);
         assert_eq!(ship_picker_observation(), (before + 1, false));
-        rust_automation_observe_ship_picker(1);
+        observe_ship_picker(true);
         assert_eq!(ship_picker_observation(), (before + 2, true));
-        rust_automation_observe_ship_picker(0);
+        observe_ship_picker(false);
     }
 
     #[test]

@@ -1776,15 +1776,6 @@
       "provider": "native_object:native/outfit.c.o"
     },
     {
-      "source": "sc2/src/uqm/pickship.c",
-      "source_sha256": "f4362292d461e84e1921d037d033c3f385c81100c521a3fe262b5847fae6af9c",
-      "object_output": "pickship.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "CORE_NATIVE",
-      "production_profile": "production",
-      "provider": "native_object:native/pickship.c.o"
-    },
-    {
       "source": "sc2/src/uqm/plandata.c",
       "source_sha256": "09bcdc468f525f862334054377a5cdb12a1bb697d2f07baac90f0639970da338",
       "object_output": "plandata.c.o",
