@@ -2,4 +2,4 @@
 # #[no_mangle] exports provide TFB_Random, TFB_SeedRandom,
 # RandomContext_*, and square_root with identical C ABI.
 uqm_CFILES=""
-uqm_HFILES="mthintrn.h random.h"
+uqm_HFILES="random.h"
