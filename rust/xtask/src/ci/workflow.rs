@@ -373,6 +373,9 @@ fn rule_required_identity_environment(document: &Yaml) -> RuleResult {
         .all(|(name, value)| step.get_str(&["env", name]) == Some(*value));
     let run = step.get_str(&["run"]).unwrap_or_default();
     let derives_base = run.contains("git merge-base \"${UQM_CI_BASE_SHA}\" HEAD")
+        && run.contains("git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'")
+        && run.contains("git merge-base origin/main HEAD")
+        && run.contains("git rev-parse HEAD^")
         && run.contains("export UQM_CI_BASE_SHA");
     if env_matches && derives_base {
         RuleResult {

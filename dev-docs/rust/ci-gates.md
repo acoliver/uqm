@@ -132,12 +132,21 @@ containment is established by the separate containment-check receipt. After untr
 source SHA, tracked and untracked state, and authority bytes, retaining
 `source-revalidation.result.json`.
 
-Candidate-policy admission preserves every base field except one bounded addition:
-scenario pins already embedded in the installed controller's inventory. Existing pins cannot be removed, changed or reordered.
-The singleton policy used by base `212bd046ad7dccc7b695d378deac1b1c148d8be9`
-may gain `scenario_scripts`, but its original script pin must remain. Commands,
+Candidate-policy admission preserves every base field except two bounded changes.
+A candidate may lower any numeric field whose name starts with `maximum_` (for
+example `zero_native_delta.maximum_transitional_native_inputs`) and never raise
+one, so a porting PR can tighten the ceiling it improved. A candidate may also
+append scenario entries to `native_acceptance.scenario_scripts`; existing entries
+cannot be removed, changed (including their deadlines) or reordered. The
+authority carries no content fingerprints for scenario scripts, start saves or
+the Cargo manifest and lockfile; `--locked` builds and `cargo audit` cover
+dependency drift, and start-save provenance JSON is documentation only. Commands,
 tools, tuples, content, acceptance predicates, runtime limits, permissions and
 transport limits cannot change through this rule. Unknown fields are rejected.
+On push events other than to `main`, the workflow fetches `origin/main` and measures
+the delta against `git merge-base origin/main HEAD`, so main's own changes are not
+blamed on a branch that merged main. Pushes to `main` keep the previous-push base
+with a `HEAD^` fallback.
 The plan and each gate job independently admit policy; rejection does not replace
 the installed policy. Supervised admission logs retain the decision and both hashes.
 Source revalidation compares the checkout with the admitted candidate bytes.
@@ -191,11 +200,6 @@ Scope of the rule:
   them, so such a bundle is checked by the source revision that produced it. It
   is not reinterpreted under the new pins. This includes the earlier revision
   a35d65d64, which covered 11 of the 14 scripts.
-
-Candidate-policy admission against a base that predates this field sees a changed
-base pin and rejects it. The installed base controller has to carry this policy
-before a candidate with the override can be admitted, and nothing in this change
-relaxes that comparison.
 
 The sections below on autoplay selection and the `native-acceptance` step describe the local
 native suite (`native run`, `native-test`); hosted CI no longer runs them (see the

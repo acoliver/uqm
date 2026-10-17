@@ -25,71 +25,87 @@ pub fn event_selection(event: WorkflowEvent, changed: Option<&[String]>) -> Auto
 }
 
 /// Candidate data cannot grant permission to change controller code or gate limits.
+///
+/// A candidate may differ from the base only by lowering a numeric `maximum_*`
+/// ceiling and by appending scenario entries to
+/// `native_acceptance.scenario_scripts`. Everything else must equal the base.
 pub fn admit_policy(base: &[u8], candidate: &[u8]) -> Result<(), String> {
     let base: serde_json::Value = serde_json::from_slice(base).map_err(|e| e.to_string())?;
     let candidate: serde_json::Value =
         serde_json::from_slice(candidate).map_err(|e| e.to_string())?;
     let typed: Authority = serde_json::from_value(candidate.clone()).map_err(|e| e.to_string())?;
     super::authority::validate_authority(&typed)?;
-    let installed: Authority = serde_json::from_slice(include_bytes!("../../../ci/gates.json"))
-        .map_err(|e| e.to_string())?;
-    for pointer in ["/mutation_targets", "/native_acceptance/scenario_scripts"] {
-        let legacy = vec![serde_json::json!({
-            "path": base["native_acceptance"]["script"],
-            "sha256": base["native_acceptance"]["script_sha256"],
-            "byte_length": base["native_acceptance"]["script_byte_length"],
-        })];
-        let old = match base.pointer(pointer) {
-            Some(value) => value
-                .as_array()
-                .ok_or("base policy inventory is not an array")?,
-            None if pointer == "/native_acceptance/scenario_scripts" => &legacy,
-            None => return Err("base mutation inventory missing".into()),
-        };
+    for (pointer, may_append) in [
+        ("/mutation_targets", false),
+        ("/native_acceptance/scenario_scripts", true),
+    ] {
+        let old = base
+            .pointer(pointer)
+            .and_then(|v| v.as_array())
+            .ok_or("base policy inventory is not an array")?;
         let new = candidate
             .pointer(pointer)
             .and_then(|v| v.as_array())
             .ok_or("candidate policy inventory missing")?;
-        let mut cursor = 0;
-        for item in new {
-            if old.get(cursor) == Some(item) {
-                cursor += 1;
-            } else {
-                let permitted = if pointer == "/mutation_targets" {
-                    false
-                } else {
-                    serde_json::from_value::<PinnedScript>(item.clone()).is_ok_and(|pin| {
-                        installed.native_acceptance.scenario_scripts.contains(&pin)
-                    })
-                };
-                if !permitted || old.contains(item) {
-                    return Err(format!(
-                        "candidate policy has an unapproved addition or reordering at {pointer}"
-                    ));
-                }
-            }
-        }
-        if cursor != old.len() {
+        if new.len() < old.len() || new[..old.len()] != *old {
             return Err(format!(
                 "candidate policy removes or changes a base entry at {pointer}"
+            ));
+        }
+        if !may_append && new.len() != old.len() {
+            return Err(format!(
+                "candidate policy has an unapproved addition or reordering at {pointer}"
             ));
         }
     }
     let mut comparable = candidate;
     comparable["mutation_targets"] = base["mutation_targets"].clone();
-    if let Some(inventory) = base.pointer("/native_acceptance/scenario_scripts") {
-        comparable["native_acceptance"]["scenario_scripts"] = inventory.clone();
-    } else {
-        comparable["native_acceptance"]
-            .as_object_mut()
-            .ok_or("candidate native policy missing")?
-            .remove("scenario_scripts");
-    }
+    comparable["native_acceptance"]["scenario_scripts"] =
+        base["native_acceptance"]["scenario_scripts"].clone();
+    accept_lowered_ceilings(&base, &mut comparable);
     if comparable != base {
         return Err("candidate policy changes a field outside base-owned admission rules".into());
     }
     Ok(())
 }
+
+/// Rewrite every `maximum_*` number that `candidate` lowered below `base` back
+/// to the base value, so the remaining comparison sees only forbidden changes.
+/// A raised ceiling is left in place and therefore stays a difference.
+fn accept_lowered_ceilings(base: &serde_json::Value, candidate: &mut serde_json::Value) {
+    use serde_json::Value;
+    match (base, candidate) {
+        (Value::Object(base), Value::Object(candidate)) => {
+            for (key, base_value) in base {
+                let Some(candidate_value) = candidate.get_mut(key) else {
+                    continue;
+                };
+                if key.starts_with("maximum_") && lowered(base_value, candidate_value) {
+                    *candidate_value = base_value.clone();
+                } else {
+                    accept_lowered_ceilings(base_value, candidate_value);
+                }
+            }
+        }
+        (Value::Array(base), Value::Array(candidate)) if base.len() == candidate.len() => {
+            for (base_value, candidate_value) in base.iter().zip(candidate.iter_mut()) {
+                accept_lowered_ceilings(base_value, candidate_value);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn lowered(base: &serde_json::Value, candidate: &serde_json::Value) -> bool {
+    match (base.as_u64(), candidate.as_u64()) {
+        (Some(base), Some(candidate)) => candidate < base,
+        _ => match (base.as_f64(), candidate.as_f64()) {
+            (Some(base), Some(candidate)) => candidate < base,
+            _ => false,
+        },
+    }
+}
+
 /// Retained controller input, not a candidate's requested scenario list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

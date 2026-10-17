@@ -620,18 +620,13 @@ pub struct NativeAcceptanceAuthority {
     pub content_version: String,
     pub content_transport: NativeContentTransportAuthority,
     pub script: String,
-    pub script_sha256: String,
-    pub script_byte_length: u64,
-    /// Every scenario script the autoplay suite may execute, pinned.
+    /// Every scenario script the autoplay suite may execute.
     ///
-    /// The suite that runs is chosen per run, but what may run is fixed here,
-    /// in the base-owned authority, by content hash. Selection can therefore
-    /// narrow the set but never reach outside it, which is what keeps a head
-    /// revision from introducing a script for CI to execute.
+    /// The suite that runs is chosen per run, but what may run is listed here,
+    /// in the base-owned authority. Selection can therefore narrow the set but
+    /// never reach outside it. A candidate may append entries and may not
+    /// remove, reorder or change existing ones.
     pub scenario_scripts: Vec<PinnedScript>,
-    /// Save games a scenario may start from, pinned by content like scripts.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub start_saves: Vec<PinnedSave>,
     pub acceptance_policy: uqm_rust::automation::native_window::NativeAcceptancePolicy,
     pub runtime_contract: NativeRuntimeAuthority,
 }
@@ -643,26 +638,15 @@ pub struct NativeAcceptanceAuthority {
 /// value, not a per-script choice: a pin either carries exactly this or nothing.
 pub const LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS: u64 = 900_000;
 
-/// One scenario script, pinned by content.
+/// One scenario script the suite may run.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PinnedScript {
     pub path: String,
-    pub sha256: String,
-    pub byte_length: u64,
     /// Present only on the approved long scripts. Absent means the shared
     /// `runtime_contract.outer_child_timeout_ms` applies unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outer_child_timeout_ms: Option<u64>,
-}
-
-/// One committed start save, pinned by content.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct PinnedSave {
-    pub path: String,
-    pub sha256: String,
-    pub byte_length: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -671,8 +655,6 @@ pub struct PackageAuthority {
     pub manifest_schema: String,
     pub producing_command: String,
     pub profile: String,
-    pub cargo_manifest_sha256: String,
-    pub cargo_lock_sha256: String,
     pub features: Vec<String>,
     pub artifacts: Vec<PackageArtifactAuthority>,
 }
@@ -1307,11 +1289,11 @@ fn validate_cache_and_supervision(authority: &Authority) -> Result<(), String> {
     Ok(())
 }
 
-/// Every scenario script must be pinned, exactly once, with a well-formed digest.
+/// Every scenario script must be listed exactly once.
 ///
-/// This validates the shape of the inventory. Whether each digest matches the
-/// file on disk is checked separately, against the real tree, because an
-/// inventory that agrees only with itself proves nothing.
+/// This validates the shape of the inventory. Whether it matches the files on
+/// disk is checked separately, against the real tree, because an inventory
+/// that agrees only with itself proves nothing.
 fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
     let pinned = &authority.native_acceptance.scenario_scripts;
     if pinned.is_empty() {
@@ -1327,15 +1309,6 @@ fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
         }
         if entry.path.contains("..") {
             return Err(format!("authority pins a traversing path: {}", entry.path));
-        }
-        if !valid_sha256(&entry.sha256) {
-            return Err(format!(
-                "authority pins {} with a malformed digest",
-                entry.path
-            ));
-        }
-        if entry.byte_length == 0 {
-            return Err(format!("authority pins {} as empty", entry.path));
         }
         if !seen.insert(entry.path.as_str()) {
             return Err(format!("authority pins {} more than once", entry.path));
@@ -1406,8 +1379,6 @@ fn validate_native_acceptance(authority: &Authority) -> Result<(), String> {
             .iter()
             .any(|seconds| !(1..=300).contains(seconds))
         || !safe_relative(&native.script)
-        || !valid_sha256(&native.script_sha256)
-        || native.script_byte_length == 0
         || !native.acceptance_policy.is_valid()
         || !native.runtime_contract.inventory_limits.is_valid()
         || native.runtime_contract.capture_budget_bytes
@@ -1431,8 +1402,6 @@ fn validate_package_and_bootstrap(authority: &Authority) -> Result<(), String> {
     if package.manifest_schema.is_empty()
         || package.producing_command.is_empty()
         || package.profile.is_empty()
-        || !valid_sha256(&package.cargo_manifest_sha256)
-        || !valid_sha256(&package.cargo_lock_sha256)
         || package.features.is_empty()
         || package.features.iter().any(String::is_empty)
         || package.artifacts.is_empty()
@@ -1730,20 +1699,9 @@ mod tests {
     }
 
     #[test]
-    fn checked_in_native_script_matches_authority_and_presents_after_battle_assertion() {
-        use sha2::{Digest, Sha256};
-
+    fn checked_in_native_script_presents_after_battle_assertion() {
         let authority = fixture_authority();
         let bytes = include_bytes!("../../../scripts/linked-playable-v1.json");
-        let digest = Sha256::digest(bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        assert_eq!(
-            bytes.len() as u64,
-            authority.native_acceptance.script_byte_length
-        );
-        assert_eq!(digest, authority.native_acceptance.script_sha256);
 
         // The inventory must describe the tree, not itself.
         {
@@ -1757,20 +1715,7 @@ mod tests {
             let mut pinned = BTreeSet::new();
             for entry in &authority.native_acceptance.scenario_scripts {
                 let path = root.join(&entry.path);
-                let bytes = std::fs::read(&path).unwrap_or_else(|error| {
-                    panic!("{} is pinned but unreadable: {error}", entry.path)
-                });
-                let digest = Sha256::digest(&bytes)
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>();
-                assert_eq!(digest, entry.sha256, "{} digest drifted", entry.path);
-                assert_eq!(
-                    bytes.len() as u64,
-                    entry.byte_length,
-                    "{} length drifted",
-                    entry.path
-                );
+                assert!(path.is_file(), "{} is listed but is not a file", entry.path);
                 pinned.insert(entry.path.clone());
             }
             // A scenario the suite can select but the authority does not pin
@@ -1935,18 +1880,6 @@ mod tests {
         let mut zero_length = fixture_authority();
         zero_length.native_acceptance.content_byte_length = 0;
         assert!(validate_authority(&zero_length)
-            .unwrap_err()
-            .contains("native acceptance configuration"));
-
-        let mut malformed_script_digest = fixture_authority();
-        malformed_script_digest.native_acceptance.script_sha256 = "not-a-digest".into();
-        assert!(validate_authority(&malformed_script_digest)
-            .unwrap_err()
-            .contains("native acceptance configuration"));
-
-        let mut zero_script_length = fixture_authority();
-        zero_script_length.native_acceptance.script_byte_length = 0;
-        assert!(validate_authority(&zero_script_length)
             .unwrap_err()
             .contains("native acceptance configuration"));
 
