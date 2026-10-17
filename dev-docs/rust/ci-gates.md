@@ -361,7 +361,42 @@ visibility.
 Immutable ownership ledger v7 assigns S4 control-plane authority and no native
 implementation authority. Its SHA-256 is
 `d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a`.
-The S4 delta is zero tracked native sources, providers, objects, internal symbols,
-bridges, generated bindings, and transitional ownership flags. The transitional
-native input count may not increase. S1's provider report remains the provider and
-symbol authority.
+The S4 delta is zero native additions: native code may only shrink. The gate
+(`ownership.zero_native_delta`) reports a verdict for every path or manifest
+entry that differs between the merge base and the head, across tracked native
+sources, bridges, generated bindings, transitional flag definitions, objects,
+providers, and internal symbols.
+
+Path-based categories (tracked sources, bridges, generated bindings, transitional
+flags):
+
+- A path deleted at head passes.
+- A path added at head fails, whatever it contains.
+- A path edited in place passes only if every hunk of its `git diff -U0` is
+  removal-only: the multiset of word and punctuation tokens on the hunk's added
+  lines must be a sub-multiset of the tokens on the same hunk's removed lines.
+  Whitespace is ignored, so `#<tab>include "x.h"` becoming `#include "x.h"`, a
+  shortened comment, a shorter file list, and a reordered block all pass. Any
+  token the hunk did not remove fails, so a new `extern` declaration or a new
+  call fails even though its surrounding lines look familiar. A change with no
+  textual hunk (binary or mode-only) fails.
+
+Manifest categories (objects, providers, and internal symbols in
+`rust/ownership/native-provider-manifest.json`): the head's set of entries,
+identified by object path or recompiled canonical source (objects), those plus
+provider and archive decision (providers), and symbol, owner, and active
+provider (internal symbols), must be a subset of the base's set. Changed hashes
+and other fields of kept entries pass; a new entry fails.
+
+`measured_delta` counts failing verdicts and must be zero. The report keeps
+`changed_paths` (every path with a verdict) and `verdicts` (`path`, `verdict` of
+`pass`, `fail`, or `waived`, and `reason`). The transitional native input count
+may not increase and may not exceed its ceiling; that ratchet is unchanged.
+
+A commit between the base and the head whose message has a line starting exactly
+`Adds-native: <reason>` with a non-empty reason waives the failures of that run.
+Waived entries stay in the report as `waived` verdicts and the commit and reason
+are listed under `waivers`. The evidence validator rejects a `waived` verdict
+without a recorded waiver and a `fail` verdict alongside one. Agents may add an
+`Adds-native:` line only with Andrew's explicit approval for that change. S1's
+provider report remains the provider and symbol authority.
