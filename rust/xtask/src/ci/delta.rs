@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::authority::Authority;
 use super::exec::{run_captured_with_bound_environment, Captured};
+use super::scenario_ratchet::{self, RatchetReport};
 use crate::hex_sha256;
 
 const SCHEMA: &str = "uqm-s4-zero-native-delta-v1";
@@ -23,6 +24,7 @@ pub struct DeltaReport {
     pub head_sha: String,
     pub categories: BTreeMap<String, DeltaCategory>,
     pub transitional_native_inputs: TransitionalNativeInputs,
+    pub scenario_ratchet: RatchetReport,
     pub passed: bool,
 }
 
@@ -183,16 +185,19 @@ fn measure_between(
             .zero_native_delta
             .maximum_transitional_native_inputs,
     );
+    let scenario_ratchet = scenario_ratchet::measure(root, authority, base_sha, head_sha)?;
     let passed = categories
         .values()
         .all(|category| category.measured_delta == 0)
-        && transitional_native_inputs.passed;
+        && transitional_native_inputs.passed
+        && scenario_ratchet.passed;
     Ok(DeltaReport {
         schema: SCHEMA.into(),
         base_sha: base_sha.into(),
         head_sha: head_sha.into(),
         categories,
         transitional_native_inputs,
+        scenario_ratchet,
         passed,
     })
 }
@@ -312,7 +317,7 @@ fn object_projection(manifest: &Value) -> Option<Value> {
     }))
 }
 
-fn supervised_git(
+pub(super) fn supervised_git(
     root: &Path,
     authority: &Authority,
     arguments: &[String],

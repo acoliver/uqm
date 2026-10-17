@@ -5,6 +5,27 @@ The native UI suite that runs these scenarios is a local gate on a real Mac wind
 Automation can either play through normal game state or, for tests that do not
 need navigation coverage, activate a deterministic start scene.
 
+## Changing scenarios
+
+CI compares each scenario with its version on the merge base with main (the
+assertion ratchet, `dev-docs/rust/ci-gates.md`). You may add scenarios, add
+steps, tighten assertions, and edit plain steps (input taps and holds, settles,
+waits without checks). These count as weakening and fail the gate:
+
+- deleting a scenario or removing it from `scenario_scripts`;
+- removing an assertion-class step (`assert_*`, `wait_for_*`, `capture`,
+  `fight_battle`, `pick_battle_ship`, `collect_planet_minerals`,
+  `select_communication_response`, `navigate_to_*`, `expect_quit`);
+- lowering a `minimum*` or `count`, relaxing `expect_change`, or changing any
+  exact value (`equals`, `mode`, `fuel_on_board`, `res_units`, `encounter`,
+  `dialogue`, `outcome`, `planet`, `moon`, ...);
+- raising `max_ticks`, a timeout, or a script budget to more than twice its
+  old value, or raising `outer_child_timeout_ms` at all.
+
+A reviewed weakening needs a commit message line `Weakens-assertion: <reason>`
+somewhere in the pushed range. Agents may use that trailer only with Andrew's
+explicit approval.
+
 ## Real Sol probe proof
 
 `real-sol-autopilot.json` is the authoritative regression proof for the opening
