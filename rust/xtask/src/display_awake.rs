@@ -70,6 +70,11 @@ impl DisplayAwake {
     fn is_held(&self) -> bool {
         self._holder.is_some()
     }
+
+    /// A guard that holds nothing, for tests that must not touch the display.
+    pub(crate) fn inert() -> Self {
+        Self { _holder: None }
+    }
 }
 
 /// Wake the display and hold it awake until the returned guard is dropped.
