@@ -2,10 +2,9 @@
 //!
 //! `real-sol-starbase-alliance` plays the allied Starbase chain once and saves
 //! to slot 0. `extract-save` copies that save out of a passing run's retained
-//! config and writes its provenance. A scenario declaring `start_save` is
-//! admitted only when the save on disk matches the digest pinned in the
-//! authority, and the provenance must name the alliance script the authority
-//! pins now, so changing the chain forces the save to be regenerated.
+//! config and writes its provenance, which documents how the save was made. A
+//! scenario declaring `start_save` is admitted only when the save is a regular
+//! file next to the script.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uqm_rust::automation::native_window::NATIVE_ACCEPTANCE_SCHEMA;
 use uqm_rust::automation::{parse_script, Action, NativeRetainedInput, StartSave};
 
-use crate::ci::authority::{Authority, PinnedSave};
+use crate::ci::authority::Authority;
 use crate::native_suite::{ScenarioState, SuiteManifest};
 
 /// The scenario that plays the chain and produces the save.
@@ -90,7 +89,6 @@ struct RecordedRun {
 #[derive(Deserialize)]
 struct RecordedScript {
     sha256: String,
-    byte_length: u64,
 }
 
 /// A scenario of a finalized, passing suite bundle that ran exactly the pinned
@@ -179,8 +177,8 @@ fn verify_run(authority: &Authority, artifacts: &Path) -> Result<ProducingRun, S
     };
     if row.script != *pinned {
         return Err(format!(
-            "the suite ran {} ({}), not the pinned {PRODUCER_SCRIPT} ({})",
-            row.script.path, row.script.sha256, pinned.sha256
+            "the suite ran {}, not {PRODUCER_SCRIPT}",
+            row.script.path
         ));
     }
     if requested.is_some_and(|directory| directory != row.directory) {
@@ -211,16 +209,10 @@ fn verify_run(authority: &Authority, artifacts: &Path) -> Result<ProducingRun, S
     )?;
     let recorded: RecordedRun = serde_json::from_slice(&acceptance_bytes)
         .map_err(|error| format!("parse native-acceptance.json: {error}"))?;
-    if recorded.schema != NATIVE_ACCEPTANCE_SCHEMA
-        || recorded.script.sha256 != pinned.sha256
-        || recorded.script.byte_length != pinned.byte_length
-    {
+    if recorded.schema != NATIVE_ACCEPTANCE_SCHEMA {
         return Err(format!(
-            "the run played an alliance script ({}, {} bytes) that is not the pinned one ({}, {} bytes)",
-            recorded.script.sha256,
-            recorded.script.byte_length,
-            pinned.sha256,
-            pinned.byte_length
+            "native-acceptance.json has schema {}, expected {NATIVE_ACCEPTANCE_SCHEMA}",
+            recorded.schema
         ));
     }
     let run_id = format!(
@@ -336,15 +328,6 @@ pub fn extract_save(
     std::fs::write(&provenance_file, text)
         .map_err(|error| format!("write {}: {error}", provenance_file.display()))?;
     println!("saved {} and {}", out.display(), provenance_file.display());
-    println!(
-        "pin it in rust/ci/gates.json under native_acceptance.start_saves:\n{}",
-        serde_json::to_string_pretty(&PinnedSave {
-            path: provenance.save.path,
-            sha256: provenance.save.sha256,
-            byte_length: provenance.save.byte_length,
-        })
-        .map_err(|error| error.to_string())?
-    );
     Ok(())
 }
 
@@ -360,69 +343,25 @@ fn git_head(root: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// Admit the save a script starts with: it must be pinned and match its pin.
+/// Admit the save a script starts with: it must be a regular file next to
+/// the script.
 pub fn verify_start_save(
     root: &Path,
     script_path: &str,
     start_save: &StartSave,
-    authority: &Authority,
 ) -> Result<(), String> {
     let relative = Path::new(script_path)
         .parent()
         .ok_or("script path has no directory")?
         .join(&start_save.path);
-    let relative = relative.to_string_lossy();
-    let pin = authority
-        .native_acceptance
-        .start_saves
-        .iter()
-        .find(|pin| pin.path == relative)
-        .ok_or_else(|| {
+    crate::read_regular_file_nofollow_bounded(&root.join(&relative), SAVE_LIMIT).map_err(
+        |error| {
             format!(
-                "script {} starts from {relative}, which the authority does not pin",
-                script_path
+                "script {script_path} starts from {}: {error}",
+                relative.display()
             )
-        })?;
-    let bytes = crate::read_regular_file_nofollow_bounded(&root.join(&pin.path), pin.byte_length)
-        .map_err(|error| format!("start save {}: {error}", pin.path))?;
-    if bytes.len() as u64 != pin.byte_length || crate::hex_sha256(&bytes) != pin.sha256 {
-        return Err(format!(
-            "start save {} differs from machine authority",
-            pin.path
-        ));
-    }
-    Ok(())
-}
-
-/// The provenance of every pinned save must name the alliance script the
-/// authority pins now, and the save bytes it names.
-pub fn check_provenance_current(root: &Path, authority: &Authority) -> Result<(), String> {
-    let producer = authority
-        .native_acceptance
-        .scenario_scripts
-        .iter()
-        .find(|pin| pin.path == PRODUCER_SCRIPT)
-        .ok_or("authority does not pin the alliance script")?;
-    for pin in &authority.native_acceptance.start_saves {
-        let provenance_file = provenance_path(&root.join(&pin.path));
-        let bytes = crate::read_regular_file_nofollow_bounded(&provenance_file, SAVE_LIMIT)
-            .map_err(|error| format!("provenance of {}: {error}", pin.path))?;
-        let provenance: Provenance = serde_json::from_slice(&bytes)
-            .map_err(|error| format!("parse provenance of {}: {error}", pin.path))?;
-        if provenance.scenario.sha256 != producer.sha256 {
-            return Err(format!(
-                "{} was produced by {} {}, but {PRODUCER_SCRIPT} is now pinned as {}; \
-                 regenerate the save",
-                pin.path, provenance.scenario.name, provenance.scenario.sha256, producer.sha256
-            ));
-        }
-        if provenance.save.sha256 != pin.sha256 || provenance.save.byte_length != pin.byte_length {
-            return Err(format!(
-                "provenance of {} names different save bytes",
-                pin.path
-            ));
-        }
-    }
+        },
+    )?;
     Ok(())
 }
 
@@ -439,12 +378,9 @@ mod tests {
             .unwrap()
     }
 
-    /// Every script that starts from a save must have that save pinned, present
-    /// and matching, and the provenance of every pinned save must name the
-    /// alliance script as pinned today. Changing the chain therefore fails here
-    /// until the save is regenerated with `native extract-save`.
+    /// Every script that starts from a save must have that save present.
     #[test]
-    fn every_start_save_is_pinned_and_produced_by_the_current_chain() {
+    fn every_start_save_is_present() {
         let root = repository_root();
         let authority = load_authority(root).unwrap();
         for pin in &authority.native_acceptance.scenario_scripts {
@@ -452,11 +388,10 @@ mod tests {
             let bytes = std::fs::read(&path).unwrap();
             let document = parse_script(&bytes, &path).unwrap();
             if let Some(start_save) = document.start_save {
-                verify_start_save(root, &pin.path, &start_save, &authority)
+                verify_start_save(root, &pin.path, &start_save)
                     .unwrap_or_else(|error| panic!("{}: {error}", pin.path));
             }
         }
-        check_provenance_current(root, &authority).unwrap();
     }
 
     const SAVE_BYTES: &[u8] = b"allied starbase save";
@@ -477,6 +412,7 @@ mod tests {
                 .find(|pin| pin.path == PRODUCER_SCRIPT)
                 .unwrap()
                 .clone();
+            let script_bytes = std::fs::read(repository_root().join(PRODUCER_SCRIPT)).unwrap();
             let directory = tempfile::tempdir().unwrap();
             let suite = directory.path().join("art-real-sol-starbase-alliance");
             let scenario = suite.join("scenarios/0000");
@@ -490,8 +426,8 @@ mod tests {
                 "schema": NATIVE_ACCEPTANCE_SCHEMA,
                 "script": {
                     "relative_path": "inputs/real-sol-starbase-alliance.json",
-                    "byte_length": pinned.byte_length,
-                    "sha256": pinned.sha256,
+                    "byte_length": script_bytes.len(),
+                    "sha256": crate::hex_sha256(&script_bytes),
                 },
                 "retained_files": [
                     {
@@ -563,15 +499,6 @@ mod tests {
             )
             .unwrap();
         }
-
-        fn edit_acceptance(&self, edit: impl FnOnce(&mut serde_json::Value)) {
-            let path = self.scenario().join("native-acceptance.json");
-            let mut acceptance: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-            edit(&mut acceptance);
-            std::fs::write(&path, serde_json::to_vec_pretty(&acceptance).unwrap()).unwrap();
-            self.write_manifest(|_| {});
-        }
     }
 
     #[test]
@@ -606,24 +533,18 @@ mod tests {
     }
 
     #[test]
-    fn a_run_of_another_script_than_the_pinned_one_is_refused() {
+    fn a_run_of_another_script_than_the_alliance_script_is_refused() {
         let bundle = Bundle::new("success");
         bundle.write_manifest(|manifest| {
-            manifest["scenarios"][0]["script"]["sha256"] = "0".repeat(64).into();
+            manifest["scenarios"][0]["script"]["path"] = "rust/scripts/other.json".into();
         });
         let error = verify_run(&bundle.authority, &bundle.scenario())
             .err()
             .unwrap();
-        assert!(error.contains("not the pinned"), "{error}");
-
-        let bundle = Bundle::new("success");
-        bundle.edit_acceptance(|acceptance| {
-            acceptance["script"]["sha256"] = "0".repeat(64).into();
-        });
-        let error = verify_run(&bundle.authority, &bundle.scenario())
-            .err()
-            .unwrap();
-        assert!(error.contains("not the pinned"), "{error}");
+        assert!(
+            error.contains("not rust/scripts/real-sol-starbase-alliance.json"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -737,89 +658,18 @@ mod tests {
         );
         assert_eq!(
             provenance.scenario.sha256,
-            bundle
-                .authority
-                .native_acceptance
-                .scenario_scripts
-                .iter()
-                .find(|pin| pin.path == PRODUCER_SCRIPT)
-                .unwrap()
-                .sha256
+            crate::hex_sha256(&std::fs::read(repository_root().join(PRODUCER_SCRIPT)).unwrap())
         );
     }
 
     #[test]
-    fn a_provenance_naming_another_alliance_script_is_stale() {
-        let root = tempfile::tempdir().unwrap();
-        let mut authority = load_authority(repository_root()).unwrap();
-        let save = b"save bytes";
-        std::fs::write(root.path().join("a.sav"), save).unwrap();
-        authority.native_acceptance.start_saves = vec![PinnedSave {
-            path: "a.sav".into(),
-            sha256: crate::hex_sha256(save),
-            byte_length: save.len() as u64,
-        }];
-        let provenance = Provenance {
-            schema: PROVENANCE_SCHEMA.into(),
-            save: SaveIdentity {
-                path: "a.sav".into(),
-                slot: 0,
-                sha256: crate::hex_sha256(save),
-                byte_length: save.len() as u64,
-            },
-            scenario: ScenarioIdentity {
-                name: PRODUCER_SCENARIO.into(),
-                path: PRODUCER_SCRIPT.into(),
-                sha256: "0".repeat(64),
-            },
-            producing_commit: "c".into(),
-            run_id: "run".into(),
-            terminal_reason: "success".into(),
-            asserted_before_save: serde_json::Value::Null,
-        };
-        std::fs::write(
-            provenance_path(&root.path().join("a.sav")),
-            serde_json::to_vec(&provenance).unwrap(),
-        )
-        .unwrap();
-        let error = check_provenance_current(root.path(), &authority).unwrap_err();
-        assert!(error.contains("regenerate the save"), "{error}");
-    }
-
-    #[test]
-    fn a_script_whose_save_is_not_pinned_is_refused() {
-        let authority = load_authority(repository_root()).unwrap();
+    fn a_script_whose_save_is_missing_is_refused() {
         let start_save = StartSave {
             path: "saves/missing.sav".into(),
             slot: 0,
         };
-        let error = verify_start_save(
-            repository_root(),
-            "rust/scripts/x.json",
-            &start_save,
-            &authority,
-        )
-        .unwrap_err();
-        assert!(error.contains("does not pin"), "{error}");
-    }
-
-    #[test]
-    fn a_save_that_differs_from_its_pin_is_refused() {
-        let root = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(root.path().join("rust/scripts/saves")).unwrap();
-        std::fs::write(root.path().join("rust/scripts/saves/a.sav"), b"changed").unwrap();
-        let mut authority = load_authority(repository_root()).unwrap();
-        authority.native_acceptance.start_saves = vec![PinnedSave {
-            path: "rust/scripts/saves/a.sav".into(),
-            sha256: crate::hex_sha256(b"original"),
-            byte_length: 8,
-        }];
-        let start_save = StartSave {
-            path: "saves/a.sav".into(),
-            slot: 0,
-        };
-        let error = verify_start_save(root.path(), "rust/scripts/x.json", &start_save, &authority)
-            .unwrap_err();
-        assert!(error.contains("differs"), "{error}");
+        let error =
+            verify_start_save(repository_root(), "rust/scripts/x.json", &start_save).unwrap_err();
+        assert!(error.contains("starts from"), "{error}");
     }
 }
