@@ -88,16 +88,12 @@ fn only_the_approved_long_scripts_carry_the_override() {
 fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
     let root = repository_root();
     let authority = authority();
-    let present: Vec<PinnedScript> = authority
-        .native_acceptance
-        .scenario_scripts
-        .iter()
-        .filter(|pin| {
-            !crate::native_save::SAVES_PENDING_FIRST_CHAIN_RUN.contains(&pin.path.as_str())
-        })
-        .cloned()
-        .collect();
-    let admitted = preflight(root, &present, &authority).unwrap();
+    let admitted = preflight(
+        root,
+        &authority.native_acceptance.scenario_scripts,
+        &authority,
+    )
+    .unwrap();
     let mut longer = Vec::new();
     for admission in &admitted {
         let path = admission.script.path.as_str();
@@ -117,15 +113,11 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
             "{path}"
         );
     }
-    let mut expected_longer: Vec<&str> = APPROVED_LONG_SCRIPTS
-        .iter()
-        .copied()
-        .filter(|path| !crate::native_save::SAVES_PENDING_FIRST_CHAIN_RUN.contains(path))
-        .collect();
+    let mut expected_longer: Vec<&str> = APPROVED_LONG_SCRIPTS.to_vec();
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
-    assert_eq!(longer.len(), 14);
+    assert_eq!(longer.len(), 16);
     for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);
@@ -286,10 +278,6 @@ fn the_900_second_scripts_carry_the_override_in_the_authority() {
 fn removing_the_override_from_any_longer_script_is_refused_at_admission() {
     let root = repository_root();
     for path in APPROVED_LONG_SCRIPTS {
-        // Admission checks the start save before the deadline class.
-        if crate::native_save::SAVES_PENDING_FIRST_CHAIN_RUN.contains(&path) {
-            continue;
-        }
         let mut authority = authority();
         let slot = authority
             .native_acceptance

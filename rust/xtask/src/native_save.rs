@@ -52,8 +52,10 @@ pub struct Provenance {
     pub producing_commit: String,
     pub run_id: String,
     pub terminal_reason: String,
-    /// The `assert_ship_resources` step that ran last before the save.
-    pub asserted_before_save: serde_json::Value,
+    /// The `assert_ship_resources` step that ran last before the save, for the
+    /// chain's final save only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asserted_before_save: Option<serde_json::Value>,
 }
 
 /// Where the provenance of `save` lives: next to it, `<stem>.provenance.json`.
@@ -61,18 +63,45 @@ pub fn provenance_path(save: &Path) -> PathBuf {
     save.with_extension("provenance.json")
 }
 
-/// The last resource assertion in the producing script. The save is taken
-/// after it, so these are the values a scenario sees right after loading.
-fn asserted_before_save(script_bytes: &[u8], path: &Path) -> Result<serde_json::Value, String> {
+/// The resource assertion a slot's save was taken after, when the script's own
+/// assertions describe that save.
+///
+/// The chain's resources change between its checkpoints, so an assertion only
+/// describes the save of the chain's last slot capture. Earlier slots record
+/// none rather than the final chain's values.
+fn asserted_before_save(
+    script_bytes: &[u8],
+    path: &Path,
+    slot: u8,
+) -> Result<Option<serde_json::Value>, String> {
     let document = parse_script(script_bytes, path).map_err(|error| error.to_string())?;
-    document
+    let slot_suffix = format!("-slot-{slot}");
+    let mut slot_captures = document
         .steps
+        .iter()
+        .enumerate()
+        .filter_map(|(index, action)| match action {
+            Action::Capture(capture) if capture.label.starts_with("saved-") => {
+                Some((index, capture.label.ends_with(&slot_suffix)))
+            }
+            _ => None,
+        });
+    let last_capture = slot_captures.clone().next_back().map(|(index, _)| index);
+    let save_step = slot_captures
+        .find(|(_, is_slot)| *is_slot)
+        .map(|(index, _)| index)
+        .ok_or_else(|| format!("{PRODUCER_SCRIPT} has no capture of a save in slot {slot}"))?;
+    if Some(save_step) != last_capture {
+        return Ok(None);
+    }
+    document.steps[..save_step]
         .iter()
         .rev()
         .find(|action| matches!(action, Action::AssertShipResources(_)))
         .map(|action| serde_json::to_value(action).map_err(|error| error.to_string()))
         .transpose()?
         .ok_or_else(|| format!("{PRODUCER_SCRIPT} asserts no ship resources before its save"))
+        .map(Some)
 }
 
 /// What a suite bundle's scenario records about itself that the extraction
@@ -277,7 +306,7 @@ pub fn extract_save(
             run.recorded.script.sha256
         ));
     }
-    let asserted = asserted_before_save(&script_bytes, Path::new(PRODUCER_SCRIPT))?;
+    let asserted = asserted_before_save(&script_bytes, Path::new(PRODUCER_SCRIPT), slot)?;
     let slot_file = format!("uqmsave.{slot:02}");
     let save_relative = format!("config-final/save/{slot_file}");
     let save_bytes = crate::read_regular_file_nofollow_bounded(
@@ -374,16 +403,6 @@ pub fn verify_start_save(
     Ok(())
 }
 
-/// Scripts whose checkpoint save has not been extracted from a real alliance
-/// chain run yet. Each must still fail admission with the "start save missing"
-/// message, and the suite-wide admission tests leave them out. Delete an entry
-/// in the commit that adds its save (a test fails once the save exists).
-#[cfg(test)]
-pub(crate) const SAVES_PENDING_FIRST_CHAIN_RUN: &[&str] = &[
-    "rust/scripts/real-sol-alliance-from-mercury.json",
-    "rust/scripts/real-sol-alliance-from-luna.json",
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,7 +421,6 @@ mod tests {
     fn every_start_save_is_present() {
         let root = repository_root();
         let authority = load_authority(root).unwrap();
-        let mut pending_seen = 0;
         for pin in &authority.native_acceptance.scenario_scripts {
             let path = root.join(&pin.path);
             let bytes = std::fs::read(&path).unwrap();
@@ -410,20 +428,9 @@ mod tests {
             let Some(start_save) = document.start_save else {
                 continue;
             };
-            let result = verify_start_save(root, &pin.path, &start_save);
-            if SAVES_PENDING_FIRST_CHAIN_RUN.contains(&pin.path.as_str()) {
-                let error = result.expect_err(&format!(
-                    "{} now has its save; remove it from SAVES_PENDING_FIRST_CHAIN_RUN",
-                    pin.path
-                ));
-                assert!(error.starts_with("start save missing:"), "{error}");
-                assert!(error.contains("extract-save"), "{error}");
-                pending_seen += 1;
-            } else {
-                result.unwrap_or_else(|error| panic!("{}: {error}", pin.path));
-            }
+            verify_start_save(root, &pin.path, &start_save)
+                .unwrap_or_else(|error| panic!("{}: {error}", pin.path));
         }
-        assert_eq!(pending_seen, SAVES_PENDING_FIRST_CHAIN_RUN.len());
     }
 
     const SAVE_BYTES: &[u8] = b"allied starbase save";
@@ -692,6 +699,21 @@ mod tests {
             provenance.scenario.sha256,
             crate::hex_sha256(&std::fs::read(repository_root().join(PRODUCER_SCRIPT)).unwrap())
         );
+    }
+
+    #[test]
+    fn only_the_final_slots_save_is_described_by_the_scripts_assertion() {
+        let script = std::fs::read(repository_root().join(PRODUCER_SCRIPT)).unwrap();
+        let path = Path::new(PRODUCER_SCRIPT);
+        for slot in [1, 2] {
+            assert_eq!(asserted_before_save(&script, path, slot).unwrap(), None);
+        }
+        let final_slot = asserted_before_save(&script, path, 0).unwrap().unwrap();
+        assert_eq!(final_slot["action"], "assert_ship_resources");
+        assert_eq!(final_slot["fuel_on_board"], 896);
+        assert_eq!(final_slot["res_units"], 2500);
+        let error = asserted_before_save(&script, path, 9).unwrap_err();
+        assert!(error.contains("slot 9"), "{error}");
     }
 
     #[test]

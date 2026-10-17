@@ -1070,10 +1070,9 @@ checkpoint changes (conversations, purchases, the Mercury or Luna routes).
 The from-checkpoint scripts copy their steps from the chain verbatim (chain steps
 36-95 for Mercury, 59-95 for Luna, original numbering). After the load they
 assert interplanetary activity and at least one radioactive unit aboard. Their
-tick budgets are the validator minimum and their saves do not exist until the
-first chain run that produced slots 1 and 2 is extracted. Until then admission
-fails with `start save missing: ... regenerate with ...` (`native list` and
-`native run --all` stop there); the xtask tests list the two scripts in
-`SAVES_PENDING_FIRST_CHAIN_RUN` and leave them out of the suite-wide admission
-checks. Remove them from that list in the commit that adds the saves. None of
-this has run live.
+tick budgets are the validator minimum. Their saves, `alliance-after-mercury.sav`
+and `alliance-after-luna.sav`, were extracted with `xtask native extract-save`
+from a passing run of the chain; each has a provenance file beside it. Only the
+final save, `allied-starbase.sav`, records the chain's last ship-resource
+assertion, because fuel and resource units change between checkpoints. None of
+the from-checkpoint scripts has run live.

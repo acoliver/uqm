@@ -2953,30 +2953,26 @@ mod tests {
             .parent()
             .unwrap();
         let authority = crate::ci::authority::load_authority(root).unwrap();
-        let present: Vec<_> = authority
-            .native_acceptance
-            .scenario_scripts
-            .iter()
-            .filter(|pin| {
-                !crate::native_save::SAVES_PENDING_FIRST_CHAIN_RUN.contains(&pin.path.as_str())
-            })
-            .cloned()
-            .collect();
-        let admitted = preflight(root, &present, &authority).unwrap();
-        assert_eq!(admitted.len(), 36);
+        let admitted = preflight(
+            root,
+            &authority.native_acceptance.scenario_scripts,
+            &authority,
+        )
+        .unwrap();
+        assert_eq!(admitted.len(), 38);
         assert_eq!(
             admitted
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
                 .count(),
-            20
+            22
         );
         assert_eq!(
             admitted
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
                 .count(),
-            14
+            16
         );
         for admission in &admitted {
             let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS
