@@ -12,11 +12,11 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::authority::Authority;
-use super::delta::supervised_git;
+use super::delta::{commit_waivers, supervised_git, Waiver};
 
 const SCRIPT_DIR: &str = "rust/scripts/";
 const GATES_PATH: &str = "rust/ci/gates.json";
-const WAIVER_TRAILER: &str = "Weakens-assertion: ";
+const WAIVER_KEY: &str = "Weakens-assertion";
 
 /// A timeout or tick budget may grow by up to this factor without counting as
 /// a weakening. Anything beyond it is.
@@ -73,12 +73,6 @@ pub struct Weakening {
     pub scenario: String,
     pub step: String,
     pub change: String,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct Waiver {
-    pub commit: String,
-    pub reason: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -307,24 +301,6 @@ fn loosened(rule: &FieldRule, base: &Value, head: Option<&Value>) -> Option<Stri
     }
 }
 
-/// Collect `Weakens-assertion:` trailers from `git log --format=%x1e%H%n%B`
-/// output.
-pub fn parse_waivers(log: &str) -> Vec<Waiver> {
-    log.split('\u{1e}')
-        .filter_map(|entry| {
-            let (commit, message) = entry.split_once('\n')?;
-            let reason = message
-                .lines()
-                .find_map(|line| line.strip_prefix(WAIVER_TRAILER))?
-                .trim();
-            (!reason.is_empty()).then(|| Waiver {
-                commit: commit.trim().to_string(),
-                reason: reason.to_string(),
-            })
-        })
-        .collect()
-}
-
 pub fn measure(
     root: &Path,
     authority: &Authority,
@@ -337,18 +313,7 @@ pub fn measure(
     let waivers = if weakenings.is_empty() {
         Vec::new()
     } else {
-        let log = supervised_git(
-            root,
-            authority,
-            &[
-                "log".into(),
-                "--format=%x1e%H%n%B".into(),
-                format!("{base_sha}..{head_sha}"),
-            ],
-            "read commit messages for the assertion ratchet",
-            &[0],
-        )?;
-        parse_waivers(&String::from_utf8_lossy(&log.stdout))
+        commit_waivers(root, authority, base_sha, head_sha, WAIVER_KEY)?
     };
     Ok(RatchetReport::new(weakenings, waivers))
 }
@@ -599,24 +564,6 @@ mod tests {
             assert_eq!(classify_action(action), ActionClass::Plain, "{action}");
             assert!(!action.starts_with("assert_") && !action.starts_with("wait_for_"));
         }
-    }
-
-    #[test]
-    fn waiver_trailer_is_parsed_and_reported() {
-        let sha = "a".repeat(40);
-        let log = format!(
-            "\u{1e}{sha}\nSubject\n\nBody\nWeakens-assertion: probe fight is flaky, see #99\n\u{1e}{other}\nNo trailer here\n",
-            other = "b".repeat(40)
-        );
-        assert_eq!(
-            parse_waivers(&log),
-            [Waiver {
-                commit: sha,
-                reason: "probe fight is flaky, see #99".into()
-            }]
-        );
-        assert!(parse_waivers("\u{1e}abc\nweakens-assertion: lowercase\n").is_empty());
-        assert!(parse_waivers("\u{1e}abc\nWeakens-assertion:   \n").is_empty());
     }
 
     #[test]
