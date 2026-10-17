@@ -106,7 +106,7 @@ pub mod live_queues {
 
     extern "C" {
         #[link_name = "battle_counter"]
-        static BATTLE_COUNTER: [u8; crate::battle::battle_controls::NUM_PLAYERS];
+        static mut BATTLE_COUNTER: [u8; crate::battle::battle_controls::NUM_PLAYERS];
     }
 
     /// `battle_counter`, the ships each side still has in the running battle
@@ -116,6 +116,21 @@ pub mod live_queues {
     /// Game thread only: C changes the counters while ships are picked and die.
     pub unsafe fn battle_counters() -> [u8; crate::battle::battle_controls::NUM_PLAYERS] {
         std::ptr::addr_of!(BATTLE_COUNTER).read()
+    }
+
+    /// `&battle_counter[player]`, for the code that picks ships and so changes
+    /// the count.
+    ///
+    /// # Safety
+    /// Game thread only, and `player` must be a side of the battle.
+    pub unsafe fn battle_counter_slot(player: usize) -> *mut u8 {
+        assert!(
+            player < crate::battle::battle_controls::NUM_PLAYERS,
+            "battle_counter has no side {player}"
+        );
+        std::ptr::addr_of_mut!(BATTLE_COUNTER)
+            .cast::<u8>()
+            .add(player)
     }
 }
 

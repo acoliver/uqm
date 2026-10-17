@@ -16,7 +16,7 @@
     "bridges": 0,
     "generated_bindings": 0,
     "transitional_flags": 0,
-    "maximum_transitional_native_inputs": 321
+    "maximum_transitional_native_inputs": 320
   },
   "control_plane_paths": [
     ".github/workflows/rust-quality.yaml",

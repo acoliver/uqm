@@ -677,8 +677,8 @@ mod tests {
             report.transitional_native_inputs.base_count,
             report.transitional_native_inputs.head_count
         );
-        assert_eq!(report.transitional_native_inputs.head_count, 321);
-        assert_eq!(report.transitional_native_inputs.maximum_count, 321);
+        assert_eq!(report.transitional_native_inputs.head_count, 320);
+        assert_eq!(report.transitional_native_inputs.maximum_count, 320);
         assert!(report.transitional_native_inputs.passed);
     }
 }
