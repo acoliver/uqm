@@ -11,6 +11,8 @@ use crate::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
 /// `PlanetScanTypes`.
 pub const MINERAL_SCAN: usize = 0;
 /// `PlanetScanTypes`.
+pub const ENERGY_SCAN: usize = 1;
+/// `PlanetScanTypes`.
 pub const BIOLOGICAL_SCAN: usize = 2;
 
 const NUM_CREATURE_TYPES: u8 = 23;

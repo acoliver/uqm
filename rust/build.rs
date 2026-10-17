@@ -747,6 +747,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let planets = "../sc2/src/uqm/planets/planets.h";
     let game_strings = "../sc2/src/uqm/gamestr.h";
     let star_indexes = "../sc2/src/uqm/gendef.h";
+    let generate = "../sc2/src/uqm/planets/generate.h";
     let drawable = "../sc2/src/libs/graphics/drawable.h";
     for header in [
         globdata,
@@ -757,6 +758,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         planets,
         game_strings,
         star_indexes,
+        generate,
         drawable,
     ] {
         println!("cargo:rerun-if-changed={header}");
@@ -770,13 +772,14 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(planets)
         .header(game_strings)
         .header(star_indexes)
+        .header(generate)
         .header(drawable)
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
             "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
              |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC|ELEMENT\
-             |STARSHIP)",
+             |STARSHIP|GenerateFunctions)",
         )
         .opaque_type("(tfb_image|drawable_desc|race_desc|RACE_DESC)")
         .allowlist_var(

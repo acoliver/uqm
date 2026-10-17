@@ -118,6 +118,11 @@ pub extern "C" fn RandomContext_Copy(source: *const RandomContext) -> *mut Rando
 }
 
 impl RandomContext {
+    /// The current position in the stream (`RandomContext_GetSeed`).
+    pub fn seed(&self) -> u32 {
+        self.seed
+    }
+
     /// A context seeded the way `RandomContext_SeedRandom` would seed it.
     pub fn with_seed(seed: u32) -> Self {
         Self {

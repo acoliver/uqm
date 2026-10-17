@@ -6,6 +6,7 @@
 
 use std::fmt::Write as _;
 
+pub mod default_gen;
 pub mod topography;
 
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
@@ -113,7 +114,7 @@ pub fn scan_seeds(rand_seed: u32) -> [u32; 3] {
     ]
 }
 
-fn write_node(out: &mut String, ret: u16, node: &NODE_INFO) {
+pub fn write_node(out: &mut String, ret: u16, node: &NODE_INFO) {
     let _ = write!(
         out,
         "{ret}:{},{},{},{};",

@@ -7,6 +7,10 @@
 
 mod planets_common;
 
+use planets_common::default_gen::{
+    self, layout_cases, moon_cases, moons_line, nodes_line, planets_line, DefaultOps, Layout,
+    NodeKind,
+};
 use planets_common::topography::{TopoCase, Topography};
 use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
@@ -22,6 +26,8 @@ const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");
 const ORBITS: &str = include_str!("fixtures/planets/orbits.txt");
 const TOPOGRAPHY: &str = include_str!("fixtures/planets/topography.txt");
+const DEFAULT_LAYOUT: &str = include_str!("fixtures/planets/default_layout.txt");
+const DEFAULT_NODES: &str = include_str!("fixtures/planets/default_nodes.txt");
 
 /// Parses the golden planet-frame table captured from the C original.
 fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
@@ -85,6 +91,118 @@ impl Topography for RustTopography {
             case.depth_delta,
         );
         rng.reseed(1)
+    }
+}
+
+#[test]
+fn default_generator_layout_matches_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let mut ops = RustDefault::new(&table);
+    let planets = collect(layout_cases(), layout_cases(), |case| {
+        planets_line(&mut ops, case)
+    });
+    let moons = collect(moon_cases(), moon_cases(), |case| {
+        moons_line(&mut ops, case)
+    });
+    let text = format!("{}{}", render_fixture(&planets), render_fixture(&moons));
+    check_default("default_layout.txt", &text, DEFAULT_LAYOUT);
+}
+
+#[test]
+fn default_generator_nodes_match_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let mut generators = RustGenerators::new(&table);
+    let mut ops = RustDefault::new(&table);
+    let records = collect(world_cases(false), world_cases(true), |case| {
+        nodes_line(&mut ops, case, generators.analyze(case))
+    });
+    check_default(
+        "default_nodes.txt",
+        &render_fixture(&records),
+        DEFAULT_NODES,
+    );
+}
+
+/// With `UQM_BLESS_DEFAULT_FIXTURES` set, write the fixture instead of
+/// checking it; `planets_parity` then holds the Rust output to the C original.
+fn check_default(name: &str, text: &str, stored: &str) {
+    if std::env::var_os("UQM_BLESS_DEFAULT_FIXTURES").is_some() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/planets")
+            .join(name);
+        std::fs::write(path, text).expect("write fixture");
+        return;
+    }
+    assert_eq!(text, stored);
+}
+
+/// `uqm_rust::planets::generate::default` called directly.
+struct RustDefault<'a> {
+    table: &'a [PlanetFrame],
+    rng: RandomContext,
+}
+
+impl<'a> RustDefault<'a> {
+    fn new(table: &'a [PlanetFrame]) -> Self {
+        Self {
+            table,
+            rng: RandomContext::with_seed(1),
+        }
+    }
+
+    fn blank_descs(count: usize) -> Vec<PLANET_DESC> {
+        (0..count).map(|_| unsafe { std::mem::zeroed() }).collect()
+    }
+}
+
+impl DefaultOps for RustDefault<'_> {
+    fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
+        use uqm_rust::planets::generate::default::generate_planets;
+
+        let mut descs = Self::blank_descs(16);
+        self.rng.reseed(seed);
+        let drawn = generate_planets(&mut self.rng, self.table, star_size, star_color, &mut descs);
+        Layout {
+            worlds: descs[..usize::from(drawn)]
+                .iter()
+                .map(default_gen::world_of)
+                .collect(),
+            drawn,
+            rng: self.rng.seed(),
+        }
+    }
+
+    fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
+        use uqm_rust::planets::generate::default::generate_moons;
+
+        let mut descs = Self::blank_descs(usize::from(count));
+        self.rng.reseed(seed);
+        generate_moons(&mut self.rng, star_size, star_color, count, &mut descs);
+        Layout {
+            worlds: descs.iter().map(default_gen::world_of).collect(),
+            drawn: 0,
+            rng: self.rng.seed(),
+        }
+    }
+
+    fn nodes(
+        &mut self,
+        kind: NodeKind,
+        info: &SYSTEM_INFO,
+        which: u16,
+        node: &mut NODE_INFO,
+    ) -> (u16, u32) {
+        use uqm_rust::planets::generate::default as gen;
+
+        let rng = &mut self.rng;
+        let count = match kind {
+            NodeKind::Minerals => gen::generate_minerals(rng, info, which, node),
+            NodeKind::Energy => gen::generate_energy(),
+            NodeKind::Life => gen::generate_life(rng, info, which, node),
+            NodeKind::Artifact => gen::generate_artifact(rng, info, which, node),
+            NodeKind::Ruins => gen::generate_ruins(rng, info, which, node),
+        };
+        (count, rng.seed())
     }
 }
 

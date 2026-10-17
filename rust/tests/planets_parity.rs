@@ -15,6 +15,10 @@ use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use planets_common::default_gen::{
+    self, layout_cases, moon_cases, moons_line, nodes_line, planets_line, DefaultOps, Layout,
+    NodeKind,
+};
 use planets_common::topography::{self, TopoCase, Topography};
 use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
@@ -63,6 +67,47 @@ unsafe extern "C" {
         info: *mut NODE_INFO,
     ) -> u16;
     fn GenerateRandomLocation(loc: *mut POINT);
+    fn GenerateDefault_generatePlanets(system: *mut SOLARSYS_STATE) -> bool;
+    fn GenerateDefault_generateMoons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC)
+        -> bool;
+    fn GenerateDefault_generateMinerals(
+        system: *const SOLARSYS_STATE,
+        world: *const PLANET_DESC,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
+    fn GenerateDefault_generateEnergy(
+        system: *const SOLARSYS_STATE,
+        world: *const PLANET_DESC,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
+    fn GenerateDefault_generateLife(
+        system: *const SOLARSYS_STATE,
+        world: *const PLANET_DESC,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
+    fn GenerateDefault_generateArtifact(
+        system: *const SOLARSYS_STATE,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
+    fn GenerateDefault_generateRuins(
+        system: *const SOLARSYS_STATE,
+        which: u16,
+        info: *mut NODE_INFO,
+    ) -> u16;
+    fn GenerateDefault_pickupMinerals(
+        system: *mut SOLARSYS_STATE,
+        world: *mut PLANET_DESC,
+        which: u16,
+    ) -> bool;
+    fn GenerateDefault_pickupLife(
+        system: *mut SOLARSYS_STATE,
+        world: *mut PLANET_DESC,
+        which: u16,
+    ) -> bool;
     fn FillOrbits(
         system: *mut SOLARSYS_STATE,
         num_planets: u8,
@@ -222,6 +267,185 @@ impl Generators for ExportedGenerators {
     }
 }
 
+/// The C `GenerateDefault_*` hooks over the same state the exports use.
+impl DefaultOps for ExportedGenerators {
+    fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
+        self.set_star(star_size, (star_color << 5) | 0b101);
+        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
+        self.state.SunDesc[0].NumPlanets = 0;
+        let rng = unsafe {
+            reseed_c(SysGenRNG, seed);
+            assert!(GenerateDefault_generatePlanets(&mut *self.state));
+            uqm_rust::math::RandomContext_GetSeed(SysGenRNG)
+        };
+        let drawn = self.state.SunDesc[0].NumPlanets;
+        Layout {
+            worlds: self.state.PlanetDesc[..usize::from(drawn)]
+                .iter()
+                .map(default_gen::world_of)
+                .collect(),
+            drawn,
+            rng,
+        }
+    }
+
+    fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
+        self.set_star(star_size, (star_color << 5) | 0b101);
+        self.state.MoonDesc = unsafe { std::mem::zeroed() };
+        let mut planet: PLANET_DESC = unsafe { std::mem::zeroed() };
+        planet.NumPlanets = count;
+        let rng = unsafe {
+            reseed_c(SysGenRNG, seed);
+            assert!(GenerateDefault_generateMoons(&mut *self.state, &mut planet));
+            uqm_rust::math::RandomContext_GetSeed(SysGenRNG)
+        };
+        Layout {
+            worlds: self.state.MoonDesc[..usize::from(count)]
+                .iter()
+                .map(default_gen::world_of)
+                .collect(),
+            drawn: 0,
+            rng,
+        }
+    }
+
+    fn nodes(
+        &mut self,
+        kind: NodeKind,
+        info: &SYSTEM_INFO,
+        which: u16,
+        node: &mut NODE_INFO,
+    ) -> (u16, u32) {
+        self.state.SysInfo = *info;
+        let system: *const SOLARSYS_STATE = &*self.state;
+        let world: *const PLANET_DESC = std::ptr::null();
+        unsafe {
+            let count = match kind {
+                NodeKind::Minerals => GenerateDefault_generateMinerals(system, world, which, node),
+                NodeKind::Energy => GenerateDefault_generateEnergy(system, world, which, node),
+                NodeKind::Life => GenerateDefault_generateLife(system, world, which, node),
+                NodeKind::Artifact => GenerateDefault_generateArtifact(system, which, node),
+                NodeKind::Ruins => GenerateDefault_generateRuins(system, which, node),
+            };
+            (count, uqm_rust::math::RandomContext_GetSeed(SysGenRNG))
+        }
+    }
+}
+
+/// `uqm_rust::planets::generate::default`, over a private stream.
+struct RustDefault<'a> {
+    table: &'a [PlanetFrame],
+    rng: RandomContext,
+}
+
+impl DefaultOps for RustDefault<'_> {
+    fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
+        use uqm_rust::planets::generate::default::generate_planets;
+
+        let mut descs: Vec<PLANET_DESC> = (0..16).map(|_| unsafe { std::mem::zeroed() }).collect();
+        self.rng.reseed(seed);
+        let drawn = generate_planets(&mut self.rng, self.table, star_size, star_color, &mut descs);
+        Layout {
+            worlds: descs[..usize::from(drawn)]
+                .iter()
+                .map(default_gen::world_of)
+                .collect(),
+            drawn,
+            rng: self.rng.seed(),
+        }
+    }
+
+    fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
+        use uqm_rust::planets::generate::default::generate_moons;
+
+        let mut descs: Vec<PLANET_DESC> =
+            (0..count).map(|_| unsafe { std::mem::zeroed() }).collect();
+        self.rng.reseed(seed);
+        generate_moons(&mut self.rng, star_size, star_color, count, &mut descs);
+        Layout {
+            worlds: descs.iter().map(default_gen::world_of).collect(),
+            drawn: 0,
+            rng: self.rng.seed(),
+        }
+    }
+
+    fn nodes(
+        &mut self,
+        kind: NodeKind,
+        info: &SYSTEM_INFO,
+        which: u16,
+        node: &mut NODE_INFO,
+    ) -> (u16, u32) {
+        use uqm_rust::planets::generate::default as gen;
+
+        let rng = &mut self.rng;
+        let count = match kind {
+            NodeKind::Minerals => gen::generate_minerals(rng, info, which, node),
+            NodeKind::Energy => gen::generate_energy(),
+            NodeKind::Life => gen::generate_life(rng, info, which, node),
+            NodeKind::Artifact => gen::generate_artifact(rng, info, which, node),
+            NodeKind::Ruins => gen::generate_ruins(rng, info, which, node),
+        };
+        (count, rng.seed())
+    }
+}
+
+/// The C `GenerateDefault_*` hooks and the Rust port agree on every case
+/// (worlds, nodes, RNG position), and C reproduces the checked-in fixtures.
+fn default_generator_agrees_with_c(exports: &mut ExportedGenerators, table: &[PlanetFrame]) {
+    let mut rust = RustDefault {
+        table,
+        rng: RandomContext::with_seed(1),
+    };
+    let layout_c = [
+        collect(layout_cases(), layout_cases(), |c| planets_line(exports, c)),
+        collect(moon_cases(), moon_cases(), |c| moons_line(exports, c)),
+    ];
+    let layout_rust = [
+        collect(layout_cases(), layout_cases(), |c| {
+            planets_line(&mut rust, c)
+        }),
+        collect(moon_cases(), moon_cases(), |c| moons_line(&mut rust, c)),
+    ];
+    for (c, r) in layout_c.iter().zip(&layout_rust) {
+        assert_eq!(c.golden_lines, r.golden_lines, "layout lines differ");
+        assert_eq!((c.digest, c.count), (r.digest, r.count), "layout digest");
+    }
+    let text = layout_c.iter().map(render_fixture).collect::<String>();
+    check_or_bless("default_layout.txt", &text);
+
+    let nodes_c = collect(world_cases(false), world_cases(true), |case| {
+        let info = exports.analyze(case);
+        nodes_line(exports, case, info)
+    });
+    let nodes_rust = collect(world_cases(false), world_cases(true), |case| {
+        let info = exports.analyze(case);
+        nodes_line(&mut rust, case, info)
+    });
+    assert_eq!(
+        nodes_c.golden_lines, nodes_rust.golden_lines,
+        "node lines differ"
+    );
+    assert_eq!(
+        (nodes_c.digest, nodes_c.count),
+        (nodes_rust.digest, nodes_rust.count),
+        "node digest"
+    );
+    println!(
+        "default generator parity: {} planet layouts, {} moon layouts, {} node worlds",
+        layout_c[0].count, layout_c[1].count, nodes_c.count
+    );
+    check_or_bless("default_nodes.txt", &render_fixture(&nodes_c));
+}
+
+/// With `UQM_BLESS_DEFAULT_FIXTURES` set, the C output becomes the fixture.
+fn check_or_bless(name: &str, text: &str) {
+    if std::env::var_os("UQM_BLESS_DEFAULT_FIXTURES").is_some() {
+        std::fs::write(fixture_path(name), text).expect("write fixture");
+    }
+    check_fixture(name, text);
+}
+
 fn render_plan_data(table: &[PlanetFrame]) -> String {
     let mut text = String::new();
     for frame in table {
@@ -279,6 +503,11 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     });
     check_fixture("worlds.txt", &render_fixture(&worlds));
     check_fixture("orbits.txt", &render_fixture(&orbits));
+    default_generator_agrees_with_c(&mut exports, table);
+    assert!(unsafe {
+        GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
+            && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
+    });
 }
 
 fn gravity_and_random_locations_agree() {
