@@ -9,7 +9,7 @@ ownership-link, harness, complexity, security, coverage, cache, workflow, mutati
 The native suite is a local gate run on a real Mac window with
 `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run|validate|report|gallery|replay`
 (see `dev-docs/rust/autoplay-runner.md`). Its authority data stays in `rust/ci/gates.json`
-under `native_acceptance` because the local CLI reads the pinned scenario scripts from it.
+under `native_acceptance` because the local CLI reads the scenario list and deadlines from it.
 
 Issue #27/S4 owns CI composition. It consumes S1 provider and strict-link checks,
 S2 matrix, build, determinism, verification, and package commands, and S3 fixtures,
@@ -166,8 +166,8 @@ permission, secret or checkout-reference bypass is part of this migration.
 ### Outer child deadline for long scenarios
 
 The native runtime contract carries one outer child deadline,
-`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A pinned
-script may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
+`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A scenario
+entry may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
 only value accepted is 900000 ms (15 minutes). Approval, verbatim from the
 repository owner: "yeah you can switch them to 15m", given for the proposal that
 the longer scenarios get a longer outer timeout while the short ones remain at
@@ -175,14 +175,16 @@ the longer scenarios get a longer outer timeout while the short ones remain at
 
 Scope of the rule:
 
-- A script whose declared `max_wallclock_seconds` is above 300 must carry the
-  900000 ms pin. A script at or below 300 must not carry it. The wall budget is
-  read from the pinned script bytes during admission, so a pin that disagrees
-  with the script's own budget is refused before any build or launch. All 14
-  pinned scripts above 300 s carry the pin and the other 22 keep the default.
+- A script whose declared `max_wallclock_seconds` is above 300 must have a
+  scenario entry with the 900000 ms deadline. A script at or below 300 must not.
+  The wall budget is read from the script during admission, so an entry that
+  disagrees with the script's own budget is refused before any build or launch.
+  Scripts are listed in `gates.json` with their deadlines and are not
+  fingerprinted. All 14 scripts above 300 s carry the deadline and the other 22
+  keep the default.
 - A wall budget is a failure ceiling, not a promise that every run takes that
   long. `real-sol-luna-moonbase-departure`
-  and `real-sol-starbase-alliance` declare 900 s, carry the same 900000 ms pin, and
+  and `real-sol-starbase-alliance` declare 900 s, carry the same 900000 ms deadline, and
   are ended by the outer deadline if a run does not finish first. The approval
   does not cover raising the value further.
 - Every other runtime value is shared and unchanged: capture, observer and
@@ -191,14 +193,14 @@ Scope of the rule:
   95000 ms, below both outer deadlines.
 - The primary `native_acceptance.script` cannot carry the override because the
   single-script gate uses the shared contract.
-- The controller hands each scenario child the contract of its own pin, the child
+- The controller hands each scenario child the contract of its own entry, the child
   supervisor uses that value as the `ChildSession` timeout, and the proof,
   failure-manifest, suite-success and replay consumers compare the recorded
   contract with the one the authority declares for that script.
 - A retained bundle recorded before this change holds the 300000 ms contract for
   its long scripts. The current authority does not declare that contract for
   them, so such a bundle is checked by the source revision that produced it. It
-  is not reinterpreted under the new pins. This includes the earlier revision
+  is not reinterpreted under the new deadlines. This includes the earlier revision
   a35d65d64, which covered 11 of the 14 scripts.
 
 The sections below on autoplay selection and the `native-acceptance` step describe the local

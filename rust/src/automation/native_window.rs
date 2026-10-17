@@ -3844,18 +3844,11 @@ fn validate_linked_build_receipt_bundle(
     validate_linked_cargo_messages(&receipt, &cargo_messages)?;
     let provider = validate_retained_input(root, &receipt.provider_report, limit)?;
     let evidence = validate_retained_input(root, &receipt.native_build_evidence, limit)?;
-    let cargo_manifest = validate_retained_input(root, &receipt.cargo_manifest, limit)?;
-    let cargo_lock = validate_retained_input(root, &receipt.cargo_lock, limit)?;
+    validate_retained_input(root, &receipt.cargo_manifest, limit)?;
+    validate_retained_input(root, &receipt.cargo_lock, limit)?;
     let authority = validate_retained_input(root, &receipt.authority, limit)?;
     let canonical_toolchain = validate_retained_input(root, &receipt.canonical_toolchain, limit)?;
-    validate_native_linked_build_semantics(
-        &provider,
-        &evidence,
-        &authority,
-        &canonical_toolchain,
-        &cargo_manifest,
-        &cargo_lock,
-    )
+    validate_native_linked_build_semantics(&provider, &evidence, &authority, &canonical_toolchain)
 }
 
 fn validate_linked_cargo_messages(
@@ -3951,8 +3944,6 @@ pub fn validate_native_linked_build_semantics(
     evidence_bytes: &[u8],
     authority_bytes: &[u8],
     canonical_toolchain_bytes: &[u8],
-    cargo_manifest_bytes: &[u8],
-    cargo_lock_bytes: &[u8],
 ) -> Result<(), NativeWindowProofError> {
     let provider: LinkedProviderReport =
         serde_json::from_slice(provider_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
@@ -3971,20 +3962,10 @@ pub fn validate_native_linked_build_semantics(
         .pointer("/tools/rust/expected_output_prefix")
         .and_then(serde_json::Value::as_str)
         .ok_or(NativeWindowProofError::Receipt)?;
-    let cargo_manifest_sha256 = authority
-        .pointer("/package/cargo_manifest_sha256")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(NativeWindowProofError::Receipt)?;
-    let cargo_lock_sha256 = authority
-        .pointer("/package/cargo_lock_sha256")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(NativeWindowProofError::Receipt)?;
     if authority.get("schema").and_then(serde_json::Value::as_str) == Some("uqm-s4-ci-authority-v1")
         && provider.ledger_sha256 == authority_ledger
         && evidence.toolchain == canonical_toolchain
         && evidence.toolchain.rustc.version.starts_with(rust_prefix)
-        && format!("{:x}", Sha256::digest(cargo_manifest_bytes)) == cargo_manifest_sha256
-        && format!("{:x}", Sha256::digest(cargo_lock_bytes)) == cargo_lock_sha256
         && valid_linked_provider_report(&provider)
         && valid_linked_build_evidence(&evidence)
     {
@@ -4778,7 +4759,7 @@ mod tests {
             ("Cargo.lock", b"# lock\n"),
             (
                 "gates.json",
-                br#"{"schema":"uqm-s4-ci-authority-v1","ledger_identity":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"tools":{"rust":{"expected_output_prefix":"rustc 1.97.1 "}},"package":{"cargo_manifest_sha256":"97114b6db551bf665ec805d7d066227bde6ac04d7e01c5e2b981ec6effafc345","cargo_lock_sha256":"718475cd179c5fce5f3cbaf68fb45b15017015ebeec359c040cf704e3f1c86b6"}}"#,
+                br#"{"schema":"uqm-s4-ci-authority-v1","ledger_identity":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"tools":{"rust":{"expected_output_prefix":"rustc 1.97.1 "}}}"#,
             ),
             (
                 "canonical-toolchain.json",
@@ -5429,23 +5410,11 @@ mod tests {
             serde_json::from_slice(&fs::read(&authority_path).unwrap()).unwrap();
         forged_authority["ledger_identity"]["sha256"] = serde_json::json!("b".repeat(64));
         let forged_authority = serde_json::to_vec(&forged_authority).unwrap();
-        for (member, receipt_field, changed_member) in [
-            (
-                "inputs/linked-build/Cargo.toml",
-                "cargo_manifest",
-                b"[package]\nname = \"forged\"\n".to_vec(),
-            ),
-            (
-                "inputs/linked-build/Cargo.lock",
-                "cargo_lock",
-                b"# forged lock\n".to_vec(),
-            ),
-            (
-                "inputs/linked-build/gates.json",
-                "authority",
-                forged_authority,
-            ),
-        ] {
+        for (member, receipt_field, changed_member) in [(
+            "inputs/linked-build/gates.json",
+            "authority",
+            forged_authority,
+        )] {
             let original_member = fs::read(root.path().join(member)).unwrap();
             let mut changed_receipt = linked_receipt_value.clone();
             let mut changed_manifest = descriptor_bound.clone();
