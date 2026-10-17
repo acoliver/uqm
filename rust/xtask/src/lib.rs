@@ -22,6 +22,7 @@ use uqm_rust::automation::{
 mod ci;
 mod display_awake;
 pub mod native_cli;
+mod native_frames;
 mod native_gallery;
 mod native_replay;
 mod native_save;
