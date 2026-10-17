@@ -79,10 +79,10 @@ type Rect = [i16; 4];
 /// instead of corrupting memory.
 const GUARD_CELLS: usize = 4096;
 
-/// The linked C `DeltaTopography`, over the C-owned `SysGenRNG`.
-struct CTopography;
+/// The exported `DeltaTopography`, over the C-owned `SysGenRNG`.
+struct ExportedTopography;
 
-impl Topography for CTopography {
+impl Topography for ExportedTopography {
     fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32 {
         let rect: Rect = [0, 0, case.width, case.height];
         let mut padded = map.to_vec();
@@ -98,27 +98,24 @@ impl Topography for CTopography {
         }
         assert!(
             padded[map.len()..].iter().all(|cell| *cell == 0),
-            "C wrote past the map for {case:?}"
+            "DeltaTopography wrote past the map for {case:?}"
         );
         map.copy_from_slice(&padded[..map.len()]);
         unsafe { uqm_rust::math::RandomContext_GetSeed(SysGenRNG) }
     }
 }
 
-/// The Rust port and the C original agree on every case, whole depth map and
-/// RNG position, and the C results are the checked-in fixture.
-fn topography_agrees_with_c(table: &[PlanetFrame]) {
-    let mut checked = 0;
-    for case in topography::cases(table) {
-        let c_line = topography::case_line(&mut CTopography, &case);
-        let rust_line = topography::case_line(&mut topography::RustTopography, &case);
-        assert_eq!(c_line, rust_line, "topography case {case:?}");
-        checked += 1;
-    }
-    assert_eq!(checked, 171, "topography domain changed");
-    check_or_write(
+/// The exported `DeltaTopography` reproduces the checked-in C fixture: every
+/// case's whole depth map and RNG position.
+fn exported_topography_reproduces_the_fixture(table: &[PlanetFrame]) {
+    assert_eq!(
+        topography::cases(table).len(),
+        171,
+        "topography domain changed"
+    );
+    check_fixture(
         "topography.txt",
-        &topography::render(&mut CTopography, table),
+        &topography::render(&mut ExportedTopography, table),
     );
 }
 
@@ -261,16 +258,6 @@ fn check_fixture(name: &str, text: &str) {
     assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
-/// Compares with the checked-in fixture; `UQM_REGEN_PLANET_FIXTURES=1`
-/// rewrites it from the C results instead.
-fn check_or_write(name: &str, text: &str) {
-    if std::env::var_os("UQM_REGEN_PLANET_FIXTURES").is_some() {
-        std::fs::write(fixture_path(name), text).expect("write fixture");
-    } else {
-        check_fixture(name, text);
-    }
-}
-
 /// One test: the exports share process-global state (`pSolarSysState`,
 /// `SysGenRNG`), so the comparisons must not run in parallel.
 #[test]
@@ -282,7 +269,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
 
     // The planet-frame table the fixtures carry must be the C table.
     check_fixture("plan_data.txt", &render_plan_data(table));
-    topography_agrees_with_c(table);
+    exported_topography_reproduces_the_fixture(table);
 
     let worlds = collect(world_cases(false), world_cases(true), |case| {
         world_line(&mut exports, case, base)

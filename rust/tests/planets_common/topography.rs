@@ -1,14 +1,12 @@
 //! Input domain and record format for the `DeltaTopography` parity tests.
 //!
-//! The Rust port and the linked C original run the same cases; each case
-//! becomes one line holding an FNV-1a hash of the whole depth map and the RNG
-//! state left behind, so a mismatch names the exact input.
+//! Each case becomes one line holding an FNV-1a hash of the whole depth map
+//! and the RNG state left behind, so a mismatch names the exact input.
 
 use std::fmt::Write as _;
 
 use uqm_rust::c_bindings::global_state::PlanetFrame;
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
-use uqm_rust::planets::topography::delta_topography;
 
 /// Rows of the narrow band `MakeGasGiant` perturbs, and its iteration count.
 const BAND_HEIGHT: i16 = 5;
@@ -50,19 +48,6 @@ impl TopoCase {
 /// A topography run: fills `map` and returns the seed the RNG ended on.
 pub trait Topography {
     fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32;
-}
-
-pub fn rust_run(case: &TopoCase, map: &mut [i8]) -> u32 {
-    let mut rng = uqm_rust::math::RandomContext::with_seed(case.seed);
-    delta_topography(
-        &mut rng,
-        case.iterations,
-        map,
-        case.width,
-        case.height,
-        case.depth_delta,
-    );
-    rng.reseed(1)
 }
 
 pub fn fnv_bytes(bytes: &[i8]) -> u64 {
@@ -205,12 +190,4 @@ pub fn render(runner: &mut impl Topography, table: &[PlanetFrame]) -> String {
         text.push('\n');
     }
     text
-}
-
-pub struct RustTopography;
-
-impl Topography for RustTopography {
-    fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32 {
-        rust_run(case, map)
-    }
 }

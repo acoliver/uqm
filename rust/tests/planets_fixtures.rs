@@ -7,6 +7,7 @@
 
 mod planets_common;
 
+use planets_common::topography::{TopoCase, Topography};
 use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, Records, WorldCase, PRESET_LIFE,
@@ -14,6 +15,8 @@ use planets_common::{
 use uqm_rust::c_bindings::global_state::{
     PlanetFrame, ELEMENT_ENTRY, NODE_INFO, PLANET_DESC, SYSTEM_INFO,
 };
+use uqm_rust::math::RandomContext;
+use uqm_rust::planets::topography::delta_topography;
 
 const PLAN_DATA: &str = include_str!("fixtures/planets/plan_data.txt");
 const WORLDS: &str = include_str!("fixtures/planets/worlds.txt");
@@ -63,9 +66,26 @@ fn planetary_analysis_and_nodes_match_the_c_fixture() {
 #[test]
 fn fault_line_topography_matches_the_c_fixture() {
     let table = parse_plan_data(PLAN_DATA);
-    let text =
-        planets_common::topography::render(&mut planets_common::topography::RustTopography, &table);
+    let text = planets_common::topography::render(&mut RustTopography, &table);
     assert_eq!(text, TOPOGRAPHY);
+}
+
+/// `delta_topography` called directly over a seeded private stream.
+struct RustTopography;
+
+impl Topography for RustTopography {
+    fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32 {
+        let mut rng = RandomContext::with_seed(case.seed);
+        delta_topography(
+            &mut rng,
+            case.iterations,
+            map,
+            case.width,
+            case.height,
+            case.depth_delta,
+        );
+        rng.reseed(1)
+    }
 }
 
 #[test]

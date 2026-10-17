@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "e0b4645a0ab541f47debd2c524f34b6e562ed04fcaf0cc96c29264c250eb36f6",
+    "projection_sha256": "cbf386f4a38376e6895250df76a44b9038a525ff31f719a91c5eda88df62d2e4",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2946,18 +2946,6 @@
       "sha256": "21a46b23549419aa8d1969bf8972417f14ddf6af79aa49b053f4bad799bf92d8",
       "archive_decision": "include",
       "provider": "native_object:native/genzoq.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gentopo.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/gentopo.c",
-      "scan_root": "native",
-      "sha256": "362121bb64b9462e9e1496126e75b7211bb8062537eef944e37c4c9672bebfc8",
-      "archive_decision": "include",
-      "provider": "native_object:native/gentopo.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"

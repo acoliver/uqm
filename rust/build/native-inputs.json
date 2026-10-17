@@ -2064,15 +2064,6 @@
       "provider": "native_object:native/genzoq.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/gentopo.c",
-      "source_sha256": "362121bb64b9462e9e1496126e75b7211bb8062537eef944e37c4c9672bebfc8",
-      "object_output": "gentopo.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "PLANET_GEN",
-      "production_profile": "production",
-      "provider": "native_object:native/gentopo.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/oval.c",
       "source_sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
       "object_output": "oval.c.o",
