@@ -110,16 +110,28 @@ impl ViewGeometry {
     /// Read the geometry from the live C screen-size globals.
     #[cfg(feature = "linked_c_archive")]
     fn current() -> Self {
-        // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
-        // init and are read-only thereafter; this hook runs on the game thread.
-        let (width, height) = unsafe {
-            (
-                std::ptr::addr_of!(SCREEN_WIDTH).read(),
-                std::ptr::addr_of!(SCREEN_HEIGHT).read(),
-            )
-        };
+        let (width, height) = screen_size();
         Self::from_screen(width, height)
     }
+}
+
+/// The live `ScreenWidth` and `ScreenHeight`.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn screen_size() -> (i32, i32) {
+    // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
+    // init and are read-only thereafter; this runs on the game thread.
+    unsafe {
+        (
+            std::ptr::addr_of!(SCREEN_WIDTH).read(),
+            std::ptr::addr_of!(SCREEN_HEIGHT).read(),
+        )
+    }
+}
+
+/// Without the linked game the screen is the baseline size.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn screen_size() -> (i32, i32) {
+    (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 }
 
 /// The game's baseline screen size, used only when the C globals are absent.
@@ -244,6 +256,26 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
 /// Without the linked game there is no flagship state to read.
 #[cfg(not(feature = "linked_c_archive"))]
 pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    None
+}
+
+/// The flagship's authoritative `ElementAmounts`, indexed by element category.
+///
+/// The lander hold is added to these when it returns to the ship, so they
+/// change only after the trip. Nothing is written.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some(std::ptr::addr_of!((*sis_state).element_amounts).read())
+    }
+}
+
+/// Without the linked game there is no flagship state to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
     None
 }
 

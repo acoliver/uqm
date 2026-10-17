@@ -9,32 +9,27 @@ use crate::ci::authority::load_authority;
 use uqm_rust::automation::native_window::NativeWindowRuntimeContract;
 
 /// Pinned scripts whose declared wall budget is above 300 s.
-pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 18] = [
+pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 14] = [
     "rust/scripts/comm-encounter-v1.json",
     "rust/scripts/explore-planet-v1.json",
     "rust/scripts/probe-encounter-v1.json",
     "rust/scripts/probe-encounter-v2.json",
-    "rust/scripts/probe-encounter-v3.json",
-    "rust/scripts/probe-encounter-v4.json",
     "rust/scripts/probe-encounter-v5.json",
     "rust/scripts/probe-encounter-v6.json",
     "rust/scripts/probe-encounter-v7.json",
     "rust/scripts/real-sol-commander-completion.json",
-    "rust/scripts/real-sol-earth-moon-base.json",
     "rust/scripts/real-sol-luna-moonbase-departure.json",
+    "rust/scripts/real-sol-mercury-radioactives.json",
     "rust/scripts/real-sol-planetside-collision-proof.json",
     "rust/scripts/real-sol-probe-to-commander-responses.json",
-    "rust/scripts/real-sol-probe-to-starbase.json",
     "rust/scripts/real-sol-rust-planetside-smoke.json",
-    "rust/scripts/real-sol-starbase-to-mars.json",
-    "rust/scripts/starbase-visit-v1.json",
+    "rust/scripts/real-sol-starbase-alliance.json",
 ];
 
 /// Pinned scripts that declare a 900 s wall budget.
-const WALL_900_SCRIPTS: [&str; 3] = [
-    "rust/scripts/real-sol-earth-moon-base.json",
+const WALL_900_SCRIPTS: [&str; 2] = [
     "rust/scripts/real-sol-luna-moonbase-departure.json",
-    "rust/scripts/real-sol-starbase-to-mars.json",
+    "rust/scripts/real-sol-starbase-alliance.json",
 ];
 
 const DEFAULT_OUTER_MS: u64 = 300_000;
@@ -120,7 +115,7 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
-    assert_eq!(longer.len(), 18);
+    assert_eq!(longer.len(), 14);
     for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);
@@ -211,7 +206,7 @@ fn admit_rehashed(fixture: &RehashedScript) -> Result<ScriptAdmission, String> {
 fn rehashed_scripts_admit_the_pinned_class_at_its_budget_edges() {
     for wall in [899, 900] {
         let long = rehashed_script(
-            "rust/scripts/probe-encounter-v3.json",
+            "rust/scripts/real-sol-starbase-alliance.json",
             wall,
             Some(LONG_OUTER_MS),
         );
@@ -237,7 +232,7 @@ fn rehashed_scripts_admit_the_pinned_class_at_its_budget_edges() {
 #[test]
 fn rehashed_scripts_with_the_wrong_class_are_refused_for_the_class_not_the_hash() {
     let covered = rehashed_script(
-        "rust/scripts/probe-encounter-v3.json",
+        "rust/scripts/real-sol-starbase-alliance.json",
         200,
         Some(LONG_OUTER_MS),
     );
@@ -245,14 +240,14 @@ fn rehashed_scripts_with_the_wrong_class_are_refused_for_the_class_not_the_hash(
     assert!(error.contains("fits the 300000 ms default"), "{error}");
 
     let exactly_default = rehashed_script(
-        "rust/scripts/probe-encounter-v3.json",
+        "rust/scripts/real-sol-starbase-alliance.json",
         300,
         Some(LONG_OUTER_MS),
     );
     let error = admit_rehashed(&exactly_default).unwrap_err();
     assert!(error.contains("fits the 300000 ms default"), "{error}");
 
-    let missing = rehashed_script("rust/scripts/probe-encounter-v3.json", 720, None);
+    let missing = rehashed_script("rust/scripts/real-sol-starbase-alliance.json", 720, None);
     let error = admit_rehashed(&missing).unwrap_err();
     assert!(error.contains("needs the approved 900000 ms"), "{error}");
 
@@ -263,13 +258,13 @@ fn rehashed_scripts_with_the_wrong_class_are_refused_for_the_class_not_the_hash(
 
 #[test]
 fn a_900_second_budget_without_the_override_is_refused() {
-    let missing = rehashed_script("rust/scripts/probe-encounter-v3.json", 900, None);
+    let missing = rehashed_script("rust/scripts/real-sol-starbase-alliance.json", 900, None);
     let error = admit_rehashed(&missing).unwrap_err();
     assert!(error.contains("needs the approved 900000 ms"), "{error}");
 }
 
 #[test]
-fn the_three_900_second_scripts_carry_the_override_in_the_authority() {
+fn the_900_second_scripts_carry_the_override_in_the_authority() {
     let authority = authority();
     for path in WALL_900_SCRIPTS {
         assert_eq!(

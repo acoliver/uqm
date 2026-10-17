@@ -17,6 +17,7 @@ use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::c_extern::ONE_SECOND;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
+use crate::planet_side::cargo::ElementCategory;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
@@ -503,6 +504,37 @@ pub struct TurnFlagshipStep {
     pub max_ticks: u64,
 }
 
+/// A `collect_planet_minerals` step drives the planet-side lander with
+/// player input until its hold carries `minimum_units` units of `category`,
+/// and fails when it does not within `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CollectPlanetMineralsStep {
+    pub category: ElementCategory,
+    pub minimum_units: u16,
+    pub max_ticks: u64,
+}
+
+/// A `fight_battle` step fights the running full-game battle with player
+/// input: it aims the flagship at the opposing ship and fires until the
+/// opposing side loses a ship and the player's side has not, and fails when
+/// that does not happen within `max_ticks` input ticks.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FightBattleStep {
+    pub max_ticks: u64,
+}
+
+/// An `assert_ship_element` step requires the flagship to hold at least
+/// `minimum` units of an element category, as `GLOBAL_SIS` records it after
+/// the lander returned.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ShipElementAssertion {
+    pub category: ElementCategory,
+    pub minimum: u16,
+}
+
 /// Wait until a Rust PlanetSide session has started.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -569,6 +601,16 @@ pub struct WaitForPlanetSideEndStep {
 #[serde(deny_unknown_fields)]
 pub struct SelectPlanetMenuStep {
     pub phase: PlanetMenuPhaseName,
+    pub max_ticks: u64,
+}
+
+/// Confirm the flagship once the production battle ship picker is active.
+///
+/// The full game shows the picker only when the player has escorts, so this
+/// step fails when no picker appears within `max_ticks`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PickBattleShipStep {
     pub max_ticks: u64,
 }
 
@@ -803,9 +845,12 @@ pub enum Action {
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
     TurnFlagship(TurnFlagshipStep),
+    CollectPlanetMinerals(CollectPlanetMineralsStep),
+    FightBattle(FightBattleStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
+    PickBattleShip(PickBattleShipStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
     AssertScene(SceneAssertion),
@@ -820,6 +865,7 @@ pub enum Action {
     RecordSavedHyperspacePosition(RecordSavedHyperspacePositionStep),
     AssertHyperspacePositionRestored(HyperspacePositionRestoredAssertion),
     AssertShipResources(ShipResourcesAssertion),
+    AssertShipElement(ShipElementAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     WaitForBattleShipLoss(WaitForBattleShipLossStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
@@ -880,6 +926,58 @@ pub struct RootDocument {
     /// Fixture isolation identity, introduced at schema version 2.
     #[serde(default)]
     pub fixture: Option<String>,
+    /// A committed save game the harness places in the run's save directory
+    /// before launch. Absent for a script that starts from a fresh profile.
+    #[serde(default)]
+    pub start_save: Option<StartSave>,
+}
+
+/// A committed, hash-pinned save file a scenario starts with.
+///
+/// `path` is relative to the directory holding the script and must name a
+/// `.sav` file under `saves/`. `slot` is the game's own slot number, so the
+/// harness installs the file as `uqmsave.NN` in the run's save directory.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StartSave {
+    pub path: String,
+    pub slot: u8,
+}
+
+/// Number of save slots the game offers (`MAX_SAVED_GAMES`).
+pub const START_SAVE_SLOT_COUNT: u8 = 50;
+
+impl StartSave {
+    /// The file name the game reads this slot from.
+    #[must_use]
+    pub fn slot_file_name(&self) -> String {
+        format!("uqmsave.{:02}", self.slot)
+    }
+
+    fn validate(&self, script_path: &str) -> Result<(), AutomationError> {
+        let invalid = |reason: &str| AutomationError::InvalidValue {
+            path: script_path.to_string(),
+            field: "start_save",
+            reason: reason.to_string(),
+        };
+        let relative = self
+            .path
+            .strip_prefix("saves/")
+            .ok_or_else(|| invalid("path must be under saves/ next to the script"))?;
+        if !std::path::Path::new(relative)
+            .extension()
+            .is_some_and(|extension| extension == "sav")
+            || relative.contains('/')
+            || relative.contains('\\')
+            || relative.starts_with('.')
+        {
+            return Err(invalid("path must name one saves/<name>.sav file"));
+        }
+        if self.slot >= START_SAVE_SLOT_COUNT {
+            return Err(invalid("slot must be below 50"));
+        }
+        Ok(())
+    }
 }
 
 // ===========================================================================
@@ -903,9 +1001,16 @@ pub struct ValidatedScript {
     pub(crate) transitions: Vec<MainMenuTransition>,
     pub(crate) seed: u32,
     pub(crate) fixture: String,
+    pub(crate) start_save: Option<StartSave>,
 }
 
 impl ValidatedScript {
+    /// The committed save this scenario starts with, if it declares one.
+    #[must_use]
+    pub fn start_save(&self) -> Option<&StartSave> {
+        self.start_save.as_ref()
+    }
+
     /// The u32 initialization argument supplied to each automation-owned RNG.
     /// The generator still applies its own seed normalization internally.
     #[must_use]
@@ -1358,6 +1463,7 @@ impl ResolvedScenario {
                 steps: self.steps.clone(),
                 seed: Some(u64::from(self.requested_seed)),
                 fixture: Some(self.fixture.clone()),
+                start_save: None,
             },
             path,
         )?;
@@ -1548,6 +1654,9 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         path: path.into(),
         field: "fixture",
     })?;
+    if let Some(start_save) = &doc.start_save {
+        start_save.validate(path)?;
+    }
     Ok(ValidatedScript {
         name: doc.name,
         start_scene: doc.start_scene,
@@ -1556,6 +1665,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         transitions,
         seed,
         fixture,
+        start_save: doc.start_save,
     })
 }
 
@@ -1833,6 +1943,7 @@ fn validate_wait_step(
         Action::WaitForPlanetSideStart(wait) => (wait.max_ticks, "wait_for_planet_side_start"),
         Action::WaitForPlanetSideEnd(wait) => (wait.max_ticks, "wait_for_planet_side_end"),
         Action::SelectPlanetMenu(select) => (select.max_ticks, "select_planet_menu"),
+        Action::PickBattleShip(pick) => (pick.max_ticks, "pick_battle_ship"),
         Action::SelectCommunicationResponse(select) => {
             if select.index >= 8 {
                 return Some(Err(AutomationError::step(
@@ -1933,6 +2044,26 @@ fn validate_navigation_step(
             }
             turn.max_ticks
         }
+        Action::CollectPlanetMinerals(collect) => {
+            if collect.minimum_units == 0 || collect.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "collect_planet_minerals requires positive minimum_units and max_ticks",
+                )));
+            }
+            collect.max_ticks
+        }
+        Action::FightBattle(fight) => {
+            if fight.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "fight_battle requires positive max_ticks",
+                )));
+            }
+            fight.max_ticks
+        }
         Action::NavigateToPlanet(navigation) => {
             if navigation.planet > 8 {
                 return Some(Err(AutomationError::step(
@@ -2024,6 +2155,15 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_ship_resources: state fuel_on_board, res_units or both",
+                ));
+            }
+        }
+        Action::AssertShipElement(assertion) => {
+            if assertion.minimum == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_ship_element: minimum must be greater than zero",
                 ));
             }
         }
@@ -2548,7 +2688,7 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":85,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":95,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
                 {"action":"wait_for_communication_replay","max_ticks":10},
@@ -2556,6 +2696,7 @@ mod tests {
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
                 {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
                 {"action":"wait_for_planet_side_start","max_ticks":10},
+                {"action":"pick_battle_ship","max_ticks":10},
                 {"action":"wait_for_battle_frames","minimum":1,"max_ticks":10},
                 {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
                 {"action":"finish"}
@@ -2587,6 +2728,7 @@ mod tests {
                     max_ticks: 10
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
+                Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),
                 Action::WaitForBattleFrames(WaitForBattleFramesStep {
                     minimum: 1,
                     max_ticks: 10
@@ -2640,6 +2782,7 @@ mod tests {
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
             r#"{"action":"wait_for_battle_frames","minimum":1,"max_ticks":0}"#,
+            r#"{"action":"pick_battle_ship","max_ticks":0}"#,
         ] {
             let txt = format!(
                 "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":2,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
@@ -3118,11 +3261,19 @@ mod tests {
         script.steps().iter().position(matches).unwrap()
     }
 
-    #[test]
-    fn load_save_proves_the_load_restored_the_saved_position_after_a_verified_move() {
+    fn count_steps(script: &ValidatedScript, matches: impl Fn(&Action) -> bool) -> usize {
+        script.steps().iter().filter(|a| matches(a)).count()
+    }
+
+    fn load_save_script() -> ValidatedScript {
         let bytes = include_bytes!("../../scripts/load-save-v1.json");
         let document = parse_script(bytes, "rust/scripts/load-save-v1.json").unwrap();
-        let script = validate_script(document, "rust/scripts/load-save-v1.json").unwrap();
+        validate_script(document, "rust/scripts/load-save-v1.json").unwrap()
+    }
+
+    #[test]
+    fn load_save_asserts_the_restored_position_only_after_choosing_load() {
+        let script = load_save_script();
 
         let saved = position_of(&script, |a| {
             matches!(a, Action::RecordSavedHyperspacePosition(_))
@@ -3142,18 +3293,39 @@ mod tests {
         // verified leg, and only after choosing Load does equality get asserted.
         assert!(saved < moved && moved < load_menu && load_menu < restored);
         assert!(restored < resources);
-        // Exactly one kept position and one restore assertion, so a restore can
-        // never be satisfied by a different record.
-        let count =
-            |wanted: fn(&Action) -> bool| script.steps().iter().filter(|a| wanted(a)).count();
+    }
+
+    #[test]
+    fn load_save_keeps_exactly_one_position_and_one_restore_assertion() {
+        let script = load_save_script();
+
+        // A restore can never be satisfied by a different record.
         assert_eq!(
-            count(|a| matches!(a, Action::RecordSavedHyperspacePosition(_))),
+            count_steps(&script, |a| matches!(
+                a,
+                Action::RecordSavedHyperspacePosition(_)
+            )),
             1
         );
         assert_eq!(
-            count(|a| matches!(a, Action::AssertHyperspacePositionRestored(_))),
+            count_steps(&script, |a| matches!(
+                a,
+                Action::AssertHyperspacePositionRestored(_)
+            )),
             1
         );
+    }
+
+    #[test]
+    fn load_save_records_the_displacement_baseline_right_before_the_thrust_leg() {
+        let script = load_save_script();
+
+        let saved = position_of(&script, |a| {
+            matches!(a, Action::RecordSavedHyperspacePosition(_))
+        });
+        let moved = position_of(&script, |a| {
+            matches!(a, Action::AssertHyperspaceDisplacement(_))
+        });
         // The displacement baseline is recorded after the save screens and
         // immediately before the thrust leg it measures.
         assert!(matches!(
@@ -3260,6 +3432,13 @@ mod tests {
             |a| matches!(a, Action::Capture(CaptureStep { label, .. }) if label == "battle-final"),
         );
         assert!(frames < loss && loss < last_capture);
+        // The arena capture is taken once the frames prove a battle is being
+        // drawn, not a fixed delay after Select, which can still show the
+        // team selection screen.
+        assert!(matches!(
+            &script.steps()[frames + 1],
+            Action::Capture(CaptureStep { label, .. }) if label == "super-melee-battle-start"
+        ));
         let Action::WaitForBattleShipLoss(wait) = &script.steps()[loss] else {
             unreachable!()
         };
@@ -3534,6 +3713,63 @@ mod tests {
             .expect("step present after the previous one")
     }
 
+    /// With escorts aboard the full game shows the ship picker after the
+    /// Ilwrath hail, and the battle frames only start once Select confirms it.
+    #[test]
+    fn alliance_scenario_picks_the_flagship_before_waiting_for_battle_frames() {
+        let steps = checked_in_steps("real-sol-starbase-alliance");
+        let battle_wait = step_index(&steps, 0, |step| {
+            matches!(step, Action::WaitForBattleFrames(_))
+        });
+        let pick = step_index(&steps, 0, |step| matches!(step, Action::PickBattleShip(_)));
+        assert_eq!(pick + 1, battle_wait);
+        // The Ilwrath conversation ends into the battle; its completion must be
+        // consumed before the post-battle conversation's response waits.
+        assert!(matches!(
+            steps[pick - 1],
+            Action::WaitForCommunicationEnd(_)
+        ));
+        assert!(matches!(
+            steps[pick - 2],
+            Action::SelectCommunicationResponse(_)
+        ));
+    }
+
+    /// The allied Commander talk (`starbas.c` `NormalStarbase` with
+    /// `MOONBASE_ON_SHIP`) offers `have_minerals`, `need_info` and
+    /// `goodbye_commander`; only the last one (`ByeBye`) ends the conversation.
+    #[test]
+    fn alliance_scenario_ends_the_allied_talk_with_goodbye() {
+        let steps = checked_in_steps("real-sol-starbase-alliance");
+        let menu = step_index(&steps, 0, |step| {
+            matches!(
+                step,
+                Action::AssertMode(ModeAssertion {
+                    mode: crate::automation::mode::GameMode::Starbase
+                })
+            )
+        });
+        assert!(matches!(
+            steps[menu - 1],
+            Action::WaitInputTicks(WaitInputTicksStep { count: 60 })
+        ));
+        assert!(matches!(
+            steps[menu - 2],
+            Action::WaitForCommunicationEnd(_)
+        ));
+        assert!(matches!(
+            steps[menu - 3],
+            Action::SelectCommunicationResponse(SelectCommunicationResponseStep { index: 2, .. })
+        ));
+        assert!(matches!(
+            steps[menu - 4],
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 3,
+                ..
+            })
+        ));
+    }
+
     /// The scenario audit: a scenario whose name or domain claims a Starbase
     /// visit, a moon base pickup or a response choice must assert it.
     #[test]
@@ -3555,19 +3791,11 @@ mod tests {
                 })
             )
         };
-        let solar = |step: &Action| {
-            matches!(
-                step,
-                Action::AssertMode(ModeAssertion {
-                    mode: GameMode::Solar
-                })
-            )
-        };
         let resources = |step: &Action| {
             matches!(
                 step,
                 Action::AssertShipResources(ShipResourcesAssertion {
-                    fuel_on_board: Some(970),
+                    fuel_on_board: Some(896),
                     res_units: Some(2500),
                 })
             )
@@ -3591,24 +3819,37 @@ mod tests {
             let wait = step_index(&steps, 0, wait_responses);
             step_index(&steps, wait, assert_responses);
         }
-        for name in [
-            "real-sol-probe-to-starbase",
-            "real-sol-starbase-to-mars",
-            "real-sol-earth-moon-base",
-        ] {
-            let steps = checked_in_steps(name);
+        {
+            let steps = checked_in_steps("real-sol-starbase-alliance");
             let landing = step_index(&steps, 0, returned);
             let menu = step_index(&steps, landing, starbase);
             step_index(&steps, menu, resources);
         }
-        // The pickup is proved by the Commander paying for it, so the moon
-        // base scenario must also see the solar view again after the lander
-        // takes off. Returning from the moon base pickup leaves Luna orbit for
-        // the solar system view (a live run observed `solar`, not `orbit`);
-        // only a Mars landing still reads as orbit afterwards.
-        let moon = checked_in_steps("real-sol-earth-moon-base");
-        let takeoff = step_index(&moon, 0, returned);
-        let back_in_solar = step_index(&moon, takeoff, solar);
+        // The downstream Starbase scenarios start from the alliance save, so
+        // the Starbase menu is reached by loading it, not by a planet return.
+        for name in [
+            "real-sol-starbase-to-mars",
+            "starbase-visit-v1",
+            "probe-encounter-v3",
+            "probe-encounter-v4",
+        ] {
+            let steps = checked_in_steps(name);
+            let load = step_index(&steps, 0, |step| matches!(step, Action::AssertActivity(_)));
+            let menu = step_index(&steps, load, starbase);
+            step_index(&steps, menu, resources);
+        }
+        // The pickup is proved by the Commander paying for it: the moon base
+        // scenario plays the allied chain, so the Luna return (the second
+        // planet-side return, after Mercury) must be followed by the
+        // interplanetary activity of the solar view (a live run observed the
+        // solar view, not orbit, after the moon base pickup) and only then by
+        // the Starbase menu.
+        let moon = checked_in_steps("real-sol-starbase-alliance");
+        let mercury_return = step_index(&moon, 0, returned);
+        let luna_return = step_index(&moon, mercury_return + 1, returned);
+        let back_in_solar = step_index(&moon, luna_return, |step| {
+            matches!(step, Action::AssertActivity(_))
+        });
         step_index(&moon, back_in_solar, starbase);
         // The Luna landing site is chosen by the cursor: with Up held for 19
         // ticks the lander lands at 728,68 where the Cancel presses launch it
@@ -3940,6 +4181,107 @@ mod tests {
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
         let roomy = tight.replace("\"max_input_ticks\":2", "\"max_input_ticks\":3");
         assert!(validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).is_ok());
+    }
+
+    // --- collect_planet_minerals / assert_ship_element ---
+
+    fn validated_steps(steps: &str) -> Result<ValidatedScript, AutomationError> {
+        let text = turn_script(steps);
+        validate_script(parse_script(text.as_bytes(), "m.json").unwrap(), "m.json")
+    }
+
+    #[test]
+    fn collect_planet_minerals_parses_the_category_by_name() {
+        let script = validated_steps(
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::CollectPlanetMinerals(CollectPlanetMineralsStep {
+                category: ElementCategory::Radioactive,
+                minimum_units: 1,
+                max_ticks: 2400,
+            })
+        );
+    }
+
+    #[test]
+    fn collect_planet_minerals_rejects_zero_bounds_unknown_categories_and_fields() {
+        for bad in [
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":0,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":0}"#,
+        ] {
+            assert!(validated_steps(bad).is_err(), "{bad} must be rejected");
+        }
+        for bad in [
+            r#"{"action":"collect_planet_minerals","category":"uranium","minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"Radioactive","minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":6,"minimum_units":1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":-1,"max_ticks":10}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1}"#,
+            r#"{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":10,"grant":5}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn collect_planet_minerals_counts_against_the_input_budget() {
+        let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn fight_battle_parses_requires_positive_ticks_and_rejects_unknown_fields() {
+        let script = validated_steps(r#"{"action":"fight_battle","max_ticks":3000}"#).unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::FightBattle(FightBattleStep { max_ticks: 3000 })
+        );
+        assert!(validated_steps(r#"{"action":"fight_battle","max_ticks":0}"#).is_err());
+        for bad in [
+            r#"{"action":"fight_battle"}"#,
+            r#"{"action":"fight_battle","max_ticks":-1}"#,
+            r#"{"action":"fight_battle","max_ticks":10,"ship":"avenger"}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn fight_battle_counts_against_the_input_budget() {
+        let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"fight_battle","max_ticks":3000},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn assert_ship_element_parses_and_requires_a_positive_minimum() {
+        let script = validated_steps(
+            r#"{"action":"assert_ship_element","category":"radioactive","minimum":1}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::AssertShipElement(ShipElementAssertion {
+                category: ElementCategory::Radioactive,
+                minimum: 1,
+            })
+        );
+        assert!(validated_steps(
+            r#"{"action":"assert_ship_element","category":"radioactive","minimum":0}"#
+        )
+        .is_err());
+        for bad in [
+            r#"{"action":"assert_ship_element","category":"plutonium","minimum":1}"#,
+            r#"{"action":"assert_ship_element","minimum":1}"#,
+            r#"{"action":"assert_ship_element","category":"exotic","minimum":1,"grant":1}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
     }
 
     // --- capability contract ---

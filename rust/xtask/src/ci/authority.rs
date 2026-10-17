@@ -629,6 +629,9 @@ pub struct NativeAcceptanceAuthority {
     /// narrow the set but never reach outside it, which is what keeps a head
     /// revision from introducing a script for CI to execute.
     pub scenario_scripts: Vec<PinnedScript>,
+    /// Save games a scenario may start from, pinned by content like scripts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub start_saves: Vec<PinnedSave>,
     pub acceptance_policy: uqm_rust::automation::native_window::NativeAcceptancePolicy,
     pub runtime_contract: NativeRuntimeAuthority,
 }
@@ -651,6 +654,15 @@ pub struct PinnedScript {
     /// `runtime_contract.outer_child_timeout_ms` applies unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outer_child_timeout_ms: Option<u64>,
+}
+
+/// One committed start save, pinned by content.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedSave {
+    pub path: String,
+    pub sha256: String,
+    pub byte_length: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

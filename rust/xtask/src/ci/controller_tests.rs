@@ -39,7 +39,7 @@ fn successful_full_and_pr_selection_require_exact_ordered_original_pins() {
         assert_eq!(
             selected.len(),
             if event == WorkflowEvent::PullRequestTarget {
-                2
+                3
             } else {
                 32
             }

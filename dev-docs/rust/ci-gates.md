@@ -2,7 +2,7 @@
 
 ## Native UI suite is a local gate
 
-Hosted GitHub runners do not run the native-window UI suite. The 32-scenario suite takes
+Hosted GitHub runners do not run the native-window UI suite. The 34-scenario suite takes
 about 4500 s on arm64, the Intel runner renders at about 14 fps, and the evidence exceeds
 upload limits. Hosted CI keeps the code-quality gates (format, check, clippy, tests,
 ownership-link, harness, complexity, security, coverage, cache, workflow, mutations).
@@ -172,8 +172,8 @@ Scope of the rule:
   with the script's own budget is refused before any build or launch. All 14
   pinned scripts above 300 s carry the pin and the other 22 keep the default.
 - A wall budget is a failure ceiling, not a promise that every run takes that
-  long. `real-sol-earth-moon-base`, `real-sol-luna-moonbase-departure` and
-  `real-sol-starbase-to-mars` declare 900 s, carry the same 900000 ms pin, and
+  long. `real-sol-luna-moonbase-departure`
+  and `real-sol-starbase-alliance` declare 900 s, carry the same 900000 ms pin, and
   are ended by the outer deadline if a run does not finish first. The approval
   does not cover raising the value further.
 - Every other runtime value is shared and unchanged: capture, observer and
@@ -203,7 +203,7 @@ local gate section). Autoplay selection is bound to a typed `uqm-s4-selection-v1
 plan controller records event, exact source/controller/base revisions, merge base,
 raw NUL-delimited changed paths, policy digest and the derived ordered scenario set.
 Only `pull_request_target` may use changed-path selection. Empty, unmapped or
-non-UTF-8 paths select the original complete 32-scenario suite. Push, schedule and
+non-UTF-8 paths select the original complete 34-scenario suite. Push, schedule and
 manual runs always select that complete suite. A Git inspection failure is an error,
 not permission to execute a smaller suite. The existing workflow now declares a
 daily schedule and manual trigger without adding another gate or tuple matrix.
