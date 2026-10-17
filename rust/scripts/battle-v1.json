@@ -43,10 +43,6 @@
       "count": 40
     },
     {
-      "action": "capture",
-      "label": "super-melee-battle-start"
-    },
-    {
       "action": "assert_activity",
       "mask": 767,
       "equals": 512
@@ -98,6 +94,10 @@
     {
       "action": "assert_battle_frames",
       "minimum": 30
+    },
+    {
+      "action": "capture",
+      "label": "super-melee-battle-start"
     },
     {
       "action": "set_player_key",

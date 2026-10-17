@@ -17,8 +17,8 @@ use super::platform::{
     ONE_SECOND,
 };
 use super::screen::{
-    cleanup_after_visit, do_time_passage, run_outfit, run_starbase_menu, OutfitScreen,
-    StarbaseScreen, StatusModeGuard,
+    cleanup_after_visit, do_time_passage, finish_unallied_commander_talk, run_outfit,
+    run_starbase_menu, OutfitScreen, StarbaseScreen, StatusModeGuard, UnalliedVisit,
 };
 use super::sis_modules::{fuel_bar_layout, ModuleSlots};
 use super::starbase_menu::StarbaseState;
@@ -833,6 +833,88 @@ fn cleanup_returns_to_interplanetary_space_through_a_faked_load() {
         .events()
         .iter()
         .any(|e| matches!(e, Event::SetNextActivity(_))));
+}
+
+/// State after the opening probe broadcast and the first Commander talk: the
+/// conversation itself set `STARBASE_VISITED` (`comandr.c:636`).
+fn after_first_commander_talk(probe_ilwrath_encounter: u32) -> RecordingPlatform {
+    let platform = RecordingPlatform::new();
+    {
+        let mut states = platform.states.borrow_mut();
+        states.insert(StateKey::StarbaseVisited, 1);
+        states.insert(StateKey::StarbaseAvailable, 0);
+        states.insert(StateKey::ProbeIlwrathEncounter, probe_ilwrath_encounter);
+        states.insert(StateKey::GlobalFlagsAndData, 0xFF);
+    }
+    platform
+}
+
+#[test]
+fn first_commander_talk_leaves_the_starbase_unavailable() {
+    let platform = after_first_commander_talk(0);
+    assert_eq!(
+        finish_unallied_commander_talk(&platform),
+        UnalliedVisit::LeftForSpace
+    );
+    assert_eq!(platform.state(StateKey::StarbaseAvailable), 0);
+    assert!(!platform.events().iter().any(|e| matches!(
+        e,
+        Event::SetState(StateKey::StarbaseAvailable | StateKey::StarbaseVisited, _)
+    )));
+}
+
+#[test]
+fn first_commander_talk_returns_to_space_through_a_faked_load() {
+    let platform = after_first_commander_talk(0);
+    finish_unallied_commander_talk(&platform);
+    assert_eq!(platform.state(StateKey::GlobalFlagsAndData), 0);
+    assert_eq!(
+        platform.current_activity(),
+        ActivityValue::new(activity_flags::CHECK_LOAD)
+    );
+}
+
+#[test]
+fn an_unavailable_starbase_repeats_the_unallied_talk_on_every_visit() {
+    let platform = after_first_commander_talk(0);
+    for _ in 0..2 {
+        platform
+            .states
+            .borrow_mut()
+            .insert(StateKey::GlobalFlagsAndData, 0xFF);
+        platform.activity.set(ActivityValue::new(0));
+        assert_eq!(
+            finish_unallied_commander_talk(&platform),
+            UnalliedVisit::LeftForSpace
+        );
+        assert_eq!(platform.state(StateKey::StarbaseAvailable), 0);
+    }
+}
+
+#[test]
+fn the_ilwrath_chain_continues_without_leaving_the_starbase() {
+    let platform = after_first_commander_talk(1);
+    assert_eq!(
+        finish_unallied_commander_talk(&platform),
+        UnalliedVisit::IlwrathEncounter
+    );
+    assert_eq!(platform.state(StateKey::StarbaseAvailable), 0);
+    assert_eq!(platform.state(StateKey::GlobalFlagsAndData), 0xFF);
+    assert!(platform.events().is_empty());
+}
+
+#[test]
+fn an_abort_during_the_ilwrath_chain_leaves_without_availability() {
+    let platform = after_first_commander_talk(1);
+    platform
+        .activity
+        .set(ActivityValue::new(activity_flags::CHECK_ABORT));
+    assert_eq!(
+        finish_unallied_commander_talk(&platform),
+        UnalliedVisit::LeftForSpace
+    );
+    assert_eq!(platform.state(StateKey::StarbaseAvailable), 0);
+    assert!(platform.events().is_empty());
 }
 
 #[test]

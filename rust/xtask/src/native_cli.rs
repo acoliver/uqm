@@ -42,6 +42,7 @@ const FLAGS: &[&str] = &[
     "--scenario",
     "--scenarios",
     "--seed",
+    "--slot",
 ];
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -57,6 +58,7 @@ pub struct Options {
     pub artifacts: Option<PathBuf>,
     pub content: Option<PathBuf>,
     pub output: Option<PathBuf>,
+    pub slot: Option<u8>,
     pub json: bool,
 }
 
@@ -149,6 +151,12 @@ impl Options {
             "--artifacts" => set_once(&mut self.artifacts, PathBuf::from(value), flag)?,
             "--content" => set_once(&mut self.content, PathBuf::from(value), flag)?,
             "--output" => set_once(&mut self.output, PathBuf::from(value), flag)?,
+            "--slot" => {
+                let slot = value
+                    .parse::<u8>()
+                    .map_err(|_| format!("--slot expects a save slot number, got {value}"))?;
+                set_once(&mut self.slot, slot, flag)?;
+            }
             other => return Err(format!("option {other} takes no value")),
         }
         Ok(())
@@ -170,6 +178,7 @@ impl Options {
             (self.artifacts.is_some(), "--artifacts"),
             (self.content.is_some(), "--content"),
             (self.output.is_some(), "--output"),
+            (self.slot.is_some(), "--slot"),
         ] {
             if present {
                 supplied.push(flag);
@@ -239,7 +248,8 @@ pub fn usage() -> String {
      validate BUNDLE [--scenario NAME]... [--all]\n  \
      report BUNDLE [--json]\n  \
      replay BUNDLE --output DIR [--scenario NAME]... [--seed N]\n  \
-     gallery BUNDLE --output DIR [--json]"
+     gallery BUNDLE --output DIR [--json]\n  \
+     extract-save --artifacts SUITE_OR_SCENARIO_DIR --slot N --output rust/scripts/saves/NAME.sav"
         .into()
 }
 
@@ -254,6 +264,7 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<(), String> {
         "report" => report(&options),
         "replay" => replay(root, &options),
         "gallery" => gallery(&options),
+        "extract-save" => extract_save(root, &options),
         other => Err(format!("unknown native command '{other}'\n{}", usage())),
     }
 }
@@ -673,6 +684,24 @@ fn gallery(options: &Options) -> Result<(), String> {
         gallery.totals.not_run
     );
     Ok(())
+}
+
+/// Copy the save a passing alliance run produced into the repository.
+fn extract_save(root: &Path, options: &Options) -> Result<(), String> {
+    options.require_only("extract-save", &["--artifacts", "--slot", "--output"])?;
+    let run = options.required_path(
+        &options.artifacts,
+        "native extract-save requires --artifacts DIR: the alliance suite bundle or its scenarios/NNNN directory",
+    )?;
+    let out = options.required_path(
+        &options.output,
+        "native extract-save requires --output rust/scripts/saves/NAME.sav",
+    )?;
+    let slot = options
+        .slot
+        .ok_or("native extract-save requires --slot N: the slot the run saved to")?;
+    let authority = load_authority(root)?;
+    crate::native_save::extract_save(root, &authority, &run, slot, &root.join(out))
 }
 
 fn load_authority(root: &Path) -> Result<Authority, String> {

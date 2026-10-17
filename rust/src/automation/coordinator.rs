@@ -15,12 +15,16 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::battle_fight::{
+    BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
+};
 use crate::automation::battle_outcome::{self, BattleLossTracker};
 use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
 use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
 use crate::automation::mode;
 use crate::automation::outcome::TerminalClass;
+use crate::automation::planet_minerals::{self, CollectProgress, PlanetMineralsTracker};
 use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
@@ -28,6 +32,7 @@ use crate::automation::scheduler::{
     SchedulerState, TerminalOutcome,
 };
 use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
+use crate::automation::ship_element;
 use crate::automation::ship_resources;
 use crate::automation::trace::{
     ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
@@ -205,18 +210,28 @@ fn planet_side_wait_mismatch_label(
 /// Rotating phase for the orbital-exit key sequence.
 static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
 
-/// Menu keys that leave the orbital screen, one admitted callback at a time.
+/// Callbacks in one repetition of the orbital-exit key sequence.
+const ORBIT_EXIT_PERIOD: u64 = 6;
+
+/// Menu keys `(cancel, up, select)` that leave orbit, one admitted callback
+/// at a time.
 ///
-/// `DoPlanetOrbit` is a menu, not ship flight. `PlanetOrbitMenu` always opens
-/// on the first item (SCAN), and NAVIGATION is the last, so one Up wraps the
-/// cursor straight onto it and Select confirms. `DoMenuChooser` honours Up in
-/// both the PC and 3DO menu layouts. Both keys are pulsed, so each press needs
-/// an intervening release to register as a new press.
-fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
-    match phase % 4 {
-        0 => (true, false),
-        2 => (false, true),
-        _ => (false, false),
+/// Orbit may be left from two menus. `DoScan` (scan.c) is open right after a
+/// lander returns: Cancel exits it back to `DoPlanetOrbit`, whereas Up and
+/// Select there would move within the scan items and scan or dispatch again.
+/// Cancel is ignored by the `DoPlanetOrbit` menu itself (`DoMenuChooser`
+/// only reacts to it in the alternate cargo menu), so it is safe to press
+/// first from either state. `PlanetOrbitMenu` always opens on the first item
+/// (SCAN), and NAVIGATION is the last, so one Up wraps the cursor straight
+/// onto it and Select confirms. `DoMenuChooser` honours Up in both the PC and
+/// 3DO menu layouts. Every key is pulsed, so each press needs an intervening
+/// release to register as a new press.
+fn orbit_exit_menu_keys(phase: u64) -> (bool, bool, bool) {
+    match phase % ORBIT_EXIT_PERIOD {
+        0 => (true, false, false),
+        2 => (false, true, false),
+        4 => (false, false, true),
+        _ => (false, false, false),
     }
 }
 
@@ -271,6 +286,10 @@ struct CoordInner {
     battle_loss: BattleLossTracker,
     /// Facing at which the current `turn_flagship` step began.
     flagship_turn: FlagshipTurnTracker,
+    /// Ticks and trip of the current `collect_planet_minerals` step.
+    planet_minerals: PlanetMineralsTracker,
+    /// Ticks and starting ship counts of the current `fight_battle` step.
+    battle_fight: BattleFightTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -304,6 +323,8 @@ struct CoordInner {
     consumed_replay_generation: u64,
     /// Most recent planet-menu generation selected semantically.
     consumed_planet_menu_generation: u64,
+    /// Most recent battle ship picker generation confirmed semantically.
+    consumed_ship_picker_generation: u64,
     /// Require one callback after orbit navigation before accepting menu ownership.
     orbit_transition_pending: bool,
     /// Whether the current `navigate_to_hyperspace` step has sampled live
@@ -432,6 +453,8 @@ impl Coordinator {
                 flight_position: FlightPositionTracker::default(),
                 battle_loss: BattleLossTracker::default(),
                 flagship_turn: FlagshipTurnTracker::default(),
+                planet_minerals: PlanetMineralsTracker::default(),
+                battle_fight: BattleFightTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -446,6 +469,7 @@ impl Coordinator {
                 consumed_response_generation: 0,
                 consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
+                consumed_ship_picker_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
                 hyperspace_flight_observed: false,
@@ -881,6 +905,29 @@ impl Coordinator {
                     ),
                 );
             }
+        } else if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::PickBattleShip(_))
+        ) {
+            let (generation, active) = crate::automation::ui_observation::ship_picker_observation();
+            if !released_semantic_select
+                && active
+                && generation > inner.consumed_ship_picker_generation
+            {
+                let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
+                if !inject_menu_key(key_index, 1) {
+                    self.reject_input(inner, "menu", key_index, 1);
+                    return scheduler_event;
+                }
+                inner.release_semantic_select = true;
+                inner.consumed_ship_picker_generation = generation;
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("battle_ship_picked:generation={generation}"),
+                );
+            }
         } else if let Some(result) = self.service_planet_side_wait(inner) {
             scheduler_event = self.record_planet_side_result(inner, result, scheduler_event);
         } else if let Some(Action::WaitForBattleFrames(wait)) =
@@ -989,6 +1036,94 @@ impl Coordinator {
                 SchedulerEvent::NavigationReached
             }
             Err(error) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
+    /// Drive the planet-side lander toward the nearest deposit of the
+    /// requested category until its hold carries the requested units.
+    fn service_planet_minerals(
+        &self,
+        inner: &mut CoordInner,
+        collect: crate::automation::script::CollectPlanetMineralsStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::navigation::NavigationControl;
+
+        let progress = inner
+            .planet_minerals
+            .observe(&planet_minerals::PlanetSnapshot::live(), &collect);
+        match progress {
+            Ok(CollectProgress::Steering(control)) => {
+                if !Self::set_navigation_controls(control) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                }
+                scheduler_event
+            }
+            Ok(CollectProgress::Complete(proof)) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                if !Self::set_navigation_controls(NavigationControl::default()) {
+                    self.reject_input(inner, "collect_planet_minerals", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    error.trace_label(&collect),
+                );
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                scheduler_event
+            }
+        }
+    }
+
+    /// Aim the flagship at the opposing ship and fire until the battle ends
+    /// with the opposing side a ship down, holding only the keys a player
+    /// would press.
+    fn service_battle_fight(
+        &self,
+        inner: &mut CoordInner,
+        fight: crate::automation::script::FightBattleStep,
+        scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        let progress = inner.battle_fight.observe(&BattleSnapshot::live(), &fight);
+        match progress {
+            Ok(FightProgress::Fighting { control, report }) => {
+                if !Self::set_fight_controls(control) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                }
+                if let Some(report) = report {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        report.trace_label(),
+                    );
+                }
+                scheduler_event
+            }
+            Ok(FightProgress::Won(proof)) => {
+                if !Self::set_fight_controls(FightControl::default()) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                    return scheduler_event;
+                }
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+                SchedulerEvent::NavigationReached
+            }
+            Err(error) => {
+                if !Self::set_fight_controls(FightControl::default()) {
+                    self.reject_input(inner, "fight_battle", -1, -1);
+                    return scheduler_event;
+                }
                 self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error.trace_label());
                 self.set_terminal(inner, TerminalClass::SemanticMismatch);
                 scheduler_event
@@ -1127,7 +1262,7 @@ impl Coordinator {
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,
-                    in_orbit: false,
+                    in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
@@ -1166,6 +1301,14 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_flagship_turn(inner, *turn, scheduler_event);
+        } else if let Some(Action::CollectPlanetMinerals(collect)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_planet_minerals(inner, *collect, scheduler_event);
+        } else if let Some(Action::FightBattle(fight)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_battle_fight(inner, *fight, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1187,10 +1330,10 @@ impl Coordinator {
                 && snapshot.inner_planet == i32::from(navigation.planet)
                 && snapshot.orbital_moon == i32::from(navigation.moon)
                 && snapshot.orbital_data_index == snapshot.target_data_index;
-            let control = crate::automation::navigation::steer_moon_navigation(
+            let control = crate::automation::navigation::steer_moon_route(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
-                    inner_planet: None,
+                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
                     in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
@@ -1209,6 +1352,7 @@ impl Coordinator {
                             navigation.moon,
                         ),
                 },
+                navigation.planet,
             );
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
                 if remaining % 250 == 0 {
@@ -1709,6 +1853,30 @@ impl Coordinator {
             match ship_resources::assert_ship_resources(
                 mode::require_live(),
                 ship_resources::live_resources(),
+                *assertion,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertShipElement(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match ship_element::assert_ship_element(
+                mode::require_live(),
+                ship_element::live_amounts(),
                 *assertion,
             ) {
                 Ok(proof) => self.write_trace_labeled(
@@ -2337,6 +2505,20 @@ impl Coordinator {
         result
     }
 
+    /// Hold exactly the thrust, turn and fire keys of `control`.
+    fn set_fight_controls(control: FightControl) -> bool {
+        use crate::automation::script::PlayerKey;
+
+        [
+            (PlayerKey::Thrust, control.thrust),
+            (PlayerKey::Left, control.left),
+            (PlayerKey::Right, control.right),
+            (PlayerKey::Weapon, control.weapon),
+        ]
+        .into_iter()
+        .all(|(key, active)| inject_player_key(i32::from(key.index()), i32::from(active)))
+    }
+
     fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) -> bool {
         use crate::automation::script::{MenuKey, PlayerKey};
 
@@ -2350,13 +2532,17 @@ impl Coordinator {
             }
         }
 
-        let (up, select) = if control.leave_orbit {
+        let (cancel, up, select) = if control.leave_orbit {
             orbit_exit_menu_keys(ORBIT_EXIT_PHASE.fetch_add(1, Ordering::AcqRel))
         } else {
             ORBIT_EXIT_PHASE.store(0, Ordering::Release);
-            (false, false)
+            (false, false, false)
         };
-        for (key, active) in [(MenuKey::Up, up), (MenuKey::Select, select)] {
+        for (key, active) in [
+            (MenuKey::Cancel, cancel),
+            (MenuKey::Up, up),
+            (MenuKey::Select, select),
+        ] {
             if !inject_menu_key(i32::from(key.index()), i32::from(active)) {
                 return false;
             }
@@ -3694,25 +3880,43 @@ mod tests {
     }
 
     #[test]
-    fn orbit_exit_presses_up_then_select_with_a_release_between_them() {
+    fn orbit_exit_cancels_then_presses_up_then_select_with_releases_between() {
         // `DoMenuChooser` only sees a new press when the pulsed key was
         // released on an intervening callback, so the sequence must be
-        // press-Up, release, press-Select, release.
-        assert_eq!(orbit_exit_menu_keys(0), (true, false));
-        assert_eq!(orbit_exit_menu_keys(1), (false, false));
-        assert_eq!(orbit_exit_menu_keys(2), (false, true));
-        assert_eq!(orbit_exit_menu_keys(3), (false, false));
+        // press-Cancel, release, press-Up, release, press-Select, release.
+        // Cancel comes first because the ship can be inside the scan menu
+        // (for example right after a lander returns), where Up and Select
+        // would scan instead of leaving orbit.
+        assert_eq!(orbit_exit_menu_keys(0), (true, false, false));
+        assert_eq!(orbit_exit_menu_keys(1), (false, false, false));
+        assert_eq!(orbit_exit_menu_keys(2), (false, true, false));
+        assert_eq!(orbit_exit_menu_keys(3), (false, false, false));
+        assert_eq!(orbit_exit_menu_keys(4), (false, false, true));
+        assert_eq!(orbit_exit_menu_keys(5), (false, false, false));
     }
 
     #[test]
-    fn orbit_exit_never_presses_both_keys_on_one_callback() {
+    fn orbit_exit_never_presses_two_keys_on_one_callback() {
         for phase in 0..64 {
-            let (up, select) = orbit_exit_menu_keys(phase);
+            let (cancel, up, select) = orbit_exit_menu_keys(phase);
             assert!(
-                !(up && select),
-                "phase {phase} pressed Up and Select together"
+                u8::from(cancel) + u8::from(up) + u8::from(select) <= 1,
+                "phase {phase} pressed more than one key together"
             );
         }
+    }
+
+    #[test]
+    fn orbit_exit_never_selects_before_cancel_and_up_have_been_pressed() {
+        let first_press = |wanted: fn((bool, bool, bool)) -> bool| {
+            (0..ORBIT_EXIT_PERIOD)
+                .find(|phase| wanted(orbit_exit_menu_keys(*phase)))
+                .expect("every key is pressed once per period")
+        };
+        let cancel = first_press(|keys| keys.0);
+        let up = first_press(|keys| keys.1);
+        let select = first_press(|keys| keys.2);
+        assert!(cancel < up && up < select);
     }
 
     #[test]
@@ -3720,23 +3924,23 @@ mod tests {
         for phase in 0..64 {
             assert_eq!(
                 orbit_exit_menu_keys(phase),
-                orbit_exit_menu_keys(phase + 4),
-                "phase {phase} did not repeat with period four"
+                orbit_exit_menu_keys(phase + ORBIT_EXIT_PERIOD),
+                "phase {phase} did not repeat after one period"
             );
         }
     }
 
     #[test]
-    fn orbit_exit_phase_restarts_at_the_up_press_after_a_reset() {
+    fn orbit_exit_phase_restarts_at_the_cancel_press_after_a_reset() {
         // `set_navigation_controls` stores zero whenever `leave_orbit` is
-        // false, so the next orbit exit must begin with the Up press again
-        // rather than resuming mid-sequence.
+        // false, so the next orbit exit must begin with the Cancel press
+        // again rather than resuming mid-sequence.
         let phase = ORBIT_EXIT_PHASE.load(Ordering::Acquire);
         assert_eq!(
             orbit_exit_menu_keys(phase.wrapping_sub(phase)),
-            (true, false)
+            (true, false, false)
         );
-        assert_eq!(orbit_exit_menu_keys(0), (true, false));
+        assert_eq!(orbit_exit_menu_keys(0), (true, false, false));
     }
 
     #[test]

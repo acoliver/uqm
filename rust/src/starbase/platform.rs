@@ -57,6 +57,8 @@ pub const ONE_SECOND: u32 = 840;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StateKey {
     StarbaseVisited,
+    StarbaseAvailable,
+    ProbeIlwrathEncounter,
     GlobalFlagsAndData,
     MoonbaseOnShip,
     ChmmrBombState,

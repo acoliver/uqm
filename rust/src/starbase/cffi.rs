@@ -471,6 +471,8 @@ impl Gfx for CffiPlatform {
 fn state_key_name(key: StateKey) -> &'static str {
     match key {
         StateKey::StarbaseVisited => "STARBASE_VISITED",
+        StateKey::StarbaseAvailable => "STARBASE_AVAILABLE",
+        StateKey::ProbeIlwrathEncounter => "PROBE_ILWRATH_ENCOUNTER",
         StateKey::GlobalFlagsAndData => "GLOBAL_FLAGS_AND_DATA",
         StateKey::MoonbaseOnShip => "MOONBASE_ON_SHIP",
         StateKey::ChmmrBombState => "CHMMR_BOMB_STATE",

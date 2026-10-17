@@ -102,6 +102,21 @@ impl world::MaskLookup for SurfaceMaskLookup<'_> {
     }
 }
 
+/// Publish the mineral deposits still on the surface for read-only automation.
+fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
+    let deposits = surface.world.iter().filter_map(|(_, entity)| {
+        let SurfaceEntityKind::MineralNode { category, .. } = &entity.kind else {
+            return None;
+        };
+        Some(super::telemetry::MineralDeposit {
+            x: entity.position.x,
+            y: entity.position.y,
+            category: u8::try_from(*category).ok()?,
+        })
+    });
+    super::telemetry::publish_deposits(deposits, near);
+}
+
 /// Concrete Rust collision adapter. Geometry and classification are both
 /// independent of C `ELEMENT` and `IntersectControl` layouts.
 pub struct SurfaceCollisionAdapter<R, G, V> {
@@ -126,6 +141,7 @@ where
 {
     fn contacts(&mut self, lander: &LanderState) -> Result<Vec<CollisionContact>, AdapterError> {
         let surface = self.surface.borrow();
+        publish_deposits(&surface, lander.position);
         let lander_mask = &surface.masks.lander[usize::from(lander.facing) % 16];
         let mut contacts = Vec::new();
         for (id, entity) in surface.world.iter() {
@@ -215,7 +231,9 @@ where
             } => false,
         };
         if should_remove {
-            remove_surface_entity(&mut self.surface.borrow_mut(), entity_id)?;
+            let mut surface = self.surface.borrow_mut();
+            remove_surface_entity(&mut surface, entity_id)?;
+            publish_deposits(&surface, super::telemetry::lander_position());
         }
         Ok(effects)
     }

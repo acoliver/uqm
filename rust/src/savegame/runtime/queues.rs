@@ -150,7 +150,7 @@ pub struct QueueSections {
 }
 
 /// An element that starts with the `LINK` fields.
-pub(super) trait QueueElement {
+pub(crate) trait QueueElement {
     fn pred(&self) -> *mut c_void;
     fn succ(&self) -> *mut c_void;
 }
@@ -198,7 +198,7 @@ pub(super) fn pool_slots<T: QueueElement>(
 ///
 /// Every link is checked against the pool, so a queue the game corrupted is an
 /// error and not a save of whatever the pointers reach.
-pub(super) fn walk<T: QueueElement>(
+pub(crate) fn walk<T: QueueElement>(
     queue: &CQueue,
     kind: QueueKind,
 ) -> Result<Vec<*mut T>, QueueError> {
