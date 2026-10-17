@@ -290,7 +290,6 @@ fn list(root: &Path, options: &Options) -> Result<(), String> {
         rows.push(serde_json::json!({
             "scenario": stem,
             "path": pinned.path,
-            "sha256": pinned.sha256,
             "seed": admission.seed,
             "actions": admission.action_count,
             "captures": admission.capture_count,
@@ -904,8 +903,6 @@ mod tests {
     fn failed_bundle(root: &Path) -> Vec<crate::ci::authority::PinnedScript> {
         let selected = vec![crate::ci::authority::PinnedScript {
             path: "rust/scripts/report-fixture.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite =

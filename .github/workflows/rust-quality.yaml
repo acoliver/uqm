@@ -800,7 +800,16 @@ jobs:
           set -uo pipefail
           evidence="${RUNNER_TEMP}/s4-command-evidence"
           mkdir -p "${evidence}"
-          if [[ "${UQM_CI_BASE_SHA}" =~ ^0{40}$ ]] \
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            if ! git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'; then
+              printf 'cannot fetch origin main for the push comparison base\n' >&2
+              exit 1
+            fi
+            if ! resolved_base="$(git merge-base origin/main HEAD)"; then
+              printf 'cannot resolve merge base against origin/main\n' >&2
+              exit 1
+            fi
+          elif [[ "${UQM_CI_BASE_SHA}" =~ ^0{40}$ ]] \
             || ! git rev-parse --verify --quiet "${UQM_CI_BASE_SHA}^{commit}" >/dev/null; then
             printf 'push base %s is absent or unreachable; comparing against HEAD^\n' \
               "${UQM_CI_BASE_SHA}" >&2

@@ -9,7 +9,7 @@ ownership-link, harness, complexity, security, coverage, cache, workflow, mutati
 The native suite is a local gate run on a real Mac window with
 `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run|validate|report|gallery|replay`
 (see `dev-docs/rust/autoplay-runner.md`). Its authority data stays in `rust/ci/gates.json`
-under `native_acceptance` because the local CLI reads the pinned scenario scripts from it.
+under `native_acceptance` because the local CLI reads the scenario list and deadlines from it.
 
 Issue #27/S4 owns CI composition. It consumes S1 provider and strict-link checks,
 S2 matrix, build, determinism, verification, and package commands, and S3 fixtures,
@@ -132,12 +132,21 @@ containment is established by the separate containment-check receipt. After untr
 source SHA, tracked and untracked state, and authority bytes, retaining
 `source-revalidation.result.json`.
 
-Candidate-policy admission preserves every base field except one bounded addition:
-scenario pins already embedded in the installed controller's inventory. Existing pins cannot be removed, changed or reordered.
-The singleton policy used by base `212bd046ad7dccc7b695d378deac1b1c148d8be9`
-may gain `scenario_scripts`, but its original script pin must remain. Commands,
+Candidate-policy admission preserves every base field except two bounded changes.
+A candidate may lower any numeric field whose name starts with `maximum_` (for
+example `zero_native_delta.maximum_transitional_native_inputs`) and never raise
+one, so a porting PR can tighten the ceiling it improved. A candidate may also
+append scenario entries to `native_acceptance.scenario_scripts`; existing entries
+cannot be removed, changed (including their deadlines) or reordered. The
+authority carries no content fingerprints for scenario scripts, start saves or
+the Cargo manifest and lockfile; `--locked` builds and `cargo audit` cover
+dependency drift, and start-save provenance JSON is documentation only. Commands,
 tools, tuples, content, acceptance predicates, runtime limits, permissions and
 transport limits cannot change through this rule. Unknown fields are rejected.
+On push events other than to `main`, the workflow fetches `origin/main` and measures
+the delta against `git merge-base origin/main HEAD`, so main's own changes are not
+blamed on a branch that merged main. Pushes to `main` keep the previous-push base
+with a `HEAD^` fallback.
 The plan and each gate job independently admit policy; rejection does not replace
 the installed policy. Supervised admission logs retain the decision and both hashes.
 Source revalidation compares the checkout with the admitted candidate bytes.
@@ -157,8 +166,8 @@ permission, secret or checkout-reference bypass is part of this migration.
 ### Outer child deadline for long scenarios
 
 The native runtime contract carries one outer child deadline,
-`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A pinned
-script may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
+`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A scenario
+entry may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
 only value accepted is 900000 ms (15 minutes). Approval, verbatim from the
 repository owner: "yeah you can switch them to 15m", given for the proposal that
 the longer scenarios get a longer outer timeout while the short ones remain at
@@ -166,14 +175,16 @@ the longer scenarios get a longer outer timeout while the short ones remain at
 
 Scope of the rule:
 
-- A script whose declared `max_wallclock_seconds` is above 300 must carry the
-  900000 ms pin. A script at or below 300 must not carry it. The wall budget is
-  read from the pinned script bytes during admission, so a pin that disagrees
-  with the script's own budget is refused before any build or launch. All 14
-  pinned scripts above 300 s carry the pin and the other 22 keep the default.
+- A script whose declared `max_wallclock_seconds` is above 300 must have a
+  scenario entry with the 900000 ms deadline. A script at or below 300 must not.
+  The wall budget is read from the script during admission, so an entry that
+  disagrees with the script's own budget is refused before any build or launch.
+  Scripts are listed in `gates.json` with their deadlines and are not
+  fingerprinted. All 14 scripts above 300 s carry the deadline and the other 22
+  keep the default.
 - A wall budget is a failure ceiling, not a promise that every run takes that
   long. `real-sol-luna-moonbase-departure`
-  and `real-sol-starbase-alliance` declare 900 s, carry the same 900000 ms pin, and
+  and `real-sol-starbase-alliance` declare 900 s, carry the same 900000 ms deadline, and
   are ended by the outer deadline if a run does not finish first. The approval
   does not cover raising the value further.
 - Every other runtime value is shared and unchanged: capture, observer and
@@ -182,20 +193,15 @@ Scope of the rule:
   95000 ms, below both outer deadlines.
 - The primary `native_acceptance.script` cannot carry the override because the
   single-script gate uses the shared contract.
-- The controller hands each scenario child the contract of its own pin, the child
+- The controller hands each scenario child the contract of its own entry, the child
   supervisor uses that value as the `ChildSession` timeout, and the proof,
   failure-manifest, suite-success and replay consumers compare the recorded
   contract with the one the authority declares for that script.
 - A retained bundle recorded before this change holds the 300000 ms contract for
   its long scripts. The current authority does not declare that contract for
   them, so such a bundle is checked by the source revision that produced it. It
-  is not reinterpreted under the new pins. This includes the earlier revision
+  is not reinterpreted under the new deadlines. This includes the earlier revision
   a35d65d64, which covered 11 of the 14 scripts.
-
-Candidate-policy admission against a base that predates this field sees a changed
-base pin and rejects it. The installed base controller has to carry this policy
-before a candidate with the override can be admitted, and nothing in this change
-relaxes that comparison.
 
 The sections below on autoplay selection and the `native-acceptance` step describe the local
 native suite (`native run`, `native-test`); hosted CI no longer runs them (see the

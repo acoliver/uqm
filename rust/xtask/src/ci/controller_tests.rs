@@ -165,8 +165,8 @@ fn policy_admission_rejects_removal_reordering_pin_changes_and_capability_change
                 .unwrap()
                 .swap(0, 1),
             2 => {
-                candidate["native_acceptance"]["scenario_scripts"][0]["sha256"] =
-                    serde_json::json!("0".repeat(64))
+                candidate["native_acceptance"]["scenario_scripts"][0]["outer_child_timeout_ms"] =
+                    serde_json::json!(900_000)
             }
             3 => {
                 let pin = candidate["native_acceptance"]["scenario_scripts"][0].clone();
@@ -205,21 +205,79 @@ fn rejected_migration_never_replaces_the_installed_policy() {
     assert_eq!(std::fs::read(&output).unwrap(), original);
 }
 
+fn policy_with(edit: impl FnOnce(&mut serde_json::Value)) -> Vec<u8> {
+    let mut candidate: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+    edit(&mut candidate);
+    serde_json::to_vec(&candidate).unwrap()
+}
+
+fn admitted(edit: impl FnOnce(&mut serde_json::Value)) -> Result<(), String> {
+    admit_policy(include_bytes!("../../../ci/gates.json"), &policy_with(edit))
+}
+
 #[test]
-fn singleton_base_policy_migrates_without_replacing_its_original_script_pin() {
-    let candidate = include_bytes!("../../../ci/gates.json");
-    let mut base: serde_json::Value = serde_json::from_slice(candidate).unwrap();
-    base["native_acceptance"]
-        .as_object_mut()
-        .unwrap()
-        .remove("scenario_scripts");
-    let base_bytes = serde_json::to_vec(&base).unwrap();
-    admit_policy(&base_bytes, candidate).unwrap();
-    let mut forged: serde_json::Value = serde_json::from_slice(candidate).unwrap();
-    let legacy = forged["native_acceptance"]["script"].clone();
-    forged["native_acceptance"]["scenario_scripts"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|v| v["path"] != legacy);
-    assert!(admit_policy(&base_bytes, &serde_json::to_vec(&forged).unwrap()).is_err());
+fn policy_admission_accepts_a_lowered_ceiling_and_rejects_a_raised_one() {
+    let ceiling = include_bytes!("../../../ci/gates.json");
+    let original: serde_json::Value = serde_json::from_slice(ceiling).unwrap();
+    let current = original["zero_native_delta"]["maximum_transitional_native_inputs"]
+        .as_u64()
+        .unwrap();
+    admitted(|policy| {
+        policy["zero_native_delta"]["maximum_transitional_native_inputs"] =
+            serde_json::json!(current - 1);
+    })
+    .unwrap();
+    let error = admitted(|policy| {
+        policy["zero_native_delta"]["maximum_transitional_native_inputs"] =
+            serde_json::json!(current + 1);
+    })
+    .unwrap_err();
+    assert!(
+        error.contains("outside base-owned admission rules"),
+        "{error}"
+    );
+}
+
+#[test]
+fn policy_admission_accepts_an_appended_scenario_only() {
+    admitted(|policy| {
+        policy["native_acceptance"]["scenario_scripts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"path": "rust/scripts/appended-scenario.json"}));
+    })
+    .unwrap();
+    let error = admitted(|policy| {
+        policy["native_acceptance"]["scenario_scripts"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+    })
+    .unwrap_err();
+    assert!(error.contains("removes or changes a base entry"), "{error}");
+    let error = admitted(|policy| {
+        let scripts = policy["native_acceptance"]["scenario_scripts"]
+            .as_array_mut()
+            .unwrap();
+        let index = scripts
+            .iter()
+            .position(|pin| pin.get("outer_child_timeout_ms").is_none())
+            .unwrap();
+        scripts[index]["outer_child_timeout_ms"] = serde_json::json!(900_000);
+    })
+    .unwrap_err();
+    assert!(error.contains("removes or changes a base entry"), "{error}");
+}
+
+#[test]
+fn policy_admission_rejects_an_unrelated_field_change() {
+    let error = admitted(|policy| {
+        policy["native_acceptance"]["content_version"] = serde_json::json!("0.9.0");
+    })
+    .unwrap_err();
+    assert!(
+        error.contains("outside base-owned admission rules"),
+        "{error}"
+    );
 }

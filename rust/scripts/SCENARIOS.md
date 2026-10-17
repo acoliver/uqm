@@ -168,8 +168,8 @@ visit then runs, using only menu input:
 
 Budgets: `max_input_ticks` 161743 (the validator's static bound for this step
 list, the minimum it accepts), `max_presentations` 323486 (twice the ticks),
-`max_wallclock_seconds` 900. The script is pinned with the approved 900000 ms
-outer deadline. Neither the allied chain's tail nor the visit has run live; the
+`max_wallclock_seconds` 900. Its scenario entry in `gates.json` carries the
+approved 900000 ms outer deadline. Neither the allied chain's tail nor the visit has run live; the
 first live run decides whether the Outfit and Shipyard expectations hold.
 
 ## Scenario audit limits
@@ -190,7 +190,7 @@ These edits have not run in a real window yet.
   the probe first: `navigate_to_planet 2`, `assert_dispatch 24/18`,
   `wait_for_communication_end` (1 completion) and `assert_activity 4`, before
   the hyperspace flight. A rename would touch gates, MATRIX, tests and docs for
-  scripts whose flights are pinned by `probe_encounter_flight_input`.
+  scripts whose flights are fixed by `probe_encounter_flight_input`.
   `probe-encounter-v1` now exceeds 300 s and joins the 900 s outer deadline list.
 - `real-sol-commander-completion` selects Commander responses with typed
   `select_communication_response` (index 0 twice, as in
@@ -246,7 +246,7 @@ These edits have not run in a real window yet.
   `luna-moonbase-collected`, `commander-radioactives-offer`, `ilwrath-battle`,
   `ilwrath-defeated`, `allied-starbase-menu`. It asserts no resource numbers,
   since the refuel and 14 day passage values have not been observed live.
-  Budgets: 164000 ticks, 900 s wall (outer deadline pin 900000 ms). Not played
+  Budgets: 164000 ticks, 900 s wall (outer deadline 900000 ms). Not played
   live: every step after the Luna return, and whether `fight_battle` wins the
   Ilwrath fight within 6000 ticks.
 - `quit-v1` selects Quit and ends with `expect_quit`. The restart menu sets
@@ -990,21 +990,17 @@ scenarios start from the save it makes.
   `inputs/start-save.sav` in the run. The script then loads it through the real
   main menu: Down, Select (Load Game), Select (slot 0). The final config the run
   retains (`config-final/save/`) holds whatever saves the run wrote.
-- `rust/ci/gates.json` pins each save (`native_acceptance.start_saves`: path,
-  sha256, byte_length) the way it pins scripts. Admission refuses a script whose
-  save is unpinned, missing or different, and refuses a pinned save whose
-  provenance (`saves/allied-starbase.provenance.json`) names a different
-  `real-sol-starbase-alliance.json` digest than the one pinned now.
-- Regeneration rule: any change to `real-sol-starbase-alliance.json` changes
-  its pin and makes the save stale. Run the alliance scenario in a real window,
-  then `native extract-save --artifacts <suite bundle or its scenarios/NNNN dir>
-  --slot 0 --output rust/scripts/saves/allied-starbase.sav`, paste the printed pin into
-  `start_saves`, and commit the save, the provenance and the pin together.
-  `extract-save` reads the script identity from the suite manifest and the
-  scenario's `native-acceptance.json`, checks the trace, manifest and save
-  against the digests the run recorded, and refuses a run whose
-  `terminal_reason` is not `success`, whose bundle holds anything but the
-  alliance scenario, or whose alliance script is not the pinned one.
+- Saves are not fingerprinted in `rust/ci/gates.json`. The provenance file next
+  to each save (`saves/allied-starbase.provenance.json`) documents how the save
+  was produced: the scenario run, the script it came from and the resources it
+  recorded. It is documentation, and admission does not compare it with anything.
+- Regeneration rule: when `real-sol-starbase-alliance.json` changes the
+  conversation chain or the purchases, regenerate the save. Run the alliance
+  scenario in a real window, then `native extract-save --artifacts <suite bundle
+  or its scenarios/NNNN dir> --slot 0 --output
+  rust/scripts/saves/allied-starbase.sav`, and commit the save and its
+  provenance together. `extract-save` refuses a run whose `terminal_reason` is not
+  `success` or whose bundle holds anything but the alliance scenario.
 
 ### Scripts that start from the alliance save
 
@@ -1017,8 +1013,6 @@ save's provenance), re-dock with `navigate_to_moon 2/0` (the allied Starbase
 opens its menu with no conversation) and assert `starbase` mode and the same
 resources again, followed by their own earlier steps unchanged. Their budgets
 shrank to the validator minimum with a 300 s wall budget, so they no longer carry the
-900000 ms outer deadline pin: `starbase-visit-v1` 2897 ticks,
+900000 ms outer deadline: `starbase-visit-v1` 2897 ticks,
 `real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
-`probe-encounter-v4` 7856 (presentations twice that). Until the save is
-generated and pinned, admission of these scripts, and so `native run`, fails
-closed. None of this has run live.
+`probe-encounter-v4` 7856 (presentations twice that). None of this has run live.

@@ -297,12 +297,6 @@ fn scenario_plan(
     let Some(bytes) = scripts.get(&format!("inputs/{filename}")) else {
         return Ok(None);
     };
-    if bytes.len() as u64 != pinned.byte_length || crate::hex_sha256(bytes) != pinned.sha256 {
-        return Err(format!(
-            "retained script for {} differs from the suite's own pin",
-            pinned.path
-        ));
-    }
     let path = Path::new(&pinned.path);
     let document = parse_script(bytes, path).map_err(|error| error.to_string())?;
     let script = validate_script(document, path).map_err(|error| error.to_string())?;
@@ -827,11 +821,9 @@ mod tests {
 
     const SCRIPT: &str = r#"{"version":1,"name":"gallery-fixture","seed":7,"budgets":{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":60},"steps":[{"action":"capture","label":"menu"},{"action":"assert_battle_frames","minimum":4},{"action":"finish"}]}"#;
 
-    fn pinned(path: &str, bytes: &[u8]) -> PinnedScript {
+    fn pinned(path: &str) -> PinnedScript {
         PinnedScript {
             path: path.to_string(),
-            sha256: crate::hex_sha256(bytes),
-            byte_length: bytes.len() as u64,
             outer_child_timeout_ms: None,
         }
     }
@@ -900,7 +892,7 @@ mod tests {
 
     fn row(state: ScenarioState) -> ScenarioAccounting {
         ScenarioAccounting {
-            script: pinned("rust/scripts/gallery.json", SCRIPT.as_bytes()),
+            script: pinned("rust/scripts/gallery.json"),
             directory: "scenarios/0000".into(),
             state,
             elapsed_ms: 5,
@@ -1087,8 +1079,6 @@ mod tests {
                 index: 0,
                 script: PinnedScript {
                     path: hostile.into(),
-                    sha256: "0".repeat(64),
-                    byte_length: 1,
                     outer_child_timeout_ms: None,
                 },
                 directory: "scenarios/0000".into(),
@@ -1290,24 +1280,6 @@ mod tests {
         assert_eq!(
             relative_prefix(Path::new("/a/b/c/d"), Path::new("/a/x")).unwrap(),
             "../../../x/"
-        );
-    }
-
-    #[test]
-    fn a_shared_script_that_differs_from_its_pin_is_refused() {
-        let fixture = Fixture::new(
-            vec![ScenarioAccounting {
-                script: pinned("rust/scripts/gallery.json", b"different bytes"),
-                directory: "scenarios/0000".into(),
-                state: ScenarioState::NotRun,
-                elapsed_ms: 0,
-            }],
-            false,
-        );
-        let error = build(fixture.root()).unwrap_err();
-        assert!(
-            error.contains("differs from the suite's own pin"),
-            "{error}"
         );
     }
 }
