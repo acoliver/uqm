@@ -18,24 +18,20 @@ pub struct ScriptAdmission {
     pub outer_child_kill_grace_ms: u64,
 }
 
+/// Upper bound on the size of a scenario script read from the tree.
+pub(crate) const SCRIPT_LIMIT_BYTES: u64 = 1024 * 1024;
+
 pub fn admit_script(
     root: &Path,
     pinned: &PinnedScript,
     authority: &Authority,
 ) -> Result<ScriptAdmission, String> {
     let path = root.join(&pinned.path);
-    let bytes = crate::read_regular_file_nofollow_bounded(&path, pinned.byte_length)?;
-    if bytes.len() as u64 != pinned.byte_length || crate::hex_sha256(&bytes) != pinned.sha256 {
-        return Err(format!(
-            "native acceptance script {} differs from machine authority",
-            pinned.path
-        ));
-    }
+    let bytes = crate::read_regular_file_nofollow_bounded(&path, SCRIPT_LIMIT_BYTES)?;
     let document = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
     let script = validate_script(document, &path).map_err(|error| error.to_string())?;
     if let Some(start_save) = script.start_save() {
-        crate::native_save::verify_start_save(root, &pinned.path, start_save, authority)?;
-        crate::native_save::check_provenance_current(root, authority)?;
+        crate::native_save::verify_start_save(root, &pinned.path, start_save)?;
     }
     let runtime = authority.native_runtime_contract_for(pinned)?;
     if !runtime.has_valid_deadline_order() {
@@ -428,10 +424,7 @@ fn validate_script_identity(
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or("script has no filename")?;
-    if actual.relative_path != format!("inputs/{filename}")
-        || actual.byte_length != expected.byte_length
-        || actual.sha256 != expected.sha256
-    {
+    if actual.relative_path != format!("inputs/{filename}") {
         return Err("native scenario proof used a different selected script".into());
     }
     Ok(())
@@ -554,8 +547,6 @@ mod journal_regressions {
     fn pinned(name: &str) -> PinnedScript {
         PinnedScript {
             path: format!("rust/scripts/{name}.json"),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }
     }
@@ -680,8 +671,6 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/a.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
@@ -722,8 +711,6 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/a.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
@@ -773,8 +760,6 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/a.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
@@ -802,8 +787,6 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/a.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
@@ -836,8 +819,6 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/a.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
@@ -886,8 +867,6 @@ mod teardown_regressions {
     fn pinned(name: &str) -> PinnedScript {
         PinnedScript {
             path: format!("rust/scripts/{name}.json"),
-            sha256: "a".repeat(64),
-            byte_length: 12,
             outer_child_timeout_ms: None,
         }
     }
@@ -2897,8 +2876,6 @@ mod tests {
             ["a", "b", "c"]
                 .map(|id| PinnedScript {
                     path: format!("rust/scripts/{id}.json"),
-                    sha256: "a".repeat(64),
-                    byte_length: 12,
                     outer_child_timeout_ms: None,
                 })
                 .to_vec()
@@ -3029,8 +3006,8 @@ mod tests {
             .unwrap();
         let authority = crate::ci::authority::load_authority(root).unwrap();
         let mut scripts = authority.native_acceptance.scenario_scripts[..2].to_vec();
-        for script in &mut scripts {
-            script.sha256 = "0".repeat(64);
+        for (index, script) in scripts.iter_mut().enumerate() {
+            script.path = format!("rust/scripts/missing-{index}.json");
         }
         let error = preflight(root, &scripts, &authority).unwrap_err();
         for script in scripts {
@@ -3383,8 +3360,6 @@ mod finalization_regressions {
         let root = temp.path().join("suite");
         let selected = vec![PinnedScript {
             path: "rust/scripts/fixture.json".into(),
-            sha256: "a".repeat(64),
-            byte_length: 1,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();

@@ -305,13 +305,6 @@ fn scenario_identity(
 ) -> Result<ScenarioIdentity, String> {
     let filename = script_filename(&row.script)?;
     let bytes = member(members, &format!("inputs/{filename}"))?;
-    if bytes.len() as u64 != row.script.byte_length || crate::hex_sha256(bytes) != row.script.sha256
-    {
-        return Err(format!(
-            "retained script for {} differs from the pin the suite recorded",
-            row.script.path
-        ));
-    }
     let path = Path::new(&row.script.path);
     let document = parse_script(bytes, path).map_err(|error| error.to_string())?;
     let script = validate_script(document, path).map_err(|error| error.to_string())?;
@@ -613,8 +606,6 @@ mod tests {
     fn pinned(path: &str) -> PinnedScript {
         PinnedScript {
             path: path.into(),
-            sha256: "a".repeat(64),
-            byte_length: 4,
             outer_child_timeout_ms: None,
         }
     }

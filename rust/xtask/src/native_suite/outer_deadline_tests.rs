@@ -183,8 +183,6 @@ fn rehashed_script(
     std::fs::write(&target, edited.as_bytes()).unwrap();
     let pin = PinnedScript {
         path: source_path.to_string(),
-        sha256: crate::hex_sha256(edited.as_bytes()),
-        byte_length: edited.len() as u64,
         outer_child_timeout_ms: override_ms,
     };
     RehashedScript { root, pin }
@@ -360,8 +358,6 @@ fn child_deadline_validation_rejects_the_primary_script_and_broken_ordering() {
 fn pin_parsing_rejects_malformed_and_unknown_fields() {
     let template = serde_json::json!({
         "path": "rust/scripts/probe-encounter-v3.json",
-        "sha256": "1b40fea5dcc41a7e4c7986fb74a7a0618a7aa4a395dbfeef980d2354ee45e442",
-        "byte_length": 1491,
     });
     for value in [
         serde_json::json!(-1),
