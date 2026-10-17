@@ -499,15 +499,6 @@ mod tests {
             )
             .unwrap();
         }
-
-        fn edit_acceptance(&self, edit: impl FnOnce(&mut serde_json::Value)) {
-            let path = self.scenario().join("native-acceptance.json");
-            let mut acceptance: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-            edit(&mut acceptance);
-            std::fs::write(&path, serde_json::to_vec_pretty(&acceptance).unwrap()).unwrap();
-            self.write_manifest(|_| {});
-        }
     }
 
     #[test]

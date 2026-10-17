@@ -5410,31 +5410,26 @@ mod tests {
             serde_json::from_slice(&fs::read(&authority_path).unwrap()).unwrap();
         forged_authority["ledger_identity"]["sha256"] = serde_json::json!("b".repeat(64));
         let forged_authority = serde_json::to_vec(&forged_authority).unwrap();
-        for (member, receipt_field, changed_member) in [(
-            "inputs/linked-build/gates.json",
+        let member = "inputs/linked-build/gates.json";
+        let original_member = fs::read(root.path().join(member)).unwrap();
+        let mut changed_receipt = linked_receipt_value.clone();
+        let mut changed_manifest = descriptor_bound.clone();
+        publish_rehashed_linked_mutation(
+            root.path(),
+            &mut changed_manifest,
+            &mut changed_receipt,
+            &linked_receipt_path,
+            member,
             "authority",
-            forged_authority,
-        )] {
-            let original_member = fs::read(root.path().join(member)).unwrap();
-            let mut changed_receipt = linked_receipt_value.clone();
-            let mut changed_manifest = descriptor_bound.clone();
-            publish_rehashed_linked_mutation(
-                root.path(),
-                &mut changed_manifest,
-                &mut changed_receipt,
-                &linked_receipt_path,
-                member,
-                receipt_field,
-                &changed_member,
-            );
-            assert_eq!(
-                validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
-                Err(NativeWindowProofError::Receipt),
-                "accepted coherently rehashed retained member {member}"
-            );
-            fs::write(root.path().join(member), original_member).unwrap();
-            fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
-        }
+            &forged_authority,
+        );
+        assert_eq!(
+            validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
+            Err(NativeWindowProofError::Receipt),
+            "accepted coherently rehashed retained member {member}"
+        );
+        fs::write(root.path().join(member), original_member).unwrap();
+        fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
 
         let canonical_path = root
             .path()
