@@ -21,10 +21,13 @@ use uqm_rust::automation::{
 
 mod ci;
 mod display_awake;
+mod host_preflight;
 pub mod native_cli;
+mod native_frames;
 mod native_gallery;
 mod native_replay;
 mod native_save;
+mod native_smoke;
 mod native_suite;
 use uqm_rust::automation::native_runner as native_acceptance_runner;
 

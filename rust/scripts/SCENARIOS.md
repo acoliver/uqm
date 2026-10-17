@@ -1016,3 +1016,38 @@ shrank to the validator minimum with a 300 s wall budget, so they no longer carr
 900000 ms outer deadline: `starbase-visit-v1` 2897 ticks,
 `real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
 `probe-encounter-v4` 7856 (presentations twice that). None of this has run live.
+
+## Playability smoke
+
+`native smoke` plays the smallest set of existing scenarios that together cover
+the main menu, flight in a solar system and in hyperspace, orbit, landing, the
+lander and takeoff back to orbit, a conversation with response selection, a
+battle, and a save followed by a load. The set and what each scenario covers is
+in `rust/ci/smoke.json`; it is a subset of the scenarios listed in
+`gates.json`, not a second inventory.
+
+```sh
+cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native smoke \
+  --artifacts DIR --content PATH [--pr N]
+```
+
+Run it for any change to game runtime code, before saying the change works and
+before merging. A tooling-only change (xtask, CI, docs, scripts) does not need
+it. It uses the real Mac window, so it refuses to start with the lid closed or
+the display asleep; `native run` makes the same check.
+
+Every scenario runs through the same path as `native run --scenario`, in order,
+and the run continues after a failure so the receipt covers the whole set. The
+command exits nonzero if any scenario failed.
+
+The receipt is `DIR/smoke-receipt.json` and `DIR/smoke-receipt.md`: the commit
+SHA and whether the tree was clean, the date, and for each scenario the result,
+terminal reason, duration, capture count, the screen-check result (`passed` or
+the exact failure) and the screenshots directory. The `.md` is a table for a PR
+comment and lists the window screenshots a person or the image-checking agent
+has to look at. `--pr N` records the number in the receipt; the command posts
+nothing.
+
+"Fixed" may only be claimed with a passing receipt for that commit whose listed
+frames were looked at. A passing receipt for another commit, or one nobody
+looked at, is not that evidence.
