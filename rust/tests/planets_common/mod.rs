@@ -6,6 +6,8 @@
 
 use std::fmt::Write as _;
 
+pub mod topography;
+
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 
 pub const NODE_SENTINEL_DENSITY: u16 = 0xBEEF;

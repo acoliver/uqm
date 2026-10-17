@@ -16,6 +16,7 @@ use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::orbits::{self, OrbitRequest};
 use crate::planets::surface;
 use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
+use crate::planets::topography;
 use crate::savegame::runtime::star::CStarDesc;
 
 /// `PlanData` (formerly defined in `surface.c`): the planet-frame table.
@@ -212,6 +213,42 @@ pub unsafe extern "C" fn generate_random_nodes_c(
 #[export_name = "GenerateRandomLocation"]
 pub unsafe extern "C" fn generate_random_location_c(loc: *mut POINT) {
     surface::generate_random_location(sys_gen_rng(), &mut *loc);
+}
+
+/// C `RECT`: `{ POINT corner; EXTENT extent; }`, all `SWORD`s.
+#[repr(C)]
+pub struct CRect {
+    pub corner: [i16; 2],
+    pub extent: [i16; 2],
+}
+
+/// C: `void DeltaTopography (COUNT num_iterations, SBYTE *DepthArray, RECT *pRect,
+/// SIZE depth_delta)`.
+///
+/// Only the extent of `pRect` matters; `DepthArray` holds `width * height`
+/// cells.
+///
+/// # Safety
+/// `depth` must be valid for reads and writes of `extent.width * extent.height`
+/// cells, `rect` must be valid, and `SysGenRNG` must be valid.
+#[export_name = "DeltaTopography"]
+pub unsafe extern "C" fn delta_topography_c(
+    num_iterations: u16,
+    depth: *mut i8,
+    rect: *const CRect,
+    depth_delta: i16,
+) {
+    let [width, height] = (*rect).extent;
+    let cells = usize::try_from(i32::from(width) * i32::from(height))
+        .expect("topography map extent is negative");
+    topography::delta_topography(
+        sys_gen_rng(),
+        num_iterations,
+        std::slice::from_raw_parts_mut(depth, cells),
+        width,
+        height,
+        depth_delta,
+    );
 }
 
 /// `MAX_GENERATED_PLANETS`: the most worlds `FillOrbits` draws for itself.
