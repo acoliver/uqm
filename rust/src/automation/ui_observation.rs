@@ -12,6 +12,8 @@ static COMMUNICATION_REPLAY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static STARBASE_MENU_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PLANET_MENU_PHASE: AtomicUsize = AtomicUsize::new(0);
 static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
+static SHIP_PICKER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static SHIP_PICKER_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Production planet-menu phases exposed to semantic automation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +74,27 @@ pub fn starbase_menu_active() -> bool {
 #[no_mangle]
 pub extern "C" fn rust_automation_observe_game_options(active: i32) {
     GAME_OPTIONS_ACTIVE.store(active != 0, Ordering::Release);
+}
+
+/// Record entry to or exit from the production battle ship picker.
+///
+/// Each entry starts a new generation so a pick consumed for one battle cannot
+/// satisfy the picker of the next.
+#[no_mangle]
+pub extern "C" fn rust_automation_observe_ship_picker(active: i32) {
+    let previous = SHIP_PICKER_ACTIVE.swap(active != 0, Ordering::AcqRel);
+    if active != 0 && !previous {
+        SHIP_PICKER_GENERATION.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// Return the current ship-picker generation and whether the picker is active.
+#[must_use]
+pub fn ship_picker_observation() -> (u64, bool) {
+    (
+        SHIP_PICKER_GENERATION.load(Ordering::Acquire),
+        SHIP_PICKER_ACTIVE.load(Ordering::Acquire),
+    )
 }
 
 /// Record the number of response choices in the current communication frame.
@@ -225,6 +248,23 @@ mod tests {
         assert!(verify_game_options_active().is_ok());
         rust_automation_observe_game_options(0);
         assert!(verify_game_options_active().is_err());
+    }
+
+    #[test]
+    fn ship_picker_observation_starts_a_generation_per_entry() {
+        let _turn = OBSERVATIONS.lock().unwrap_or_else(|e| e.into_inner());
+        rust_automation_observe_ship_picker(0);
+        let (before, active) = ship_picker_observation();
+        assert!(!active);
+        rust_automation_observe_ship_picker(1);
+        assert_eq!(ship_picker_observation(), (before + 1, true));
+        rust_automation_observe_ship_picker(1);
+        assert_eq!(ship_picker_observation(), (before + 1, true));
+        rust_automation_observe_ship_picker(0);
+        assert_eq!(ship_picker_observation(), (before + 1, false));
+        rust_automation_observe_ship_picker(1);
+        assert_eq!(ship_picker_observation(), (before + 2, true));
+        rust_automation_observe_ship_picker(0);
     }
 
     #[test]

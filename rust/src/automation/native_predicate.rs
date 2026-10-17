@@ -18,6 +18,12 @@ fn at_least(label: &str, key: &str, minimum: u64) -> bool {
     number(label, key).is_some_and(|actual| actual >= minimum)
 }
 
+fn has_category(label: &str, category: crate::planet_side::cargo::ElementCategory) -> bool {
+    label
+        .split(':')
+        .any(|field| field.strip_prefix("category=") == Some(category.name()))
+}
+
 fn shape(label: &str, prefix: &str, keys: &[&str]) -> bool {
     let mut fields = label.split(':');
     fields.next() == Some(prefix)
@@ -122,6 +128,15 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
         Action::AssertShipResources(value) => {
             super::ship_resources::verified_label_satisfies(label, *value)
         }
+        Action::AssertShipElement(value) => {
+            shape(
+                label,
+                "ship_element_verified",
+                &["category=", "amount=", "minimum="],
+            ) && has_category(label, value.category)
+                && number(label, "minimum=") == Some(u64::from(value.minimum))
+                && at_least(label, "amount=", u64::from(value.minimum))
+        }
         Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
         Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
         _ => wait_or_navigation_satisfied(action, label),
@@ -211,6 +226,25 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             ) && label.contains(&format!(":direction={}:", value.direction.name()))
                 && number(label, "facings=") == Some(u64::from(value.facings))
         }
+        Action::CollectPlanetMinerals(value) => {
+            shape(
+                label,
+                "planet_minerals_collected",
+                &["category=", "units=", "minimum="],
+            ) && has_category(label, value.category)
+                && number(label, "minimum=") == Some(u64::from(value.minimum_units))
+                && at_least(label, "units=", u64::from(value.minimum_units))
+        }
+        Action::FightBattle(value) => {
+            shape(
+                label,
+                "battle_won",
+                &["player_left=", "enemy_left=", "ticks=", "player_crew="],
+            ) && at_least(label, "player_left=", 1)
+                && at_least(label, "player_crew=", 1)
+                && at_least(label, "ticks=", 1)
+                && number(label, "ticks=").is_some_and(|ticks| ticks <= value.max_ticks)
+        }
         Action::NavigateToMoon(value) => {
             shape(
                 label,
@@ -225,6 +259,10 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "planet_menu_selected", &["generation=", "phase="])
                 && at_least(label, "generation=", 1)
                 && label.ends_with(&format!(":phase={:?}", value.phase))
+        }
+        Action::PickBattleShip(_) => {
+            shape(label, "battle_ship_picked", &["generation="])
+                && at_least(label, "generation=", 1)
         }
         Action::SelectCommunicationResponse(value) => {
             shape(
@@ -261,6 +299,7 @@ pub(super) struct PredicateHistory {
     response: u64,
     replay: u64,
     menu: u64,
+    ship_pick: u64,
     completions: u64,
     last_planet_side: u64,
     awaited_planet_side: Option<u64>,
@@ -294,6 +333,7 @@ impl PredicateHistory {
                 advance(&mut self.replay, number(label, "generation="))
             }
             Action::SelectPlanetMenu(_) => advance(&mut self.menu, number(label, "generation=")),
+            Action::PickBattleShip(_) => advance(&mut self.ship_pick, number(label, "generation=")),
             Action::WaitForCommunicationEnd(value) => {
                 let (Some(target), Some(actual)) = (
                     self.completions.checked_add(value.minimum_completions),
@@ -447,6 +487,10 @@ mod tests {
                 "planet_menu_selected:generation=1:phase=Dispatch",
             ),
             (
+                json!({"action":"pick_battle_ship","max_ticks":100}),
+                "battle_ship_picked:generation=1",
+            ),
+            (
                 json!({"action":"select_communication_response","index":1,"max_ticks":100}),
                 "communication_response_selected:generation=1:count=3:index=1",
             ),
@@ -485,6 +529,10 @@ mod tests {
             (
                 json!({"action":"select_planet_menu","phase":"dispatch","max_ticks":100}),
                 "planet_menu_selected:generation=1:phase=Dispatch",
+            ),
+            (
+                json!({"action":"pick_battle_ship","max_ticks":100}),
+                "battle_ship_picked:generation=1",
             ),
             (
                 json!({"action":"select_communication_response","index":1,"max_ticks":100}),
@@ -705,5 +753,80 @@ mod tests {
             4,
             "flagship_turn_overshot:direction=right:facings=4:turned=5"
         ));
+    }
+
+    #[test]
+    fn only_a_collected_label_of_the_same_category_and_minimum_satisfies_the_action() {
+        use crate::automation::script::CollectPlanetMineralsStep;
+        use crate::planet_side::cargo::ElementCategory;
+        let action = Action::CollectPlanetMinerals(CollectPlanetMineralsStep {
+            category: ElementCategory::Radioactive,
+            minimum_units: 2,
+            max_ticks: 900,
+        });
+        assert!(semantic_satisfied(
+            &action,
+            "planet_minerals_collected:category=radioactive:units=3:minimum=2"
+        ));
+        for label in [
+            "planet_minerals_collected:category=common:units=3:minimum=2",
+            "planet_minerals_collected:category=radioactive:units=1:minimum=2",
+            "planet_minerals_collected:category=radioactive:units=3:minimum=1",
+            "planet_minerals_collected:category=radioactive:units=3",
+            "planet_minerals_collect_failed:category=radioactive:minimum=2:reason=timeout:units=0",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn only_a_won_label_within_the_budget_with_a_surviving_player_satisfies_fight_battle() {
+        use crate::automation::script::FightBattleStep;
+        let action = Action::FightBattle(FightBattleStep { max_ticks: 900 });
+        assert!(semantic_satisfied(
+            &action,
+            "battle_won:player_left=1:enemy_left=0:ticks=412:player_crew=14"
+        ));
+        assert!(semantic_satisfied(
+            &action,
+            "battle_won:player_left=2:enemy_left=0:ticks=900:player_crew=3"
+        ));
+        for label in [
+            "battle_won:player_left=0:enemy_left=0:ticks=412:player_crew=14",
+            "battle_won:player_left=1:enemy_left=0:ticks=412:player_crew=0",
+            "battle_won:player_left=1:enemy_left=0:ticks=412",
+            "battle_won:player_left=1:enemy_left=0:ticks=901:player_crew=14",
+            "battle_won:player_left=1:enemy_left=0:ticks=0:player_crew=14",
+            "battle_won:player_left=1:enemy_left=0",
+            "battle_won:player_left=1:enemy_left=0:ticks=4:player_crew=14:extra=1",
+            "battle_fight_failed:reason=timeout",
+            "battle_fight_failed:reason=player_ship_lost",
+            "battle_fight_failed:reason=not_in_battle",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn only_a_verified_element_label_of_the_same_category_and_minimum_satisfies_the_action() {
+        use crate::automation::script::ShipElementAssertion;
+        use crate::planet_side::cargo::ElementCategory;
+        let action = Action::AssertShipElement(ShipElementAssertion {
+            category: ElementCategory::Radioactive,
+            minimum: 1,
+        });
+        assert!(semantic_satisfied(
+            &action,
+            "ship_element_verified:category=radioactive:amount=4:minimum=1"
+        ));
+        for label in [
+            "ship_element_verified:category=exotic:amount=4:minimum=1",
+            "ship_element_verified:category=radioactive:amount=0:minimum=1",
+            "ship_element_verified:category=radioactive:amount=4:minimum=2",
+            "ship_element_failed:category=radioactive:amount=0:minimum=1",
+            "ship_element_unavailable",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
     }
 }

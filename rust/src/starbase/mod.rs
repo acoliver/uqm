@@ -75,8 +75,8 @@ pub use module_guard::{
 pub use outfit_menu::{OutfitFrameInput, OutfitMenu, OutfitState, OutfitStep, SaveLoadReturn};
 pub use platform::{Platform, StarbaseError, UnportedRoute};
 pub use screen::{
-    cleanup_after_visit, do_time_passage, run_outfit, run_shipyard, run_starbase_menu,
-    StatusModeGuard,
+    cleanup_after_visit, do_time_passage, finish_unallied_commander_talk, run_outfit, run_shipyard,
+    run_starbase_menu, StatusModeGuard, UnalliedVisit,
 };
 pub use sis_modules::{
     fuel_bar_layout, FuelBar, FuelLayoutError, ModuleSlot, ModuleSlots, ModuleSlotsError,

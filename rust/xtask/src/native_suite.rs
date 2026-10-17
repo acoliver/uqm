@@ -33,6 +33,10 @@ pub fn admit_script(
     }
     let document = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
     let script = validate_script(document, &path).map_err(|error| error.to_string())?;
+    if let Some(start_save) = script.start_save() {
+        crate::native_save::verify_start_save(root, &pinned.path, start_save, authority)?;
+        crate::native_save::check_provenance_current(root, authority)?;
+    }
     let runtime = authority.native_runtime_contract_for(pinned)?;
     if !runtime.has_valid_deadline_order() {
         return Err("native acceptance runtime has invalid deadline ordering".into());
@@ -2991,7 +2995,7 @@ mod tests {
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
                 .count(),
-            18
+            14
         );
         for admission in &admitted {
             let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS

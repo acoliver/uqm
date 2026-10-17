@@ -3,6 +3,64 @@
 pub const NUM_ELEMENT_CATEGORIES: usize = 8;
 const MAX_SCROUNGED: u16 = 50;
 
+/// The eight element categories, in `planets/elemdata.h` order.
+///
+/// The discriminant is the category index used by `MineralCargo::categories`
+/// and by the ship's `ElementAmounts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ElementCategory {
+    Common,
+    Corrosive,
+    BaseMetal,
+    Noble,
+    RareEarth,
+    Precious,
+    Radioactive,
+    Exotic,
+}
+
+impl ElementCategory {
+    /// Every category, in index order.
+    pub const ALL: [Self; NUM_ELEMENT_CATEGORIES] = [
+        Self::Common,
+        Self::Corrosive,
+        Self::BaseMetal,
+        Self::Noble,
+        Self::RareEarth,
+        Self::Precious,
+        Self::Radioactive,
+        Self::Exotic,
+    ];
+
+    /// The index of this category in the cargo and ship element arrays.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The category at `index`, if there is one.
+    #[must_use]
+    pub fn from_index(index: usize) -> Option<Self> {
+        Self::ALL.get(index).copied()
+    }
+
+    /// The name used in scripts and trace labels.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Common => "common",
+            Self::Corrosive => "corrosive",
+            Self::BaseMetal => "base_metal",
+            Self::Noble => "noble",
+            Self::RareEarth => "rare_earth",
+            Self::Precious => "precious",
+            Self::Radioactive => "radioactive",
+            Self::Exotic => "exotic",
+        }
+    }
+}
+
 /// Outcome of attempting to collect a surface node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CargoPickup {
@@ -92,6 +150,17 @@ impl BioCargo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn element_categories_follow_the_elemdata_order() {
+        assert_eq!(ElementCategory::Radioactive.index(), 6);
+        for (index, category) in ElementCategory::ALL.into_iter().enumerate() {
+            assert_eq!(category.index(), index);
+            assert_eq!(ElementCategory::from_index(index), Some(category));
+        }
+        assert_eq!(ElementCategory::from_index(NUM_ELEMENT_CATEGORIES), None);
+        assert_eq!(ElementCategory::BaseMetal.name(), "base_metal");
+    }
 
     #[test]
     fn normal_and_improved_landers_use_distinct_internal_limits() {

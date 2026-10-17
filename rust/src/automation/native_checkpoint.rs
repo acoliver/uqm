@@ -30,6 +30,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertHyperspaceDisplacement(_)
         | Action::AssertHyperspacePositionRestored(_)
         | Action::AssertShipResources(_)
+        | Action::AssertShipElement(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
         Action::WaitForMainMenuReady(_)
@@ -46,7 +47,10 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::NavigateToOrbit(_)
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
+        | Action::CollectPlanetMinerals(_)
+        | Action::FightBattle(_)
         | Action::SelectPlanetMenu(_)
+        | Action::PickBattleShip(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
         Action::WaitInputTicks(_)
@@ -426,6 +430,33 @@ mod tests {
     }
 
     #[test]
+    fn fighting_a_battle_is_navigation() {
+        let fight = serde_json::json!({"action":"fight_battle","max_ticks":600});
+        let (source, script) = script(serde_json::json!([fight, {"action":"finish"}]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let classes: Vec<_> = plan.checkpoints.iter().map(|item| item.class).collect();
+        assert_eq!(classes, vec![CheckpointClass::Navigation]);
+    }
+
+    #[test]
+    fn mineral_collection_is_navigation_and_the_element_assertion_is_an_assertion() {
+        let collect = serde_json::json!({
+            "action":"collect_planet_minerals","category":"radioactive",
+            "minimum_units":1,"max_ticks":600
+        });
+        let element = serde_json::json!({
+            "action":"assert_ship_element","category":"radioactive","minimum":1
+        });
+        let (source, script) = script(serde_json::json!([collect, element, {"action":"finish"}]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let classes: Vec<_> = plan.checkpoints.iter().map(|item| item.class).collect();
+        assert_eq!(
+            classes,
+            vec![CheckpointClass::Navigation, CheckpointClass::Assertion]
+        );
+    }
+
+    #[test]
     fn native_checkpoints_reject_reused_commits_and_post_present_assertions() {
         let (source, script) = script(serde_json::json!([
             {"action":"assert_battle_frames","minimum":4},
@@ -603,7 +634,7 @@ mod tests {
                 captures += expected_captures;
             }
         }
-        assert_eq!(captures, 146);
+        assert_eq!(captures, 159);
         assert_eq!(classes.len(), 4);
     }
 }
