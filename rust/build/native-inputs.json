@@ -1794,15 +1794,6 @@
       "provider": "native_object:native/plandata.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/calc.c",
-      "source_sha256": "eb19397bbe10e1387708a43acc47b4b83764bfcdb8c3224030d34128480cd18b",
-      "object_output": "calc.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "PLANET_GEN",
-      "production_profile": "production",
-      "provider": "native_object:native/calc.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/cargo.c",
       "source_sha256": "33a4d4f2ed1a8e2645d11346dde380d3c575f468bce6d67f438b371d7171c186",
       "object_output": "cargo.c.o",
@@ -2091,15 +2082,6 @@
       "provider": "native_object:native/gentopo.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/orbits.c",
-      "source_sha256": "6002edee8b0120b2eb997a99c12dc0e2edb51c4e699c278b815aa7db30f5037a",
-      "object_output": "orbits.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "NAVIGATION",
-      "production_profile": "production",
-      "provider": "native_object:native/orbits.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/oval.c",
       "source_sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
       "object_output": "oval.c.o",
@@ -2179,15 +2161,6 @@
       "owner": "NAVIGATION",
       "production_profile": "production",
       "provider": "native_object:native/solarsys.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/planets/surface.c",
-      "source_sha256": "b8ae0c2acd3451445c5f46f0c4636e02db5e4925f401cde671304f942b2ce758",
-      "object_output": "surface.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "PLANETSIDE_INTEGRATION",
-      "production_profile": "production",
-      "provider": "native_object:native/surface.c.o"
     },
     {
       "source": "sc2/src/uqm/process.c",

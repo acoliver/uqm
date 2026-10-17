@@ -25,6 +25,7 @@ pub mod mainloop;
 pub mod math;
 pub mod memory;
 pub mod planet_side;
+pub mod planets;
 pub mod resource;
 pub mod savegame;
 pub mod ships;

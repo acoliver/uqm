@@ -650,6 +650,8 @@ fn test_all(root: &Path) -> Result<(), String> {
             LINKED_TEST_FEATURES,
             "--test",
             "linked_provider_fixture",
+            "--test",
+            "planets_parity",
         ],
         cargo_target.as_deref(),
     );

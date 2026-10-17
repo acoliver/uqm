@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "f1b46a6efa1c41de1c155ad4903c14c946e1f16f940260f99fe75170c55b3f90",
+    "projection_sha256": "0128559127bd55ab02733dbd07f5df0d1d9284f0dca05aa94060d92890b16288",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2591,18 +2591,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/calc.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/calc.c",
-      "scan_root": "native",
-      "sha256": "eb19397bbe10e1387708a43acc47b4b83764bfcdb8c3224030d34128480cd18b",
-      "archive_decision": "include",
-      "provider": "native_object:native/calc.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/cargo.c.o",
       "issue": "PLANETSIDE_INTEGRATION",
       "canonical_source": "sc2/src/uqm/planets/cargo.c",
@@ -2998,18 +2986,6 @@
       "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
-      "path": "native/orbits.c.o",
-      "issue": "NAVIGATION",
-      "canonical_source": "sc2/src/uqm/planets/orbits.c",
-      "scan_root": "native",
-      "sha256": "6002edee8b0120b2eb997a99c12dc0e2edb51c4e699c278b815aa7db30f5037a",
-      "archive_decision": "include",
-      "provider": "native_object:native/orbits.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/oval.c.o",
       "issue": "PLANET_GEN",
       "canonical_source": "sc2/src/uqm/planets/oval.c",
@@ -3113,18 +3089,6 @@
       "sha256": "2b803e4726d944b137c45baf52c4709db98f04f75f2fe7b1a34f71b8ec9c8949",
       "archive_decision": "include",
       "provider": "native_object:native/solarsys.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/surface.c.o",
-      "issue": "PLANETSIDE_INTEGRATION",
-      "canonical_source": "sc2/src/uqm/planets/surface.c",
-      "scan_root": "native",
-      "sha256": "b8ae0c2acd3451445c5f46f0c4636e02db5e4925f401cde671304f942b2ce758",
-      "archive_decision": "include",
-      "provider": "native_object:native/surface.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
