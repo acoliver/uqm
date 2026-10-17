@@ -1023,7 +1023,7 @@ shrank to the validator minimum with a 300 s wall budget, so they no longer carr
 the main menu, flight in a solar system and in hyperspace, orbit, landing, the
 lander and takeoff back to orbit, a conversation with response selection, a
 battle, and a save followed by a load. The set and what each scenario covers is
-in `rust/ci/smoke.json`; it is a subset of the pinned scenarios in
+in `rust/ci/smoke.json`; it is a subset of the scenarios listed in
 `gates.json`, not a second inventory.
 
 ```sh
