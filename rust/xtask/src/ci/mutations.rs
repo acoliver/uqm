@@ -1153,26 +1153,56 @@ fn validate_internal_mutation(
     }
 }
 
-/// Snapshot of the authority a mutation case was built from, so its validator
-/// subprocess judges the fixture under that same policy.
+/// The admitted policy a mutation case was built from, handed to its validator
+/// subprocess byte for byte.
+///
+/// The workflow validator re-derives the CI plan and compares the policy file
+/// of the source tree against the admitted one, so the snapshot must be the
+/// admitted bytes, not a re-serialization of the parsed authority. The source
+/// root is the one the admitted policy is bound to, which differs from the
+/// controller checkout when a merge check admits a candidate policy.
 struct PolicySnapshot {
     directory: tempfile::TempDir,
+    source_root: PathBuf,
 }
 
 impl PolicySnapshot {
     const FILE: &'static str = "gates.json";
 
-    fn write(authority: &authority::Authority) -> Result<Self, CiError> {
+    fn capture(root: &Path) -> Result<Self, CiError> {
+        let bytes = authority::load_policy_bytes(root)
+            .map_err(|error| CiError::new("mutations.policy", error))?;
+        let source_root = super::controller::runtime_source_root(root)
+            .map_err(|error| CiError::new("mutations.policy", error))?;
+        Self::write(&bytes, source_root)
+    }
+
+    fn write(bytes: &[u8], source_root: PathBuf) -> Result<Self, CiError> {
         let directory = mutation_tempdir("mutations.policy")?;
-        let bytes = serde_json::to_vec_pretty(authority)
-            .map_err(|error| CiError::new("mutations.policy", error.to_string()))?;
         fs::write(directory.path().join(Self::FILE), bytes)
             .map_err(|error| CiError::new("mutations.policy", error.to_string()))?;
-        Ok(Self { directory })
+        Ok(Self {
+            directory,
+            source_root,
+        })
     }
 
     fn path(&self) -> PathBuf {
         self.directory.path().join(Self::FILE)
+    }
+
+    /// The only runtime bindings the validator subprocess receives.
+    fn environment(&self) -> [(String, String); 2] {
+        [
+            (
+                "UQM_CI_AUTHORITY_PATH".to_string(),
+                self.path().display().to_string(),
+            ),
+            (
+                "UQM_CI_SOURCE_ROOT".to_string(),
+                self.source_root.display().to_string(),
+            ),
+        ]
     }
 }
 
@@ -1198,14 +1228,10 @@ fn run_internal_mutation_validator(
     let command: Vec<String> = std::iter::once(executable.to_string())
         .chain(arguments)
         .collect();
-    let environment = [(
-        "UQM_CI_AUTHORITY_PATH".to_string(),
-        policy.path().display().to_string(),
-    )];
     let (captured, executable_identity) = run_bound_captured(
         root,
         &command,
-        &environment,
+        &policy.environment(),
         authority.supervision.builtin_limits(),
     );
     let mut execution = capture_execution(
@@ -1269,7 +1295,7 @@ fn internal_mutation_case(
     };
     let baseline_files = write_fixture(baseline_root.path(), &baseline)?;
     let files = write_fixture(mutant_root.path(), &mutant)?;
-    let policy = PolicySnapshot::write(authority)?;
+    let policy = PolicySnapshot::capture(root)?;
     let baseline_execution = run_internal_mutation_validator(
         root,
         baseline_root.path(),
@@ -2043,7 +2069,7 @@ fn artifact_mutation(
 
     let baseline_files = artifact_mutation_files(baseline_root.path(), authority)?;
     let files = artifact_mutation_files(mutant_root.path(), authority)?;
-    let policy = PolicySnapshot::write(authority)?;
+    let policy = PolicySnapshot::capture(root)?;
     let baseline_execution = run_internal_mutation_validator(
         root,
         baseline_root.path(),
@@ -2356,16 +2382,152 @@ mod tests {
         }
     }
 
+    fn checked_in_policy_bytes() -> Vec<u8> {
+        fs::read(repository_root().join(authority::AUTHORITY_RELATIVE)).unwrap()
+    }
+
+    /// A source tree whose policy is the admitted lowered-ceiling candidate,
+    /// the way a merge check binds a candidate that differs from the
+    /// installed controller's checkout.
+    fn candidate_source_tree() -> (tempfile::TempDir, Vec<u8>) {
+        let base = authority();
+        let candidate = admitted_lowered_ceiling_authority();
+        let mut policy: serde_json::Value =
+            serde_json::from_slice(&checked_in_policy_bytes()).unwrap();
+        policy["zero_native_delta"] = serde_json::to_value(&candidate.zero_native_delta).unwrap();
+        let bytes = serde_json::to_vec_pretty(&policy).unwrap();
+        let tree = tempfile::tempdir().unwrap();
+        fixture_file(
+            tree.path(),
+            authority::AUTHORITY_RELATIVE,
+            std::str::from_utf8(&bytes).unwrap(),
+        )
+        .unwrap();
+        fixture_file(
+            tree.path(),
+            &base.matrix_file,
+            &fs::read_to_string(repository_root().join(&base.matrix_file)).unwrap(),
+        )
+        .unwrap();
+        (tree, bytes)
+    }
+
     #[test]
-    fn policy_snapshot_carries_the_authority_in_force() {
-        let in_force = admitted_lowered_ceiling_authority();
-        let snapshot = PolicySnapshot::write(&in_force).unwrap();
-        let bytes = fs::read(snapshot.path()).unwrap();
-        let loaded: authority::Authority = serde_json::from_slice(&bytes).unwrap();
+    fn policy_snapshot_carries_the_admitted_policy_bytes_exactly() {
+        let admitted = checked_in_policy_bytes();
+        let snapshot = PolicySnapshot::write(&admitted, repository_root()).unwrap();
+        assert_eq!(fs::read(snapshot.path()).unwrap(), admitted);
+
+        let (tree, candidate) = candidate_source_tree();
+        let snapshot = PolicySnapshot::write(&candidate, tree.path().to_path_buf()).unwrap();
+        assert_eq!(fs::read(snapshot.path()).unwrap(), candidate);
+        assert_ne!(candidate, admitted);
+    }
+
+    #[test]
+    fn policy_snapshot_binds_the_validator_to_the_admitted_policy_and_its_source() {
+        let (tree, candidate) = candidate_source_tree();
+        let snapshot = PolicySnapshot::write(&candidate, tree.path().to_path_buf()).unwrap();
+        let environment = snapshot.environment();
         assert_eq!(
-            serde_json::to_vec_pretty(&loaded).unwrap(),
-            serde_json::to_vec_pretty(&in_force).unwrap()
+            environment,
+            [
+                (
+                    "UQM_CI_AUTHORITY_PATH".to_string(),
+                    snapshot.path().display().to_string()
+                ),
+                (
+                    "UQM_CI_SOURCE_ROOT".to_string(),
+                    tree.path().display().to_string()
+                ),
+            ]
         );
+    }
+
+    /// Run the validator in a child test process whose environment is exactly
+    /// the snapshot's bindings, as the cleared-environment subprocess sees it.
+    fn run_validator_child(
+        snapshot: &PolicySnapshot,
+        target: &str,
+        phase: &str,
+        fixture: &Path,
+    ) -> std::process::Output {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "ci::mutations::tests::validator_child_judges_one_fixture",
+                "--nocapture",
+            ])
+            .env_clear()
+            .envs(snapshot.environment())
+            .env(CHILD_FIXTURE_ENV, fixture)
+            .env(CHILD_TARGET_ENV, target)
+            .env(CHILD_PHASE_ENV, phase);
+        child.output().unwrap()
+    }
+
+    const CHILD_FIXTURE_ENV: &str = "UQM_TEST_MUTATION_FIXTURE";
+    const CHILD_TARGET_ENV: &str = "UQM_TEST_MUTATION_TARGET";
+    const CHILD_PHASE_ENV: &str = "UQM_TEST_MUTATION_PHASE";
+
+    #[test]
+    fn validator_child_judges_one_fixture() {
+        let Some(fixture) = std::env::var_os(CHILD_FIXTURE_ENV) else {
+            return;
+        };
+        let arguments = [
+            std::env::var(CHILD_TARGET_ENV).unwrap(),
+            std::env::var(CHILD_PHASE_ENV).unwrap(),
+            Path::new(&fixture).display().to_string(),
+        ];
+        let result = run_internal_validator(&repository_root(), &arguments);
+        let [target, phase, _] = &arguments;
+        match phase.as_str() {
+            "baseline" => result.unwrap_or_else(|error| panic!("{target} baseline: {error}")),
+            _ => {
+                let error = result.unwrap_err();
+                assert!(
+                    error.contains("workflow-trust-boundaries rejected"),
+                    "{target} mutant: {error}"
+                );
+            }
+        }
+    }
+
+    fn assert_workflow_case_under(snapshot: &PolicySnapshot, built_from: &authority::Authority) {
+        let (recipe, _diagnostic, baseline, mutant) =
+            expected_causal_contract("workflow", built_from).unwrap();
+        for (phase, bytes) in [("baseline", baseline), ("mutant", mutant)] {
+            let fixture = tempfile::tempdir().unwrap();
+            fixture_file(
+                fixture.path(),
+                &recipe.path,
+                std::str::from_utf8(&bytes).unwrap(),
+            )
+            .unwrap();
+            let output = run_validator_child(snapshot, "workflow", phase, fixture.path());
+            assert!(
+                output.status.success(),
+                "workflow {phase}: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn workflow_validator_judges_the_push_policy_through_the_snapshot() {
+        let snapshot =
+            PolicySnapshot::write(&checked_in_policy_bytes(), repository_root()).unwrap();
+        assert_workflow_case_under(&snapshot, &authority());
+    }
+
+    #[test]
+    fn workflow_validator_judges_an_admitted_candidate_through_the_snapshot() {
+        let (tree, candidate) = candidate_source_tree();
+        let snapshot = PolicySnapshot::write(&candidate, tree.path().to_path_buf()).unwrap();
+        assert_workflow_case_under(&snapshot, &admitted_lowered_ceiling_authority());
     }
 
     #[test]
