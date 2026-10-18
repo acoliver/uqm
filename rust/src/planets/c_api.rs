@@ -22,6 +22,11 @@ extern "C" {
     fn CloneShipFragment(ship_index: u16, dst_queue: *mut c_void, crew_percent: u16)
         -> *mut c_void;
     fn LoadStdLanderFont(info: *mut c_void);
+    fn FreeLanderFont(info: *mut c_void);
+    fn GetStringTableCount(table: *mut c_void) -> u16;
+    fn SetRelStringTableIndex(table: *mut c_void, offset: i16) -> *mut c_void;
+    fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
+    fn DestroyStringTable(table: *mut c_void) -> i32;
     fn LoadGraphicInstance(res: *const std::ffi::c_char) -> *mut c_void;
     fn LoadStringTableInstance(res: *const std::ffi::c_char) -> *mut c_void;
     fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
@@ -167,6 +172,74 @@ pub unsafe fn load_lander_scene(
     } else {
         SetAbsStringTableIndex(table, first_report).cast()
     };
+}
+
+/// `LoadStdLanderFont (info)`, the `graphics.ruins` mask and the Androsynth
+/// ruins report table started at report `visits`. When every report was
+/// already given the table is destroyed and `DiscoveryString` cleared.
+///
+/// # Safety
+/// `system` must be the live solar system state, on the game thread.
+pub unsafe fn load_ruins_story(
+    system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
+    visits: u32,
+) {
+    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    (*system).PlanetSideFrame[1] =
+        CaptureDrawable(LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast();
+    let table = CaptureStringTable(LoadStringTableInstance(c"text.androsynthruins".as_ptr()));
+    (*system).SysInfo.PlanetInfo.DiscoveryString = table.cast();
+    if visits >= u32::from(GetStringTableCount(table)) {
+        DestroyStringTable(ReleaseStringTable(table));
+        (*system).SysInfo.PlanetInfo.DiscoveryString = std::ptr::null_mut();
+    } else {
+        let offset = i16::try_from(visits).expect("a visit count is at most sixteen");
+        (*system).SysInfo.PlanetInfo.DiscoveryString = SetRelStringTableIndex(table, offset).cast();
+    }
+}
+
+/// `LoadStdLanderFont (info)` and the `text.chmmrbase` report table, as the
+/// `DiscoveryString` the starbase report presents.
+///
+/// # Safety
+/// `system` must be the live solar system state, on the game thread.
+pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
+    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    (*system).SysInfo.PlanetInfo.DiscoveryString =
+        CaptureStringTable(LoadStringTableInstance(c"text.chmmrbase".as_ptr())).cast();
+}
+
+/// `FreeLanderFont (info)`.
+///
+/// # Safety
+/// `system` must be the live solar system state, on the game thread.
+pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
+    FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+}
+
+/// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), 1)` and, when a
+/// fragment was made, `captains_name_index = name_index`.
+///
+/// # Safety
+/// Game thread, with the fleet queue initialised.
+pub unsafe fn clone_named_ship_into_built_queue(ship: u16, name_index: u8) {
+    let fragment = CloneShipFragment(
+        ship,
+        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+        1,
+    );
+    if !fragment.is_null() {
+        // The queue is a table queue: `LockShipFrag` is a cast of the link.
+        (*fragment.cast::<crate::comm::dispatch::CShipFragment>()).captains_name_index = name_index;
+    }
+}
+
+/// `PutGroupInfo (offset, 1)`.
+///
+/// # Safety
+/// Game thread.
+pub unsafe fn put_group_info(offset: u32) -> u32 {
+    PutGroupInfo(offset, 1)
 }
 
 /// The live game, through `GlobData` and the C group functions.

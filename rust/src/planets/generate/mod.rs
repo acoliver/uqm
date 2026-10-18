@@ -22,6 +22,8 @@ pub mod slylandro;
 pub mod special;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod special_exports;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod story_exports;
 pub mod sup;
 pub mod syreen;
 pub mod thrad;

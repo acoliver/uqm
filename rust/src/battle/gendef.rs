@@ -8,7 +8,7 @@ use std::os::raw::c_void;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-use crate::planets::generate::{home_exports, special_exports};
+use crate::planets::generate::{home_exports, special_exports, story_exports};
 
 /// Opaque GenerateFunctions type — C struct with function pointers
 pub type GenerateFunctions = c_void;
@@ -66,11 +66,8 @@ pub const MYCON_TRAP_DEFINED: u8 = 45;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 extern "C" {
-    static generateAndrosynthFunctions: GenerateFunctions;
-    static generateChmmrFunctions: GenerateFunctions;
     static generateMyconFunctions: GenerateFunctions;
     static generateSaMatraFunctions: GenerateFunctions;
-    static generateShofixtiFunctions: GenerateFunctions;
     static generateSolFunctions: GenerateFunctions;
     static generateSpathiFunctions: GenerateFunctions;
     static generateTalkingPetFunctions: GenerateFunctions;
@@ -89,7 +86,9 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
     unsafe {
         match index {
             SOL_DEFINED => &generateSolFunctions as *const _,
-            SHOFIXTI_DEFINED => &generateShofixtiFunctions as *const _,
+            SHOFIXTI_DEFINED => {
+                &story_exports::GENERATE_SHOFIXTI_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             START_COLONY_DEFINED => {
                 &special_exports::GENERATE_COLONY_FUNCTIONS as *const _ as *const GenerateFunctions
             }
@@ -101,7 +100,9 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
                     as *const GenerateFunctions
             }
             TALKING_PET_DEFINED => &generateTalkingPetFunctions as *const _,
-            CHMMR_DEFINED => &generateChmmrFunctions as *const _,
+            CHMMR_DEFINED => {
+                &story_exports::GENERATE_CHMMR_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             SYREEN_DEFINED => {
                 &special_exports::GENERATE_SYREEN_FUNCTIONS as *const _ as *const GenerateFunctions
             }
@@ -124,7 +125,10 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             }
             SUN_DEVICE_DEFINED | MYCON_DEFINED | EGG_CASE0_DEFINED | EGG_CASE1_DEFINED
             | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
-            ANDROSYNTH_DEFINED => &generateAndrosynthFunctions as *const _,
+            ANDROSYNTH_DEFINED => {
+                &story_exports::GENERATE_ANDROSYNTH_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => {
                 &home_exports::GENERATE_ORZ_FUNCTIONS as *const _ as *const GenerateFunctions
             }

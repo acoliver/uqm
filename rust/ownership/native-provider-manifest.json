@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "2bf2b3e25e5ec056bb2f20d24922648fa0f560020d69cdec9bf3ef799461ebaa",
+    "projection_sha256": "22158485d9265048306fcc1f895daca5480e0cb4e42d642864e3caf4ff6800ba",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2603,30 +2603,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/genand.c.o",
-      "issue": "GEN_GENAND",
-      "canonical_source": "sc2/src/uqm/planets/generate/genand.c",
-      "scan_root": "native",
-      "sha256": "5d96ba0212c3fbcb53d45df96b62e2de6653ad5bf85280d9efd9afc84e7ce0d4",
-      "archive_decision": "include",
-      "provider": "native_object:native/genand.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genchmmr.c.o",
-      "issue": "GEN_GENCHMMR",
-      "canonical_source": "sc2/src/uqm/planets/generate/genchmmr.c",
-      "scan_root": "native",
-      "sha256": "b1998fb72661df8080453427cb734638816c33e08a1b6d036e5d3449c94d77c2",
-      "archive_decision": "include",
-      "provider": "native_object:native/genchmmr.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/genmyc.c.o",
       "issue": "GEN_GENMYC",
       "canonical_source": "sc2/src/uqm/planets/generate/genmyc.c",
@@ -2658,18 +2634,6 @@
       "sha256": "e05cca503c2f740f27ab9babe74c9018dd651c388f18551fcd1a4d5ab8214c84",
       "archive_decision": "include",
       "provider": "native_object:native/gensam.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genshof.c.o",
-      "issue": "GEN_GENSHOF",
-      "canonical_source": "sc2/src/uqm/planets/generate/genshof.c",
-      "scan_root": "native",
-      "sha256": "e6cdd87a332cabe0cac9cce13a628b0661647c45554df902710eafa2cbb19ca5",
-      "archive_decision": "include",
-      "provider": "native_object:native/genshof.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
