@@ -994,6 +994,19 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
             Some(s) => s.lock(),
             None => return,
         };
+        // The decoder thread captured `sample_arc` under an earlier lock of this
+        // source. C holds stream_mutex from that check through the processing; here
+        // the lock is released in between, so a stop or a new stream may have won
+        // the source since. Without this recheck the stale pass would queue buffers
+        // and set stream_should_be_playing again, restarting a stopped stream.
+        let still_streaming_this_sample = source.stream_should_be_playing
+            && source
+                .sample
+                .as_ref()
+                .is_some_and(|current| Arc::ptr_eq(current, sample_arc));
+        if !still_streaming_this_sample {
+            return;
+        }
         let mut sample = sample_arc.lock();
 
         let processed =

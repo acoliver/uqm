@@ -270,6 +270,7 @@ pub fn fade_music(how_long: u32, end_volume: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sound::test_support::ENGINE_TEST_LOCK;
 
     // --- P13 TDD ---
 
@@ -302,6 +303,7 @@ mod tests {
     #[test]
 
     fn test_plr_pause_resume_delegates() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = plr_pause();
         assert!(result.is_ok() || result.is_err());
     }
@@ -310,6 +312,7 @@ mod tests {
     #[test]
 
     fn test_snd_play_speech_uses_speech_source() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let sample = stream::create_sound_sample(None, 4, None).unwrap();
         let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
         let result = snd_play_speech(&music_ref);
@@ -319,6 +322,7 @@ mod tests {
     #[test]
 
     fn test_snd_stop_speech_noop_when_none() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = snd_stop_speech();
         assert!(result.is_ok());
     }
@@ -353,6 +357,7 @@ mod tests {
     #[test]
 
     fn test_set_music_volume_updates_state() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         set_music_volume(128);
         let state = MUSIC_STATE.lock();
         assert_eq!(state.music_volume, 128);
@@ -361,6 +366,7 @@ mod tests {
     #[test]
 
     fn test_fade_music_zero_interval() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = fade_music(0, 128);
         // Zero interval = immediate, should return true/false
         assert!(result || !result);

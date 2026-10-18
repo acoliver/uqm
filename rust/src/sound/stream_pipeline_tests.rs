@@ -444,6 +444,111 @@ fn a_finished_buffer_is_recycled_with_the_next_chunk_and_reported() {
     assert_eq!(mixer_int(SourceProp::BuffersProcessed), 0);
 }
 
+/// A stream whose first buffer has finished playing, so a pass over it would
+/// recycle that buffer, plus the log of the callbacks such a pass would fire.
+fn playing_stream_with_a_finished_buffer() -> (Arc<Mutex<SoundSample>>, Log) {
+    let log: Log = Arc::default();
+    let sample = sample_with(
+        Some(ScriptedDecoder::new(chunks(6))),
+        2,
+        Some(Recorder::new(&log)),
+    );
+    play_stream(Arc::clone(&sample), TEST_SOURCE, false, false, true).unwrap();
+    finish_front_buffer();
+    log.lock().clear();
+    (sample, log)
+}
+
+#[test]
+fn a_pass_over_a_sample_captured_before_the_stream_was_stopped_does_nothing() {
+    let _guard = lock_test();
+    let (stale, log) = playing_stream_with_a_finished_buffer();
+    stop_stream(TEST_SOURCE).unwrap();
+    // Nothing is queued and the stale sample still has a decoder: the state in
+    // which a pass refills the source and starts it playing again.
+    assert!(stale.lock().decoder.is_some());
+    let decoded_before = stale.lock().decoder.as_ref().unwrap().get_frame();
+
+    process_source_stream(TEST_SOURCE, &stale);
+
+    assert_eq!(
+        stale.lock().decoder.as_ref().unwrap().get_frame(),
+        decoded_before,
+        "the stale sample was not decoded from"
+    );
+    let source = get_source(TEST_SOURCE).unwrap();
+    assert!(
+        !source.stream_should_be_playing,
+        "a stopped stream stays stopped"
+    );
+    assert!(source.sample.is_none());
+    assert!(source.queued_buf_sizes.is_empty());
+    drop(source);
+    assert_eq!(mixer_int(SourceProp::BuffersQueued), 0);
+    assert_eq!(
+        mixer_int(SourceProp::SourceState),
+        SourceState::Stopped as i32
+    );
+    assert!(!playing_stream(TEST_SOURCE));
+    assert!(
+        log_of(&log).is_empty(),
+        "no callback fires for the dead stream"
+    );
+}
+
+#[test]
+fn a_pass_over_a_sample_captured_before_a_new_stream_replaced_it_does_nothing() {
+    let _guard = lock_test();
+    let (stale, stale_log) = playing_stream_with_a_finished_buffer();
+    let new_log: Log = Arc::default();
+    let replacement = sample_with(
+        Some(ScriptedDecoder::new(chunks(6))),
+        2,
+        Some(Recorder::new(&new_log)),
+    );
+    play_stream(Arc::clone(&replacement), TEST_SOURCE, false, false, true).unwrap();
+    // A finished buffer on the new stream is what a pass would recycle with
+    // data from whichever sample it was handed.
+    finish_front_buffer();
+    new_log.lock().clear();
+    let queued_sizes_before = get_source(TEST_SOURCE).unwrap().queued_buf_sizes.clone();
+    let decoded_before = replacement.lock().decoder.as_ref().unwrap().get_frame();
+    let stale_decoded_before = stale.lock().decoder.as_ref().unwrap().get_frame();
+
+    process_source_stream(TEST_SOURCE, &stale);
+
+    let source = get_source(TEST_SOURCE).unwrap();
+    assert!(Arc::ptr_eq(source.sample.as_ref().unwrap(), &replacement));
+    assert!(source.stream_should_be_playing);
+    assert_eq!(source.queued_buf_sizes, queued_sizes_before);
+    drop(source);
+    assert_eq!(mixer_int(SourceProp::BuffersQueued), 2);
+    assert_eq!(mixer_int(SourceProp::BuffersProcessed), 1);
+    assert!(log_of(&stale_log).is_empty());
+    assert!(log_of(&new_log).is_empty());
+    assert_eq!(
+        replacement.lock().decoder.as_ref().unwrap().get_frame(),
+        decoded_before
+    );
+    assert_eq!(
+        stale.lock().decoder.as_ref().unwrap().get_frame(),
+        stale_decoded_before,
+        "the stale sample was not decoded from"
+    );
+}
+
+#[test]
+fn a_pass_over_a_paused_stream_leaves_it_to_the_resume() {
+    let _guard = lock_test();
+    let (sample, log) = playing_stream_with_a_finished_buffer();
+    pause_stream(TEST_SOURCE).unwrap();
+
+    process_source_stream(TEST_SOURCE, &sample);
+
+    assert_eq!(mixer_int(SourceProp::BuffersProcessed), 1);
+    assert!(log_of(&log).is_empty());
+}
+
 #[test]
 fn a_tagged_buffer_reports_its_tag_when_it_finishes_playing() {
     let _guard = lock_test();
