@@ -204,6 +204,7 @@ pub fn wait_for_sound_end(channel: Option<usize>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sound::test_support::ENGINE_TEST_LOCK;
 
     // --- P16 TDD ---
 
@@ -231,12 +232,14 @@ mod tests {
     #[test]
 
     fn test_stop_sound_all_sfx_channels() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         stop_sound(); // should not panic
     }
 
     #[test]
 
     fn test_set_sfx_volume_all_channels() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         set_sfx_volume(128); // should not panic
         let state = VOLUME.lock();
         assert!((state.sfx_volume_scale - (128.0 / 255.0)).abs() < 0.01);
@@ -245,6 +248,7 @@ mod tests {
     #[test]
 
     fn test_set_speech_volume_speech_source() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         set_speech_volume(200); // should not panic
         let state = VOLUME.lock();
         assert!((state.speech_volume_scale - (200.0 / 255.0)).abs() < 0.01);
@@ -253,12 +257,14 @@ mod tests {
     #[test]
 
     fn test_sound_playing_false_when_idle() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert!(!sound_playing());
     }
 
     #[test]
 
     fn test_wait_for_sound_end_returns_when_not_playing() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         wait_for_sound_end(None); // should return immediately
     }
 
