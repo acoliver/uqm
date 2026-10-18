@@ -6,9 +6,9 @@
 use std::os::raw::c_void;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-use crate::planets::generate::special_exports;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
 use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+use crate::planets::generate::{home_exports, special_exports};
 
 /// Opaque GenerateFunctions type — C struct with function pointers
 pub type GenerateFunctions = c_void;
@@ -67,23 +67,15 @@ pub const MYCON_TRAP_DEFINED: u8 = 45;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 extern "C" {
     static generateAndrosynthFunctions: GenerateFunctions;
-    static generateBurvixeseFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
-    static generateDruugeFunctions: GenerateFunctions;
-    static generateIlwrathFunctions: GenerateFunctions;
     static generateMyconFunctions: GenerateFunctions;
-    static generateOrzFunctions: GenerateFunctions;
-    static generatePkunkFunctions: GenerateFunctions;
     static generateSaMatraFunctions: GenerateFunctions;
     static generateShofixtiFunctions: GenerateFunctions;
     static generateSolFunctions: GenerateFunctions;
     static generateSpathiFunctions: GenerateFunctions;
-    static generateSupoxFunctions: GenerateFunctions;
     static generateTalkingPetFunctions: GenerateFunctions;
-    static generateThraddashFunctions: GenerateFunctions;
     static generateUtwigFunctions: GenerateFunctions;
     static generateVuxFunctions: GenerateFunctions;
-    static generateZoqFotPikFunctions: GenerateFunctions;
 }
 
 /// C: `const GenerateFunctions *getGenerateFunctions(BYTE Index)`
@@ -116,18 +108,26 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             MYCON_TRAP_DEFINED => {
                 &special_exports::GENERATE_TRAP_FUNCTIONS as *const _ as *const GenerateFunctions
             }
-            BURVIXESE_DEFINED => &generateBurvixeseFunctions as *const _,
+            BURVIXESE_DEFINED => {
+                &home_exports::GENERATE_BURVIXESE_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             SLYLANDRO_DEFINED => {
                 &special_exports::GENERATE_SLYLANDRO_FUNCTIONS as *const _
                     as *const GenerateFunctions
             }
-            DRUUGE_DEFINED => &generateDruugeFunctions as *const _,
+            DRUUGE_DEFINED => {
+                &home_exports::GENERATE_DRUUGE_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             BOMB_DEFINED | UTWIG_DEFINED => &generateUtwigFunctions as *const _,
-            AQUA_HELIX_DEFINED | THRADD_DEFINED => &generateThraddashFunctions as *const _,
+            AQUA_HELIX_DEFINED | THRADD_DEFINED => {
+                &home_exports::GENERATE_THRADDASH_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             SUN_DEVICE_DEFINED | MYCON_DEFINED | EGG_CASE0_DEFINED | EGG_CASE1_DEFINED
             | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
             ANDROSYNTH_DEFINED => &generateAndrosynthFunctions as *const _,
-            TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => &generateOrzFunctions as *const _,
+            TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => {
+                &home_exports::GENERATE_ORZ_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             SHIP_VAULT_DEFINED => {
                 &special_exports::GENERATE_VAULT_FUNCTIONS as *const _ as *const GenerateFunctions
             }
@@ -136,7 +136,10 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             }
             MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => &generateVuxFunctions as *const _,
             SAMATRA_DEFINED => &generateSaMatraFunctions as *const _,
-            ZOQFOT_DEFINED => &generateZoqFotPikFunctions as *const _,
+            ZOQFOT_DEFINED => {
+                &home_exports::GENERATE_ZOQ_FOT_PIK_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             ZOQ_SCOUT_DEFINED => {
                 &special_exports::GENERATE_ZOQ_FOT_PIK_SCOUT_FUNCTIONS as *const _
                     as *const GenerateFunctions
@@ -144,13 +147,19 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             YEHAT_DEFINED => {
                 &special_exports::GENERATE_YEHAT_FUNCTIONS as *const _ as *const GenerateFunctions
             }
-            PKUNK_DEFINED => &generatePkunkFunctions as *const _,
-            SUPOX_DEFINED => &generateSupoxFunctions as *const _,
+            PKUNK_DEFINED => {
+                &home_exports::GENERATE_PKUNK_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
+            SUPOX_DEFINED => {
+                &home_exports::GENERATE_SUPOX_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             RAINBOW_DEFINED => {
                 &special_exports::GENERATE_RAINBOW_WORLD_FUNCTIONS as *const _
                     as *const GenerateFunctions
             }
-            ILWRATH_DEFINED => &generateIlwrathFunctions as *const _,
+            ILWRATH_DEFINED => {
+                &home_exports::GENERATE_ILWRATH_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             _ => &GENERATE_DEFAULT_FUNCTIONS as *const _ as *const GenerateFunctions,
         }
     }

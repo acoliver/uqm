@@ -9,6 +9,8 @@ pub mod dru;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod exports;
 pub mod home_contact;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod home_exports;
 pub mod ilw;
 pub mod melnorme;
 pub mod orz;

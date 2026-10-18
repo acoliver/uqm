@@ -30,6 +30,7 @@ extern "C" {
     fn InitCommunication(which_comm: u32) -> u16;
     fn StartSphereTracking(race: u16) -> u16;
     fn NotifyOthers(which_race: u16, target_loc: u8);
+    fn RepairSISBorder();
     #[link_name = "star_array"]
     static STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
@@ -91,6 +92,14 @@ const INFINITE_FLEET: u16 = !0;
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn start_sphere_tracking(race: u16) -> bool {
     StartSphereTracking(race) != 0
+}
+
+/// `RepairSISBorder ()`.
+///
+/// # Safety
+/// Game thread, inside a planet orbit.
+pub unsafe fn repair_sis_border() {
+    RepairSISBorder();
 }
 
 /// `NotifyOthers (race, IPNL_ALL_CLEAR)`.

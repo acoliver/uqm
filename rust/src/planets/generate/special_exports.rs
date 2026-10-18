@@ -34,7 +34,7 @@ use crate::planets::generate::{
 ///
 /// # Safety
 /// `world` must be a planet of `system` or a moon whose `pPrevDesc` is one.
-unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> Body {
+pub(super) unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> Body {
     let planet = u8::try_from(planet_index(system, world)).expect("planet index fits a byte");
     let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PLANET_DESC>();
     if (*world).pPrevDesc.cast_const() == sun {
@@ -50,7 +50,7 @@ unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> B
 ///
 /// # Safety
 /// As [`super::exports::generate_planets_c`].
-unsafe fn lay_out_planets(
+pub(super) unsafe fn lay_out_planets(
     system: *mut SOLARSYS_STATE,
     generate: impl FnOnce(&mut RandomContext, &[PlanetFrame], u8, u8, &mut [PLANET_DESC]) -> u8,
 ) -> bool {
@@ -70,7 +70,7 @@ unsafe fn lay_out_planets(
 ///
 /// # Safety
 /// As [`super::exports::generate_orbital_c`].
-unsafe fn orbit_world(
+pub(super) unsafe fn orbit_world(
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
     generate: impl FnOnce(&mut Orbit<'_>, Body) -> bool,
