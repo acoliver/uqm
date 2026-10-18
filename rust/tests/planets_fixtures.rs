@@ -310,8 +310,8 @@ mod rust_special {
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        burv, chmmr, colony, dru, ilw, orz, pku, rainbow, slylandro, sup, syreen, thrad, trap,
-        vault, wreck, yehat, zoq,
+        andro, burv, chmmr, colony, dru, ilw, orz, pet, pku, rainbow, shof, slylandro, sup, syreen,
+        thrad, trap, vault, wreck, yehat, zoq,
     };
 
     /// A game state whose only flag is `name`.
@@ -369,6 +369,12 @@ mod rust_special {
                         THRADD_DEFINED
                     },
                 ),
+                "shof" => shof::generate_planets(
+                    &mut rng,
+                    case.0,
+                    star_color((case.1 << 5) | 0b101),
+                    &mut planets,
+                ),
                 "orz" | "taalo" => orz::generate_planets(
                     &mut rng,
                     self.table,
@@ -384,6 +390,8 @@ mod rust_special {
                 other => {
                     let hook = match other {
                         "zoq" => zoq::generate_planets,
+                        "andro" => andro::generate_planets,
+                        "pet" => pet::generate_planets,
                         "ilw" => ilw::generate_planets,
                         "burv" => burv::generate_planets,
                         "pku" => pku::generate_planets,
@@ -465,6 +473,8 @@ mod rust_special {
             let hook: &dyn Fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16 =
                 match system {
                     "orz" | "taalo0" | "taalo1" => &orz,
+                    "andro" => &andro::generate_energy,
+                    "pet" => &pet::generate_energy,
                     "zoq" => &|rng, info, body, which, node| {
                         zoq::generate_energy(rng, info, body, which, node)
                     },

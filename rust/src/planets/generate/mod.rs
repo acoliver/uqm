@@ -1,5 +1,6 @@
 //! System generators ported from `planets/generate/*.c`.
 
+pub mod andro;
 pub mod burv;
 pub mod chmmr;
 pub mod colony;
@@ -11,8 +12,10 @@ pub mod home_contact;
 pub mod ilw;
 pub mod melnorme;
 pub mod orz;
+pub mod pet;
 pub mod pku;
 pub mod rainbow;
+pub mod shof;
 pub mod slylandro;
 pub mod special;
 #[cfg(any(not(test), feature = "linked_c_archive"))]

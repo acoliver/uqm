@@ -35,6 +35,9 @@ unsafe extern "C" {
     static generateThraddashFunctions: GenerateFunctions;
     static generateOrzFunctions: GenerateFunctions;
     static generateZoqFotPikFunctions: GenerateFunctions;
+    static generateShofixtiFunctions: GenerateFunctions;
+    static generateAndrosynthFunctions: GenerateFunctions;
+    static generateTalkingPetFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
@@ -192,6 +195,9 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
             "aqua" | "aqua0" | "aqua1" | "thrad" => &generateThraddashFunctions,
             "orz" | "taalo" | "taalo0" | "taalo1" => &generateOrzFunctions,
             "zoq" => &generateZoqFotPikFunctions,
+            "shof" => &generateShofixtiFunctions,
+            "andro" => &generateAndrosynthFunctions,
+            "pet" => &generateTalkingPetFunctions,
             "pku" => &generatePkunkFunctions,
             "sup" => &generateSupoxFunctions,
             "dru" => &generateDruugeFunctions,

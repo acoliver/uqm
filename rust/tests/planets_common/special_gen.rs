@@ -9,6 +9,9 @@ use super::default_gen::{layout_cases, moon_cases};
 use uqm_rust::c_bindings::global_state::PLANET_DESC;
 use uqm_rust::planets::generate::special::Body;
 
+/// `STAR_COLOR` of an orange star.
+const ORANGE_STAR: u8 = 2;
+
 pub type Desc = (u8, i16, u32, u8, i16, i16);
 
 pub fn desc_of(d: &PLANET_DESC) -> Desc {
@@ -28,9 +31,9 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 /// set; `aqua` and `thrad` are the Thraddash generator at the Aqua Helix and
 /// Thraddash home stars (`CurStarDescPtr->Index`), `orz` and `taalo` the Orz
 /// generator at the Orz home and Taalo stars.
-pub const LAYOUT_SYSTEMS: [&str; 18] = [
+pub const LAYOUT_SYSTEMS: [&str; 21] = [
     "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1", "pku", "sup",
-    "dru", "burv", "aqua", "thrad", "orz", "taalo", "zoq",
+    "dru", "burv", "aqua", "thrad", "orz", "taalo", "zoq", "shof", "andro", "pet",
 ];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
@@ -51,6 +54,14 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
             Body::Moon { planet: 1, moon: 0 },
         ]
     };
+    let home_bodies_and_second_moon = || {
+        vec![
+            Body::Planet(0),
+            Body::Planet(1),
+            Body::Moon { planet: 0, moon: 0 },
+            Body::Moon { planet: 1, moon: 0 },
+        ]
+    };
     // The Orz hooks look at the Taalo device moon (planet 1, moon 2) too.
     let orz_bodies = || {
         vec![
@@ -62,6 +73,8 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
         ]
     };
     vec![
+        ("andro", home_bodies_and_second_moon()),
+        ("pet", home_bodies()),
         ("orz", orz_bodies()),
         ("taalo0", orz_bodies()),
         ("taalo1", orz_bodies()),
@@ -131,6 +144,12 @@ pub fn render(ops: &mut impl SpecialOps) -> String {
     let mut out = String::new();
     for system in LAYOUT_SYSTEMS {
         for case in layout_cases() {
+            // `FillOrbits` with the types already chosen retries until the
+            // star's distribution allows the type; no orange star allows the
+            // Shofixti metal worlds, so the C original never returns there.
+            if system == "shof" && case.1 == ORANGE_STAR {
+                continue;
+            }
             let _ = writeln!(
                 out,
                 "layout {system} {case:?} {:?}",
