@@ -1,15 +1,15 @@
-//! Linked parity of the Rust ports of the small per-system generators
-//! (`genyeh.c` ... `gensly.c`) against the C `generateXFunctions` tables:
-//! the deterministic hooks (planet layout, moons, energy nodes) are run on
-//! both sides over the same inputs and must leave the same descriptions, node
-//! outputs and `SysGenRNG` position.
+//! Linked check of the `generateXFunctions` tables of the small per-system
+//! generators: the deterministic hooks (planet layout, moons, energy nodes)
+//! are run through the tables, Rust-exported except for Yehat's, over the same
+//! inputs and must leave the descriptions, node outputs and `SysGenRNG`
+//! position captured from the C originals in the checked-in fixture.
 
 use std::ffi::c_void;
 use std::fmt::Write as _;
 
-use crate::planets_common::special_gen::{self, desc_of, Desc, RustSpecial, SpecialOps};
+use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
-use uqm_rust::c_bindings::global_state::{PlanetFrame, PLANET_DESC, SOLARSYS_STATE};
+use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
@@ -23,7 +23,6 @@ unsafe extern "C" {
     static mut pSolarSysState: *mut SOLARSYS_STATE;
     static mut CurStarDescPtr: *mut c_void;
     static mut ScreenWidth: i32;
-    static planet_array: [PlanetFrame; 59];
     static generateYehatFunctions: GenerateFunctions;
     static generateVaultFunctions: GenerateFunctions;
     static generateColonyFunctions: GenerateFunctions;
@@ -179,16 +178,12 @@ impl SpecialOps for Harness {
 }
 
 /// Run every comparison; called from `planets_parity`'s single test because
-/// the C globals they drive cannot be shared between parallel tests. The C
-/// output must equal the checked-in fixture and the Rust port.
+/// the C globals they drive cannot be shared between parallel tests.
 pub fn special_generators_match_the_c_originals() {
-    let table = unsafe { &planet_array }.as_slice();
-    let from_c = special_gen::render(&mut Harness::new());
-    crate::check_fixture("special_generators.txt", &from_c);
-    let from_rust = special_gen::render(&mut RustSpecial { table });
-    assert_eq!(from_rust, from_c, "Rust port differs from the C originals");
+    let rendered = special_gen::render(&mut Harness::new());
+    crate::check_fixture("special_generators.txt", &rendered);
     println!(
-        "special generators: {} parity cases",
-        from_c.lines().count()
+        "special generators: {} fixture cases",
+        rendered.lines().count()
     );
 }

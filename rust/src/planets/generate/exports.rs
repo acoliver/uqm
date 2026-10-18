@@ -23,7 +23,7 @@ use crate::planets::generate::default;
 ///
 /// # Safety
 /// `world` must be a planet of `system` or a moon whose `pPrevDesc` is one.
-unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> u16 {
+pub(super) unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> u16 {
     let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PLANET_DESC>();
     let planet = if (*world).pPrevDesc.cast_const() == sun {
         world
@@ -38,7 +38,7 @@ unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const PLANET_DESC)
 ///
 /// # Safety
 /// `system` must be valid.
-unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscoveryReport {
+pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscoveryReport {
     let slot = std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo.DiscoveryString);
     CffiDiscoveryReport::new(slot.cast::<*mut c_void>())
         .expect("the discovery string slot is part of the system state")

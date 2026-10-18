@@ -1830,15 +1830,6 @@
       "provider": "native_object:native/genchmmr.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/gencol.c",
-      "source_sha256": "e2b3e6f3ad806377b22564ff147d318b9fb4708cbaad20fe1e5e63173193203c",
-      "object_output": "gencol.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENCOL",
-      "production_profile": "production",
-      "provider": "native_object:native/gencol.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/gendru.c",
       "source_sha256": "dc73997dd1c2a33e6f07406d8e4c8572afcf18a32d6c8d4ec97e757b35e92a16",
       "object_output": "gendru.c.o",
@@ -1855,15 +1846,6 @@
       "owner": "GEN_GENILW",
       "production_profile": "production",
       "provider": "native_object:native/genilw.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/planets/generate/genmel.c",
-      "source_sha256": "23dfe9e80daa408c7a7704778138d218e37477fcee2f67a5d86d33b0941e5617",
-      "object_output": "genmel.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENMEL",
-      "production_profile": "production",
-      "provider": "native_object:native/genmel.c.o"
     },
     {
       "source": "sc2/src/uqm/planets/generate/genmyc.c",
@@ -1902,15 +1884,6 @@
       "provider": "native_object:native/genpku.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/genrain.c",
-      "source_sha256": "e90d751ec8b0699597a732484beca8b1ad2eacf6b8cf61534bfda3e408182ce6",
-      "object_output": "genrain.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENRAIN",
-      "production_profile": "production",
-      "provider": "native_object:native/genrain.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/gensam.c",
       "source_sha256": "e05cca503c2f740f27ab9babe74c9018dd651c388f18551fcd1a4d5ab8214c84",
       "object_output": "gensam.c.o",
@@ -1927,15 +1900,6 @@
       "owner": "GEN_GENSHOF",
       "production_profile": "production",
       "provider": "native_object:native/genshof.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/planets/generate/gensly.c",
-      "source_sha256": "07f327be3a088218ef2fecf75d4ebc8ae8fc0f28203d77df7afed6907e700d31",
-      "object_output": "gensly.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENSLY",
-      "production_profile": "production",
-      "provider": "native_object:native/gensly.c.o"
     },
     {
       "source": "sc2/src/uqm/planets/generate/gensol.c",
@@ -1965,15 +1929,6 @@
       "provider": "native_object:native/gensup.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/gensyr.c",
-      "source_sha256": "8fa16fbf3278913ad18f03325900d121919aa99003118635e889d4b7d2893b01",
-      "object_output": "gensyr.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENSYR",
-      "production_profile": "production",
-      "provider": "native_object:native/gensyr.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/genthrad.c",
       "source_sha256": "190174890c502bd139485f927cd0a7e87c18f1e4bf8bb4df8ca9ab83a5b60e96",
       "object_output": "genthrad.c.o",
@@ -1981,15 +1936,6 @@
       "owner": "GEN_GENTHRAD",
       "production_profile": "production",
       "provider": "native_object:native/genthrad.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/planets/generate/gentrap.c",
-      "source_sha256": "f4ec9f9a384f5cdb417e43639f9bea023ebf4e4177af043930e0d1cab00b06f6",
-      "object_output": "gentrap.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENTRAP",
-      "production_profile": "production",
-      "provider": "native_object:native/gentrap.c.o"
     },
     {
       "source": "sc2/src/uqm/planets/generate/genutw.c",
@@ -2001,15 +1947,6 @@
       "provider": "native_object:native/genutw.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/genvault.c",
-      "source_sha256": "3b1893adea50edb936ea41ec70add7b0f09aa311a6a5821a7dc2f53365f048dc",
-      "object_output": "genvault.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENVAULT",
-      "production_profile": "production",
-      "provider": "native_object:native/genvault.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/genvux.c",
       "source_sha256": "896d9c899e94ea4e68e7e16204094a032d517e0582df7d3b90c7317048cc319a",
       "object_output": "genvux.c.o",
@@ -2019,15 +1956,6 @@
       "provider": "native_object:native/genvux.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/genwreck.c",
-      "source_sha256": "4dfe6ee205c75167769e4922ee3cb404ccc4656d805057c057c17bf8a1071052",
-      "object_output": "genwreck.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENWRECK",
-      "production_profile": "production",
-      "provider": "native_object:native/genwreck.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/genyeh.c",
       "source_sha256": "a35fbaa1bb93dcfa97a2b3a38ac671468e772d1ce7991bf93d34313e2d63f224",
       "object_output": "genyeh.c.o",
@@ -2035,15 +1963,6 @@
       "owner": "GEN_GENYEH",
       "production_profile": "production",
       "provider": "native_object:native/genyeh.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/planets/generate/genzfpscout.c",
-      "source_sha256": "0def56df3d243b9fcf93da1c75f59516af31af8665323c32ff2987e18e71b2fb",
-      "object_output": "genzfpscout.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENZFPSCOUT",
-      "production_profile": "production",
-      "provider": "native_object:native/genzfpscout.c.o"
     },
     {
       "source": "sc2/src/uqm/planets/generate/genzoq.c",

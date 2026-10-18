@@ -6,6 +6,8 @@
 use std::os::raw::c_void;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
+use crate::planets::generate::special_exports;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
 use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
 
 /// Opaque GenerateFunctions type — C struct with function pointers
@@ -67,31 +69,22 @@ extern "C" {
     static generateAndrosynthFunctions: GenerateFunctions;
     static generateBurvixeseFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
-    static generateColonyFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
     static generateIlwrathFunctions: GenerateFunctions;
-    static generateMelnormeFunctions: GenerateFunctions;
     static generateMyconFunctions: GenerateFunctions;
     static generateOrzFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
-    static generateRainbowWorldFunctions: GenerateFunctions;
     static generateSaMatraFunctions: GenerateFunctions;
     static generateShofixtiFunctions: GenerateFunctions;
-    static generateSlylandroFunctions: GenerateFunctions;
     static generateSolFunctions: GenerateFunctions;
     static generateSpathiFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
-    static generateSyreenFunctions: GenerateFunctions;
     static generateTalkingPetFunctions: GenerateFunctions;
     static generateThraddashFunctions: GenerateFunctions;
-    static generateTrapFunctions: GenerateFunctions;
     static generateUtwigFunctions: GenerateFunctions;
-    static generateVaultFunctions: GenerateFunctions;
     static generateVuxFunctions: GenerateFunctions;
-    static generateWreckFunctions: GenerateFunctions;
     static generateYehatFunctions: GenerateFunctions;
     static generateZoqFotPikFunctions: GenerateFunctions;
-    static generateZoqFotPikScoutFunctions: GenerateFunctions;
 }
 
 /// C: `const GenerateFunctions *getGenerateFunctions(BYTE Index)`
@@ -106,17 +99,29 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
         match index {
             SOL_DEFINED => &generateSolFunctions as *const _,
             SHOFIXTI_DEFINED => &generateShofixtiFunctions as *const _,
-            START_COLONY_DEFINED => &generateColonyFunctions as *const _,
+            START_COLONY_DEFINED => {
+                &special_exports::GENERATE_COLONY_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             SPATHI_DEFINED => &generateSpathiFunctions as *const _,
             MELNORME0_DEFINED | MELNORME1_DEFINED | MELNORME2_DEFINED | MELNORME3_DEFINED
             | MELNORME4_DEFINED | MELNORME5_DEFINED | MELNORME6_DEFINED | MELNORME7_DEFINED
-            | MELNORME8_DEFINED => &generateMelnormeFunctions as *const _,
+            | MELNORME8_DEFINED => {
+                &special_exports::GENERATE_MELNORME_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             TALKING_PET_DEFINED => &generateTalkingPetFunctions as *const _,
             CHMMR_DEFINED => &generateChmmrFunctions as *const _,
-            SYREEN_DEFINED => &generateSyreenFunctions as *const _,
-            MYCON_TRAP_DEFINED => &generateTrapFunctions as *const _,
+            SYREEN_DEFINED => {
+                &special_exports::GENERATE_SYREEN_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
+            MYCON_TRAP_DEFINED => {
+                &special_exports::GENERATE_TRAP_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             BURVIXESE_DEFINED => &generateBurvixeseFunctions as *const _,
-            SLYLANDRO_DEFINED => &generateSlylandroFunctions as *const _,
+            SLYLANDRO_DEFINED => {
+                &special_exports::GENERATE_SLYLANDRO_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             DRUUGE_DEFINED => &generateDruugeFunctions as *const _,
             BOMB_DEFINED | UTWIG_DEFINED => &generateUtwigFunctions as *const _,
             AQUA_HELIX_DEFINED | THRADD_DEFINED => &generateThraddashFunctions as *const _,
@@ -124,16 +129,26 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
             ANDROSYNTH_DEFINED => &generateAndrosynthFunctions as *const _,
             TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => &generateOrzFunctions as *const _,
-            SHIP_VAULT_DEFINED => &generateVaultFunctions as *const _,
-            URQUAN_WRECK_DEFINED => &generateWreckFunctions as *const _,
+            SHIP_VAULT_DEFINED => {
+                &special_exports::GENERATE_VAULT_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
+            URQUAN_WRECK_DEFINED => {
+                &special_exports::GENERATE_WRECK_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => &generateVuxFunctions as *const _,
             SAMATRA_DEFINED => &generateSaMatraFunctions as *const _,
             ZOQFOT_DEFINED => &generateZoqFotPikFunctions as *const _,
-            ZOQ_SCOUT_DEFINED => &generateZoqFotPikScoutFunctions as *const _,
+            ZOQ_SCOUT_DEFINED => {
+                &special_exports::GENERATE_ZOQ_FOT_PIK_SCOUT_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             YEHAT_DEFINED => &generateYehatFunctions as *const _,
             PKUNK_DEFINED => &generatePkunkFunctions as *const _,
             SUPOX_DEFINED => &generateSupoxFunctions as *const _,
-            RAINBOW_DEFINED => &generateRainbowWorldFunctions as *const _,
+            RAINBOW_DEFINED => {
+                &special_exports::GENERATE_RAINBOW_WORLD_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             ILWRATH_DEFINED => &generateIlwrathFunctions as *const _,
             _ => &GENERATE_DEFAULT_FUNCTIONS as *const _ as *const GenerateFunctions,
         }

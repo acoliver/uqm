@@ -1,6 +1,3 @@
-uqm_CFILES="genand.c genburv.c genchmmr.c gencol.c gendru.c
-		genilw.c genmel.c genmyc.c genorz.c genpet.c genpku.c genrain.c
-		gensam.c genshof.c gensly.c gensol.c genspa.c gensup.c gensyr.c
-		genthrad.c gentrap.c genutw.c genvault.c genvux.c genwreck.c
-		genyeh.c genzfpscout.c genzoq.c"
+uqm_CFILES="genand.c genburv.c genchmmr.c gendru.c
+		genilw.c genmyc.c genorz.c genpet.c genpku.c gensam.c genshof.c gensol.c genspa.c gensup.c genthrad.c genutw.c genvux.c genyeh.c genzoq.c"
 uqm_HFILES="genall.h gendefault.h"

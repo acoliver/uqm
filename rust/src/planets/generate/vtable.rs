@@ -61,10 +61,9 @@ assert_c_layout!(
     }
 );
 
-/// `generateDefaultFunctions`: what a system without a special generator uses.
+/// The default hooks; a special system overrides some of them.
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-#[export_name = "generateDefaultFunctions"]
-pub static GENERATE_DEFAULT_FUNCTIONS: GenerateFunctions = GenerateFunctions {
+pub const DEFAULT_HOOKS: GenerateFunctions = GenerateFunctions {
     init_npcs: Some(exports::init_npcs_c),
     reinit_npcs: Some(exports::reinit_npcs_c),
     uninit_npcs: Some(exports::uninit_npcs_c),
@@ -79,3 +78,8 @@ pub static GENERATE_DEFAULT_FUNCTIONS: GenerateFunctions = GenerateFunctions {
     pickup_energy: Some(exports::pickup_energy_c),
     pickup_life: Some(exports::pickup_life_c),
 };
+
+/// `generateDefaultFunctions`: what a system without a special generator uses.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[export_name = "generateDefaultFunctions"]
+pub static GENERATE_DEFAULT_FUNCTIONS: GenerateFunctions = DEFAULT_HOOKS;

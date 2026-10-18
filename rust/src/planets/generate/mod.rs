@@ -8,6 +8,8 @@ pub mod melnorme;
 pub mod rainbow;
 pub mod slylandro;
 pub mod special;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod special_exports;
 pub mod syreen;
 pub mod trap;
 pub mod vault;

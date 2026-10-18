@@ -7,6 +7,8 @@ use crate::c_bindings::global_state::IP_GROUP;
 use crate::collections::queue::{Queue, ReinitQueue};
 use crate::comm::locdata::CGlobData;
 use crate::planets::generate::default::{Npcs, PlanetNames};
+use crate::planets::generate::special::FleetGroups;
+use crate::savegame::runtime::star::CStarDesc;
 
 extern "C" {
     #[link_name = "GlobData"]
@@ -17,6 +19,19 @@ extern "C" {
     fn PutGroupInfo(offset: u32, which_group: u8) -> u32;
     fn BuildGroups();
     fn LoadPlanet(surf_def_frame: *mut c_void);
+    fn CloneShipFragment(ship_index: u16, dst_queue: *mut c_void, crew_percent: u16)
+        -> *mut c_void;
+    fn LoadStdLanderFont(info: *mut c_void);
+    fn LoadGraphicInstance(res: *const std::ffi::c_char) -> *mut c_void;
+    fn LoadStringTableInstance(res: *const std::ffi::c_char) -> *mut c_void;
+    fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
+    fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
+    fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
+    fn InitCommunication(which_comm: u32) -> u16;
+    #[link_name = "star_array"]
+    static STAR_ARRAY: *const CStarDesc;
+    #[link_name = "CurStarDescPtr"]
+    static CUR_STAR_DESC_PTR: *const CStarDesc;
     fn utf8StringCopy(dst: *mut u8, size: usize, src: *const std::ffi::c_char);
     fn rust_get_game_state_bits(start: i32, end: i32) -> u8;
     fn rust_set_game_state_bits(start: i32, end: i32, value: u8);
@@ -36,6 +51,67 @@ const GROUPS_RANDOM: u32 = 0;
 /// Game thread, inside a planet orbit.
 pub unsafe fn load_planet_default_surface() {
     LoadPlanet(std::ptr::null_mut());
+}
+
+/// `CurStarDescPtr->Index`.
+///
+/// # Safety
+/// `CurStarDescPtr` must point at a valid star description.
+pub unsafe fn current_star_index() -> u8 {
+    (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).index
+}
+
+/// `GROUPS_ADD_NEW` (`state.h`).
+const GROUPS_ADD_NEW: u32 = !0;
+/// `SYREEN_CONVERSATION` and `SLYLANDRO_HOME_CONVERSATION` (`commglue.h`).
+pub const SYREEN_CONVERSATION: u32 = 20;
+pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
+
+/// `InitCommunication (which_comm)`.
+///
+/// # Safety
+/// Game thread, inside a planet orbit.
+pub unsafe fn init_communication(which_comm: u32) {
+    InitCommunication(which_comm);
+}
+
+/// The `star_index` byte of every catalog entry before `CurStarDescPtr`:
+/// `for (SDPtr = &star_array[0]; SDPtr != CurStarDescPtr; ++SDPtr)`.
+///
+/// # Safety
+/// `CurStarDescPtr` must be an entry of `star_array`.
+pub unsafe fn star_indexes_before_current() -> Vec<u8> {
+    let first = std::ptr::addr_of!(STAR_ARRAY).read();
+    let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
+    let before = usize::try_from(current.offset_from(first))
+        .expect("CurStarDescPtr is an entry of star_array");
+    std::slice::from_raw_parts(first, before)
+        .iter()
+        .map(|star| star.index)
+        .collect()
+}
+
+/// `LoadStdLanderFont (info)`, the mask `graphics` frame and the report
+/// `strtab`, with the report started at `first_report` (the string-table
+/// index call only when it is not the first).
+///
+/// # Safety
+/// `system` must be the live solar system state, on the game thread; both
+/// resource names must be NUL terminated.
+pub unsafe fn load_lander_scene(
+    system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
+    graphics: &std::ffi::CStr,
+    strtab: &std::ffi::CStr,
+    first_report: u16,
+) {
+    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    (*system).PlanetSideFrame[1] = CaptureDrawable(LoadGraphicInstance(graphics.as_ptr())).cast();
+    let table = CaptureStringTable(LoadStringTableInstance(strtab.as_ptr()));
+    (*system).SysInfo.PlanetInfo.DiscoveryString = if first_report == 0 {
+        table.cast()
+    } else {
+        SetAbsStringTableIndex(table, first_report).cast()
+    };
 }
 
 /// The live game, through `GlobData` and the C group functions.
@@ -123,5 +199,45 @@ impl PlanetNames for LiveGame {
     fn set_battle_planet(&mut self, value: u8) {
         // SAFETY: writes the Rust-owned game state.
         unsafe { rust_set_game_state_bits(BATTLE_PLANET.0, BATTLE_PLANET.1, value) };
+    }
+}
+
+impl FleetGroups for LiveGame {
+    fn battle_group_ref(&self) -> u32 {
+        // SAFETY: game thread; `GlobData` is initialised.
+        unsafe { (*glob()).game_state.battle_group_ref }
+    }
+    fn set_battle_group_ref(&mut self, value: u32) {
+        // SAFETY: as above.
+        unsafe { (*glob()).game_state.battle_group_ref = value };
+    }
+    fn clone_ship_into_built_queue(&mut self, ship: u8) {
+        // SAFETY: the queue is the live `npc_built_ship_q`.
+        unsafe {
+            CloneShipFragment(
+                u16::from(ship),
+                std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+                0,
+            )
+        };
+    }
+    fn add_new_group(&mut self) -> u32 {
+        // SAFETY: game thread.
+        unsafe { PutGroupInfo(GROUPS_ADD_NEW, 1) }
+    }
+    fn reinit_built_queue(&mut self) {
+        self.reinit_npc_built_ship_q();
+    }
+    fn head_ip_group(&mut self) -> Option<&mut IP_GROUP> {
+        // SAFETY: the head of the live `ip_group_q`; its links are the
+        // elements themselves, as in `for_each_ip_group`.
+        unsafe {
+            let head = (*std::ptr::addr_of!((*glob()).game_state.ip_group_q)).head;
+            if head.is_null() {
+                None
+            } else {
+                Some(&mut *head.cast::<IP_GROUP>())
+            }
+        }
     }
 }
