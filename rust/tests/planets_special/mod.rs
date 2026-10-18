@@ -28,6 +28,9 @@ unsafe extern "C" {
     static generateYehatFunctions: GenerateFunctions;
     static generateIlwrathFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
+    static generatePkunkFunctions: GenerateFunctions;
+    static generateSupoxFunctions: GenerateFunctions;
+    static generateDruugeFunctions: GenerateFunctions;
     static generateVaultFunctions: GenerateFunctions;
     static generateColonyFunctions: GenerateFunctions;
     static generateWreckFunctions: GenerateFunctions;
@@ -158,6 +161,9 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
         match system {
             "yehat" => &generateYehatFunctions,
             "ilw" => &generateIlwrathFunctions,
+            "pku" => &generatePkunkFunctions,
+            "sup" => &generateSupoxFunctions,
+            "dru" => &generateDruugeFunctions,
             "chmmr0" | "chmmr1" | "chmmr" => &generateChmmrFunctions,
             "vault" => &generateVaultFunctions,
             "colony" => &generateColonyFunctions,

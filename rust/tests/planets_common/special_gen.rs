@@ -26,13 +26,24 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 ///
 /// `chmmr0` and `chmmr1` are the Chmmr system with `CHMMR_UNLEASHED` clear and
 /// set.
-pub const LAYOUT_SYSTEMS: [&str; 9] = [
-    "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1",
+pub const LAYOUT_SYSTEMS: [&str; 12] = [
+    "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1", "pku", "sup",
+    "dru",
 ];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
 pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
+    let home_bodies = || {
+        vec![
+            Body::Planet(0),
+            Body::Planet(1),
+            Body::Moon { planet: 0, moon: 0 },
+        ]
+    };
     vec![
+        ("pku", home_bodies()),
+        ("sup", home_bodies()),
+        ("dru", home_bodies()),
         (
             "ilw",
             vec![

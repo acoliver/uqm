@@ -307,7 +307,7 @@ mod rust_special {
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        chmmr, colony, ilw, rainbow, slylandro, syreen, trap, vault, wreck, yehat,
+        chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, trap, vault, wreck, yehat,
     };
 
     /// A game state whose only set flag is `CHMMR_UNLEASHED`.
@@ -356,6 +356,9 @@ mod rust_special {
                 other => {
                     let hook = match other {
                         "ilw" => ilw::generate_planets,
+                        "pku" => pku::generate_planets,
+                        "sup" => sup::generate_planets,
+                        "dru" => dru::generate_planets,
                         "yehat" => yehat::generate_planets,
                         "rainbow" => rainbow::generate_planets,
                         "syreen" => syreen::generate_planets,
@@ -398,6 +401,9 @@ mod rust_special {
             let hook: EnergyFn = match system {
                 "yehat" => yehat::generate_energy,
                 "ilw" => ilw::generate_energy,
+                "pku" => pku::generate_energy,
+                "sup" => sup::generate_energy,
+                "dru" => dru::generate_energy,
                 "vault" => vault::generate_energy,
                 "wreck" => wreck::generate_energy,
                 other => panic!("no such system {other}"),
