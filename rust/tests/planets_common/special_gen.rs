@@ -23,11 +23,24 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 }
 
 /// The systems whose `generatePlanets` is overridden.
-pub const LAYOUT_SYSTEMS: [&str; 6] = ["yehat", "colony", "rainbow", "syreen", "trap", "sly"];
+///
+/// `chmmr0` and `chmmr1` are the Chmmr system with `CHMMR_UNLEASHED` clear and
+/// set.
+pub const LAYOUT_SYSTEMS: [&str; 9] = [
+    "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1",
+];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
 pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
     vec![
+        (
+            "ilw",
+            vec![
+                Body::Planet(0),
+                Body::Planet(1),
+                Body::Moon { planet: 0, moon: 0 },
+            ],
+        ),
         (
             "yehat",
             vec![
@@ -60,8 +73,10 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
 pub trait SpecialOps {
     /// `generatePlanets` of `system`: planet table, drawn count, RNG position.
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32);
-    /// Syreen `generateMoons` for planet `planet_i`: moon table, RNG position.
-    fn moons(&mut self, planet_i: usize, case: (u8, u8, u32, u8)) -> (Vec<Desc>, u32);
+    /// `generateMoons` of `system` (Syreen or Chmmr) for planet `planet_i`:
+    /// moon table, RNG position.
+    fn moons(&mut self, system: &str, planet_i: usize, case: (u8, u8, u32, u8))
+        -> (Vec<Desc>, u32);
     /// `generateEnergy` of `system` on `body`: the node list as text.
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String;
 }
@@ -82,13 +97,15 @@ pub fn render(ops: &mut impl SpecialOps) -> String {
             );
         }
     }
-    for planet_i in [0usize, 1] {
-        for case in moon_cases() {
-            let _ = writeln!(
-                out,
-                "moons syreen {planet_i} {case:?} {:?}",
-                ops.moons(planet_i, case)
-            );
+    for system in ["syreen", "chmmr"] {
+        for planet_i in [0usize, 1] {
+            for case in moon_cases() {
+                let _ = writeln!(
+                    out,
+                    "moons {system} {planet_i} {case:?} {:?}",
+                    ops.moons(system, planet_i, case)
+                );
+            }
         }
     }
     for (system, bodies) in energy_systems() {

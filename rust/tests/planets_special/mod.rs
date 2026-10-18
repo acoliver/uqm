@@ -13,6 +13,7 @@ use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
+use uqm_rust::state::game_state_keys::set_game_state;
 
 #[cfg_attr(
     target_os = "macos",
@@ -23,7 +24,10 @@ unsafe extern "C" {
     static mut pSolarSysState: *mut SOLARSYS_STATE;
     static mut CurStarDescPtr: *mut c_void;
     static mut ScreenWidth: i32;
+    fn rust_init_game_state();
     static generateYehatFunctions: GenerateFunctions;
+    static generateIlwrathFunctions: GenerateFunctions;
+    static generateChmmrFunctions: GenerateFunctions;
     static generateVaultFunctions: GenerateFunctions;
     static generateColonyFunctions: GenerateFunctions;
     static generateWreckFunctions: GenerateFunctions;
@@ -42,6 +46,8 @@ impl Harness {
     fn new() -> Self {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
+            // `set_game_state` is a no-op until the game state exists.
+            rust_init_game_state();
             SysGenRNG = uqm_rust::math::RandomContext_New();
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
@@ -151,6 +157,8 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
     unsafe {
         match system {
             "yehat" => &generateYehatFunctions,
+            "ilw" => &generateIlwrathFunctions,
+            "chmmr0" | "chmmr1" | "chmmr" => &generateChmmrFunctions,
             "vault" => &generateVaultFunctions,
             "colony" => &generateColonyFunctions,
             "wreck" => &generateWreckFunctions,
@@ -165,11 +173,19 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
 
 impl SpecialOps for Harness {
     fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
+        if let Some(unleashed) = system.strip_prefix("chmmr") {
+            set_game_state("CHMMR_UNLEASHED", unleashed.parse().expect("0 or 1"));
+        }
         self.c_planets(c_table(system), case)
     }
 
-    fn moons(&mut self, planet_i: usize, case: (u8, u8, u32, u8)) -> (Vec<Desc>, u32) {
-        self.c_moons(c_table("syreen"), case, planet_i)
+    fn moons(
+        &mut self,
+        system: &str,
+        planet_i: usize,
+        case: (u8, u8, u32, u8),
+    ) -> (Vec<Desc>, u32) {
+        self.c_moons(c_table(system), case, planet_i)
     }
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {

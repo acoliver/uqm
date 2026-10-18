@@ -1,9 +1,11 @@
 //! System generators ported from `planets/generate/*.c`.
 
+pub mod chmmr;
 pub mod colony;
 pub mod default;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod exports;
+pub mod ilw;
 pub mod melnorme;
 pub mod rainbow;
 pub mod slylandro;

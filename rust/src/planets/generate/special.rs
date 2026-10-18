@@ -12,6 +12,8 @@ use crate::state::game_state_keys::{get_game_state, set_game_state};
 
 /// `planets.h`/`plandata.h` values the generators use.
 pub const RAINBOW_WORLD: u8 = 32;
+pub const SAPPHIRE_WORLD: u8 = 34;
+pub const PRIMORDIAL_WORLD: u8 = 38;
 pub const WATER_WORLD: u8 = 42;
 pub const TELLURIC_WORLD: u8 = 43;
 pub const RED_GAS_GIANT: u8 = 56;

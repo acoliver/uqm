@@ -305,10 +305,29 @@ mod rust_special {
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
     use uqm_rust::planets::consts::star_color;
-    use uqm_rust::planets::generate::special::Body;
+    use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        colony, rainbow, slylandro, syreen, trap, vault, wreck, yehat,
+        chmmr, colony, ilw, rainbow, slylandro, syreen, trap, vault, wreck, yehat,
     };
+
+    /// A game state whose only set flag is `CHMMR_UNLEASHED`.
+    struct Unleashed(bool);
+
+    impl Story for Unleashed {
+        fn flag(&self, name: &'static str) -> u32 {
+            assert_eq!(name, "CHMMR_UNLEASHED");
+            u32::from(self.0)
+        }
+        fn set_flag(&mut self, name: &'static str, _value: u32) {
+            panic!("unexpected write of {name}");
+        }
+        fn word(&self, name: &'static str) -> u32 {
+            panic!("unexpected read of {name}");
+        }
+        fn set_word(&mut self, name: &'static str, _value: u32) {
+            panic!("unexpected write of {name}");
+        }
+    }
 
     /// The Rust port called directly.
     pub struct RustSpecial<'a> {
@@ -326,8 +345,17 @@ mod rust_special {
                     star_color((case.1 << 5) | 0b101),
                     &mut planets,
                 ),
+                "chmmr0" | "chmmr1" => chmmr::generate_planets(
+                    &mut rng,
+                    self.table,
+                    case.0,
+                    case.1,
+                    &mut planets,
+                    &Unleashed(system == "chmmr1"),
+                ),
                 other => {
                     let hook = match other {
+                        "ilw" => ilw::generate_planets,
                         "yehat" => yehat::generate_planets,
                         "rainbow" => rainbow::generate_planets,
                         "syreen" => syreen::generate_planets,
@@ -341,10 +369,20 @@ mod rust_special {
             (planets.iter().map(desc_of).collect(), drawn, rng.seed())
         }
 
-        fn moons(&mut self, planet_i: usize, case: (u8, u8, u32, u8)) -> (Vec<Desc>, u32) {
+        fn moons(
+            &mut self,
+            system: &str,
+            planet_i: usize,
+            case: (u8, u8, u32, u8),
+        ) -> (Vec<Desc>, u32) {
             let mut rng = RandomContext::with_seed(case.2);
             let mut moons: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 4];
-            syreen::generate_moons(
+            let hook = match system {
+                "syreen" => syreen::generate_moons,
+                "chmmr" => chmmr::generate_moons,
+                other => panic!("no such system {other}"),
+            };
+            hook(
                 &mut rng,
                 case.0,
                 star_color((case.1 << 5) | 0b101),
@@ -359,6 +397,7 @@ mod rust_special {
             type EnergyFn = fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16;
             let hook: EnergyFn = match system {
                 "yehat" => yehat::generate_energy,
+                "ilw" => ilw::generate_energy,
                 "vault" => vault::generate_energy,
                 "wreck" => wreck::generate_energy,
                 other => panic!("no such system {other}"),
