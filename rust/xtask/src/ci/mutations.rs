@@ -1098,19 +1098,29 @@ fn validate_artifact_mutation_fixture(fixture: &Path, phase: &str) -> Result<(),
     }
 }
 
+/// Entry point of the validator subprocess: judge the fixture under the policy
+/// the controller handed down through `UQM_CI_AUTHORITY_PATH`.
 pub fn run_internal_validator(root: &Path, arguments: &[String]) -> Result<(), String> {
+    let authority = authority::load_authority(root)?;
+    validate_internal_mutation(root, &authority, arguments)
+}
+
+fn validate_internal_mutation(
+    root: &Path,
+    authority: &authority::Authority,
+    arguments: &[String],
+) -> Result<(), String> {
     let [target, phase, fixture] = arguments else {
         return Err("internal mutation validator requires TARGET PHASE FIXTURE".into());
     };
     if !matches!(phase.as_str(), "baseline" | "mutant") {
         return Err(format!("unsupported internal mutation phase '{phase}'"));
     }
-    let authority = authority::load_authority(root)?;
-    authority::validate_authority(&authority)?;
+    authority::validate_authority(authority)?;
     if target == "artifact" {
         return validate_artifact_mutation_fixture(Path::new(fixture), phase);
     }
-    let (recipe, _diagnostic, baseline, mutant) = expected_causal_contract(target, &authority)
+    let (recipe, _diagnostic, baseline, mutant) = expected_causal_contract(target, authority)
         .ok_or_else(|| format!("target '{target}' has no internal mutation contract"))?;
     let fixture = Path::new(fixture);
     let actual = super::bounded_io::read_regular_nofollow(
@@ -1133,7 +1143,7 @@ pub fn run_internal_validator(root: &Path, arguments: &[String]) -> Result<(), S
             "internal mutation fixture does not match the exact {phase} recipe for {target}"
         ));
     }
-    let validation = validate_internal_fixture(root, fixture, target, &authority);
+    let validation = validate_internal_fixture(root, fixture, target, authority);
     match (phase.as_str(), validation) {
         ("baseline", Ok(())) => Ok(()),
         ("mutant", Err(error)) => Err(error),
@@ -1143,12 +1153,36 @@ pub fn run_internal_validator(root: &Path, arguments: &[String]) -> Result<(), S
     }
 }
 
+/// Snapshot of the authority a mutation case was built from, so its validator
+/// subprocess judges the fixture under that same policy.
+struct PolicySnapshot {
+    directory: tempfile::TempDir,
+}
+
+impl PolicySnapshot {
+    const FILE: &'static str = "gates.json";
+
+    fn write(authority: &authority::Authority) -> Result<Self, CiError> {
+        let directory = mutation_tempdir("mutations.policy")?;
+        let bytes = serde_json::to_vec_pretty(authority)
+            .map_err(|error| CiError::new("mutations.policy", error.to_string()))?;
+        fs::write(directory.path().join(Self::FILE), bytes)
+            .map_err(|error| CiError::new("mutations.policy", error.to_string()))?;
+        Ok(Self { directory })
+    }
+
+    fn path(&self) -> PathBuf {
+        self.directory.path().join(Self::FILE)
+    }
+}
+
 fn run_internal_mutation_validator(
     root: &Path,
     fixture: &Path,
     target: &str,
     phase: &str,
     authority: &authority::Authority,
+    policy: &PolicySnapshot,
 ) -> Result<MutationExecution, CiError> {
     let executable = env::current_exe()
         .map_err(|error| CiError::new("mutations.internal_runner", error.to_string()))?;
@@ -1164,8 +1198,16 @@ fn run_internal_mutation_validator(
     let command: Vec<String> = std::iter::once(executable.to_string())
         .chain(arguments)
         .collect();
-    let (captured, executable_identity) =
-        run_bound_captured(root, &command, &[], authority.supervision.builtin_limits());
+    let environment = [(
+        "UQM_CI_AUTHORITY_PATH".to_string(),
+        policy.path().display().to_string(),
+    )];
+    let (captured, executable_identity) = run_bound_captured(
+        root,
+        &command,
+        &environment,
+        authority.supervision.builtin_limits(),
+    );
     let mut execution = capture_execution(
         "mutations",
         "internal-validator",
@@ -1227,12 +1269,14 @@ fn internal_mutation_case(
     };
     let baseline_files = write_fixture(baseline_root.path(), &baseline)?;
     let files = write_fixture(mutant_root.path(), &mutant)?;
+    let policy = PolicySnapshot::write(authority)?;
     let baseline_execution = run_internal_mutation_validator(
         root,
         baseline_root.path(),
         target_name,
         "baseline",
         authority,
+        &policy,
     )?;
     let mutant_execution = run_internal_mutation_validator(
         root,
@@ -1240,6 +1284,7 @@ fn internal_mutation_case(
         target_name,
         "mutant",
         authority,
+        &policy,
     )?;
     let baseline_accepted = execution_accepted(&baseline_execution);
     let fragments = expected_diagnostic
@@ -1977,11 +2022,8 @@ fn artifact_mutation(
     root: &Path,
     authority: &authority::Authority,
 ) -> Result<MutationCase, CiError> {
-    let authority_bytes = super::bounded_io::read_regular_nofollow(
-        &root.join(authority::AUTHORITY_RELATIVE),
-        super::bounded_io::AUTHORITY_BOOTSTRAP_LIMIT_BYTES,
-    )
-    .map_err(|error| CiError::new("mutations.artifact.authority", error))?;
+    let authority_bytes = authority::load_policy_bytes(root)
+        .map_err(|error| CiError::new("mutations.artifact.authority", error))?;
     let baseline_root = mutation_tempdir("mutations.artifact.baseline")?;
     let mutant_root = mutation_tempdir("mutations.artifact.mutant")?;
     evidence::build_artifact_mutation_fixture(
@@ -2001,15 +2043,23 @@ fn artifact_mutation(
 
     let baseline_files = artifact_mutation_files(baseline_root.path(), authority)?;
     let files = artifact_mutation_files(mutant_root.path(), authority)?;
+    let policy = PolicySnapshot::write(authority)?;
     let baseline_execution = run_internal_mutation_validator(
         root,
         baseline_root.path(),
         "artifact",
         "baseline",
         authority,
+        &policy,
     )?;
-    let mutant_execution =
-        run_internal_mutation_validator(root, mutant_root.path(), "artifact", "mutant", authority)?;
+    let mutant_execution = run_internal_mutation_validator(
+        root,
+        mutant_root.path(),
+        "artifact",
+        "mutant",
+        authority,
+        &policy,
+    )?;
     let baseline_accepted = execution_accepted(&baseline_execution);
     let expected_diagnostic = MutationDiagnostic {
         class: "artifact-provenance".to_string(),
@@ -2225,6 +2275,97 @@ mod tests {
         ] {
             assert_internal_causal_rejection(target);
         }
+    }
+
+    fn admitted_lowered_ceiling_authority() -> authority::Authority {
+        let base = authority();
+        let mut candidate = base.clone();
+        candidate
+            .zero_native_delta
+            .maximum_transitional_native_inputs -= 1;
+        super::super::controller::admit_policy(
+            &serde_json::to_vec_pretty(&base).unwrap(),
+            &serde_json::to_vec_pretty(&candidate).unwrap(),
+        )
+        .expect("a lowered ceiling is admitted");
+        candidate
+    }
+
+    fn validate_under(
+        in_force: &authority::Authority,
+        built_from: &authority::Authority,
+        target: &str,
+        phase: &str,
+    ) -> Result<(), String> {
+        let (recipe, _diagnostic, baseline, mutant) =
+            expected_causal_contract(target, built_from).unwrap();
+        let bytes = if phase == "baseline" {
+            baseline
+        } else {
+            mutant
+        };
+        let fixture = tempfile::tempdir().unwrap();
+        fixture_file(
+            fixture.path(),
+            &recipe.path,
+            std::str::from_utf8(&bytes).unwrap(),
+        )
+        .unwrap();
+        validate_internal_mutation(
+            &repository_root(),
+            in_force,
+            &[
+                target.into(),
+                phase.into(),
+                fixture.path().display().to_string(),
+            ],
+        )
+    }
+
+    #[test]
+    fn internal_mutation_cases_judge_both_sides_under_the_authority_in_force() {
+        let in_force = admitted_lowered_ceiling_authority();
+        assert_ne!(
+            in_force.zero_native_delta,
+            authority().zero_native_delta,
+            "the checkout's gates.json must differ from the policy in force"
+        );
+        for target in ["ownership", "security"] {
+            validate_under(&in_force, &in_force, target, "baseline")
+                .unwrap_or_else(|error| panic!("{target} baseline: {error}"));
+            let error = validate_under(&in_force, &in_force, target, "mutant").unwrap_err();
+            assert!(
+                !error.contains("exact mutant recipe"),
+                "{target} mutant fixture drifted from its recipe: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn internal_validator_rejects_a_fixture_from_another_authority() {
+        let in_force = authority();
+        let tampered = admitted_lowered_ceiling_authority();
+        for target in ["ownership", "security"] {
+            for phase in ["baseline", "mutant"] {
+                let error = validate_under(&in_force, &tampered, target, phase).unwrap_err();
+                assert!(
+                    error.contains(&format!("does not match the exact {phase} recipe")),
+                    "{target} {phase}: {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn policy_snapshot_carries_the_authority_in_force() {
+        let in_force = admitted_lowered_ceiling_authority();
+        let snapshot = PolicySnapshot::write(&in_force).unwrap();
+        let bytes = fs::read(snapshot.path()).unwrap();
+        let loaded: authority::Authority = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            serde_json::to_vec_pretty(&loaded).unwrap(),
+            serde_json::to_vec_pretty(&in_force).unwrap()
+        );
     }
 
     #[test]
