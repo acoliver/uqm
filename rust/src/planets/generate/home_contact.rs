@@ -50,7 +50,7 @@ pub trait HomeContactSite {
 /// conversation took the visit, so the default orbital is skipped.
 pub fn enter_orbit(site: &mut impl HomeContactSite, artifact_taken: bool) -> bool {
     if site.start_sphere_tracking() {
-        meet(site);
+        meet(site, HOME_CONTACT_FLAGS);
         true
     } else {
         site.load_ruins_scene(artifact_taken);
@@ -61,7 +61,9 @@ pub fn enter_orbit(site: &mut impl HomeContactSite, artifact_taken: bool) -> boo
 /// The contact sequence: the interplanetary groups are put away, the race's
 /// flagship stands alone in the built-ship queue for the conversation, and
 /// unless the conversation aborted or loaded a game the world is put back.
-fn meet(site: &mut impl HomeContactSite) {
+/// `flags_and_data` is what `GLOBAL_FLAGS_AND_DATA` holds during the talk; the
+/// result is false when the abort or load left the conversation state alone.
+pub fn meet(site: &mut impl HomeContactSite, flags_and_data: u8) -> bool {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -75,7 +77,7 @@ fn meet(site: &mut impl HomeContactSite) {
 
     let activity = site.current_activity();
     site.set_current_activity(activity | START_INTERPLANETARY);
-    site.set_global_flags_and_data(HOME_CONTACT_FLAGS);
+    site.set_global_flags_and_data(flags_and_data);
     site.talk();
 
     let activity = site.current_activity();
@@ -83,6 +85,9 @@ fn meet(site: &mut impl HomeContactSite) {
         site.set_current_activity(activity & !START_INTERPLANETARY);
         site.reinit_built_ship_q();
         site.load_ip_groups();
+        true
+    } else {
+        false
     }
 }
 

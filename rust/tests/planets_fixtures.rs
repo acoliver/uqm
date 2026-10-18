@@ -302,13 +302,14 @@ mod rust_special {
 
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
+    use uqm_rust::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        burv, chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, trap, vault, wreck,
-        yehat,
+        burv, chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, thrad, trap, vault,
+        wreck, yehat,
     };
 
     /// A game state whose only flag is `name`.
@@ -353,6 +354,18 @@ mod rust_special {
                     case.1,
                     &mut planets,
                     &OneFlag("CHMMR_UNLEASHED", system == "chmmr1"),
+                ),
+                "aqua" | "thrad" => thrad::generate_planets(
+                    &mut rng,
+                    self.table,
+                    case.0,
+                    case.1,
+                    &mut planets,
+                    if system == "aqua" {
+                        AQUA_HELIX_DEFINED
+                    } else {
+                        THRADD_DEFINED
+                    },
                 ),
                 other => {
                     let hook = match other {
@@ -408,9 +421,23 @@ mod rust_special {
                         node: &mut NODE_INFO| {
                 burv::generate_energy(rng, info, body, which, node, &taken)
             };
+            let helix = OneFlag("AQUA_HELIX", system == "aqua1");
+            let thraddash = |rng: &mut RandomContext,
+                             info: &SYSTEM_INFO,
+                             body: Body,
+                             which: u16,
+                             node: &mut NODE_INFO| {
+                let star_index = if system.starts_with("aqua") {
+                    AQUA_HELIX_DEFINED
+                } else {
+                    THRADD_DEFINED
+                };
+                thrad::generate_energy(rng, info, star_index, body, which, node, &helix)
+            };
             let hook: &dyn Fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16 =
                 match system {
                     "burv0" | "burv1" => &burv,
+                    "aqua0" | "aqua1" | "thrad" => &thraddash,
                     "yehat" => &yehat::generate_energy,
                     "ilw" => &ilw::generate_energy,
                     "pku" => &pku::generate_energy,

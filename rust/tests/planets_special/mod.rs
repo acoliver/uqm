@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
+use uqm_rust::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
 use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
@@ -29,6 +30,7 @@ unsafe extern "C" {
     static generateIlwrathFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
     static generateBurvixeseFunctions: GenerateFunctions;
+    static generateThraddashFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
@@ -44,6 +46,8 @@ unsafe extern "C" {
 struct Harness {
     state: Box<SOLARSYS_STATE>,
     star: Box<[u8; 8]>,
+    /// `CurStarDescPtr->Index` the next `set_star` installs.
+    star_index: u8,
 }
 
 impl Harness {
@@ -59,12 +63,14 @@ impl Harness {
         Self {
             state,
             star: Box::new([0; 8]),
+            star_index: 0,
         }
     }
 
     fn set_star(&mut self, size: u8, color: u8) {
         self.state.SunDesc[0].data_index = size;
         self.star[4] = (color << 5) | 0b101;
+        self.star[5] = self.star_index;
         unsafe { CurStarDescPtr = self.star.as_mut_ptr().cast() };
     }
 
@@ -156,6 +162,18 @@ impl Harness {
     }
 }
 
+/// `CurStarDescPtr->Index` of the Thraddash generator's two stars; 0 for the
+/// systems that do not look at it.
+fn star_index_of(system: &str) -> u8 {
+    if system.starts_with("aqua") {
+        AQUA_HELIX_DEFINED
+    } else if system == "thrad" {
+        THRADD_DEFINED
+    } else {
+        0
+    }
+}
+
 /// The C tables, looked up by system name.
 fn c_table(system: &str) -> &'static GenerateFunctions {
     unsafe {
@@ -163,6 +181,7 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
             "yehat" => &generateYehatFunctions,
             "ilw" => &generateIlwrathFunctions,
             "burv" | "burv0" | "burv1" => &generateBurvixeseFunctions,
+            "aqua" | "aqua0" | "aqua1" | "thrad" => &generateThraddashFunctions,
             "pku" => &generatePkunkFunctions,
             "sup" => &generateSupoxFunctions,
             "dru" => &generateDruugeFunctions,
@@ -184,6 +203,7 @@ impl SpecialOps for Harness {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
             set_game_state("CHMMR_UNLEASHED", unleashed.parse().expect("0 or 1"));
         }
+        self.star_index = star_index_of(system);
         self.c_planets(c_table(system), case)
     }
 
@@ -200,6 +220,11 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("burv") {
             set_game_state("BURVIXESE_BROADCASTERS", taken.parse().expect("0 or 1"));
         }
+        if let Some(taken) = system.strip_prefix("aqua") {
+            set_game_state("AQUA_HELIX", taken.parse().expect("0 or 1"));
+        }
+        self.star_index = star_index_of(system);
+        self.set_star(0, 0);
         self.c_energy(c_table(system), body, seed)
     }
 }

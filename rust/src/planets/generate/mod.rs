@@ -18,6 +18,7 @@ pub mod special;
 pub mod special_exports;
 pub mod sup;
 pub mod syreen;
+pub mod thrad;
 pub mod trap;
 pub mod vault;
 pub mod vtable;

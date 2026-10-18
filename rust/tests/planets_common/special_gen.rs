@@ -25,10 +25,11 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 /// The systems whose `generatePlanets` is overridden.
 ///
 /// `chmmr0` and `chmmr1` are the Chmmr system with `CHMMR_UNLEASHED` clear and
-/// set.
-pub const LAYOUT_SYSTEMS: [&str; 13] = [
+/// set; `aqua` and `thrad` are the Thraddash generator at the Aqua Helix and
+/// Thraddash home stars (`CurStarDescPtr->Index`).
+pub const LAYOUT_SYSTEMS: [&str; 15] = [
     "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1", "pku", "sup",
-    "dru", "burv",
+    "dru", "burv", "aqua", "thrad",
 ];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
@@ -50,6 +51,9 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
         ]
     };
     vec![
+        ("aqua0", home_bodies()),
+        ("aqua1", home_bodies()),
+        ("thrad", home_bodies()),
         ("burv0", burv_bodies()),
         ("burv1", burv_bodies()),
         ("pku", home_bodies()),
