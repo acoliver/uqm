@@ -309,6 +309,7 @@ pub fn release_sound_bank_data(sound_bank: SoundBank) -> AudioResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sound::test_support::ENGINE_TEST_LOCK;
 
     // --- P13 TDD ---
 
@@ -360,6 +361,7 @@ mod tests {
     #[test]
 
     fn test_stop_channel_delegates() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = stop_channel(0, 0);
         assert!(result.is_ok() || result.is_err());
     }
@@ -367,12 +369,14 @@ mod tests {
     #[test]
 
     fn test_channel_playing_initial_false() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         assert!(!channel_playing(0));
     }
 
     #[test]
 
     fn test_check_finished_channels_cleans() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         check_finished_channels(); // should not panic
     }
 
@@ -410,6 +414,7 @@ mod tests {
     #[test]
 
     fn test_get_set_positional_object() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         set_positional_object(0, 42);
         assert_eq!(get_positional_object(0), 42);
     }
