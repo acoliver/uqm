@@ -57,18 +57,30 @@ impl Story for LiveStory {
         set_game_state(name, value);
     }
     fn word(&self, name: &'static str) -> u32 {
-        let (start, _) = crate::state::game_state_keys::bit_range(name)
-            .unwrap_or_else(|| panic!("unknown 32-bit game state key {name}"));
-        (0..4).fold(0, |word, byte| {
-            word | (get_game_state_byte(start + 8 * byte) << (8 * byte))
-        })
+        read_word(word_start(name), get_game_state_byte)
     }
     fn set_word(&mut self, name: &'static str, value: u32) {
-        let (start, _) = crate::state::game_state_keys::bit_range(name)
-            .unwrap_or_else(|| panic!("unknown 32-bit game state key {name}"));
-        for byte in 0..4 {
-            set_game_state_byte(start + 8 * byte, (value >> (8 * byte)) as u8);
-        }
+        write_word(word_start(name), value, set_game_state_byte);
+    }
+}
+
+fn word_start(name: &str) -> u32 {
+    crate::state::game_state_keys::bit_range(name)
+        .unwrap_or_else(|| panic!("unknown 32-bit game state key {name}"))
+        .0
+}
+
+/// `getGameState32`: four bytes from `start`, the first the least significant.
+fn read_word(start: u32, read_byte: impl Fn(u32) -> u32) -> u32 {
+    (0..4).fold(0, |word, byte| {
+        word | (read_byte(start + 8 * byte) << (8 * byte))
+    })
+}
+
+/// `setGameState32`: four bytes from `start`, least significant first.
+fn write_word(start: u32, value: u32, mut write_byte: impl FnMut(u32, u8)) {
+    for byte in 0..4 {
+        write_byte(start + 8 * byte, (value >> (8 * byte)) as u8);
     }
 }
 

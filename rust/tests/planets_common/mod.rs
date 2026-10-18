@@ -7,6 +7,7 @@
 use std::fmt::Write as _;
 
 pub mod default_gen;
+pub mod special_gen;
 pub mod topography;
 
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};

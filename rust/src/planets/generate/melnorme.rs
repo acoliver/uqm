@@ -28,18 +28,39 @@ pub fn ref_var(star_index: u8) -> Option<&'static str> {
     REF_VARS.get(post).copied()
 }
 
-/// `GenerateMelnorme_initNpcs`. A star that is no Melnorme post has no
-/// reference to keep, as in C (which logs a warning and reads 0).
-pub fn init_npcs(star_index: u8, story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
-    match ref_var(star_index) {
-        Some(var) => special::ensure_fleet(story, host, var, MELNORME_SHIP),
+/// `GetMelnormeRef`: the stored group reference, or 0 with a warning when the
+/// star is no Melnorme post.
+fn get_ref(var: Option<&'static str>, story: &impl Story) -> u32 {
+    match var {
+        Some(var) => story.word(var),
         None => {
-            host.set_battle_group_ref(0);
-            host.clone_ship_into_built_queue(MELNORME_SHIP);
-            let group = host.add_new_group();
-            host.set_battle_group_ref(group);
-            host.reinit_built_queue();
+            crate::log_warning!("GetMelnormeRef(): reference unknown");
+            0
         }
+    }
+}
+
+/// `SetMelnormeRef`: store the group reference, or warn when the star is no
+/// Melnorme post.
+fn set_ref(var: Option<&'static str>, story: &mut impl Story, group: u32) {
+    match var {
+        Some(var) => story.set_word(var, group),
+        None => crate::log_warning!("SetMelnormeRef(): reference unknown"),
+    }
+}
+
+/// `GenerateMelnorme_initNpcs`. A star that is no Melnorme post still gets a
+/// new group each time, as in C: the reference cannot be read or stored, and
+/// both attempts only log a warning.
+pub fn init_npcs(star_index: u8, story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
+    let var = ref_var(star_index);
+    host.set_battle_group_ref(get_ref(var, story));
+    if host.battle_group_ref() == 0 {
+        host.clone_ship_into_built_queue(MELNORME_SHIP);
+        let group = host.add_new_group();
+        host.set_battle_group_ref(group);
+        host.reinit_built_queue();
+        set_ref(var, story, group);
     }
     special::default_init(host);
     true

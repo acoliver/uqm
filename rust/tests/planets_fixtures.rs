@@ -28,6 +28,7 @@ const ORBITS: &str = include_str!("fixtures/planets/orbits.txt");
 const TOPOGRAPHY: &str = include_str!("fixtures/planets/topography.txt");
 const DEFAULT_LAYOUT: &str = include_str!("fixtures/planets/default_layout.txt");
 const DEFAULT_NODES: &str = include_str!("fixtures/planets/default_nodes.txt");
+const SPECIAL_GENERATORS: &str = include_str!("fixtures/planets/special_generators.txt");
 
 /// Parses the golden planet-frame table captured from the C original.
 fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
@@ -67,6 +68,15 @@ fn planetary_analysis_and_nodes_match_the_c_fixture() {
     assert_eq!(table.len(), 59);
     let records = world_records(&table);
     assert_eq!(render_fixture(&records), WORLDS);
+}
+
+#[test]
+fn special_generators_match_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let text = planets_common::special_gen::render(&mut planets_common::special_gen::RustSpecial {
+        table: &table,
+    });
+    assert_eq!(text, SPECIAL_GENERATORS);
 }
 
 #[test]
