@@ -9,44 +9,8 @@ use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTE
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
+use crate::planets::generate::home_contact::{self, HomeContactSite};
 use crate::planets::generate::special::{self, Body, Orbit, PRIMORDIAL_WORLD};
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-
-/// `GLOBAL_FLAGS_AND_DATA` value that marks the Ilwrath conversation as a
-/// home contact: `1 << 7`.
-pub const HOME_CONTACT_FLAGS: u8 = 1 << 7;
-
-/// What entering orbit at the Ilwrath home does to the rest of the game, one
-/// method per host call of `GenerateIlwrath_generateOrbital`, in the order the
-/// C makes them.
-pub trait IlwrathSite {
-    /// `StartSphereTracking (ILWRATH_SHIP)`.
-    fn start_sphere_tracking(&mut self) -> bool;
-    /// `NotifyOthers (ILWRATH_SHIP, IPNL_ALL_CLEAR)`.
-    fn notify_others_all_clear(&mut self);
-    /// `PutGroupInfo (GROUPS_RANDOM, GROUP_SAVE_IP)`.
-    fn save_ip_groups(&mut self);
-    /// `ReinitQueue (&GLOBAL (ip_group_q))`.
-    fn reinit_ip_group_q(&mut self);
-    /// `CountLinks (&GLOBAL (npc_built_ship_q))`.
-    fn built_ship_count(&self) -> u16;
-    /// `CloneShipFragment (ILWRATH_SHIP, &GLOBAL (npc_built_ship_q),
-    /// INFINITE_FLEET)`.
-    fn clone_ilwrath_fleet_into_built_queue(&mut self);
-    /// `GLOBAL (CurrentActivity)`.
-    fn current_activity(&self) -> u16;
-    fn set_current_activity(&mut self, activity: u16);
-    /// `SET_GAME_STATE (GLOBAL_FLAGS_AND_DATA, value)`.
-    fn set_global_flags_and_data(&mut self, value: u8);
-    /// `InitCommunication (ILWRATH_CONVERSATION)`.
-    fn talk_to_ilwrath(&mut self);
-    /// `ReinitQueue (&GLOBAL (npc_built_ship_q))`.
-    fn reinit_built_ship_q(&mut self);
-    /// `GetGroupInfo (GROUPS_RANDOM, GROUP_LOAD_IP)`.
-    fn load_ip_groups(&mut self);
-    /// `LoadStdLanderFont`, the ruins mask and the ruins report strings.
-    fn load_ruins_scene(&mut self);
-}
 
 /// `GenerateIlwrath_generatePlanets`.
 pub fn generate_planets(
@@ -69,57 +33,15 @@ pub fn generate_planets(
 pub fn generate_orbital(
     orbit: &mut Orbit<'_>,
     body: Body,
-    site: &mut impl IlwrathSite,
+    site: &mut impl HomeContactSite,
     load_planet: impl FnOnce(),
 ) -> bool {
-    if enter_orbit(body, site) {
+    if body == Body::Planet(0) && home_contact::enter_orbit(site, false) {
         return true;
     }
     orbit.default_orbital(load_planet);
     set_home_climate(body, orbit.sys_info);
     true
-}
-
-/// The part of `generateOrbital` before the default orbital: true when the
-/// Ilwrath conversation took the visit, so the default orbital is skipped.
-fn enter_orbit(body: Body, site: &mut impl IlwrathSite) -> bool {
-    if body != Body::Planet(0) {
-        return false;
-    }
-    if site.start_sphere_tracking() {
-        meet_ilwrath(site);
-        return true;
-    }
-    site.load_ruins_scene();
-    false
-}
-
-/// The contact sequence: the interplanetary groups are put away, the Ilwrath
-/// flagship stands alone in the built-ship queue for the conversation, and
-/// unless the conversation aborted or loaded a game the world is put back.
-fn meet_ilwrath(site: &mut impl IlwrathSite) {
-    site.notify_others_all_clear();
-    site.save_ip_groups();
-    site.reinit_ip_group_q();
-    assert_eq!(
-        site.built_ship_count(),
-        0,
-        "the built-ship queue must be empty before the Ilwrath flagship is cloned into it"
-    );
-
-    site.clone_ilwrath_fleet_into_built_queue();
-
-    let activity = site.current_activity();
-    site.set_current_activity(activity | START_INTERPLANETARY);
-    site.set_global_flags_and_data(HOME_CONTACT_FLAGS);
-    site.talk_to_ilwrath();
-
-    let activity = site.current_activity();
-    if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
-        site.set_current_activity(activity & !START_INTERPLANETARY);
-        site.reinit_built_ship_q();
-        site.load_ip_groups();
-    }
 }
 
 /// The weather and tectonics the home world has after the default orbital.

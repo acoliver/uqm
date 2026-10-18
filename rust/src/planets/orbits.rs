@@ -14,8 +14,9 @@ const MAX_GENERATED_PLANETS: u16 = 9;
 const MIN_PLANET_RADIUS: u16 = 4 << 6;
 const MAX_PLANET_RADIUS: u16 = 124 << 6;
 const MIN_MOON_RADIUS: u16 = 35;
-const MOON_DELTA: u16 = 20;
-const MAX_MOONS: u16 = 4;
+/// `MOON_DELTA` and `MAX_MOONS` (`planets.h`).
+pub const MOON_DELTA: u16 = 20;
+pub const MAX_MOONS: u16 = 4;
 
 /// Closest rocky and gas giant orbits for dwarf, giant and supergiant suns.
 const SUN_MIN_DISTANCES: [(u16, u16); 3] = [

@@ -13,6 +13,8 @@ use crate::state::game_state_keys::{get_game_state, set_game_state};
 /// `planets.h`/`plandata.h` values the generators use.
 pub const RAINBOW_WORLD: u8 = 32;
 pub const DUST_WORLD: u8 = 23;
+pub const SELENIC_WORLD: u8 = 27;
+pub const REDUX_WORLD: u8 = 37;
 pub const SAPPHIRE_WORLD: u8 = 34;
 pub const PRIMORDIAL_WORLD: u8 = 38;
 pub const WATER_WORLD: u8 = 42;
@@ -167,6 +169,18 @@ pub struct Orbit<'a> {
 }
 
 impl Orbit<'_> {
+    /// `GenerateDefault_generateOrbital` up to `LoadPlanet`.
+    pub fn analyse(&mut self) {
+        default::analyse_orbital(
+            self.rng,
+            self.plan_data,
+            self.star,
+            self.site,
+            self.sys_info,
+            self.world,
+        );
+    }
+
     /// `GenerateDefault_generateOrbital`; `load_planet` is `LoadPlanet (NULL)`.
     pub fn default_orbital(&mut self, load_planet: impl FnOnce()) -> bool {
         default::generate_orbital(

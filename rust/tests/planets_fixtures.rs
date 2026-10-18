@@ -307,16 +307,17 @@ mod rust_special {
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, trap, vault, wreck, yehat,
+        burv, chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, trap, vault, wreck,
+        yehat,
     };
 
-    /// A game state whose only set flag is `CHMMR_UNLEASHED`.
-    struct Unleashed(bool);
+    /// A game state whose only flag is `name`.
+    struct OneFlag(&'static str, bool);
 
-    impl Story for Unleashed {
+    impl Story for OneFlag {
         fn flag(&self, name: &'static str) -> u32 {
-            assert_eq!(name, "CHMMR_UNLEASHED");
-            u32::from(self.0)
+            assert_eq!(name, self.0);
+            u32::from(self.1)
         }
         fn set_flag(&mut self, name: &'static str, _value: u32) {
             panic!("unexpected write of {name}");
@@ -351,11 +352,12 @@ mod rust_special {
                     case.0,
                     case.1,
                     &mut planets,
-                    &Unleashed(system == "chmmr1"),
+                    &OneFlag("CHMMR_UNLEASHED", system == "chmmr1"),
                 ),
                 other => {
                     let hook = match other {
                         "ilw" => ilw::generate_planets,
+                        "burv" => burv::generate_planets,
                         "pku" => pku::generate_planets,
                         "sup" => sup::generate_planets,
                         "dru" => dru::generate_planets,
@@ -383,6 +385,7 @@ mod rust_special {
             let hook = match system {
                 "syreen" => syreen::generate_moons,
                 "chmmr" => chmmr::generate_moons,
+                "burv" => burv::generate_moons,
                 other => panic!("no such system {other}"),
             };
             hook(
@@ -397,17 +400,26 @@ mod rust_special {
         }
 
         fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
-            type EnergyFn = fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16;
-            let hook: EnergyFn = match system {
-                "yehat" => yehat::generate_energy,
-                "ilw" => ilw::generate_energy,
-                "pku" => pku::generate_energy,
-                "sup" => sup::generate_energy,
-                "dru" => dru::generate_energy,
-                "vault" => vault::generate_energy,
-                "wreck" => wreck::generate_energy,
-                other => panic!("no such system {other}"),
+            let taken = OneFlag("BURVIXESE_BROADCASTERS", system == "burv1");
+            let burv = |rng: &mut RandomContext,
+                        info: &SYSTEM_INFO,
+                        body: Body,
+                        which: u16,
+                        node: &mut NODE_INFO| {
+                burv::generate_energy(rng, info, body, which, node, &taken)
             };
+            let hook: &dyn Fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16 =
+                match system {
+                    "burv0" | "burv1" => &burv,
+                    "yehat" => &yehat::generate_energy,
+                    "ilw" => &ilw::generate_energy,
+                    "pku" => &pku::generate_energy,
+                    "sup" => &sup::generate_energy,
+                    "dru" => &dru::generate_energy,
+                    "vault" => &vault::generate_energy,
+                    "wreck" => &wreck::generate_energy,
+                    other => panic!("no such system {other}"),
+                };
             let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
             info.PlanetInfo.ScanSeed = scan_seeds(seed);
             let mut out = String::new();

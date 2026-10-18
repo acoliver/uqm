@@ -184,6 +184,21 @@ pub fn generate_orbital(
     world: &PLANET_DESC,
     load_planet: impl FnOnce(),
 ) -> bool {
+    analyse_orbital(rng, plan_data, star, site, sys_info, world);
+    load_planet();
+    true
+}
+
+/// Everything `GenerateDefault_generateOrbital` does before `LoadPlanet`, for
+/// the generators that add their own scene between the two.
+pub fn analyse_orbital(
+    rng: &mut RandomContext,
+    plan_data: &[PlanetFrame],
+    star: StarDescription,
+    site: AnalysisSite,
+    sys_info: &mut SYSTEM_INFO,
+    world: &PLANET_DESC,
+) {
     calc::do_planetary_analysis(rng, plan_data, star, site, sys_info, world);
     let mut spare = blank_node();
 
@@ -196,8 +211,6 @@ pub fn generate_orbital(
     surface::generate_mineral_deposits(rng, sys_info, GENERATE_ALL, &mut spare);
 
     sys_info.PlanetInfo.ScanSeed[ENERGY_SCAN] = after_life;
-    load_planet();
-    true
 }
 
 fn blank_node() -> NODE_INFO {

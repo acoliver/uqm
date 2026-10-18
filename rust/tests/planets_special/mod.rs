@@ -28,6 +28,7 @@ unsafe extern "C" {
     static generateYehatFunctions: GenerateFunctions;
     static generateIlwrathFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;
+    static generateBurvixeseFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
@@ -161,6 +162,7 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
         match system {
             "yehat" => &generateYehatFunctions,
             "ilw" => &generateIlwrathFunctions,
+            "burv" | "burv0" | "burv1" => &generateBurvixeseFunctions,
             "pku" => &generatePkunkFunctions,
             "sup" => &generateSupoxFunctions,
             "dru" => &generateDruugeFunctions,
@@ -195,6 +197,9 @@ impl SpecialOps for Harness {
     }
 
     fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
+        if let Some(taken) = system.strip_prefix("burv") {
+            set_game_state("BURVIXESE_BROADCASTERS", taken.parse().expect("0 or 1"));
+        }
         self.c_energy(c_table(system), body, seed)
     }
 }

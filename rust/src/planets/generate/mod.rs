@@ -1,5 +1,6 @@
 //! System generators ported from `planets/generate/*.c`.
 
+pub mod burv;
 pub mod chmmr;
 pub mod colony;
 pub mod default;
