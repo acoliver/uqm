@@ -303,7 +303,8 @@ mod rust_special {
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
     use uqm_rust::battle::gendef::{
-        AQUA_HELIX_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
+        AQUA_HELIX_DEFINED, BOMB_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
+        UTWIG_DEFINED,
     };
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
@@ -311,7 +312,7 @@ mod rust_special {
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
         andro, burv, chmmr, colony, dru, ilw, orz, pet, pku, rainbow, shof, slylandro, sup, syreen,
-        thrad, trap, vault, wreck, yehat, zoq,
+        thrad, trap, utw, vault, wreck, yehat, zoq,
     };
 
     /// A game state whose only flag is `name`.
@@ -367,6 +368,18 @@ mod rust_special {
                         AQUA_HELIX_DEFINED
                     } else {
                         THRADD_DEFINED
+                    },
+                ),
+                "utw" | "bomb" => utw::generate_planets(
+                    &mut rng,
+                    self.table,
+                    case.0,
+                    case.1,
+                    &mut planets,
+                    if system == "utw" {
+                        UTWIG_DEFINED
+                    } else {
+                        BOMB_DEFINED
                     },
                 ),
                 "shof" => shof::generate_planets(
@@ -457,6 +470,19 @@ mod rust_special {
                 };
                 thrad::generate_energy(rng, info, star_index, body, which, node, &helix)
             };
+            let bomb = OneFlag("UTWIG_BOMB", system == "bomb1");
+            let utwig = |rng: &mut RandomContext,
+                         info: &SYSTEM_INFO,
+                         body: Body,
+                         which: u16,
+                         node: &mut NODE_INFO| {
+                let star_index = if system == "utw" {
+                    UTWIG_DEFINED
+                } else {
+                    BOMB_DEFINED
+                };
+                utw::generate_energy(rng, info, star_index, body, which, node, &bomb)
+            };
             let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
             let orz = |rng: &mut RandomContext,
                        info: &SYSTEM_INFO,
@@ -480,6 +506,7 @@ mod rust_special {
                     },
                     "burv0" | "burv1" => &burv,
                     "aqua0" | "aqua1" | "thrad" => &thraddash,
+                    "utw" | "bomb0" | "bomb1" => &utwig,
                     "yehat" => &yehat::generate_energy,
                     "ilw" => &ilw::generate_energy,
                     "pku" => &pku::generate_energy,

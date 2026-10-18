@@ -28,6 +28,7 @@ pub mod sup;
 pub mod syreen;
 pub mod thrad;
 pub mod trap;
+pub mod utw;
 pub mod vault;
 pub mod vtable;
 pub mod wreck;
