@@ -104,7 +104,11 @@ fn meet_yehat(site: &mut impl YehatSite) {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
-    debug_assert_eq!(site.built_ship_count(), 0);
+    assert_eq!(
+        site.built_ship_count(),
+        0,
+        "the built-ship queue must be empty before the Yehat flagship is cloned into it"
+    );
 
     site.clone_yehat_fleet_into_built_queue();
 

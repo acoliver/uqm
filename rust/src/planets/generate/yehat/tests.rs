@@ -156,7 +156,7 @@ fn contact_needs_the_built_ship_queue_to_be_empty() {
     let visit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         enter_orbit(Body::Planet(0), &mut site)
     }));
-    assert_eq!(visit.is_err(), cfg!(debug_assertions));
+    assert!(visit.is_err());
 }
 
 #[test]
