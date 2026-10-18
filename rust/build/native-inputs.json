@@ -1812,15 +1812,6 @@
       "provider": "native_object:native/genmyc.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/genpet.c",
-      "source_sha256": "8e857fe8f4a503eb05af4b2053f20e23ee71b51aab88de61fea29212b68f7279",
-      "object_output": "genpet.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENPET",
-      "production_profile": "production",
-      "provider": "native_object:native/genpet.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/gensam.c",
       "source_sha256": "e05cca503c2f740f27ab9babe74c9018dd651c388f18551fcd1a4d5ab8214c84",
       "object_output": "gensam.c.o",

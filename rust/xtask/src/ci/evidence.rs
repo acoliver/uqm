@@ -11443,9 +11443,9 @@ mod tests {
             "head_sha": source_sha,
             "categories": categories,
             "transitional_native_inputs": {
-                "base_count": 294,
-                "head_count": 294,
-                "maximum_count": 294,
+                "base_count": 293,
+                "head_count": 293,
+                "maximum_count": 293,
                 "passed": true
             },
             "passed": !delta_failed

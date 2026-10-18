@@ -1,6 +1,6 @@
 //! The C `generate<System>Functions` tables of the race home systems
 //! (`genilw.c`, `genpku.c`, `gensup.c`, `gendru.c`, `genburv.c`,
-//! `genthrad.c`, `genorz.c`, `genzoq.c`).
+//! `genthrad.c`, `genorz.c`, `genzoq.c`) and the talking pet (`genpet.c`).
 //!
 //! Like the hooks of [`super::special_exports`], each one turns the C `world`
 //! pointer into the [`Body`] `matchWorld` would test and hands the C-owned
@@ -12,7 +12,9 @@ use std::ffi::CStr;
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::comm::dispatch::{conv, ship};
 use crate::planets::c_api::{
-    built_ship_count, clone_infinite_ship_into_built_queue, current_star_index, init_communication,
+    begin_urquan_encounter, built_ship_count, built_ship_queue_has_ships, clear_sis_message,
+    clone_infinite_ship_into_built_queue, current_star_index, current_star_point, delta_fuel,
+    draw_hyper_coords, fade_to_black_for_two_seconds, fuel_on_board, init_communication,
     load_lander_scene, load_planet_default_surface, notify_others_all_clear, repair_sis_border,
     start_sphere_tracking, LiveGame,
 };
@@ -20,10 +22,11 @@ use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
+use crate::planets::generate::pet::{TalkingPetSite, UrquanEncounterSite};
 use crate::planets::generate::special::{FleetGroups, LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
-use crate::planets::generate::{burv, dru, ilw, orz, pku, sup, thrad, zoq};
+use crate::planets::generate::{burv, dru, ilw, orz, pet, pku, sup, thrad, zoq};
 
 /// The live race home: the C engine behind each host call of
 /// [`HomeContactSite`] and the extras the Orz, Thraddash and Zoq-Fot-Pik
@@ -143,6 +146,61 @@ impl zoq::ZoqFotPikSite for RaceHome {
     }
 }
 
+impl TalkingPetSite for RaceHome {
+    fn clone_zombie_into_built_queue(&mut self) {
+        self.game.clone_ship_into_built_queue(self.ship);
+    }
+    fn built_ship_survives(&self) -> bool {
+        // SAFETY: game thread; `GlobData` is initialised.
+        unsafe { built_ship_queue_has_ships() }
+    }
+    fn talk_pet(&mut self) {
+        // SAFETY: as above.
+        unsafe { init_communication(conv::TALKING_PET) };
+    }
+}
+
+impl UrquanEncounterSite for RaceHome {
+    fn begin_urquan_encounter(&mut self, loc: (i16, i16)) -> bool {
+        // SAFETY: game thread, with the fleet and encounter queues initialised.
+        unsafe { begin_urquan_encounter(loc) }
+    }
+    fn fade_to_black(&mut self) {
+        // SAFETY: game thread.
+        unsafe { fade_to_black_for_two_seconds() };
+    }
+    fn move_game_clock_days(&mut self, days: u16) {
+        // SAFETY: plain call into the Rust game clock, as `MoveGameClockDays`.
+        unsafe { crate::time::clock_bridge::rust_clock_advance_days(i32::from(days)) };
+    }
+    fn star_point(&self) -> (i16, i16) {
+        // SAFETY: `CurStarDescPtr` is the system being visited.
+        unsafe { current_star_point() }
+    }
+    fn fuel_on_board(&self) -> u32 {
+        // SAFETY: game thread; `GlobData` is initialised.
+        unsafe { fuel_on_board() }
+    }
+    fn delta_fuel(&mut self, delta: i16) {
+        // SAFETY: game thread.
+        unsafe { delta_fuel(delta) };
+    }
+    fn random(&mut self) -> u32 {
+        crate::math::TFB_Random()
+    }
+    fn clear_sis_message(&mut self) {
+        // SAFETY: game thread.
+        unsafe { clear_sis_message() };
+    }
+    fn draw_hyper_coords(&mut self, loc: (i16, i16)) {
+        // SAFETY: game thread.
+        unsafe { draw_hyper_coords(loc) };
+    }
+    fn finish_encounter(&mut self) {
+        // `UnlockEncounter` on a table queue is `(void) h`: nothing to release.
+    }
+}
+
 /// `SetLanderTakeoff ()`.
 struct Takeoff;
 
@@ -172,6 +230,10 @@ impl burv::BurvScenes for BurvScenes {
 
 fn ilwrath(system: *mut SOLARSYS_STATE) -> RaceHome {
     RaceHome::new(system, ship::ILWRATH_SHIP, conv::ILWRATH, c"text.ruins")
+}
+
+fn umgah(system: *mut SOLARSYS_STATE) -> RaceHome {
+    RaceHome::new(system, ship::UMGAH_SHIP, conv::UMGAH, c"text.ruins")
 }
 
 fn pkunk(system: *mut SOLARSYS_STATE) -> RaceHome {
@@ -228,6 +290,7 @@ energy_hook!(pku_energy, pku::generate_energy);
 energy_hook!(sup_energy, sup::generate_energy);
 energy_hook!(dru_energy, dru::generate_energy);
 energy_hook!(zoq_energy, zoq::generate_energy);
+energy_hook!(pet_energy, pet::generate_energy);
 
 unsafe extern "C" fn ilw_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, ilw::generate_planets)
@@ -247,6 +310,26 @@ unsafe extern "C" fn ilw_pickup(
     _which_node: u16,
 ) -> bool {
     ilw::pickup_energy(body_of(system, world), &mut discovery_report(system))
+}
+
+unsafe extern "C" fn pet_planets(system: *mut SOLARSYS_STATE) -> bool {
+    lay_out_planets(system, pet::generate_planets)
+}
+
+unsafe extern "C" fn pet_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
+    orbit_world(system, world, |orbit, body| {
+        pet::generate_orbital(orbit, body, &mut LiveStory, &mut umgah(system), || {
+            load_planet_default_surface()
+        })
+    })
+}
+
+unsafe extern "C" fn pet_pickup(
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+    _which_node: u16,
+) -> bool {
+    pet::pickup_energy(body_of(system, world), &mut discovery_report(system))
 }
 
 unsafe extern "C" fn pku_planets(system: *mut SOLARSYS_STATE) -> bool {
@@ -579,5 +662,14 @@ pub static GENERATE_ZOQ_FOT_PIK_FUNCTIONS: GenerateFunctions = GenerateFunctions
     generate_orbital: Some(zoq_orbital),
     generate_energy: Some(zoq_energy),
     pickup_energy: Some(zoq_pickup),
+    ..DEFAULT_HOOKS
+};
+
+#[export_name = "generateTalkingPetFunctions"]
+pub static GENERATE_TALKING_PET_FUNCTIONS: GenerateFunctions = GenerateFunctions {
+    generate_planets: Some(pet_planets),
+    generate_orbital: Some(pet_orbital),
+    generate_energy: Some(pet_energy),
+    pickup_energy: Some(pet_pickup),
     ..DEFAULT_HOOKS
 };

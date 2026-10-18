@@ -70,7 +70,6 @@ extern "C" {
     static generateSaMatraFunctions: GenerateFunctions;
     static generateSolFunctions: GenerateFunctions;
     static generateSpathiFunctions: GenerateFunctions;
-    static generateTalkingPetFunctions: GenerateFunctions;
     static generateUtwigFunctions: GenerateFunctions;
     static generateVuxFunctions: GenerateFunctions;
 }
@@ -99,7 +98,10 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
                 &special_exports::GENERATE_MELNORME_FUNCTIONS as *const _
                     as *const GenerateFunctions
             }
-            TALKING_PET_DEFINED => &generateTalkingPetFunctions as *const _,
+            TALKING_PET_DEFINED => {
+                &home_exports::GENERATE_TALKING_PET_FUNCTIONS as *const _
+                    as *const GenerateFunctions
+            }
             CHMMR_DEFINED => {
                 &story_exports::GENERATE_CHMMR_FUNCTIONS as *const _ as *const GenerateFunctions
             }

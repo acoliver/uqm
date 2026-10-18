@@ -4,10 +4,19 @@
 use std::ffi::c_void;
 
 use crate::c_bindings::global_state::IP_GROUP;
-use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
+use crate::collections::queue::{
+    AllocLink, CountLinks, HLink, InsertQueue, Queue, ReinitQueue, RemoveQueue,
+};
+use crate::comm::dispatch::{
+    get_star_ship_from_index, ship, BriefShipInfo, CEncounter, CFleetInfo, CPoint, ONE_SECOND,
+};
 use crate::comm::locdata::CGlobData;
+use crate::mainloop::restart_menu::c_extern::{
+    uqm_sleep_thread_until, FadeScreen, FADE_ALL_TO_BLACK,
+};
 use crate::planets::generate::default::{Npcs, PlanetNames};
 use crate::planets::generate::special::FleetGroups;
+use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::savegame::runtime::star::CStarDesc;
 
 extern "C" {
@@ -36,6 +45,9 @@ extern "C" {
     fn StartSphereTracking(race: u16) -> u16;
     fn NotifyOthers(which_race: u16, target_loc: u8);
     fn RepairSISBorder();
+    fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
+    fn DrawSISMessage(message: *const std::ffi::c_char);
+    fn DrawHyperCoords(origin: CPoint);
     #[link_name = "star_array"]
     static STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
@@ -240,6 +252,131 @@ pub unsafe fn clone_named_ship_into_built_queue(ship: u16, name_index: u8) {
 /// Game thread.
 pub unsafe fn put_group_info(offset: u32) -> u32 {
     PutGroupInfo(offset, 1)
+}
+
+/// `GetHeadLink (&GLOBAL (npc_built_ship_q)) != 0`.
+///
+/// # Safety
+/// Game thread; `GlobData` is initialised.
+pub unsafe fn built_ship_queue_has_ships() -> bool {
+    !(*std::ptr::addr_of!((*glob()).game_state.npc_built_ship_q))
+        .head
+        .is_null()
+}
+
+/// `ONE_SHOT_ENCOUNTER` (`encount.h`).
+const ONE_SHOT_ENCOUNTER: u8 = 1 << 7;
+
+/// The head of the encounter queue, or the first encounter free to use:
+/// `AllocEncounter ()` and failing that `GetHeadEncounter ()`. A head
+/// encounter is taken off the queue first.
+///
+/// # Safety
+/// Game thread; `GlobData` is initialised.
+unsafe fn take_encounter() -> HLink {
+    let queue = std::ptr::addr_of_mut!((*glob()).game_state.encounter_q).cast::<Queue>();
+    let mut handle = AllocLink(queue);
+    if handle.is_null() {
+        handle = (*queue).head;
+    }
+    if !handle.is_null() && handle == (*queue).head {
+        RemoveQueue(queue, handle);
+    }
+    handle
+}
+
+/// The one-shot Ur-Quan encounter `ZapToUrquanEncounter` builds at the
+/// universe point `loc` from the `URQUAN_SHIP` fleet template, with the SIS
+/// logical position set to match. False when there is no encounter to use.
+///
+/// # Safety
+/// Game thread; `GlobData` and the fleet queue are initialised.
+pub unsafe fn begin_urquan_encounter(loc: (i16, i16)) -> bool {
+    let handle = take_encounter();
+    if handle.is_null() {
+        return false;
+    }
+    let queue = std::ptr::addr_of_mut!((*glob()).game_state.encounter_q).cast::<Queue>();
+    // `LockEncounter` on a table queue is a cast.
+    let encounter = handle.cast::<CEncounter>();
+    std::ptr::write_bytes(encounter, 0, 1);
+    InsertQueue(queue, handle, (*queue).head);
+
+    let fleets = std::ptr::addr_of!((*glob()).game_state.avail_race_q).cast::<Queue>();
+    let template = get_star_ship_from_index(fleets, ship::URQUAN_SHIP).cast::<CFleetInfo>();
+    assert!(
+        !template.is_null(),
+        "the available races include the Ur-Quan fleet"
+    );
+    let template = &*template;
+
+    (*encounter).origin = template.loc;
+    (*encounter).radius = template.actual_strength;
+    (*encounter).race_id = ship::URQUAN_SHIP;
+    (*encounter).num_ships = 1;
+    (*encounter).flags = ONE_SHOT_ENCOUNTER;
+    (*encounter).ship_list[0] = BriefShipInfo {
+        race_id: ship::URQUAN_SHIP,
+        crew_level: template.crew_level,
+        max_crew: template.max_crew,
+        max_energy: template.max_energy,
+    };
+    (*encounter).loc_pt = CPoint { x: loc.0, y: loc.1 };
+    (*encounter).log_x = universe_to_logx(loc.0);
+    (*encounter).log_y = universe_to_logy(loc.1);
+    (*glob()).sis_state.log_x = (*encounter).log_x;
+    (*glob()).sis_state.log_y = (*encounter).log_y;
+    true
+}
+
+/// `SleepThreadUntil (FadeScreen (FadeAllToBlack, ONE_SECOND * 2))`.
+///
+/// # Safety
+/// Game thread.
+pub unsafe fn fade_to_black_for_two_seconds() {
+    let interval = i16::try_from(ONE_SECOND * 2).expect("two seconds fit a SIZE");
+    uqm_sleep_thread_until(FadeScreen(FADE_ALL_TO_BLACK, interval));
+}
+
+/// `CurStarDescPtr->star_pt`.
+///
+/// # Safety
+/// `CurStarDescPtr` must point at a valid star description.
+pub unsafe fn current_star_point() -> (i16, i16) {
+    let point = (*std::ptr::addr_of!(CUR_STAR_DESC_PTR).read()).star_pt;
+    (point.x, point.y)
+}
+
+/// `GLOBAL_SIS (FuelOnBoard)`.
+///
+/// # Safety
+/// Game thread; `GlobData` is initialised.
+pub unsafe fn fuel_on_board() -> u32 {
+    (*glob()).sis_state.fuel_on_board
+}
+
+/// `DeltaSISGauges (0, delta, 0)`.
+///
+/// # Safety
+/// Game thread.
+pub unsafe fn delta_fuel(delta: i16) {
+    DeltaSISGauges(0, delta, 0);
+}
+
+/// `DrawSISMessage (NULL)`.
+///
+/// # Safety
+/// Game thread.
+pub unsafe fn clear_sis_message() {
+    DrawSISMessage(std::ptr::null());
+}
+
+/// `DrawHyperCoords (loc)`.
+///
+/// # Safety
+/// Game thread.
+pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
+    DrawHyperCoords(CPoint { x: loc.0, y: loc.1 });
 }
 
 /// The live game, through `GlobData` and the C group functions.

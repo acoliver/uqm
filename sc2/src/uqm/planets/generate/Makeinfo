@@ -1,2 +1,2 @@
-uqm_CFILES="genmyc.c genpet.c gensam.c gensol.c genspa.c genutw.c genvux.c"
+uqm_CFILES="genmyc.c gensam.c gensol.c genspa.c genutw.c genvux.c"
 uqm_HFILES="genall.h gendefault.h"

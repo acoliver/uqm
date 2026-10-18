@@ -570,7 +570,7 @@ unsafe fn get_succ_link(lp: *const ShipBaseCommon) -> HLink {
 /// C: `GetStarShipFromIndex(pShipQ, Index)` — walks the queue by index.
 ///
 /// Returns the HLINK at position `index` (0-based), or null if out of range.
-unsafe fn get_star_ship_from_index(p_ship_q: *const Queue, index: u8) -> HLink {
+pub(crate) unsafe fn get_star_ship_from_index(p_ship_q: *const Queue, index: u8) -> HLink {
     let mut h_star_ship = get_head_link(p_ship_q);
     let mut remaining = index;
 
