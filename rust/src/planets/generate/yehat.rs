@@ -12,14 +12,42 @@ use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, Body, Orbit, WATER_WORLD};
 
-/// What entering orbit at the Yehat capital does to the rest of the game.
+/// `START_INTERPLANETARY`, `CHECK_ABORT` and `CHECK_LOAD` of
+/// `GLOBAL (CurrentActivity)`.
+pub use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+
+/// `GLOBAL_FLAGS_AND_DATA` value that marks the Yehat conversation as a
+/// capital contact: `1 << 7`.
+pub const CAPITAL_CONTACT_FLAGS: u8 = 1 << 7;
+
+/// What entering orbit at the Yehat capital does to the rest of the game,
+/// one method per host call of `GenerateYehat_generateOrbital`, in the order
+/// the C makes them.
 pub trait YehatSite {
     /// `StartSphereTracking (YEHAT_SHIP)`.
     fn start_sphere_tracking(&mut self) -> bool;
-    /// The whole contact sequence of `GenerateYehat_generateOrbital`: notify
-    /// the other ships, save the groups, set the Yehat flagship up and run
+    /// `NotifyOthers (YEHAT_SHIP, IPNL_ALL_CLEAR)`.
+    fn notify_others_all_clear(&mut self);
+    /// `PutGroupInfo (GROUPS_RANDOM, GROUP_SAVE_IP)`.
+    fn save_ip_groups(&mut self);
+    /// `ReinitQueue (&GLOBAL (ip_group_q))`.
+    fn reinit_ip_group_q(&mut self);
+    /// `CountLinks (&GLOBAL (npc_built_ship_q))`.
+    fn built_ship_count(&self) -> u16;
+    /// `CloneShipFragment (YEHAT_SHIP, &GLOBAL (npc_built_ship_q),
+    /// INFINITE_FLEET)`.
+    fn clone_yehat_fleet_into_built_queue(&mut self);
+    /// `GLOBAL (CurrentActivity)`.
+    fn current_activity(&self) -> u16;
+    fn set_current_activity(&mut self, activity: u16);
+    /// `SET_GAME_STATE (GLOBAL_FLAGS_AND_DATA, value)`.
+    fn set_global_flags_and_data(&mut self, value: u8);
     /// `InitCommunication (YEHAT_CONVERSATION)`.
-    fn meet_yehat(&mut self);
+    fn talk_to_yehat(&mut self);
+    /// `ReinitQueue (&GLOBAL (npc_built_ship_q))`.
+    fn reinit_built_ship_q(&mut self);
+    /// `GetGroupInfo (GROUPS_RANDOM, GROUP_LOAD_IP)`.
+    fn load_ip_groups(&mut self);
     /// `LoadStdLanderFont`, the ruins mask and the ruins report strings.
     fn load_ruins_scene(&mut self);
 }
@@ -39,21 +67,58 @@ pub fn generate_planets(
     })
 }
 
-/// `GenerateYehat_generateOrbital`.
+/// `GenerateYehat_generateOrbital`: while the Yehat sphere of influence can
+/// still be tracked, entering orbit at the capital is the Yehat conversation
+/// and nothing else; otherwise the ruins scene is loaded before the default
+/// orbital.
 pub fn generate_orbital(
     orbit: &mut Orbit<'_>,
     body: Body,
     site: &mut impl YehatSite,
     load_planet: impl FnOnce(),
 ) -> bool {
-    if body == Body::Planet(0) {
-        if site.start_sphere_tracking() {
-            site.meet_yehat();
-            return true;
-        }
-        site.load_ruins_scene();
+    if enter_orbit(body, site) {
+        return true;
     }
     orbit.default_orbital(load_planet)
+}
+
+/// The part of `generateOrbital` before the default orbital: true when the
+/// Yehat conversation took the visit, so the default orbital is skipped.
+fn enter_orbit(body: Body, site: &mut impl YehatSite) -> bool {
+    if body != Body::Planet(0) {
+        return false;
+    }
+    if site.start_sphere_tracking() {
+        meet_yehat(site);
+        return true;
+    }
+    site.load_ruins_scene();
+    false
+}
+
+/// The contact sequence: the interplanetary groups are put away, the Yehat
+/// flagship stands alone in the built-ship queue for the conversation, and
+/// unless the conversation aborted or loaded a game the world is put back.
+fn meet_yehat(site: &mut impl YehatSite) {
+    site.notify_others_all_clear();
+    site.save_ip_groups();
+    site.reinit_ip_group_q();
+    debug_assert_eq!(site.built_ship_count(), 0);
+
+    site.clone_yehat_fleet_into_built_queue();
+
+    let activity = site.current_activity();
+    site.set_current_activity(activity | START_INTERPLANETARY);
+    site.set_global_flags_and_data(CAPITAL_CONTACT_FLAGS);
+    site.talk_to_yehat();
+
+    let activity = site.current_activity();
+    if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        site.set_current_activity(activity & !START_INTERPLANETARY);
+        site.reinit_built_ship_q();
+        site.load_ip_groups();
+    }
 }
 
 /// `GenerateYehat_generateEnergy`.
@@ -79,3 +144,6 @@ pub fn pickup_energy(body: Body, report: &mut impl DiscoveryReportPort) -> bool 
     }
     false
 }
+
+#[cfg(test)]
+mod tests;

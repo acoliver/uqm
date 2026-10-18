@@ -83,7 +83,6 @@ extern "C" {
     static generateThraddashFunctions: GenerateFunctions;
     static generateUtwigFunctions: GenerateFunctions;
     static generateVuxFunctions: GenerateFunctions;
-    static generateYehatFunctions: GenerateFunctions;
     static generateZoqFotPikFunctions: GenerateFunctions;
 }
 
@@ -142,7 +141,9 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
                 &special_exports::GENERATE_ZOQ_FOT_PIK_SCOUT_FUNCTIONS as *const _
                     as *const GenerateFunctions
             }
-            YEHAT_DEFINED => &generateYehatFunctions as *const _,
+            YEHAT_DEFINED => {
+                &special_exports::GENERATE_YEHAT_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             PKUNK_DEFINED => &generatePkunkFunctions as *const _,
             SUPOX_DEFINED => &generateSupoxFunctions as *const _,
             RAINBOW_DEFINED => {

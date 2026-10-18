@@ -28,7 +28,7 @@ fn authorities() -> (
 fn checked_in_native_authorities_are_exactly_bound() {
     let (inputs, dependencies, providers) = authorities();
     validate_native_authority(&root(), &inputs, &dependencies, &providers).unwrap();
-    assert_eq!(inputs.inputs.len(), 306);
+    assert_eq!(inputs.inputs.len(), 305);
     assert!(dependencies
         .dependencies
         .iter()

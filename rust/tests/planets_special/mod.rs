@@ -1,6 +1,6 @@
 //! Linked check of the `generateXFunctions` tables of the small per-system
 //! generators: the deterministic hooks (planet layout, moons, energy nodes)
-//! are run through the tables, Rust-exported except for Yehat's, over the same
+//! are run through the tables, Rust-exported, over the same
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 

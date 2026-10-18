@@ -1956,15 +1956,6 @@
       "provider": "native_object:native/genvux.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/genyeh.c",
-      "source_sha256": "a35fbaa1bb93dcfa97a2b3a38ac671468e772d1ce7991bf93d34313e2d63f224",
-      "object_output": "genyeh.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENYEH",
-      "production_profile": "production",
-      "provider": "native_object:native/genyeh.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/generate/genzoq.c",
       "source_sha256": "21a46b23549419aa8d1969bf8972417f14ddf6af79aa49b053f4bad799bf92d8",
       "object_output": "genzoq.c.o",

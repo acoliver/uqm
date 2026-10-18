@@ -12,18 +12,21 @@ use std::ffi::CStr;
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::math::RandomContext;
 use crate::planets::c_api::{
-    current_star_index, init_communication, load_lander_scene, load_planet_default_surface,
-    star_indexes_before_current, LiveGame, SLYLANDRO_HOME_CONVERSATION, SYREEN_CONVERSATION,
+    built_ship_count, clone_infinite_ship_into_built_queue, current_star_index, init_communication,
+    load_lander_scene, load_planet_default_surface, notify_others_all_clear,
+    star_indexes_before_current, start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION,
+    SYREEN_CONVERSATION, YEHAT_CONVERSATION, YEHAT_SHIP,
 };
 use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
+use crate::planets::generate::default::Npcs;
 use crate::planets::generate::exports::{discovery_report, planet_index};
-use crate::planets::generate::special::{Body, LiveStory, Orbit};
+use crate::planets::generate::special::{Body, LiveStory, Orbit, Story};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use crate::planets::generate::{
-    colony, melnorme, rainbow, slylandro, syreen, trap, vault, wreck, zfpscout,
+    colony, melnorme, rainbow, slylandro, syreen, trap, vault, wreck, yehat, zfpscout,
 };
 
 /// What `matchWorld (system, world, planetI, moonI)` tests: the planet, or the
@@ -139,6 +142,63 @@ impl slylandro::HomeSite for Conversations {
     }
 }
 
+/// The live Yehat capital: the C engine behind each host call of
+/// [`yehat::YehatSite`].
+struct YehatCapital {
+    system: *mut SOLARSYS_STATE,
+    game: LiveGame,
+}
+
+impl yehat::YehatSite for YehatCapital {
+    fn start_sphere_tracking(&mut self) -> bool {
+        // SAFETY: game thread, inside a planet orbit.
+        unsafe { start_sphere_tracking(YEHAT_SHIP) }
+    }
+    fn notify_others_all_clear(&mut self) {
+        // SAFETY: as above.
+        unsafe { notify_others_all_clear(YEHAT_SHIP) };
+    }
+    fn save_ip_groups(&mut self) {
+        self.game.save_ip_groups();
+    }
+    fn reinit_ip_group_q(&mut self) {
+        self.game.reinit_ip_group_q();
+    }
+    fn built_ship_count(&self) -> u16 {
+        // SAFETY: as above.
+        unsafe { built_ship_count() }
+    }
+    fn clone_yehat_fleet_into_built_queue(&mut self) {
+        // SAFETY: as above.
+        unsafe { clone_infinite_ship_into_built_queue(YEHAT_SHIP) };
+    }
+    fn current_activity(&self) -> u16 {
+        crate::mainloop::ffi::get_current_activity().0
+    }
+    fn set_current_activity(&mut self, activity: u16) {
+        crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(activity));
+    }
+    fn set_global_flags_and_data(&mut self, value: u8) {
+        LiveStory.set_flag("GLOBAL_FLAGS_AND_DATA", u32::from(value));
+    }
+    fn talk_to_yehat(&mut self) {
+        // SAFETY: as above.
+        unsafe { init_communication(YEHAT_CONVERSATION) };
+    }
+    fn reinit_built_ship_q(&mut self) {
+        self.game.reinit_npc_built_ship_q();
+    }
+    fn load_ip_groups(&mut self) {
+        self.game.load_ip_groups();
+    }
+    fn load_ruins_scene(&mut self) {
+        // SAFETY: `system` is the live solar system state on the game thread.
+        unsafe {
+            load_lander_scene(self.system, c"graphics.ruins", c"text.ruins", 0);
+        }
+    }
+}
+
 fn vault_scene(system: *mut SOLARSYS_STATE) -> LanderScene {
     LanderScene {
         system,
@@ -233,6 +293,44 @@ unsafe extern "C" fn wreck_pickup(
         &mut wreck_scene(system),
         &mut discovery_report(system),
     )
+}
+
+unsafe extern "C" fn yehat_planets(system: *mut SOLARSYS_STATE) -> bool {
+    lay_out_planets(system, yehat::generate_planets)
+}
+
+unsafe extern "C" fn yehat_orbital(system: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool {
+    orbit_world(system, world, |orbit, body| {
+        let mut capital = YehatCapital {
+            system,
+            game: LiveGame,
+        };
+        yehat::generate_orbital(orbit, body, &mut capital, || load_planet_default_surface())
+    })
+}
+
+unsafe extern "C" fn yehat_energy(
+    system: *const SOLARSYS_STATE,
+    world: *const PLANET_DESC,
+    which_node: u16,
+    info: *mut NODE_INFO,
+) -> u16 {
+    let mut spare = blank_node();
+    yehat::generate_energy(
+        sys_gen_rng(),
+        &(*system).SysInfo,
+        body_of(system, world),
+        which_node,
+        node_or(info, &mut spare),
+    )
+}
+
+unsafe extern "C" fn yehat_pickup(
+    system: *mut SOLARSYS_STATE,
+    world: *mut PLANET_DESC,
+    _which_node: u16,
+) -> bool {
+    yehat::pickup_energy(body_of(system, world), &mut discovery_report(system))
 }
 
 unsafe extern "C" fn colony_init_npcs(_system: *mut SOLARSYS_STATE) -> bool {
@@ -394,5 +492,14 @@ pub static GENERATE_TRAP_FUNCTIONS: GenerateFunctions = GenerateFunctions {
 pub static GENERATE_SLYLANDRO_FUNCTIONS: GenerateFunctions = GenerateFunctions {
     generate_planets: Some(slylandro_planets),
     generate_orbital: Some(slylandro_orbital),
+    ..DEFAULT_HOOKS
+};
+
+#[export_name = "generateYehatFunctions"]
+pub static GENERATE_YEHAT_FUNCTIONS: GenerateFunctions = GenerateFunctions {
+    generate_planets: Some(yehat_planets),
+    generate_orbital: Some(yehat_orbital),
+    generate_energy: Some(yehat_energy),
+    pickup_energy: Some(yehat_pickup),
     ..DEFAULT_HOOKS
 };

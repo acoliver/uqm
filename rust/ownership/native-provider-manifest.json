@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "44641feeb0a422c7903694e7d6e3d31832599f1391a5120fab00f87410c89e8f",
+    "projection_sha256": "7a88ab0b5a658bf7f25537394ac5bbbf73582fd3d90681879f3985f8bf1b4193",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2802,18 +2802,6 @@
       "sha256": "896d9c899e94ea4e68e7e16204094a032d517e0582df7d3b90c7317048cc319a",
       "archive_decision": "include",
       "provider": "native_object:native/genvux.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genyeh.c.o",
-      "issue": "GEN_GENYEH",
-      "canonical_source": "sc2/src/uqm/planets/generate/genyeh.c",
-      "scan_root": "native",
-      "sha256": "a35fbaa1bb93dcfa97a2b3a38ac671468e772d1ce7991bf93d34313e2d63f224",
-      "archive_decision": "include",
-      "provider": "native_object:native/genyeh.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"

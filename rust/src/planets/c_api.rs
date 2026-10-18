@@ -4,7 +4,7 @@
 use std::ffi::c_void;
 
 use crate::c_bindings::global_state::IP_GROUP;
-use crate::collections::queue::{Queue, ReinitQueue};
+use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::locdata::CGlobData;
 use crate::planets::generate::default::{Npcs, PlanetNames};
 use crate::planets::generate::special::FleetGroups;
@@ -28,6 +28,8 @@ extern "C" {
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn InitCommunication(which_comm: u32) -> u16;
+    fn StartSphereTracking(race: u16) -> u16;
+    fn NotifyOthers(which_race: u16, target_loc: u8);
     #[link_name = "star_array"]
     static STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
@@ -73,6 +75,50 @@ pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
 /// Game thread, inside a planet orbit.
 pub unsafe fn init_communication(which_comm: u32) {
     InitCommunication(which_comm);
+}
+
+/// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).
+pub const YEHAT_CONVERSATION: u32 = 11;
+pub const YEHAT_SHIP: u16 = 11;
+/// `IPNL_ALL_CLEAR` (`ipdisp.h`): `(BYTE)-1`.
+const IPNL_ALL_CLEAR: u8 = !0;
+/// `INFINITE_FLEET` (`races.h`): `(COUNT)~0`.
+const INFINITE_FLEET: u16 = !0;
+
+/// `StartSphereTracking (race)` as the truth value the generators test.
+///
+/// # Safety
+/// Game thread, with the fleet queue initialised.
+pub unsafe fn start_sphere_tracking(race: u16) -> bool {
+    StartSphereTracking(race) != 0
+}
+
+/// `NotifyOthers (race, IPNL_ALL_CLEAR)`.
+///
+/// # Safety
+/// Game thread, inside a planet orbit.
+pub unsafe fn notify_others_all_clear(race: u16) {
+    NotifyOthers(race, IPNL_ALL_CLEAR);
+}
+
+/// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), INFINITE_FLEET)`.
+///
+/// # Safety
+/// Game thread, with the fleet queue initialised.
+pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
+    CloneShipFragment(
+        ship,
+        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+        INFINITE_FLEET,
+    );
+}
+
+/// `CountLinks (&GLOBAL (npc_built_ship_q))`.
+///
+/// # Safety
+/// Game thread; `GlobData` is initialised.
+pub unsafe fn built_ship_count() -> u16 {
+    CountLinks(std::ptr::addr_of!((*glob()).game_state.npc_built_ship_q).cast::<Queue>())
 }
 
 /// The `star_index` byte of every catalog entry before `CurStarDescPtr`:
