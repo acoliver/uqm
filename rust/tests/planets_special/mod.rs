@@ -9,7 +9,9 @@ use std::fmt::Write as _;
 
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
-use uqm_rust::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
+use uqm_rust::battle::gendef::{
+    AQUA_HELIX_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
+};
 use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
@@ -31,6 +33,8 @@ unsafe extern "C" {
     static generateChmmrFunctions: GenerateFunctions;
     static generateBurvixeseFunctions: GenerateFunctions;
     static generateThraddashFunctions: GenerateFunctions;
+    static generateOrzFunctions: GenerateFunctions;
+    static generateZoqFotPikFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
@@ -162,13 +166,17 @@ impl Harness {
     }
 }
 
-/// `CurStarDescPtr->Index` of the Thraddash generator's two stars; 0 for the
-/// systems that do not look at it.
+/// `CurStarDescPtr->Index` of the Thraddash and Orz generators' stars; 0 for
+/// the systems that do not look at it.
 fn star_index_of(system: &str) -> u8 {
     if system.starts_with("aqua") {
         AQUA_HELIX_DEFINED
     } else if system == "thrad" {
         THRADD_DEFINED
+    } else if system == "orz" {
+        ORZ_DEFINED
+    } else if system.starts_with("taalo") {
+        TAALO_PROTECTOR_DEFINED
     } else {
         0
     }
@@ -182,6 +190,8 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
             "ilw" => &generateIlwrathFunctions,
             "burv" | "burv0" | "burv1" => &generateBurvixeseFunctions,
             "aqua" | "aqua0" | "aqua1" | "thrad" => &generateThraddashFunctions,
+            "orz" | "taalo" | "taalo0" | "taalo1" => &generateOrzFunctions,
+            "zoq" => &generateZoqFotPikFunctions,
             "pku" => &generatePkunkFunctions,
             "sup" => &generateSupoxFunctions,
             "dru" => &generateDruugeFunctions,
@@ -222,6 +232,9 @@ impl SpecialOps for Harness {
         }
         if let Some(taken) = system.strip_prefix("aqua") {
             set_game_state("AQUA_HELIX", taken.parse().expect("0 or 1"));
+        }
+        if let Some(taken) = system.strip_prefix("taalo") {
+            set_game_state("TAALO_PROTECTOR", taken.parse().expect("0 or 1"));
         }
         self.star_index = star_index_of(system);
         self.set_star(0, 0);

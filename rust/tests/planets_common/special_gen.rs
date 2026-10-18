@@ -26,10 +26,11 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 ///
 /// `chmmr0` and `chmmr1` are the Chmmr system with `CHMMR_UNLEASHED` clear and
 /// set; `aqua` and `thrad` are the Thraddash generator at the Aqua Helix and
-/// Thraddash home stars (`CurStarDescPtr->Index`).
-pub const LAYOUT_SYSTEMS: [&str; 15] = [
+/// Thraddash home stars (`CurStarDescPtr->Index`), `orz` and `taalo` the Orz
+/// generator at the Orz home and Taalo stars.
+pub const LAYOUT_SYSTEMS: [&str; 18] = [
     "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1", "pku", "sup",
-    "dru", "burv", "aqua", "thrad",
+    "dru", "burv", "aqua", "thrad", "orz", "taalo", "zoq",
 ];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
@@ -50,7 +51,21 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
             Body::Moon { planet: 1, moon: 0 },
         ]
     };
+    // The Orz hooks look at the Taalo device moon (planet 1, moon 2) too.
+    let orz_bodies = || {
+        vec![
+            Body::Planet(0),
+            Body::Planet(1),
+            Body::Moon { planet: 0, moon: 0 },
+            Body::Moon { planet: 1, moon: 0 },
+            Body::Moon { planet: 1, moon: 2 },
+        ]
+    };
     vec![
+        ("orz", orz_bodies()),
+        ("taalo0", orz_bodies()),
+        ("taalo1", orz_bodies()),
+        ("zoq", home_bodies()),
         ("aqua0", home_bodies()),
         ("aqua1", home_bodies()),
         ("thrad", home_bodies()),

@@ -302,14 +302,16 @@ mod rust_special {
 
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
-    use uqm_rust::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
+    use uqm_rust::battle::gendef::{
+        AQUA_HELIX_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
+    };
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        burv, chmmr, colony, dru, ilw, pku, rainbow, slylandro, sup, syreen, thrad, trap, vault,
-        wreck, yehat,
+        burv, chmmr, colony, dru, ilw, orz, pku, rainbow, slylandro, sup, syreen, thrad, trap,
+        vault, wreck, yehat, zoq,
     };
 
     /// A game state whose only flag is `name`.
@@ -367,8 +369,21 @@ mod rust_special {
                         THRADD_DEFINED
                     },
                 ),
+                "orz" | "taalo" => orz::generate_planets(
+                    &mut rng,
+                    self.table,
+                    case.0,
+                    case.1,
+                    &mut planets,
+                    if system == "orz" {
+                        ORZ_DEFINED
+                    } else {
+                        TAALO_PROTECTOR_DEFINED
+                    },
+                ),
                 other => {
                     let hook = match other {
+                        "zoq" => zoq::generate_planets,
                         "ilw" => ilw::generate_planets,
                         "burv" => burv::generate_planets,
                         "pku" => pku::generate_planets,
@@ -434,8 +449,25 @@ mod rust_special {
                 };
                 thrad::generate_energy(rng, info, star_index, body, which, node, &helix)
             };
+            let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
+            let orz = |rng: &mut RandomContext,
+                       info: &SYSTEM_INFO,
+                       body: Body,
+                       which: u16,
+                       node: &mut NODE_INFO| {
+                let star_index = if system == "orz" {
+                    ORZ_DEFINED
+                } else {
+                    TAALO_PROTECTOR_DEFINED
+                };
+                orz::generate_energy(rng, info, star_index, body, which, node, &device)
+            };
             let hook: &dyn Fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16 =
                 match system {
+                    "orz" | "taalo0" | "taalo1" => &orz,
+                    "zoq" => &|rng, info, body, which, node| {
+                        zoq::generate_energy(rng, info, body, which, node)
+                    },
                     "burv0" | "burv1" => &burv,
                     "aqua0" | "aqua1" | "thrad" => &thraddash,
                     "yehat" => &yehat::generate_energy,
