@@ -20,6 +20,8 @@ use std::os::raw::{c_int, c_void};
 use super::element::{Element, Point};
 use super::process_loop::TimeValue;
 
+pub use crate::c_bindings::global_state::DrawBatch;
+
 // ---------------------------------------------------------------------------
 // Opaque C types
 // ---------------------------------------------------------------------------
@@ -60,9 +62,6 @@ extern "C" {
 
     /// Set the graphics scale factor (0 = reset)
     pub fn SetGraphicScale(scale: c_int);
-
-    /// Draw a batch of primitives
-    pub fn DrawBatch(display_array: *mut c_void, display_links: PrimLinks, flags: c_int);
 
     /// Perform screen transition effect
     pub fn ScreenTransition(which: c_int, rect: *const c_void);

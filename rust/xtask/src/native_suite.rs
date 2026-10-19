@@ -2959,13 +2959,13 @@ mod tests {
             &authority,
         )
         .unwrap();
-        assert_eq!(admitted.len(), 36);
+        assert_eq!(admitted.len(), 38);
         assert_eq!(
             admitted
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
                 .count(),
-            20
+            22
         );
         assert_eq!(
             admitted

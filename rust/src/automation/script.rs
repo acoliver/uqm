@@ -4007,7 +4007,7 @@ mod tests {
                 "{label} presses a menu key at step {first_key} before the restart menu is ready"
             );
         }
-        assert_eq!(checked, 33, "restart menu scripts checked");
+        assert_eq!(checked, 35, "restart menu scripts checked");
     }
 
     /// #213 amendment 5: Rust-owned `main` presents twice per input callback
@@ -4019,7 +4019,7 @@ mod tests {
     fn required_scenarios_budget_two_presentations_per_scripted_tick() {
         let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
         let required = crate::automation::suite::required_suite();
-        assert_eq!(required.len(), 32, "required scenarios");
+        assert_eq!(required.len(), 34, "required scenarios");
         for name in required {
             let label = scripts
                 .join(format!("{name}.json"))

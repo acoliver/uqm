@@ -9,6 +9,8 @@
 //! `tests/fixtures/planets/*`, so it proves the adapters wire that state the
 //! way the C did.
 
+#[path = "planets_render/oval.rs"]
+mod oval_parity;
 mod planets_common;
 #[path = "planets_special/mod.rs"]
 mod planets_special;
@@ -418,6 +420,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     planets_special::mycon_matches_the_c_original(table);
     planets_special::late_generators_match(table);
     planets_special::sol_matches_the_c_original(table);
+    oval_parity::original_c_and_rust_ovals_match_full_offscreen_buffers();
     assert!(unsafe {
         GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
             && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)

@@ -12,6 +12,7 @@ pub mod ffi;
 pub mod generate;
 pub mod orbit_tables;
 pub mod orbits;
+pub mod render;
 pub mod surface;
 pub mod tables;
 pub mod topography;
