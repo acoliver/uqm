@@ -3385,11 +3385,29 @@ fn validate_delta_receipt(
             "head_sha",
             "categories",
             "transitional_native_inputs",
+            "waivers",
             "passed",
         ],
     ) {
         contracts.push("evidence.ownership.zero_native_delta.fields".to_string());
     }
+    let waivers = report.get("waivers").and_then(|value| value.as_array());
+    if waivers.is_none_or(|entries| {
+        !entries.iter().all(|entry| {
+            exact_json_fields(entry, &["commit", "reason"])
+                && entry
+                    .get("commit")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|commit| is_hex(commit, 40))
+                && entry
+                    .get("reason")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|reason| !reason.trim().is_empty())
+        })
+    }) {
+        contracts.push("evidence.ownership.zero_native_delta.waivers".to_string());
+    }
+    let waived_run = waivers.is_some_and(|entries| !entries.is_empty());
     let report_base_sha = report.get("base_sha").and_then(|value| value.as_str());
     if report.get("schema").and_then(|value| value.as_str()) != Some("uqm-s4-zero-native-delta-v1")
         || report.get("head_sha").and_then(|value| value.as_str())
@@ -3427,9 +3445,9 @@ fn validate_delta_receipt(
     let mut passed = true;
     for (name, expected_delta) in expected {
         let category = categories.and_then(|values| values.get(name));
-        if category
-            .is_some_and(|value| !exact_json_fields(value, &["measured_delta", "changed_paths"]))
-        {
+        if category.is_some_and(|value| {
+            !exact_json_fields(value, &["measured_delta", "changed_paths", "verdicts"])
+        }) {
             contracts.push(format!(
                 "evidence.ownership.zero_native_delta.{name}.fields"
             ));
@@ -3440,24 +3458,60 @@ fn validate_delta_receipt(
         let changed_paths = category
             .and_then(|value| value.get("changed_paths"))
             .and_then(|value| value.as_array());
+        let verdicts = category
+            .and_then(|value| value.get("verdicts"))
+            .and_then(|value| value.as_array());
         if measured.is_none() {
             contracts.push(format!(
                 "evidence.ownership.zero_native_delta.{name}.measured"
             ));
         }
-        match changed_paths {
-            Some(paths) => {
-                if Some(paths.len() as u64) != measured {
-                    contracts.push(format!("evidence.ownership.zero_native_delta.{name}.count"));
-                }
+        match (changed_paths, verdicts) {
+            (Some(paths), Some(verdicts)) => {
                 if !paths
                     .iter()
                     .all(|path| path.as_str().is_some_and(validate_relative_path))
                 {
                     contracts.push(format!("evidence.ownership.zero_native_delta.{name}.path"));
                 }
+                let mut failed = 0_u64;
+                let mut verdict_paths = std::collections::BTreeSet::new();
+                let mut verdicts_valid = true;
+                for verdict in verdicts {
+                    let state = verdict.get("verdict").and_then(|value| value.as_str());
+                    let path = verdict.get("path").and_then(|value| value.as_str());
+                    let reason = verdict.get("reason").and_then(|value| value.as_str());
+                    failed += u64::from(state == Some("fail"));
+                    verdicts_valid &= exact_json_fields(verdict, &["path", "verdict", "reason"])
+                        && path.is_some_and(validate_relative_path)
+                        && reason.is_some_and(|reason| !reason.trim().is_empty())
+                        && match state {
+                            Some("pass") => true,
+                            Some("fail") => !waived_run,
+                            Some("waived") => waived_run,
+                            _ => false,
+                        };
+                    verdict_paths.extend(path);
+                }
+                if !verdicts_valid {
+                    contracts.push(format!(
+                        "evidence.ownership.zero_native_delta.{name}.verdicts"
+                    ));
+                }
+                if Some(failed) != measured {
+                    contracts.push(format!("evidence.ownership.zero_native_delta.{name}.count"));
+                }
+                let listed = paths
+                    .iter()
+                    .filter_map(|path| path.as_str())
+                    .collect::<std::collections::BTreeSet<_>>();
+                if listed != verdict_paths || listed.len() != paths.len() {
+                    contracts.push(format!(
+                        "evidence.ownership.zero_native_delta.{name}.changed_paths"
+                    ));
+                }
             }
-            None => contracts.push(format!("evidence.ownership.zero_native_delta.{name}.paths")),
+            _ => contracts.push(format!("evidence.ownership.zero_native_delta.{name}.paths")),
         }
         if measured != Some(u64::from(expected_delta)) {
             passed = false;
@@ -11433,7 +11487,16 @@ mod tests {
                 name.to_string(),
                 serde_json::json!({
                     "measured_delta": usize::from(failed_category),
-                    "changed_paths": if failed_category { vec!["rust/src/lib.rs"] } else { Vec::<&str>::new() }
+                    "changed_paths": if failed_category { vec!["rust/src/lib.rs"] } else { Vec::<&str>::new() },
+                    "verdicts": if failed_category {
+                        vec![serde_json::json!({
+                            "path": "rust/src/lib.rs",
+                            "verdict": "fail",
+                            "reason": "added at head"
+                        })]
+                    } else {
+                        Vec::new()
+                    }
                 }),
             );
         }
@@ -11448,6 +11511,7 @@ mod tests {
                 "maximum_count": 288,
                 "passed": true
             },
+            "waivers": [],
             "passed": !delta_failed
         }))
         .unwrap();
@@ -11519,6 +11583,7 @@ mod tests {
             serde_json::from_slice(&fs::read(root.join(&delta_entry.path)).unwrap()).unwrap();
         delta["categories"]["tracked_sources"]["measured_delta"] = serde_json::json!(0);
         delta["categories"]["tracked_sources"]["changed_paths"] = serde_json::json!([]);
+        delta["categories"]["tracked_sources"]["verdicts"] = serde_json::json!([]);
         delta["passed"] = serde_json::json!(true);
         rewrite_bundle_entry(
             root,
@@ -16501,9 +16566,9 @@ mod tests {
             report["categories"]["tracked_sources"]["changed_paths"] =
                 serde_json::json!(["rust/src/lib.rs", "../outside"]);
         });
-        assert!(contracts.iter().any(
-            |contract| contract == "evidence.ownership.zero_native_delta.tracked_sources.count"
-        ));
+        assert!(contracts.iter().any(|contract| {
+            contract == "evidence.ownership.zero_native_delta.tracked_sources.changed_paths"
+        }));
         assert!(contracts.iter().any(
             |contract| contract == "evidence.ownership.zero_native_delta.tracked_sources.path"
         ));
@@ -16553,6 +16618,74 @@ mod tests {
                 contract == "evidence.ownership.zero_native_delta.transitional_inputs.result"
             }));
         }
+    }
+
+    #[test]
+    fn delta_replay_rejects_forged_verdicts_and_waivers() {
+        let tracked = |report: &mut serde_json::Value| {
+            report["categories"]["tracked_sources"]["verdicts"][0].take()
+        };
+        let has = |contracts: Vec<String>, suffix: &str| {
+            contracts.iter().any(|contract| {
+                contract == &format!("evidence.ownership.zero_native_delta.{suffix}")
+            })
+        };
+
+        // A failing verdict relabelled as a pass no longer matches measured_delta.
+        let contracts = tampered_delta_contracts(|report| {
+            report["categories"]["tracked_sources"]["verdicts"][0]["verdict"] =
+                serde_json::json!("pass");
+        });
+        assert!(has(contracts, "tracked_sources.count"));
+
+        // A waived verdict without a waiver on record is a forgery.
+        let contracts = tampered_delta_contracts(|report| {
+            report["categories"]["tracked_sources"]["verdicts"][0]["verdict"] =
+                serde_json::json!("waived");
+            report["categories"]["tracked_sources"]["measured_delta"] = serde_json::json!(0);
+        });
+        assert!(has(contracts, "tracked_sources.verdicts"));
+
+        // A failing verdict cannot coexist with a recorded waiver.
+        let contracts = tampered_delta_contracts(|report| {
+            report["waivers"] = serde_json::json!([{
+                "commit": "d".repeat(40),
+                "reason": "approved by Andrew"
+            }]);
+        });
+        assert!(has(contracts, "tracked_sources.verdicts"));
+
+        // A waiver must name a commit and a non-empty reason.
+        for waiver in [
+            serde_json::json!({"commit": "short", "reason": "approved"}),
+            serde_json::json!({"commit": "d".repeat(40), "reason": "  "}),
+            serde_json::json!({"commit": "d".repeat(40), "reason": "ok", "extra": 1}),
+        ] {
+            let contracts = tampered_delta_contracts(|report| {
+                report["waivers"] = serde_json::json!([waiver]);
+            });
+            assert!(has(contracts, "waivers"));
+        }
+
+        // Verdict entries are exact and carry a reason.
+        let contracts = tampered_delta_contracts(|report| {
+            report["categories"]["tracked_sources"]["verdicts"][0]["reason"] =
+                serde_json::json!("");
+        });
+        assert!(has(contracts, "tracked_sources.verdicts"));
+        let contracts = tampered_delta_contracts(|report| {
+            tracked(report);
+        });
+        assert!(has(contracts, "tracked_sources.verdicts"));
+
+        // Dropping the verdict list entirely breaks the category fields.
+        let contracts = tampered_delta_contracts(|report| {
+            report["categories"]["tracked_sources"]
+                .as_object_mut()
+                .unwrap()
+                .remove("verdicts");
+        });
+        assert!(has(contracts, "tracked_sources.fields"));
     }
 
     #[test]
@@ -19684,6 +19817,7 @@ mod tests {
                 .unwrap();
         delta["categories"]["tracked_sources"]["measured_delta"] = serde_json::json!(0);
         delta["categories"]["tracked_sources"]["changed_paths"] = serde_json::json!([]);
+        delta["categories"]["tracked_sources"]["verdicts"] = serde_json::json!([]);
         delta["passed"] = serde_json::json!(true);
         rewrite_bundle_entry(
             bundle.path(),
