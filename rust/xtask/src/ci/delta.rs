@@ -687,18 +687,8 @@ pub(super) fn projection_diff(
     let directory = tempfile::tempdir().map_err(|error| format!("create flag diff: {error}"))?;
     let paths = [directory.path().join("base"), directory.path().join("head")];
     for (path, lines) in paths.iter().zip([base, head]) {
-        std::fs::write(
-            path,
-            format!(
-                "{}
-",
-                lines.join(
-                    "
-"
-                )
-            ),
-        )
-        .map_err(|error| format!("write flag projection: {error}"))?;
+        std::fs::write(path, format!("{}\n", lines.join("\n")))
+            .map_err(|error| format!("write flag projection: {error}"))?;
     }
     let output = supervised_git(
         root,
