@@ -1,4 +1,4 @@
-//! Calls the still-linked `genmyc.c` slots without running the game.
+//! Calls the production Rust Mycon ABI slots against retained C fixtures.
 
 use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
@@ -59,6 +59,11 @@ impl MyconOps for Harness {
         self.seed(case.seed);
         let before = format!("{:?}", self.state);
         let count = unsafe { hook(&*self.state, world, case.which, node) };
+        let after_rng = self.rng_position();
+        self.seed(case.seed);
+        let count_only = unsafe { hook(&*self.state, world, case.which, std::ptr::null_mut()) };
+        assert_eq!(count_only, count, "NULL output count: {case:?}");
+        assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
             format!("{:?}", self.state),
             before,
@@ -73,11 +78,11 @@ impl MyconOps for Harness {
 }
 
 pub fn check(table: &[PlanetFrame]) {
-    let from_c = mycon::render(&mut Harness::new());
-    crate::check_fixture("mycon.txt", &from_c);
-    assert_eq!(from_c, mycon::render(&mut RustMycon(table)));
+    let from_export = mycon::render(&mut Harness::new());
+    crate::check_fixture("mycon.txt", &from_export);
+    assert_eq!(from_export, mycon::render(&mut RustMycon(table)));
     println!(
-        "Mycon: {} exact C == fixture == Rust cases",
-        from_c.lines().count()
+        "Mycon: {} exact Rust export == retained C fixture == Rust cases",
+        from_export.lines().count()
     );
 }

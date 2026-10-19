@@ -1,4 +1,4 @@
-//! `genvux.c`: VUX home, Zex' maidens and Zex' beast. C remains linked.
+//! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
 use crate::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
@@ -77,6 +77,25 @@ pub fn generate_orbital(
     site: &mut impl VuxSite,
     load_planet: impl FnOnce(),
 ) -> bool {
+    if prepare_orbital(body, star, story, site) {
+        return true;
+    }
+    orbit.default_orbital(load_planet);
+    if body == WORLD {
+        // C changes these after LoadPlanet, not before it.
+        orbit.sys_info.PlanetInfo.Weather = 2;
+        orbit.sys_info.PlanetInfo.Tectonics = 0;
+    }
+    true
+}
+
+/// Contact and scene work, without borrowing the live orbital state.
+pub(super) fn prepare_orbital(
+    body: Body,
+    star: u8,
+    story: &impl Story,
+    site: &mut impl VuxSite,
+) -> bool {
     if body == WORLD
         && (star == VUX_DEFINED || (star == MAIDENS_DEFINED && !site.zex_is_dead()))
         && site.start_sphere_tracking()
@@ -111,13 +130,7 @@ pub fn generate_orbital(
             _ => site.load_scene(Scene::Ruins),
         }
     }
-    orbit.default_orbital(load_planet);
-    if body == WORLD {
-        // C changes these after LoadPlanet, not before it.
-        orbit.sys_info.PlanetInfo.Weather = 2;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
-    }
-    true
+    false
 }
 
 pub fn generate_energy(

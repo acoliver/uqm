@@ -107,6 +107,27 @@ pub fn generate_orbital(
     site: &mut impl UtwigSite,
     load_planet: impl FnOnce(),
 ) -> bool {
+    if prepare_orbital(body, star_index, story, site) {
+        return true;
+    }
+
+    orbit.default_orbital(load_planet);
+
+    if star_index == UTWIG_DEFINED && body == HOME {
+        let info = &mut orbit.sys_info.PlanetInfo;
+        info.Weather = 1;
+        info.Tectonics = 1;
+    }
+    true
+}
+
+/// Contact and scene work, with no system or RNG borrow across host calls.
+pub(super) fn prepare_orbital(
+    body: Body,
+    star_index: u8,
+    story: &mut impl Story,
+    site: &mut impl UtwigSite,
+) -> bool {
     let at_home = star_index == UTWIG_DEFINED && body == HOME;
     let bomb = at_bomb(star_index, body, story);
     if at_home || bomb {
@@ -136,14 +157,7 @@ pub fn generate_orbital(
         site.load_scene(star_index == BOMB_DEFINED);
     }
 
-    orbit.default_orbital(load_planet);
-
-    if star_index == UTWIG_DEFINED && body == HOME {
-        let info = &mut orbit.sys_info.PlanetInfo;
-        info.Weather = 1;
-        info.Tectonics = 1;
-    }
-    true
+    false
 }
 
 /// The Druuge confront the player at the bomb: false when the talk aborted or

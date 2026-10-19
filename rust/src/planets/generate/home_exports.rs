@@ -31,16 +31,16 @@ use crate::planets::generate::{burv, dru, ilw, orz, pet, pku, sup, thrad, zoq};
 /// The live race home: the C engine behind each host call of
 /// [`HomeContactSite`] and the extras the Orz, Thraddash and Zoq-Fot-Pik
 /// generators ask for.
-struct RaceHome {
-    system: *mut SOLARSYS_STATE,
-    game: LiveGame,
+pub(super) struct RaceHome {
+    pub(super) system: *mut SOLARSYS_STATE,
+    pub(super) game: LiveGame,
     ship: u8,
     conversation: u32,
     ruins_text: &'static CStr,
 }
 
 impl RaceHome {
-    fn new(
+    pub(super) fn new(
         system: *mut SOLARSYS_STATE,
         ship: u8,
         conversation: u32,
@@ -55,7 +55,7 @@ impl RaceHome {
         }
     }
 
-    fn load_scene(&self, graphics: &CStr, strtab: &CStr, first_report: u16) {
+    pub(super) fn load_scene(&self, graphics: &CStr, strtab: &CStr, first_report: u16) {
         // SAFETY: `system` is the live solar system state on the game thread.
         unsafe { load_lander_scene(self.system, graphics, strtab, first_report) };
     }
@@ -202,7 +202,7 @@ impl UrquanEncounterSite for RaceHome {
 }
 
 /// `SetLanderTakeoff ()`.
-struct Takeoff;
+pub(super) struct Takeoff;
 
 impl LanderTakeoff for Takeoff {
     fn lander_takeoff(&mut self) {

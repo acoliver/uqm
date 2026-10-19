@@ -749,6 +749,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let star_indexes = "../sc2/src/uqm/gendef.h";
     let generate = "../sc2/src/uqm/planets/generate.h";
     let drawable = "../sc2/src/libs/graphics/drawable.h";
+    let ship_build = "../sc2/src/uqm/build.h";
     for header in [
         globdata,
         events,
@@ -760,6 +761,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         star_indexes,
         generate,
         drawable,
+        ship_build,
     ] {
         println!("cargo:rerun-if-changed={header}");
     }
@@ -774,6 +776,8 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(star_indexes)
         .header(generate)
         .header(drawable)
+        .header(ship_build)
+        .allowlist_function("(planetOuterLocation|XFormIPLoc|EscortFeasibilityStudy)")
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
@@ -785,7 +789,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
-             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM)",
+             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup)",
         )
         .generate_comments(false)
         .layout_tests(true)

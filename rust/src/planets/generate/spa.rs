@@ -75,33 +75,47 @@ pub fn generate_orbital(
     site: &mut impl SpathiSite,
     load_planet: impl FnOnce(),
 ) -> bool {
-    if body == MOON {
-        if story.flag("SPATHI_SHIELDED_SELVES") == 0 && site.start_sphere_tracking() {
-            site.notify_others_all_clear();
-            site.save_ip_groups();
-            site.reinit_ip_group_q();
-            assert_eq!(site.built_ship_count(), 0);
-            site.clone_fleet_into_built_queue();
-            site.set_global_flags_and_data(1 << 7);
-            site.set_current_activity(site.current_activity() | START_INTERPLANETARY);
-            site.talk();
-            let activity = site.current_activity();
-            if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
-                site.set_current_activity(activity & !START_INTERPLANETARY);
-                site.reinit_built_ship_q();
-                site.load_ip_groups();
-            }
-            return true;
+    if contact(body, story, site) {
+        return true;
+    }
+    analyse_orbital(orbit, body);
+    if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
+        site.load_broadcasters_scene(story.flag("SPATHI_SHIELDED_SELVES") == 0);
+    }
+    load_planet();
+    true
+}
+
+/// The moon conversation, before any orbital state or RNG is borrowed.
+pub(super) fn contact(body: Body, story: &impl Story, site: &mut impl SpathiSite) -> bool {
+    if body == MOON && story.flag("SPATHI_SHIELDED_SELVES") == 0 && site.start_sphere_tracking() {
+        site.notify_others_all_clear();
+        site.save_ip_groups();
+        site.reinit_ip_group_q();
+        assert_eq!(site.built_ship_count(), 0);
+        site.clone_fleet_into_built_queue();
+        site.set_global_flags_and_data(1 << 7);
+        site.set_current_activity(site.current_activity() | START_INTERPLANETARY);
+        site.talk();
+        let activity = site.current_activity();
+        if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+            site.set_current_activity(activity & !START_INTERPLANETARY);
+            site.reinit_built_ship_q();
+            site.load_ip_groups();
         }
+        return true;
+    }
+    false
+}
+
+/// Analysis and physical overrides, completed before scene and surface loading.
+pub(super) fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
+    if body == MOON {
         orbit.analyse();
         orbit.sys_info.PlanetInfo.Weather = 0;
         orbit.sys_info.PlanetInfo.Tectonics = 0;
         orbit.sys_info.PlanetInfo.SurfaceTemperature = 28;
-        if story.flag("UMGAH_BROADCASTERS") == 0 {
-            site.load_broadcasters_scene(story.flag("SPATHI_SHIELDED_SELVES") == 0);
-        }
-        load_planet();
-        return true;
+        return;
     }
     if body == WORLD {
         calc::do_planetary_analysis(
@@ -126,10 +140,9 @@ pub fn generate_orbital(
         orbit.sys_info.PlanetInfo.Weather = 0;
         orbit.sys_info.PlanetInfo.Tectonics = 0;
         orbit.sys_info.PlanetInfo.SurfaceTemperature = 31;
-        load_planet();
-        return true;
+        return;
     }
-    orbit.default_orbital(load_planet)
+    orbit.analyse();
 }
 
 pub fn generate_energy(

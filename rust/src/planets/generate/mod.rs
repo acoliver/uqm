@@ -12,6 +12,8 @@ pub mod home_contact;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod home_exports;
 pub mod ilw;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod late_exports;
 pub mod melnorme;
 pub mod myc;
 pub mod orz;

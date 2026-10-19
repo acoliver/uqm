@@ -1,4 +1,4 @@
-//! Invoke the original, still-linked C vtables; no game or graphics calls.
+//! Invoke the production Rust ABI tables against retained C fixtures.
 use super::Harness;
 use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
 use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
@@ -96,6 +96,11 @@ impl Ops for Harness {
         self.seed(case.seed);
         let before = format!("{:?}", self.state);
         let result = unsafe { hook(&*self.state, world, case.which, node) };
+        let after_rng = self.rng_position();
+        self.seed(case.seed);
+        let count_only = unsafe { hook(&*self.state, world, case.which, std::ptr::null_mut()) };
+        assert_eq!(count_only, result, "NULL output count: {case:?}");
+        assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
             format!("{:?}", self.state),
             before,
@@ -113,16 +118,16 @@ pub fn check(frames: &[PlanetFrame]) {
         (Kind::Samatra, "samatra.txt"),
         (Kind::Spathi, "spathi.txt"),
     ] {
-        let from_c = late_gen::render(kind, frames, &mut Harness::new());
-        crate::check_fixture(name, &from_c);
+        let from_export = late_gen::render(kind, frames, &mut Harness::new());
+        crate::check_fixture(name, &from_export);
         assert_eq!(
-            from_c,
+            from_export,
             late_gen::render(kind, frames, &mut late_gen::Rust(frames)),
             "{kind:?}"
         );
         println!(
-            "{kind:?}: {} exact C == fixture == Rust cases",
-            from_c.lines().count()
+            "{kind:?}: {} exact Rust export == retained C fixture == Rust cases",
+            from_export.lines().count()
         );
     }
 }

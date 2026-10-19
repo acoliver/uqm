@@ -96,6 +96,24 @@ pub fn generate_orbital(
     site: &mut impl MyconSite,
     load_planet: impl FnOnce(),
 ) -> bool {
+    if prepare_orbital(body, star_index, story, site, || {
+        orbit.sys_info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] & 1 != 0
+    }) {
+        return true;
+    }
+
+    orbit.default_orbital(load_planet);
+    true
+}
+
+/// Contact and scene work, reading the retrieval mask after the conversation.
+pub(super) fn prepare_orbital(
+    body: Body,
+    star_index: u8,
+    story: &mut impl Story,
+    site: &mut impl MyconSite,
+    retrieved: impl FnOnce() -> bool,
+) -> bool {
     if body == WORLD {
         if (star_index == MYCON_DEFINED || star_index == SUN_DEVICE_DEFINED)
             && site.start_sphere_tracking()
@@ -115,7 +133,7 @@ pub fn generate_orbital(
                 if story.flag("KNOW_ABOUT_SHATTERED") == 0 {
                     story.set_flag("KNOW_ABOUT_SHATTERED", 1);
                 }
-                let retrieved = orbit.sys_info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] & 1 != 0;
+                let retrieved = retrieved();
                 if !retrieved {
                     site.load_scene(Scene::EggCase);
                 }
@@ -124,8 +142,7 @@ pub fn generate_orbital(
         }
     }
 
-    orbit.default_orbital(load_planet);
-    true
+    false
 }
 
 /// The Mycon confront the player: false when the visit is over, because the

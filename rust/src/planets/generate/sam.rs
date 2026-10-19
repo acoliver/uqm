@@ -1,4 +1,4 @@
-//! `gensam.c`: Sa-Matra's guards, moon and final encounter. C remains linked.
+//! Sa-Matra's guards, moon and final encounter, ported from `gensam.c`.
 
 use crate::battle::battle_types::{arctan, cosine, sine};
 use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, POINT};
@@ -181,6 +181,11 @@ pub fn generate_orbital(
     if body != WORLD {
         return orbit.default_orbital(load_planet);
     }
+    encounter(story, site)
+}
+
+/// The Sa-Matra encounter, with no live system borrow during communication.
+pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> bool {
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(site.built_ship_count(), 0);

@@ -1,14 +1,12 @@
-// gendef.c port — dispatches BYTE index to GenerateFunctions struct pointer
-// The special-system GenerateFunctions structs live in C planets/generate/*.c;
-// the default one is Rust (planets::generate::vtable).
-// We declare them as extern C statics and return raw pointers.
+//! Dispatch the star index to its production GenerateFunctions table.
+//! Sol remains C-owned; all other tables are Rust ABI exports.
 
 use std::os::raw::c_void;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-use crate::planets::generate::{home_exports, special_exports, story_exports};
+use crate::planets::generate::{home_exports, late_exports, special_exports, story_exports};
 
 /// Opaque GenerateFunctions type — C struct with function pointers
 pub type GenerateFunctions = c_void;
@@ -66,12 +64,7 @@ pub const MYCON_TRAP_DEFINED: u8 = 45;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 extern "C" {
-    static generateMyconFunctions: GenerateFunctions;
-    static generateSaMatraFunctions: GenerateFunctions;
     static generateSolFunctions: GenerateFunctions;
-    static generateSpathiFunctions: GenerateFunctions;
-    static generateUtwigFunctions: GenerateFunctions;
-    static generateVuxFunctions: GenerateFunctions;
 }
 
 /// C: `const GenerateFunctions *getGenerateFunctions(BYTE Index)`
@@ -91,7 +84,9 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             START_COLONY_DEFINED => {
                 &special_exports::GENERATE_COLONY_FUNCTIONS as *const _ as *const GenerateFunctions
             }
-            SPATHI_DEFINED => &generateSpathiFunctions as *const _,
+            SPATHI_DEFINED => {
+                &late_exports::GENERATE_SPATHI_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             MELNORME0_DEFINED | MELNORME1_DEFINED | MELNORME2_DEFINED | MELNORME3_DEFINED
             | MELNORME4_DEFINED | MELNORME5_DEFINED | MELNORME6_DEFINED | MELNORME7_DEFINED
             | MELNORME8_DEFINED => {
@@ -121,12 +116,16 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             DRUUGE_DEFINED => {
                 &home_exports::GENERATE_DRUUGE_FUNCTIONS as *const _ as *const GenerateFunctions
             }
-            BOMB_DEFINED | UTWIG_DEFINED => &generateUtwigFunctions as *const _,
+            BOMB_DEFINED | UTWIG_DEFINED => {
+                &late_exports::GENERATE_UTWIG_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             AQUA_HELIX_DEFINED | THRADD_DEFINED => {
                 &home_exports::GENERATE_THRADDASH_FUNCTIONS as *const _ as *const GenerateFunctions
             }
             SUN_DEVICE_DEFINED | MYCON_DEFINED | EGG_CASE0_DEFINED | EGG_CASE1_DEFINED
-            | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
+            | EGG_CASE2_DEFINED => {
+                &late_exports::GENERATE_MYCON_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             ANDROSYNTH_DEFINED => {
                 &story_exports::GENERATE_ANDROSYNTH_FUNCTIONS as *const _
                     as *const GenerateFunctions
@@ -140,8 +139,12 @@ pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
             URQUAN_WRECK_DEFINED => {
                 &special_exports::GENERATE_WRECK_FUNCTIONS as *const _ as *const GenerateFunctions
             }
-            MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => &generateVuxFunctions as *const _,
-            SAMATRA_DEFINED => &generateSaMatraFunctions as *const _,
+            MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => {
+                &late_exports::GENERATE_VUX_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
+            SAMATRA_DEFINED => {
+                &late_exports::GENERATE_SAMATRA_FUNCTIONS as *const _ as *const GenerateFunctions
+            }
             ZOQFOT_DEFINED => {
                 &home_exports::GENERATE_ZOQ_FOT_PIK_FUNCTIONS as *const _
                     as *const GenerateFunctions

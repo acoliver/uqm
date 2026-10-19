@@ -3,7 +3,10 @@
 
 use std::ffi::c_void;
 
-use crate::c_bindings::global_state::IP_GROUP;
+use crate::c_bindings::global_state::{
+    planetOuterLocation, EncounterGroup as ENCOUNTER_GROUP, EncounterRace as ENCOUNTER_RACE,
+    EscortFeasibilityStudy, XFormIPLoc, IP_GROUP,
+};
 use crate::collections::queue::{
     AllocLink, CountLinks, HLink, InsertQueue, Queue, ReinitQueue, RemoveQueue,
 };
@@ -22,8 +25,6 @@ use crate::savegame::runtime::star::CStarDesc;
 extern "C" {
     #[link_name = "GlobData"]
     static mut GLOB_DATA: CGlobData;
-    #[link_name = "EncounterRace"]
-    static ENCOUNTER_RACE: i16;
     fn GetGroupInfo(offset: u32, which_group: u8) -> bool;
     fn PutGroupInfo(offset: u32, which_group: u8) -> u32;
     fn BuildGroups();
@@ -62,6 +63,35 @@ const GROUP_INIT_IP: u8 = !0;
 const GROUP_SAVE_IP: u8 = !0;
 /// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
 const GROUP_LOAD_IP: u8 = 0;
+
+/// Clear the guard encounter so the interplanetary groups do not chase.
+///
+/// # Safety
+/// Game thread; the encounter globals belong to the current visit.
+pub unsafe fn reset_encounter() {
+    std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(0);
+    std::ptr::addr_of_mut!(ENCOUNTER_RACE).write(-1);
+}
+
+/// The remaining legacy escort queue's feasibility check for rebel Yehat.
+///
+/// # Safety
+/// Game thread, with the available-race and escort queues initialised.
+pub unsafe fn rebel_escort_feasible() -> bool {
+    EscortFeasibilityStudy(u16::from(ship::YEHAT_REBEL_SHIP)) != 0
+}
+
+/// The beast report has no mask, but still loads the lander font.
+///
+/// # Safety
+/// `system` is the live system, with no outstanding references into it.
+pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
+    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    (*system).PlanetSideFrame[1] = std::ptr::null_mut();
+    (*system).SysInfo.PlanetInfo.DiscoveryString =
+        CaptureStringTable(LoadStringTableInstance(c"text.vuxbeast".as_ptr())).cast();
+}
+
 /// `GROUPS_RANDOM`.
 const GROUPS_RANDOM: u32 = 0;
 
@@ -503,6 +533,99 @@ impl FleetGroups for LiveGame {
             } else {
                 Some(&mut *head.cast::<IP_GROUP>())
             }
+        }
+    }
+}
+
+unsafe fn assert_ip_group_link(queue: *const Queue, handle: HLink) {
+    let start = (*queue).pq_tab as usize;
+    let end = start + usize::from((*queue).object_size) * usize::from((*queue).num_objects);
+    assert!(!(*queue).pq_tab.is_null() && handle as usize >= start && (handle as usize) < end);
+}
+
+impl crate::planets::generate::sam::GuardSite for LiveGame {
+    fn save_ip_groups(&mut self) {
+        Npcs::save_ip_groups(self);
+    }
+    fn load_ip_groups(&mut self) {
+        Npcs::load_ip_groups(self);
+    }
+    fn reset_encounter(&mut self) {
+        // SAFETY: game-thread encounter globals.
+        unsafe { reset_encounter() };
+    }
+    fn built_ship_count(&self) -> u16 {
+        // SAFETY: the live built queue on the game thread.
+        unsafe { built_ship_count() }
+    }
+    fn set_battle_group_ref(&mut self, value: u32) {
+        FleetGroups::set_battle_group_ref(self, value);
+    }
+    fn battle_group_ref(&self) -> u32 {
+        FleetGroups::battle_group_ref(self)
+    }
+    fn clone_ship(&mut self, race: u8) {
+        self.clone_ship_into_built_queue(race);
+    }
+    fn add_new_group(&mut self) -> u32 {
+        FleetGroups::add_new_group(self)
+    }
+    fn store_group(&mut self, reference: u32, group: u8) {
+        // SAFETY: the guard group and built queue belong to this visit.
+        unsafe { PutGroupInfo(reference, group) };
+    }
+    fn reinit_built_queue(&mut self) {
+        self.reinit_npc_built_ship_q();
+    }
+    fn init_ip_groups(&mut self, reference: u32) {
+        // SAFETY: the reference was stored by PutGroupInfo.
+        unsafe { GetGroupInfo(reference, GROUP_INIT_IP) };
+    }
+    fn planet_outer_location(&self, planet: u16) -> crate::c_bindings::global_state::POINT {
+        // SAFETY: the planet index belongs to the current system.
+        unsafe { planetOuterLocation(planet) }
+    }
+    fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
+        // SAFETY: the live table queue on the game thread. Preserve both
+        // LockIpGroup's size assertion and Lock/UnlockLink's bounds checks.
+        unsafe {
+            let queue = std::ptr::addr_of!((*glob()).game_state.ip_group_q).cast::<Queue>();
+            let mut handle = (*queue).head;
+            while !handle.is_null() {
+                assert_eq!(
+                    usize::from((*queue).object_size),
+                    std::mem::size_of::<IP_GROUP>()
+                );
+                assert_ip_group_link(queue, handle);
+                let group = handle.cast::<IP_GROUP>();
+                let next = (*group).succ;
+                visit(&mut *group);
+                assert_ip_group_link(queue, handle);
+                handle = next;
+            }
+        }
+    }
+    fn ip_location(&self) -> crate::c_bindings::global_state::POINT {
+        // SAFETY: game-thread global, represented by the asserted CGlobData layout.
+        unsafe {
+            let point = (*glob()).game_state.ip_location;
+            crate::c_bindings::global_state::POINT {
+                x: point.x,
+                y: point.y,
+            }
+        }
+    }
+    fn set_and_transform_ip_location(&mut self, location: crate::c_bindings::global_state::POINT) {
+        // SAFETY: disjoint global fields, with no Rust references held across
+        // the legacy coordinate transform. CPoint's layout is bindgen-asserted.
+        unsafe {
+            let input = std::ptr::addr_of_mut!((*glob()).game_state.ip_location);
+            input.write(crate::comm::locdata::CPoint {
+                x: location.x,
+                y: location.y,
+            });
+            let output = std::ptr::addr_of_mut!((*glob()).game_state.ship_stamp.origin);
+            XFormIPLoc(input.cast(), output.cast(), 1);
         }
     }
 }
