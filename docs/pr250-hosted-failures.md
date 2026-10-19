@@ -82,3 +82,29 @@ test or changing the shared registry.
 No GUI, native-window acceptance or screenshot result is claimed. No unchanged
 hosted rerun, workflow cancellation, policy waiver or enforcement relaxation is
 part of this repair. Review skipped per Andrew 2026-10-09.
+
+## Changed-source validation and remaining controller defect
+
+On `979570fa8`, both clean local full routes passed: 6,183 tests for PR250 and
+6,200 for PR251, each with zero failures and 15 existing ignored tests. Both
+fresh linked parity executions, strict clippy, formatting and workflow checks
+passed. The exact-source Linux arm64 workspace coverage run also passed. Its
+raw-profile files are retained as diagnostic outputs, not admitted clean-source
+CI evidence.
+
+[Changed-source push run 39207702596](https://github.com/acoliver/uqm/actions/runs/39207702596)
+used the merged shrink controller and exposed narrower failures. The native
+object/provider reductions and 321-to-288 input ratchet passed. Its only native
+source failure was the cross-file comment replacement in `hyper.h`. The existing
+rule explicitly counts comment tokens. Removing that comment is a removal-only
+source correction; the coordinate macros and the token rule are unchanged.
+
+Five Rust paths were also reported under transitional flags because their uses
+of the existing `linked_c_archive` feature caused whole Rust files to be judged
+as native paths. [Issue #252](https://github.com/acoliver/uqm/issues/252) tracks
+the controller projection defect. Its repair is isolated on a main-targeted
+branch and must be installed before this stack can use it as the base-owned PR
+controller. No merge is authorized. The final Linux arm64 and Linux x86_64 PR
+gates in run `39207704569` passed before that controller repair; their narrower
+stack-parent comparison did not expose the same false positives as the push
+comparison against main.
