@@ -1,13 +1,19 @@
-//! Sol layout, naming, scans and lander pickups from `gensol.c`.
+//! Sol generation and probe lifecycle from `gensol.c`.
 //!
-//! This core is not installed in the live vtable. Orbital entry and the probe
-//! lifecycle still belong to the linked C generator.
+//! This core is not installed in the live vtable; C remains the runtime owner.
+
+#[cfg(test)]
+mod lifecycle_tests;
+pub mod orbital;
+#[cfg(test)]
+mod orbital_tests;
+pub use orbital::generate_orbital;
 
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_NUMBER_BASE, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planets::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, PlanetNames};
-use crate::planets::generate::special::{self, Body, Story};
+use crate::planets::generate::special::{self, Body, FleetGroups, Story};
 use crate::planets::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::surface::{self, BIOLOGICAL_SCAN};
 
@@ -26,6 +32,48 @@ const PLANETS: [(u8, i32, u8); 9] = [
     (50, 1250, 1),
     (22, 1550, 0),
 ];
+
+const STARBASE: Body = Body::Moon { planet: 2, moon: 0 };
+const URQUAN_DRONE_SHIP: u8 = 23;
+
+/// Persist the single probe group even after its message has been delivered.
+pub fn init_npcs(story: &mut impl Story, host: &mut impl FleetGroups) -> bool {
+    special::ensure_fleet(story, host, "URQUAN_PROBE_GRPOFFS0", URQUAN_DRONE_SHIP);
+    if story.flag("PROBE_MESSAGE_DELIVERED") == 0 && host.init_ip_groups() {
+        if let Some(group) = host.head_ip_group() {
+            group.task = special::IN_ORBIT;
+            group.sys_loc = 3;
+            group.dest_loc = 3;
+            group.loc.x = 0;
+            group.loc.y = 0;
+            group.group_counter = 0;
+            return true;
+        }
+    }
+    default::init_npcs(host);
+    true
+}
+
+/// Restore the queue before checking the collision flag, except when the
+/// completed bomb empties Sol. Only the head probe may be changed.
+pub fn reinit_npcs<H: FleetGroups + orbital::Queues>(story: &impl Story, host: &mut H) -> bool {
+    if story.flag("CHMMR_BOMB_STATE") == 3 {
+        host.clear_battle_group_ref();
+        host.reinit_ip_group_q();
+        assert_eq!(host.built_ship_count(), 0);
+    } else {
+        default::reinit_npcs(host);
+        if host.battle_group_ref() != 0 {
+            if let Some(group) = host.head_ip_group() {
+                if group.race_id == URQUAN_DRONE_SHIP && group.task & default::REFORM_GROUP != 0 {
+                    group.task = default::FLEE | default::IGNORE_FLAGSHIP;
+                    group.dest_loc = 0;
+                }
+            }
+        }
+    }
+    true
+}
 
 /// `GenerateSol_generatePlanets`: Sol replaces the incoming RNG seed.
 /// Slots after Pluto and fields not written by C remain untouched.

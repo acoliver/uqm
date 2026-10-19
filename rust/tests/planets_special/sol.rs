@@ -8,7 +8,7 @@ use uqm_rust::planets::generate::vtable::GenerateFunctions;
 use uqm_rust::state::game_state_keys::{get_game_state, set_game_state};
 
 unsafe extern "C" {
-    static generateSolFunctions: GenerateFunctions;
+    pub(super) static generateSolFunctions: GenerateFunctions;
 }
 
 impl Ops for Harness {
@@ -130,7 +130,7 @@ impl Ops for Harness {
     }
 }
 
-pub fn check() {
+pub fn check(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
     let mut c = Harness::new();
     let layout = sol::render_layout(&mut c);
     let scans = sol::render_scans(&mut c);
@@ -138,6 +138,7 @@ pub fn check() {
     crate::check_fixture("sol_scans.txt", &scans);
     assert_eq!(layout, sol::render_layout(&mut sol::RustSol));
     assert_eq!(scans, sol::render_scans(&mut sol::RustSol));
+    super::sol_orbital::check(&mut c, table);
     println!(
         "Sol: {} full-buffer layouts and {} guarded scans: linked C == fixture == Rust",
         layout.lines().count(),

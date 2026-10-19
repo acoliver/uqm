@@ -98,6 +98,15 @@ fn mycon_full_fields_and_scan_buffers_match_the_c_fixture() {
 }
 
 #[test]
+fn sol_orbital_full_info_and_rng_match_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let text =
+        planets_common::sol_orbital::render(&mut planets_common::sol_orbital::Rust(&table), &table);
+    assert_eq!(text.lines().count(), 3_168);
+    assert_eq!(text, include_str!("fixtures/planets/sol_orbital.txt"));
+}
+
+#[test]
 fn fault_line_topography_matches_the_c_fixture() {
     let table = parse_plan_data(PLAN_DATA);
     let text = planets_common::topography::render(&mut RustTopography, &table);

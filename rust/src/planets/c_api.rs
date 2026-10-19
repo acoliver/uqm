@@ -23,6 +23,10 @@ use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::savegame::runtime::star::CStarDesc;
 
 extern "C" {
+    /// Existing DEBUG universe traversal seam; not a resource/surface emulator.
+    #[cfg(feature = "debug-process")]
+    #[link_name = "disableInteractivity"]
+    pub static mut DISABLE_INTERACTIVITY: i32;
     #[link_name = "GlobData"]
     static mut GLOB_DATA: CGlobData;
     fn GetGroupInfo(offset: u32, which_group: u8) -> bool;

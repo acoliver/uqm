@@ -10,6 +10,7 @@ pub mod default_gen;
 pub mod late_gen;
 pub mod mycon;
 pub mod sol;
+pub mod sol_orbital;
 pub mod special_gen;
 pub mod topography;
 
