@@ -1,4 +1,4 @@
-//! Actual linked `gensol.c` slots, without replacing or interposing C code.
+//! Actual Rust-exported Sol slots, checked against retained original-C fixtures.
 
 use super::{Harness, SysGenRNG};
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
@@ -140,7 +140,7 @@ pub fn check(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
     assert_eq!(scans, sol::render_scans(&mut sol::RustSol));
     super::sol_orbital::check(&mut c, table);
     println!(
-        "Sol: {} full-buffer layouts and {} guarded scans: linked C == fixture == Rust",
+        "Sol: {} full-buffer layouts and {} guarded scans: Rust ABI == immutable C fixture == Rust core",
         layout.lines().count(),
         scans.lines().count()
     );

@@ -33,7 +33,7 @@ pub(super) mod c_bridge {
         pub fn CaptureStringTable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // Resource destruction
-        pub fn DestroyDrawable(handle: *mut std::ffi::c_void);
+        pub fn DestroyDrawable(handle: *mut std::ffi::c_void) -> u32;
         pub fn DestroyFont(handle: *mut std::ffi::c_void) -> c_int;
         #[allow(clashing_extern_declarations)]
         pub fn DestroyMusic(handle: *mut std::ffi::c_void) -> c_int;

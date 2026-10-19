@@ -1,4 +1,3 @@
-uqm_SUBDIRS="generate"
 uqm_CFILES="cargo.c devices.c
 		oval.c pl_stuff.c planets.c plangen.c pstarmap.c report.c
 		roster.c scan.c solarsys.c"

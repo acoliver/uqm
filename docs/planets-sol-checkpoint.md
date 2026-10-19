@@ -1,3 +1,79 @@
+# Sol runs through the Rust provider; live acceptance is pending
+
+`generateSolFunctions` is now the complete Rust ABI table in
+`rust/src/planets/generate/sol_exports.rs`. Runtime `getGenerateFunctions`
+selects that table directly. Its nine Sol callbacks use the existing Rust
+cores; the other four entries use the existing Rust default exports.
+`gensol.c` and its Makeinfo are removed. Production inputs decrease from 288
+to 287, and the ownership projection decreases from 305 objects to 304. The
+original assessment ledgers remain unchanged.
+
+## Live adapters and ownership
+
+Naming uses the parent planet for both Sol's game string and battle frame.
+Pickup uses the existing Rust crew-effect, report and takeoff owners. The
+probe host uses actual group files and table queues, with the existing Rust
+ship-clone and game-state owners. It preserves the saved reference after the
+message, performs the default load before the reforming-probe check, and
+retains the bomb-state assertion and starbase activity bits. Remaining legacy
+calls are declared in `planets::c_api`.
+
+Orbital analysis/mineral RNG order and all physical overrides are unchanged.
+No system/RNG borrow crosses resource loading, reports or surface entry.
+Pluto and Luna use the real packaged lander font, effect, scene and report
+resources. Their ownership remains with the system through `FreePlanet`.
+
+Earth's definition is a move-only C-frame owner, never a Rust graphics handle
+cast to a C frame. Its normal map is 242 by 75 pixels. Matching frames retain
+their original images. Replacement art is normalized before surface entry;
+indexed elevation keeps its palette and indexes. This avoids both an
+unsupported indexed-to-truecolor legacy resize and the unowned temporary
+created by legacy elevation rescaling. Partial normalization failures release
+all completed allocations. The existing DEBUG traversal return leaves the
+unconsumed definition owned by Rust; interactive `LoadPlanet` consumes it.
+
+## Headless evidence and its limits
+
+The immutable C fixtures still contain 21,600 Sol records: 3,312 full-buffer
+layouts, 15,120 guarded scans and 3,168 complete orbital SYSTEM_INFO/RNG
+records. Their original hashes and capture provenance are recorded below.
+The retained original-C executable was run separately before source removal.
+Replacement-provider parity invokes the actual Rust export against those
+same bytes. It does not relabel replacement output as original-C capture.
+
+Additional headless tests call the actual exported table and runtime dispatch,
+check all thirteen slots and the four inherited defaults, and exercise real
+probe creation/reload/persistence and starbase queue saves. They load real
+game strings and both discovery scenes, then call actual `FreePlanet`.
+Non-null matching and mismatched two-frame drawables pass through allocation,
+rescaling, ownership transfer and actual planet cleanup; queued image frees
+are drained and SDL allocation counts must return to baseline. Indexed Earth
+rescaling compares every elevation pixel. Actual `GeneratePlanetSurface`
+consumes the packaged Earth definition, allocates its sphere/topography state,
+and actual `FreePlanet` clears those owners with SDL allocations restored.
+
+These checks do not establish visual correctness. The headless Earth
+surface run logs the existing renderer error
+`TFB_DrawCanvas_Rect unsupported draw mode (1)` during shield tinting. The
+allocation/lifetime assertions do not test that tint's pixels. Interactive
+`LoadPlanet`, orbit presentation/music, lander crew/report/takeoff timing,
+probe encounters, loading/aborting during gameplay, and real-window rendering
+remain live acceptance work. No game or owned025 action is performed here.
+No live scenario is marked accepted by unit tests.
+
+Source-bound commands, exits, original-source and fixture receipts, compiler
+handoff, provider reports, archive/symbol checks and the final report are kept
+outside the worktree in `tmp/planets9-switch/` in the main checkout. The final
+report distinguishes completed checks from remaining live proof. Verification
+uses Rust 1.97.1, locked dependencies, four jobs, unset SDKROOT and
+MACOSX_DEPLOYMENT_TARGET, and the absolute planets9-target directory. No new
+C, shim or dependency is added. Review skipped per Andrew 2026-10-09.
+
+## Historical checkpoint A record
+
+The following record describes the earlier C-retained checkpoints. Its
+runtime-owner and remaining-work statements refer to those checkpoints.
+
 # Sol checkpoint A: Rust cores implemented, C runtime retained
 
 All nine custom Sol hooks now have testable Rust cores in

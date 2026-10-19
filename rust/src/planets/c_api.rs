@@ -1,6 +1,9 @@
 //! The C functions and globals the default system generator still needs, in
 //! one place. Each goes away when its owner is ported.
 
+mod surface;
+pub use surface::{load_planet_surface, CapturedSurface};
+
 use std::ffi::c_void;
 
 use crate::c_bindings::global_state::{
@@ -21,20 +24,27 @@ use crate::planets::generate::default::{Npcs, PlanetNames};
 use crate::planets::generate::special::FleetGroups;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::savegame::runtime::star::CStarDesc;
+use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 extern "C" {
+    pub fn log_init(max_lines: i32);
     /// Existing DEBUG universe traversal seam; not a resource/surface emulator.
     #[cfg(feature = "debug-process")]
     #[link_name = "disableInteractivity"]
     pub static mut DISABLE_INTERACTIVITY: i32;
     #[link_name = "GlobData"]
-    static mut GLOB_DATA: CGlobData;
-    fn GetGroupInfo(offset: u32, which_group: u8) -> bool;
+    pub static mut GLOB_DATA: CGlobData;
+    fn GetGroupInfo(offset: u32, which_group: u8) -> u32;
     fn PutGroupInfo(offset: u32, which_group: u8) -> u32;
+    pub fn InitGroupInfo(first_time: u32);
+    pub fn UninitGroupInfo();
     fn BuildGroups();
     fn LoadPlanet(surf_def_frame: *mut c_void);
-    fn CloneShipFragment(ship_index: u16, dst_queue: *mut c_void, crew_percent: u16)
-        -> *mut c_void;
+    pub fn FreePlanet();
+    pub fn GeneratePlanetSurface(
+        world: *mut crate::c_bindings::global_state::PLANET_DESC,
+        definition: *mut crate::c_bindings::global_state::FRAME_DESC,
+    );
     fn LoadStdLanderFont(info: *mut c_void);
     fn FreeLanderFont(info: *mut c_void);
     fn GetStringTableCount(table: *mut c_void) -> u16;
@@ -42,9 +52,39 @@ extern "C" {
     fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
     fn DestroyStringTable(table: *mut c_void) -> i32;
     fn LoadGraphicInstance(res: *const std::ffi::c_char) -> *mut c_void;
-    fn LoadStringTableInstance(res: *const std::ffi::c_char) -> *mut c_void;
+    pub fn LoadStringTableInstance(res: *const std::ffi::c_char) -> *mut c_void;
+    #[link_name = "GameStrings"]
+    pub static mut GAME_STRINGS: *mut c_void;
     fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-    fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
+    fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
+    fn DestroyDrawable(drawable: *mut c_void) -> u32;
+    fn RescaleFrame(frame: *mut c_void, width: i32, height: i32) -> *mut c_void;
+    fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut crate::c_bindings::global_state::TFB_Image;
+    fn TFB_DrawCanvas_Rescale_Nearest(
+        source: *mut c_void,
+        target: *mut c_void,
+        scale: i32,
+        source_hotspot: *mut c_void,
+        extent: *mut c_void,
+        target_hotspot: *mut c_void,
+    );
+    pub fn ReadFramePixelIndexes(
+        frame: *mut c_void,
+        indexes: *mut u8,
+        width: i32,
+        height: i32,
+    ) -> u32;
+    fn GetFrameCount(frame: *mut c_void) -> u16;
+    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
+    fn CreateDrawable(flags: u8, width: i16, height: i16, frames: u16) -> *mut c_void;
+    #[link_name = "format_conv_surf"]
+    pub static mut FORMAT_CONV_SURF: *mut sdl2::sys::SDL_Surface;
+    #[link_name = "SDL_Screen"]
+    pub static mut SDL_SCREEN: *mut sdl2::sys::SDL_Surface;
+    pub fn Init_DrawCommandQueue();
+    pub fn Uninit_DrawCommandQueue();
+    pub fn TFB_FlushGraphicsEx(skip_swap: u32);
+    pub fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn InitCommunication(which_comm: u32) -> u16;
     fn StartSphereTracking(race: u16) -> u16;
@@ -54,12 +94,10 @@ extern "C" {
     fn DrawSISMessage(message: *const std::ffi::c_char);
     fn DrawHyperCoords(origin: CPoint);
     #[link_name = "star_array"]
-    static STAR_ARRAY: *const CStarDesc;
+    pub static mut STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
     static CUR_STAR_DESC_PTR: *const CStarDesc;
     fn utf8StringCopy(dst: *mut u8, size: usize, src: *const std::ffi::c_char);
-    fn rust_get_game_state_bits(start: i32, end: i32) -> u8;
-    fn rust_set_game_state_bits(start: i32, end: i32, value: u8);
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
@@ -75,6 +113,14 @@ const GROUP_LOAD_IP: u8 = 0;
 pub unsafe fn reset_encounter() {
     std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(0);
     std::ptr::addr_of_mut!(ENCOUNTER_RACE).write(-1);
+}
+
+/// The group selected by a starbase encounter.
+///
+/// # Safety
+/// Game thread, with no references to the encounter global outstanding.
+pub unsafe fn set_encounter_group(value: u8) {
+    std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(value);
 }
 
 /// The remaining legacy escort queue's feasibility check for rebel Yehat.
@@ -166,9 +212,9 @@ pub unsafe fn notify_others_all_clear(race: u16) {
 /// # Safety
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn clone_infinite_ship_into_built_queue(ship: u16) {
-    CloneShipFragment(
-        ship,
-        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+    crate::comm::dispatch::clone_ship_fragment(
+        u8::try_from(ship).expect("ship index fits a byte"),
+        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<Queue>(),
         INFINITE_FLEET,
     );
 }
@@ -269,9 +315,9 @@ pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOL
 /// # Safety
 /// Game thread, with the fleet queue initialised.
 pub unsafe fn clone_named_ship_into_built_queue(ship: u16, name_index: u8) {
-    let fragment = CloneShipFragment(
-        ship,
-        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+    let fragment = crate::comm::dispatch::clone_ship_fragment(
+        u8::try_from(ship).expect("ship index fits a byte"),
+        std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<Queue>(),
         1,
     );
     if !fragment.is_null() {
@@ -423,7 +469,7 @@ fn glob() -> *mut CGlobData {
 impl Npcs for LiveGame {
     fn init_ip_groups(&mut self) -> bool {
         // SAFETY: game thread; `GlobData` is initialised.
-        unsafe { GetGroupInfo((*glob()).game_state.battle_group_ref, GROUP_INIT_IP) }
+        unsafe { GetGroupInfo((*glob()).game_state.battle_group_ref, GROUP_INIT_IP) != 0 }
     }
     fn clear_battle_group_ref(&mut self) {
         // SAFETY: as above.
@@ -513,9 +559,9 @@ impl FleetGroups for LiveGame {
     fn clone_ship_into_built_queue(&mut self, ship: u8) {
         // SAFETY: the queue is the live `npc_built_ship_q`.
         unsafe {
-            CloneShipFragment(
-                u16::from(ship),
-                std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<c_void>(),
+            crate::comm::dispatch::clone_ship_fragment(
+                ship,
+                std::ptr::addr_of_mut!((*glob()).game_state.npc_built_ship_q).cast::<Queue>(),
                 0,
             )
         };
@@ -535,6 +581,12 @@ impl FleetGroups for LiveGame {
             if head.is_null() {
                 None
             } else {
+                let queue = std::ptr::addr_of!((*glob()).game_state.ip_group_q).cast::<Queue>();
+                assert_eq!(
+                    usize::from((*queue).object_size),
+                    std::mem::size_of::<IP_GROUP>()
+                );
+                assert_ip_group_link(queue, head);
                 Some(&mut *head.cast::<IP_GROUP>())
             }
         }

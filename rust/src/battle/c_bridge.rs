@@ -164,7 +164,7 @@ extern "C" {
     pub fn ReleaseDrawable(drawable: Drawable) -> Drawable;
 
     /// Destroy a drawable resource
-    pub fn DestroyDrawable(drawable: Drawable);
+    pub fn DestroyDrawable(drawable: Drawable) -> u32;
 
     /// Load a music resource
     pub fn LoadMusic(music_file: *const u8) -> MusicRef;

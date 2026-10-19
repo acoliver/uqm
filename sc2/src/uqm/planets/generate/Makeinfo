@@ -1,2 +1,0 @@
-uqm_CFILES="gensol.c"
-uqm_HFILES="genall.h gendefault.h"

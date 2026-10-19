@@ -24,6 +24,8 @@ pub mod sam;
 pub mod shof;
 pub mod slylandro;
 pub mod sol;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod sol_exports;
 pub mod spa;
 pub mod special;
 #[cfg(any(not(test), feature = "linked_c_archive"))]

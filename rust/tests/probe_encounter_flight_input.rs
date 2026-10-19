@@ -811,41 +811,24 @@ impl DerivedPreparation {
         let fuel_price = u8::try_from(number_after(&globdata, "GLOBAL (FuelCost) = "))
             .expect("fuel price fits a byte");
 
-        // Luna is the second moon of Earth; `gensol.c` fixes its density and
-        // radius, and `CalcGravity` (`calc.c`) is density * radius / 100.
-        let gensol = c_source("planets/generate/gensol.c");
-        let moon_properties = &gensol[gensol
-            .find("// World is a moon.")
-            .expect("moon properties block")..];
-        let earth_moons = &moon_properties[moon_properties
-            .find("case 2: /* moons of EARTH */")
-            .expect("Earth moons block")..];
-        let earth_moons = &earth_moons[..earth_moons
-            .find("case 4: /* moons of JUPITER */")
-            .expect("Jupiter moons block")];
-        let density = number_after(earth_moons, "PlanetInfo.PlanetDensity = ");
-        let radius = number_after(earth_moons, "PlanetInfo.PlanetRadius = ");
-        let gravity = u16::try_from(density * radius / 100).expect("gravity fits");
+        // Derive fuel cost from the production Sol physical owner.
+        let mut lunar_info = unsafe { std::mem::zeroed() };
+        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+            &mut lunar_info,
+            uqm_rust::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
+        );
+        let gravity = lunar_info.PlanetInfo.SurfaceGravity;
         let landing_cost = u32::from(landing_fuel_needed(
             gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
-        // Mercury is planet 0 of Sol; `gensol.c` fixes its density and radius
-        // the same way.
-        let world_properties = &gensol[gensol
-            .find("if (worldIsPlanet (solarSys, world))")
-            .expect("planet properties block")..];
-        let planets = &world_properties[world_properties
-            .find("case 0: /* MERCURY */")
-            .expect("Mercury block")..];
-        let mercury = &planets[..planets.find("case 1: /* VENUS */").expect("Venus block")];
-        let mercury_gravity = u16::try_from(
-            number_after(mercury, "PlanetInfo.PlanetDensity = ")
-                * number_after(mercury, "PlanetInfo.PlanetRadius = ")
-                / 100,
-        )
-        .expect("gravity fits");
+        let mut mercury_info = unsafe { std::mem::zeroed() };
+        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+            &mut mercury_info,
+            uqm_rust::planets::generate::special::Body::Planet(0),
+        );
+        let mercury_gravity = mercury_info.PlanetInfo.SurfaceGravity;
         let mercury_landing_cost = u32::from(landing_fuel_needed(
             mercury_gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),

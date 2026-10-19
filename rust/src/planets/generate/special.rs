@@ -90,10 +90,7 @@ fn write_word(start: u32, value: u32, mut write_byte: impl FnMut(u32, u8)) {
     }
 }
 
-extern "C" {
-    fn rust_get_game_state_bits(start: i32, end: i32) -> u8;
-    fn rust_set_game_state_bits(start: i32, end: i32, value: u8);
-}
+use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
 fn get_game_state_byte(start: u32) -> u32 {
     // SAFETY: reads the Rust-owned game state.

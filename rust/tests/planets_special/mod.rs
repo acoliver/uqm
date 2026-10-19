@@ -8,7 +8,10 @@ mod late_abi;
 mod late_gen;
 mod mycon;
 mod sol;
+mod sol_abi;
+mod sol_npcs;
 mod sol_orbital;
+mod sol_resources;
 
 use std::ffi::c_void;
 use std::fmt::Write as _;
@@ -297,4 +300,5 @@ pub fn late_generators_match(frames: &[uqm_rust::c_bindings::global_state::Plane
 
 pub fn sol_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
     sol::check(table);
+    sol_abi::check();
 }

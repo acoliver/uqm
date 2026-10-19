@@ -1,4 +1,4 @@
-//! Invoke the unchanged linked Sol orbital slot, using its existing DEBUG
+//! Invoke the production Rust Sol orbital slot, using the existing DEBUG
 //! universe traversal exit in `LoadPlanet`. No surface/display interposition.
 
 use super::{Harness, ScreenWidth};
@@ -93,5 +93,5 @@ pub fn check(c: &mut Harness, table: &[PlanetFrame]) {
         actual,
         sol_orbital::render(&mut sol_orbital::Rust(table), table)
     );
-    println!("Sol orbital: 3168 complete SYSTEM_INFO/RNG records: original linked C == fixture == Rust; LoadPlanet exits via existing DEBUG traversal seam");
+    println!("Sol orbital: 3168 complete SYSTEM_INFO/RNG records: Rust ABI == immutable C fixture == Rust core; LoadPlanet exits via existing DEBUG traversal seam");
 }

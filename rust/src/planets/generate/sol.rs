@@ -1,6 +1,6 @@
 //! Sol generation and probe lifecycle from `gensol.c`.
 //!
-//! This core is not installed in the live vtable; C remains the runtime owner.
+//! The live ABI adapter is in `sol_exports`.
 
 #[cfg(test)]
 mod lifecycle_tests;
