@@ -2,8 +2,8 @@
   "schema": "uqm-native-input-trend-v1",
   "baseline_assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
   "baseline_observed_objects": 339,
-  "current_transitional_inputs": 287,
-  "maximum_transitional_inputs": 287,
+  "current_transitional_inputs": 286,
+  "maximum_transitional_inputs": 286,
   "tracked_native_file_delta": 0,
   "infrastructure_delta": {
     "recursive_cargo_invocations": -1,
@@ -16,7 +16,8 @@
   "removed_providers": [
     "native/heap.c.o",
     "native/charhashtable.c.o",
-    "native/stringhashtable.c.o"
+    "native/stringhashtable.c.o",
+    "native/oval.c.o"
   ],
   "ownership_ledger": {
     "schema": "uqm-native-ownership-ledger-v8",
@@ -39,5 +40,11 @@
       "canonical_owner": "CORE_NATIVE/#22",
       "retained_source": "sc2/src/libs/strings/stringhashtable.c"
     }
-  ]
+  ],
+  "oval_cutover": {
+    "native_provider": "native/oval.c.o",
+    "rust_provider": "rust/src/planets/render/c_api.rs",
+    "canonical_owner": "PLANET_GEN/#262",
+    "removed_source": "sc2/src/uqm/planets/oval.c"
+  }
 }

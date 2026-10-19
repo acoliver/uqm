@@ -420,7 +420,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     planets_special::mycon_matches_the_c_original(table);
     planets_special::late_generators_match(table);
     planets_special::sol_matches_the_c_original(table);
-    oval_parity::original_c_and_rust_ovals_match_full_offscreen_buffers();
+    oval_parity::exported_ovals_match_original_c_full_offscreen_buffers();
     assert!(unsafe {
         GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
             && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)

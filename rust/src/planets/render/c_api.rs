@@ -1,14 +1,62 @@
-//! Existing C graphics boundary for the Rust oval implementation.
-//! No oval symbols are exported until the runtime cutover checkpoint.
+//! Planet oval ABI, using the current context's existing primitive renderer.
 
-use crate::c_bindings::global_state as c;
+use crate::c_bindings::{assert_c_layout, global_state as c};
 use crate::comm::locdata::{CPoint, CRect};
 use crate::starbase::ids::RadarLayout;
 
 use super::oval::OvalGfx;
 
+assert_c_layout!(CRect, c::RECT { corner: corner });
+const _: () = {
+    assert!(std::mem::offset_of!(CRect, width) == std::mem::offset_of!(c::RECT, extent));
+    assert!(
+        std::mem::offset_of!(CRect, height)
+            == std::mem::offset_of!(c::RECT, extent) + std::mem::offset_of!(c::EXTENT, height)
+    );
+    assert!(std::mem::size_of::<std::ffi::c_long>() == 8);
+};
+const _: unsafe extern "C" fn(*mut c::RECT, c::BYTE) = c::DrawOval;
+const _: unsafe extern "C" fn(*mut c::RECT) = c::DrawFilledOval;
+const _: unsafe extern "C" fn(*mut c::RECT, c::BYTE) = draw_oval;
+const _: unsafe extern "C" fn(*mut c::RECT) = draw_filled_oval;
+
+fn input(rect: c::RECT) -> CRect {
+    CRect {
+        corner: CPoint {
+            x: rect.corner.x,
+            y: rect.corner.y,
+        },
+        width: rect.extent.width,
+        height: rect.extent.height,
+    }
+}
+
+/// `planets.h`: outline with the original unsigned-byte off-step cadence.
+///
+/// # Safety
+/// Game thread only, with a readable RECT and an active graphics context and
+/// foreground frame for the entire call. The renderer must not switch context
+/// or reenter game menus. No input borrow survives a graphics call.
+#[export_name = "DrawOval"]
+pub unsafe extern "C" fn draw_oval(rect: *mut c::RECT, num_off_pixels: c::BYTE) {
+    let rect = input(rect.read());
+    let mut gfx = CffiOvalGfx::current(c::ScreenWidth, c::ScreenHeight);
+    super::oval::draw_oval(&rect, num_off_pixels, &mut gfx);
+}
+
+/// `planets.h`: filled ellipse, retaining repeated centre rows.
+///
+/// # Safety
+/// The same game-thread, input and graphics lifetime contract as [`draw_oval`].
+#[export_name = "DrawFilledOval"]
+pub unsafe extern "C" fn draw_filled_oval(rect: *mut c::RECT) {
+    let rect = input(rect.read());
+    let mut gfx = CffiOvalGfx::current(c::ScreenWidth, c::ScreenHeight);
+    super::oval::draw_filled_oval(&rect, &mut gfx);
+}
+
 /// A short-lived borrow of the current graphics context on the game thread.
-pub struct CffiOvalGfx {
+struct CffiOvalGfx {
     viewport: CRect,
     color: c::Color,
 }
@@ -18,7 +66,7 @@ impl CffiOvalGfx {
     /// The current C context and foreground frame must remain active for this
     /// adapter's lifetime. Calls must stay on the game thread, with no context
     /// changes or reentrant menus between them.
-    pub unsafe fn current(screen_width: i32, screen_height: i32) -> Self {
+    unsafe fn current(screen_width: i32, screen_height: i32) -> Self {
         let layout = RadarLayout::for_screen(screen_width, screen_height);
         Self {
             viewport: CRect {

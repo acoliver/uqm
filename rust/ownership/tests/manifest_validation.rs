@@ -214,3 +214,30 @@ fn production_archive_is_explicitly_feature_gated() {
     assert!(!verifier.contains("xtask/Cargo.toml"));
     assert!(!verifier.contains("production-artifacts.json"));
 }
+
+#[test]
+fn ovals_have_exact_rust_contracts_and_no_native_provider() {
+    let manifest = manifest();
+    assert!(!manifest
+        .objects
+        .iter()
+        .any(|object| object.path == uqm_ownership::OVAL_OBJECT));
+    let contracts: Vec<_> = manifest
+        .symbol_contracts
+        .iter()
+        .filter(|contract| uqm_ownership::OVAL_SYMBOLS.contains(&contract.symbol.as_str()))
+        .collect();
+    assert_eq!(contracts.len(), 2);
+    for contract in contracts {
+        assert_eq!(contract.canonical_owner, uqm_ownership::OVAL_OWNER);
+        assert_eq!(
+            contract.active_provider.path,
+            uqm_ownership::OVAL_RUST_PROVIDER
+        );
+        assert_eq!(contract.excluded_providers.len(), 1);
+        assert_eq!(
+            contract.excluded_providers[0].path,
+            uqm_ownership::OVAL_OBJECT
+        );
+    }
+}

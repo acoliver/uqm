@@ -1,15 +1,13 @@
-//! Offscreen differential coverage of the original linked `oval.c` and Rust.
+//! Offscreen coverage of the exported Rust oval ABI against original C fixtures.
 //! Uses real RAM drawables and C graphics dependencies, never a video driver.
 
 use std::ffi::c_void;
 use std::fmt::Write;
+use std::io::Read;
 
 use sha2::{Digest, Sha256};
 use uqm_rust::c_bindings::global_state as c;
-use uqm_rust::comm::locdata::{CPoint, CRect};
 use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
-use uqm_rust::planets::render::c_api::CffiOvalGfx;
-use uqm_rust::planets::render::oval::{draw_filled_oval, draw_oval};
 use uqm_rust::starbase::ids::RadarLayout;
 
 extern "C" {
@@ -34,8 +32,6 @@ extern "C" {
     ) -> c::BOOLEAN;
     fn SetContextForeGroundColor(color: c::Color) -> c::Color;
     fn TFB_DrawCanvas_Initialize();
-    fn DrawOval(rect: *mut c::RECT, off: u8);
-    fn DrawFilledOval(rect: *mut c::RECT);
 }
 
 struct Offscreen {
@@ -46,6 +42,7 @@ struct Offscreen {
     width: i32,
     height: i32,
     previous_screen: (i32, i32),
+    screen: (i32, i32),
     _format: sdl2::surface::Surface<'static>,
     _screen_format: sdl2::surface::Surface<'static>,
 }
@@ -88,9 +85,38 @@ impl Offscreen {
                 width: layout.sis_screen_width,
                 height: layout.sis_screen_height,
                 previous_screen,
+                screen,
                 _format: format,
                 _screen_format: screen_format,
             }
+        }
+    }
+
+    fn assert_context(&self, alpha: u8) {
+        unsafe {
+            assert_eq!(
+                SetContext(self.context),
+                self.context,
+                "oval changed context"
+            );
+            assert_eq!(c::GetContextFGFrame(), self.frame);
+            let color = c::GetContextForeGroundColor();
+            assert_eq!([color.r, color.g, color.b, color.a], [71, 131, 197, alpha]);
+            let mut clip: c::RECT = std::mem::zeroed();
+            c::GetContextClipRect(&mut clip);
+            assert_eq!(
+                (
+                    clip.corner.x,
+                    clip.corner.y,
+                    clip.extent.width,
+                    clip.extent.height
+                ),
+                (0, 0, self.width as i16, self.height as i16)
+            );
+            let mode = c::GetContextDrawMode();
+            assert_eq!((mode.kind, mode.factor), (0, 0));
+            assert_eq!((ScreenWidth, ScreenHeight), self.screen);
+            assert_eq!(((*self.frame).HotSpot.x, (*self.frame).HotSpot.y), (0, 0));
         }
     }
 
@@ -180,8 +206,14 @@ fn rects(width: i16, height: i16) -> Vec<[i16; 4]> {
     cases
 }
 
-pub fn original_c_and_rust_ovals_match_full_offscreen_buffers() {
+pub fn exported_ovals_match_original_c_full_offscreen_buffers() {
     let seed_before = unsafe { uqm_rust::math::RandomContext_GetSeed(super::SysGenRNG) };
+    // Standard tests require every full-buffer digest. A supplied original-C
+    // capture adds a streaming byte-for-byte comparison without checking in or
+    // duplicating the large capture.
+    let mut raw = std::env::var_os("UQM_OVAL_ORIGINAL_C_PIXELS")
+        .map(|path| std::fs::File::open(path).expect("read retained original-C pixels"));
+    let mut raw_digest = Sha256::new();
     let mut fixture = String::new();
     let mut compared_bytes = 0usize;
     for screen in [(320, 240), (640, 480)] {
@@ -190,11 +222,6 @@ pub fn original_c_and_rust_ovals_match_full_offscreen_buffers() {
             .into_iter()
             .enumerate()
         {
-            let rect = CRect {
-                corner: CPoint { x, y },
-                width,
-                height,
-            };
             for alpha in [255, 101] {
                 unsafe {
                     SetContextForeGroundColor(c::Color {
@@ -210,18 +237,20 @@ pub fn original_c_and_rust_ovals_match_full_offscreen_buffers() {
                         extent: c::EXTENT { width, height },
                     };
                     canvas.reset();
+                    canvas.assert_context(alpha);
                     unsafe {
                         if let Some(off) = mode {
-                            DrawOval(&mut c_rect, off);
+                            c::DrawOval(&mut c_rect, off);
                         } else {
-                            DrawFilledOval(&mut c_rect);
+                            c::DrawFilledOval(&mut c_rect);
                         }
                     }
-                    let expected = canvas.pixels();
+                    canvas.assert_context(alpha);
+                    let actual = canvas.pixels();
                     if (x, y, width, height) == (10, 20, 5, 5) {
                         assert!(
-                            expected.iter().any(|p| *p != [11, 23, 37, 255]),
-                            "original C must draw into the RAM frame"
+                            actual.iter().any(|p| *p != [11, 23, 37, 255]),
+                            "exported Rust oval must draw into the RAM frame"
                         );
                     }
                     assert_eq!(
@@ -233,19 +262,15 @@ pub fn original_c_and_rust_ovals_match_full_offscreen_buffers() {
                         ),
                         (x, y, width, height)
                     );
-                    let bytes = expected.as_flattened();
+                    let bytes = actual.as_flattened();
                     compared_bytes += bytes.len();
                     writeln!(fixture, "{}x{} case{case} {x},{y},{width},{height} alpha{alpha} {mode:?} bytes{} {:x}", screen.0, screen.1, bytes.len(), Sha256::digest(bytes)).unwrap();
-                    canvas.reset();
-                    let mut gfx = unsafe { CffiOvalGfx::current(screen.0, screen.1) };
-                    if let Some(off) = mode {
-                        draw_oval(&rect, off, &mut gfx);
-                    } else {
-                        draw_filled_oval(&rect, &mut gfx);
-                    }
-                    let actual = canvas.pixels();
-                    if let Some(index) = actual.iter().zip(&expected).position(|(a, b)| a != b) {
-                        panic!("screen={screen:?} case={case} rect={x},{y},{width},{height} alpha={alpha} mode={mode:?} pixel={index} C={:?} Rust={:?}", expected[index], actual[index]);
+                    if let Some(raw) = raw.as_mut() {
+                        let mut expected = vec![0; bytes.len()];
+                        raw.read_exact(&mut expected)
+                            .expect("complete original-C buffer");
+                        raw_digest.update(&expected);
+                        assert_eq!(bytes, expected, "exported ABI differs from original C: screen={screen:?} case={case} alpha={alpha} mode={mode:?}");
                     }
                 }
             }
@@ -266,7 +291,15 @@ pub fn original_c_and_rust_ovals_match_full_offscreen_buffers() {
     assert_eq!(compared_bytes, 533_211_840);
     assert_eq!(
         fixture, golden,
-        "original linked C differs from the retained capture"
+        "exported Rust ABI differs from the retained original-C capture"
     );
-    println!("Planet ovals: 840 original-C draws match the immutable fixture and Rust; all {compared_bytes} RGBA readback bytes compared, rectangle inputs and system RNG preserved");
+    if let Some(mut raw) = raw {
+        assert_eq!(raw.read(&mut [0]).unwrap(), 0, "no extra original-C bytes");
+        assert_eq!(
+            format!("{:x}", raw_digest.finalize()),
+            "2ef36aee9679faafb011be5e915bb5634637b6bd8ef7a5d1f6cd5091c34cc310"
+        );
+        println!("Planet ovals: byte-for-byte comparison with all 533211840 retained original-C bytes passed");
+    }
+    println!("Planet ovals: 840 exported Rust ABI draws match the immutable original-C fixture; all {compared_bytes} RGBA readback bytes hashed, rectangle inputs, context state and system RNG preserved");
 }

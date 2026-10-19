@@ -621,8 +621,10 @@ fn normalize_contract_symbol(token: &str) -> Option<String> {
     let cleaned = token
         .trim_matches(|character: char| matches!(character, ':' | ',' | '(' | ')' | '[' | ']'));
     let symbol = cleaned.strip_prefix('_').unwrap_or(cleaned);
-    (crate::QUEUE_SYMBOLS.contains(&symbol) || crate::HASH_TABLE_SYMBOLS.contains(&symbol))
-        .then(|| symbol.to_string())
+    (crate::QUEUE_SYMBOLS.contains(&symbol)
+        || crate::HASH_TABLE_SYMBOLS.contains(&symbol)
+        || crate::OVAL_SYMBOLS.contains(&symbol))
+    .then(|| symbol.to_string())
 }
 
 fn run_tool_path(

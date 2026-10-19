@@ -5,7 +5,8 @@ use proptest::prelude::*;
 use uqm_ownership::{
     DiagnosticCode, ExternalImport, Manifest, ObjectProvider, ObservedSymbol, ProductionNm,
     ProviderKind, SymbolState, ValidateOptions, Validator, DISPLIST_OBJECT,
-    HASH_TABLE_RUST_PROVIDER, HASH_TABLE_SYMBOLS, QUEUE_RUST_PROVIDER, QUEUE_SYMBOLS,
+    HASH_TABLE_RUST_PROVIDER, HASH_TABLE_SYMBOLS, OVAL_RUST_PROVIDER, OVAL_SYMBOLS,
+    QUEUE_RUST_PROVIDER, QUEUE_SYMBOLS,
 };
 
 fn manifest() -> Manifest {
@@ -35,12 +36,18 @@ fn valid_symbols() -> Vec<ObservedSymbol> {
             provider: HASH_TABLE_RUST_PROVIDER.to_string(),
             state: SymbolState::DefinedInternal,
         }))
+        .chain(OVAL_SYMBOLS.iter().map(|symbol| ObservedSymbol {
+            symbol: (*symbol).to_string(),
+            provider: OVAL_RUST_PROVIDER.to_string(),
+            state: SymbolState::DefinedInternal,
+        }))
         .collect()
 }
 fn valid_nm() -> ProductionNm {
     let definitions = QUEUE_SYMBOLS
         .iter()
         .chain(HASH_TABLE_SYMBOLS.iter())
+        .chain(OVAL_SYMBOLS.iter())
         .map(|symbol| format!("libuqm_rust.a(provider.o): 00000000 T _{symbol}"))
         .collect::<Vec<_>>()
         .join("\n");
@@ -49,6 +56,7 @@ fn valid_nm() -> ProductionNm {
         c_archive: QUEUE_SYMBOLS
             .iter()
             .chain(HASH_TABLE_SYMBOLS.iter())
+            .chain(OVAL_SYMBOLS.iter())
             .map(|symbol| format!("libuqm_c.a(caller.o): U _{symbol}"))
             .collect::<Vec<_>>()
             .join("\n"),
@@ -483,5 +491,47 @@ proptest! {
         let mut value = manifest();
         value.objects[0].path = format!("sc2/obj/release/{}/escape.c.o", "../".repeat(depth));
         prop_assert!(has(&value.validate_self().unwrap_err(), DiagnosticCode::PathViolation));
+    }
+}
+
+#[test]
+fn each_oval_symbol_rejects_duplicate_missing_c_and_unresolved_providers() {
+    let validator = Validator::new(manifest());
+    for symbol in OVAL_SYMBOLS {
+        let mut duplicate = valid_nm();
+        duplicate
+            .rust_archive
+            .push_str(&format!("\nlibuqm_rust.a(other.o): 00000000 T _{symbol}"));
+        assert!(has(
+            &validator.validate_production_nm(&duplicate).unwrap_err(),
+            DiagnosticCode::DuplicateProvider
+        ));
+        let mut missing = valid_nm();
+        missing.rust_archive = missing
+            .rust_archive
+            .lines()
+            .filter(|line| !line.ends_with(&format!("_{symbol}")))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(has(
+            &validator.validate_production_nm(&missing).unwrap_err(),
+            DiagnosticCode::MissingProvider
+        ));
+        let mut wrong = missing;
+        wrong
+            .c_archive
+            .push_str(&format!("\nlibuqm_c.a(oval.c.o): 00000000 T _{symbol}"));
+        assert!(has(
+            &validator.validate_production_nm(&wrong).unwrap_err(),
+            DiagnosticCode::UnassignedObject
+        ));
+        let mut unresolved = valid_nm();
+        unresolved
+            .executable
+            .push_str(&format!("\nuqm: U _{symbol}"));
+        assert!(has(
+            &validator.validate_production_nm(&unresolved).unwrap_err(),
+            DiagnosticCode::DynamicUnresolvedSymbol
+        ));
     }
 }

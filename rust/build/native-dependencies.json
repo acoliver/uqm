@@ -1,6 +1,6 @@
 {
   "schema": "uqm-native-dependencies-v2",
-  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 287 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
+  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 covers 286 production inputs after removing oval.c; its headers remain shared by other native inputs; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
   "dependencies": [
     {
       "path": "sc2/config_unix.h",

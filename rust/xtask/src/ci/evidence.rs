@@ -11506,9 +11506,9 @@ mod tests {
             "head_sha": source_sha,
             "categories": categories,
             "transitional_native_inputs": {
-                "base_count": 287,
-                "head_count": 287,
-                "maximum_count": 287,
+                "base_count": 286,
+                "head_count": 286,
+                "maximum_count": 286,
                 "passed": true
             },
             "waivers": [],

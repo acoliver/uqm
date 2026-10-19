@@ -1,4 +1,4 @@
-//! Input-free planet rendering. C remains the runtime provider at checkpoint A.
+//! Input-free planet rendering, including the live oval ABI provider.
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod c_api;

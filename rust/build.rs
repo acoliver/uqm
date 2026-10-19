@@ -779,7 +779,8 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(ship_build)
         .allowlist_function(
             "(planetOuterLocation|XFormIPLoc|EscortFeasibilityStudy|_clip_line|DrawBatch\
-             |DrawLine|GetContextForeGroundColor)",
+             |DrawLine|DrawOval|DrawFilledOval|GetContextForeGroundColor\
+             |GetContextFGFrame|GetContextClipRect|GetContextDrawMode)",
         )
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
@@ -792,7 +793,8 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
-             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup)",
+             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup\
+             |ScreenWidth|ScreenHeight)",
         )
         .generate_comments(false)
         .layout_tests(true)

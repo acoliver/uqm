@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "488d555c084767d72aa91d80ab718a22606143b05a6fc06d336c89e5792cf9ce",
+    "projection_sha256": "b80f9e594c8aa43f7118ed87b878bde5c38e0bc1e45ccf4c41b71eaf84a1f570",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2614,18 +2614,6 @@
       "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
-      "path": "native/oval.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/oval.c",
-      "scan_root": "native",
-      "sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
-      "archive_decision": "include",
-      "provider": "native_object:native/oval.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/pl_stuff.c.o",
       "issue": "PLANET_GEN",
       "canonical_source": "sc2/src/uqm/planets/pl_stuff.c",
@@ -4167,6 +4155,34 @@
           "path": "native/stringhashtable.c.o"
         }
       ]
+    },
+    {
+      "symbol": "DrawOval",
+      "canonical_owner": "PLANET_GEN/#262",
+      "active_provider": {
+        "kind": "rust_source",
+        "path": "rust/src/planets/render/c_api.rs"
+      },
+      "excluded_providers": [
+        {
+          "kind": "native_object",
+          "path": "native/oval.c.o"
+        }
+      ]
+    },
+    {
+      "symbol": "DrawFilledOval",
+      "canonical_owner": "PLANET_GEN/#262",
+      "active_provider": {
+        "kind": "rust_source",
+        "path": "rust/src/planets/render/c_api.rs"
+      },
+      "excluded_providers": [
+        {
+          "kind": "native_object",
+          "path": "native/oval.c.o"
+        }
+      ]
     }
   ],
   "external_imports": [],
@@ -4177,7 +4193,8 @@
       "native/displist.c.o",
       "native/heap.c.o",
       "native/charhashtable.c.o",
-      "native/stringhashtable.c.o"
+      "native/stringhashtable.c.o",
+      "native/oval.c.o"
     ],
     "removed_permissive_link_modes": [
       "-undefined,dynamic_lookup"

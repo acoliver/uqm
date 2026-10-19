@@ -49,7 +49,12 @@ const PROVIDER_REPORT_COMMAND: &str = "rust/build.rs uqm_ownership::Validator::g
 const HASH_TABLE_PROVIDER: &str = "rust/src/collections/hash_table.rs";
 const CHAR_HASH_OBJECT: &str = "native/charhashtable.c.o";
 const STRING_HASH_OBJECT: &str = "native/stringhashtable.c.o";
-const REMOVED_PROVIDERS: [&str; 3] = ["native/heap.c.o", CHAR_HASH_OBJECT, STRING_HASH_OBJECT];
+const REMOVED_PROVIDERS: [&str; 4] = [
+    "native/heap.c.o",
+    CHAR_HASH_OBJECT,
+    STRING_HASH_OBJECT,
+    uqm_ownership::OVAL_OBJECT,
+];
 const HASH_TABLE_CUTOVERS: [(&str, &str, &str, &str); 2] = [
     (
         CHAR_HASH_OBJECT,
@@ -75,6 +80,7 @@ struct Trend {
     infrastructure_delta: InfrastructureDelta,
     removed_providers: Vec<String>,
     provider_cutovers: Vec<ProviderCutover>,
+    oval_cutover: OvalCutover,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +104,14 @@ struct ProviderCutover {
     rust_provider: String,
     canonical_owner: String,
     retained_source: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OvalCutover {
+    native_provider: String,
+    rust_provider: String,
+    canonical_owner: String,
+    removed_source: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1944,6 +1958,15 @@ fn validate_trend_authority(root: &Path, trend: &Trend) -> Result<(), String> {
             )
         })
         .collect();
+    let oval = &trend.oval_cutover;
+    if oval.native_provider != uqm_ownership::OVAL_OBJECT
+        || oval.rust_provider != uqm_ownership::OVAL_RUST_PROVIDER
+        || oval.canonical_owner != uqm_ownership::OVAL_OWNER
+        || oval.removed_source != "sc2/src/uqm/planets/oval.c"
+        || root.join(&oval.removed_source).exists()
+    {
+        return Err("native input trend differs from the oval production cutover".into());
+    }
     if actual_cutovers != HASH_TABLE_CUTOVERS {
         return Err("native input trend hash-table cutovers differ from ledger v7".into());
     }
