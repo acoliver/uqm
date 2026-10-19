@@ -63,6 +63,17 @@ fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
 }
 
 #[test]
+fn sol_layout_and_scans_match_the_c_fixtures() {
+    use planets_common::sol::{render_layout, render_scans, RustSol};
+    let layout = render_layout(&mut RustSol);
+    let scans = render_scans(&mut RustSol);
+    assert_eq!(layout.lines().count(), 3_312);
+    assert_eq!(scans.lines().count(), 15_120);
+    assert_eq!(layout, include_str!("fixtures/planets/sol_layout.txt"));
+    assert_eq!(scans, include_str!("fixtures/planets/sol_scans.txt"));
+}
+
+#[test]
 fn planetary_analysis_and_nodes_match_the_c_fixture() {
     let table = parse_plan_data(PLAN_DATA);
     assert_eq!(table.len(), 59);

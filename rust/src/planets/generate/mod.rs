@@ -23,6 +23,7 @@ pub mod rainbow;
 pub mod sam;
 pub mod shof;
 pub mod slylandro;
+pub mod sol;
 pub mod spa;
 pub mod special;
 #[cfg(any(not(test), feature = "linked_c_archive"))]

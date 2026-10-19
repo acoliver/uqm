@@ -417,6 +417,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     planets_special::special_generators_match_the_c_originals();
     planets_special::mycon_matches_the_c_original(table);
     planets_special::late_generators_match(table);
+    planets_special::sol_matches_the_c_original();
     assert!(unsafe {
         GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
             && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
