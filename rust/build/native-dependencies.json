@@ -1,6 +1,6 @@
 {
   "schema": "uqm-native-dependencies-v2",
-  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 288 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
+  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 287 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
   "dependencies": [
     {
       "path": "sc2/config_unix.h",
@@ -2445,26 +2445,6 @@
     {
       "path": "sc2/src/uqm/planets/generate.h",
       "sha256": "577b495ebb237ac3ab42c4b0ba06ed49ade26f4978d3b68bfb5372ed2e24008d",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
-      "path": "sc2/src/uqm/planets/generate/genall.h",
-      "sha256": "154253a5f12bf0a4b91b9d4df4a470c1973a6b7e54db494a375e3df8ca507ae9",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
-      "path": "sc2/src/uqm/planets/generate/gendefault.h",
-      "sha256": "a2e02376d3e2151eed2f46626ca5a0cdb10003ed6eb7a5ec965e14283c623cd8",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",

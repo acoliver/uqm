@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "4bbe6ebddfad433651e017a4315b5df57d09c26a3a70618231ae3d1e745c2cc8",
+    "projection_sha256": "488d555c084767d72aa91d80ab718a22606143b05a6fc06d336c89e5792cf9ce",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -2598,18 +2598,6 @@
       "sha256": "0689e396b66fdad4b3fecdee6b9583de4f910aecb452bc08390e89b685b6ca51",
       "archive_decision": "include",
       "provider": "native_object:native/devices.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensol.c.o",
-      "issue": "GEN_GENSOL",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensol.c",
-      "scan_root": "native",
-      "sha256": "2e9772c579edba343966dd2bd0bd2402cf1c863900c3c4149639af16984f268a",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensol.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"

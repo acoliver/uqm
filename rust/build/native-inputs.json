@@ -1803,15 +1803,6 @@
       "provider": "native_object:native/devices.c.o"
     },
     {
-      "source": "sc2/src/uqm/planets/generate/gensol.c",
-      "source_sha256": "2e9772c579edba343966dd2bd0bd2402cf1c863900c3c4149639af16984f268a",
-      "object_output": "gensol.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GEN_GENSOL",
-      "production_profile": "production",
-      "provider": "native_object:native/gensol.c.o"
-    },
-    {
       "source": "sc2/src/uqm/planets/oval.c",
       "source_sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
       "object_output": "oval.c.o",
