@@ -4,6 +4,7 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
+mod late_gen;
 mod mycon;
 
 use std::ffi::c_void;
@@ -284,4 +285,8 @@ pub fn special_generators_match_the_c_originals() {
 
 pub fn mycon_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
     mycon::check(table);
+}
+
+pub fn late_generators_match(frames: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+    late_gen::check(frames);
 }

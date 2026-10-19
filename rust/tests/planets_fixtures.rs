@@ -558,3 +558,21 @@ mod rust_special {
         }
     }
 }
+
+#[test]
+fn late_generators_full_fields_match_c_fixtures() {
+    use planets_common::late_gen::{render, Kind, Rust};
+    let table = parse_plan_data(PLAN_DATA);
+    for (kind, name, count) in [
+        (Kind::Vux, "vux.txt", 14256),
+        (Kind::Samatra, "samatra.txt", 1548),
+        (Kind::Spathi, "spathi.txt", 5112),
+    ] {
+        let text = render(kind, &table, &mut Rust(&table));
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/planets")
+            .join(name);
+        assert_eq!(text.lines().count(), count, "{name}");
+        assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name}");
+    }
+}

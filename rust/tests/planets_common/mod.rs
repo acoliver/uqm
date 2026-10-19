@@ -7,6 +7,7 @@
 use std::fmt::Write as _;
 
 pub mod default_gen;
+pub mod late_gen;
 pub mod mycon;
 pub mod special_gen;
 pub mod topography;

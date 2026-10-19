@@ -18,8 +18,10 @@ pub mod orz;
 pub mod pet;
 pub mod pku;
 pub mod rainbow;
+pub mod sam;
 pub mod shof;
 pub mod slylandro;
+pub mod spa;
 pub mod special;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod special_exports;
@@ -32,6 +34,7 @@ pub mod trap;
 pub mod utw;
 pub mod vault;
 pub mod vtable;
+pub mod vux;
 pub mod wreck;
 pub mod yehat;
 pub mod zfpscout;
