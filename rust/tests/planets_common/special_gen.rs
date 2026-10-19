@@ -31,10 +31,11 @@ pub fn desc_of(d: &PLANET_DESC) -> Desc {
 /// set; `aqua` and `thrad` are the Thraddash generator at the Aqua Helix and
 /// Thraddash home stars (`CurStarDescPtr->Index`), `orz` and `taalo` the Orz
 /// generator at the Orz home and Taalo stars, and `utw` and `bomb` the Utwig
-/// generator at the Utwig home and bomb stars.
-pub const LAYOUT_SYSTEMS: [&str; 23] = [
+/// generator at the Utwig home and bomb stars, and `myc` the Mycon generator.
+pub const LAYOUT_SYSTEMS: [&str; 24] = [
     "yehat", "colony", "rainbow", "syreen", "trap", "sly", "ilw", "chmmr0", "chmmr1", "pku", "sup",
     "dru", "burv", "aqua", "thrad", "orz", "taalo", "zoq", "shof", "andro", "pet", "utw", "bomb",
+    "myc",
 ];
 
 /// The systems whose `generateEnergy` is overridden, with the bodies probed.
@@ -94,6 +95,10 @@ pub fn energy_systems() -> Vec<(&'static str, Vec<Body>)> {
         ("aqua0", home_bodies()),
         ("aqua1", home_bodies()),
         ("thrad", home_bodies()),
+        ("myc", home_bodies()),
+        ("sun0", home_bodies()),
+        ("sun1", home_bodies()),
+        ("egg", home_bodies()),
         ("utw", utwig_bodies()),
         ("bomb0", utwig_bodies()),
         ("bomb1", utwig_bodies()),

@@ -79,6 +79,14 @@ fn special_generators_match_the_c_fixture() {
 }
 
 #[test]
+fn mycon_full_fields_and_scan_buffers_match_the_c_fixture() {
+    let table = parse_plan_data(PLAN_DATA);
+    let text = planets_common::mycon::render(&mut planets_common::mycon::RustMycon(&table));
+    assert_eq!(text.lines().count(), 5_160);
+    assert_eq!(text, include_str!("fixtures/planets/mycon.txt"));
+}
+
+#[test]
 fn fault_line_topography_matches_the_c_fixture() {
     let table = parse_plan_data(PLAN_DATA);
     let text = planets_common::topography::render(&mut RustTopography, &table);
@@ -303,16 +311,16 @@ mod rust_special {
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
     use uqm_rust::battle::gendef::{
-        AQUA_HELIX_DEFINED, BOMB_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
-        UTWIG_DEFINED,
+        AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
+        SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
     };
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
     use uqm_rust::planets::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
-        andro, burv, chmmr, colony, dru, ilw, orz, pet, pku, rainbow, shof, slylandro, sup, syreen,
-        thrad, trap, utw, vault, wreck, yehat, zoq,
+        andro, burv, chmmr, colony, dru, ilw, myc, orz, pet, pku, rainbow, shof, slylandro, sup,
+        syreen, thrad, trap, utw, vault, wreck, yehat, zoq,
     };
 
     /// A game state whose only flag is `name`.
@@ -402,6 +410,7 @@ mod rust_special {
                 ),
                 other => {
                     let hook = match other {
+                        "myc" => myc::generate_planets,
                         "zoq" => zoq::generate_planets,
                         "andro" => andro::generate_planets,
                         "pet" => pet::generate_planets,
@@ -483,6 +492,19 @@ mod rust_special {
                 };
                 utw::generate_energy(rng, info, star_index, body, which, node, &bomb)
             };
+            let sun_device = OneFlag("SUN_DEVICE", system == "sun1");
+            let mycon = |rng: &mut RandomContext,
+                         info: &SYSTEM_INFO,
+                         body: Body,
+                         which: u16,
+                         node: &mut NODE_INFO| {
+                let star_index = match system {
+                    "myc" => MYCON_DEFINED,
+                    "egg" => EGG_CASE0_DEFINED,
+                    _ => SUN_DEVICE_DEFINED,
+                };
+                myc::generate_energy(rng, info, star_index, body, which, node, &sun_device)
+            };
             let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
             let orz = |rng: &mut RandomContext,
                        info: &SYSTEM_INFO,
@@ -507,6 +529,7 @@ mod rust_special {
                     "burv0" | "burv1" => &burv,
                     "aqua0" | "aqua1" | "thrad" => &thraddash,
                     "utw" | "bomb0" | "bomb1" => &utwig,
+                    "myc" | "sun0" | "sun1" | "egg" => &mycon,
                     "yehat" => &yehat::generate_energy,
                     "ilw" => &ilw::generate_energy,
                     "pku" => &pku::generate_energy,

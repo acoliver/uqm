@@ -4,14 +4,16 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
+mod mycon;
+
 use std::ffi::c_void;
 use std::fmt::Write as _;
 
 use crate::planets_common::special_gen::{self, desc_of, Desc, SpecialOps};
 use crate::planets_common::{fresh_node, scan_seeds, write_node};
 use uqm_rust::battle::gendef::{
-    AQUA_HELIX_DEFINED, BOMB_DEFINED, ORZ_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED,
-    UTWIG_DEFINED,
+    AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
+    SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
 use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
@@ -40,6 +42,7 @@ unsafe extern "C" {
     static generateAndrosynthFunctions: GenerateFunctions;
     static generateTalkingPetFunctions: GenerateFunctions;
     static generateUtwigFunctions: GenerateFunctions;
+    static generateMyconFunctions: GenerateFunctions;
     static generatePkunkFunctions: GenerateFunctions;
     static generateSupoxFunctions: GenerateFunctions;
     static generateDruugeFunctions: GenerateFunctions;
@@ -186,6 +189,12 @@ fn star_index_of(system: &str) -> u8 {
         UTWIG_DEFINED
     } else if system.starts_with("bomb") {
         BOMB_DEFINED
+    } else if system == "myc" {
+        MYCON_DEFINED
+    } else if system.starts_with("sun") {
+        SUN_DEVICE_DEFINED
+    } else if system == "egg" {
+        EGG_CASE0_DEFINED
     } else {
         0
     }
@@ -205,6 +214,7 @@ fn c_table(system: &str) -> &'static GenerateFunctions {
             "andro" => &generateAndrosynthFunctions,
             "pet" => &generateTalkingPetFunctions,
             "utw" | "bomb" | "bomb0" | "bomb1" => &generateUtwigFunctions,
+            "myc" | "sun0" | "sun1" | "egg" => &generateMyconFunctions,
             "pku" => &generatePkunkFunctions,
             "sup" => &generateSupoxFunctions,
             "dru" => &generateDruugeFunctions,
@@ -249,6 +259,9 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("bomb") {
             set_game_state("UTWIG_BOMB", taken.parse().expect("0 or 1"));
         }
+        if let Some(taken) = system.strip_prefix("sun") {
+            set_game_state("SUN_DEVICE", taken.parse().expect("0 or 1"));
+        }
         if let Some(taken) = system.strip_prefix("taalo") {
             set_game_state("TAALO_PROTECTOR", taken.parse().expect("0 or 1"));
         }
@@ -267,4 +280,8 @@ pub fn special_generators_match_the_c_originals() {
         "special generators: {} fixture cases",
         rendered.lines().count()
     );
+}
+
+pub fn mycon_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+    mycon::check(table);
 }

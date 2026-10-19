@@ -13,6 +13,7 @@ pub mod home_contact;
 pub mod home_exports;
 pub mod ilw;
 pub mod melnorme;
+pub mod myc;
 pub mod orz;
 pub mod pet;
 pub mod pku;
