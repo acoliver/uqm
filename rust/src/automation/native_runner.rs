@@ -89,6 +89,8 @@ impl CaptureAttemptSource for HeldBarrierCapture<'_> {
 struct BoundedNativeObserver {
     executable: PathBuf,
     executable_digest: String,
+    #[cfg(test)]
+    helper_script: Option<PathBuf>,
     scratch_root: PathBuf,
     scratch_directory: std::os::fd::OwnedFd,
     scratch_identity: (u64, u64),
@@ -132,6 +134,8 @@ impl BoundedNativeObserver {
         Ok(Self {
             executable,
             executable_digest,
+            #[cfg(test)]
+            helper_script: None,
             scratch_root,
             scratch_directory,
             scratch_identity,
@@ -150,6 +154,8 @@ impl BoundedNativeObserver {
         let response_sequence = self.sequence;
         let response_path = self.next_path("observe", "json")?;
         let mut command = Command::new(&self.executable);
+        #[cfg(test)]
+        command.args(self.helper_script.iter());
         command
             .arg("observer-helper")
             .arg("observe")
@@ -246,6 +252,8 @@ impl BoundedNativeObserver {
         response_sequence: u64,
     ) -> Result<Vec<u8>, NativeWindowObserverError> {
         let mut command = Command::new(&self.executable);
+        #[cfg(test)]
+        command.args(self.helper_script.iter());
         command
             .arg("observer-helper")
             .arg("capture")
@@ -4243,6 +4251,7 @@ mod tests {
             executable_digest: sha256_hex(
                 &read_regular_file_nofollow_bounded(&executable, 64 * 1024 * 1024).unwrap(),
             ),
+            helper_script: None,
             scratch_root: scratch_root.to_path_buf(),
             scratch_directory: open_directory_path_nofollow(scratch_root).unwrap(),
             scratch_identity: (metadata.dev(), metadata.ino()),
@@ -4915,11 +4924,24 @@ mod tests {
         path
     }
 
+    fn observer_for_capture_helper_test(
+        scratch_root: &Path,
+        script: PathBuf,
+        contract: NativeWindowRuntimeContract,
+    ) -> BoundedNativeObserver {
+        // Read the generated script through an interpreter. Executing its inode
+        // directly races writable descriptors inherited by concurrent forks.
+        let interpreter = fs::canonicalize("/bin/sh").unwrap();
+        let mut observer = observer_for_helper_test(scratch_root, interpreter, contract);
+        observer.helper_script = Some(script);
+        observer
+    }
+
     #[test]
     fn hung_screencapture_is_discarded_and_retried_once_inside_the_barrier() {
         let helper_directory = tempfile::tempdir().unwrap();
         let scratch = tempfile::tempdir().unwrap();
-        let mut observer = observer_for_helper_test(
+        let mut observer = observer_for_capture_helper_test(
             scratch.path(),
             hung_then_healthy_capture_helper(helper_directory.path()),
             runtime_contract(),
@@ -4940,7 +4962,7 @@ mod tests {
     fn hung_screencapture_without_barrier_budget_fails_and_leaves_nothing_behind() {
         let helper_directory = tempfile::tempdir().unwrap();
         let scratch = tempfile::tempdir().unwrap();
-        let mut observer = observer_for_helper_test(
+        let mut observer = observer_for_capture_helper_test(
             scratch.path(),
             hung_then_healthy_capture_helper(helper_directory.path()),
             runtime_contract(),
@@ -4958,6 +4980,32 @@ mod tests {
         assert!(!scratch.path().join(".capture-0.png").exists());
         observer.finish().unwrap();
         assert!(!scratch.path().exists());
+    }
+
+    #[test]
+    fn capture_timeout_is_independent_of_an_inherited_script_writer() {
+        let helper_directory = tempfile::tempdir().unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let script = hung_then_healthy_capture_helper(helper_directory.path());
+        // A concurrent fork can retain this writable inode until its exec,
+        // even though the descriptor is close-on-exec.
+        let writer = fs::OpenOptions::new().write(true).open(&script).unwrap();
+        let mut observer =
+            observer_for_capture_helper_test(scratch.path(), script, runtime_contract());
+        let barrier_started = Instant::now()
+            .checked_sub(Duration::from_secs(60))
+            .expect("monotonic clock has run for a minute");
+
+        let error = observer.capture(7, barrier_started).err().unwrap();
+
+        assert!(
+            matches!(error, NativeWindowObserverError::CaptureTimedOut(_)),
+            "expected the helper's capture timeout, got {error:?}"
+        );
+        assert!(!scratch.path().join(".capture-0.png").exists());
+        observer.finish().unwrap();
+        assert!(!scratch.path().exists());
+        drop(writer);
     }
 
     #[test]
