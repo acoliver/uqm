@@ -150,6 +150,7 @@ mod tests {
             stderr_bytes: 0,
             output_drained,
             orphan_check_passed,
+            cleanup_diagnostics: Vec::new(),
             identity: identity(pid),
         }
     }

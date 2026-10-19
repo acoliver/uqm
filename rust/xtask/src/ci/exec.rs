@@ -1390,7 +1390,6 @@ impl Containment {
         }
         // Retain what the monitor says about its own failure; discarding it
         // leaves an exit status with no stated cause.
-        #[cfg(not(test))]
         command.stderr(Stdio::piped());
         // SAFETY: fcntl and close are async-signal-safe. A separate process
         // group keeps the monitor outside every group it is authorized to kill.
@@ -4249,6 +4248,26 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn containment_monitor_failure_retains_its_protocol_diagnosis() {
+        let containment =
+            Containment::start(Duration::ZERO, LaunchContext::CurrentAquaSession).unwrap();
+        assert!(containment
+            .protocol()
+            .exchange(NestedGroupOperation::Register, 0)
+            .is_err());
+        let error = containment.finish(Duration::from_secs(1)).unwrap_err();
+        assert!(
+            error.contains("nested process-group monitor failed"),
+            "{error}"
+        );
+        assert!(
+            error.contains("registration has nonpositive PID"),
+            "{error}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn containment_monitor_process() {
         if std::env::var_os(MONITOR_REGISTRATION_FD_ENV).is_none() {
             return;
@@ -4484,7 +4503,7 @@ mod tests {
         ));
         assert_eq!(failure.receipt.signal, Some(libc::SIGKILL));
         assert!(failure.receipt.output_drained);
-        assert!(failure.receipt.orphan_check_passed);
+        assert!(failure.receipt.orphan_check_passed, "{failure:?}");
         assert!(!process_exists(pid));
         assert_eq!(
             std::fs::read(directory.join("timeout.out")).unwrap(),
@@ -4544,7 +4563,7 @@ mod tests {
         ));
         assert_eq!(failure.receipt.signal, Some(libc::SIGKILL));
         assert!(failure.receipt.output_drained);
-        assert!(failure.receipt.orphan_check_passed);
+        assert!(failure.receipt.orphan_check_passed, "{failure:?}");
         assert!(!process_exists(pid));
     }
 
