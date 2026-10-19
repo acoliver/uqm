@@ -136,6 +136,14 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("explore-planet-v1", &[Domain::NavigationOrbitScan]),
     row("real-sol-autopilot", &[Domain::NavigationOrbitScan]),
     row(
+        "real-sol-earth-orbit",
+        &[Domain::NewGame, Domain::NavigationOrbitScan],
+    ),
+    row(
+        "real-sol-pluto-orbit-scan",
+        &[Domain::NewGame, Domain::NavigationOrbitScan],
+    ),
+    row(
         "real-sol-luna-moonbase-departure",
         &[Domain::NavigationOrbitScan],
     ),

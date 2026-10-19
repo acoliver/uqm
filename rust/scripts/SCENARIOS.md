@@ -5,6 +5,12 @@ The native UI suite that runs these scenarios is a local gate on a real Mac wind
 Automation can either play through normal game state or, for tests that do not
 need navigation coverage, activate a deterministic start scene.
 
+`real-sol-earth-orbit` and `real-sol-pluto-orbit-scan` are unplayed New Game
+inputs using existing navigation actions. Their exact claims, source-only
+verification limits and commands for execution after lane025 is released are in
+[the special-system input notes](../../docs/special-system-proof-inputs.md).
+Pluto orbit/scan is a Sol path, not Spathi homeworld generator 5 coverage.
+
 ## Real Sol probe proof
 
 `real-sol-autopilot.json` is the authoritative regression proof for the opening

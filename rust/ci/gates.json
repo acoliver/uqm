@@ -329,6 +329,9 @@
                 "outer_child_timeout_ms": 900000
           },
           {
+                "path": "rust/scripts/real-sol-earth-orbit.json"
+          },
+          {
                 "path": "rust/scripts/real-sol-luna-moonbase-departure.json",
                 "outer_child_timeout_ms": 900000
           },
@@ -339,6 +342,9 @@
           {
                 "path": "rust/scripts/real-sol-planetside-collision-proof.json",
                 "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-pluto-orbit-scan.json"
           },
           {
                 "path": "rust/scripts/real-sol-probe-completion.json"
