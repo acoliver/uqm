@@ -97,11 +97,16 @@ fn allocations() -> i32 {
 fn check_drawable_ownership(h: &mut Harness) {
     let format =
         sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
+    // Production keeps its non-alpha screen separate from the alpha conversion
+    // surface. Sharing the latter here converts RGB resource art into RGBA.
+    let screen =
+        sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
     let old_format = unsafe { std::ptr::addr_of!(c_api::FORMAT_CONV_SURF).read() };
     let old_screen = unsafe { std::ptr::addr_of!(c_api::SDL_SCREEN).read() };
     unsafe {
         std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(format.raw());
-        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(format.raw());
+        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(screen.raw());
+        super::shield_additive::check();
         c_api::Init_DrawCommandQueue();
     }
     // Warm SDL's format cache before measuring resource-owned allocations.

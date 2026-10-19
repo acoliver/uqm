@@ -44,6 +44,8 @@ pub fn check(h: &mut Harness) {
             "real Earth definition must load"
         );
         let raw = earth.as_frame();
+        let before_tint = frame_rgb(raw);
+        let expected_tint = super::shield_additive::earth_expected(raw);
         let earth = earth
             .into_definition(MAP_WIDTH as i16, MAP_HEIGHT as i16)
             .unwrap();
@@ -76,6 +78,20 @@ pub fn check(h: &mut Harness) {
         assert!(!(*system).Orbit.lpTopoData.is_null());
         assert!(!(*system).Orbit.TopoColors.is_null());
         assert!(!(*system).Orbit.SphereFrame.is_null());
+        let after_tint = frame_rgb((*system).TopoFrame);
+        assert_eq!(after_tint.len(), before_tint.len());
+        assert_eq!(
+            super::shield_additive::frame_bytes((*system).TopoFrame),
+            expected_tint
+        );
+        for (index, (before, after)) in before_tint.iter().zip(&after_tint).enumerate() {
+            assert_eq!(
+                *after,
+                [255, before[1], before[2]],
+                "Earth shield tint pixel {index}"
+            );
+        }
+        println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
         c_api::FreePlanet();
         c_api::TFB_FlushGraphicsEx(1);
         assert!((*system).TopoFrame.is_null());
@@ -94,6 +110,31 @@ pub fn check(h: &mut Harness) {
         uio_bridge::uio_closeRepository(repository);
         uio_bridge::uio_unInit();
     }
+}
+
+unsafe fn frame_rgb(frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC) -> Vec<[u8; 3]> {
+    let surface = (*frame).image.cast::<*mut sdl2::sys::SDL_Surface>().read();
+    let info = uqm_rust::graphics::sdl_capture::query_surface_info(surface);
+    let format = &*(*surface).format;
+    println!("Earth canvas: {info:?}, palette={:p}", format.palette);
+    assert_eq!(format.BytesPerPixel, 4);
+    assert_eq!(sdl2::sys::SDL_LockSurface(surface), 0);
+    let mut result = Vec::new();
+    for y in 0..(*surface).h {
+        for x in 0..(*surface).w {
+            let pixel = (*surface)
+                .pixels
+                .cast::<u8>()
+                .add((y * (*surface).pitch + x * 4) as usize)
+                .cast::<u32>()
+                .read_unaligned();
+            let (mut r, mut g, mut b) = (0, 0, 0);
+            sdl2::sys::SDL_GetRGB(pixel, (*surface).format, &mut r, &mut g, &mut b);
+            result.push([r, g, b]);
+        }
+    }
+    sdl2::sys::SDL_UnlockSurface(surface);
+    result
 }
 
 unsafe fn names(h: &mut Harness) {

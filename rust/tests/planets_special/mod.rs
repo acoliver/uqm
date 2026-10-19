@@ -7,6 +7,7 @@
 mod late_abi;
 mod late_gen;
 mod mycon;
+mod shield_additive;
 mod sol;
 mod sol_abi;
 mod sol_npcs;
