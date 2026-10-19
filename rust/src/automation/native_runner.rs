@@ -4951,10 +4951,10 @@ mod tests {
 
         let error = observer.capture(7, barrier_started).err().unwrap();
 
-        assert!(matches!(
-            error,
-            NativeWindowObserverError::CaptureTimedOut(_)
-        ));
+        assert!(
+            matches!(error, NativeWindowObserverError::CaptureTimedOut(_)),
+            "expected the helper's capture timeout, got {error:?}"
+        );
         assert!(!scratch.path().join(".capture-0.png").exists());
         observer.finish().unwrap();
         assert!(!scratch.path().exists());
