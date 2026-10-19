@@ -2284,7 +2284,7 @@
     },
     {
       "path": "sc2/src/uqm/hyper.h",
-      "sha256": "72debf71fbaac7a0ae2cc7d5c19bfd727cd13f133d42029eb78b7437697706f4",
+      "sha256": "b0cf2919d7515d2f8424a62676199374be2e6b06fc7f038ad6811852c600d077",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
