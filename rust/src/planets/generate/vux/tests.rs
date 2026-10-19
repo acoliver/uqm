@@ -143,7 +143,9 @@ impl LanderTakeoff for Pickup {
 
 pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SYSTEM_INFO, u32) {
     let mut rng = RandomContext::with_seed(104729);
-    let table = vec![unsafe { std::mem::zeroed() }; 59];
+    // The returned SYSTEM_INFO retains PlanDataPtr after this helper returns.
+    static TABLE: crate::planets::tables::SharedTable<[PlanetFrame; 59]> =
+        crate::planets::tables::SharedTable([unsafe { std::mem::zeroed() }; 59]);
     let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
     world.rand_seed = 7919;
     world.radius = 512;
@@ -151,7 +153,7 @@ pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SYSTEM_INFO, u32)
     info.PlanetInfo.ScanSeed = [101, 202, 303];
     run(&mut Orbit {
         rng: &mut rng,
-        plan_data: &table,
+        plan_data: &TABLE.0,
         star: StarDescription {
             size: 0,
             star_type: 0,
