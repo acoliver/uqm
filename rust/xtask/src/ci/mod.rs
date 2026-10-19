@@ -26,6 +26,8 @@ pub mod mutations;
 pub mod plan;
 pub mod proof;
 pub mod run;
+pub mod shrink;
+pub mod trailer;
 pub mod workflow;
 
 use std::path::Path;

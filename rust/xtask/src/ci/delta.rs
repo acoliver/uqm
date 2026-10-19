@@ -9,12 +9,15 @@ use serde_json::Value;
 
 use super::authority::Authority;
 use super::exec::{run_captured_with_bound_environment, Captured};
+use super::shrink::{self, PathVerdict, Verdict};
+use super::trailer::waiver_reasons;
 use crate::hex_sha256;
 
 const SCHEMA: &str = "uqm-s4-zero-native-delta-v1";
 const LEDGER_PATH: &str = "rust/ci/native-ownership-ledger-v8.json";
 const PROVIDER_PATH: &str = "rust/ownership/native-provider-manifest.json";
 const NATIVE_INPUTS_PATH: &str = "rust/build/native-inputs.json";
+const WAIVER_KEY: &str = "Adds-native";
 
 #[derive(Debug, Serialize)]
 pub struct DeltaReport {
@@ -23,7 +26,15 @@ pub struct DeltaReport {
     pub head_sha: String,
     pub categories: BTreeMap<String, DeltaCategory>,
     pub transitional_native_inputs: TransitionalNativeInputs,
+    pub waivers: Vec<Waiver>,
     pub passed: bool,
+}
+
+/// An `Adds-native:` commit-message line that turns failures into reported passes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Waiver {
+    pub commit: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,8 +47,10 @@ pub struct TransitionalNativeInputs {
 
 #[derive(Debug, Serialize)]
 pub struct DeltaCategory {
+    /// Number of verdicts that failed the shrink-only rule (waived ones excluded).
     pub measured_delta: usize,
     pub changed_paths: Vec<String>,
+    pub verdicts: Vec<PathVerdict>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,7 +106,21 @@ fn measure_between(
     let head_tree = tree(root, authority, head_sha)?;
 
     let all_paths = base_tree.keys().chain(head_tree.keys());
-    let sources = path_delta(
+    let waivers = commit_waivers(root, authority, base_sha, head_sha)?;
+    let verdicts_for = |changed: Vec<String>| -> Result<Vec<PathVerdict>, String> {
+        changed
+            .iter()
+            .map(|path| {
+                shrink::path_verdict(
+                    path,
+                    base_tree.contains_key(path),
+                    head_tree.contains_key(path),
+                    || path_diff(root, authority, base_sha, head_sha, path),
+                )
+            })
+            .collect()
+    };
+    let sources = verdicts_for(path_delta(
         ledger
             .tracked_native_sources_and_build_inputs
             .iter()
@@ -106,12 +133,12 @@ fn measure_between(
             ),
         &base_tree,
         &head_tree,
-    );
+    ))?;
     // `bridges` measures expansion of the Rust/native boundary, not edits to
     // an implementation that already belongs to that boundary. Content
     // changes remain covered by the ordinary source, test, and ownership
     // gates; adding or removing a bridge path is the zero-delta concern here.
-    let bridges = path_membership_delta(
+    let bridges = verdicts_for(path_membership_delta(
         ledger
             .rust_internal_ffi_files
             .iter()
@@ -124,21 +151,21 @@ fn measure_between(
             ),
         &base_tree,
         &head_tree,
-    );
+    ))?;
     let generated_binding_paths = all_paths
         .filter(|path| is_generated_binding(path))
         .collect::<BTreeSet<_>>();
     if generated_binding_paths.is_empty() {
         return Err("generated-binding inventory is empty".into());
     }
-    let generated_bindings = path_delta(
+    let generated_bindings = verdicts_for(path_delta(
         generated_binding_paths.iter().map(|path| path.as_str()),
         &base_tree,
         &head_tree,
-    );
+    ))?;
     let base_flags = flag_projection(root, authority, base_sha, &ledger)?;
     let head_flags = flag_projection(root, authority, head_sha, &ledger)?;
-    let flags = projection_delta(&base_flags, &head_flags);
+    let flags = verdicts_for(projection_delta(&base_flags, &head_flags))?;
 
     let base_manifest = git_json(root, authority, base_sha, PROVIDER_PATH)?;
     let head_manifest_bytes = super::bounded_io::read_regular_nofollow(
@@ -147,30 +174,36 @@ fn measure_between(
     )?;
     let head_manifest: Value = serde_json::from_slice(&head_manifest_bytes)
         .map_err(|error| format!("cannot parse {PROVIDER_PATH}: {error}"))?;
-    let providers = value_delta(
-        provider_projection(&base_manifest),
-        provider_projection(&head_manifest),
-        PROVIDER_PATH,
-    );
-    let objects = value_delta(
-        object_projection(&base_manifest),
-        object_projection(&head_manifest),
-        PROVIDER_PATH,
-    );
-    let symbols = value_delta(
-        base_manifest.get("symbol_contracts").cloned(),
-        head_manifest.get("symbol_contracts").cloned(),
-        PROVIDER_PATH,
-    );
+    let providers = manifest_section_verdicts(
+        &base_manifest,
+        &head_manifest,
+        provider_identities,
+        provider_projection,
+    )?;
+    let objects = manifest_section_verdicts(
+        &base_manifest,
+        &head_manifest,
+        object_identities,
+        object_projection,
+    )?;
+    let symbols = manifest_section_verdicts(
+        &base_manifest,
+        &head_manifest,
+        symbol_identities,
+        |manifest| manifest.get("symbol_contracts").cloned(),
+    )?;
 
     let categories = BTreeMap::from([
-        ("tracked_sources".into(), category(sources)),
-        ("providers".into(), category(providers)),
-        ("objects".into(), category(objects)),
-        ("internal_symbols".into(), category(symbols)),
-        ("bridges".into(), category(bridges)),
-        ("generated_bindings".into(), category(generated_bindings)),
-        ("transitional_flags".into(), category(flags)),
+        ("tracked_sources".into(), category(sources, &waivers)),
+        ("providers".into(), category(providers, &waivers)),
+        ("objects".into(), category(objects, &waivers)),
+        ("internal_symbols".into(), category(symbols, &waivers)),
+        ("bridges".into(), category(bridges, &waivers)),
+        (
+            "generated_bindings".into(),
+            category(generated_bindings, &waivers),
+        ),
+        ("transitional_flags".into(), category(flags, &waivers)),
     ]);
     let base_input_count =
         native_input_count(&git_json(root, authority, base_sha, NATIVE_INPUTS_PATH)?)?;
@@ -193,15 +226,92 @@ fn measure_between(
         head_sha: head_sha.into(),
         categories,
         transitional_native_inputs,
+        waivers,
         passed,
     })
 }
 
-fn category(changed_paths: Vec<String>) -> DeltaCategory {
-    DeltaCategory {
-        measured_delta: changed_paths.len(),
-        changed_paths,
+fn category(mut verdicts: Vec<PathVerdict>, waivers: &[Waiver]) -> DeltaCategory {
+    if !waivers.is_empty() {
+        shrink::waive_failures(&mut verdicts);
     }
+    let changed_paths = verdicts
+        .iter()
+        .map(|verdict| verdict.path.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    DeltaCategory {
+        measured_delta: verdicts
+            .iter()
+            .filter(|verdict| verdict.verdict == Verdict::Fail)
+            .count(),
+        changed_paths,
+        verdicts,
+    }
+}
+
+fn commit_waivers(
+    root: &Path,
+    authority: &Authority,
+    base_sha: &str,
+    head_sha: &str,
+) -> Result<Vec<Waiver>, String> {
+    let output = supervised_git(
+        root,
+        authority,
+        &[
+            "log".into(),
+            "--format=%H%x1f%B%x1e".into(),
+            format!("{base_sha}..{head_sha}"),
+        ],
+        "read base-to-head commit messages",
+        &[0],
+    )?;
+    Ok(parse_waivers(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// Parse `git log --format=%H%x1f%B%x1e` output into waivers.
+fn parse_waivers(log: &str) -> Vec<Waiver> {
+    log.split('\x1e')
+        .filter_map(|record| record.trim_start().split_once('\x1f'))
+        .flat_map(|(commit, message)| {
+            waiver_reasons(message, WAIVER_KEY)
+                .into_iter()
+                .map(|reason| Waiver {
+                    commit: commit.to_string(),
+                    reason,
+                })
+        })
+        .collect()
+}
+
+fn path_diff(
+    root: &Path,
+    authority: &Authority,
+    base_sha: &str,
+    head_sha: &str,
+    path: &str,
+) -> Result<String, String> {
+    let output = supervised_git(
+        root,
+        authority,
+        &[
+            "diff".into(),
+            "--no-color".into(),
+            "--no-ext-diff".into(),
+            "--no-textconv".into(),
+            "--no-renames".into(),
+            "-U0".into(),
+            base_sha.into(),
+            head_sha.into(),
+            "--".into(),
+            path.into(),
+        ],
+        &format!("diff {path} between {base_sha} and {head_sha}"),
+        &[0],
+    )?;
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn native_input_count(manifest: &Value) -> Result<usize, String> {
@@ -280,12 +390,86 @@ fn path_membership_delta<'a>(
         .collect()
 }
 
-fn value_delta(base: Option<Value>, head: Option<Value>, path: &str) -> Vec<String> {
-    if base == head {
-        Vec::new()
-    } else {
-        vec![path.into()]
+fn manifest_section_verdicts(
+    base: &Value,
+    head: &Value,
+    identities: fn(&Value) -> Result<BTreeSet<String>, String>,
+    projection: fn(&Value) -> Option<Value>,
+) -> Result<Vec<PathVerdict>, String> {
+    Ok(shrink::manifest_verdicts(
+        PROVIDER_PATH,
+        &identities(base)?,
+        &identities(head)?,
+        projection(base) != projection(head),
+    ))
+}
+
+fn manifest_array<'a>(manifest: &'a Value, key: &str) -> Result<&'a Vec<Value>, String> {
+    manifest
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{PROVIDER_PATH} has no {key} array"))
+}
+
+fn manifest_field<'a>(entry: &'a Value, key: &str) -> Result<&'a str, String> {
+    entry
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{PROVIDER_PATH} entry has no string {key}: {entry}"))
+}
+
+/// Native objects and recompiled objects, identified by path / canonical source.
+fn object_identities(manifest: &Value) -> Result<BTreeSet<String>, String> {
+    let mut identities = BTreeSet::new();
+    for entry in manifest_array(manifest, "objects")? {
+        identities.insert(format!("object {}", manifest_field(entry, "path")?));
     }
+    for entry in manifest_array(manifest, "recompiled_objects")? {
+        identities.insert(format!(
+            "recompiled {}",
+            manifest_field(entry, "canonical_source")?
+        ));
+    }
+    Ok(identities)
+}
+
+/// Provider assignments, identified by what they provide and who provides it.
+fn provider_identities(manifest: &Value) -> Result<BTreeSet<String>, String> {
+    let mut identities = BTreeSet::new();
+    for entry in manifest_array(manifest, "objects")? {
+        identities.insert(format!(
+            "object {} provided by {} ({})",
+            manifest_field(entry, "path")?,
+            manifest_field(entry, "provider")?,
+            manifest_field(entry, "archive_decision")?
+        ));
+    }
+    for entry in manifest_array(manifest, "recompiled_objects")? {
+        identities.insert(format!(
+            "recompiled {} provided by {}",
+            manifest_field(entry, "canonical_source")?,
+            manifest_field(entry, "provider")?
+        ));
+    }
+    Ok(identities)
+}
+
+/// Symbol contracts, identified by symbol, owner, and active provider. Shrinking
+/// the excluded-provider list is a content change of a kept entry.
+fn symbol_identities(manifest: &Value) -> Result<BTreeSet<String>, String> {
+    manifest_array(manifest, "symbol_contracts")?
+        .iter()
+        .map(|entry| {
+            let provider = entry
+                .get("active_provider")
+                .ok_or_else(|| format!("{PROVIDER_PATH} symbol has no active_provider: {entry}"))?;
+            Ok(format!(
+                "symbol {} owned by {} provided by {provider}",
+                manifest_field(entry, "symbol")?,
+                manifest_field(entry, "canonical_owner")?
+            ))
+        })
+        .collect()
 }
 
 fn provider_projection(manifest: &Value) -> Option<Value> {
@@ -669,6 +853,11 @@ mod tests {
         let report = measure_between(&root, &authority, &head, &head).unwrap();
         assert!(report.passed, "{report:#?}");
         assert_eq!(report.categories.len(), 7);
+        assert!(report.waivers.is_empty());
+        assert!(report
+            .categories
+            .values()
+            .all(|category| category.verdicts.is_empty()));
         assert!(report
             .categories
             .values()
@@ -680,5 +869,67 @@ mod tests {
         assert_eq!(report.transitional_native_inputs.head_count, 287);
         assert_eq!(report.transitional_native_inputs.maximum_count, 287);
         assert!(report.transitional_native_inputs.passed);
+    }
+
+    fn failing_verdict() -> PathVerdict {
+        PathVerdict {
+            path: "sc2/src/new.c".into(),
+            verdict: Verdict::Fail,
+            reason: "added at head".into(),
+        }
+    }
+
+    #[test]
+    fn unwaived_failures_count_toward_the_measured_delta() {
+        let result = category(vec![failing_verdict()], &[]);
+        assert_eq!(result.measured_delta, 1);
+        assert_eq!(result.changed_paths, ["sc2/src/new.c"]);
+    }
+
+    #[test]
+    fn waived_failures_are_not_counted_but_stay_listed() {
+        let waivers = parse_waivers(&format!(
+            "{commit}\x1fSubject\n\nAdds-native: approved bootstrap shim\n\x1e\n{other}\x1fPlain\n\x1e",
+            commit = "a".repeat(40),
+            other = "b".repeat(40),
+        ));
+        assert_eq!(
+            waivers,
+            [Waiver {
+                commit: "a".repeat(40),
+                reason: "approved bootstrap shim".into()
+            }]
+        );
+        let result = category(vec![failing_verdict()], &waivers);
+        assert_eq!(result.measured_delta, 0);
+        assert_eq!(result.changed_paths, ["sc2/src/new.c"]);
+        assert_eq!(result.verdicts[0].verdict, Verdict::Waived);
+        assert_eq!(result.verdicts[0].reason, "added at head");
+    }
+
+    #[test]
+    fn manifest_identities_ignore_hashes_and_excluded_provider_lists() {
+        let manifest = |hash: &str, excluded: &str| {
+            serde_json::json!({
+                "objects": [{"path": "native/a.c.o", "sha256": hash,
+                             "provider": "rust_source:rust/src/a.rs",
+                             "archive_decision": "exclude_replaced"}],
+                "recompiled_objects": [],
+                "symbol_contracts": [{"symbol": "S", "canonical_owner": "O",
+                                      "active_provider": {"kind": "rust_source"},
+                                      "excluded_providers": [excluded]}],
+            })
+        };
+        let base = manifest("h1", "native/a.c.o");
+        let head = manifest("h2", "");
+        let objects =
+            manifest_section_verdicts(&base, &head, object_identities, object_projection).unwrap();
+        assert_eq!(objects.len(), 1);
+        assert_eq!(objects[0].verdict, Verdict::Pass);
+        let symbols = manifest_section_verdicts(&base, &head, symbol_identities, |manifest| {
+            manifest.get("symbol_contracts").cloned()
+        })
+        .unwrap();
+        assert_eq!(symbols[0].verdict, Verdict::Pass);
     }
 }
