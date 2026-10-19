@@ -106,7 +106,6 @@ fn check_drawable_ownership(h: &mut Harness) {
     unsafe {
         std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(format.raw());
         std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(screen.raw());
-        super::shield_additive::check();
         c_api::Init_DrawCommandQueue();
     }
     // Warm SDL's format cache before measuring resource-owned allocations.

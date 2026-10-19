@@ -14,6 +14,7 @@ pub fn check(h: &mut Harness) {
     let path = std::ffi::CString::new(content.to_str().unwrap()).unwrap();
     unsafe {
         c_api::log_init(100);
+        super::shield_additive::check();
         uio_bridge::uio_init();
         let repository = uio_bridge::uio_openRepository(0);
         let mount = uio_bridge::uio_mountDir(
