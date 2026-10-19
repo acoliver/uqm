@@ -83,7 +83,6 @@ struct RequiredResult {
     source_sha: String,
     plan: String,
     gates: String,
-    autoplay: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1268,13 +1267,11 @@ fn validate_required_result(root: &Path, index: &TransportIndex, contracts: &mut
     let valid = result.is_some_and(|result| {
         result.schema == REQUIRED_RESULT_SCHEMA
             && result.source_sha == index.source_sha
-            && [
-                result.plan.as_str(),
-                result.gates.as_str(),
-                result.autoplay.as_str(),
-            ]
-            .iter()
-            .all(|observed| matches!(*observed, "success" | "failure" | "cancelled" | "skipped"))
+            && [result.plan.as_str(), result.gates.as_str()]
+                .iter()
+                .all(|observed| {
+                    matches!(*observed, "success" | "failure" | "cancelled" | "skipped")
+                })
     });
     if !valid || index.files.len() != 1 || index.files[0].path != "required-result.json" {
         contracts.push("transport.required-gates.result".to_string());
@@ -19443,18 +19440,44 @@ mod tests {
     #[test]
     fn required_transport_validates_aggregate_result_without_a_repository() {
         let temp = tempfile::tempdir().unwrap();
-        fs::write(
+        let document = super::super::workflow::parse_yaml(include_str!(
+            "../../../../.github/workflows/rust-quality.yaml"
+        ))
+        .unwrap();
+        let steps = document
+            .get("jobs")
+            .unwrap()
+            .get("required-gates")
+            .unwrap()
+            .get("steps")
+            .unwrap()
+            .as_seq()
+            .unwrap();
+        let aggregate = steps
+            .iter()
+            .find(|step| step.get_str(&["name"]) == Some("Aggregate required results"))
+            .unwrap();
+        let (producer, _) = aggregate
+            .get_str(&["run"])
+            .unwrap()
+            .split_once("EVIDENCE_DIR=")
+            .unwrap();
+        let output = std::process::Command::new("bash")
+            .args(["-c", producer])
+            .env("RUNNER_TEMP", temp.path())
+            .env("SOURCE_SHA", "a".repeat(40))
+            .env("PLAN_RESULT", "success")
+            .env("GATES_RESULT", "success")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        fs::rename(
+            temp.path()
+                .join("s4-required-evidence/required-result.json"),
             temp.path().join("required-result.json"),
-            serde_json::to_vec_pretty(&serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success",
-                "autoplay": "success"
-            }))
-            .unwrap(),
         )
         .unwrap();
+        fs::remove_dir(temp.path().join("s4-required-evidence")).unwrap();
         let mut index = TransportIndex {
             schema: TRANSPORT_SCHEMA.to_string(),
             job: "required-gates".to_string(),
@@ -19483,22 +19506,30 @@ mod tests {
                 "schema": REQUIRED_RESULT_SCHEMA,
                 "source_sha": "a".repeat(40),
                 "plan": "unknown",
+                "gates": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
+                "gates": "unknown"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "gates": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
                 "gates": "success",
                 "autoplay": "success"
-            }),
-            serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success",
-                "autoplay": "unknown"
-            }),
-            // An aggregate that never observed autoplay is not a valid result.
-            serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success"
             }),
         ] {
             fs::write(
