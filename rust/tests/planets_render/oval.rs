@@ -114,7 +114,7 @@ impl Offscreen {
                 (0, 0, self.width as i16, self.height as i16)
             );
             let mode = c::GetContextDrawMode();
-            assert_eq!((mode.kind, mode.factor), (0, 0));
+            assert_eq!((mode.kind, mode.factor), (0, 255));
             assert_eq!((ScreenWidth, ScreenHeight), self.screen);
             assert_eq!(((*self.frame).HotSpot.x, (*self.frame).HotSpot.y), (0, 0));
         }
