@@ -582,6 +582,14 @@ struct RetirementContext<'a> {
     head_manifest: &'a Value,
 }
 
+struct RetiredProvider {
+    symbol: String,
+    rust_path: String,
+    source: String,
+    owner: String,
+    provider: String,
+}
+
 impl RetirementContext<'_> {
     fn blob(&self, commit: &str, path: &str) -> Result<Vec<u8>, String> {
         normal_git_path(path.as_bytes())?;
@@ -628,6 +636,25 @@ impl RetirementContext<'_> {
     }
 
     fn verify_symbol(&self, contract: &Value) -> Result<String, String> {
+        let RetiredProvider {
+            symbol,
+            rust_path,
+            source,
+            owner,
+            provider,
+        } = self.verify_provider(contract)?;
+        let (bytes, profile) = self.verify_compilation(&source, &provider)?;
+        let arguments = self.original_arguments(&profile)?;
+        let c = super::retirement::c_function(self.root, &source, &bytes, &symbol, &arguments)?;
+        let header = self.verify_headers(&c)?;
+        let rust = self.blob(self.head_sha, &rust_path)?;
+        let rust = std::str::from_utf8(&rust).map_err(|_| "Rust provider is not UTF-8")?;
+        super::retirement::rust_function(rust, &symbol, &c)?;
+        Ok(format!("source {source} sha256 {}; declaration {}; retired {provider}; Rust owner {owner} at {rust_path}; ABI ({}) -> {}",
+            hex_sha256(&bytes), header.display(), c.arguments.join(", "), c.result))
+    }
+
+    fn verify_provider(&self, contract: &Value) -> Result<RetiredProvider, String> {
         let symbol = manifest_field(contract, "symbol")?;
         if manifest_array(self.base_manifest, "symbol_contracts")?
             .iter()
@@ -702,13 +729,27 @@ impl RetirementContext<'_> {
         {
             return Err("original native provider was not retired".into());
         }
+        Ok(RetiredProvider {
+            symbol: symbol.into(),
+            rust_path: rust_path.into(),
+            source: source.into(),
+            owner: owner.into(),
+            provider,
+        })
+    }
+
+    fn verify_compilation(
+        &self,
+        source: &str,
+        provider: &str,
+    ) -> Result<(Vec<u8>, uqm_ownership::native::ProductionProfile), String> {
         let base_inputs = git_json(self.root, self.authority, self.base_sha, NATIVE_INPUTS_PATH)?;
         let head_inputs = git_json(self.root, self.authority, self.head_sha, NATIVE_INPUTS_PATH)?;
         let inputs = manifest_array(&base_inputs, "inputs")?
             .iter()
             .filter(|input| {
                 input.get("source").and_then(Value::as_str) == Some(source)
-                    && input.get("provider").and_then(Value::as_str) == Some(provider.as_str())
+                    && input.get("provider").and_then(Value::as_str) == Some(provider)
             })
             .collect::<Vec<_>>();
         let [input] = inputs.as_slice() else {
@@ -716,7 +757,7 @@ impl RetirementContext<'_> {
         };
         if manifest_array(&head_inputs, "inputs")?.iter().any(|input| {
             input.get("source").and_then(Value::as_str) == Some(source)
-                || input.get("provider").and_then(Value::as_str) == Some(provider.as_str())
+                || input.get("provider").and_then(Value::as_str) == Some(provider)
         }) {
             return Err("native compilation input was not retired".into());
         }
@@ -735,6 +776,13 @@ impl RetirementContext<'_> {
         )
         .map_err(|error| format!("invalid base production profile: {error}"))?;
         uqm_ownership::native::validate_profile(&profile)?;
+        Ok((bytes, profile))
+    }
+
+    fn original_arguments(
+        &self,
+        profile: &uqm_ownership::native::ProductionProfile,
+    ) -> Result<Vec<String>, String> {
         let mut arguments = profile
             .defines
             .iter()
@@ -763,7 +811,13 @@ impl RetirementContext<'_> {
             }
             arguments.extend(["-isysroot".into(), sdk.into()]);
         }
-        let c = super::retirement::c_function(self.root, source, &bytes, symbol, &arguments)?;
+        Ok(arguments)
+    }
+
+    fn verify_headers(
+        &self,
+        c: &super::retirement::CFunction,
+    ) -> Result<std::path::PathBuf, String> {
         let header = super::retirement::repository_header(self.root, &c.header)?
             .ok_or("declaration is not in a first-party header")?;
         if header.extension().and_then(|ext| ext.to_str()) != Some("h") {
@@ -792,11 +846,7 @@ impl RetirementContext<'_> {
                 ));
             }
         }
-        let rust = self.blob(self.head_sha, rust_path)?;
-        let rust = std::str::from_utf8(&rust).map_err(|_| "Rust provider is not UTF-8")?;
-        super::retirement::rust_function(rust, symbol, &c)?;
-        Ok(format!("source {source} sha256 {}; declaration {}; retired {provider}; Rust owner {owner} at {rust_path}; ABI ({}) -> {}",
-            hex_sha256(&bytes), header.display(), c.arguments.join(", "), c.result))
+        Ok(header)
     }
 }
 

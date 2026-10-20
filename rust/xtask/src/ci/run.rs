@@ -523,6 +523,17 @@ fn record_preflight_reports(
     Ok(delta_failure)
 }
 
+fn pending_retirements(
+    root: &Path,
+    authority: &Authority,
+    report: Option<&delta::DeltaReport>,
+) -> Result<delta::SourceRetirements, String> {
+    match report.filter(|report| report.passed) {
+        Some(report) => delta::source_retirements(root, authority, report),
+        None => Ok(delta::SourceRetirements::default()),
+    }
+}
+
 fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
     let authority =
         super::load_authority(root).map_err(|error| format!("authority.load: {error}"))?;
@@ -597,10 +608,7 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         None
     };
 
-    let retirements = match delta_report.as_ref().filter(|report| report.passed) {
-        Some(report) => delta::source_retirements(root, &authority, report)?,
-        None => delta::SourceRetirements::default(),
-    };
+    let retirements = pending_retirements(root, &authority, delta_report.as_ref())?;
 
     let cache = if preflight_failure.is_none() {
         Some(
