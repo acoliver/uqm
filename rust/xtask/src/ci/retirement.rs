@@ -375,9 +375,56 @@ pub(super) fn rust_function(source: &str, symbol: &str, c: &CFunction) -> Result
     Ok(())
 }
 
+/// Resolve clang's parent-relative include spelling without authorizing a
+/// symlink to change which file supplies the declaration.
+pub(super) fn repository_header(root: &Path, path: &Path) -> Result<Option<PathBuf>, String> {
+    use std::path::Component;
+
+    let Ok(relative) = path.strip_prefix(root) else {
+        return Ok(None);
+    };
+    let mut normalized = PathBuf::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(name) => normalized.push(name),
+            Component::CurDir => {}
+            Component::ParentDir if normalized.pop() => {}
+            _ => return Err("included header escapes the repository".into()),
+        }
+    }
+    let resolved = path
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve included header {}: {error}", path.display()))?;
+    let expected = root
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve repository root: {error}"))?
+        .join(&normalized);
+    if resolved != expected {
+        return Err(format!(
+            "included header resolves through a symlink: {}",
+            path.display()
+        ));
+    }
+    Ok(Some(normalized))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn header_spelling_normalizes_parent_components_but_rejects_symlinks_and_escape() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("include/nested")).unwrap();
+        std::fs::write(root.path().join("include/api.h"), "void Existing(void);").unwrap();
+        assert_eq!(
+            repository_header(root.path(), &root.path().join("include/nested/../api.h")).unwrap(),
+            Some(PathBuf::from("include/api.h"))
+        );
+        std::os::unix::fs::symlink("api.h", root.path().join("include/alias.h")).unwrap();
+        assert!(repository_header(root.path(), &root.path().join("include/alias.h")).is_err());
+        assert!(repository_header(root.path(), &root.path().join("../outside.h")).is_err());
+    }
 
     const RUST: &str = r#"
 use crate::c_bindings::{global_state as c};

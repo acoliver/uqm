@@ -676,15 +676,13 @@ impl RetirementContext<'_> {
             arguments.extend(["-isysroot".into(), sdk.into()]);
         }
         let c = super::retirement::c_function(self.root, source, &bytes, symbol, &arguments)?;
-        let header = c
-            .header
-            .strip_prefix(self.root)
-            .map_err(|_| "declaration is not in a first-party header")?;
+        let header = super::retirement::repository_header(self.root, &c.header)?
+            .ok_or("declaration is not in a first-party header")?;
         if header.extension().and_then(|ext| ext.to_str()) != Some("h") {
             return Err("declaration is not in a C header".into());
         }
         for included in c.included.iter().chain(std::iter::once(&c.header)) {
-            let Ok(relative) = included.strip_prefix(self.root) else {
+            let Some(relative) = super::retirement::repository_header(self.root, included)? else {
                 continue;
             };
             let relative = relative.to_str().ok_or("header path is not UTF-8")?;
@@ -697,7 +695,7 @@ impl RetirementContext<'_> {
                 ));
             }
             let actual = super::bounded_io::read_regular_nofollow(
-                included,
+                &self.root.join(relative),
                 self.authority.actions.evidence_snapshot_member_limit_bytes,
             )?;
             if actual != self.blob(self.base_sha, relative)? {
