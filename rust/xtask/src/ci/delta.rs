@@ -165,7 +165,9 @@ fn measure_between(
     ))?;
     let base_flags = flag_projection(root, authority, base_sha, &ledger)?;
     let head_flags = flag_projection(root, authority, head_sha, &ledger)?;
-    let flags = verdicts_for(projection_delta(&base_flags, &head_flags))?;
+    let flags = super::flag_definitions::verdicts(&base_flags, &head_flags, |base, head| {
+        projection_diff(root, authority, base, head)
+    })?;
 
     let base_manifest = git_json(root, authority, base_sha, PROVIDER_PATH)?;
     let head_manifest_bytes = super::bounded_io::read_regular_nofollow(
@@ -655,10 +657,19 @@ fn flag_projection(
     for row in text.lines() {
         let (path, content) = parse_grep_row(row, &prefix)
             .ok_or_else(|| format!("malformed transitional flag grep row: {row}"))?;
-        projection
-            .entry(path.into())
-            .or_default()
-            .push(content.trim().to_string());
+        if super::flag_definitions::is_definition(
+            path,
+            content,
+            ledger
+                .transitional_flags_and_features
+                .iter()
+                .map(|record| record.flag.as_str()),
+        ) {
+            projection
+                .entry(path.into())
+                .or_default()
+                .push(content.trim().to_string());
+        }
     }
     for lines in projection.values_mut() {
         lines.sort();
@@ -667,17 +678,36 @@ fn flag_projection(
     Ok(projection)
 }
 
-fn projection_delta(
-    base: &BTreeMap<String, Vec<String>>,
-    head: &BTreeMap<String, Vec<String>>,
-) -> Vec<String> {
-    base.keys()
-        .chain(head.keys())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .filter(|path| base.get(*path) != head.get(*path))
-        .cloned()
-        .collect()
+pub(super) fn projection_diff(
+    root: &Path,
+    authority: &Authority,
+    base: &[String],
+    head: &[String],
+) -> Result<String, String> {
+    let directory = tempfile::tempdir().map_err(|error| format!("create flag diff: {error}"))?;
+    let paths = [directory.path().join("base"), directory.path().join("head")];
+    for (path, lines) in paths.iter().zip([base, head]) {
+        std::fs::write(path, format!("{}\n", lines.join("\n")))
+            .map_err(|error| format!("write flag projection: {error}"))?;
+    }
+    let output = supervised_git(
+        root,
+        authority,
+        &[
+            "diff".into(),
+            "--no-index".into(),
+            "--no-ext-diff".into(),
+            "--no-textconv".into(),
+            "--unified=0".into(),
+            "--".into(),
+            paths[0].to_string_lossy().into_owned(),
+            paths[1].to_string_lossy().into_owned(),
+        ],
+        "compare transitional definitions",
+        &[0, 1],
+    )?;
+    String::from_utf8(output.stdout)
+        .map_err(|error| format!("flag definition diff is not UTF-8: {error}"))
 }
 
 fn is_flag_definition_path(path: &str) -> bool {
@@ -746,6 +776,53 @@ mod tests {
         let row = format!("100644 blob {hash}\t{path}\0");
         let parsed = parse_tree(row.as_bytes()).unwrap();
         assert_eq!(parsed.get(path), Some(&hash));
+    }
+
+    #[test]
+    fn rust_feature_consumers_do_not_define_transitional_flags() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("rust/src");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(
+            source.join("consumer.rs"),
+            "#[cfg(feature = \"linked_c_archive\")]\nfn rust_provider() {}\n",
+        )
+        .unwrap();
+        for arguments in [
+            vec!["init", "--quiet"],
+            vec!["add", "."],
+            vec![
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "fixture",
+            ],
+        ] {
+            crate::git_text(root.path(), &arguments, "prepare flag projection fixture").unwrap();
+        }
+        let head = crate::git_text(root.path(), &["rev-parse", "HEAD"], "fixture HEAD").unwrap();
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let authority = super::super::authority::load_authority(repository).unwrap();
+        let ledger = Ledger {
+            tracked_native_sources_and_build_inputs: Vec::new(),
+            rust_internal_ffi_files: Vec::new(),
+            transitional_flags_and_features: vec![FlagRecord {
+                flag: "linked_c_archive".into(),
+            }],
+        };
+        let projection = flag_projection(root.path(), &authority, &head, &ledger).unwrap();
+        assert!(
+            projection.is_empty(),
+            "feature references became definitions: {projection:?}"
+        );
     }
 
     #[test]
