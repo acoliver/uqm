@@ -1,4 +1,4 @@
-//! Planet oval ABI, using the current context's existing primitive renderer.
+//! Planet oval ABI and unwired topography adapter over the existing context renderer.
 
 use crate::c_bindings::{assert_c_layout, global_state as c};
 use crate::comm::locdata::{CPoint, CRect};
@@ -143,4 +143,135 @@ impl OvalGfx for CffiOvalGfx {
         }
         self.batch(&mut primitives);
     }
+}
+
+use super::topography::{
+    render_topography, TopographyError, TopographyGfx, TopographyPalette, TopographyPoint,
+    NUM_BATCH_POINTS,
+};
+
+extern "C" {
+    fn SetContextFGFrame(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn SetContextOrigin(origin: c::POINT) -> c::POINT;
+    fn SetContextClipRect(rect: *mut CRect);
+    fn GetColorMapAddress(map: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn GetStringLengthBin(string: *mut std::ffi::c_void) -> u16;
+}
+
+/// Borrow of the existing context renderer, without any new frame registry.
+struct CffiTopographyGfx;
+
+impl CffiTopographyGfx {
+    /// # Safety
+    /// Game thread, active context and live borrowed RAM frames throughout the
+    /// complete render call; no reentry or concurrent context/resource changes.
+    pub unsafe fn current() -> Self {
+        Self
+    }
+}
+
+impl TopographyGfx for CffiTopographyGfx {
+    type Frame = *mut c::FRAME_DESC;
+
+    fn set_frame(&mut self, frame: Self::Frame) -> Self::Frame {
+        unsafe { SetContextFGFrame(frame.cast()).cast() }
+    }
+
+    fn set_origin(&mut self, origin: CPoint) -> CPoint {
+        let old = unsafe { SetContextOrigin(point(origin)) };
+        CPoint { x: old.x, y: old.y }
+    }
+
+    fn clip(&mut self) -> CRect {
+        let mut clip: c::RECT = unsafe { std::mem::zeroed() };
+        unsafe { c::GetContextClipRect(&mut clip) };
+        input(clip)
+    }
+
+    fn set_clip(&mut self, mut clip: Option<CRect>) {
+        unsafe { SetContextClipRect(clip.as_mut().map_or(std::ptr::null_mut(), |r| r)) };
+    }
+
+    fn batch(&mut self, points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) {
+        let mut primitives = topography_primitives(points);
+        unsafe { c::DrawBatch(primitives.as_mut_ptr(), first as u32, 0) };
+    }
+}
+
+/// Native primitive encoding shared by the adapter and linked RAM observer.
+/// Only the caller-selected tail of the array is submitted to DrawBatch.
+pub fn topography_primitives(
+    points: &[TopographyPoint; NUM_BATCH_POINTS],
+) -> [c::PRIMITIVE; NUM_BATCH_POINTS] {
+    let mut primitives: [c::PRIMITIVE; NUM_BATCH_POINTS] = unsafe { std::mem::zeroed() };
+    for (index, (primitive, source)) in primitives.iter_mut().zip(points).enumerate() {
+        let next = if index + 1 == NUM_BATCH_POINTS {
+            u16::MAX
+        } else {
+            (index + 1) as u16
+        };
+        primitive.Links = u32::from(u16::MAX) | (u32::from(next) << 16);
+        primitive.Type = c::gfx_object_POINT_PRIM as u8;
+        primitive.Object.Point = point(source.point);
+        let color = source.color;
+        primitive.color = c::Color {
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
+        };
+    }
+    primitives
+}
+
+/// Unwired checkpoint adapter for the current solar-system resources.
+/// `GeneratePlanetSurface` continues to call the complete C provider.
+///
+/// # Safety
+/// Game thread, active context, live destination and system/orbital descriptor.
+/// Resource handles and XlatPtr must refer to their live external resource
+/// storage for the call, without mutable aliases. No ownership is transferred.
+pub unsafe fn render_system_topography(
+    system: *const c::SOLARSYS_STATE,
+    destination: *mut c::FRAME_DESC,
+    depth: &[i8],
+    width: i32,
+    height: i32,
+) -> Result<(), TopographyError> {
+    let mut gfx = CffiTopographyGfx::current();
+    if (*system).XlatRef.is_null() {
+        return render_topography(&mut gfx, destination, depth, width, height, None);
+    }
+    let index = (*(*system).pOrbitalDesc).data_index & !crate::planets::consts::PLANET_SHIELDED;
+    let planet = crate::planets::tables::PLANET_ARRAY
+        .0
+        .get(usize::from(index))
+        .ok_or(TopographyError::PlanetIndex)?;
+    // XLAT_DESC starts with three signed SIZE levels, followed by 256 bytes.
+    let prefix = 3 * std::mem::size_of::<i16>();
+    if usize::from(GetStringLengthBin((*system).XlatRef.cast())) < prefix + 256 {
+        return Err(TopographyError::TranslationLength);
+    }
+    let translation = &*(*system)
+        .XlatPtr
+        .cast::<u8>()
+        .add(prefix)
+        .cast::<[u8; 256]>();
+    let colors = std::slice::from_raw_parts(
+        GetColorMapAddress((*system).OrbitalCMap.cast()).cast::<u8>(),
+        usize::from(GetStringLengthBin((*system).OrbitalCMap.cast())),
+    );
+    render_topography(
+        &mut gfx,
+        destination,
+        depth,
+        width,
+        height,
+        Some(TopographyPalette {
+            translation,
+            colors,
+            planet_type: planet.Type,
+            base_elevation: planet.base_elevation,
+        }),
+    )
 }

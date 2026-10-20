@@ -4,3 +4,4 @@
 pub mod c_api;
 pub mod oval;
 pub mod topo_gen;
+pub mod topography;

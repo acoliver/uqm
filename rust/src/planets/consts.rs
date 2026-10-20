@@ -4,6 +4,10 @@
 /// `PLANET_SHIELDED` / `WORLD_TYPE_SPECIAL` flag in `data_index`.
 pub const PLANET_SHIELDED: u8 = 0x80;
 
+/// `PLANALGO` mask and gas algorithm tag from `plandata.h`.
+pub const PLAN_ALGO_MASK: u8 = 0x0c;
+pub const GAS_GIANT_ALGO: u8 = 2 << 2;
+
 /// `EARTH_RADIUS` = `SCALE_RADIUS(8)`.
 pub const EARTH_RADIUS: i16 = 8 << 6;
 
