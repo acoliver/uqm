@@ -476,7 +476,7 @@ impl BattleSnapshot {
             }
             Self {
                 in_battle: true,
-                counters: live_queues::battle_counters(),
+                counters: crate::battle::ffi::live_counters::battle_counters(),
                 player,
                 enemy,
                 arena,

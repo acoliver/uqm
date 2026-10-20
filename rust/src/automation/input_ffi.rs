@@ -62,9 +62,6 @@ extern "C" {
     /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
     #[allow(non_snake_case)]
     fn playerInPlanetOrbit() -> bool;
-    /// Ships left per side, `BYTE battle_counter[NUM_SIDES]` in `battle.c`.
-    #[link_name = "battle_counter"]
-    static BATTLE_COUNTER: [u8; 2];
     #[link_name = "ScreenWidth"]
     static SCREEN_WIDTH: std::ffi::c_int;
     #[link_name = "ScreenHeight"]
@@ -286,7 +283,7 @@ pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
 pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so the counters cannot change during this read.
-    let counters = unsafe { std::ptr::addr_of!(BATTLE_COUNTER).read() };
+    let counters = unsafe { crate::battle::ffi::live_counters::battle_counters() };
     Some((counters[0], counters[1]))
 }
 
