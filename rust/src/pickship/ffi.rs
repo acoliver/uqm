@@ -48,7 +48,6 @@ extern "C" {
 
     fn SetContextForeGroundColor(color: CColor) -> CColor;
     fn SetContextFont(font: *mut c_void) -> *mut c_void;
-    fn GetContextClipRect(rect: *mut CRect);
     fn font_DrawText(text: *mut CText);
     fn DrawFilledRectangle(rect: *mut CRect);
     fn DrawStamp(stamp: *mut CStamp);
@@ -490,7 +489,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe {
         SetFrameHot(stamp.frame, no_hot_spot);
         crate::battle::c_bridge::GetFrameRect(stamp.frame, std::ptr::addr_of_mut!(pick).cast());
-        GetContextClipRect(&mut clip);
+        crate::c_bindings::global_state::GetContextClipRect(std::ptr::addr_of_mut!(clip).cast());
     }
     pick.corner.x = (clip.width >> 1) - (pick.width >> 1);
     pick.corner.y = (clip.height >> 1) - (pick.height >> 1);
