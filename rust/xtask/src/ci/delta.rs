@@ -647,12 +647,35 @@ impl RetirementContext<'_> {
         )
         .map_err(|error| format!("invalid base production profile: {error}"))?;
         uqm_ownership::native::validate_profile(&profile)?;
-        let defines = profile
+        let mut arguments = profile
             .defines
             .iter()
             .map(|define| define.compiler_argument())
             .collect::<Vec<_>>();
-        let c = super::retirement::c_function(self.root, source, &bytes, symbol, &defines)?;
+        if cfg!(target_os = "macos") {
+            let sdk = run_captured_with_bound_environment(
+                self.root,
+                "/usr/bin/xcrun",
+                &["--show-sdk-path".into()],
+                self.authority.supervision.builtin_limits(),
+                true,
+                |_| Ok(Vec::new()),
+            );
+            if !sdk.completed_under_supervision()
+                || sdk.exit_code != Some(0)
+                || sdk.signal.is_some()
+            {
+                return Err(sdk.failure_detail("resolve the compiler's macOS SDK"));
+            }
+            let sdk = std::str::from_utf8(&sdk.stdout)
+                .map_err(|_| "macOS SDK path is not UTF-8")?
+                .trim();
+            if sdk.lines().count() != 1 || !Path::new(sdk).is_absolute() {
+                return Err("macOS SDK query did not return one absolute path".into());
+            }
+            arguments.extend(["-isysroot".into(), sdk.into()]);
+        }
+        let c = super::retirement::c_function(self.root, source, &bytes, symbol, &arguments)?;
         let header = c
             .header
             .strip_prefix(self.root)

@@ -6,7 +6,7 @@ const SOURCE: &str = "sc2/src/retired.c";
 const HEADER: &str = "sc2/src/api.h";
 const RUST_PATH: &str = "rust/src/replacement.rs";
 const C_SOURCE: &str = "#include \"api.h\"\nvoid Existing(BYTE value) { (void)value; }\n";
-const C_HEADER: &str = "typedef unsigned char BYTE;\nvoid Existing(BYTE);\n";
+const C_HEADER: &str = "#include <unistd.h>\ntypedef unsigned char BYTE;\nvoid Existing(BYTE);\n";
 const RUST_SOURCE: &str = r#"
 use crate::c_bindings::{global_state as c};
 const _: unsafe extern "C" fn(c::BYTE) = c::Existing;
