@@ -29,6 +29,7 @@ pub mod proof;
 mod retirement;
 pub(crate) mod retirement_provider;
 pub mod run;
+mod scratch;
 pub mod shrink;
 pub mod trailer;
 pub mod workflow;

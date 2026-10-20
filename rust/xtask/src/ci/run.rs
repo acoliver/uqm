@@ -1510,7 +1510,7 @@ fn execute_process_gate(
             &effective_command[0],
             &effective_command[1..],
             session.authority.supervision.limits(step.timeout_seconds),
-            execute_retained_source,
+            execute_retained_source || direct_witness_directory.is_some(),
             |_| Ok(env_overrides),
         );
         write_captured(

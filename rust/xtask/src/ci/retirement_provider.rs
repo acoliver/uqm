@@ -560,6 +560,53 @@ mod tests {
     }
 
     #[test]
+    fn direct_witness_controller_retains_its_protected_adjacent_path() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("rust/ci")).unwrap();
+        fs::write(
+            root.path().join("rust/ci/gates.json"),
+            include_bytes!("../../../ci/gates.json"),
+        )
+        .unwrap();
+        let sources = SourceRetirements {
+            base_sha: "a".repeat(40),
+            head_sha: "b".repeat(40),
+            entries: vec![SourceRetirement {
+                contract: SymbolContract {
+                    symbol: "Existing".into(),
+                    canonical_owner: "DOMAIN/#1".into(),
+                    active_provider: uqm_ownership::ProviderRef {
+                        kind: uqm_ownership::ProviderKind::RustSource,
+                        path: "rust/src/provider.rs".into(),
+                    },
+                    excluded_providers: vec![uqm_ownership::ProviderRef {
+                        kind: uqm_ownership::ProviderKind::NativeObject,
+                        path: "native/retired.c.o".into(),
+                    }],
+                },
+                source: "sc2/src/retired.c".into(),
+                bytes: Vec::new(),
+            }],
+        };
+        let (directory, arguments) =
+            stage_direct_witness(root.path(), root.path(), &sources, 100_000_000).unwrap();
+        let controller = directory.path().join("uqm-base-controller");
+        let mut resolved =
+            super::super::doctor::resolve_executable(controller.to_str().unwrap(), 100_000_000)
+                .unwrap();
+        resolved.execute_retained_source();
+        assert_eq!(Path::new(resolved.execution_path()), controller);
+        resolved.verify_unchanged().unwrap();
+        witness_bytes(
+            Path::new(&arguments[0]),
+            &arguments[1],
+            Path::new(resolved.execution_path()),
+            1_000_000,
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn actual_compiler_metadata_archive_and_added_symbol_mutations() {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
