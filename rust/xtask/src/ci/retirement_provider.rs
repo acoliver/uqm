@@ -229,8 +229,20 @@ pub(crate) fn verify_compiled(
     }
     arguments.extend(native.compile_profile.ordered_compile_flags.iter().cloned());
     arguments.extend(["-target".into(), native.toolchain.target.clone()]);
-    if let Some(sdk) = native.build_environment.get("SDKROOT") {
-        arguments.extend(["-isysroot".into(), sdk.clone()]);
+    if cfg!(target_os = "macos") {
+        let sdk = tool(
+            root,
+            authority,
+            "/usr/bin/xcrun",
+            &["--show-sdk-path".into()],
+        )?;
+        let sdk = std::str::from_utf8(&sdk)
+            .map_err(|_| "compiler SDK path is not UTF-8")?
+            .trim();
+        if sdk.lines().count() != 1 || !Path::new(sdk).is_absolute() {
+            return Err("compiler SDK query must return one absolute path".into());
+        }
+        arguments.extend(["-isysroot".into(), sdk.into()]);
     }
     let directory = tempfile::Builder::new()
         .prefix("retirement-probe-")
@@ -556,22 +568,31 @@ mod tests {
             .unwrap();
         let authority = super::super::load_authority(repository).unwrap();
         let toolchain = crate::canonical_toolchain(repository).unwrap();
-        for mutation in 0..6 {
+        for mutation in 0..8 {
             let root = tempfile::tempdir().unwrap();
             fs::create_dir_all(root.path().join("rust/src")).unwrap();
             fs::create_dir_all(root.path().join("rust/target/deps")).unwrap();
             fs::create_dir_all(root.path().join("sc2/src")).unwrap();
             fs::write(
                 root.path().join("sc2/src/api.h"),
-                "typedef unsigned char BYTE; void Existing(BYTE);",
+                "#include <stdlib.h>\ntypedef unsigned char BYTE; void Existing(BYTE);",
             )
             .unwrap();
             let provider = "use crate::c_bindings::global_state as c;\nconst _: unsafe extern \"C\" fn(c::BYTE) = c::Existing;\nconst _: unsafe extern \"C\" fn(c::BYTE) = replacement;\n#[export_name = \"Existing\"]\npub unsafe extern \"C\" fn replacement(value: c::BYTE) { let _ = value; }\n";
             fs::write(root.path().join("rust/src/replacement.rs"), provider).unwrap();
-            let originals = uqm_ownership::QUEUE_SYMBOLS
+            let installed = Manifest::from_file(
+                &repository.join("rust/ownership/native-provider-manifest.json"),
+            )
+            .unwrap();
+            let originals = installed
+                .symbol_contracts
                 .iter()
-                .chain(uqm_ownership::HASH_TABLE_SYMBOLS.iter())
-                .map(|name| format!("#[no_mangle] pub extern \"C\" fn {name}() {{}}\n"))
+                .map(|contract| {
+                    format!(
+                        "#[no_mangle] pub extern \"C\" fn {}() {{}}\n",
+                        contract.symbol
+                    )
+                })
                 .collect::<String>();
             fs::write(root.path().join("rust/src/lib.rs"), format!("pub mod c_bindings {{ pub mod global_state {{ pub type BYTE = {}; extern \"C\" {{ pub fn Existing(value: BYTE); }} }} }}\npub mod replacement;\n{originals}", if mutation == 1 { "u16" } else { "u8" })).unwrap();
             fs::write(root.path().join(".gitignore"), "rust/target\n").unwrap();
@@ -622,6 +643,16 @@ mod tests {
                         .to_vec(),
                 }],
             };
+            if [6, 7].contains(&mutation) {
+                fs::write(
+                    root.path().join("rust/src/replacement.rs"),
+                    provider.replace(
+                        "#[export_name = \"Existing\"]",
+                        "#[export_name = \"MissingExisting\"]",
+                    ),
+                )
+                .unwrap();
+            }
             command(
                 &root.path().join("rust"),
                 &toolchain.rustc.executable,
@@ -661,7 +692,7 @@ mod tests {
                     "rust/target/anchor.o".into(),
                 ],
             );
-            if mutation == 2 || mutation == 3 {
+            if [2, 3, 7].contains(&mutation) {
                 fs::write(
                     root.path().join("rust/target/duplicate.c"),
                     "void Existing(unsigned char value) { (void)value; }",
@@ -736,6 +767,29 @@ mod tests {
                 c_archive: empty,
                 executable: archive,
             };
+            if [6, 7].contains(&mutation) {
+                let mut manifest = Manifest::from_file(
+                    &repository.join("rust/ownership/native-provider-manifest.json"),
+                )
+                .unwrap();
+                manifest.symbol_contracts.push(contract.clone());
+                let validator = Validator::new(manifest)
+                    .with_verified_retirements(vec![contract.clone()])
+                    .unwrap();
+                let measured = validator.validate_symbol_artifacts(
+                    &artifacts,
+                    &uqm_ownership::ProductionToolPaths {
+                        ar: toolchain.ar.executable.clone().into(),
+                        nm: toolchain.nm.executable.clone().into(),
+                    },
+                );
+                let error = measured.unwrap_err().to_string();
+                assert!(
+                    error.contains("Existing"),
+                    "archive mutation {mutation}: {error}"
+                );
+                continue;
+            }
             let result = verify_compiled(root.path(), &authority, &sources, &artifacts, &native);
             if [1, 4, 5].contains(&mutation) {
                 assert!(result.is_err(), "compiler mutation {mutation}");
