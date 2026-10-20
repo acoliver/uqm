@@ -381,6 +381,17 @@ flags):
   call fails even though its surrounding lines look familiar. A change with no
   textual hunk (binary or mode-only) fails.
 
+Transitional flags use the same path-membership and per-hunk token rules on
+projected declarations, rather than on unrelated contents of their containing
+files. Uppercase native macros retain the conservative ledger-matching line
+projection. A Cargo feature such as `linked_c_archive` is defined by its manifest
+assignment; a Rust `cfg` consumer or a `required-features` entry does not define
+it. The sorted declaration projections are compared by supervised
+`git diff --no-index --unified=0`; unchanged declarations separate hunks, so a
+removed token cannot authorize an addition in another hunk. New declaration
+paths and added declaration tokens still fail. Native-source comments remain
+subject to the unchanged whole-source token rule.
+
 Manifest categories (objects, providers, and internal symbols in
 `rust/ownership/native-provider-manifest.json`): the head's set of entries,
 identified by object path or recompiled canonical source (objects), those plus

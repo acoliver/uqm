@@ -22,6 +22,7 @@ pub mod delta;
 pub mod doctor;
 pub mod evidence;
 pub mod exec;
+mod flag_definitions;
 pub mod mutations;
 pub mod plan;
 pub mod proof;

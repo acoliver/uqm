@@ -83,7 +83,6 @@ struct RequiredResult {
     source_sha: String,
     plan: String,
     gates: String,
-    autoplay: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -599,14 +598,7 @@ fn validate_workflow_setup(
             .iter()
             .find(|step| step.step == "authoritative-gates")
             .map(|step| step.outcome.as_str());
-        let nested: Vec<_> = index
-            .files
-            .iter()
-            .filter(|entry| {
-                entry.path.ends_with(&format!("/{INDEX_FILENAME}"))
-                    || entry.path.ends_with(&format!("/{PRE_SESSION_FILENAME}"))
-            })
-            .collect();
+        let nested = outermost_gate_evidence(&index.files);
         if gates_outcome == Some("skipped") {
             if !nested.is_empty() {
                 contracts.push("transport.gates.unexpected_nested_evidence".to_string());
@@ -628,6 +620,29 @@ fn validate_workflow_setup(
     if job == "plan" {
         validate_plan_payload(root, index, &setup, authority.as_ref(), contracts);
     }
+}
+
+fn outermost_gate_evidence(files: &[TransportFile]) -> Vec<&TransportFile> {
+    let candidates: Vec<_> = files
+        .iter()
+        .filter(|entry| {
+            entry.path.ends_with(&format!("/{INDEX_FILENAME}"))
+                || entry.path.ends_with(&format!("/{PRE_SESSION_FILENAME}"))
+        })
+        .collect();
+    candidates
+        .iter()
+        .copied()
+        .filter(|entry| {
+            // Mutation artifacts retain their own indices inside the authoritative bundle.
+            !candidates.iter().any(|ancestor| {
+                let parent = Path::new(&ancestor.path).parent().unwrap();
+                Path::new(&entry.path)
+                    .parent()
+                    .is_some_and(|directory| directory != parent && directory.starts_with(parent))
+            })
+        })
+        .collect()
 }
 
 fn valid_descendant_start_identity(value: &serde_json::Value, scope: &str) -> bool {
@@ -1041,8 +1056,15 @@ fn validate_successful_workflow_subprocess_receipts(
             "tools-rustup.result.json",
             "tools-venv.result.json",
             "tools-lizard.result.json",
-            "tools-cargo-audit.result.json",
-            "tools-cargo-llvm-cov.result.json",
+            "tools-lizard-patch.result.json",
+            "tools-cargo-audit-download.result.json",
+            "tools-cargo-audit-fetch-locked.result.json",
+            "tools-cargo-audit-install.result.json",
+            "tools-cargo-llvm-cov-download.result.json",
+            "tools-cargo-llvm-cov-fetch-locked.result.json",
+            "tools-cargo-llvm-cov-install.result.json",
+            "tools-actionlint-checksums-download.result.json",
+            "tools-actionlint-download.result.json",
             "tools-actionlint.result.json",
         ];
         if required_tools.iter().any(|name| !has_success(name)) {
@@ -1127,8 +1149,10 @@ fn validate_plan_payload(
         contracts.push("transport.plan.payload.authority".to_string());
         return;
     };
-    let expected_authority = serde_json::to_value(authority).ok();
     let policy_bytes = read_bundle_file(root, "authority-snapshot.json").ok();
+    let expected_authority = policy_bytes
+        .as_deref()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok());
     let valid = plan.as_ref().is_some_and(|plan| {
         plan.schema == super::plan::PLAN_SCHEMA
             && plan.authority == super::authority::AUTHORITY_RELATIVE
@@ -1243,13 +1267,11 @@ fn validate_required_result(root: &Path, index: &TransportIndex, contracts: &mut
     let valid = result.is_some_and(|result| {
         result.schema == REQUIRED_RESULT_SCHEMA
             && result.source_sha == index.source_sha
-            && [
-                result.plan.as_str(),
-                result.gates.as_str(),
-                result.autoplay.as_str(),
-            ]
-            .iter()
-            .all(|observed| matches!(*observed, "success" | "failure" | "cancelled" | "skipped"))
+            && [result.plan.as_str(), result.gates.as_str()]
+                .iter()
+                .all(|observed| {
+                    matches!(*observed, "success" | "failure" | "cancelled" | "skipped")
+                })
     });
     if !valid || index.files.len() != 1 || index.files[0].path != "required-result.json" {
         contracts.push("transport.required-gates.result".to_string());
@@ -18604,8 +18626,15 @@ mod tests {
                 "tools-rustup.result.json",
                 "tools-venv.result.json",
                 "tools-lizard.result.json",
-                "tools-cargo-audit.result.json",
-                "tools-cargo-llvm-cov.result.json",
+                "tools-lizard-patch.result.json",
+                "tools-cargo-audit-download.result.json",
+                "tools-cargo-audit-fetch-locked.result.json",
+                "tools-cargo-audit-install.result.json",
+                "tools-cargo-llvm-cov-download.result.json",
+                "tools-cargo-llvm-cov-fetch-locked.result.json",
+                "tools-cargo-llvm-cov-install.result.json",
+                "tools-actionlint-checksums-download.result.json",
+                "tools-actionlint-download.result.json",
                 "tools-actionlint.result.json",
                 "tools-component-rustfmt.result.json",
                 "tools-component-clippy.result.json",
@@ -18617,6 +18646,97 @@ mod tests {
         );
         add_successful_workflow_receipts(root, index, &["containment-check.result.json"]);
     }
+    #[test]
+    fn gate_transport_counts_outer_bundles_without_counting_retained_mutation_indices() {
+        let paths = [
+            "bundle/run-0/evidence-index.json",
+            "bundle/run-0/payloads/mutation.fixture/artifact/baseline/0/evidence-index.json",
+            "bundle/run-0/payloads/mutation.fixture/artifact/mutant/0/evidence-index.json",
+            "bundle/run-0/payloads/mutation.fixture/pre-session-failure.json",
+        ];
+        let mut files: Vec<_> = paths
+            .iter()
+            .map(|path| TransportFile {
+                path: (*path).to_string(),
+                byte_length: 0,
+                sha256: "0".repeat(64),
+            })
+            .collect();
+        let selected = outermost_gate_evidence(&files);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].path, paths[0]);
+
+        files.push(TransportFile {
+            path: "bundle/run-1/evidence-index.json".to_string(),
+            byte_length: 0,
+            sha256: "0".repeat(64),
+        });
+        assert_eq!(outermost_gate_evidence(&files).len(), 2);
+        files[4].path = "bundle/run-0/pre-session-failure.json".to_string();
+        assert_eq!(outermost_gate_evidence(&files).len(), 2);
+        files[4].path = "bundle/run-0-other/evidence-index.json".to_string();
+        assert_eq!(outermost_gate_evidence(&files).len(), 2);
+    }
+
+    #[test]
+    fn successful_tools_require_each_actual_installation_receipt() {
+        let temporary = tempfile::tempdir().unwrap();
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let mut index = TransportIndex {
+            schema: TRANSPORT_SCHEMA.to_string(),
+            job: "gates".to_string(),
+            source_sha: "a".repeat(40),
+            tuple: Some("linux-x86_64".to_string()),
+            exit_code: None,
+            job_status: Some("success".to_string()),
+            files: Vec::new(),
+        };
+        let setup = WorkflowSetupResults {
+            schema: WORKFLOW_SETUP_SCHEMA.to_string(),
+            job: "gates".to_string(),
+            source_sha: index.source_sha.clone(),
+            tuple: index.tuple.clone(),
+            steps: vec![WorkflowSetupStep {
+                step: "tools".to_string(),
+                outcome: "success".to_string(),
+            }],
+        };
+        add_gate_setup_receipts(temporary.path(), &mut index);
+        let validate = |index: &TransportIndex| {
+            let mut contracts = Vec::new();
+            validate_workflow_subprocess_receipts(
+                temporary.path(),
+                index,
+                "gates",
+                &setup,
+                Some(&authority),
+                &mut contracts,
+            );
+            contracts
+        };
+        assert!(validate(&index).is_empty());
+        for entry in index
+            .files
+            .iter()
+            .filter(|entry| entry.path.starts_with("tools-"))
+        {
+            let mut missing = index.clone();
+            missing.files.retain(|file| file.path != entry.path);
+            let contracts = validate(&missing);
+            let expected = if entry.path.starts_with("tools-component-") {
+                "transport.gates.tool_component_receipts"
+            } else {
+                "transport.gates.tool_receipts"
+            };
+            assert!(
+                contracts.contains(&expected.to_string()),
+                "{}: {contracts:?}",
+                entry.path
+            );
+        }
+    }
+
     #[test]
     fn failed_workflow_prefixes_require_causal_failed_receipts() {
         let authority: Authority =
@@ -18800,7 +18920,9 @@ mod tests {
         let plan = super::super::plan::Plan {
             schema: super::super::plan::PLAN_SCHEMA.to_string(),
             authority: super::super::authority::AUTHORITY_RELATIVE.to_string(),
-            authority_contract: Some(serde_json::to_value(&authority).unwrap()),
+            authority_contract: Some(
+                serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap(),
+            ),
             tuples: authority
                 .runner_mapping
                 .iter()
@@ -18945,6 +19067,22 @@ mod tests {
                 .contains("unknown field")
         );
         fs::write(&index_path, serde_json::to_vec_pretty(&index).unwrap()).unwrap();
+
+        let mut forged_plan = serde_json::to_value(&plan).unwrap();
+        forged_plan["authority_contract"] = serde_json::to_value(&authority).unwrap();
+        assert_ne!(forged_plan, serde_json::to_value(&plan).unwrap());
+        fs::write(
+            temp.path().join("ci-plan.json"),
+            serde_json::to_vec_pretty(&forged_plan).unwrap(),
+        )
+        .unwrap();
+        *index
+            .files
+            .iter_mut()
+            .find(|entry| entry.path == "ci-plan.json")
+            .unwrap() = transport_file(temp.path(), "ci-plan.json");
+        assert!(validate_transport_index(temp.path(), &index)
+            .contains(&"transport.plan.payload".to_string()));
 
         let mut forged_plan = serde_json::to_value(&plan).unwrap();
         forged_plan["tuples"][0]["runner"] = serde_json::json!("ubuntu-latest");
@@ -19391,18 +19529,44 @@ mod tests {
     #[test]
     fn required_transport_validates_aggregate_result_without_a_repository() {
         let temp = tempfile::tempdir().unwrap();
-        fs::write(
+        let document = super::super::workflow::parse_yaml(include_str!(
+            "../../../../.github/workflows/rust-quality.yaml"
+        ))
+        .unwrap();
+        let steps = document
+            .get("jobs")
+            .unwrap()
+            .get("required-gates")
+            .unwrap()
+            .get("steps")
+            .unwrap()
+            .as_seq()
+            .unwrap();
+        let aggregate = steps
+            .iter()
+            .find(|step| step.get_str(&["name"]) == Some("Aggregate required results"))
+            .unwrap();
+        let (producer, _) = aggregate
+            .get_str(&["run"])
+            .unwrap()
+            .split_once("EVIDENCE_DIR=")
+            .unwrap();
+        let output = std::process::Command::new("bash")
+            .args(["-c", producer])
+            .env("RUNNER_TEMP", temp.path())
+            .env("SOURCE_SHA", "a".repeat(40))
+            .env("PLAN_RESULT", "success")
+            .env("GATES_RESULT", "success")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        fs::rename(
+            temp.path()
+                .join("s4-required-evidence/required-result.json"),
             temp.path().join("required-result.json"),
-            serde_json::to_vec_pretty(&serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success",
-                "autoplay": "success"
-            }))
-            .unwrap(),
         )
         .unwrap();
+        fs::remove_dir(temp.path().join("s4-required-evidence")).unwrap();
         let mut index = TransportIndex {
             schema: TRANSPORT_SCHEMA.to_string(),
             job: "required-gates".to_string(),
@@ -19431,22 +19595,30 @@ mod tests {
                 "schema": REQUIRED_RESULT_SCHEMA,
                 "source_sha": "a".repeat(40),
                 "plan": "unknown",
+                "gates": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
+                "gates": "unknown"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "gates": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
                 "gates": "success",
                 "autoplay": "success"
-            }),
-            serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success",
-                "autoplay": "unknown"
-            }),
-            // An aggregate that never observed autoplay is not a valid result.
-            serde_json::json!({
-                "schema": REQUIRED_RESULT_SCHEMA,
-                "source_sha": "a".repeat(40),
-                "plan": "success",
-                "gates": "success"
             }),
         ] {
             fs::write(
