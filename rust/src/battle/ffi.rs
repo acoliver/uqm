@@ -21,6 +21,7 @@ pub(crate) mod live_counters {
     ///
     /// # Safety
     /// Game thread only: C changes the counters while ships are picked and die.
+    #[cfg(feature = "linked_c_archive")]
     pub(crate) unsafe fn battle_counters() -> [u8; crate::battle::battle_controls::NUM_PLAYERS] {
         std::ptr::addr_of!(BATTLE_COUNTER).read()
     }
