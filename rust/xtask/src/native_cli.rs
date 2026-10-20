@@ -832,7 +832,7 @@ mod tests {
         let selection = options.selection().expect("--all names a suite");
         let required = uqm_rust::automation::suite::required_suite();
         assert_eq!(selection.split(',').count(), required.len());
-        assert_eq!(required.len(), 34, "the required suite is not capped here");
+        assert_eq!(required.len(), 36, "the required suite is not capped here");
     }
 
     #[test]

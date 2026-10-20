@@ -163,6 +163,27 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row(
+        "real-sol-alliance-from-mercury",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::PlanetSideResults,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+            Domain::Starbase,
+        ],
+    ),
+    row(
+        "real-sol-alliance-from-luna",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+            Domain::Starbase,
+        ],
+    ),
+    row(
         "real-sol-planetside-collision-proof",
         &[Domain::PlanetSideResults],
     ),
@@ -388,6 +409,8 @@ mod tests {
         let classified: BTreeSet<String> =
             MATRIX.iter().map(|row| row.scenario.to_string()).collect();
         let on_disk = scenarios_on_disk();
+        assert_eq!(on_disk.len(), 40, "scenario files");
+        assert_eq!(classified.len(), 40, "classified scenarios");
         let unclassified: Vec<&String> = on_disk.difference(&classified).collect();
         assert!(
             unclassified.is_empty(),
