@@ -1,6 +1,6 @@
 {
   "schema": "uqm-native-dependencies-v2",
-  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 covers 285 production inputs after removing oval.c and pickship.c; its headers remain shared by other native inputs; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
+  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 covers 261 production inputs after removing oval.c, pickship.c, and the 24 unused MikMod/MOD decoder inputs; shared headers remain declared; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
   "dependencies": [
     {
       "path": "sc2/config_unix.h",
@@ -573,36 +573,6 @@
       ]
     },
     {
-      "path": "sc2/src/libs/mikmod/mikmod.h",
-      "sha256": "1c9698cd334ffe457daf2bfc6b3f191a64ea65d825aec08775a268639a91a148",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
-      "path": "sc2/src/libs/mikmod/mikmod_ctype.h",
-      "sha256": "fee6a0ae6c8c6611bd5c113c183080fea3fb776a11b2e6063740a616e7a50fa5",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
-      "path": "sc2/src/libs/mikmod/mikmod_internals.h",
-      "sha256": "10dc94457ee9d0351c97bfb01445f5a05eacc3e16f10b95e6c4cbecb2a3e979c",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
       "path": "sc2/src/libs/misc.h",
       "sha256": "29c47e3d8c2730bcdd45bd696853bceab7b9d7e59e77a25ad7075cbb7f8d71aa",
       "targets": [
@@ -863,16 +833,6 @@
       ]
     },
     {
-      "path": "sc2/src/libs/sound/decoders/modaud.h",
-      "sha256": "16a157382564f535b0fd0ef745179e5b7ac1f794bce7327a20d8cd29cdcac539",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
       "path": "sc2/src/libs/sound/decoders/rust_aiff.h",
       "sha256": "adc388206c43a81e1be1a1e656f6cd6d7b2ec78a1b3233fa00377ca2e5f5e4d4",
       "targets": [
@@ -894,7 +854,7 @@
     },
     {
       "path": "sc2/src/libs/sound/decoders/rust_mod.h",
-      "sha256": "fa5bd010a1ea4e415abd6936e271dc6fb010114e6abeb2b8ae581e6b0b8b6a41",
+      "sha256": "f7f5e499b102394f36b61866c39fe01e5497101eeb7dde68cdf1a7a2484261e1",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",

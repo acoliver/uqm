@@ -921,9 +921,9 @@ mod tests {
 
     #[test]
     fn transitional_native_inputs_may_decrease_but_not_increase_or_exceed_the_ceiling() {
-        assert!(transitional_native_inputs(321, 320, 321).passed);
-        assert!(!transitional_native_inputs(320, 321, 321).passed);
-        assert!(!transitional_native_inputs(322, 322, 321).passed);
+        assert!(transitional_native_inputs(261, 260, 261).passed);
+        assert!(!transitional_native_inputs(260, 261, 261).passed);
+        assert!(!transitional_native_inputs(262, 262, 261).passed);
     }
 
     #[test]
@@ -951,8 +951,8 @@ mod tests {
             report.transitional_native_inputs.base_count,
             report.transitional_native_inputs.head_count
         );
-        assert_eq!(report.transitional_native_inputs.head_count, 285);
-        assert_eq!(report.transitional_native_inputs.maximum_count, 285);
+        assert_eq!(report.transitional_native_inputs.head_count, 261);
+        assert_eq!(report.transitional_native_inputs.maximum_count, 261);
         assert!(report.transitional_native_inputs.passed);
     }
 

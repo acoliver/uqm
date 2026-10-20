@@ -11578,9 +11578,9 @@ mod tests {
             "head_sha": source_sha,
             "categories": categories,
             "transitional_native_inputs": {
-                "base_count": 285,
-                "head_count": 285,
-                "maximum_count": 285,
+                "base_count": 261,
+                "head_count": 261,
+                "maximum_count": 261,
                 "passed": true
             },
             "waivers": [],
@@ -16691,13 +16691,13 @@ mod tests {
         }
 
         let contracts = tampered_delta_contracts(|report| {
-            report["transitional_native_inputs"]["head_count"] = serde_json::json!(322);
+            report["transitional_native_inputs"]["head_count"] = serde_json::json!(262);
         });
         assert!(contracts.iter().any(|contract| {
             contract == "evidence.ownership.zero_native_delta.transitional_inputs.result"
         }));
         assert!(!tampered_delta_contracts(|report| {
-            report["transitional_native_inputs"]["head_count"] = serde_json::json!(322);
+            report["transitional_native_inputs"]["head_count"] = serde_json::json!(262);
             report["transitional_native_inputs"]["passed"] = serde_json::json!(false);
             report["passed"] = serde_json::json!(false);
         })
@@ -16719,10 +16719,10 @@ mod tests {
 
         for mutate in [
             |report: &mut serde_json::Value| {
-                report["transitional_native_inputs"]["maximum_count"] = serde_json::json!(322);
+                report["transitional_native_inputs"]["maximum_count"] = serde_json::json!(262);
             },
             |report: &mut serde_json::Value| {
-                report["transitional_native_inputs"]["base_count"] = serde_json::json!("321");
+                report["transitional_native_inputs"]["base_count"] = serde_json::json!("261");
             },
         ] {
             assert!(tampered_delta_contracts(mutate).iter().any(|contract| {
