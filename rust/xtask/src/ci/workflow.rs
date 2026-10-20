@@ -3990,18 +3990,84 @@ total_timeout=60
         assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
     #[cfg(unix)]
+    fn socket_member_in(
+        socket_root: &Path,
+        member: &Path,
+    ) -> Result<std::os::unix::net::UnixListener, String> {
+        use std::os::unix::net::{SocketAddr, UnixListener};
+
+        if !socket_root.is_absolute() {
+            return Err("socket scratch root must be absolute".into());
+        }
+        // Validate the complete generated pathname, including the terminator,
+        // before allocating. The standard library applies this platform's sun_path limit.
+        let probe = socket_root.join("xxxxxx/s");
+        SocketAddr::from_pathname(&probe)
+            .map_err(|error| format!("invalid socket scratch path {}: {error}", probe.display()))?;
+        let temporary = tempfile::Builder::new()
+            .prefix("")
+            .rand_bytes(6)
+            .tempdir_in(socket_root)
+            .map_err(|error| format!("cannot create socket scratch: {error}"))?;
+        let path = temporary.path().join("s");
+        let address = SocketAddr::from_pathname(&path).map_err(|error| error.to_string())?;
+        let socket = UnixListener::bind_addr(&address).map_err(|error| error.to_string())?;
+        // These finalizers inspect an inode type, not a reachable listener. Moving
+        // the socket preserves that test without binding through a long evidence path.
+        fs::rename(&path, member).map_err(|error| error.to_string())?;
+        Ok(socket)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn socket_member_supports_evidence_paths_beyond_the_platform_bind_limit() {
+        use std::os::unix::fs::FileTypeExt as _;
+        use std::os::unix::net::SocketAddr;
+
+        let scratch =
+            super::super::scratch::project_tmp(&crate::repository_root().unwrap()).unwrap();
+        let temporary = tempfile::tempdir_in(&scratch).unwrap();
+        let root = temporary.path().join("e".repeat(128));
+        fs::create_dir(&root).unwrap();
+        let member = root.join("special-member");
+        assert!(SocketAddr::from_pathname(&member).is_err());
+        let _socket = socket_member_in(&scratch, &member).unwrap();
+        assert!(fs::symlink_metadata(&member)
+            .unwrap()
+            .file_type()
+            .is_socket());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn socket_scratch_checks_platform_path_bytes_including_the_nul() {
+        use std::os::unix::net::SocketAddr;
+
+        let capacity = std::mem::size_of::<libc::sockaddr_un>()
+            - std::mem::offset_of!(libc::sockaddr_un, sun_path);
+        let fitting = format!("/{}", "s".repeat(capacity - 2));
+        assert!(SocketAddr::from_pathname(&fitting).is_ok());
+        assert!(SocketAddr::from_pathname(format!("{fitting}s")).is_err());
+        let unicode = format!("/{}", "é".repeat(capacity / 2));
+        assert!(SocketAddr::from_pathname(&unicode).is_err());
+        let error = socket_member_in(Path::new(&fitting), Path::new("unused")).unwrap_err();
+        assert!(error.contains("invalid socket scratch path"), "{error}");
+    }
+
+    #[cfg(unix)]
     #[test]
     fn special_transport_member_preserves_a_fresh_detached_fallback() {
-        use std::os::unix::net::UnixListener;
         use std::process::Command;
 
         let finalizer = workflow_run_containing("\n          setup = {\n");
         assert!(finalizer.contains("def collect(directory_fd):"));
-        let temporary = tempfile::tempdir().unwrap();
+        let scratch =
+            super::super::scratch::project_tmp(&crate::repository_root().unwrap()).unwrap();
+        let temporary = tempfile::tempdir_in(&scratch).unwrap();
         let root = temporary.path().join("s4-plan-evidence");
         fs::create_dir(&root).unwrap();
         fs::write(root.join("index.json"), b"{\"forged\":true}\n").unwrap();
-        let _socket = UnixListener::bind(root.join("special-member")).unwrap();
+        let _socket = socket_member_in(&scratch, &root.join("special-member")).unwrap();
         let script = temporary.path().join("finalizer.sh");
         fs::write(&script, finalizer).unwrap();
 
@@ -4041,17 +4107,18 @@ total_timeout=60
     #[cfg(unix)]
     #[test]
     fn required_transport_rejects_special_members_and_preserves_fallback() {
-        use std::os::unix::net::UnixListener;
         use std::process::Command;
 
         let finalizer = workflow_run_containing(
             "if [item[\"path\"] for item in files] != [\"required-result.json\"]",
         );
-        let temporary = tempfile::tempdir().unwrap();
+        let scratch =
+            super::super::scratch::project_tmp(&crate::repository_root().unwrap()).unwrap();
+        let temporary = tempfile::tempdir_in(&scratch).unwrap();
         let root = temporary.path().join("s4-required-evidence");
         fs::create_dir(&root).unwrap();
         fs::write(root.join("index.json"), b"{\"forged\":true}\n").unwrap();
-        let _socket = UnixListener::bind(root.join("special-member")).unwrap();
+        let _socket = socket_member_in(&scratch, &root.join("special-member")).unwrap();
         let script = temporary.path().join("required-finalizer.sh");
         fs::write(&script, finalizer).unwrap();
 
