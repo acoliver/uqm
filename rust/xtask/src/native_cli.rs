@@ -37,6 +37,7 @@ const FLAGS: &[&str] = &[
     "--json",
     "--output",
     "--platform",
+    "--pr",
     "--profile",
     "--renderer",
     "--scenario",
@@ -55,6 +56,7 @@ pub struct Options {
     pub profile: Option<String>,
     pub renderer: Option<String>,
     pub platform: Option<String>,
+    pub pr: Option<u32>,
     pub artifacts: Option<PathBuf>,
     pub content: Option<PathBuf>,
     pub output: Option<PathBuf>,
@@ -148,6 +150,12 @@ impl Options {
             "--profile" => set_once(&mut self.profile, value, flag)?,
             "--renderer" => set_once(&mut self.renderer, value, flag)?,
             "--platform" => set_once(&mut self.platform, value, flag)?,
+            "--pr" => {
+                let number = value
+                    .parse::<u32>()
+                    .map_err(|_| format!("--pr expects a pull request number, got {value}"))?;
+                set_once(&mut self.pr, number, flag)?;
+            }
             "--artifacts" => set_once(&mut self.artifacts, PathBuf::from(value), flag)?,
             "--content" => set_once(&mut self.content, PathBuf::from(value), flag)?,
             "--output" => set_once(&mut self.output, PathBuf::from(value), flag)?,
@@ -175,6 +183,7 @@ impl Options {
             (self.profile.is_some(), "--profile"),
             (self.renderer.is_some(), "--renderer"),
             (self.platform.is_some(), "--platform"),
+            (self.pr.is_some(), "--pr"),
             (self.artifacts.is_some(), "--artifacts"),
             (self.content.is_some(), "--content"),
             (self.output.is_some(), "--output"),
@@ -245,6 +254,7 @@ pub fn usage() -> String {
      list [DOMAIN] [--json]\n  \
      run --artifacts DIR --content DIR [--scenario NAME]... [--all] [--seed N] \
      [--profile release] [--renderer sdl2-native-window] [--platform macos]\n  \
+     smoke --artifacts DIR --content DIR [--pr N]\n  \
      validate BUNDLE [--scenario NAME]... [--all]\n  \
      report BUNDLE [--json]\n  \
      replay BUNDLE --output DIR [--scenario NAME]... [--seed N]\n  \
@@ -260,6 +270,7 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<(), String> {
     match subcommand.as_str() {
         "list" => list(root, &options),
         "run" => run_suite(root, &options),
+        "smoke" => smoke(root, &options),
         "validate" => validate(root, &options),
         "report" => report(&options),
         "replay" => replay(root, &options),
@@ -401,13 +412,61 @@ fn run_suite(root: &Path, options: &Options) -> Result<(), String> {
         "native run requires --content DIR: the directory holding the pinned content package",
     )?;
     let _display_awake = crate::display_awake::hold_display_awake()?;
+    run_selection(root, selection, artifacts, content)
+}
+
+/// The one path a native scenario selection runs through, for `run` and `smoke`.
+fn run_selection(
+    root: &Path,
+    scenarios: Option<String>,
+    artifacts: PathBuf,
+    content: PathBuf,
+) -> Result<(), String> {
     crate::native_test_with(
         root,
         &crate::NativeRunRequest {
-            scenarios: selection,
+            scenarios,
             evidence_root: Some(artifacts),
             content_root: Some(content),
             verify_workflow_selection: true,
+        },
+    )
+}
+
+/// Run the short playability smoke set and write its receipt.
+fn smoke(root: &Path, options: &Options) -> Result<(), String> {
+    crate::require_native_platform(cfg!(target_os = "macos"))?;
+    options.require_only("smoke", &["--artifacts", "--content", "--pr"])?;
+    if !options.positional.is_empty() {
+        return Err(format!(
+            "native smoke takes no positional arguments; got {}",
+            options.positional.join(" ")
+        ));
+    }
+    let artifacts = options.required_path(
+        &options.artifacts,
+        "native smoke requires --artifacts DIR: a fresh directory for the receipt and evidence",
+    )?;
+    let content = options.required_path(
+        &options.content,
+        "native smoke requires --content DIR: the directory holding the pinned content package",
+    )?;
+    let set = crate::native_smoke::SmokeSet::load(root)?;
+    let _display_awake = crate::display_awake::hold_display_awake()?;
+    crate::native_smoke::run(
+        &crate::native_smoke::SmokeRequest {
+            root,
+            artifacts,
+            pr: options.pr,
+        },
+        &set,
+        &mut |scenario, bundle| {
+            run_selection(
+                root,
+                Some(scenario.to_string()),
+                bundle.to_path_buf(),
+                content.clone(),
+            )
         },
     )
 }

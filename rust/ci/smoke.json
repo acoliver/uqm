@@ -1,0 +1,29 @@
+{
+  "schema": "uqm-smoke-v1",
+  "scenarios": [
+    "main-menu-v1",
+    "real-sol-starbase-to-mars",
+    "load-save-v1",
+    "comm-encounter-v1",
+    "battle-v1"
+  ],
+  "covers": {
+    "main-menu-v1": ["main_menu"],
+    "real-sol-starbase-to-mars": ["flight", "orbit_land_takeoff"],
+    "load-save-v1": ["flight", "save_load"],
+    "comm-encounter-v1": ["conversation"],
+    "battle-v1": ["battle"]
+  },
+  "look_at": {
+    "main-menu-v1": ["menu-after-select"],
+    "real-sol-starbase-to-mars": [
+      "loaded-allied-start-save",
+      "mars-orbit-after-starbase",
+      "mars-planet-side-start",
+      "mars-orbit-after-takeoff"
+    ],
+    "load-save-v1": ["moved-after-save", "loaded-game-state", "final-state"],
+    "comm-encounter-v1": ["real-commander-responses", "real-commander-conversation-ended"],
+    "battle-v1": ["super-melee-battle-start", "battle-final"]
+  }
+}
