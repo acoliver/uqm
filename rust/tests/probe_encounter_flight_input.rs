@@ -456,6 +456,29 @@ fn position(steps: &[Value], from: usize, wanted: impl Fn(&Value) -> bool) -> us
         .expect("expected step is missing")
 }
 
+fn reward_precedes_post_commander_menu(steps: &[Value], farewell: usize, reward: usize) -> bool {
+    let first_menu_input = position(steps, farewell, |step| {
+        matches!(action_of(step), "tap_menu_key" | "set_menu_key")
+    });
+    reward < first_menu_input
+}
+
+#[test]
+fn reward_ordering_distinguishes_checkpoint_navigation_from_post_commander_input() {
+    let mut steps = vec![
+        serde_json::json!({"action": "tap_menu_key", "key": "up"}),
+        serde_json::json!({"action": "select_communication_response", "index": 2}),
+        serde_json::json!({"action": "assert_ship_resources", "res_units": 2500}),
+        serde_json::json!({"action": "tap_menu_key", "key": "down"}),
+    ];
+    assert!(reward_precedes_post_commander_menu(&steps, 1, 2));
+    for action in ["tap_menu_key", "set_menu_key"] {
+        steps[2] = serde_json::json!({"action": action, "key": "up"});
+        steps[3] = serde_json::json!({"action": "assert_ship_resources", "res_units": 2500});
+        assert!(!reward_precedes_post_commander_menu(&steps, 1, 3));
+    }
+}
+
 /// Everything before the first flight step: the preparation.
 fn prep_of(name: &str) -> Vec<Value> {
     let steps = script_steps(name);
@@ -525,9 +548,8 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
             steps[farewell]["index"], 2,
             "{name} says goodbye_commander to the allied Commander"
         );
-        let first_purchase = position(&steps, 0, |step| is_tap(step, "up"));
         assert!(
-            reward < first_purchase,
+            reward_precedes_post_commander_menu(&steps, farewell, reward),
             "{name} must hold the 2500 RU reward before buying fuel"
         );
         // The reward is only paid when the allied Commander greets the moon
