@@ -158,11 +158,17 @@ impl Manifest {
         Self::from_json(&std::fs::read(path)?)
     }
     pub fn validate_self(&self) -> Result<(), OwnershipError> {
+        self.validate_self_with_verified(&[])
+    }
+    pub(crate) fn validate_self_with_verified(
+        &self,
+        verified: &[SymbolContract],
+    ) -> Result<(), OwnershipError> {
         let mut diagnostics = Vec::new();
         self.validate_identity(&mut diagnostics);
         self.validate_paths_and_objects(&mut diagnostics);
         self.validate_recompiled(&mut diagnostics);
-        self.validate_symbols(&mut diagnostics);
+        self.validate_symbols(verified, &mut diagnostics);
         self.validate_native_change(&mut diagnostics);
         diagnostics.sort_by(|a, b| {
             a.path
@@ -448,7 +454,22 @@ impl Manifest {
             ));
         }
     }
-    fn validate_symbols(&self, diagnostics: &mut Vec<Diagnostic>) {
+    /// Check the original inventory plus contracts independently verified by the
+    /// trusted controller. Candidate manifest records are never authority.
+    pub fn validate_verified_symbols(
+        &self,
+        verified: &[SymbolContract],
+    ) -> Result<(), OwnershipError> {
+        let mut diagnostics = Vec::new();
+        self.validate_symbols(verified, &mut diagnostics);
+        if diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(OwnershipError::multiple(diagnostics))
+        }
+    }
+
+    fn validate_symbols(&self, verified: &[SymbolContract], diagnostics: &mut Vec<Diagnostic>) {
         let mut symbols = BTreeSet::new();
         for contract in &self.symbol_contracts {
             if contract.symbol.is_empty() || !symbols.insert(contract.symbol.as_str()) {
@@ -459,8 +480,25 @@ impl Manifest {
                 ));
             }
             check_path(&contract.active_provider.path, diagnostics);
-            let Some((owner, provider, excluded)) = expected_symbol_contract(&contract.symbol)
-            else {
+            let expected = expected_symbol_contract(&contract.symbol).or_else(|| {
+                verified
+                    .iter()
+                    .find(|entry| entry.symbol == contract.symbol)
+                    .and_then(|entry| {
+                        let [excluded] = entry.excluded_providers.as_slice() else {
+                            return None;
+                        };
+                        (entry == contract
+                            && entry.active_provider.kind == ProviderKind::RustSource
+                            && excluded.kind == ProviderKind::NativeObject)
+                            .then_some((
+                                entry.canonical_owner.as_str(),
+                                entry.active_provider.path.as_str(),
+                                excluded.path.as_str(),
+                            ))
+                    })
+            });
+            let Some((owner, provider, excluded)) = expected else {
                 diagnostics.push(diag(
                     DiagnosticCode::UnassignedObject,
                     Some(&contract.symbol),
@@ -495,6 +533,7 @@ impl Manifest {
             .iter()
             .chain(crate::HASH_TABLE_SYMBOLS.iter())
             .copied()
+            .chain(verified.iter().map(|contract| contract.symbol.as_str()))
             .collect();
         if symbols != expected {
             diagnostics.push(diag(

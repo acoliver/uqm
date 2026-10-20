@@ -17,6 +17,9 @@ pub(super) struct CFunction {
     pub included: BTreeSet<PathBuf>,
     pub arguments: Vec<String>,
     pub result: String,
+    pub machine_checks: BTreeSet<String>,
+    pub c_checks: BTreeSet<String>,
+    pub c_pointer_type: String,
 }
 
 struct TranslationUnit {
@@ -141,6 +144,76 @@ unsafe fn rust_type(ty: CXType) -> Result<String, String> {
     })
 }
 
+unsafe fn machine_checks(
+    ty: CXType,
+    checks: &mut BTreeSet<String>,
+    c_checks: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    if ty.kind == CXType_Pointer {
+        checks.insert(format!(
+            "assert!(std::mem::size_of::<*const ()>() == {});",
+            clang_Type_getSizeOf(ty)
+        ));
+        return machine_checks(clang_getPointeeType(ty), checks, c_checks);
+    }
+    if ty.kind == CXType_Elaborated {
+        return machine_checks(clang_Type_getNamedType(ty), checks, c_checks);
+    }
+    if ty.kind != CXType_Typedef {
+        return Ok(());
+    }
+    let name = text(clang_getCursorSpelling(clang_getTypeDeclaration(ty)));
+    let _: syn::Ident = syn::parse_str(&name).map_err(|_| "unsupported type name")?;
+    let canonical = clang_getCanonicalType(ty);
+    let size = clang_Type_getSizeOf(ty);
+    let align = clang_Type_getAlignOf(ty);
+    if size < 0 || align < 0 {
+        return Err(format!("incomplete C ABI type {name}"));
+    }
+    if !checks.insert(format!("assert!(std::mem::size_of::<c::{name}>() == {size}); assert!(std::mem::align_of::<c::{name}>() == {align});")) {
+        return Ok(());
+    }
+    c_checks.insert(format!("_Static_assert(sizeof({name}) == {size} && _Alignof({name}) == {align}, \"original type layout\");"));
+    if canonical.kind != CXType_Record {
+        let primitive = rust_type(canonical)?;
+        // A compiler assignment distinguishes signed and unsigned aliases too.
+        checks.insert(format!("let _: Option<c::{name}> = None::<{primitive}>;"));
+        return Ok(());
+    }
+    struct Fields {
+        fields: Vec<CXCursor>,
+    }
+    extern "C" fn field(cursor: CXCursor, _: CXCursor, data: CXClientData) -> CXChildVisitResult {
+        unsafe {
+            if clang_getCursorKind(cursor) == CXCursor_FieldDecl {
+                (&mut *data.cast::<Fields>()).fields.push(cursor);
+            }
+        }
+        CXChildVisit_Continue
+    }
+    let mut fields = Fields { fields: Vec::new() };
+    clang_visitChildren(
+        clang_getTypeDeclaration(canonical),
+        field,
+        ptr::from_mut(&mut fields).cast(),
+    );
+    for field in fields.fields {
+        let field_name = text(clang_getCursorSpelling(field));
+        let _: syn::Ident = syn::parse_str(&field_name).map_err(|_| "unsupported C field name")?;
+        let offset = clang_Cursor_getOffsetOfField(field);
+        if offset < 0 || offset % 8 != 0 || clang_Cursor_isBitField(field) != 0 {
+            return Err("unsupported bit-field layout".into());
+        }
+        checks.insert(format!(
+            "assert!(std::mem::offset_of!(c::{name}, {field_name}) == {});",
+            offset / 8
+        ));
+        c_checks.insert(format!("_Static_assert(__builtin_offsetof({name}, {field_name}) == {}, \"original field layout\");", offset / 8));
+        machine_checks(clang_getCursorType(field), checks, c_checks)?;
+    }
+    Ok(())
+}
+
 /// Parse the original Git blob as an unsaved translation unit. No base source
 /// checkout or source copy is created. Callers must verify every included
 /// repository header against both Git trees before using the result.
@@ -250,6 +323,20 @@ pub(super) fn c_function(
         if count < 0 {
             return Err("original C function has no prototype".into());
         }
+        let mut machine_checks_set = BTreeSet::new();
+        let mut c_checks = BTreeSet::new();
+        for n in 0..count {
+            machine_checks(
+                clang_getArgType(signature, n as _),
+                &mut machine_checks_set,
+                &mut c_checks,
+            )?;
+        }
+        machine_checks(
+            clang_getResultType(signature),
+            &mut machine_checks_set,
+            &mut c_checks,
+        )?;
         let arguments = (0..count)
             .map(|n| rust_type(clang_getArgType(signature, n as _)))
             .collect::<Result<_, _>>()?;
@@ -259,6 +346,16 @@ pub(super) fn c_function(
             included,
             arguments,
             result,
+            machine_checks: machine_checks_set,
+            c_checks,
+            c_pointer_type: format!(
+                "{} (*)({})",
+                text(clang_getTypeSpelling(clang_getResultType(signature))),
+                (0..count)
+                    .map(|n| text(clang_getTypeSpelling(clang_getArgType(signature, n as _))))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         })
     }
 }
@@ -289,6 +386,10 @@ fn imported_binding(tree: &syn::UseTree, prefix: &str) -> bool {
 /// pair of compiler type probes against the bindgen declaration. A JSON claim
 /// about a matching signature cannot satisfy this check.
 pub(super) fn rust_function(source: &str, symbol: &str, c: &CFunction) -> Result<(), String> {
+    rust_export(source, symbol, c).map(|_| ())
+}
+
+pub(super) fn rust_export(source: &str, symbol: &str, c: &CFunction) -> Result<String, String> {
     let file =
         syn::parse_file(source).map_err(|error| format!("cannot parse Rust provider: {error}"))?;
     if !file.items.iter().any(|item| matches!(item, syn::Item::Use(item) if item.attrs.is_empty() && imported_binding(&item.tree, ""))) {
@@ -372,7 +473,7 @@ pub(super) fn rust_function(source: &str, symbol: &str, c: &CFunction) -> Result
             "missing unconditional C-declaration and Rust-function compiler ABI probes".into(),
         );
     }
-    Ok(())
+    Ok(function.sig.ident.to_string())
 }
 
 /// Resolve clang's parent-relative include spelling without authorizing a

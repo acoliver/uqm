@@ -1,74 +1,79 @@
-# Existing-ABI retirement measurements: source-proof implementation
+# Existing-ABI retirement measurements
 
-## Status
+The controller can admit a new measurement of an existing C function when that
+function's native provider is retired to Rust. It cannot admit a new ABI,
+changed signature, additional native provider or duplicate implementation.
+Standalone manifest and archive validation retain their installed inventory.
+Candidate JSON and ambient environment variables cannot authorize an addition.
 
-This branch implements and tests the source-verification part of the correction.
-It is not ready to replace the installed controller. The downstream ownership
-validator still requires exactly the 34 queue and hash-table contracts and its
-symbol reader recognizes only that inventory. No ownership constraint has been
-removed or broadened to make the source proof pass.
+## Source evidence
 
-The user goal is to port existing C functions to Rust while retaining their
-measurements. A newly recorded measurement of an existing ABI should not be
-classified as a new interface. New native code, new interfaces, changed
-signatures, duplicate providers and unmeasured exports must remain rejected.
-This is an implementation decision within that goal, not a request for another
-approval.
+The base controller reads both commits from Git. The original C blob must match
+its base compilation input and active object assignment. The head must delete
+the source, object and compilation input, preserve the owner domain and retain
+the production profile. Libclang parses the original blob in memory and requires
+one external definition with a matching first-party header declaration. Included
+repository headers must match both Git trees and their disk bytes. Parent-relative
+include spelling is normalized; symlink substitutions and escaping paths fail.
 
-## Implemented proof
+The Rust source must contain an unconditional explicit C export with the original
+signature, the generated binding import and unconditional function-pointer probes
+against both the C declaration and Rust implementation. Unsupported forms fail.
+No function-name exception is involved.
 
-The delta evaluator reads the original object assignment and compilation input
-from the actual base Git objects. It checks their source identity against the
-original C blob, requires deletion of that source and retirement of its object
-and compilation input, and preserves the owner domain. It uses libclang, already
-used by this repository through bindgen, to parse the original blob in memory
-with the base production defines. It requires an external definition and a
-matching header declaration. Every included repository header must match both
-Git trees and its actual disk bytes.
+This produces `SourceRetirements`, which contains pending source evidence.
+It does not authorize archive measurement by itself.
 
-The Rust provider is parsed with syn. Its explicit C export must match the
-original argument and return types, import the generated global-state binding,
-and retain unconditional compiler function-pointer probes against both the
-original declaration and the Rust implementation. Unknown forms fail. There is
-no function-name exception and no candidate-supplied signature receipt.
+## Compiler and archive evidence
 
-The existing source, object, provider, generated-binding, bridge and flag rules
-are unchanged. Receipt structure and limits are unchanged. The new proof is
-recorded in the existing verdict reason, including source hash, declaration,
-retired provider, Rust source owner and signature.
+Production ownership verification first validates the existing two-clean-build
+artifact proof, source identity, toolchain and native compiler profile. It then
+checks the Rust compiler's dep-info for the selected provider. Every object in
+the sibling compiler metadata archive must occur with identical bytes in the
+actual production static archive. Missing metadata, missing members and changed
+member bytes fail.
 
-## Remaining controller integration
+The recorded production C compiler compiles a probe against the original header
+with the recorded compilation profile. The probe checks the original function
+pointer type and type/field layouts. An independent Rust compiler probe uses the
+actual production metadata to check the public provider function, generated C
+declaration, scalar alias types, sizes, alignment and field offsets against the
+original C definition. The compiler output therefore supplies the type evidence;
+matching source prototypes alone are insufficient.
 
-`rust/ownership/src/manifest.rs::validate_symbols` currently compares the complete
-contract set with the fixed queue/hash-table set and rejects unknown contracts.
-`rust/ownership/src/validate.rs::normalize_contract_symbol` likewise recognizes
-only those names. The candidate's oval port extends both checks, but those
-candidate changes do not authorize an installed base-owned controller to admit
-an expanded inventory.
+Only these checks can construct `VerifiedRetirements`. It binds the exact typed
+contracts to the measured archive hash and is consumed in memory by the ownership
+validator. The symbol reader measures the installed inventory plus those exact
+contracts. Missing, duplicate, wrong-provider, unresolved and dynamically resolved
+symbols remain errors. The controller's fixed queue/hash link fixture keeps its
+own embedded manifest instead of claiming to test candidate production exports.
 
-A complete correction needs a typed handoff of the verified retirement contracts
-from the base-owned proof evaluator into the base-owned ownership validator and
-symbol reader. The default standalone manifest validator must stay strict, and
-the measured archives must still supply exactly one Rust provider for each
-verified contract. The proof must be recomputed or passed through the existing
-trusted controller channel, not accepted as head JSON. The current cleared child
-environment deliberately excludes `UQM_CI_BASE_SHA`, so adding an ambient lookup
-in a child would not implement that handoff.
+## Supervised children and offline evidence
 
-Neither broad acceptance of arbitrary contract records nor an oval-name
-allowlist is an acceptable substitute. End-to-end base-controller acceptance
-has not been established by the source-proof unit tests. Keep this branch
-separate from the consolidated ports until that integration and its actual
-artifact checks are complete.
+A supervised child receives explicit witness path/hash arguments. The versioned
+witness records the base commit, head commit and admitted authority hash, never a
+list of candidate-authorized contracts. It is a regular, controller-owned 0440
+file beside the staged 0550 controller in its protected 0750 directory. The child
+checks its location, ownership, mode, hash, version, authority and physical HEAD,
+then recomputes the base-to-head delta and source proof. No base-SHA environment
+lookup is used to grant the child authority.
 
-## Verification scope
+Source preflight uses these verified retirements to check the exact removed-provider
+trend. Every embedded controller caller forwards the explicit arguments. The
+ownership subprocess remains mandatory. Existing execution-receipt schemas and
+read limits are unchanged. Offline validation reconstructs the witness hash from
+the retained delta and authority snapshot and rejects any other added arguments.
+Compiler signatures, probe content, toolchain, compilation profile and artifact
+hashes are retained in the supervised ownership step's output.
 
-The focused tests use actual libclang translation units and temporary Git
-repositories. They exercise matching retirement evidence and reject invented
-symbols, signature changes, owner changes, missing or nonretired providers,
-missing probes, unsupported paths, changed headers, declarations fabricated only
-at head, and reassignment of already measured symbols. Existing ownership
-mutation tests continue to cover missing, duplicate, dynamic and unassigned
-providers. These fixtures are not production artifact evidence.
+## Verification
+
+Tests cover source/header/owner/retirement mutations, unsupported Rust exports,
+missing or conditional probes, strict default inventory rejection, and added
+contract inventory/provider mutations. Real compiler/archive fixtures exercise a
+matching provider, changed compiled scalar type, extra Rust-archive definition,
+C duplicate, missing metadata and missing compiler object. Witness checks reject
+wrong paths, hashes, modes, oversized files and symlinks. These fixtures supplement,
+not replace, the production controller run and game acceptance gates.
 
 Review skipped per Andrew 2026-10-09.

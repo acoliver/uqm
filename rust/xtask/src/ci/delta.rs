@@ -80,7 +80,7 @@ pub fn measure(root: &Path, authority: &Authority, head_sha: &str) -> Result<Del
     measure_between(root, authority, &base_sha, head_sha)
 }
 
-fn measure_between(
+pub(crate) fn measure_between(
     root: &Path,
     authority: &Authority,
     base_sha: &str,
@@ -481,6 +481,94 @@ fn symbol_identities(manifest: &Value) -> Result<BTreeSet<String>, String> {
             ))
         })
         .collect()
+}
+
+/// Source-verified retirements are pending until the actual compiled Rust
+/// metadata and archive member have also been checked by the controller.
+#[derive(Debug, Default)]
+pub(crate) struct SourceRetirements {
+    pub(super) base_sha: String,
+    pub(super) head_sha: String,
+    pub(super) entries: Vec<SourceRetirement>,
+}
+
+impl SourceRetirements {
+    pub(crate) fn retired_providers(&self) -> BTreeSet<String> {
+        self.entries
+            .iter()
+            .flat_map(|entry| {
+                entry
+                    .contract
+                    .excluded_providers
+                    .iter()
+                    .map(|provider| provider.path.clone())
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct SourceRetirement {
+    pub contract: uqm_ownership::SymbolContract,
+    pub source: String,
+    pub bytes: Vec<u8>,
+}
+
+pub(crate) fn source_retirements(
+    root: &Path,
+    authority: &Authority,
+    report: &DeltaReport,
+) -> Result<SourceRetirements, String> {
+    if !report.passed {
+        return Err("retirements require a passing base-to-head delta".into());
+    }
+    let base_tree = tree(root, authority, &report.base_sha)?;
+    let head_tree = tree(root, authority, &report.head_sha)?;
+    let base_manifest = git_json(root, authority, &report.base_sha, PROVIDER_PATH)?;
+    let head_manifest = git_json(root, authority, &report.head_sha, PROVIDER_PATH)?;
+    let context = RetirementContext {
+        root,
+        authority,
+        base_sha: &report.base_sha,
+        head_sha: &report.head_sha,
+        base_tree: &base_tree,
+        head_tree: &head_tree,
+        base_manifest: &base_manifest,
+        head_manifest: &head_manifest,
+    };
+    let base_symbols = symbol_identities(&base_manifest)?;
+    let mut entries = Vec::new();
+    for contract in manifest_array(&head_manifest, "symbol_contracts")? {
+        let identity = symbol_identities(&serde_json::json!({"symbol_contracts": [contract]}))?
+            .into_iter()
+            .next()
+            .unwrap();
+        if base_symbols.contains(&identity) {
+            continue;
+        }
+        context.verify_symbol(contract)?;
+        let typed: uqm_ownership::SymbolContract =
+            serde_json::from_value(contract.clone()).map_err(|error| error.to_string())?;
+        let source = manifest_array(&base_manifest, "objects")?
+            .iter()
+            .find(|object| {
+                object.get("path").and_then(Value::as_str)
+                    == Some(typed.excluded_providers[0].path.as_str())
+            })
+            .and_then(|object| object.get("canonical_source"))
+            .and_then(Value::as_str)
+            .ok_or("missing base source")?;
+        entries.push(SourceRetirement {
+            contract: typed,
+            source: source.into(),
+            bytes: context.blob(&report.base_sha, source)?,
+        });
+    }
+    Ok(SourceRetirements {
+        base_sha: report.base_sha.clone(),
+        head_sha: report.head_sha.clone(),
+        entries,
+    })
 }
 
 struct RetirementContext<'a> {

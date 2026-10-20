@@ -419,7 +419,15 @@ This exception records a measurement of an existing interface so Rust ports can
 retain their ownership checks. It does not permit a new interface, native input,
 bridge path, generated-binding addition, or an unmeasured contract. The other
 shrink-only rules and all limits remain unchanged. Tests in `retirement_tests.rs`
-and `retirement.rs` cover compiler-derived matching and rejection cases.
+and `retirement.rs` cover source-derived matching and rejection cases.
+`retirement_provider.rs` promotes that evidence only after production compiler
+metadata, C and Rust ABI/layout probes, compiler dep-info and actual archive
+member equality pass. The resulting in-memory capability authorizes only the
+verified contracts and archive hash. Supervised children receive a protected,
+versioned commit/authority witness through explicit arguments and recompute the
+proof; candidate JSON and ambient child environment cannot issue it. Strict
+receipt fields and read limits are unchanged. Offline replay checks the witness
+argument hash against the retained delta and authority snapshot.
 
 `measured_delta` counts failing verdicts and must be zero. The report keeps
 `changed_paths` (every path with a verdict) and `verdicts` (`path`, `verdict` of
