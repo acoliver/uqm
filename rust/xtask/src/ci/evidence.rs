@@ -3386,6 +3386,7 @@ fn validate_delta_receipt(
             "categories",
             "transitional_native_inputs",
             "waivers",
+            "scenario_ratchet",
             "passed",
         ],
     ) {
@@ -3557,6 +3558,7 @@ fn validate_delta_receipt(
             .push("evidence.ownership.zero_native_delta.transitional_inputs.result".to_string());
     }
     passed &= input_counts_passed;
+    passed &= validate_scenario_ratchet(report.get("scenario_ratchet"), contracts);
     let failure_correlated = passed
         || index.first_failed_contract.as_deref() == Some("ownership.zero_native_delta")
         || index
@@ -3567,6 +3569,54 @@ fn validate_delta_receipt(
     {
         contracts.push("evidence.ownership.zero_native_delta.result".to_string());
     }
+}
+
+/// Check the shape of the assertion-ratchet block and return whether it
+/// passed: no weakening, or at least one `Weakens-assertion:` waiver.
+fn validate_scenario_ratchet(
+    ratchet: Option<&serde_json::Value>,
+    contracts: &mut Vec<String>,
+) -> bool {
+    const PREFIX: &str = "evidence.ownership.zero_native_delta.scenario_ratchet";
+    let Some(ratchet) = ratchet else {
+        return false;
+    };
+    if !exact_json_fields(ratchet, &["weakenings", "waivers", "passed"]) {
+        contracts.push(format!("{PREFIX}.fields"));
+        return false;
+    }
+    let weakenings = ratchet.get("weakenings").and_then(|value| value.as_array());
+    let waivers = ratchet.get("waivers").and_then(|value| value.as_array());
+    let (Some(weakenings), Some(waivers)) = (weakenings, waivers) else {
+        contracts.push(format!("{PREFIX}.fields"));
+        return false;
+    };
+    let non_empty = |entry: &serde_json::Value, field: &str| {
+        entry
+            .get(field)
+            .and_then(|value| value.as_str())
+            .is_some_and(|text| !text.trim().is_empty())
+    };
+    if !weakenings.iter().all(|entry| {
+        exact_json_fields(entry, &["scenario", "step", "change"])
+            && ["scenario", "step", "change"]
+                .iter()
+                .all(|field| non_empty(entry, field))
+    }) || !waivers.iter().all(|entry| {
+        exact_json_fields(entry, &["commit", "reason"])
+            && entry
+                .get("commit")
+                .and_then(|value| value.as_str())
+                .is_some_and(|commit| is_hex(commit, 40))
+            && non_empty(entry, "reason")
+    }) {
+        contracts.push(format!("{PREFIX}.fields"));
+    }
+    let passed = weakenings.is_empty() || !waivers.is_empty();
+    if ratchet.get("passed").and_then(|value| value.as_bool()) != Some(passed) {
+        contracts.push(format!("{PREFIX}.result"));
+    }
+    passed
 }
 
 fn is_source_preflight_failure(contract: &str) -> bool {
@@ -11506,12 +11556,13 @@ mod tests {
             "head_sha": source_sha,
             "categories": categories,
             "transitional_native_inputs": {
-                "base_count": 286,
-                "head_count": 286,
-                "maximum_count": 286,
+                "base_count": 285,
+                "head_count": 285,
+                "maximum_count": 285,
                 "passed": true
             },
             "waivers": [],
+            "scenario_ratchet": {"weakenings": [], "waivers": [], "passed": true},
             "passed": !delta_failed
         }))
         .unwrap();
@@ -16578,6 +16629,44 @@ mod tests {
         })
         .iter()
         .any(|contract| contract == "evidence.ownership.zero_native_delta.result"));
+
+        let unwaived = |report: &mut serde_json::Value| {
+            report["scenario_ratchet"]["weakenings"] = serde_json::json!([
+                {"scenario": "rust/scripts/a.json", "step": "assert_mode", "change": "removed"}
+            ]);
+        };
+        assert!(
+            tampered_delta_contracts(|report| {
+                unwaived(report);
+                report["scenario_ratchet"]["passed"] = serde_json::json!(true);
+            })
+            .iter()
+            .any(|contract| contract
+                == "evidence.ownership.zero_native_delta.scenario_ratchet.result")
+        );
+        assert!(!tampered_delta_contracts(|report| {
+            unwaived(report);
+            report["scenario_ratchet"]["passed"] = serde_json::json!(false);
+            report["passed"] = serde_json::json!(false);
+        })
+        .iter()
+        .any(|contract| contract.contains("scenario_ratchet")));
+        assert!(tampered_delta_contracts(|report| {
+            report.as_object_mut().unwrap().remove("scenario_ratchet");
+        })
+        .iter()
+        .any(|contract| contract == "evidence.ownership.zero_native_delta.fields"));
+        for waiver in [
+            serde_json::json!({"commit": "not-a-sha", "reason": "why"}),
+            serde_json::json!({"commit": "a".repeat(40), "reason": "  "}),
+        ] {
+            assert!(tampered_delta_contracts(|report| {
+                report["scenario_ratchet"]["waivers"] = serde_json::json!([waiver]);
+            })
+            .iter()
+            .any(|contract| contract
+                == "evidence.ownership.zero_native_delta.scenario_ratchet.fields"));
+        }
 
         let contracts = tampered_delta_contracts(|report| {
             report["transitional_native_inputs"]["head_count"] = serde_json::json!(322);

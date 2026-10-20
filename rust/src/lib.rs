@@ -24,6 +24,7 @@ pub mod logging;
 pub mod mainloop;
 pub mod math;
 pub mod memory;
+pub mod pickship;
 pub mod planet_side;
 pub mod planets;
 pub mod resource;

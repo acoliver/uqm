@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::authority::Authority;
 use super::exec::{run_captured_with_bound_environment, Captured};
+use super::scenario_ratchet::{self, RatchetReport};
 use super::shrink::{self, PathVerdict, Verdict};
 use super::trailer::waiver_reasons;
 use crate::hex_sha256;
@@ -27,10 +28,12 @@ pub struct DeltaReport {
     pub categories: BTreeMap<String, DeltaCategory>,
     pub transitional_native_inputs: TransitionalNativeInputs,
     pub waivers: Vec<Waiver>,
+    pub scenario_ratchet: RatchetReport,
     pub passed: bool,
 }
 
-/// An `Adds-native:` commit-message line that turns failures into reported passes.
+/// A commit-message waiver line (`Adds-native:` here, `Weakens-assertion:` for the
+/// scenario ratchet) that turns failures into reported passes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Waiver {
     pub commit: String,
@@ -106,7 +109,7 @@ fn measure_between(
     let head_tree = tree(root, authority, head_sha)?;
 
     let all_paths = base_tree.keys().chain(head_tree.keys());
-    let waivers = commit_waivers(root, authority, base_sha, head_sha)?;
+    let waivers = commit_waivers(root, authority, base_sha, head_sha, WAIVER_KEY)?;
     let verdicts_for = |changed: Vec<String>| -> Result<Vec<PathVerdict>, String> {
         changed
             .iter()
@@ -216,10 +219,12 @@ fn measure_between(
             .zero_native_delta
             .maximum_transitional_native_inputs,
     );
+    let scenario_ratchet = scenario_ratchet::measure(root, authority, base_sha, head_sha)?;
     let passed = categories
         .values()
         .all(|category| category.measured_delta == 0)
-        && transitional_native_inputs.passed;
+        && transitional_native_inputs.passed
+        && scenario_ratchet.passed;
     Ok(DeltaReport {
         schema: SCHEMA.into(),
         base_sha: base_sha.into(),
@@ -227,6 +232,7 @@ fn measure_between(
         categories,
         transitional_native_inputs,
         waivers,
+        scenario_ratchet,
         passed,
     })
 }
@@ -251,11 +257,13 @@ fn category(mut verdicts: Vec<PathVerdict>, waivers: &[Waiver]) -> DeltaCategory
     }
 }
 
-fn commit_waivers(
+/// Waivers carried by the commits in `base..head` under the exact trailer `key`.
+pub fn commit_waivers(
     root: &Path,
     authority: &Authority,
     base_sha: &str,
     head_sha: &str,
+    key: &str,
 ) -> Result<Vec<Waiver>, String> {
     let output = supervised_git(
         root,
@@ -268,15 +276,15 @@ fn commit_waivers(
         "read base-to-head commit messages",
         &[0],
     )?;
-    Ok(parse_waivers(&String::from_utf8_lossy(&output.stdout)))
+    Ok(parse_waivers(&String::from_utf8_lossy(&output.stdout), key))
 }
 
 /// Parse `git log --format=%H%x1f%B%x1e` output into waivers.
-fn parse_waivers(log: &str) -> Vec<Waiver> {
+fn parse_waivers(log: &str, key: &str) -> Vec<Waiver> {
     log.split('\x1e')
         .filter_map(|record| record.trim_start().split_once('\x1f'))
         .flat_map(|(commit, message)| {
-            waiver_reasons(message, WAIVER_KEY)
+            waiver_reasons(message, key)
                 .into_iter()
                 .map(|reason| Waiver {
                     commit: commit.to_string(),
@@ -496,7 +504,7 @@ fn object_projection(manifest: &Value) -> Option<Value> {
     }))
 }
 
-fn supervised_git(
+pub(super) fn supervised_git(
     root: &Path,
     authority: &Authority,
     arguments: &[String],
@@ -866,8 +874,8 @@ mod tests {
             report.transitional_native_inputs.base_count,
             report.transitional_native_inputs.head_count
         );
-        assert_eq!(report.transitional_native_inputs.head_count, 286);
-        assert_eq!(report.transitional_native_inputs.maximum_count, 286);
+        assert_eq!(report.transitional_native_inputs.head_count, 285);
+        assert_eq!(report.transitional_native_inputs.maximum_count, 285);
         assert!(report.transitional_native_inputs.passed);
     }
 
@@ -892,7 +900,7 @@ mod tests {
             "{commit}\x1fSubject\n\nAdds-native: approved bootstrap shim\n\x1e\n{other}\x1fPlain\n\x1e",
             commit = "a".repeat(40),
             other = "b".repeat(40),
-        ));
+        ), WAIVER_KEY);
         assert_eq!(
             waivers,
             [Waiver {
@@ -905,6 +913,27 @@ mod tests {
         assert_eq!(result.changed_paths, ["sc2/src/new.c"]);
         assert_eq!(result.verdicts[0].verdict, Verdict::Waived);
         assert_eq!(result.verdicts[0].reason, "added at head");
+    }
+
+    #[test]
+    fn weakens_assertion_trailer_is_read_with_exact_prefix_semantics() {
+        let sha = "a".repeat(40);
+        let log = format!(
+            "{sha}\x1fSubject\n\nBody\nWeakens-assertion: probe fight is flaky, see #99\n\x1e\n{other}\x1fNo trailer here\n\x1e",
+            other = "b".repeat(40)
+        );
+        assert_eq!(
+            parse_waivers(&log, "Weakens-assertion"),
+            [Waiver {
+                commit: sha,
+                reason: "probe fight is flaky, see #99".into()
+            }]
+        );
+        assert!(parse_waivers(&log, WAIVER_KEY).is_empty());
+        for message in ["weakens-assertion: lowercase", "Weakens-assertion:   "] {
+            let log = format!("abc\x1f{message}\n\x1e");
+            assert!(parse_waivers(&log, "Weakens-assertion").is_empty());
+        }
     }
 
     #[test]

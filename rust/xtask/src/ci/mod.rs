@@ -26,6 +26,7 @@ pub mod mutations;
 pub mod plan;
 pub mod proof;
 pub mod run;
+pub mod scenario_ratchet;
 mod scratch;
 pub mod shrink;
 pub mod trailer;

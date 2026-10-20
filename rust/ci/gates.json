@@ -16,7 +16,7 @@
     "bridges": 0,
     "generated_bindings": 0,
     "transitional_flags": 0,
-    "maximum_transitional_native_inputs": 286
+    "maximum_transitional_native_inputs": 285
   },
   "control_plane_paths": [
     ".github/workflows/rust-quality.yaml",
@@ -387,6 +387,14 @@
           },
           {
                 "path": "rust/scripts/real-sol-pluto-orbit-scan.json"
+          },
+          {
+                "path": "rust/scripts/real-sol-alliance-from-mercury.json",
+                "outer_child_timeout_ms": 900000
+          },
+          {
+                "path": "rust/scripts/real-sol-alliance-from-luna.json",
+                "outer_child_timeout_ms": 900000
           }
     ],
     "script": "rust/scripts/linked-playable-v1.json",

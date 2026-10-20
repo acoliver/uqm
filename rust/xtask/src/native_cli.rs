@@ -1032,7 +1032,7 @@ mod tests {
     fn every_pinned_scenario_resolves_to_a_scenario_name() {
         let authority: Authority =
             serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        assert_eq!(authority.native_acceptance.scenario_scripts.len(), 38);
+        assert_eq!(authority.native_acceptance.scenario_scripts.len(), 40);
         for pinned in &authority.native_acceptance.scenario_scripts {
             assert!(!scenario_stem(&pinned.path).unwrap().is_empty());
         }

@@ -400,3 +400,37 @@ are listed under `waivers`. The evidence validator rejects a `waived` verdict
 without a recorded waiver and a `fail` verdict alongside one. Agents may add an
 `Adds-native:` line only with Andrew's explicit approval for that change. S1's
 provider report remains the provider and symbol authority.
+
+## Scenario assertion ratchet
+
+`ci run` also compares every `rust/scripts/*.json` scenario at
+`UQM_CI_BASE_SHA` with the same scenario at HEAD, together with the
+`outer_child_timeout_ms` entries in `native_acceptance.scenario_scripts`. The
+result is the `scenario_ratchet` block of `zero-native-delta.json`
+(`weakenings`, `waivers`, `passed`), and a failure is reported as
+`ownership.zero_native_delta`. On a push the base is
+`git merge-base origin/main HEAD`, so every commit that is not on main yet is
+measured together. Rules in `rust/xtask/src/ci/scenario_ratchet.rs`:
+
+- A scenario script that existed at base may not be deleted or dropped from
+  `scenario_scripts`.
+- Assertion-class steps may not be removed. Steps are matched as a multiset by
+  action and `label`, so reordering and adding steps is fine. Assertion class
+  means `assert_*`, `wait_for_*`, `capture`, `fight_battle`, `pick_battle_ship`,
+  `collect_planet_minerals`, `select_communication_response`, `navigate_to_*`,
+  `expect_quit`, and any action the table does not list as plain. Plain actions
+  (input taps and holds, `set_*_key`, `wait_input_ticks`, `wait_presentations`,
+  `turn_flagship`, `select_planet_menu`, `record_*`, the collision fixture,
+  `finish`) can change freely.
+- Kept assertions may not be loosened: `minimum*` and `count` may not be
+  lowered, `expect_change` may not go from true to false, and every other field
+  (`equals`, `mode`, `fuel_on_board`, `res_units`, `encounter`, `dialogue`,
+  `outcome`, `planet`, `moon`, ...) must stay equal.
+- `max_ticks`, other timeouts, and the script `budgets` may grow to at most
+  twice their base value. Larger growth is a weakening.
+  `outer_child_timeout_ms` may not be raised at all.
+
+A commit in `base..head` whose message has a line starting exactly with
+`Weakens-assertion: <reason>` waives every weakening in that range. The
+weakenings and the waiver commit stay in the report. Agents may add that trailer
+only with Andrew's explicit approval.

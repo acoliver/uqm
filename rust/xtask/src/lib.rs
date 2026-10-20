@@ -3418,7 +3418,7 @@ mod tests {
                 short_seen += 1;
             }
         }
-        assert_eq!((long_seen, short_seen), (14, 24));
+        assert_eq!((long_seen, short_seen), (16, 24));
 
         let mut forged = authority.native_acceptance.scenario_scripts[0].clone();
         forged.outer_child_timeout_ms = Some(900_000);
