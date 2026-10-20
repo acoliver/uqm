@@ -15,6 +15,8 @@ mod planets_common;
 #[path = "planets_special/mod.rs"]
 mod planets_special;
 
+#[path = "planets_render/sphere_geometry.rs"]
+mod sphere_geometry_parity;
 #[path = "planets_render/topography.rs"]
 mod topography_parity;
 use std::ffi::c_void;
@@ -424,6 +426,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
     planets_special::sol_matches_the_c_original(table);
     oval_parity::exported_ovals_match_original_c_full_offscreen_buffers();
     topography_parity::full_c_fixture_core_and_host_parity();
+    sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
     assert!(unsafe {
         GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
             && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
