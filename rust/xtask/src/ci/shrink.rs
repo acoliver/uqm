@@ -3,7 +3,9 @@
 //! A changed native path passes when it was deleted or when every hunk of its
 //! base-to-head diff only rearranges or removes tokens. A path added at head
 //! always fails. Manifest entries may be removed or have their content change,
-//! but no entry may appear that the base did not have.
+//! but no entry may appear that the base did not have. The delta evaluator
+//! separately verifies added measurements of an existing ABI retired to Rust;
+//! it never applies that source-proof exception to objects or providers.
 
 use std::collections::{BTreeMap, BTreeSet};
 

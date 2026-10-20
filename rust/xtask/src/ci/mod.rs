@@ -26,6 +26,7 @@ mod flag_definitions;
 pub mod mutations;
 pub mod plan;
 pub mod proof;
+mod retirement;
 pub mod run;
 pub mod shrink;
 pub mod trailer;

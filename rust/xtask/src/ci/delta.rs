@@ -1,5 +1,9 @@
 //! Base-to-head measurement of S4's zero-native ownership boundary.
 
+#[cfg(test)]
+#[path = "retirement_tests.rs"]
+mod retirement_tests;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::{Component, Path};
@@ -188,12 +192,17 @@ fn measure_between(
         object_identities,
         object_projection,
     )?;
-    let symbols = manifest_section_verdicts(
-        &base_manifest,
-        &head_manifest,
-        symbol_identities,
-        |manifest| manifest.get("symbol_contracts").cloned(),
-    )?;
+    let symbols = RetirementContext {
+        root,
+        authority,
+        base_sha,
+        head_sha,
+        base_tree: &base_tree,
+        head_tree: &head_tree,
+        base_manifest: &base_manifest,
+        head_manifest: &head_manifest,
+    }
+    .symbol_verdicts()?;
 
     let categories = BTreeMap::from([
         ("tracked_sources".into(), category(sources, &waivers)),
@@ -472,6 +481,214 @@ fn symbol_identities(manifest: &Value) -> Result<BTreeSet<String>, String> {
             ))
         })
         .collect()
+}
+
+struct RetirementContext<'a> {
+    root: &'a Path,
+    authority: &'a Authority,
+    base_sha: &'a str,
+    head_sha: &'a str,
+    base_tree: &'a BTreeMap<String, String>,
+    head_tree: &'a BTreeMap<String, String>,
+    base_manifest: &'a Value,
+    head_manifest: &'a Value,
+}
+
+impl RetirementContext<'_> {
+    fn blob(&self, commit: &str, path: &str) -> Result<Vec<u8>, String> {
+        normal_git_path(path.as_bytes())?;
+        Ok(supervised_git(
+            self.root,
+            self.authority,
+            &["show".into(), format!("{commit}:{path}")],
+            "read retirement proof Git blob",
+            &[0],
+        )?
+        .stdout)
+    }
+
+    fn symbol_verdicts(&self) -> Result<Vec<PathVerdict>, String> {
+        let base = symbol_identities(self.base_manifest)?;
+        let head = symbol_identities(self.head_manifest)?;
+        if head.is_subset(&base) {
+            return manifest_section_verdicts(
+                self.base_manifest,
+                self.head_manifest,
+                symbol_identities,
+                |manifest| manifest.get("symbol_contracts").cloned(),
+            );
+        }
+        let mut verdicts = Vec::new();
+        for contract in manifest_array(self.head_manifest, "symbol_contracts")? {
+            let single = serde_json::json!({"symbol_contracts": [contract]});
+            let identity = symbol_identities(&single)?.into_iter().next().unwrap();
+            if base.contains(&identity) {
+                continue;
+            }
+            let symbol = manifest_field(contract, "symbol")?;
+            let result = self.verify_symbol(contract);
+            verdicts.push(PathVerdict {
+                path: PROVIDER_PATH.into(),
+                verdict: if result.is_ok() { Verdict::Pass } else { Verdict::Fail },
+                reason: match result {
+                    Ok(proof) => format!("new measurement of existing ABI {symbol}: original external C definition and unchanged header verified; {proof}; archive uniqueness remains required by ownership-link"),
+                    Err(error) => format!("new entry {identity}: existing-ABI retirement proof rejected: {error}"),
+                },
+            });
+        }
+        Ok(verdicts)
+    }
+
+    fn verify_symbol(&self, contract: &Value) -> Result<String, String> {
+        let symbol = manifest_field(contract, "symbol")?;
+        if manifest_array(self.base_manifest, "symbol_contracts")?
+            .iter()
+            .any(|entry| entry.get("symbol").and_then(Value::as_str) == Some(symbol))
+        {
+            return Err(
+                "an existing measured symbol cannot change owner or provider through this rule"
+                    .into(),
+            );
+        }
+        let active = contract
+            .get("active_provider")
+            .ok_or("missing Rust provider")?;
+        if manifest_field(active, "kind")? != "rust_source" {
+            return Err("replacement is not a Rust source provider".into());
+        }
+        let rust_path = manifest_field(active, "path")?;
+        normal_git_path(rust_path.as_bytes())?;
+        if !rust_path.starts_with("rust/src/")
+            || !rust_path.ends_with(".rs")
+            || !self.head_tree.contains_key(rust_path)
+        {
+            return Err("unsupported Rust provider path".into());
+        }
+        let excluded = contract
+            .get("excluded_providers")
+            .and_then(Value::as_array)
+            .ok_or("missing retired provider")?;
+        let [excluded] = excluded.as_slice() else {
+            return Err("exactly one retired native provider is required".into());
+        };
+        if manifest_field(excluded, "kind")? != "native_object" {
+            return Err("retired provider is not a native object".into());
+        }
+        let object_path = manifest_field(excluded, "path")?;
+        normal_git_path(object_path.as_bytes())?;
+        let objects = manifest_array(self.base_manifest, "objects")?
+            .iter()
+            .filter(|object| object.get("path").and_then(Value::as_str) == Some(object_path))
+            .collect::<Vec<_>>();
+        let [object] = objects.as_slice() else {
+            return Err("retired object is absent or ambiguous in the base manifest".into());
+        };
+        let provider = format!("native_object:{object_path}");
+        if manifest_field(object, "archive_decision")? != "include"
+            || manifest_field(object, "provider")? != provider
+        {
+            return Err("base object was not an active native provider".into());
+        }
+        let owner = manifest_field(contract, "canonical_owner")?;
+        if owner.split("/#").next() != Some(manifest_field(object, "issue")?) {
+            return Err("replacement owner differs from the base native owner".into());
+        }
+        let source = manifest_field(object, "canonical_source")?;
+        normal_git_path(source.as_bytes())?;
+        if !source.starts_with("sc2/src/")
+            || !source.ends_with(".c")
+            || !self.base_tree.contains_key(source)
+            || self.head_tree.contains_key(source)
+        {
+            return Err("original first-party C source must be deleted at head".into());
+        }
+        if manifest_array(self.head_manifest, "objects")?
+            .iter()
+            .any(|entry| {
+                entry.get("path").and_then(Value::as_str) == Some(object_path)
+                    || entry.get("canonical_source").and_then(Value::as_str) == Some(source)
+            })
+            || manifest_array(self.head_manifest, "recompiled_objects")?
+                .iter()
+                .any(|entry| entry.get("canonical_source").and_then(Value::as_str) == Some(source))
+        {
+            return Err("original native provider was not retired".into());
+        }
+        let base_inputs = git_json(self.root, self.authority, self.base_sha, NATIVE_INPUTS_PATH)?;
+        let head_inputs = git_json(self.root, self.authority, self.head_sha, NATIVE_INPUTS_PATH)?;
+        let inputs = manifest_array(&base_inputs, "inputs")?
+            .iter()
+            .filter(|input| {
+                input.get("source").and_then(Value::as_str) == Some(source)
+                    && input.get("provider").and_then(Value::as_str) == Some(provider.as_str())
+            })
+            .collect::<Vec<_>>();
+        let [input] = inputs.as_slice() else {
+            return Err("missing unique base native compilation input".into());
+        };
+        if manifest_array(&head_inputs, "inputs")?.iter().any(|input| {
+            input.get("source").and_then(Value::as_str) == Some(source)
+                || input.get("provider").and_then(Value::as_str) == Some(provider.as_str())
+        }) {
+            return Err("native compilation input was not retired".into());
+        }
+        let bytes = self.blob(self.base_sha, source)?;
+        if manifest_field(input, "source_sha256")? != hex_sha256(&bytes) {
+            return Err("base C source hash differs from its compilation input".into());
+        }
+        if base_inputs.get("production_profile") != head_inputs.get("production_profile") {
+            return Err("retirement proof requires an unchanged native production profile".into());
+        }
+        let profile: uqm_ownership::native::ProductionProfile = serde_json::from_value(
+            base_inputs
+                .get("production_profile")
+                .cloned()
+                .ok_or("missing base production profile")?,
+        )
+        .map_err(|error| format!("invalid base production profile: {error}"))?;
+        uqm_ownership::native::validate_profile(&profile)?;
+        let defines = profile
+            .defines
+            .iter()
+            .map(|define| define.compiler_argument())
+            .collect::<Vec<_>>();
+        let c = super::retirement::c_function(self.root, source, &bytes, symbol, &defines)?;
+        let header = c
+            .header
+            .strip_prefix(self.root)
+            .map_err(|_| "declaration is not in a first-party header")?;
+        if header.extension().and_then(|ext| ext.to_str()) != Some("h") {
+            return Err("declaration is not in a C header".into());
+        }
+        for included in c.included.iter().chain(std::iter::once(&c.header)) {
+            let Ok(relative) = included.strip_prefix(self.root) else {
+                continue;
+            };
+            let relative = relative.to_str().ok_or("header path is not UTF-8")?;
+            normal_git_path(relative.as_bytes())?;
+            if !self.base_tree.contains_key(relative)
+                || self.base_tree.get(relative) != self.head_tree.get(relative)
+            {
+                return Err(format!(
+                    "included header is absent or changed from base: {relative}"
+                ));
+            }
+            let actual = super::bounded_io::read_regular_nofollow(
+                included,
+                self.authority.actions.evidence_snapshot_member_limit_bytes,
+            )?;
+            if actual != self.blob(self.base_sha, relative)? {
+                return Err(format!(
+                    "included header differs from the base Git blob: {relative}"
+                ));
+            }
+        }
+        let rust = self.blob(self.head_sha, rust_path)?;
+        let rust = std::str::from_utf8(&rust).map_err(|_| "Rust provider is not UTF-8")?;
+        super::retirement::rust_function(rust, symbol, &c)?;
+        Ok(format!("source {source} sha256 {}; declaration {}; retired {provider}; Rust owner {owner} at {rust_path}; ABI ({}) -> {}",
+            hex_sha256(&bytes), header.display(), c.arguments.join(", "), c.result))
+    }
 }
 
 fn provider_projection(manifest: &Value) -> Option<Value> {
