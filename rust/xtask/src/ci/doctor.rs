@@ -265,11 +265,11 @@ fn executable_staging_directory(temporary_root: &Path) -> Result<tempfile::TempD
     let root = temporary_root
         .canonicalize()
         .map_err(|error| format!("cannot resolve executable staging root: {error}"))?;
-    super::scratch::validate_process_temporary_directory(&root)?;
     let staging = tempfile::Builder::new()
         .prefix("uqm-executable-")
         .tempdir_in(&root)
         .map_err(|error| format!("cannot create executable staging directory: {error}"))?;
+    super::scratch::validate_process_temporary_directory(staging.path())?;
     fs::set_permissions(staging.path(), fs::Permissions::from_mode(0o755))
         .map_err(|error| format!("cannot permit executable staging directory: {error}"))?;
     Ok(staging)
@@ -640,6 +640,18 @@ mod tests {
         assert_eq!(path.metadata().unwrap().mode() & 0o777, 0o755);
         drop(staging);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn executable_snapshots_support_the_containment_shared_temporary_parent() {
+        let parent = tempfile::tempdir().unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o770)).unwrap();
+        let staging = executable_staging_directory(parent.path()).unwrap();
+        assert_eq!(staging.path().parent().unwrap(), parent.path());
+        assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
+        assert_eq!(staging.path().metadata().unwrap().uid(), unsafe {
+            libc::geteuid()
+        });
     }
 
     #[test]

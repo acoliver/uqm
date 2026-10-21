@@ -4,8 +4,8 @@ use std::fs;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
 
-// A contained process has its own TMPDIR and cannot own the controller checkout.
-// Witness storage separately requires controller ownership and immutable modes.
+// TMPDIR can be shared with the controller group. Validate the newly created
+// private snapshot directory, not that shared parent. Witnesses are separate.
 pub(super) fn validate_process_temporary_directory(path: &Path) -> Result<(), String> {
     super::bounded_io::validate_directory_nofollow(path)?;
     let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
