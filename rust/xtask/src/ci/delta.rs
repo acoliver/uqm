@@ -1064,9 +1064,19 @@ pub(super) fn projection_diff(
     base: &[String],
     head: &[String],
 ) -> Result<String, String> {
+    let parent = super::run::trusted_staging_parent(root).map_err(|error| error.to_string())?;
+    projection_diff_in(root, authority, &parent, base, head)
+}
+
+pub(super) fn projection_diff_in(
+    root: &Path,
+    authority: &Authority,
+    parent: &Path,
+    base: &[String],
+    head: &[String],
+) -> Result<String, String> {
     use std::io::Write;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    let parent = super::run::trusted_staging_parent(root).map_err(|error| error.to_string())?;
     let directory = tempfile::Builder::new()
         .prefix("flag-projection-")
         .tempdir_in(parent)

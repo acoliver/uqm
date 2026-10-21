@@ -206,9 +206,21 @@ impl Probe<'_> {
     }
 }
 
+fn containment_staging_parent(root: &Path, authority: &Path) -> Result<PathBuf, String> {
+    // This preflight runs before the gate step sets its staging-root variable.
+    // The separately bound policy already lives below the protected shared root.
+    let parent = authority
+        .parent()
+        .ok_or("containment authority has no parent")?;
+    super::run::checked_staging_parent(root, Some(parent.as_os_str().to_owned()), true)
+        .map_err(|error| error.to_string())
+}
+
 pub(super) fn verify(root: &Path, home: &Path) -> Result<(), String> {
     let authority = super::load_authority(root)?;
-    let parent = super::run::trusted_staging_parent(root).map_err(|error| error.to_string())?;
+    let authority_path =
+        std::env::var("UQM_CI_AUTHORITY_PATH").map_err(|error| error.to_string())?;
+    let parent = containment_staging_parent(root, Path::new(&authority_path))?;
     let uid = std::env::var(exec::DEDICATED_CONTAINMENT_UID_ENV)
         .map_err(|error| error.to_string())?
         .parse::<u32>()
@@ -235,10 +247,7 @@ pub(super) fn verify(root: &Path, home: &Path) -> Result<(), String> {
         authority,
         binding: vec![
             ("UQM_CI_SOURCE_ROOT".into(), root.display().to_string()),
-            (
-                "UQM_CI_AUTHORITY_PATH".into(),
-                std::env::var("UQM_CI_AUTHORITY_PATH").map_err(|error| error.to_string())?,
-            ),
+            ("UQM_CI_AUTHORITY_PATH".into(), authority_path),
         ],
     };
     let original = fs::read(&probe.path).map_err(|error| error.to_string())?;
@@ -250,9 +259,10 @@ pub(super) fn verify(root: &Path, home: &Path) -> Result<(), String> {
 }
 
 fn verify_projection(root: &Path, authority: &Authority, parent: &Path) -> Result<(), String> {
-    let diff = delta::projection_diff(
+    let diff = delta::projection_diff_in(
         root,
         authority,
+        parent,
         &["#define OLD 1".into()],
         &["#define NEW 1".into()],
     )?;
@@ -280,6 +290,28 @@ fn verify_projection(root: &Path, authority: &Authority, parent: &Path) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn containment_preflight_uses_the_protected_authority_parent_before_gate_environment() {
+        let source = tempfile::tempdir().unwrap();
+        let shared = tempfile::tempdir().unwrap();
+        fs::set_permissions(shared.path(), fs::Permissions::from_mode(0o750)).unwrap();
+        let authority = shared.path().join("authority.json");
+        assert_eq!(
+            containment_staging_parent(source.path(), &authority).unwrap(),
+            shared.path()
+        );
+        fs::set_permissions(shared.path(), fs::Permissions::from_mode(0o770)).unwrap();
+        assert!(containment_staging_parent(source.path(), &authority).is_err());
+        fs::set_permissions(shared.path(), fs::Permissions::from_mode(0o750)).unwrap();
+        let link = source.path().join("authority-parent");
+        std::os::unix::fs::symlink(shared.path(), &link).unwrap();
+        assert!(containment_staging_parent(source.path(), &link.join("authority.json")).is_err());
+        assert!(
+            containment_staging_parent(source.path(), Path::new("relative/authority.json"))
+                .is_err()
+        );
+    }
 
     #[test]
     fn containment_receipt_cannot_be_claimed_by_same_uid_execution() {

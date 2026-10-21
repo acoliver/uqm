@@ -1057,13 +1057,22 @@ fn trusted_staging_parent_from(
 }
 
 pub(super) fn trusted_staging_parent(evidence_root: &Path) -> Result<PathBuf, CiError> {
-    use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
-
-    let (parent, is_configured) = trusted_staging_parent_from(
+    checked_staging_parent(
         evidence_root,
         env::var_os("UQM_CI_TRUSTED_STAGING_ROOT"),
         env::var_os(super::exec::DEDICATED_CONTAINMENT_UID_ENV).is_some(),
-    )?;
+    )
+}
+
+pub(super) fn checked_staging_parent(
+    evidence_root: &Path,
+    configured: Option<std::ffi::OsString>,
+    dedicated: bool,
+) -> Result<PathBuf, CiError> {
+    use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
+
+    let (parent, is_configured) =
+        trusted_staging_parent_from(evidence_root, configured, dedicated)?;
     let directory = fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
