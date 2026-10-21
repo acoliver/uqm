@@ -269,10 +269,7 @@ fn verify_projection(root: &Path, authority: &Authority, parent: &Path) -> Resul
     if !diff.contains("-#define OLD 1") || !diff.contains("+#define NEW 1") {
         return Err("cross-UID projection lost its textual hunk".into());
     }
-    let private = tempfile::Builder::new()
-        .prefix("unreadable-projection-")
-        .tempdir_in(parent)
-        .map_err(|error| error.to_string())?;
+    let private = private_projection_directory(parent)?;
     let paths = [private.path().join("base"), private.path().join("head")];
     for file in &paths {
         fs::write(file, b"unreadable\n").map_err(|error| error.to_string())?;
@@ -287,9 +284,26 @@ fn verify_projection(root: &Path, authority: &Authority, parent: &Path) -> Resul
     Ok(())
 }
 
+fn private_projection_directory(parent: &Path) -> Result<tempfile::TempDir, String> {
+    tempfile::Builder::new()
+        .prefix("unreadable-projection-")
+        .permissions(fs::Permissions::from_mode(0o700))
+        .tempdir_in(parent)
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unreadable_projection_fixture_has_explicit_owner_only_permissions() {
+        let parent = tempfile::tempdir().unwrap();
+        let directory = private_projection_directory(parent.path()).unwrap();
+        let metadata = fs::symlink_metadata(directory.path()).unwrap();
+        assert_eq!(metadata.mode() & 0o7777, 0o700);
+        assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+    }
 
     #[test]
     fn containment_preflight_uses_the_protected_authority_parent_before_gate_environment() {
