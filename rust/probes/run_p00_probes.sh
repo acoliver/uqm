@@ -11,7 +11,6 @@
 #   Standalone: bash probes/run_p00_probes.sh output_log
 #
 set -euo pipefail
-RETIREMENT_ARGUMENTS=("$@")
 if [ -n "${UQM_CI_SOURCE_ROOT:-}" ]; then
 
 : "${UQM_CI_CONTROLLER_EXECUTABLE:?UQM_CI_CONTROLLER_EXECUTABLE must be supplied by the trusted controller}"
@@ -132,7 +131,7 @@ echo "--- Archive/Library Checks ---"
 
 # Build using the base-owned production flow in CI and the local xtask standalone.
 if [ -n "${UQM_CI_SOURCE_ROOT:-}" ]; then
-    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "${RETIREMENT_ARGUMENTS[@]}" >/dev/null
+    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "$@" >/dev/null
 else
     "${CARGO}" run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
 fi

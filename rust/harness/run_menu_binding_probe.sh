@@ -21,7 +21,6 @@
 # @plan PLAN-20260723-RUNTIME-AUTOMATION.P00
 #
 set -euo pipefail
-RETIREMENT_ARGUMENTS=("$@")
 
 : "${UQM_CI_CONTROLLER_EXECUTABLE:?UQM_CI_CONTROLLER_EXECUTABLE must be supplied by the trusted controller}"
 : "${CARGO:?CARGO must be supplied by the trusted controller}"
@@ -79,7 +78,7 @@ echo ""
 # intentionally lacks the two-build proof required by `xtask verify`.
 MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
 if [ ! -f "${MANIFEST_JSON}" ]; then
-    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "${RETIREMENT_ARGUMENTS[@]}" >/dev/null
+    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "$@" >/dev/null
 fi
 
 extract_artifact_path() {

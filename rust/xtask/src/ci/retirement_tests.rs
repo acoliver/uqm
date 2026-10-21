@@ -227,3 +227,55 @@ fn head_json_cannot_supply_a_base_object_or_reassign_an_existing_measured_symbol
     }]);
     assert_eq!(fixture.result()[0].verdict, Verdict::Fail);
 }
+
+#[test]
+fn production_scripts_forward_empty_and_nonempty_arguments_under_system_bash() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = tempfile::tempdir().unwrap();
+    let controller = fixture.path().join("controller");
+    fs::write(
+        &controller,
+        "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$UQM_TEST_ARGUMENTS\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&controller, fs::Permissions::from_mode(0o700)).unwrap();
+    for script in [
+        include_str!("../../../probes/run_p00_probes.sh"),
+        include_str!("../../../harness/run_p00_harness.sh"),
+        include_str!("../../../harness/run_menu_binding_probe.sh"),
+    ] {
+        let forwarding = script
+            .lines()
+            .filter(|line| {
+                line.starts_with("RETIREMENT_ARGUMENTS=")
+                    || line.contains("\"${UQM_CI_CONTROLLER_EXECUTABLE}\" __ci-production")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(forwarding.contains("__ci-production"));
+        for arguments in [
+            &[][..],
+            &["--witness", "path with spaces", "", "line\nbreak"][..],
+        ] {
+            let retained = fixture.path().join("arguments");
+            let output = Command::new("/bin/bash")
+                .args(["-euc", &forwarding, "--"])
+                .args(arguments)
+                .env("UQM_CI_CONTROLLER_EXECUTABLE", &controller)
+                .env("UQM_TEST_ARGUMENTS", &retained)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "arguments {arguments:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let expected = std::iter::once("__ci-production")
+                .chain(arguments.iter().copied())
+                .flat_map(|argument| argument.as_bytes().iter().copied().chain([0]))
+                .collect::<Vec<_>>();
+            assert_eq!(fs::read(retained).unwrap(), expected);
+        }
+    }
+}
