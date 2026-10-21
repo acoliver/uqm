@@ -1804,7 +1804,7 @@ fn isolated_harness_change(baseline: &[MutationFile], mutant: &[MutationFile]) -
 }
 
 fn harness_mutation(
-    root: &Path,
+    _root: &Path,
     authority: &authority::Authority,
 ) -> Result<MutationCase, CiError> {
     let gate = authoritative_gate(authority, "probes-harnesses")?;
@@ -1813,26 +1813,20 @@ fn harness_mutation(
         .iter()
         .find(|step| step.id == "p00-harness")
         .ok_or_else(|| CiError::new("mutations.authority", "p00-harness step is absent"))?;
-    let harness_path = root.join("rust/harness/run_p00_harness.sh");
-    let content = String::from_utf8(
-        super::bounded_io::read_regular_nofollow(
-            &harness_path,
-            MUTATION_FIXTURE_MEMBER_LIMIT_BYTES,
-        )
-        .map_err(|error| CiError::new("mutations.harness", error))?,
-    )
-    .map_err(|error| CiError::new("mutations.harness", error.to_string()))?;
-    let mutant = content.replacen("for sym in DoInput ", "for sym in MissingInputProvider ", 1);
-    if mutant == content {
-        return Err(CiError::new(
-            "mutations.harness",
-            "the authoritative harness symbol contract was not found",
-        ));
-    }
+    // The harness is controller-owned, including the recipe checked by offline validation.
+    let (recipe, expected_diagnostic, content, mutant) =
+        expected_causal_contract("harness", authority).ok_or_else(|| {
+            CiError::new(
+                "mutations.harness",
+                "the controller harness recipe is absent",
+            )
+        })?;
+    let content = utf8_fixture(&content)?;
+    let mutant = utf8_fixture(&mutant)?;
     let baseline = mutation_tempdir("mutations.harness")?;
     let defective = mutation_tempdir("mutations.harness")?;
-    let baseline_paths = build_harness_fixture(baseline.path(), &content)?;
-    let mutant_paths = build_harness_fixture(defective.path(), &mutant)?;
+    let baseline_paths = build_harness_fixture(baseline.path(), content)?;
+    let mutant_paths = build_harness_fixture(defective.path(), mutant)?;
     let execute = |fixture: &Path, phase: &str| {
         let subordinate_root = fixture.join(format!("{phase}-subordinate"));
         let mut environment = vec![(
@@ -1910,13 +1904,6 @@ fn harness_mutation(
     let rejection_observed = baseline_accepted
         && diagnostic_rejection
         && isolated_harness_change(&baseline_files, &files);
-    let (recipe, expected_diagnostic) = causal_contract(
-        "rust/harness/run_p00_harness.sh",
-        content.as_bytes(),
-        mutant.as_bytes(),
-        "missing-symbol",
-        &diagnostic_fragments,
-    );
     Ok(MutationCase {
         target: "harness".into(),
         contract: "mutations.harness.rejects_missing_marker".into(),
@@ -2648,6 +2635,30 @@ mod tests {
             .baseline_executions
             .iter()
             .all(|execution| execution.stderr.is_empty()));
+        assert_causal_rejection(record);
+    }
+
+    #[test]
+    fn harness_mutation_uses_controller_recipe_when_candidate_script_changes() {
+        let candidate = tempfile::tempdir().unwrap();
+        let script = format!(
+            "# candidate-only harness change\n{}",
+            include_str!("../../../harness/run_p00_harness.sh")
+        );
+        fixture_file(candidate.path(), "rust/harness/run_p00_harness.sh", &script).unwrap();
+        let authority = authority();
+        let record = harness_mutation(candidate.path(), &authority).unwrap();
+        let (recipe, diagnostic, baseline, mutant) =
+            expected_causal_contract("harness", &authority).unwrap();
+
+        assert_eq!(record.recipe, recipe);
+        assert_eq!(record.expected_diagnostic, diagnostic);
+        assert_eq!(record.baseline_files[0].bytes, baseline);
+        assert_eq!(record.files[0].bytes, mutant);
+        assert_eq!(
+            fs::read_to_string(candidate.path().join("rust/harness/run_p00_harness.sh")).unwrap(),
+            script
+        );
         assert_causal_rejection(record);
     }
 
