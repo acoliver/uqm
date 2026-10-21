@@ -33,6 +33,7 @@ pub struct RunSession {
     pub clean: bool,
     pub features: Vec<String>,
     pub entries: Vec<EvidenceEntry>,
+    pub(crate) retirements: delta::SourceRetirements,
 }
 
 impl RunSession {
@@ -522,6 +523,17 @@ fn record_preflight_reports(
     Ok(delta_failure)
 }
 
+fn pending_retirements(
+    root: &Path,
+    authority: &Authority,
+    report: Option<&delta::DeltaReport>,
+) -> Result<delta::SourceRetirements, String> {
+    match report.filter(|report| report.passed) {
+        Some(report) => delta::source_retirements(root, authority, report),
+        None => Ok(delta::SourceRetirements::default()),
+    }
+}
+
 fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
     let authority =
         super::load_authority(root).map_err(|error| format!("authority.load: {error}"))?;
@@ -596,6 +608,8 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         None
     };
 
+    let retirements = pending_retirements(root, &authority, delta_report.as_ref())?;
+
     let cache = if preflight_failure.is_none() {
         Some(
             cache::prepare(root, &authority.cache)
@@ -635,6 +649,7 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         clean,
         features,
         entries: Vec::new(),
+        retirements,
     };
 
     let controller_command = gate_command(gate_arg).map_err(String::from)?;
@@ -1429,7 +1444,7 @@ fn execute_process_gate(
             )?;
         }
         let execute_retained_source = process_command_requires_retained_source(&step.command);
-        let (effective_command, trusted_script_directory, staged_script_sha256) =
+        let (mut effective_command, trusted_script_directory, staged_script_sha256) =
             stage_trusted_control_plane_script(
                 &step.command,
                 &trusted_staging_parent,
@@ -1468,12 +1483,42 @@ fn execute_process_gate(
                 )
             })?;
         }
+        let direct_witness_directory = if trusted_controller_command(&step.command).is_some()
+            && !session.retirements.retired_providers().is_empty()
+        {
+            let (directory, arguments) = super::retirement_provider::stage_direct_witness(
+                &trusted_staging_parent,
+                &session.root,
+                &session.retirements,
+                session.authority.supervision.executable_member_limit_bytes,
+            )
+            .map_err(|detail| CiError::new("retirement.witness", detail))?;
+            effective_command[0] = directory
+                .path()
+                .join("uqm-base-controller")
+                .display()
+                .to_string();
+            effective_command.extend(arguments);
+            Some(directory)
+        } else {
+            None
+        };
+        if let Some(directory) = trusted_script_directory.as_ref() {
+            effective_command.extend(
+                super::retirement_provider::stage_witness(
+                    directory.path(),
+                    &session.root,
+                    &session.retirements,
+                )
+                .map_err(|detail| CiError::new("retirement.witness", detail))?,
+            );
+        }
         let captured = super::exec::run_captured_with_bound_environment(
             &session.root.join(&step.cwd),
             &effective_command[0],
             &effective_command[1..],
             session.authority.supervision.limits(step.timeout_seconds),
-            execute_retained_source,
+            execute_retained_source || direct_witness_directory.is_some(),
             |_| Ok(env_overrides),
         );
         write_captured(
@@ -1486,6 +1531,7 @@ fn execute_process_gate(
             &captured,
         )?;
         drop(trusted_script_directory);
+        drop(direct_witness_directory);
         let subordinate_result = retain_subordinate_outputs(
             session,
             gate,
@@ -2977,6 +3023,7 @@ mod tests {
             clean: true,
             features: Vec::new(),
             entries: Vec::new(),
+            retirements: delta::SourceRetirements::default(),
         };
         let cache = CacheEnvironment {
             mode: cache::AMBIENT_MODE.into(),
@@ -3029,6 +3076,7 @@ mod tests {
             clean: true,
             features: Vec::new(),
             entries: Vec::new(),
+            retirements: delta::SourceRetirements::default(),
         };
         let expected = subordinate_output_names(&gate.id, &step.id);
         let expected_contract = format!("{}.post.{}.subordinate-output", gate.id, step.id);

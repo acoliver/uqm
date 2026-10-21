@@ -59,7 +59,7 @@ echo ""
 # provider validation below still consumes its canonical recorded paths/tools.
 MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
 if [ ! -f "${MANIFEST_JSON}" ]; then
-    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production >/dev/null
+    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "$@" >/dev/null
 fi
 
 # Extract and verify exact artifact paths from production evidence.

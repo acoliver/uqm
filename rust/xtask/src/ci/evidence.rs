@@ -3017,6 +3017,85 @@ fn valid_step_executable_identity(receipt: &serde_json::Value) -> bool {
                 .is_some_and(|error| !error.is_empty()))
 }
 
+fn valid_bound_step_execution_provenance(
+    root: &Path,
+    index: &EvidenceIndex,
+    receipt: &serde_json::Value,
+    expected: &[String],
+) -> bool {
+    if valid_step_execution_provenance(receipt, expected) {
+        return true;
+    }
+    let Some(effective) = receipt
+        .get("effective_command")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+    let trusted_length = if super::run::trusted_controller_command(expected).is_some() {
+        2
+    } else if super::run::trusted_control_plane_script(expected).is_some() {
+        expected.len()
+    } else {
+        return false;
+    };
+    if effective.len() != trusted_length + 2 {
+        return false;
+    }
+    let Some(path) = effective[trusted_length].as_str().map(Path::new) else {
+        return false;
+    };
+    let program_index = usize::from(super::run::trusted_control_plane_script(expected).is_some());
+    let Some(program) = effective[program_index].as_str().map(Path::new) else {
+        return false;
+    };
+    if !path.is_absolute()
+        || path.file_name().and_then(|name| name.to_str()) != Some("retirement-witness.json")
+        || path.parent() != program.parent()
+    {
+        return false;
+    }
+    let report = index
+        .entries
+        .iter()
+        .find(|entry| entry.role == "ownership.zero-native-delta")
+        .and_then(|entry| read_bundle_file(root, &entry.path).ok())
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    let authority = index
+        .entries
+        .iter()
+        .find(|entry| entry.role == "authority.snapshot")
+        .and_then(|entry| read_bundle_file(root, &entry.path).ok());
+    let (Some(report), Some(authority)) = (report, authority) else {
+        return false;
+    };
+    let Some(base) = report
+        .get("base_sha")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| is_hex(value, 40))
+    else {
+        return false;
+    };
+    if report.get("head_sha").and_then(serde_json::Value::as_str) != Some(index.source_sha.as_str())
+        || report.get("passed").and_then(serde_json::Value::as_bool) != Some(true)
+    {
+        return false;
+    }
+    let Ok(digest) = super::retirement_provider::witness_digest(
+        base,
+        &index.source_sha,
+        &hex_sha256(&authority),
+    ) else {
+        return false;
+    };
+    if effective[trusted_length + 1].as_str() != Some(digest.as_str()) {
+        return false;
+    }
+    let mut original = receipt.clone();
+    original["effective_command"] = serde_json::Value::Array(effective[..trusted_length].to_vec());
+    valid_step_execution_provenance(&original, expected)
+}
+
 fn valid_step_execution_provenance(
     receipt: &serde_json::Value,
     expected_command: &[String],
@@ -3967,7 +4046,12 @@ fn validate_successful_process_gate(
                         && receipt.get("step").and_then(|value| value.as_str())
                             == Some(step.id.as_str())
                         && receipt.get("command") == Some(&serde_json::json!(expected_command))
-                        && valid_step_execution_provenance(receipt, expected_command)
+                        && valid_bound_step_execution_provenance(
+                            root,
+                            index,
+                            receipt,
+                            expected_command,
+                        )
                         && valid_step_executable_identity(receipt)
                         && receipt.get("success").and_then(|value| value.as_bool()) == Some(true)
                         && receipt.get("exit_code").and_then(|value| value.as_i64()) == Some(0)
@@ -5055,7 +5139,7 @@ fn validate_failed_process_receipts(
                     && receipt.get("step").and_then(|value| value.as_str())
                         == Some(step.id.as_str())
                     && receipt.get("command") == Some(&serde_json::json!(step.command))
-                    && valid_step_execution_provenance(receipt, &step.command)
+                    && valid_bound_step_execution_provenance(root, index, receipt, &step.command)
                     && valid_step_executable_identity(receipt)
                     && (if should_pass {
                         receipt.get("success").and_then(|value| value.as_bool()) == Some(true)
@@ -5625,7 +5709,7 @@ where
             && receipt.get("gate").and_then(|value| value.as_str()) == Some(gate)
             && receipt.get("step").and_then(|value| value.as_str()) == Some(step)
             && receipt.get("command") == Some(&serde_json::json!(command))
-            && valid_step_execution_provenance(receipt, command)
+            && valid_bound_step_execution_provenance(root, index, receipt, command)
             && valid_step_executable_identity(receipt)
             && result_valid
             && valid_step_supervision(
@@ -11205,6 +11289,70 @@ mod tests {
             &serde_json::to_vec(&report).unwrap(),
         );
         production_contracts(bundle.path(), &index)
+    }
+
+    #[test]
+    fn retirement_witness_arguments_require_retained_commit_and_authority_binding() {
+        let bundle = tempfile::tempdir().unwrap();
+        let mut index = valid_index();
+        retain_fixture_authority(bundle.path(), &mut index);
+        let base = "b".repeat(40);
+        let report =
+            serde_json::json!({"base_sha": base, "head_sha": index.source_sha, "passed": true});
+        write_bundle_entry(
+            bundle.path(),
+            &mut index.entries,
+            "zero-native-delta.json",
+            "ownership.zero-native-delta",
+            &["controller".into()],
+            &serde_json::to_vec(&report).unwrap(),
+        );
+        let authority = fs::read(bundle.path().join(AUTHORITY_SNAPSHOT_RELATIVE)).unwrap();
+        let digest = super::super::retirement_provider::witness_digest(
+            &base,
+            &index.source_sha,
+            &hex_sha256(&authority),
+        )
+        .unwrap();
+        let command = vec!["bash".into(), "rust/ownership/verify-fixture.sh".into()];
+        let (_, script) = super::super::run::trusted_control_plane_script(&command).unwrap();
+        let receipt = serde_json::json!({"effective_command": ["bash", "/trusted/verify-fixture.sh", "/trusted/retirement-witness.json", digest], "staged_script_sha256": hex_sha256(script)});
+        assert!(!valid_step_execution_provenance(&receipt, &command));
+        assert!(valid_bound_step_execution_provenance(
+            bundle.path(),
+            &index,
+            &receipt,
+            &command
+        ));
+        for mutation in 0..5 {
+            let mut changed = receipt.clone();
+            match mutation {
+                0 => changed["effective_command"][3] = "0".repeat(64).into(),
+                1 => changed["effective_command"][2] = "/head/retirement-witness.json".into(),
+                2 => changed["effective_command"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push("extra".into()),
+                3 => changed["staged_script_sha256"] = "0".repeat(64).into(),
+                4 => changed["effective_command"][1] = "/trusted/forged.sh".into(),
+                _ => unreachable!(),
+            }
+            assert!(
+                !valid_bound_step_execution_provenance(bundle.path(), &index, &changed, &command),
+                "mutation {mutation}"
+            );
+        }
+        fs::write(
+            bundle.path().join(AUTHORITY_SNAPSHOT_RELATIVE),
+            b"different authority",
+        )
+        .unwrap();
+        assert!(!valid_bound_step_execution_provenance(
+            bundle.path(),
+            &index,
+            &receipt,
+            &command
+        ));
     }
 
     fn fixture_supervision(

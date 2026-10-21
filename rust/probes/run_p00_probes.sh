@@ -131,7 +131,7 @@ echo "--- Archive/Library Checks ---"
 
 # Build using the base-owned production flow in CI and the local xtask standalone.
 if [ -n "${UQM_CI_SOURCE_ROOT:-}" ]; then
-    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production >/dev/null
+    "${UQM_CI_CONTROLLER_EXECUTABLE}" __ci-production "$@" >/dev/null
 else
     "${CARGO}" run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
 fi

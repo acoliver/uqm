@@ -485,3 +485,80 @@ proptest! {
         prop_assert!(has(&value.validate_self().unwrap_err(), DiagnosticCode::PathViolation));
     }
 }
+
+#[test]
+fn verified_retirement_inventory_and_nm_fail_closed_for_every_added_contract() {
+    let contract = uqm_ownership::SymbolContract {
+        symbol: "ExistingRetiredFunction".into(),
+        canonical_owner: "DOMAIN/#123".into(),
+        active_provider: uqm_ownership::ProviderRef {
+            kind: ProviderKind::RustSource,
+            path: "rust/src/replacement.rs".into(),
+        },
+        excluded_providers: vec![uqm_ownership::ProviderRef {
+            kind: ProviderKind::NativeObject,
+            path: "native/retired.c.o".into(),
+        }],
+    };
+    let mut extended = manifest();
+    extended.symbol_contracts.push(contract.clone());
+    assert!(extended.validate_self().is_err());
+    assert!(Validator::new(extended.clone())
+        .validate_production_nm(&valid_nm())
+        .is_err());
+    let validator = Validator::new(extended.clone())
+        .with_verified_retirements(vec![contract.clone()])
+        .unwrap();
+    let mut positive = valid_nm();
+    positive
+        .rust_archive
+        .push_str("\nlibuqm_rust.a(replacement.o): 000000 T _ExistingRetiredFunction");
+    validator.validate_production_nm(&positive).unwrap();
+    for change in 0..5 {
+        let mut negative = positive.clone();
+        match change {
+            0 => negative.rust_archive = valid_nm().rust_archive,
+            1 => negative
+                .rust_archive
+                .push_str("\nlibuqm_rust.a(other.o): 000000 T ExistingRetiredFunction"),
+            2 => {
+                negative.rust_archive = valid_nm().rust_archive;
+                negative
+                    .c_archive
+                    .push_str("\nlibuqm_c.a(other.o): 000000 T _ExistingRetiredFunction");
+            }
+            3 => negative
+                .executable
+                .push_str("\nuqm: U _ExistingRetiredFunction"),
+            4 => negative.executable_details.push_str(
+                "\n(undefined) external _ExistingRetiredFunction (dynamically looked up)",
+            ),
+            _ => unreachable!(),
+        }
+        assert!(
+            validator.validate_production_nm(&negative).is_err(),
+            "mutation {change}"
+        );
+    }
+    for change in 0..4 {
+        let mut negative = extended.clone();
+        let added = negative.symbol_contracts.last_mut().unwrap();
+        match change {
+            0 => added.active_provider.path = "rust/src/impostor.rs".into(),
+            1 => added.canonical_owner = "OTHER/#1".into(),
+            2 => added.excluded_providers.clear(),
+            3 => added.symbol = "InventedABI".into(),
+            _ => unreachable!(),
+        }
+        assert!(Validator::new(negative)
+            .with_verified_retirements(vec![contract.clone()])
+            .is_err());
+    }
+    let mut symbols = valid_symbols();
+    symbols.push(ObservedSymbol {
+        symbol: contract.symbol.clone(),
+        provider: "rust/src/impostor.rs".into(),
+        state: SymbolState::DefinedInternal,
+    });
+    assert!(validator.validate_symbols(&symbols).is_err());
+}

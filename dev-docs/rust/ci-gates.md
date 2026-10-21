@@ -397,7 +397,37 @@ Manifest categories (objects, providers, and internal symbols in
 identified by object path or recompiled canonical source (objects), those plus
 provider and archive decision (providers), and symbol, owner, and active
 provider (internal symbols), must be a subset of the base's set. Changed hashes
-and other fields of kept entries pass; a new entry fails.
+and other fields of kept entries pass. New object and provider entries fail.
+
+An added internal-symbol measurement can pass only for an existing first-party
+C function replaced by Rust. The base-owned controller reads the original
+object assignment, compilation input, production defines and source blob from
+Git at the actual base. It requires the same owner domain, a previously included
+native object, deletion of that C source, and removal of its object and native
+compilation input at head. A real libclang translation unit must find the
+original external function definition and matching header declaration. Every
+included repository header must be tracked and byte-identical at base and head.
+The exported Rust function must have the original signature, use the generated
+`global_state` binding, and carry unconditional compiler function-pointer probes
+against both that C declaration and the Rust function. Unsupported source or
+types, missing proofs, changed headers or signatures, invented symbols, owner
+changes to already measured symbols, and nonretired providers fail. No symbol
+name receives special treatment. The ownership-link gate must still measure
+one actual Rust definition and reject missing, duplicate or C providers.
+
+This exception records a measurement of an existing interface so Rust ports can
+retain their ownership checks. It does not permit a new interface, native input,
+bridge path, generated-binding addition, or an unmeasured contract. The other
+shrink-only rules and all limits remain unchanged. Tests in `retirement_tests.rs`
+and `retirement.rs` cover source-derived matching and rejection cases.
+`retirement_provider.rs` promotes that evidence only after production compiler
+metadata, C and Rust ABI/layout probes, compiler dep-info and actual archive
+member equality pass. The resulting in-memory capability authorizes only the
+verified contracts and archive hash. Supervised children receive a protected,
+versioned commit/authority witness through explicit arguments and recompute the
+proof; candidate JSON and ambient child environment cannot issue it. Strict
+receipt fields and read limits are unchanged. Offline replay checks the witness
+argument hash against the retained delta and authority snapshot.
 
 `measured_delta` counts failing verdicts and must be zero. The report keeps
 `changed_paths` (every path with a verdict) and `verdicts` (`path`, `verdict` of

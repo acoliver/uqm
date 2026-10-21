@@ -212,7 +212,10 @@ pub(crate) fn resolve_executable(
             source: None,
         });
     }
-    let staging = executable_staging_directory()?;
+    // macOS controller TMPDIR can have private ancestors that the child UID
+    // cannot traverse. Its configured containment home is reachable by both.
+    let temporary_root = super::exec::dedicated_containment_home()?.unwrap_or_else(env::temp_dir);
+    let staging = executable_staging_directory(&temporary_root)?;
     let staging_path = staging
         .path()
         .canonicalize()
@@ -261,24 +264,15 @@ pub(crate) fn resolve_executable(
     })
 }
 
-fn executable_staging_directory() -> Result<tempfile::TempDir, String> {
-    let root = Path::new("/var/tmp")
+fn executable_staging_directory(temporary_root: &Path) -> Result<tempfile::TempDir, String> {
+    let root = temporary_root
         .canonicalize()
         .map_err(|error| format!("cannot resolve executable staging root: {error}"))?;
-    let metadata = root
-        .metadata()
-        .map_err(|error| format!("cannot inspect executable staging root: {error}"))?;
-    let mode = metadata.mode();
-    if !metadata.is_dir() || metadata.uid() != 0 || mode & 0o1000 == 0 {
-        return Err(format!(
-            "executable staging root {} is not a root-owned sticky directory",
-            root.display()
-        ));
-    }
     let staging = tempfile::Builder::new()
         .prefix("uqm-executable-")
         .tempdir_in(&root)
         .map_err(|error| format!("cannot create executable staging directory: {error}"))?;
+    super::scratch::validate_process_temporary_directory(staging.path())?;
     fs::set_permissions(staging.path(), fs::Permissions::from_mode(0o755))
         .map_err(|error| format!("cannot permit executable staging directory: {error}"))?;
     Ok(staging)
@@ -641,6 +635,29 @@ mod tests {
     }
 
     #[test]
+    fn executable_staging_uses_the_selected_process_scratch_and_cleans_up() {
+        let project = tempfile::tempdir().unwrap();
+        let staging = executable_staging_directory(project.path()).unwrap();
+        let path = staging.path().to_path_buf();
+        assert_eq!(path.parent().unwrap(), project.path());
+        assert_eq!(path.metadata().unwrap().mode() & 0o777, 0o755);
+        drop(staging);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn executable_snapshots_support_the_containment_shared_temporary_parent() {
+        let parent = tempfile::tempdir().unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o770)).unwrap();
+        let staging = executable_staging_directory(parent.path()).unwrap();
+        assert_eq!(staging.path().parent().unwrap(), parent.path());
+        assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
+        assert_eq!(staging.path().metadata().unwrap().uid(), unsafe {
+            libc::geteuid()
+        });
+    }
+
+    #[test]
     fn staged_executable_mode_is_cross_uid_and_immutable() {
         assert_eq!(staged_executable_mode(0o755), 0o555);
         assert_eq!(staged_executable_mode(0o750), 0o555);
@@ -664,7 +681,7 @@ mod tests {
         assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
         assert_eq!(
             staging.path().parent().unwrap(),
-            Path::new("/var/tmp").canonicalize().unwrap()
+            env::temp_dir().canonicalize().unwrap()
         );
         fs::rename(&program, temp.path().join("opened-tool")).unwrap();
         fs::write(&program, b"#!/bin/sh\nprintf replacement").unwrap();
