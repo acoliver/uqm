@@ -444,6 +444,7 @@ mod tests {
                 clean: true,
                 features: Vec::new(),
                 entries: Vec::new(),
+                retirements: crate::ci::delta::SourceRetirements::default(),
             },
             gate,
         )

@@ -212,7 +212,11 @@ pub(crate) fn resolve_executable(
             source: None,
         });
     }
-    let staging = executable_staging_directory(&crate::repository_root()?)?;
+    let temporary_root = match super::exec::dedicated_containment_home()? {
+        Some(home) => home,
+        None => super::scratch::project_tmp(&crate::repository_root()?)?,
+    };
+    let staging = executable_staging_directory(&temporary_root)?;
     let staging_path = staging
         .path()
         .canonicalize()
@@ -261,12 +265,15 @@ pub(crate) fn resolve_executable(
     })
 }
 
-fn executable_staging_directory(project_root: &Path) -> Result<tempfile::TempDir, String> {
-    let root = super::scratch::project_tmp(project_root)?;
+fn executable_staging_directory(temporary_root: &Path) -> Result<tempfile::TempDir, String> {
+    let root = temporary_root
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve executable staging root: {error}"))?;
     let staging = tempfile::Builder::new()
         .prefix("uqm-executable-")
         .tempdir_in(&root)
         .map_err(|error| format!("cannot create executable staging directory: {error}"))?;
+    super::scratch::validate_process_temporary_directory(staging.path())?;
     fs::set_permissions(staging.path(), fs::Permissions::from_mode(0o755))
         .map_err(|error| format!("cannot permit executable staging directory: {error}"))?;
     Ok(staging)
@@ -631,12 +638,38 @@ mod tests {
     #[test]
     fn executable_staging_uses_the_selected_project_and_cleans_up() {
         let project = tempfile::tempdir().unwrap();
-        let staging = executable_staging_directory(project.path()).unwrap();
+        let staging = executable_staging_directory(
+            &super::super::scratch::project_tmp(project.path()).unwrap(),
+        )
+        .unwrap();
         let path = staging.path().to_path_buf();
         assert_eq!(path.parent().unwrap(), project.path().join("tmp"));
         assert_eq!(path.metadata().unwrap().mode() & 0o777, 0o755);
         drop(staging);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn executable_staging_uses_the_selected_process_scratch_and_cleans_up() {
+        let project = tempfile::tempdir().unwrap();
+        let staging = executable_staging_directory(project.path()).unwrap();
+        let path = staging.path().to_path_buf();
+        assert_eq!(path.parent().unwrap(), project.path());
+        assert_eq!(path.metadata().unwrap().mode() & 0o777, 0o755);
+        drop(staging);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn executable_snapshots_support_the_containment_shared_temporary_parent() {
+        let parent = tempfile::tempdir().unwrap();
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o770)).unwrap();
+        let staging = executable_staging_directory(parent.path()).unwrap();
+        assert_eq!(staging.path().parent().unwrap(), parent.path());
+        assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
+        assert_eq!(staging.path().metadata().unwrap().uid(), unsafe {
+            libc::geteuid()
+        });
     }
 
     #[test]

@@ -27,4 +27,4 @@ printf '' > "$OUT/empty-provider.rs"
 rustc --edition 2021 --crate-name fixture_c --crate-type staticlib \
     "$OUT/empty-provider.rs" -o "$OUT/libfixture_c.a"
 
-"$UQM_CI_CONTROLLER_EXECUTABLE" __ci-ownership-fixture
+"$UQM_CI_CONTROLLER_EXECUTABLE" __ci-ownership-fixture "$@"

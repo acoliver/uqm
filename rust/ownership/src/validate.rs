@@ -65,6 +65,7 @@ pub struct ProductionToolPaths {
 /// The ownership validator.
 pub struct Validator {
     manifest: Manifest,
+    verified_retirements: Vec<crate::SymbolContract>,
 }
 
 /// Validation inputs. Every enabled check is mandatory; missing input fails.
@@ -109,7 +110,36 @@ impl ValidateOptions {
 impl Validator {
     /// Construct a validator from a parsed manifest.
     pub fn new(manifest: Manifest) -> Self {
-        Self { manifest }
+        Self {
+            manifest,
+            verified_retirements: Vec::new(),
+        }
+    }
+
+    /// Bind additional measurements after the base controller has verified the
+    /// original definition, retirement, compiler metadata and archive member.
+    /// This is an in-memory handoff, not a manifest or environment parser.
+    pub fn with_verified_retirements(
+        mut self,
+        verified: Vec<crate::SymbolContract>,
+    ) -> Result<Self, OwnershipError> {
+        self.manifest.validate_verified_symbols(&verified)?;
+        self.verified_retirements = verified;
+        Ok(self)
+    }
+
+    fn measured_symbols(&self) -> BTreeSet<&str> {
+        crate::QUEUE_SYMBOLS
+            .iter()
+            .chain(crate::HASH_TABLE_SYMBOLS.iter())
+            .chain(crate::OVAL_SYMBOLS.iter())
+            .copied()
+            .chain(
+                self.verified_retirements
+                    .iter()
+                    .map(|contract| contract.symbol.as_str()),
+            )
+            .collect()
     }
 
     /// Load a checked-in manifest.
@@ -125,7 +155,10 @@ impl Validator {
     /// Run configured validation and return a deterministic report.
     pub fn validate(&self, options: &ValidateOptions) -> Result<ProviderReport, OwnershipError> {
         let mut diagnostics = Vec::new();
-        if let Err(error) = self.manifest.validate_self() {
+        if let Err(error) = self
+            .manifest
+            .validate_self_with_verified(&self.verified_retirements)
+        {
             diagnostics.extend(error.diagnostics);
         }
         if !options.repo_root.as_os_str().is_empty() {
@@ -246,7 +279,11 @@ impl Validator {
     }
     /// Validate parsed observations from the exact Rust archive, C archive, and executable.
     pub fn validate_production_nm(&self, nm: &ProductionNm) -> Result<(), OwnershipError> {
-        let mut observed = parse_archive_definitions(&nm.rust_archive, "rust archive", true);
+        self.manifest
+            .validate_verified_symbols(&self.verified_retirements)?;
+        let measured = self.measured_symbols();
+        let mut observed =
+            parse_archive_definitions(&nm.rust_archive, "rust archive", true, &measured);
         for definition in &mut observed {
             if let Some(contract) = self
                 .manifest
@@ -263,10 +300,12 @@ impl Validator {
             &nm.c_archive,
             "libuqm_c.a",
             false,
+            &measured,
         ));
         observed.extend(parse_executable_failures(
             &nm.executable,
             &nm.executable_details,
+            &measured,
         ));
         self.validate_symbols(&observed)
     }
@@ -538,10 +577,11 @@ fn parse_archive_definitions(
     output: &str,
     provider: &str,
     rust_archive: bool,
+    measured: &BTreeSet<&str>,
 ) -> Vec<ObservedSymbol> {
     output
         .lines()
-        .filter_map(parse_nm_line)
+        .filter_map(|line| parse_nm_line(line, measured))
         .filter_map(|(symbol, kind)| {
             let is_definition = kind != 'U' && kind != 'u';
             if !is_definition {
@@ -561,10 +601,14 @@ fn parse_archive_definitions(
         .collect()
 }
 
-fn parse_executable_failures(output: &str, details: &str) -> Vec<ObservedSymbol> {
+fn parse_executable_failures(
+    output: &str,
+    details: &str,
+    measured: &BTreeSet<&str>,
+) -> Vec<ObservedSymbol> {
     let mut observed: Vec<_> = output
         .lines()
-        .filter_map(parse_nm_line)
+        .filter_map(|line| parse_nm_line(line, measured))
         .filter(|(_, kind)| *kind == 'U' || *kind == 'u')
         .map(|(symbol, _)| ObservedSymbol {
             symbol,
@@ -586,10 +630,10 @@ fn parse_executable_failures(output: &str, details: &str) -> Vec<ObservedSymbol>
     observed
 }
 
-fn parse_nm_line(line: &str) -> Option<(String, char)> {
+fn parse_nm_line(line: &str, measured: &BTreeSet<&str>) -> Option<(String, char)> {
     let tokens: Vec<_> = line.split_whitespace().collect();
     for (index, token) in tokens.iter().enumerate().rev() {
-        let Some(symbol) = normalize_contract_symbol(token) else {
+        let Some(symbol) = normalize_contract_symbol(token, measured) else {
             continue;
         };
         let kind = index.checked_sub(1)?.checked_sub(0).and_then(|position| {
@@ -617,14 +661,11 @@ fn dynamic_symbol(line: &str) -> Option<String> {
     None
 }
 
-fn normalize_contract_symbol(token: &str) -> Option<String> {
+fn normalize_contract_symbol(token: &str, measured: &BTreeSet<&str>) -> Option<String> {
     let cleaned = token
         .trim_matches(|character: char| matches!(character, ':' | ',' | '(' | ')' | '[' | ']'));
     let symbol = cleaned.strip_prefix('_').unwrap_or(cleaned);
-    (crate::QUEUE_SYMBOLS.contains(&symbol)
-        || crate::HASH_TABLE_SYMBOLS.contains(&symbol)
-        || crate::OVAL_SYMBOLS.contains(&symbol))
-    .then(|| symbol.to_string())
+    measured.contains(symbol).then(|| symbol.to_string())
 }
 
 fn run_tool_path(

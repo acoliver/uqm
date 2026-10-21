@@ -305,13 +305,18 @@ fn run() -> Result<(), String> {
         };
         return validate_native_suite_bundle(&root, Path::new(bundle), None);
     }
-    if !extra.is_empty() {
-        return Err(format!(
-            "unexpected arguments for '{command}': {}",
-            extra.join(" ")
-        ));
-    }
-    run_preflight(&root, preflight_for(&command)?)
+    let sources = if command.starts_with("__ci-") && !extra.is_empty() {
+        ci::retirement_provider::read_witness(&root, &extra)?
+    } else {
+        if !extra.is_empty() {
+            return Err(format!(
+                "unexpected arguments for '{command}': {}",
+                extra.join(" ")
+            ));
+        }
+        ci::delta::SourceRetirements::default()
+    };
+    run_preflight_with_sources(&root, preflight_for(&command)?, &sources)
         .map_err(|error| format!("{command} preflight: {error}"))?;
     match command.as_str() {
         "__ci-test" => test_all(&root).map_err(|error| format!("test command: {error}")),
@@ -319,7 +324,7 @@ fn run() -> Result<(), String> {
         "__ci-capture-dependencies" => capture_dependencies(&root),
         "__ci-production" => production(&root).map(|_| ()),
         "__ci-verify" => verify_artifact_manifest(&root),
-        "__ci-ownership-production" => verify_production_ownership(&root),
+        "__ci-ownership-production" => verify_production_ownership_with_sources(&root, &sources),
         "__ci-ownership-fixture" => verify_fixture_ownership(&root),
         "debug" => build_profile(&root, Profile::Debug),
         "release" => build_profile(&root, Profile::Release),
@@ -430,14 +435,22 @@ fn preflight_for(command: &str) -> Result<Preflight, String> {
 }
 
 fn run_preflight(root: &Path, preflight: Preflight) -> Result<(), String> {
+    run_preflight_with_sources(root, preflight, &ci::delta::SourceRetirements::default())
+}
+
+fn run_preflight_with_sources(
+    root: &Path,
+    preflight: Preflight,
+    sources: &ci::delta::SourceRetirements,
+) -> Result<(), String> {
     match preflight {
         Preflight::StrictSource => {
-            validate_contract(root, true)?;
+            validate_contract_with_sources(root, true, sources)?;
             reject_dirty_source(root)?;
             Ok(())
         }
-        Preflight::Full => validate_contract(root, true).map(|_| ()),
-        Preflight::ContractOnly => validate_contract(root, false).map(|_| ()),
+        Preflight::Full => validate_contract_with_sources(root, true, sources).map(|_| ()),
+        Preflight::ContractOnly => validate_contract_with_sources(root, false, sources).map(|_| ()),
         Preflight::PureInspection => Ok(()),
     }
 }
@@ -1878,8 +1891,21 @@ fn rewrite_packaged_executable(
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_contract(root: &Path, prerequisites: bool) -> Result<SupportedTarget, String> {
-    validate_native_inputs(root)?;
+    validate_contract_with_sources(
+        root,
+        prerequisites,
+        &ci::delta::SourceRetirements::default(),
+    )
+}
+
+fn validate_contract_with_sources(
+    root: &Path,
+    prerequisites: bool,
+    sources: &ci::delta::SourceRetirements,
+) -> Result<SupportedTarget, String> {
+    validate_native_inputs_with_sources(root, sources)?;
     let target = select_host_target(root)?;
     if prerequisites {
         validate_prerequisites(&target)?;
@@ -1887,7 +1913,15 @@ fn validate_contract(root: &Path, prerequisites: bool) -> Result<SupportedTarget
     Ok(target)
 }
 
+#[cfg(test)]
 fn validate_native_inputs(root: &Path) -> Result<(), String> {
+    validate_native_inputs_with_sources(root, &ci::delta::SourceRetirements::default())
+}
+
+fn validate_native_inputs_with_sources(
+    root: &Path,
+    sources: &ci::delta::SourceRetirements,
+) -> Result<(), String> {
     let authority = ci::load_authority(root)?;
     let limit = authority.actions.evidence_snapshot_member_limit_bytes;
     let manifest = serde_json::from_slice(&ci::bounded_io::read_regular_nofollow(
@@ -1910,7 +1944,7 @@ fn validate_native_inputs(root: &Path) -> Result<(), String> {
     if trend.schema != "uqm-native-input-trend-v1" {
         return Err("unsupported native input trend schema".into());
     }
-    validate_trend_authority(root, &trend)?;
+    validate_trend_authority_with_sources(root, &trend, sources)?;
     if trend.tracked_native_file_delta != 0 {
         return Err(format!(
             "contradictory zero-native declaration: tracked delta is {}",
@@ -1930,7 +1964,16 @@ fn validate_native_inputs(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_trend_authority(root: &Path, trend: &Trend) -> Result<(), String> {
+    validate_trend_authority_with_sources(root, trend, &ci::delta::SourceRetirements::default())
+}
+
+fn validate_trend_authority_with_sources(
+    root: &Path,
+    trend: &Trend,
+    sources: &ci::delta::SourceRetirements,
+) -> Result<(), String> {
     let authority = ci::load_authority(root)?;
     let ledger = &trend.ownership_ledger;
     let expected = &authority.ledger_identity;
@@ -1943,8 +1986,17 @@ fn validate_trend_authority(root: &Path, trend: &Trend) -> Result<(), String> {
     {
         return Err("native input trend does not match machine-authority ledger identity".into());
     }
+    let mut removed = REMOVED_PROVIDERS
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect::<Vec<_>>();
+    for provider in sources.retired_providers() {
+        if !removed.contains(&provider) {
+            removed.push(provider);
+        }
+    }
     if trend.infrastructure_delta.rust_hash_table_provider_cutovers != HASH_TABLE_CUTOVERS.len()
-        || trend.removed_providers != REMOVED_PROVIDERS
+        || trend.removed_providers != removed
     {
         return Err("native input trend does not record the authorized provider removals".into());
     }
@@ -2323,7 +2375,10 @@ fn resolve_production_ownership_artifacts(
     })
 }
 
-fn verify_production_ownership(root: &Path) -> Result<(), String> {
+fn verify_production_ownership_with_sources(
+    root: &Path,
+    sources: &ci::delta::SourceRetirements,
+) -> Result<(), String> {
     verify_artifact_manifest(root)?;
     let authority = ci::load_authority(root)?;
     let manifest_path = root.join("rust/target/production-artifacts.json");
@@ -2332,9 +2387,23 @@ fn verify_production_ownership(root: &Path) -> Result<(), String> {
         authority.actions.evidence_snapshot_member_limit_bytes,
     )?;
     let artifacts = resolve_production_ownership_artifacts(root, &manifest.artifacts)?;
-    let validator =
-        Validator::from_manifest_file(&root.join("rust/ownership/native-provider-manifest.json"))
-            .map_err(|error| error.to_string())?;
+    let providers = uqm_ownership::Manifest::from_json(&ci::bounded_io::read_regular_nofollow(
+        &root.join(PROVIDER_MANIFEST),
+        authority.actions.evidence_snapshot_member_limit_bytes,
+    )?)
+    .map_err(|error| error.to_string())?;
+    let verified = ci::retirement_provider::verify_compiled(
+        root,
+        &authority,
+        sources,
+        &artifacts,
+        &manifest.native_build,
+    )?;
+    let validator = verified.validator(
+        providers,
+        &artifacts,
+        authority.supervision.executable_member_limit_bytes,
+    )?;
     let report = validator
         .validate_production_artifacts(
             &artifacts,
@@ -2370,9 +2439,12 @@ fn verify_fixture_ownership(root: &Path) -> Result<(), String> {
     let ar = ci::doctor::resolve_executable("ar", executable_limit)?;
     let nm = ci::doctor::resolve_executable("nm", executable_limit)?;
     let output = root.join("rust/target/ownership-strict-link-fixture");
-    let validator =
-        Validator::from_manifest_file(&root.join("rust/ownership/native-provider-manifest.json"))
-            .map_err(|error| error.to_string())?;
+    let validator = Validator::new(
+        uqm_ownership::Manifest::from_json(include_bytes!(
+            "../../ownership/native-provider-manifest.json"
+        ))
+        .map_err(|error| error.to_string())?,
+    );
     let report = validator
         .validate_symbol_artifacts(
             &ProductionArtifacts {
