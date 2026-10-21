@@ -212,7 +212,7 @@ pub(crate) fn resolve_executable(
             source: None,
         });
     }
-    let staging = executable_staging_directory(&crate::repository_root()?)?;
+    let staging = executable_staging_directory(&env::temp_dir())?;
     let staging_path = staging
         .path()
         .canonicalize()
@@ -261,8 +261,11 @@ pub(crate) fn resolve_executable(
     })
 }
 
-fn executable_staging_directory(project_root: &Path) -> Result<tempfile::TempDir, String> {
-    let root = super::scratch::project_tmp(project_root)?;
+fn executable_staging_directory(temporary_root: &Path) -> Result<tempfile::TempDir, String> {
+    let root = temporary_root
+        .canonicalize()
+        .map_err(|error| format!("cannot resolve executable staging root: {error}"))?;
+    super::scratch::validate_process_temporary_directory(&root)?;
     let staging = tempfile::Builder::new()
         .prefix("uqm-executable-")
         .tempdir_in(&root)
@@ -629,11 +632,11 @@ mod tests {
     }
 
     #[test]
-    fn executable_staging_uses_the_selected_project_and_cleans_up() {
+    fn executable_staging_uses_the_selected_process_scratch_and_cleans_up() {
         let project = tempfile::tempdir().unwrap();
         let staging = executable_staging_directory(project.path()).unwrap();
         let path = staging.path().to_path_buf();
-        assert_eq!(path.parent().unwrap(), project.path().join("tmp"));
+        assert_eq!(path.parent().unwrap(), project.path());
         assert_eq!(path.metadata().unwrap().mode() & 0o777, 0o755);
         drop(staging);
         assert!(!path.exists());
@@ -663,7 +666,7 @@ mod tests {
         assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
         assert_eq!(
             staging.path().parent().unwrap(),
-            crate::repository_root().unwrap().join("tmp")
+            env::temp_dir().canonicalize().unwrap()
         );
         fs::rename(&program, temp.path().join("opened-tool")).unwrap();
         fs::write(&program, b"#!/bin/sh\nprintf replacement").unwrap();

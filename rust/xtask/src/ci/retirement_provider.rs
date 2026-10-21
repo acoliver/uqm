@@ -52,11 +52,15 @@ fn tool(
         executable,
         args,
         authority.supervision.builtin_limits(),
-        false,
+        true,
         |_| Ok(Vec::new()),
     );
     if !captured.succeeded() {
-        return Err(captured.failure_detail("retirement compiler provenance"));
+        return Err(format!(
+            "{}: {}",
+            captured.failure_detail("retirement compiler provenance"),
+            String::from_utf8_lossy(&captured.stderr)
+        ));
     }
     Ok(captured.stdout)
 }
@@ -588,12 +592,15 @@ mod tests {
                 bytes: Vec::new(),
             }],
         };
+        let limit = super::super::load_authority(root.path())
+            .unwrap()
+            .supervision
+            .executable_member_limit_bytes;
         let (directory, arguments) =
-            stage_direct_witness(root.path(), root.path(), &sources, 100_000_000).unwrap();
+            stage_direct_witness(root.path(), root.path(), &sources, limit).unwrap();
         let controller = directory.path().join("uqm-base-controller");
         let mut resolved =
-            super::super::doctor::resolve_executable(controller.to_str().unwrap(), 100_000_000)
-                .unwrap();
+            super::super::doctor::resolve_executable(controller.to_str().unwrap(), limit).unwrap();
         resolved.execute_retained_source();
         assert_eq!(Path::new(resolved.execution_path()), controller);
         resolved.verify_unchanged().unwrap();
@@ -604,6 +611,27 @@ mod tests {
             1_000_000,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn installed_rustc_retains_its_runtime_library_directory() {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let authority = super::super::load_authority(repository).unwrap();
+        let compiler = tool(
+            repository,
+            &authority,
+            "rustup",
+            &["which".into(), "rustc".into()],
+        )
+        .unwrap();
+        let compiler = std::str::from_utf8(&compiler).unwrap().trim();
+        assert!(Path::new(compiler).is_absolute());
+        let version = tool(repository, &authority, compiler, &["--version".into()]).unwrap();
+        assert!(std::str::from_utf8(&version).unwrap().starts_with("rustc "));
     }
 
     #[test]
