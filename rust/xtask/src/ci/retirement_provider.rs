@@ -385,6 +385,14 @@ pub(crate) fn stage_witness(
     if sources.entries.is_empty() {
         return Ok(Vec::new());
     }
+    write_witness(directory, root, sources)
+}
+
+fn write_witness(
+    directory: &Path,
+    root: &Path,
+    sources: &SourceRetirements,
+) -> Result<Vec<String>, String> {
     let witness = Witness {
         version: 1,
         authority_sha256: hex_sha256(&super::authority::load_policy_bytes(root)?),
@@ -426,8 +434,24 @@ pub(crate) fn stage_direct_witness(
     )?;
     fs::set_permissions(&controller, fs::Permissions::from_mode(0o550))
         .map_err(|error| error.to_string())?;
-    let arguments = stage_witness(directory.path(), root, sources)?;
+    let arguments = write_witness(directory.path(), root, sources)?;
     Ok((directory, arguments))
+}
+
+fn issuer_uid() -> Result<u32, String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+    // The supervisor selects and verifies this executable before changing UID.
+    // Its open file identity survives that transition; an ambient UID does not.
+    let executable = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(std::env::current_exe().map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    let metadata = executable.metadata().map_err(|error| error.to_string())?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o022 != 0 {
+        return Err("retirement issuer executable is not a protected regular file".into());
+    }
+    Ok(metadata.uid())
 }
 
 fn witness_bytes(
@@ -447,13 +471,14 @@ fn witness_bytes(
             "retirement witness is not a direct member of the staged controller directory".into(),
         );
     }
+    let issuer = issuer_uid()?;
     for (entry, mode, is_directory) in [
         (directory, 0o750, true),
         (path, 0o440, false),
         (controller, 0o550, false),
     ] {
         let metadata = fs::symlink_metadata(entry).map_err(|error| error.to_string())?;
-        if metadata.uid() != unsafe { libc::geteuid() }
+        if metadata.uid() != issuer
             || metadata.permissions().mode() & 0o7777 != mode
             || (is_directory && !metadata.is_dir())
             || (!is_directory && !metadata.is_file())

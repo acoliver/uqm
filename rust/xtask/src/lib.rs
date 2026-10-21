@@ -291,6 +291,9 @@ fn run() -> Result<(), String> {
     if command == ci::mutations::INTERNAL_VALIDATOR_COMMAND {
         return ci::mutations::run_internal_validator(&root, &extra);
     }
+    if command == ci::retirement_containment::CHECK_COMMAND {
+        return ci::retirement_containment::run_check(&root, &extra);
+    }
     if command == "ci" {
         return ci::run_ci(&root, &extra);
     }

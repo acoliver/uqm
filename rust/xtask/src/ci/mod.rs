@@ -27,6 +27,7 @@ pub mod mutations;
 pub mod plan;
 pub mod proof;
 mod retirement;
+pub(crate) mod retirement_containment;
 pub(crate) mod retirement_provider;
 pub mod run;
 pub mod scenario_ratchet;
