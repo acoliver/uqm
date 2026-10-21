@@ -212,7 +212,10 @@ pub(crate) fn resolve_executable(
             source: None,
         });
     }
-    let staging = executable_staging_directory(&env::temp_dir())?;
+    // macOS controller TMPDIR can have private ancestors that the child UID
+    // cannot traverse. Its configured containment home is reachable by both.
+    let temporary_root = super::exec::dedicated_containment_home()?.unwrap_or_else(env::temp_dir);
+    let staging = executable_staging_directory(&temporary_root)?;
     let staging_path = staging
         .path()
         .canonicalize()
