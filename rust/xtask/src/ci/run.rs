@@ -1056,7 +1056,7 @@ fn trusted_staging_parent_from(
     Ok((parent, is_configured))
 }
 
-fn trusted_staging_parent(evidence_root: &Path) -> Result<PathBuf, CiError> {
+pub(super) fn trusted_staging_parent(evidence_root: &Path) -> Result<PathBuf, CiError> {
     use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 
     let (parent, is_configured) = trusted_staging_parent_from(

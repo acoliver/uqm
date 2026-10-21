@@ -3205,6 +3205,7 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
     })?;
     use std::os::unix::fs::PermissionsExt as _;
     verify_control_plane_denials(root, Path::new(&config.home))?;
+    super::retirement_containment::verify(root, Path::new(&config.home))?;
     let directory = Path::new(&config.home).join("darwin-containment-check");
     if directory.exists() {
         std::fs::remove_dir_all(&directory)

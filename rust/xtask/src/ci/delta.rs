@@ -902,7 +902,11 @@ fn supervised_git(
             .exit_code
             .is_some_and(|code| accepted_exit_codes.contains(&code))
     {
-        return Err(captured.failure_detail(label));
+        return Err(format!(
+            "{}: {}",
+            captured.failure_detail(label),
+            String::from_utf8_lossy(&captured.stderr)
+        ));
     }
     Ok(captured)
 }
@@ -1060,12 +1064,34 @@ pub(super) fn projection_diff(
     base: &[String],
     head: &[String],
 ) -> Result<String, String> {
-    let directory = tempfile::tempdir().map_err(|error| format!("create flag diff: {error}"))?;
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let parent = super::run::trusted_staging_parent(root).map_err(|error| error.to_string())?;
+    let directory = tempfile::Builder::new()
+        .prefix("flag-projection-")
+        .tempdir_in(parent)
+        .map_err(|error| format!("create flag diff: {error}"))?;
+    std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o750))
+        .map_err(|error| format!("protect flag diff: {error}"))?;
     let paths = [directory.path().join("base"), directory.path().join("head")];
     for (path, lines) in paths.iter().zip([base, head]) {
-        std::fs::write(path, format!("{}\n", lines.join("\n")))
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o440)
+            .open(path)
+            .map_err(|error| format!("create flag projection: {error}"))?;
+        writeln!(file, "{}", lines.join("\n"))
             .map_err(|error| format!("write flag projection: {error}"))?;
     }
+    projection_diff_paths(root, authority, &paths)
+}
+
+pub(super) fn projection_diff_paths(
+    root: &Path,
+    authority: &Authority,
+    paths: &[std::path::PathBuf; 2],
+) -> Result<String, String> {
     let output = supervised_git(
         root,
         authority,
@@ -1082,8 +1108,31 @@ pub(super) fn projection_diff(
         "compare transitional definitions",
         &[0, 1],
     )?;
-    String::from_utf8(output.stdout)
-        .map_err(|error| format!("flag definition diff is not UTF-8: {error}"))
+    validate_projection_diff(output.exit_code, &output.stdout, &output.stderr)
+}
+
+fn validate_projection_diff(
+    exit: Option<i32>,
+    stdout: &[u8],
+    stderr: &[u8],
+) -> Result<String, String> {
+    let diff = std::str::from_utf8(stdout)
+        .map_err(|error| format!("flag definition diff is not UTF-8: {error}"))?;
+    let valid = stderr.is_empty()
+        && match exit {
+            Some(0) => diff.is_empty(),
+            Some(1) => {
+                diff.starts_with("diff --git ") && diff.lines().any(|line| line.starts_with("@@ "))
+            }
+            _ => false,
+        };
+    if !valid {
+        return Err(format!(
+            "compare transitional definitions: invalid Git diff result (exit {exit:?}): {}",
+            String::from_utf8_lossy(stderr)
+        ));
+    }
+    Ok(diff.into())
 }
 
 fn is_flag_definition_path(path: &str) -> bool {
@@ -1144,6 +1193,94 @@ fn validate_sha(value: &str, name: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn projection_diff_rejects_git_io_errors_empty_changes_and_nontextual_output() {
+        let diff = b"diff --git a/base b/head
+--- a/base
++++ b/head
+@@ -1 +1 @@
+-old
++new
+";
+        assert_eq!(
+            validate_projection_diff(Some(1), diff, b"")
+                .unwrap()
+                .as_bytes(),
+            diff
+        );
+        assert_eq!(validate_projection_diff(Some(0), b"", b"").unwrap(), "");
+        for (exit, stdout, stderr) in [
+            (
+                Some(1),
+                &b""[..],
+                &b"error: Could not access '/private/base'
+"[..],
+            ),
+            (Some(1), &b""[..], &b""[..]),
+            (Some(0), diff.as_slice(), &b""[..]),
+            (
+                Some(1),
+                diff.as_slice(),
+                &b"error: Permission denied
+"[..],
+            ),
+            (
+                Some(1),
+                &b"diff --git a/base b/head
+old mode 100644
+new mode 100755
+"[..],
+                &b""[..],
+            ),
+            (
+                Some(1),
+                &b"diff --git a/base b/head
+Binary files a/base and b/head differ
+"[..],
+                &b""[..],
+            ),
+            (Some(128), &b""[..], &b"fatal: read error"[..]),
+        ] {
+            let error = validate_projection_diff(exit, stdout, stderr).unwrap_err();
+            assert!(error.contains(std::str::from_utf8(stderr).unwrap()));
+        }
+    }
+
+    #[test]
+    fn projection_diff_stages_readable_text_and_preserves_missing_file_stderr() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let authority = super::super::load_authority(root).unwrap();
+        let diff = projection_diff(
+            root,
+            &authority,
+            &["#define OLD 1".into()],
+            &["#define NEW 1".into()],
+        )
+        .unwrap();
+        assert!(diff.contains("-#define OLD 1"));
+        assert!(diff.contains("+#define NEW 1"));
+        assert!(
+            projection_diff(root, &authority, &["same".into()], &["same".into()])
+                .unwrap()
+                .is_empty()
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let error = projection_diff_paths(
+            root,
+            &authority,
+            &[
+                directory.path().join("missing-base"),
+                directory.path().join("missing-head"),
+            ],
+        )
+        .unwrap_err();
+        assert!(error.contains("Could not access"), "{error}");
+    }
 
     #[test]
     fn nul_tree_parser_preserves_paths_that_git_would_quote() {
