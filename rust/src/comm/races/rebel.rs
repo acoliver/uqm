@@ -1,199 +1,311 @@
-//! Rebel dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const REBEL_HELLO_1: u32 = 1;
-const REBEL_HELLO_2: u32 = 2;
-const REBEL_HELLO_3: u32 = 3;
-const REBEL_HELLO_4: u32 = 4;
-const HOW_GOES_REVOLUTION: u32 = 5;
-const REBEL_REVOLUTION_1: u32 = 6;
-const REBEL_REVOLUTION_2: u32 = 7;
-const REBEL_REVOLUTION_3: u32 = 8;
-const REBEL_REVOLUTION_4: u32 = 9;
-const ANY_SHIPS: u32 = 10;
-const NO_ROOM: u32 = 11;
-const HAVE_ALL_SHIPS: u32 = 12;
-const HAVE_FEW_SHIPS: u32 = 13;
-const NO_SHIPS_YET: u32 = 14;
-const GIVE_INFO_REBELS: u32 = 15;
-const WHAT_INFO: u32 = 16;
-const WHAT_ABOUT_ROYALTY: u32 = 17;
-const ABOUT_ROYALTY: u32 = 18;
-const WHAT_ABOUT_WAR: u32 = 19;
-const ABOUT_WAR: u32 = 20;
-const WHAT_ABOUT_URQUAN: u32 = 21;
-const ABOUT_URQUAN: u32 = 22;
-const WHAT_ABOUT_VUX: u32 = 23;
-const ABOUT_VUX: u32 = 24;
-const WHAT_ABOUT_CLUE: u32 = 25;
-const ABOUT_CLUE: u32 = 26;
-const ENOUGH_INFO: u32 = 27;
-const OK_ENOUGH_INFO: u32 = 28;
-const BYE_REBEL: u32 = 29;
-const GOODBYE_REBEL: u32 = 30;
-const YEHAT_CAVALRY: u32 = 31;
-const WHAT_ABOUT_PKUNK_REBEL: u32 = 32;
-const PKUNK_ABSORBED_REBEL: u32 = 33;
-const HATE_PKUNK_REBEL: u32 = 34;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Yehat Rebel dialogue, ported from rebel.c.
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+mod api;
+use api::RebelApi;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    Exit,
+    Info,
+    Rebels,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"rebel\0";
-const RACE_FONT: &[u8] = b"rebelfont\0";
-const RACE_COLOR_MAP: &[u8] = b"rebelcolr\0";
-const RACE_MUSIC: &[u8] = b"rebelmusic\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.rebel.dialogue\0";
-
-/// Rebel race dialogue implementation.
-pub struct RebelDialogue;
-
-impl super::RaceDialogue for RebelDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: RebelApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: i32) {
+        match h {
+            Handler::Exit => {
+                if r == BYE_REBEL {
+                    self.api.npc(GOODBYE_REBEL)
+                }
+            }
+            Handler::Info => self.info(r),
+            Handler::Rebels => self.rebels(r),
         }
     }
-
+    fn info(&mut self, r: i32) {
+        if r == GIVE_INFO_REBELS {
+            self.api.npc(WHAT_INFO)
+        } else if r == WHAT_ABOUT_URQUAN {
+            self.api.npc(ABOUT_URQUAN);
+            self.api.disable(r as u16)
+        } else if r == WHAT_ABOUT_ROYALTY {
+            self.api.npc(ABOUT_ROYALTY);
+            self.api.disable(r as u16)
+        } else if r == WHAT_ABOUT_WAR {
+            self.api.npc(ABOUT_WAR);
+            self.api.disable(r as u16)
+        } else if r == WHAT_ABOUT_VUX {
+            self.api.npc(ABOUT_VUX);
+            self.api.disable(r as u16)
+        } else if r == WHAT_ABOUT_CLUE {
+            self.api.npc(ABOUT_CLUE);
+            self.api.disable(r as u16)
+        }
+        let mut any = false;
+        for p in [
+            WHAT_ABOUT_URQUAN,
+            WHAT_ABOUT_ROYALTY,
+            WHAT_ABOUT_WAR,
+            WHAT_ABOUT_VUX,
+            WHAT_ABOUT_CLUE,
+        ] {
+            if self.api.enabled(p as u16) {
+                self.api.response(p as u16, Handler::Info, &[]);
+                any = true
+            }
+        }
+        self.api.response(ENOUGH_INFO as u16, Handler::Rebels, &[]);
+        if !any {
+            self.api.disable(GIVE_INFO_REBELS as u16)
+        }
+    }
+    fn rebels(&mut self, r: i32) {
+        if r == HOW_GOES_REVOLUTION {
+            let n = self.api.get("YEHAT_REBEL_INFO");
+            if let Some(&phrase) = [
+                REBEL_REVOLUTION_1,
+                REBEL_REVOLUTION_2,
+                REBEL_REVOLUTION_3,
+                REBEL_REVOLUTION_4,
+            ]
+            .get(usize::from(n))
+            {
+                self.api.npc(phrase);
+            }
+            self.api.set(
+                "YEHAT_REBEL_INFO",
+                if n == 3 { n } else { n.wrapping_add(1) },
+            );
+            self.api.disable(r as u16)
+        } else if r == ANY_SHIPS {
+            if self.api.get("YEHAT_SHIP_MONTH") != 0 && self.api.ship_not_ready() {
+                self.api.npc(NO_SHIPS_YET)
+            } else {
+                let n = self
+                    .api
+                    .escort_feasibility(crate::comm::dispatch::ship::YEHAT_SHIP as u16)
+                    as i8;
+                if n == 0 {
+                    self.api.npc(NO_ROOM)
+                } else {
+                    let count = n.min(4);
+                    self.api.npc(if n < 4 {
+                        HAVE_FEW_SHIPS
+                    } else {
+                        HAVE_ALL_SHIPS
+                    });
+                    self.api.talk_segue(u16::MAX);
+                    self.api
+                        .add_escorts(crate::comm::dispatch::ship::YEHAT_SHIP as u16, count as i16);
+                    self.api.prepare_ship()
+                }
+            }
+            self.api.disable(r as u16)
+        } else if r == WHAT_ABOUT_PKUNK_REBEL {
+            self.api.npc(if self.api.get("YEHAT_ABSORBED_PKUNK") != 0 {
+                PKUNK_ABSORBED_REBEL
+            } else {
+                HATE_PKUNK_REBEL
+            });
+            self.api.set("YEHAT_REBEL_TOLD_PKUNK", 1)
+        } else if r == ENOUGH_INFO {
+            self.api.npc(OK_ENOUGH_INFO)
+        }
+        if self.api.enabled(HOW_GOES_REVOLUTION as u16) {
+            self.api
+                .response(HOW_GOES_REVOLUTION as u16, Handler::Rebels, &[])
+        }
+        if self.api.get("YEHAT_REBEL_TOLD_PKUNK") == 0
+            && self.api.get("PKUNK_VISITS") != 0
+            && self.api.get("PKUNK_HOME_VISITS") != 0
+        {
+            self.api
+                .response(WHAT_ABOUT_PKUNK_REBEL as u16, Handler::Rebels, &[])
+        }
+        if self.api.enabled(ANY_SHIPS as u16) {
+            self.api.response(ANY_SHIPS as u16, Handler::Rebels, &[])
+        }
+        if self.api.enabled(GIVE_INFO_REBELS as u16) {
+            self.api
+                .response(GIVE_INFO_REBELS as u16, Handler::Info, &[])
+        }
+        self.api.response(BYE_REBEL as u16, Handler::Exit, &[])
+    }
+    fn intro(&mut self) {
+        self.api.segue(0);
+        if self.api.activity() as u8 == crate::comm::dispatch::IN_LAST_BATTLE as u8 {
+            self.api.npc(YEHAT_CAVALRY);
+            self.api.talk_segue(u16::MAX);
+            let n = (self
+                .api
+                .escort_feasibility(crate::comm::dispatch::ship::YEHAT_REBEL_SHIP as u16)
+                as u8)
+                .min(8);
+            self.api.add_escorts(
+                crate::comm::dispatch::ship::YEHAT_REBEL_SHIP as u16,
+                (n - (n >> 1)) as i16,
+            );
+            self.api.add_escorts(
+                crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+                (n >> 1) as i16,
+            )
+        } else {
+            let n = self.api.get("YEHAT_REBEL_VISITS");
+            if let Some(&phrase) =
+                [REBEL_HELLO_1, REBEL_HELLO_2, REBEL_HELLO_3, REBEL_HELLO_4].get(usize::from(n))
+            {
+                self.api.npc(phrase);
+            }
+            self.api.set(
+                "YEHAT_REBEL_VISITS",
+                if n == 3 { n } else { n.wrapping_add(1) },
+            );
+            self.rebels(0)
+        }
+    }
+    fn initialize(&mut self) {
+        self.api.segue(0)
+    }
+}
+fn text_layout(screen_width: i32) -> (CPoint, u16) {
+    (
+        CPoint {
+            x: ((screen_width - 78) * 2 / 3) as i16,
+            y: 60,
+        },
+        ((screen_width - 96) * 2 / 3) as u16,
+    )
+}
+fn descriptor(screen_width: i32) -> CLocData {
+    let (baseline, width) = text_layout(screen_width);
+    let mut d = CLocData {
+        alien_frame_res: c"comm.yehat.graphics".as_ptr(),
+        alien_font_res: c"comm.yehat.font".as_ptr(),
+        alien_colormap_res: c"comm.yehat.colortable".as_ptr(),
+        alien_song_res: c"comm.yehat.music".as_ptr(),
+        alien_alt_song_res: c"comm.yehat.rebel.music".as_ptr(),
+        conversation_phrases_res: c"comm.yehat.rebel.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: baseline,
+        alien_text_width: width,
+        alien_text_align: 1,
+        alien_text_valign: 1,
+        alien_song_flags: 1,
+        num_animations: 15,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(4, 3, 0x0c, (84, 84), (840, 2520));
+    d.alien_ambient_array[0].block_mask = (1 << 6) | (1 << 7);
+    d.alien_ambient_array[1] = animation(7, 3, 0x0c, (84, 84), (840, 2520));
+    d.alien_ambient_array[1].block_mask = (1 << 6) | (1 << 7);
+    d.alien_ambient_array[2] = animation(10, 3, 4, (42, 0), (840, 2520));
+    d.alien_ambient_array[2].block_mask = (1 << 4) | (1 << 14);
+    d.alien_ambient_array[3] = animation(13, 3, 4, (42, 0), (840, 2520));
+    d.alien_ambient_array[3].block_mask = 1 << 5;
+    d.alien_ambient_array[4] = animation(16, 5, 4, (56, 56), (8400, 2520));
+    d.alien_ambient_array[4].block_mask = (1 << 2) | (1 << 14);
+    d.alien_ambient_array[5] = animation(21, 5, 4, (56, 56), (8400, 2520));
+    d.alien_ambient_array[5].block_mask = 1 << 3;
+    d.alien_ambient_array[6] = animation(26, 2, 0x0c, (56, 56), (8400, 2520));
+    d.alien_ambient_array[6].block_mask = (1 << 0) | (1 << 1);
+    d.alien_ambient_array[7] = animation(28, 2, 0x0c, (56, 56), (8400, 2520));
+    d.alien_ambient_array[7].block_mask = (1 << 0) | (1 << 1);
+    for (i, start) in (30..=45).step_by(3).enumerate() {
+        d.alien_ambient_array[i + 8] = animation(start, 3, 4, (28, 28), (28, 28));
+    }
+    d.alien_ambient_array[14] = animation(48, 4, 0x0c, (28, 0), (840, 2520));
+    d.alien_ambient_array[14].block_mask = (1 << 2) | (1 << 4);
+    d.alien_talk_desc = animation(1, 3, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut a = LiveScript { callback };
+        f(&mut Dialogue { api: &mut a })
+    }
+    extern "C" fn exit(r: u32) {
+        run(|s| s.handle(Handler::Exit, r as i32))
+    }
+    extern "C" fn info(r: u32) {
+        run(|s| s.handle(Handler::Info, r as i32))
+    }
+    extern "C" fn rebels(r: u32) {
+        run(|s| s.handle(Handler::Rebels, r as i32))
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::Exit => exit,
+            Handler::Info => info,
+            Handler::Rebels => rebels,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro())
+    }
+    pub(super) extern "C" fn post() {}
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn init_rebel_yehat_comm() -> *mut CLocData {
+        static mut D: Option<CLocData> = None;
+        extern "C" {
+            static ScreenWidth: i32;
+        }
+        let d = (&mut *std::ptr::addr_of_mut!(D)).get_or_insert_with(|| descriptor(ScreenWidth));
+        (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
+        run(|s| s.initialize());
+        d
+    }
+}
+pub struct RebelDialogue;
+impl super::RaceDialogue for RebelDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_rebel_yehat_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor(320))
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro()
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post()
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("PKUNK_HOME_VISITS").is_some(),
-            "missing game state key: PKUNK_HOME_VISITS"
-        );
-        assert!(
-            bit_range("PKUNK_VISITS").is_some(),
-            "missing game state key: PKUNK_VISITS"
-        );
-        assert!(
-            bit_range("YEHAT_ABSORBED_PKUNK").is_some(),
-            "missing game state key: YEHAT_ABSORBED_PKUNK"
-        );
-        assert!(
-            bit_range("YEHAT_REBEL_INFO").is_some(),
-            "missing game state key: YEHAT_REBEL_INFO"
-        );
-        assert!(
-            bit_range("YEHAT_REBEL_TOLD_PKUNK").is_some(),
-            "missing game state key: YEHAT_REBEL_TOLD_PKUNK"
-        );
-    }
-}
+mod tests;

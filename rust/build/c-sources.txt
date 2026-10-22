@@ -39,7 +39,6 @@ sc2/src/uqm/cleanup.c
 sc2/src/uqm/clock_rust.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm.c
-sc2/src/uqm/comm/rebel/rebel.c
 sc2/src/uqm/comm/shofixt/shofixt.c
 sc2/src/uqm/comm/slyhome/slyhome.c
 sc2/src/uqm/comm/slyland/slyland.c
