@@ -4,4 +4,4 @@ if [ "$USE_RUST_MIXER" = 1 ]; then
 else
     uqm_CFILES="mixer.c"
 fi
-uqm_HFILES="mixer.h mixerint.h"
+uqm_HFILES="mixer.h"
