@@ -69,7 +69,6 @@ sc2/src/uqm/comm/talkpet/talkpet.c
 sc2/src/uqm/comm/thradd/thraddc.c
 sc2/src/uqm/comm/umgah/umgahc.c
 sc2/src/uqm/comm/urquan/urquanc.c
-sc2/src/uqm/comm/utwig/utwigc.c
 sc2/src/uqm/comm/vux/vuxc.c
 sc2/src/uqm/comm/yehat/yehatc.c
 sc2/src/uqm/comm/zoqfot/zoqfotc.c

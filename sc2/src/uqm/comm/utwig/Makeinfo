@@ -1,2 +1,2 @@
-uqm_CFILES="utwigc.c"
+uqm_CFILES=""
 uqm_HFILES="resinst.h strings.h"

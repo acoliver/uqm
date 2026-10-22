@@ -1,282 +1,876 @@
-//! Utwig dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const NEUTRAL_SPACE_HELLO_1: u32 = 1;
-const NEUTRAL_SPACE_HELLO_2: u32 = 2;
-const HOSTILE_SPACE_HELLO_1: u32 = 3;
-const HOSTILE_SPACE_HELLO_2: u32 = 4;
-const BOMB_WORLD_HELLO_1: u32 = 5;
-const BOMB_WORLD_HELLO_2: u32 = 6;
-const HOSTILE_BOMB_HELLO_1: u32 = 7;
-const HOSTILE_BOMB_HELLO_2: u32 = 8;
-const NEUTRAL_HOMEWORLD_HELLO_1: u32 = 9;
-const NEUTRAL_HOMEWORLD_HELLO_2: u32 = 10;
-const NEUTRAL_HOMEWORLD_HELLO_3: u32 = 11;
-const NEUTRAL_HOMEWORLD_HELLO_4: u32 = 12;
-const HOSTILE_HOMEWORLD_HELLO_1: u32 = 13;
-const HOSTILE_HOMEWORLD_HELLO_2: u32 = 14;
-const WHY_YOU_HERE: u32 = 15;
-const WE_GUARD_BOMB: u32 = 16;
-const WHAT_ABOUT_BOMB: u32 = 17;
-const ABOUT_BOMB: u32 = 18;
-const GIVE_US_BOMB_OR_DIE: u32 = 19;
-const GUARDS_WARN: u32 = 20;
-const DEMAND_BOMB: u32 = 21;
-const GUARDS_FIGHT: u32 = 22;
-const MAY_WE_HAVE_BOMB: u32 = 23;
-const NO_BOMB: u32 = 24;
-const PLEASE: u32 = 25;
-const SORRY_NO_BOMB: u32 = 26;
-const WHATS_UP_BOMB: u32 = 27;
-const GENERAL_INFO_BOMB_1: u32 = 28;
-const GENERAL_INFO_BOMB_2: u32 = 29;
-const BYE_BOMB: u32 = 30;
-const GOODBYE_BOMB: u32 = 31;
-const HEY_WAIT_GOT_ULTRON: u32 = 32;
-const TAUNT_US_BUT_WE_LOOK: u32 = 33;
-const TRICKED_US_1: u32 = 34;
-const TRICKED_US_2: u32 = 35;
-const WE_ARE_VINDICATOR0: u32 = 36;
-const WE_ARE_VINDICATOR1: u32 = 37;
-const WE_ARE_VINDICATOR2: u32 = 38;
-const WOULD_BE_HAPPY_BUT: u32 = 39;
-const WHY_SAD: u32 = 40;
-const ULTRON_BROKE: u32 = 41;
-const WHAT_ULTRON: u32 = 42;
-const GLORIOUS_ULTRON: u32 = 43;
-const DONT_BE_BABIES: u32 = 44;
-const MOCK_OUR_PAIN: u32 = 45;
-const REAL_SORRY_ABOUT_ULTRON: u32 = 46;
-const APPRECIATE_SYMPATHY: u32 = 47;
-const WHAT_ABOUT_YOU_1: u32 = 48;
-const ABOUT_US_1: u32 = 49;
-const WHAT_ABOUT_YOU_2: u32 = 50;
-const ABOUT_US_2: u32 = 51;
-const WHAT_ABOUT_YOU_3: u32 = 52;
-const ABOUT_US_3: u32 = 53;
-const WHAT_ABOUT_URQUAN_1: u32 = 54;
-const ABOUT_URQUAN_1: u32 = 55;
-const WHAT_ABOUT_URQUAN_2: u32 = 56;
-const ABOUT_URQUAN_2: u32 = 57;
-const GOT_ULTRON: u32 = 58;
-const DONT_WANT_TO_LOOK: u32 = 59;
-const SICK_TRICK_1: u32 = 60;
-const SICK_TRICK_2: u32 = 61;
-const BYE_NEUTRAL: u32 = 62;
-const GOODBYE_NEUTRAL: u32 = 63;
-const TOO_LATE: u32 = 64;
-const NAME_1: u32 = 65;
-const NAME_2: u32 = 66;
-const NAME_3: u32 = 67;
-const NAME_40: u32 = 68;
-const NAME_41: u32 = 69;
-const HAPPY_DAYS: u32 = 70;
-const OK_ATTACK_KOHRAH: u32 = 71;
-const WHATS_UP_AFTER_SPACE: u32 = 72;
-const GENERAL_INFO_AFTER_SPACE_1: u32 = 73;
-const GENERAL_INFO_AFTER_SPACE_2: u32 = 74;
-const WHAT_NOW_AFTER_SPACE: u32 = 75;
-const DO_THIS_AFTER_SPACE: u32 = 76;
-const BYE_AFTER_SPACE: u32 = 77;
-const GOODBYE_AFTER_SPACE: u32 = 78;
-const WHATS_UP_BEFORE_SPACE: u32 = 79;
-const GENERAL_INFO_BEFORE_SPACE_1: u32 = 80;
-const GENERAL_INFO_BEFORE_SPACE_2: u32 = 81;
-const WHAT_NOW_BEFORE_SPACE: u32 = 82;
-const DO_THIS_BEFORE_SPACE: u32 = 83;
-const BYE_BEFORE_SPACE: u32 = 84;
-const GOODBYE_BEFORE_SPACE: u32 = 85;
-const HOW_WENT_WAR: u32 = 86;
-const ABOUT_BATTLE: u32 = 87;
-const HOW_GOES_WAR: u32 = 88;
-const BATTLE_HAPPENS_1: u32 = 89;
-const BATTLE_HAPPENS_2: u32 = 90;
-const FLEET_ON_WAY: u32 = 91;
-const LEARN_NEW_INFO: u32 = 92;
-const NO_NEW_INFO: u32 = 93;
-const SAMATRA: u32 = 94;
-const WHAT_NOW_HOMEWORLD: u32 = 95;
-const HOPE_KILL_EACH_OTHER: u32 = 96;
-const HOW_IS_ULTRON: u32 = 97;
-const ULTRON_IS_GREAT: u32 = 98;
-const BYE_ALLIED_HOMEWORLD: u32 = 99;
-const GOODBYE_ALLIED_HOMEWORLD: u32 = 100;
-const ALLIED_HOMEWORLD_HELLO_1: u32 = 101;
-const ALLIED_HOMEWORLD_HELLO_2: u32 = 102;
-const ALLIED_HOMEWORLD_HELLO_3: u32 = 103;
-const ALLIED_HOMEWORLD_HELLO_4: u32 = 104;
-const HELLO_BEFORE_KOHRAH_SPACE_1: u32 = 105;
-const HELLO_BEFORE_KOHRAH_SPACE_2: u32 = 106;
-const HELLO_DURING_KOHRAH_SPACE_1: u32 = 107;
-const HELLO_DURING_KOHRAH_SPACE_2: u32 = 108;
-const HELLO_AFTER_KOHRAH_SPACE_1: u32 = 109;
-const HELLO_AFTER_KOHRAH_SPACE_2: u32 = 110;
-const UP_TO_YOU: u32 = 111;
-const CAN_YOU_HELP: u32 = 112;
-const HOW_HELP: u32 = 113;
-const DONT_NEED: u32 = 114;
-const HAVE_4_SHIPS: u32 = 115;
-const NO_ULTRON_AT_BOMB: u32 = 116;
-const OUT_TAKES: u32 = 117;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Utwig dialogue, ported from the original C script.
+use super::alliance::AllianceApi;
+use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
+use phrases::*;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    AlliedHome,
+    ExitConversation,
+    BeforeKohrAh,
+    AfterKohrAh,
+    NeutralUtwig,
+    BombWorld,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.utwig.graphics\0";
-const RACE_FONT: &[u8] = b"comm.utwig.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.utwig.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.utwig.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.utwig.dialogue\0";
-
-/// Utwig race dialogue implementation.
-pub struct UtwigDialogue;
-
-impl super::RaceDialogue for UtwigDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: u16) {
+        match h {
+            Handler::AlliedHome => self.allied_home(r),
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::BeforeKohrAh => self.before_kohr_ah(r),
+            Handler::AfterKohrAh => self.after_kohr_ah(r),
+            Handler::NeutralUtwig => self.neutral_utwig(r),
+            Handler::BombWorld => self.bomb_world(r),
         }
     }
+    fn initialize(&mut self, desc: &mut CLocData) {
+        if self.api.get("UTWIG_HAVE_ULTRON") != 0 {
+            desc.alien_alt_song_res = c"comm.utwig.ultron.music".as_ptr();
+            desc.alien_song_flags |= 1;
+        } else {
+            desc.alien_song_flags &= !1;
+        }
+        self.api.segue(u32::from(
+            self.api.get("UTWIG_HAVE_ULTRON") == 0 && self.api.activity() as u8 != 5,
+        ));
+    }
+    fn exit_conversation(&mut self, r: u16) {
+        self.api.segue(0);
+        if r == BYE_NEUTRAL {
+            self.api.npc(i32::from(GOODBYE_NEUTRAL));
+        } else if r == BYE_AFTER_SPACE {
+            self.api.npc(i32::from(GOODBYE_AFTER_SPACE));
+        } else if r == BYE_BEFORE_SPACE {
+            self.api.npc(i32::from(GOODBYE_BEFORE_SPACE));
+        } else if r == BYE_ALLIED_HOMEWORLD {
+            self.api.npc(i32::from(GOODBYE_ALLIED_HOMEWORLD));
+        } else if r == BYE_BOMB {
+            self.api.npc(i32::from(GOODBYE_BOMB));
+        } else if r == DEMAND_BOMB {
+            self.api.npc(i32::from(GUARDS_FIGHT));
+            self.api.segue(1);
+        } else if r == GOT_ULTRON || r == HEY_WAIT_GOT_ULTRON {
+            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
+                self.api.npc(i32::from(NO_ULTRON_AT_BOMB));
+                self.api.set("REFUSED_ULTRON_AT_BOMB", 1_u8);
+            } else {
+                if r == GOT_ULTRON {
+                    self.api.npc(i32::from(DONT_WANT_TO_LOOK));
+                } else {
+                    self.api.npc(i32::from(TAUNT_US_BUT_WE_LOOK));
+                }
+                if self.api.get("ULTRON_CONDITION") < 4 {
+                    match self.api.get("UTWIG_INFO") {
+                        0 => {
+                            if r == GOT_ULTRON {
+                                self.api.npc(i32::from(SICK_TRICK_1));
+                            } else {
+                                self.api.npc(i32::from(TRICKED_US_1));
+                                self.api.segue(1);
+                            }
+                        }
+                        1 => {
+                            if r == GOT_ULTRON {
+                                self.api.npc(i32::from(SICK_TRICK_2));
+                            } else {
+                                self.api.npc(i32::from(TRICKED_US_2));
+                                self.api.segue(1);
+                            }
+                        }
+                        _ => {}
+                    }
+                    self.api.set("UTWIG_INFO", 1_u8);
+                } else {
+                    self.api.npc(i32::from(HAPPY_DAYS));
+                    if self.api.get("KOHR_AH_FRENZY") != 0 {
+                        self.api.npc(i32::from(TOO_LATE));
+                    } else {
+                        self.api.npc(i32::from(OK_ATTACK_KOHRAH));
+                        self.api.event(1, 0, 0, 0, 9);
+                    }
+                    self.api.set("UTWIG_HAVE_ULTRON", 1_u8);
+                    self.api.set("ULTRON_CONDITION", 5_u8);
+                    self.api.set("UTWIG_VISITS", 0_u8);
+                    self.api.set("SUPOX_VISITS", 0_u8);
+                    self.api.set("UTWIG_HOME_VISITS", 0_u8);
+                    self.api.set("SUPOX_HOME_VISITS", 0_u8);
+                    self.api.set("BOMB_VISITS", 0_u8);
+                    self.api.set("SUPOX_INFO", 0_u8);
+                    self.api.set("UTWIG_INFO", 0_u8);
+                    self.api.set("SUPOX_WAR_NEWS", 0_u8);
+                    self.api.set("UTWIG_WAR_NEWS", 0_u8);
+                    self.api.set("SUPOX_HOSTILE", 0_u8);
+                    self.api.set("UTWIG_HOSTILE", 0_u8);
+                    self.api.set_allied(UTWIG_SHIP, 1 != 0);
+                    self.api.set_allied(SUPOX_SHIP, 1 != 0);
+                }
+            }
+        } else if r == CAN_YOU_HELP {
+            self.api.npc(i32::from(HOW_HELP));
+            if self.api.escort_feasibility(UTWIG_SHIP) == 0 {
+                self.api.npc(i32::from(DONT_NEED));
+            } else {
+                self.api.npc(i32::from(HAVE_4_SHIPS));
+                self.api.talk_segue(!0u16);
+                self.api.add_escorts(UTWIG_SHIP, 4);
+            }
+        }
+    }
+    fn allied_home(&mut self, r: u16) {
+        let mut news: u8;
+        news = self.api.get("UTWIG_WAR_NEWS");
+        let num_visits: u8 = self.api.get("UTWIG_SUPOX_MISSION");
+        if r == HOW_WENT_WAR {
+            self.api.npc(i32::from(ABOUT_BATTLE));
+            news |= 1 << 0;
+        } else if r == HOW_GOES_WAR {
+            if num_visits == 1 {
+                self.api.npc(i32::from(FLEET_ON_WAY));
+                self.api.set("UTWIG_WAR_NEWS", 1_u8);
+            } else {
+                match self.api.get("UTWIG_WAR_NEWS") {
+                    0 => {
+                        self.api.npc(i32::from(BATTLE_HAPPENS_1));
+                        news = 1;
+                    }
+                    1 => {
+                        self.api.npc(i32::from(BATTLE_HAPPENS_2));
+                        news = 2;
+                    }
+                    _ => {}
+                }
+            }
+            self.api.disable(HOW_GOES_WAR);
+        } else if r == LEARN_NEW_INFO {
+            if num_visits < 5 {
+                self.api.npc(i32::from(NO_NEW_INFO));
+            } else {
+                self.api.npc(i32::from(SAMATRA));
+                news |= 1 << 1;
+            }
+            self.api.disable(LEARN_NEW_INFO);
+        } else if r == WHAT_NOW_HOMEWORLD {
+            if num_visits < 5 {
+                self.api.npc(i32::from(UP_TO_YOU));
+            } else {
+                self.api.npc(i32::from(HOPE_KILL_EACH_OTHER));
+            }
+            self.api.disable(WHAT_NOW_HOMEWORLD);
+        } else if r == HOW_IS_ULTRON {
+            self.api.npc(i32::from(ULTRON_IS_GREAT));
+            self.api.disable(HOW_IS_ULTRON);
+        }
+        self.api.set("UTWIG_WAR_NEWS", news);
+        if num_visits >= 5 {
+            if !((news & (1 << 0)) != 0) {
+                self.api.response(HOW_WENT_WAR, Handler::AlliedHome, &[]);
+            }
+        } else if self.api.enabled(HOW_GOES_WAR)
+            && (((num_visits == 1) && (news == 0)) || (num_visits != 0 && (news < 2)))
+        {
+            self.api.response(HOW_GOES_WAR, Handler::AlliedHome, &[]);
+        }
+        if self.api.enabled(LEARN_NEW_INFO) {
+            self.api.response(LEARN_NEW_INFO, Handler::AlliedHome, &[]);
+        }
+        if self.api.enabled(WHAT_NOW_HOMEWORLD) {
+            self.api
+                .response(WHAT_NOW_HOMEWORLD, Handler::AlliedHome, &[]);
+        }
+        if self.api.enabled(HOW_IS_ULTRON) {
+            self.api.response(HOW_IS_ULTRON, Handler::AlliedHome, &[]);
+        }
+        if (num_visits == 0) && (self.api.escort_feasibility(UTWIG_SHIP) != 0) {
+            self.api
+                .response(CAN_YOU_HELP, Handler::ExitConversation, &[]);
+        }
+        self.api
+            .response(BYE_ALLIED_HOMEWORLD, Handler::ExitConversation, &[]);
+    }
+    fn before_kohr_ah(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == WHATS_UP_BEFORE_SPACE {
+            num_visits = self.api.get("UTWIG_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GENERAL_INFO_BEFORE_SPACE_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_BEFORE_SPACE_2));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("UTWIG_INFO", num_visits);
+            self.api.disable(WHATS_UP_BEFORE_SPACE);
+        } else if r == WHAT_NOW_BEFORE_SPACE {
+            self.api.npc(i32::from(DO_THIS_BEFORE_SPACE));
+            self.api.disable(WHAT_NOW_BEFORE_SPACE);
+        }
+        if self.api.enabled(WHATS_UP_BEFORE_SPACE) {
+            self.api
+                .response(WHATS_UP_BEFORE_SPACE, Handler::BeforeKohrAh, &[]);
+        }
+        if self.api.enabled(WHAT_NOW_BEFORE_SPACE) {
+            self.api
+                .response(WHAT_NOW_BEFORE_SPACE, Handler::BeforeKohrAh, &[]);
+        }
+        self.api
+            .response(BYE_BEFORE_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn after_kohr_ah(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == WHATS_UP_AFTER_SPACE {
+            num_visits = self.api.get("UTWIG_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GENERAL_INFO_AFTER_SPACE_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_AFTER_SPACE_2));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("UTWIG_INFO", num_visits);
+            self.api.disable(WHATS_UP_AFTER_SPACE);
+        } else if r == WHAT_NOW_AFTER_SPACE {
+            self.api.npc(i32::from(DO_THIS_AFTER_SPACE));
+            self.api.disable(WHAT_NOW_AFTER_SPACE);
+        }
+        if self.api.enabled(WHATS_UP_AFTER_SPACE) {
+            self.api
+                .response(WHATS_UP_AFTER_SPACE, Handler::AfterKohrAh, &[]);
+        }
+        if self.api.enabled(WHAT_NOW_AFTER_SPACE) {
+            self.api
+                .response(WHAT_NOW_AFTER_SPACE, Handler::AfterKohrAh, &[]);
+        }
+        self.api
+            .response(BYE_AFTER_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn neutral_utwig(&mut self, r: u16) {
+        let mut fragments: Vec<i32> = Vec::new();
+        let _i: u8;
+        let mut last_stack: u8;
+        let mut p_str: [u16; 4] = [0; 4];
+        last_stack = 0;
+        p_str[3_usize] = 0;
+        p_str[2_usize] = p_str[3_usize];
+        p_str[1_usize] = p_str[2_usize];
+        p_str[0_usize] = p_str[1_usize];
+        if r == WE_ARE_VINDICATOR0 {
+            self.api.npc(i32::from(WOULD_BE_HAPPY_BUT));
+            self.api.set("UTWIG_STACK1", 1_u8);
+        } else if r == WHY_SAD {
+            self.api.npc(i32::from(ULTRON_BROKE));
+            self.api.set("UTWIG_STACK1", 2_u8);
+        } else if r == WHAT_ULTRON {
+            self.api.npc(i32::from(GLORIOUS_ULTRON));
+            self.api.set("UTWIG_STACK1", 3_u8);
+        } else if r == DONT_BE_BABIES {
+            self.api.npc(i32::from(MOCK_OUR_PAIN));
+            self.api.segue(1);
+            self.api.set("UTWIG_STACK1", 4_u8);
+            self.api.set("UTWIG_HOSTILE", 1_u8);
+            self.api.set("UTWIG_INFO", 0_u8);
+            self.api.set("UTWIG_HOME_VISITS", 0_u8);
+            self.api.set("UTWIG_VISITS", 0_u8);
+            self.api.set("BOMB_VISITS", 0_u8);
+            return;
+        } else if r == REAL_SORRY_ABOUT_ULTRON {
+            self.api.npc(i32::from(APPRECIATE_SYMPATHY));
+            self.api.set("UTWIG_STACK1", 4_u8);
+            return;
+        } else if r == WHAT_ABOUT_YOU_1 {
+            self.api.npc(i32::from(ABOUT_US_1));
+            last_stack = 2;
+            self.api.set("UTWIG_WAR_NEWS", 1_u8);
+        } else if r == WHAT_ABOUT_YOU_2 {
+            self.api.npc(i32::from(ABOUT_US_2));
+            last_stack = 2;
+            self.api.track(SUPOX_SHIP);
+            self.api.set("UTWIG_WAR_NEWS", 2_u8);
+        } else if r == WHAT_ABOUT_YOU_3 {
+            self.api.npc(i32::from(ABOUT_US_3));
+            self.api.set("UTWIG_WAR_NEWS", 3_u8);
+        } else if r == WHAT_ABOUT_URQUAN_1 {
+            self.api.npc(i32::from(ABOUT_URQUAN_1));
+            last_stack = 3;
+            self.api.set("UTWIG_STACK2", 1_u8);
+        } else if r == WHAT_ABOUT_URQUAN_2 {
+            self.api.npc(i32::from(ABOUT_URQUAN_2));
+            self.api.set("UTWIG_STACK2", 2_u8);
+        }
+        match self.api.get("UTWIG_STACK1") {
+            0 => {
+                {
+                    fragments.clear();
+                    fragments.push(WE_ARE_VINDICATOR0 as i32);
+                    fragments.push(GLOBAL_PLAYER_NAME);
+                    fragments.push(WE_ARE_VINDICATOR1 as i32);
+                    fragments.extend(self.api.alliance_fragments(NAME_1));
+                    fragments.push(WE_ARE_VINDICATOR2 as i32);
+                }
+                p_str[0_usize] = WE_ARE_VINDICATOR0;
+            }
+            1 => {
+                p_str[0_usize] = WHY_SAD;
+            }
+            2 => {
+                p_str[0_usize] = WHAT_ULTRON;
+            }
+            3 => {
+                p_str[0_usize] = DONT_BE_BABIES;
+                p_str[1_usize] = REAL_SORRY_ABOUT_ULTRON;
+            }
+            _ => {}
+        }
+        match self.api.get("UTWIG_WAR_NEWS") {
+            0 => {
+                p_str[2_usize] = WHAT_ABOUT_YOU_1;
+            }
+            1 => {
+                p_str[2_usize] = WHAT_ABOUT_YOU_2;
+            }
+            2 => {
+                p_str[2_usize] = WHAT_ABOUT_YOU_3;
+            }
+            _ => {}
+        }
+        match self.api.get("UTWIG_STACK2") {
+            0 => {
+                p_str[2_usize] = WHAT_ABOUT_URQUAN_1;
+            }
+            1 => {
+                p_str[2_usize] = WHAT_ABOUT_URQUAN_2;
+            }
+            _ => {}
+        }
+        if p_str[last_stack as usize] != 0 {
+            if p_str[last_stack as usize] != WE_ARE_VINDICATOR0 {
+                self.api
+                    .response(p_str[last_stack as usize], Handler::NeutralUtwig, &[]);
+            } else {
+                self.api.response(
+                    p_str[last_stack as usize],
+                    Handler::NeutralUtwig,
+                    &fragments,
+                );
+            }
+        }
+        for i in 0..4 {
+            if (i != last_stack) && p_str[i as usize] != 0 {
+                if p_str[i as usize] != WE_ARE_VINDICATOR0 {
+                    self.api
+                        .response(p_str[i as usize], Handler::NeutralUtwig, &[]);
+                } else {
+                    self.api
+                        .response(p_str[i as usize], Handler::NeutralUtwig, &fragments);
+                }
+            }
+        }
+        if self.api.get("ULTRON_CONDITION") != 0 {
+            self.api
+                .response(GOT_ULTRON, Handler::ExitConversation, &[]);
+        }
+        self.api
+            .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
+    }
+    fn bomb_world(&mut self, r: u16) {
+        let mut last_stack: u8;
+        let mut p_str: [u16; 2] = [0; 2];
+        last_stack = 0;
+        p_str[1_usize] = 0;
+        p_str[0_usize] = p_str[1_usize];
+        if r == WHY_YOU_HERE {
+            self.api.npc(i32::from(WE_GUARD_BOMB));
+            self.api.set("BOMB_STACK1", 1_u8);
+        } else if r == WHAT_ABOUT_BOMB {
+            self.api.npc(i32::from(ABOUT_BOMB));
+            self.api.set("BOMB_STACK1", 2_u8);
+        } else if r == GIVE_US_BOMB_OR_DIE {
+            self.api.npc(i32::from(GUARDS_WARN));
+            self.api.set("BOMB_STACK1", 3_u8);
+        } else if r == DEMAND_BOMB {
+            self.api.npc(i32::from(GUARDS_FIGHT));
+            self.api.segue(1);
+            self.api.set("UTWIG_HOSTILE", 1_u8);
+            self.api.set("UTWIG_INFO", 0_u8);
+            self.api.set("UTWIG_HOME_VISITS", 0_u8);
+            self.api.set("UTWIG_VISITS", 0_u8);
+            self.api.set("BOMB_VISITS", 0_u8);
+            return;
+        } else if r == MAY_WE_HAVE_BOMB {
+            self.api.npc(i32::from(NO_BOMB));
+            last_stack = 1;
+            self.api.set("BOMB_STACK2", 1_u8);
+        } else if r == PLEASE {
+            self.api.npc(i32::from(SORRY_NO_BOMB));
+            self.api.set("BOMB_STACK2", 2_u8);
+        } else if r == WHATS_UP_BOMB {
+            if self.api.get("BOMB_INFO") != 0 {
+                self.api.npc(i32::from(GENERAL_INFO_BOMB_2));
+            } else {
+                self.api.npc(i32::from(GENERAL_INFO_BOMB_1));
+                self.api.set("BOMB_INFO", 1_u8);
+            }
+            self.api.disable(WHATS_UP_BOMB);
+        }
+        match self.api.get("BOMB_STACK2") {
+            0 => {
+                p_str[1_usize] = MAY_WE_HAVE_BOMB;
+            }
+            1 => {
+                p_str[1_usize] = PLEASE;
+            }
+            _ => {}
+        }
+        match self.api.get("BOMB_STACK1") {
+            0 => {
+                p_str[0_usize] = WHY_YOU_HERE;
+                p_str[1_usize] = 0;
+            }
+            1 => {
+                p_str[0_usize] = WHAT_ABOUT_BOMB;
+                p_str[1_usize] = 0;
+            }
+            2 => {
+                p_str[0_usize] = GIVE_US_BOMB_OR_DIE;
+            }
+            3 => {
+                p_str[0_usize] = DEMAND_BOMB;
+            }
+            _ => {}
+        }
+        if p_str[last_stack as usize] != 0 {
+            self.api
+                .response(p_str[last_stack as usize], Handler::BombWorld, &[]);
+        }
+        last_stack ^= 1;
+        if p_str[last_stack as usize] != 0 {
+            self.api
+                .response(p_str[last_stack as usize], Handler::BombWorld, &[]);
+        }
+        if self.api.enabled(WHATS_UP_BOMB) && (self.api.get("BOMB_STACK1") > 1) {
+            self.api.response(WHATS_UP_BOMB, Handler::BombWorld, &[]);
+        }
+        if self.api.get("ULTRON_CONDITION") != 0 && !(self.api.get("REFUSED_ULTRON_AT_BOMB") != 0) {
+            self.api
+                .response(GOT_ULTRON, Handler::ExitConversation, &[]);
+        }
+        if self.api.get("BOMB_INFO") != 0 {
+            self.api.response(BYE_BOMB, Handler::ExitConversation, &[]);
+        } else {
+            self.api
+                .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
+        }
+    }
+    fn intro(&mut self) {
+        let mut num_visits: u8;
+        if (self.api.activity() as u8) == 5 {
+            self.api.npc(i32::from(OUT_TAKES));
+            self.api.segue(0);
+            return;
+        }
+        if self.api.get("UTWIG_HOSTILE") != 0 {
+            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
+                num_visits = self.api.get("BOMB_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(HOSTILE_BOMB_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(HOSTILE_BOMB_HELLO_2));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("BOMB_VISITS", num_visits);
+            } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+                num_visits = self.api.get("UTWIG_HOME_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_2));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("UTWIG_HOME_VISITS", num_visits);
+            } else {
+                num_visits = self.api.get("UTWIG_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("UTWIG_VISITS", num_visits);
+            }
+            if !(self.api.get("ULTRON_CONDITION") != 0)
+                || (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0
+            {
+                self.api.segue(1);
+            } else {
+                self.api
+                    .response(HEY_WAIT_GOT_ULTRON, Handler::ExitConversation, &[]);
+            }
+        } else if self.api.alliance(UTWIG_SHIP) == 1 {
+            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+                num_visits = self.api.get("UTWIG_HOME_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(ALLIED_HOMEWORLD_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(ALLIED_HOMEWORLD_HELLO_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(ALLIED_HOMEWORLD_HELLO_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(ALLIED_HOMEWORLD_HELLO_4));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("UTWIG_HOME_VISITS", num_visits);
+                self.allied_home(0_u16);
+            } else {
+                num_visits = self.api.get("UTWIG_SUPOX_MISSION");
+                if num_visits == 1 {
+                    num_visits = self.api.get("UTWIG_VISITS");
+                    let res = {
+                        let old = num_visits;
+                        num_visits += 1;
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(HELLO_BEFORE_KOHRAH_SPACE_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(HELLO_BEFORE_KOHRAH_SPACE_2));
+                            num_visits -= 1;
+                        }
+                        _ => {}
+                    }
+                    self.api.set("UTWIG_VISITS", num_visits);
+                    self.before_kohr_ah(0_u16);
+                } else if num_visits < 5 {
+                    num_visits = self.api.get("UTWIG_VISITS");
+                    let res = {
+                        let old = num_visits;
+                        num_visits += 1;
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(HELLO_DURING_KOHRAH_SPACE_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(HELLO_DURING_KOHRAH_SPACE_2));
+                            num_visits -= 1;
+                        }
+                        _ => {}
+                    }
+                    self.api.set("UTWIG_VISITS", num_visits);
+                } else {
+                    num_visits = self.api.get("UTWIG_VISITS");
+                    let res = {
+                        let old = num_visits;
+                        num_visits += 1;
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(HELLO_AFTER_KOHRAH_SPACE_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(HELLO_AFTER_KOHRAH_SPACE_2));
+                            num_visits -= 1;
+                        }
+                        _ => {}
+                    }
+                    self.api.set("UTWIG_VISITS", num_visits);
+                    self.after_kohr_ah(0_u16);
+                }
+            }
+        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
+            num_visits = self.api.get("BOMB_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(BOMB_WORLD_HELLO_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(BOMB_WORLD_HELLO_2));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("BOMB_VISITS", num_visits);
+            self.bomb_world(0_u16);
+        } else {
+            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+                num_visits = self.api.get("UTWIG_HOME_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_4));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("UTWIG_HOME_VISITS", num_visits);
+            } else {
+                num_visits = self.api.get("UTWIG_VISITS");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_2));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("UTWIG_VISITS", num_visits);
+            }
+            self.neutral_utwig(0_u16);
+        }
+    }
+}
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.utwig.graphics".as_ptr(),
+        alien_font_res: c"comm.utwig.font".as_ptr(),
+        alien_colormap_res: c"comm.utwig.colortable".as_ptr(),
+        alien_song_res: c"comm.utwig.music".as_ptr(),
+        conversation_phrases_res: c"comm.utwig.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 70 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 1,
+        num_animations: 16,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(4, 3, 4, (56, 28), (840, 2520));
+    d.alien_ambient_array[1] = animation(7, 4, 4, (56, 28), (8400, 2520));
+    d.alien_ambient_array[1].block_mask = 4;
+    d.alien_ambient_array[2] = animation(11, 2, 12, (112, 28), (8400, 2520));
+    d.alien_ambient_array[2].block_mask = 2;
+    d.alien_ambient_array[3] = animation(13, 5, 2, (70, 0), (70, 0));
+    d.alien_ambient_array[4] = animation(18, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[5] = animation(20, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[6] = animation(22, 3, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[7] = animation(25, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[8] = animation(27, 3, 4, (112, 28), (8400, 2520));
+    d.alien_ambient_array[9] = animation(30, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[10] = animation(32, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[11] = animation(34, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[12] = animation(36, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[13] = animation(38, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[14] = animation(40, 2, 1, (112, 28), (8400, 2520));
+    d.alien_ambient_array[15] = animation(42, 3, 4, (112, 28), (8400, 2520));
+    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    d.alien_talk_desc = animation(1, 3, 0, (42, 42), (98, 420));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
 
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+    extern "C" fn allied_home(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::AlliedHome,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn before_kohr_ah(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::BeforeKohrAh,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn after_kohr_ah(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::AfterKohrAh,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn neutral_utwig(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::NeutralUtwig,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn bomb_world(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::BombWorld,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::AlliedHome => allied_home,
+            Handler::ExitConversation => exit_conversation,
+            Handler::BeforeKohrAh => before_kohr_ah,
+            Handler::AfterKohrAh => after_kohr_ah,
+            Handler::NeutralUtwig => neutral_utwig,
+            Handler::BombWorld => bomb_world,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {}
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_utwig_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize(desc));
+        desc
+    }
+}
+pub struct UtwigDialogue;
+impl super::RaceDialogue for UtwigDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_utwig_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("BOMB_INFO").is_some(),
-            "missing game state key: BOMB_INFO"
-        );
-        assert!(
-            bit_range("BOMB_STACK1").is_some(),
-            "missing game state key: BOMB_STACK1"
-        );
-        assert!(
-            bit_range("BOMB_STACK2").is_some(),
-            "missing game state key: BOMB_STACK2"
-        );
-        assert!(
-            bit_range("BOMB_VISITS").is_some(),
-            "missing game state key: BOMB_VISITS"
-        );
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-    }
-}
+mod tests;
