@@ -11,7 +11,6 @@ sc2/src/libs/graphics/loaddisp.c
 sc2/src/libs/graphics/pixmap.c
 sc2/src/libs/graphics/resgfx.c
 sc2/src/libs/graphics/sdl/2xscalers.c
-sc2/src/libs/graphics/sdl/biadv2x.c
 sc2/src/libs/graphics/sdl/canvas.c
 sc2/src/libs/graphics/sdl/hq2x.c
 sc2/src/libs/graphics/sdl/palette.c
