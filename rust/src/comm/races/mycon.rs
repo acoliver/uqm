@@ -1,274 +1,659 @@
-//! Mycon dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const TELL_US_ABOUT_WORLD: u32 = 1;
-const BYE_AND_DIE_HOMEWORLD: u32 = 2;
-const RAMBLE_1: u32 = 3;
-const RAMBLE_2: u32 = 4;
-const RAMBLE_3: u32 = 5;
-const RAMBLE_4: u32 = 6;
-const RAMBLE_5: u32 = 7;
-const RAMBLE_6: u32 = 8;
-const RAMBLE_7: u32 = 9;
-const RAMBLE_8: u32 = 10;
-const RAMBLE_9: u32 = 11;
-const RAMBLE_10: u32 = 12;
-const RAMBLE_11: u32 = 13;
-const RAMBLE_12: u32 = 14;
-const RAMBLE_13: u32 = 15;
-const RAMBLE_14: u32 = 16;
-const RAMBLE_15: u32 = 17;
-const RAMBLE_16: u32 = 18;
-const RAMBLE_17: u32 = 19;
-const RAMBLE_18: u32 = 20;
-const RAMBLE_19: u32 = 21;
-const RAMBLE_20: u32 = 22;
-const RAMBLE_21: u32 = 23;
-const RAMBLE_22: u32 = 24;
-const RAMBLE_23: u32 = 25;
-const RAMBLE_24: u32 = 26;
-const RAMBLE_25: u32 = 27;
-const RAMBLE_26: u32 = 28;
-const RAMBLE_27: u32 = 29;
-const RAMBLE_28: u32 = 30;
-const RAMBLE_29: u32 = 31;
-const RAMBLE_30: u32 = 32;
-const RAMBLE_31: u32 = 33;
-const RAMBLE_32: u32 = 34;
-const QUESTION_1: u32 = 35;
-const QUESTION_2: u32 = 36;
-const QUESTION_3: u32 = 37;
-const QUESTION_4: u32 = 38;
-const QUESTION_5: u32 = 39;
-const QUESTION_6: u32 = 40;
-const QUESTION_7: u32 = 41;
-const QUESTION_8: u32 = 42;
-const QUESTION_9: u32 = 43;
-const QUESTION_10: u32 = 44;
-const QUESTION_11: u32 = 45;
-const QUESTION_12: u32 = 46;
-const QUESTION_13: u32 = 47;
-const QUESTION_14: u32 = 48;
-const QUESTION_15: u32 = 49;
-const QUESTION_16: u32 = 50;
-const BYE_SPACE: u32 = 51;
-const BYE_AND_DIE_SPACE: u32 = 52;
-const GONNA_DIE: u32 = 53;
-const INSULT_1: u32 = 54;
-const INSULT_2: u32 = 55;
-const INSULT_3: u32 = 56;
-const INSULT_4: u32 = 57;
-const INSULT_5: u32 = 58;
-const INSULT_6: u32 = 59;
-const INSULT_7: u32 = 60;
-const INSULT_8: u32 = 61;
-const COME_IN_PEACE: u32 = 62;
-const HELLO_HOMEWORLD_1: u32 = 63;
-const HELLO_HOMEWORLD_2: u32 = 64;
-const HELLO_HOMEWORLD_3: u32 = 65;
-const HELLO_HOMEWORLD_4: u32 = 66;
-const HELLO_HOMEWORLD_5: u32 = 67;
-const HELLO_HOMEWORLD_6: u32 = 68;
-const HELLO_HOMEWORLD_7: u32 = 69;
-const HELLO_HOMEWORLD_8: u32 = 70;
-const HELLO_SPACE_1: u32 = 71;
-const HELLO_SPACE_2: u32 = 72;
-const HELLO_SPACE_3: u32 = 73;
-const HELLO_SPACE_4: u32 = 74;
-const HELLO_SPACE_5: u32 = 75;
-const HELLO_SPACE_6: u32 = 76;
-const HELLO_SPACE_7: u32 = 77;
-const HELLO_SPACE_8: u32 = 78;
-const LETS_BE_FRIENDS: u32 = 79;
-const CAME_TO_HOMEWORLD: u32 = 80;
-const SUBMIT_TO_US: u32 = 81;
-const BYE_SUN_DEVICE: u32 = 82;
-const GOODBYE_SUN_DEVICE: u32 = 83;
-const RESPONSE_1: u32 = 84;
-const RESPONSE_2: u32 = 85;
-const RESPONSE_3: u32 = 86;
-const CLUE_1: u32 = 87;
-const CLUE_2: u32 = 88;
-const CLUE_3: u32 = 89;
-const WHAT_ABOUT_SHATTERED: u32 = 90;
-const ABOUT_SHATTERED: u32 = 91;
-const HELLO_SUN_DEVICE_WORLD_1: u32 = 92;
-const HELLO_SUN_DEVICE_WORLD_2: u32 = 93;
-const WHATS_UP_SUN_DEVICE: u32 = 94;
-const GENERAL_INFO_SUN_DEVICE: u32 = 95;
-const LIKE_TO_LAND: u32 = 96;
-const NEVER_LET_LAND: u32 = 97;
-const BYE_HOMEWORLD: u32 = 98;
-const I_HAVE_A_CUNNING_PLAN: u32 = 99;
-const DIE_LIAR: u32 = 100;
-const HOW_GOES_IMPLANTING: u32 = 101;
-const UNFORSEEN_DELAYS: u32 = 102;
-const DIE_THIEF: u32 = 103;
-const DIE_THIEF_AGAIN: u32 = 104;
-const GOODBYE_AND_DIE: u32 = 105;
-const AMBUSH_TAIL: u32 = 106;
-const RAMBLE_TAIL: u32 = 107;
-const WE_GO_TO_IMPLANT: u32 = 108;
-const WONT_FALL_FOR_TRICK: u32 = 109;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Mycon dialogue, ported from myconc.c.
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+mod api;
+use api::MyconApi;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    CombatIsInevitable,
+    SunDevice,
+    TrickMycon,
+    NormalMycon,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+#[derive(Default)]
+struct Session {
+    made_choice: i32,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
+struct Dialogue<'a, A> {
+    api: &'a mut A,
+    session: &'a mut Session,
 }
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.mycon.graphics\0";
-const RACE_FONT: &[u8] = b"comm.mycon.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.mycon.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.mycon.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.mycon.dialogue\0";
-
-/// Mycon race dialogue implementation.
-pub struct MyconDialogue;
-
-impl super::RaceDialogue for MyconDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: MyconApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: i32) {
+        match h {
+            Handler::CombatIsInevitable => self.combat_is_inevitable(r),
+            Handler::SunDevice => self.sun_device(r),
+            Handler::TrickMycon => self.trick_mycon(r),
+            Handler::NormalMycon => self.normal_mycon(r),
         }
     }
-
+    fn do_ramble(&mut self, r: i32) {
+        let mut counter: i32;
+        counter = i32::from(self.api.get("MYCON_RAMBLE"));
+        let res = {
+            let old = counter;
+            counter = (counter + 1) as u8 as i32;
+            old
+        };
+        match res {
+            0 => {
+                self.api.npc(RAMBLE_1);
+            }
+            1 => {
+                self.api.npc(RAMBLE_2);
+            }
+            2 => {
+                self.api.npc(RAMBLE_3);
+            }
+            3 => {
+                self.api.npc(RAMBLE_4);
+            }
+            4 => {
+                self.api.npc(RAMBLE_5);
+            }
+            5 => {
+                self.api.npc(RAMBLE_6);
+            }
+            6 => {
+                self.api.npc(RAMBLE_7);
+            }
+            7 => {
+                self.api.npc(RAMBLE_8);
+            }
+            8 => {
+                self.api.npc(RAMBLE_9);
+            }
+            9 => {
+                self.api.npc(RAMBLE_10);
+            }
+            10 => {
+                self.api.npc(RAMBLE_11);
+            }
+            11 => {
+                self.api.npc(RAMBLE_12);
+            }
+            12 => {
+                self.api.npc(RAMBLE_13);
+            }
+            13 => {
+                self.api.npc(RAMBLE_14);
+            }
+            14 => {
+                self.api.npc(RAMBLE_15);
+            }
+            15 => {
+                self.api.npc(RAMBLE_16);
+            }
+            16 => {
+                self.api.npc(RAMBLE_17);
+            }
+            17 => {
+                self.api.npc(RAMBLE_18);
+            }
+            18 => {
+                self.api.npc(RAMBLE_19);
+            }
+            19 => {
+                self.api.npc(RAMBLE_20);
+            }
+            20 => {
+                self.api.npc(RAMBLE_21);
+            }
+            21 => {
+                self.api.npc(RAMBLE_22);
+            }
+            22 => {
+                self.api.npc(RAMBLE_23);
+            }
+            23 => {
+                self.api.npc(RAMBLE_24);
+            }
+            24 => {
+                self.api.npc(RAMBLE_25);
+                if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) < 2 {
+                    self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+                }
+            }
+            25 => {
+                self.api.npc(RAMBLE_26);
+            }
+            26 => {
+                self.api.npc(RAMBLE_27);
+            }
+            27 => {
+                self.api.npc(RAMBLE_28);
+            }
+            28 => {
+                self.api.npc(RAMBLE_29);
+            }
+            29 => {
+                self.api.npc(RAMBLE_30);
+            }
+            30 => {
+                self.api.npc(RAMBLE_31);
+            }
+            31 => {
+                self.api.npc(RAMBLE_32);
+                counter = 0;
+            }
+            _ => {}
+        }
+        self.api.set("MYCON_RAMBLE", (counter) as u8);
+        if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+            if !(r == COME_IN_PEACE) && !(r == GONNA_DIE) {
+                counter = (i32::from(self.api.get("MYCON_INSULTS")) + 1) & 7;
+                self.api.set("MYCON_INSULTS", (counter) as u8);
+                self.session.made_choice = 1;
+            }
+        } else if (!(r == LETS_BE_FRIENDS) && !(r == CAME_TO_HOMEWORLD)) && !(r == SUBMIT_TO_US) {
+            counter = (i32::from(self.api.get("MYCON_INFO")) + 1) & 15;
+            self.api.set("MYCON_INFO", (counter) as u8);
+            self.session.made_choice = 1;
+        }
+    }
+    fn combat_is_inevitable(&mut self, r: i32) {
+        self.api.segue(1);
+        if r == BYE_SPACE {
+            self.api.npc(BYE_AND_DIE_SPACE);
+        } else if r == BYE_HOMEWORLD {
+            self.api.npc(BYE_AND_DIE_HOMEWORLD);
+        } else if r == LIKE_TO_LAND {
+            self.api.npc(NEVER_LET_LAND);
+        } else if r == BYE_SUN_DEVICE {
+            self.api.npc(GOODBYE_SUN_DEVICE);
+            self.api.segue(0);
+        } else {
+            self.do_ramble(r);
+            if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+                self.api.npc(BYE_AND_DIE_SPACE);
+            } else {
+                self.api.npc(BYE_AND_DIE_HOMEWORLD);
+            }
+        }
+        self.session.made_choice = 0;
+    }
+    fn sun_device(&mut self, r: i32) {
+        if r == WHATS_UP_SUN_DEVICE {
+            self.api.npc(GENERAL_INFO_SUN_DEVICE);
+            self.api.disable((WHATS_UP_SUN_DEVICE) as u16);
+        } else if r == HOW_GOES_IMPLANTING {
+            self.api.npc(UNFORSEEN_DELAYS);
+            self.api.disable((HOW_GOES_IMPLANTING) as u16);
+        } else if r == I_HAVE_A_CUNNING_PLAN {
+            self.api.npc(WONT_FALL_FOR_TRICK);
+            self.api.set("NO_TRICK_AT_SUN", 1_u8);
+        }
+        if self.api.enabled((WHATS_UP_SUN_DEVICE) as u16) {
+            self.api
+                .response((WHATS_UP_SUN_DEVICE) as u16, Handler::SunDevice, &[]);
+        }
+        if i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0 {
+            if self.api.enabled((HOW_GOES_IMPLANTING) as u16)
+                && (i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0)
+            {
+                self.api
+                    .response((HOW_GOES_IMPLANTING) as u16, Handler::SunDevice, &[]);
+            }
+            self.api
+                .response((LIKE_TO_LAND) as u16, Handler::CombatIsInevitable, &[]);
+        } else if (i32::from(self.api.get("MYCON_AMBUSH")) != 0)
+            && !(i32::from(self.api.get("NO_TRICK_AT_SUN")) != 0)
+        {
+            self.api
+                .response((I_HAVE_A_CUNNING_PLAN) as u16, Handler::SunDevice, &[]);
+        }
+        self.api
+            .response((BYE_SUN_DEVICE) as u16, Handler::CombatIsInevitable, &[]);
+    }
+    fn trick_mycon(&mut self, r: i32) {
+        if r == I_HAVE_A_CUNNING_PLAN {
+            self.api.npc(TELL_US_ABOUT_WORLD);
+            self.api.disable((I_HAVE_A_CUNNING_PLAN) as u16);
+        } else if r == CLUE_1 {
+            self.api.npc(RESPONSE_1);
+            self.api.disable((CLUE_1) as u16);
+        } else if r == CLUE_2 {
+            self.api.npc(RESPONSE_2);
+            self.api.disable((CLUE_2) as u16);
+        } else if r == CLUE_3 {
+            self.api.npc(RESPONSE_3);
+            self.api.disable((CLUE_3) as u16);
+        }
+        if (!self.api.enabled((CLUE_1) as u16) && !self.api.enabled((CLUE_2) as u16))
+            && !self.api.enabled((CLUE_3) as u16)
+        {
+            self.api.npc(WE_GO_TO_IMPLANT);
+            self.api.segue(0);
+            self.api.set("MYCON_FELL_FOR_AMBUSH", 1_u8);
+            self.api.event(1, 0, 0, 0, 13);
+        } else {
+            self.api.npc(AMBUSH_TAIL);
+        }
+        if self.api.enabled((CLUE_1) as u16) {
+            self.api.response((CLUE_1) as u16, Handler::TrickMycon, &[]);
+        }
+        if self.api.enabled((CLUE_2) as u16) {
+            self.api.response((CLUE_2) as u16, Handler::TrickMycon, &[]);
+        }
+        if self.api.enabled((CLUE_3) as u16) {
+            self.api.response((CLUE_3) as u16, Handler::TrickMycon, &[]);
+        }
+    }
+    fn normal_mycon(&mut self, r: i32) {
+        if r == WHAT_ABOUT_SHATTERED {
+            self.api.npc(ABOUT_SHATTERED);
+            self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+        } else if r != 0 {
+            self.do_ramble(r);
+            self.api.npc(RAMBLE_TAIL);
+            self.api.disable((r) as u16);
+        }
+        let resp_func: Handler = if (self.api.random() as u8 as i32) < ((256 * 30) / 100) {
+            Handler::CombatIsInevitable
+        } else {
+            Handler::NormalMycon
+        };
+        if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+            if self.api.enabled((COME_IN_PEACE) as u16) {
+                self.api.response((COME_IN_PEACE) as u16, resp_func, &[]);
+            }
+            if self.api.enabled((GONNA_DIE) as u16) {
+                self.api.response((GONNA_DIE) as u16, resp_func, &[]);
+            }
+            if !(self.session.made_choice != 0) {
+                match i32::from(self.api.get("MYCON_INSULTS")) {
+                    0 => {
+                        self.api.response((INSULT_1) as u16, resp_func, &[]);
+                    }
+                    1 => {
+                        self.api.response((INSULT_2) as u16, resp_func, &[]);
+                    }
+                    2 => {
+                        self.api.response((INSULT_3) as u16, resp_func, &[]);
+                    }
+                    3 => {
+                        self.api.response((INSULT_4) as u16, resp_func, &[]);
+                    }
+                    4 => {
+                        self.api.response((INSULT_5) as u16, resp_func, &[]);
+                    }
+                    5 => {
+                        self.api.response((INSULT_6) as u16, resp_func, &[]);
+                    }
+                    6 => {
+                        self.api.response((INSULT_7) as u16, resp_func, &[]);
+                    }
+                    7 => {
+                        self.api.response((INSULT_8) as u16, resp_func, &[]);
+                    }
+                    _ => {}
+                }
+            }
+            self.api
+                .response((BYE_SPACE) as u16, Handler::CombatIsInevitable, &[]);
+        } else {
+            if !(self.session.made_choice != 0) {
+                match i32::from(self.api.get("MYCON_INFO")) {
+                    0 => {
+                        self.api.response((QUESTION_1) as u16, resp_func, &[]);
+                    }
+                    1 => {
+                        self.api.response((QUESTION_2) as u16, resp_func, &[]);
+                    }
+                    2 => {
+                        self.api.response((QUESTION_3) as u16, resp_func, &[]);
+                    }
+                    3 => {
+                        self.api.response((QUESTION_4) as u16, resp_func, &[]);
+                    }
+                    4 => {
+                        self.api.response((QUESTION_5) as u16, resp_func, &[]);
+                    }
+                    5 => {
+                        self.api.response((QUESTION_6) as u16, resp_func, &[]);
+                    }
+                    6 => {
+                        self.api.response((QUESTION_7) as u16, resp_func, &[]);
+                    }
+                    7 => {
+                        self.api.response((QUESTION_8) as u16, resp_func, &[]);
+                    }
+                    8 => {
+                        self.api.response((QUESTION_9) as u16, resp_func, &[]);
+                    }
+                    9 => {
+                        self.api.response((QUESTION_10) as u16, resp_func, &[]);
+                    }
+                    10 => {
+                        self.api.response((QUESTION_11) as u16, resp_func, &[]);
+                    }
+                    11 => {
+                        self.api.response((QUESTION_12) as u16, resp_func, &[]);
+                    }
+                    12 => {
+                        self.api.response((QUESTION_13) as u16, resp_func, &[]);
+                    }
+                    13 => {
+                        self.api.response((QUESTION_14) as u16, resp_func, &[]);
+                    }
+                    14 => {
+                        self.api.response((QUESTION_15) as u16, resp_func, &[]);
+                    }
+                    15 => {
+                        self.api.response((QUESTION_16) as u16, resp_func, &[]);
+                    }
+                    _ => {}
+                }
+            }
+            if self.api.enabled((LETS_BE_FRIENDS) as u16) {
+                self.api.response((LETS_BE_FRIENDS) as u16, resp_func, &[]);
+            }
+            if self.api.enabled((CAME_TO_HOMEWORLD) as u16) {
+                self.api
+                    .response((CAME_TO_HOMEWORLD) as u16, resp_func, &[]);
+            }
+            if self.api.enabled((SUBMIT_TO_US) as u16) {
+                self.api.response((SUBMIT_TO_US) as u16, resp_func, &[]);
+            }
+            if !(i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0) {
+                if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) == 1 {
+                    self.api
+                        .response((WHAT_ABOUT_SHATTERED) as u16, Handler::NormalMycon, &[]);
+                }
+                if i32::from(self.api.get("MYCON_AMBUSH")) != 0 {
+                    self.api
+                        .response((I_HAVE_A_CUNNING_PLAN) as u16, Handler::TrickMycon, &[]);
+                }
+            }
+            self.api
+                .response((BYE_HOMEWORLD) as u16, Handler::CombatIsInevitable, &[]);
+        }
+    }
+    fn intro(&mut self) {
+        let mut num_visits: i32;
+        if i32::from(self.api.get("SUN_DEVICE")) != 0 {
+            num_visits = i32::from(self.api.get("MYCON_VISITS"));
+            let res = {
+                let old = num_visits;
+                num_visits = (num_visits + 1) as u8 as i32;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(DIE_THIEF);
+                }
+                1 => {
+                    self.api.npc(DIE_THIEF_AGAIN);
+                    {
+                        num_visits = (num_visits - 1) as u8 as i32;
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("MYCON_VISITS", (num_visits) as u8);
+            self.api.segue(1);
+        } else if i32::from(self.api.get("MYCON_KNOW_AMBUSH")) != 0 {
+            self.api.npc(DIE_LIAR);
+            self.api.segue(1);
+        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
+            num_visits = i32::from(self.api.get("MYCON_SUN_VISITS"));
+            let res = {
+                let old = num_visits;
+                num_visits = (num_visits + 1) as u8 as i32;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(HELLO_SUN_DEVICE_WORLD_1);
+                }
+                1 => {
+                    self.api.npc(HELLO_SUN_DEVICE_WORLD_2);
+                    {
+                        num_visits = (num_visits - 1) as u8 as i32;
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("MYCON_SUN_VISITS", (num_visits) as u8);
+            self.sun_device(0_u16 as i32);
+        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+            num_visits = i32::from(self.api.get("MYCON_HOME_VISITS"));
+            let res = {
+                let old = num_visits;
+                num_visits = (num_visits + 1) as u8 as i32;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(HELLO_HOMEWORLD_1);
+                }
+                1 => {
+                    self.api.npc(HELLO_HOMEWORLD_2);
+                }
+                2 => {
+                    self.api.npc(HELLO_HOMEWORLD_3);
+                }
+                3 => {
+                    self.api.npc(HELLO_HOMEWORLD_4);
+                }
+                4 => {
+                    self.api.npc(HELLO_HOMEWORLD_5);
+                }
+                5 => {
+                    self.api.npc(HELLO_HOMEWORLD_6);
+                }
+                6 => {
+                    self.api.npc(HELLO_HOMEWORLD_7);
+                }
+                7 => {
+                    self.api.npc(HELLO_HOMEWORLD_8);
+                    {
+                        num_visits = (num_visits - 1) as u8 as i32;
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("MYCON_HOME_VISITS", (num_visits) as u8);
+            self.normal_mycon(0_u16 as i32);
+        } else {
+            num_visits = i32::from(self.api.get("MYCON_VISITS"));
+            let res = {
+                let old = num_visits;
+                num_visits = (num_visits + 1) as u8 as i32;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(HELLO_SPACE_1);
+                }
+                1 => {
+                    self.api.npc(HELLO_SPACE_2);
+                }
+                2 => {
+                    self.api.npc(HELLO_SPACE_3);
+                }
+                3 => {
+                    self.api.npc(HELLO_SPACE_4);
+                }
+                4 => {
+                    self.api.npc(HELLO_SPACE_5);
+                }
+                5 => {
+                    self.api.npc(HELLO_SPACE_6);
+                }
+                6 => {
+                    self.api.npc(HELLO_SPACE_7);
+                }
+                7 => {
+                    self.api.npc(HELLO_SPACE_8);
+                    {
+                        num_visits = (num_visits - 1) as u8 as i32;
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("MYCON_VISITS", (num_visits) as u8);
+            self.normal_mycon(0_u16 as i32);
+        }
+    }
+    fn post_mycon_enc(&mut self) {}
+    fn initialize(&mut self) {
+        self.session.made_choice = 0;
+        if (i32::from(self.api.activity()) as u8 as i32) != 5 {
+            self.api.segue(1);
+        } else {
+            self.api.segue(0);
+        }
+    }
+}
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.mycon.graphics".as_ptr(),
+        alien_font_res: c"comm.mycon.font".as_ptr(),
+        alien_colormap_res: c"comm.mycon.colortable".as_ptr(),
+        alien_song_res: c"comm.mycon.music".as_ptr(),
+        conversation_phrases_res: c"comm.mycon.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 0 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 5,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(12, 6, 2, (63, 0), (63, 0));
+    d.alien_ambient_array[0].block_mask = 2;
+    d.alien_ambient_array[1] = animation(18, 4, 2, (63, 0), (63, 0));
+    d.alien_ambient_array[1].block_mask = 1;
+    d.alien_ambient_array[2] = animation(22, 6, 2, (63, 0), (63, 0));
+    d.alien_ambient_array[3] = animation(28, 5, 2, (63, 0), (63, 0));
+    d.alien_ambient_array[4] = animation(33, 4, 4, (63, 0), (63, 0));
+    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    d.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        static mut SESSION: Session = Session { made_choice: 0 };
+        unsafe {
+            f(&mut Dialogue {
+                api: &mut api,
+                session: &mut *std::ptr::addr_of_mut!(SESSION),
+            });
+        }
+    }
+    extern "C" fn combat_is_inevitable(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::CombatIsInevitable,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn sun_device(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SunDevice,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn trick_mycon(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::TrickMycon,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn normal_mycon(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::NormalMycon,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::CombatIsInevitable => combat_is_inevitable,
+            Handler::SunDevice => sun_device,
+            Handler::TrickMycon => trick_mycon,
+            Handler::NormalMycon => normal_mycon,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_mycon_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_mycon_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize());
+        desc
+    }
+}
+pub struct MyconDialogue;
+impl super::RaceDialogue for MyconDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_mycon_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-        assert!(
-            bit_range("KNOW_ABOUT_SHATTERED").is_some(),
-            "missing game state key: KNOW_ABOUT_SHATTERED"
-        );
-        assert!(
-            bit_range("MYCON_AMBUSH").is_some(),
-            "missing game state key: MYCON_AMBUSH"
-        );
-        assert!(
-            bit_range("MYCON_FELL_FOR_AMBUSH").is_some(),
-            "missing game state key: MYCON_FELL_FOR_AMBUSH"
-        );
-        assert!(
-            bit_range("MYCON_HOME_VISITS").is_some(),
-            "missing game state key: MYCON_HOME_VISITS"
-        );
-    }
-}
+mod tests;
