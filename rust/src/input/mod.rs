@@ -24,6 +24,7 @@ pub mod joystick;
 pub mod keyboard;
 pub mod keynames;
 pub mod menu_binding;
+mod sdl_input;
 pub mod templates;
 pub mod vcontrol;
 
