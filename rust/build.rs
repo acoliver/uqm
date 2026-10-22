@@ -643,7 +643,15 @@ fn parse_game_state_entry(line: &str) -> Option<(String, usize)> {
 fn generate_netplay_abi_bindings() -> Result<(), String> {
     let bindings = bindgen::Builder::default()
         .header("../sc2/src/uqmversion.h")
-        .header("../sc2/src/uqm/supermelee/netplay/packethandlers.h")
+        .header("../sc2/src/uqm/supermelee/netplay/packet.h")
+        .header_contents("netplay_constants.h", r#"
+#include "uqm/supermelee/netplay/netmisc.h"
+#include "uqm/supermelee/meleeship.h"
+enum UqmNetplayConstants {
+    UQM_NETPLAY_BATTLE_FRAME_RATE = BATTLE_FRAME_RATE,
+    UQM_NETPLAY_NUM_MELEE_SHIPS = NUM_MELEE_SHIPS
+};
+"#)
         .header("../sc2/src/uqm/supermelee/netplay/netmelee.h")
         .header("../sc2/src/uqm/supermelee/netplay/netmisc.h")
         .header("../sc2/src/uqm/supermelee/netplay/netsend.h")
@@ -657,8 +665,8 @@ fn generate_netplay_abi_bindings() -> Result<(), String> {
         .clang_arg("-I../sc2/src")
         .clang_arg("-DNETPLAY=NETPLAY_FULL")
         .clang_arg("-DNETCONNECTION_INTERNAL")
-        .allowlist_type("(NetConnection|BattleStateData|ChecksumBuffer|crc_State|ELEMENT|STATE|Packet.*)")
-        .allowlist_function("(NetConnection_.*|PacketHandler_.*|send.*|getBattleInput.*|BattleInputBuffer_push|Netplay_.*|abortFeedback|confirmationCancelled|Melee_RemoteChange_.*|updateRandomSeed|updateMeleeSelection|TFB_SeedRandom)")
+        .allowlist_type("(NetConnection|BattleStateData|ChecksumBuffer|crc_State|ELEMENT|STATE|Packet.*|UqmNetplayConstants)")
+        .allowlist_function("(NetConnection_.*|send.*|getBattleInput.*|BattleInputBuffer_push|Netplay_.*|abortFeedback|confirmationCancelled|Melee_RemoteChange_.*|updateRandomSeed|updateMeleeSelection|TFB_SeedRandom)")
         .allowlist_var("(disp_q|battleFrameCount|NETPLAY_.*|BATTLE_FRAME_RATE|MELEE_FLEET_SIZE|MAX_TEAM_CHARS|NUM_MELEE_SHIPS|UQM_.*_VERSION)")
         .generate_comments(false)
         .layout_tests(true)

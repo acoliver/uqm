@@ -6,7 +6,7 @@ pub mod descriptor;
 pub mod listen;
 pub mod manager;
 
-unsafe fn set_errno(err: libc::c_int) {
+pub(crate) unsafe fn set_errno(err: libc::c_int) {
     #[cfg(target_os = "linux")]
     {
         *libc::__errno_location() = err;
