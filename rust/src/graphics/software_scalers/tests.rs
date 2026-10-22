@@ -77,6 +77,27 @@ fn c_scaler_surface_fixtures() {
             "filter {kind}, {w}x{h}, format {format}, case {}",
             checked[kind as usize]
         );
+        if header[6..10] == [0, 0, w, h] {
+            let flags = [0, 1 << 3, 1 << 6, 1 << 5, 1 << 4, 1 << 7][kind as usize];
+            let mut rgbx = vec![0; (w * h * 16) as usize];
+            unsafe {
+                scale_surface_to_rgbx(&mut src, flags, &mut rgbx);
+            }
+            let actual: Vec<_> = rgbx
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| u32::from_ne_bytes(*p))
+                .collect();
+            let expected: Vec<_> = expected
+                .chunks(dp as usize)
+                .flat_map(|row| row[..(w * 2) as usize].iter().copied())
+                .collect();
+            assert_eq!(
+                actual, expected,
+                "renderer filter {kind}, {w}x{h}, format {format}"
+            );
+        }
         checked[kind as usize] += 1;
     }
     assert_eq!(checked, [64; 6]);
@@ -124,6 +145,82 @@ fn all_hq_patterns_and_conditional_edges_match_c() {
                 hq_rules::rules(pattern, edges, &pixels),
                 &expected[offset..offset + 4],
                 "pattern {pattern}, edges {edge_bits}"
+            );
+        }
+    }
+}
+
+#[test]
+fn selection_preserves_flag_priority_and_default_for_every_setting() {
+    let expected: [ScaleFunc; 6] = [
+        Scale_BilinearFilter,
+        Scale_BiAdaptFilter,
+        Scale_BiAdaptAdvFilter,
+        Scale_TriScanFilter,
+        Scale_HqFilter,
+        Scale_Nearest,
+    ];
+    // Include scanlines, fullscreen, unrelated bits, and the xBRZ flags,
+    // which historically select nearest in this 2x software table.
+    for flags in 0..(1 << 12) {
+        let index = (3..8)
+            .find(|bit| flags & (1 << bit) != 0)
+            .map_or(5, |bit| bit - 3);
+        assert!(
+            std::ptr::fn_addr_eq(Scale_PrepPlatform(flags, std::ptr::null()), expected[index]),
+            "flags {flags:#x}"
+        );
+    }
+    Scale_Init();
+    Scale_Init();
+}
+
+#[test]
+fn hq_difference_thresholds_are_strict_and_channel_local() {
+    let base = 0x804040;
+    for (shift, threshold) in [(16, 0x40), (8, 0x12), (0, 0x0c)] {
+        for sign in [-1, 1] {
+            let within = (base as i32 + sign * (threshold << shift)) as u32;
+            let outside = (base as i32 + sign * ((threshold + 1) << shift)) as u32;
+            assert!(!diff_yuv(base, within));
+            assert!(diff_yuv(base, outside));
+            assert!(diff_yuv(outside, base));
+        }
+    }
+    assert!(!diff_yuv(base, base));
+}
+
+#[test]
+fn every_hq_neighborhood_matches_c_in_each_channel_layout() {
+    let fixture = include_bytes!("../../../tests/fixtures/hq2x-neighborhoods.bin");
+    assert_eq!(&fixture[..8], b"HQIN\0\0\0\0");
+    let expected = words(&fixture[8..]);
+    for (layout, shifts) in [[24, 16, 8], [16, 8, 0], [8, 16, 24], [0, 8, 16]]
+        .into_iter()
+        .enumerate()
+    {
+        let mut fmt: SDL_PixelFormat = unsafe { std::mem::zeroed() };
+        fmt.Rshift = shifts[0];
+        fmt.Gshift = shifts[1];
+        fmt.Bshift = shifts[2];
+        for pattern in 0..256 {
+            let mut pixels = [0x173583ff; 9];
+            for (bit, index) in [0, 1, 2, 3, 5, 6, 7, 8].into_iter().enumerate() {
+                if pattern & (1 << bit) != 0 {
+                    pixels[index] = 0xf5fcf1ff;
+                }
+            }
+            let image = Image {
+                pixels: &pixels,
+                stride: 3,
+                width: 3,
+                height: 3,
+            };
+            let offset = (layout * 256 + pattern) * 4;
+            assert_eq!(
+                hq(&image, &fmt, 1, 1),
+                &expected[offset..offset + 4],
+                "neighborhood {pattern}, layout {layout}"
             );
         }
     }
