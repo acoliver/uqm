@@ -30,3 +30,9 @@ mod netstate;
 mod netoptions;
 
 mod netinput;
+
+mod netconnection;
+
+mod netrcv;
+
+mod netsend;
