@@ -1,6 +1,6 @@
 uqm_SUBDIRS="comm planets ships supermelee"
 uqm_CFILES="battle.c border.c build.c cleanup.c
-		cnctdlg.c comm.c commglue.c confirm.c credits.c
+		cnctdlg.c comm.c comm_variadic.c confirm.c credits.c
 		cyborg.c encount.c flash.c fmv.c galaxy.c
 		gameev.c gameinp.c gameopt.c getchar.c globdata.c
 		cons_res.c grpinfo.c hyper.c init.c intro.c ipdisp.c load.c

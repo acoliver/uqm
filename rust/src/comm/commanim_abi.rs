@@ -323,11 +323,8 @@ mod runtime {
                 {
                     SEQUENCES[1].reset();
                 }
-                done = SEQUENCES[0].advance_transit(
-                    elapsed,
-                    &mut *(&raw mut COMM_DATA.alien_transition_desc),
-                    &mut random,
-                );
+                let transition = &raw mut COMM_DATA.alien_transition_desc;
+                done = SEQUENCES[0].advance_transit(elapsed, &mut *transition, &mut random);
             } else if flags & DONE == 0 {
                 SEQUENCES[1].advance_talk(elapsed, COMM_DATA.alien_talk_desc, &mut random);
             } else {
@@ -393,7 +390,8 @@ mod runtime {
         if full != 0 {
             DrawStamp(&raw mut stamp);
             for i in (0..usize::from(COMM_DATA.num_animations)).rev() {
-                let d = &mut *(&raw mut COMM_DATA.alien_ambient_array[i]);
+                let descriptor = &raw mut COMM_DATA.alien_ambient_array[i];
+                let d = &mut *descriptor;
                 if d.anim_flags & (RANDOM | CIRCULAR | YOYO) != 0 {
                     continue;
                 }

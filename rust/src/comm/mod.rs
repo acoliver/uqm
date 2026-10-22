@@ -19,6 +19,7 @@
 
 pub mod animation;
 mod commanim_abi;
+mod commglue_abi;
 pub mod dispatch;
 pub mod encounter;
 pub mod ffi;
