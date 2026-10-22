@@ -821,12 +821,12 @@ impl Coordinator {
         {
             // Hail through the encounter preview when waiting for dialogue.
             // The first preview callback initializes its menu and ignores input.
-            if crate::automation::ui_observation::encounter_menu_active() {
-                let select = crate::automation::script::MenuKey::Select.index();
-                if !inject_menu_key(i32::from(select), i32::from(inner.input_seen % 4 == 3)) {
-                    self.reject_input(inner, "menu", i32::from(select), 1);
-                    return scheduler_event;
-                }
+            let select = crate::automation::script::MenuKey::Select.index();
+            let hail = crate::automation::ui_observation::encounter_menu_active()
+                && inner.input_seen % 4 == 3;
+            if !inject_menu_key(i32::from(select), i32::from(hail)) {
+                self.reject_input(inner, "menu", i32::from(select), i32::from(hail));
+                return scheduler_event;
             }
             let snapshot = crate::automation::ui_observation::conversation_snapshot();
             if snapshot.has_fresh_responses(
