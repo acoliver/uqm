@@ -23,6 +23,7 @@ mod engine {
     extern "C" {
         fn PutQueue(queue: *mut c_void, handle: *mut c_void);
         fn GetFrameIndex(frame: *mut c_void) -> u16;
+        fn GetFrameCount(frame: *mut c_void) -> u16;
         fn SetRelFrameIndex(frame: *mut c_void, offset: i16) -> *mut c_void;
         fn rust_bridge_OBJECT_CLOAKED(element: *mut c_void) -> c_int;
     }
@@ -39,6 +40,12 @@ mod engine {
         GetFrameIndex(frame.cast())
     }
     /// # Safety
+    /// `frame` must be a live engine frame.
+    pub unsafe fn frame_count(frame: abi::FRAME) -> u16 {
+        GetFrameCount(frame.cast())
+    }
+
+    /// # Safety
     /// `frame` must be null or a live engine frame.
     pub unsafe fn rel_frame_index(frame: abi::FRAME, offset: i16) -> abi::FRAME {
         SetRelFrameIndex(frame.cast(), offset).cast()
@@ -52,7 +59,7 @@ mod engine {
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-pub use engine::{frame_index, object_cloaked, put_element, rel_frame_index};
+pub use engine::{frame_count, frame_index, object_cloaked, put_element, rel_frame_index};
 
 /// Queue-table handles are the element addresses, not separate allocations.
 ///
@@ -108,6 +115,28 @@ pub unsafe fn cosine(angle: i32, magnitude: i32) -> i16 {
     sine(angle + abi::QUADRANT as i32, magnitude)
 }
 
+/// C WRAP_DELTA, after assignment to SIZE.
+pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
+    if (delta as i32).abs() <= extent >> 1 {
+        delta
+    } else if delta < 0 {
+        (extent + delta as i32) as i16
+    } else {
+        (delta as i32 - extent) as i16
+    }
+}
+
+/// Initialize collision endpoints using C WORLD_TO_DISPLAY truncation.
+///
+/// # Safety
+/// `e` must point to a live engine element.
+pub unsafe fn init_intersect_points(e: *mut abi::ELEMENT) {
+    (*e).IntersectControl.IntersectStamp.origin.x = (*e).current.location.x >> abi::ONE_SHIFT;
+    (*e).IntersectControl.IntersectStamp.origin.y = (*e).current.location.y >> abi::ONE_SHIFT;
+    (*e).IntersectControl.EndPoint.x = (*e).next.location.x >> abi::ONE_SHIFT;
+    (*e).IntersectControl.EndPoint.y = (*e).next.location.y >> abi::ONE_SHIFT;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,5 +151,19 @@ mod tests {
         assert_eq!(normalize_facing(16), 0);
         assert_eq!(normalize_angle(-1), 63);
         assert_eq!(normalize_angle(64), 0);
+    }
+
+    #[test]
+    fn wrap_delta_preserves_half_extent_and_adjusts_once() {
+        for (delta, expected) in [
+            (-4097, 4095),
+            (-4096, -4096),
+            (4096, 4096),
+            (4097, -4095),
+            (20000, 11808),
+            (i16::MIN, -24576),
+        ] {
+            assert_eq!(wrap_delta(delta, 8192), expected);
+        }
     }
 }

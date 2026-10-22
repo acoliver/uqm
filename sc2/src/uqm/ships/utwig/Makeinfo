@@ -1,2 +1,2 @@
-uqm_CFILES="utwig.c"
+uqm_CFILES=""
 uqm_HFILES="icode.h resinst.h utwig.h"
