@@ -442,7 +442,7 @@ fn split_conversation_path(paths: &[u8]) -> (&[u8], Option<&[u8]>, Option<&[u8]>
     }
 }
 
-/// Little-endian binary table: `[count, extra_words, lens[count], ...,
+/// Big-endian binary table: `[count, extra_words, lens[count], ...,
 /// string data]`, with the data starting after `extra_words` more words.
 ///
 /// # Safety
@@ -464,7 +464,7 @@ pub unsafe extern "C" fn _GetBinaryTableData(fp: *mut c_void, length: u32) -> *m
 /// `file` must hold a well-formed table image.
 unsafe fn table_from_binary(file: *const u8) -> *mut StringTable {
     let words = file.cast::<u32>();
-    let word = |i: usize| u32::from_le(words.add(i).read_unaligned());
+    let word = |i: usize| u32::from_be(words.add(i).read_unaligned());
 
     let table = AllocStringTable(word(0) as i32, 0);
     let size = (*table).size as usize;
@@ -644,7 +644,7 @@ mod tests {
         // count=2, extra=1 word, lens 3 and 2, one extra word, then data.
         let mut file = Vec::new();
         for w in [2u32, 1, 3, 2, 0xdead_beef] {
-            file.extend_from_slice(&w.to_le_bytes());
+            file.extend_from_slice(&w.to_be_bytes());
         }
         file.extend_from_slice(b"abcde");
         unsafe {
