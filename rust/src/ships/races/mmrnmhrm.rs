@@ -1,3 +1,5 @@
+#[path = "mmrnmhrm_native.rs"]
+mod native;
 // Mmrnmhrm X-Form - Twin laser/twin missile + transform
 // @plan PLAN-20260314-SHIPS.P11
 

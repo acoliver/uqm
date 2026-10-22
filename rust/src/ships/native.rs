@@ -23,6 +23,7 @@ mod engine {
     extern "C" {
         fn PutQueue(queue: *mut c_void, handle: *mut c_void);
         fn GetFrameIndex(frame: *mut c_void) -> u16;
+        fn SetRelFrameIndex(frame: *mut c_void, offset: i16) -> *mut c_void;
         fn rust_bridge_OBJECT_CLOAKED(element: *mut c_void) -> c_int;
     }
 
@@ -37,6 +38,11 @@ mod engine {
     pub unsafe fn frame_index(frame: abi::FRAME) -> u16 {
         GetFrameIndex(frame.cast())
     }
+    /// # Safety
+    /// `frame` must be null or a live engine frame.
+    pub unsafe fn rel_frame_index(frame: abi::FRAME, offset: i16) -> abi::FRAME {
+        SetRelFrameIndex(frame.cast(), offset).cast()
+    }
 
     /// # Safety
     /// `element` must be live, with a valid display primitive.
@@ -46,7 +52,7 @@ mod engine {
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-pub use engine::{frame_index, object_cloaked, put_element};
+pub use engine::{frame_index, object_cloaked, put_element, rel_frame_index};
 
 /// Queue-table handles are the element addresses, not separate allocations.
 ///
@@ -60,4 +66,61 @@ pub unsafe fn element(handle: abi::HELEMENT) -> *mut abi::ELEMENT {
 /// `element` must be a live ship or weapon with its owning STARSHIP attached.
 pub unsafe fn starship(element: *mut abi::ELEMENT) -> *mut abi::STARSHIP {
     (*element).pParent.cast()
+}
+
+/// C `ANGLE_TO_FACING`, before the caller applies facing normalization.
+pub const fn angle_to_facing(angle: i32) -> i32 {
+    (angle + (1 << (abi::CIRCLE_SHIFT - abi::FACING_SHIFT - 1)))
+        >> (abi::CIRCLE_SHIFT - abi::FACING_SHIFT)
+}
+
+/// C `FACING_TO_ANGLE`.
+pub const fn facing_to_angle(facing: i32) -> i32 {
+    facing << (abi::CIRCLE_SHIFT - abi::FACING_SHIFT)
+}
+
+/// C `NORMALIZE_ANGLE`.
+pub const fn normalize_angle(angle: i32) -> i32 {
+    angle & (abi::FULL_CIRCLE as i32 - 1)
+}
+
+/// C `NORMALIZE_FACING`.
+pub const fn normalize_facing(facing: i32) -> u16 {
+    (facing & ((1 << abi::FACING_SHIFT) - 1)) as u16
+}
+
+/// C `SINE`, including its signed long product and SIZE truncation.
+///
+/// # Safety
+/// The engine sine table must have been initialized.
+pub unsafe fn sine(angle: i32, magnitude: i32) -> i16 {
+    let value = *(&raw const abi::sinetab)
+        .cast::<abi::SIZE>()
+        .add(normalize_angle(angle) as usize);
+    ((i64::from(value) * i64::from(magnitude)) >> abi::SIN_SHIFT) as i16
+}
+
+/// C `COSINE`.
+///
+/// # Safety
+/// The engine sine table must have been initialized.
+pub unsafe fn cosine(angle: i32, magnitude: i32) -> i16 {
+    sine(angle + abi::QUADRANT as i32, magnitude)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn c_angle_rounding_and_wrap_boundaries() {
+        assert_eq!(angle_to_facing(1), 0);
+        assert_eq!(angle_to_facing(2), 1);
+        assert_eq!(angle_to_facing(-3), -1);
+        assert_eq!(facing_to_angle(15), 60);
+        assert_eq!(normalize_facing(-1), 15);
+        assert_eq!(normalize_facing(16), 0);
+        assert_eq!(normalize_angle(-1), 63);
+        assert_eq!(normalize_angle(64), 0);
+    }
 }
