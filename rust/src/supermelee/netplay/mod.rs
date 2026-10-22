@@ -28,3 +28,5 @@ mod reset;
 mod netstate;
 
 mod netoptions;
+
+mod netinput;
