@@ -112,7 +112,6 @@ sc2/src/uqm/ship.c
 sc2/src/uqm/ships/blackurq/blackurq.c
 sc2/src/uqm/ships/chenjesu/chenjesu.c
 sc2/src/uqm/ships/chmmr/chmmr.c
-sc2/src/uqm/ships/druuge/druuge.c
 sc2/src/uqm/ships/lastbat/lastbat.c
 sc2/src/uqm/ships/melnorme/melnorme.c
 sc2/src/uqm/ships/mmrnmhrm/mmrnmhrm.c
