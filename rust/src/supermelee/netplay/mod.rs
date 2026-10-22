@@ -26,3 +26,5 @@ mod ready;
 mod reset;
 
 mod netstate;
+
+mod netoptions;
