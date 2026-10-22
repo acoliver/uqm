@@ -34,3 +34,5 @@ mod netinput;
 mod netconnection;
 
 mod netrcv;
+
+mod netsend;

@@ -212,3 +212,192 @@ fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
         PacketQueue_uninit(&raw mut b.queue);
     }
 }
+
+#[derive(Default)]
+struct Lifecycle {
+    events: Vec<&'static str>,
+}
+unsafe extern "C" fn connected_test(conn: *mut NetConnection) {
+    assert_eq!((*conn).state, NetState_NetState_init);
+    assert!((*conn).stateData.is_null());
+    assert!((*conn).stateFlags.connected);
+    (*(*conn).extra.cast::<Lifecycle>()).events.push("connect");
+    NetConnection_setState(conn, NetState_NetState_inSetup);
+}
+unsafe extern "C" fn closed_test(conn: *mut NetConnection) {
+    assert!(!(*conn).stateFlags.connected);
+    assert!((*conn).stateFlags.disconnected);
+    assert!(!(*conn).stateData.is_null());
+    let events = &mut *(*conn).extra.cast::<Lifecycle>();
+    events
+        .events
+        .push(if (*conn).state == NetState_NetState_connecting {
+            "cancel"
+        } else {
+            "close"
+        });
+}
+unsafe extern "C" fn deleted_test(conn: *mut NetConnection) {
+    assert_eq!((*conn).state, NetState_NetState_unconnected);
+    assert!(!(*conn).stateData.is_null());
+    (*(*conn).extra.cast::<Lifecycle>()).events.push("delete");
+}
+unsafe extern "C" fn failed_test(_conn: *mut NetConnection, _error: *const NetConnectionError) {
+    panic!("unexpected connection error");
+}
+#[repr(C)]
+struct LifecycleData {
+    release: Option<unsafe extern "C" fn(*mut NetConnectionStateData)>,
+    events: *mut Lifecycle,
+}
+unsafe extern "C" fn released_test(data: *mut NetConnectionStateData) {
+    let data = Box::from_raw(data.cast::<LifecycleData>());
+    (*data.events).events.push("release");
+}
+unsafe fn attach_data(conn: *mut NetConnection, events: *mut Lifecycle) {
+    (*conn).stateData = Box::into_raw(Box::new(LifecycleData {
+        release: Some(released_test),
+        events,
+    }))
+    .cast();
+}
+
+#[test]
+#[serial_test::serial]
+fn connection_lifecycle_keeps_callback_order_over_loopback() {
+    unsafe {
+        Callback_init();
+        Alarm_init();
+        NetManager_init();
+        let reserved = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port =
+            std::ffi::CString::new(reserved.local_addr().unwrap().port().to_string()).unwrap();
+        drop(reserved);
+        let server_options = NetplayPeerOptions {
+            isServer: true,
+            host: c"127.0.0.1".as_ptr(),
+            port: port.as_ptr(),
+        };
+        let client_options = NetplayPeerOptions {
+            isServer: false,
+            ..server_options
+        };
+        let mut a_events = Lifecycle::default();
+        let mut b_events = Lifecycle::default();
+        let a = NetConnection_open(
+            0,
+            &server_options,
+            Some(connected_test),
+            Some(closed_test),
+            Some(failed_test),
+            Some(deleted_test),
+            (&raw mut a_events).cast(),
+        );
+        assert_eq!((*a).state, NetState_NetState_connecting);
+        Callback_process();
+        let b = NetConnection_open(
+            1,
+            &client_options,
+            Some(connected_test),
+            Some(closed_test),
+            Some(failed_test),
+            Some(deleted_test),
+            (&raw mut b_events).cast(),
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while a_events.events.is_empty() || b_events.events.is_empty() {
+            assert!(std::time::Instant::now() < deadline);
+            let mut timeout = 20;
+            NetManager_process(&mut timeout);
+            Async_process();
+        }
+        assert!((*a).stateFlags.discriminant);
+        assert!(!(*b).stateFlags.discriminant);
+        assert_eq!((*a).state, NetState_NetState_inSetup);
+        assert_eq!((*b).state, NetState_NetState_inSetup);
+        // Exercise protocols through the production queue, socket sender,
+        // stream framing and descriptor read callback on both connections.
+        assert_eq!(Netplay_confirm(a), 0);
+        assert_eq!(Netplay_confirm(b), 0);
+        while (*a).state != NetState_NetState_preBattle || (*b).state != NetState_NetState_preBattle
+        {
+            assert!(std::time::Instant::now() < deadline);
+            assert_eq!(flushPacketQueue(a), 0);
+            assert_eq!(flushPacketQueue(b), 0);
+            let mut timeout = 20;
+            NetManager_process(&mut timeout);
+            Async_process();
+        }
+        let mut ready_a = 0usize;
+        let mut ready_b = 0usize;
+        assert!(!Netplay_localReady(
+            a,
+            Some(ready_count),
+            (&raw mut ready_a).cast(),
+            true
+        ));
+        assert!(!Netplay_localReady(
+            b,
+            Some(ready_count),
+            (&raw mut ready_b).cast(),
+            true
+        ));
+        while ready_a == 0 || ready_b == 0 {
+            assert!(std::time::Instant::now() < deadline);
+            assert_eq!(flushPacketQueue(a), 0);
+            assert_eq!(flushPacketQueue(b), 0);
+            let mut timeout = 20;
+            NetManager_process(&mut timeout);
+            Async_process();
+        }
+        NetConnection_setState(a, NetState_NetState_inSetup);
+        NetConnection_setState(b, NetState_NetState_inSetup);
+        let mut reset_a = 0usize;
+        let mut reset_b = 0usize;
+        Netplay_setResetCallback(a, Some(reset_count), (&raw mut reset_a).cast());
+        Netplay_setResetCallback(b, Some(reset_count), (&raw mut reset_b).cast());
+        Netplay_localReset(a, NetplayResetReason_ResetReason_manualReset);
+        while reset_a == 0 || reset_b == 0 {
+            assert!(std::time::Instant::now() < deadline);
+            assert_eq!(flushPacketQueue(a), 0);
+            assert_eq!(flushPacketQueue(b), 0);
+            let mut timeout = 20;
+            NetManager_process(&mut timeout);
+            Async_process();
+        }
+        assert!((*a).statistics.packetsReceived > 0);
+        assert!((*b).statistics.packetsReceived > 0);
+        attach_data(a, &raw mut a_events);
+        attach_data(b, &raw mut b_events);
+        NetConnection_close(a);
+        assert_eq!(a_events.events, ["connect", "close", "delete", "release"]);
+        while b_events.events.len() == 1 {
+            assert!(std::time::Instant::now() < deadline);
+            let mut timeout = 20;
+            NetManager_process(&mut timeout);
+            Async_process();
+        }
+        assert_eq!(b_events.events, ["connect", "close"]);
+        assert_eq!((*b).state, NetState_NetState_unconnected);
+        NetConnection_close(b);
+        assert_eq!(b_events.events, ["connect", "close", "delete", "release"]);
+
+        // Closing a pending listener releases its connection state after callbacks.
+        let mut cancelled = Lifecycle::default();
+        let pending = NetConnection_open(
+            0,
+            &server_options,
+            Some(connected_test),
+            Some(closed_test),
+            Some(failed_test),
+            Some(deleted_test),
+            (&raw mut cancelled).cast(),
+        );
+        NetConnection_close(pending);
+        assert_eq!(cancelled.events, ["cancel", "delete"]);
+        Callback_process();
+        NetManager_uninit();
+        Alarm_uninit();
+        Callback_uninit();
+    }
+}
