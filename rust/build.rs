@@ -597,14 +597,12 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
     match target_os {
         "macos" => {
             // The library records no #[link] for the C archive so pure test
-            // builds stay C-free; every binary that must resolve the C
-            // registration symbols force-loads the archive itself.
-            for binary in ["uqm", "menu_binding_probe"] {
-                println!(
-                    "cargo:rustc-link-arg-bin={binary}=-Wl,-force_load,{}",
-                    archive.display()
-                );
-            }
+            // builds stay C-free; the game binary force-loads the archive
+            // itself to resolve the C registration symbols.
+            println!(
+                "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
+                archive.display()
+            );
         }
         "linux" => {
             println!("cargo:rustc-link-lib=static:+whole-archive,-bundle=uqm_c");

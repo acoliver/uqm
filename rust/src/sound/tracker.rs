@@ -95,7 +95,9 @@ impl Song {
             .chunks_exact(channels * 64 * 4)
             .map(|pattern| {
                 pattern
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|bytes| {
                         let sample = usize::from((bytes[0] & 0xf0) | (bytes[2] >> 4));
                         if sample > sample_count {

@@ -1,6 +1,6 @@
 //! Source-only admission for the native autoplay suite.
 
-use crate::ci::authority::{Authority, PinnedScript, LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS};
+use crate::native_config::{Scenario, SCRIPT_LIMIT_BYTES};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uqm_rust::automation::{parse_script, validate_script, Budgets};
@@ -8,7 +8,7 @@ use uqm_rust::automation::{parse_script, validate_script, Budgets};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScriptAdmission {
-    pub script: PinnedScript,
+    pub script: Scenario,
     pub budgets: Budgets,
     /// The script's own resolved seed. Recorded, never chosen here.
     pub seed: u32,
@@ -18,36 +18,24 @@ pub struct ScriptAdmission {
     pub outer_child_kill_grace_ms: u64,
 }
 
-/// Upper bound on the size of a scenario script read from the tree.
-pub(crate) const SCRIPT_LIMIT_BYTES: u64 = 1024 * 1024;
-
-pub fn admit_script(
-    root: &Path,
-    pinned: &PinnedScript,
-    authority: &Authority,
-) -> Result<ScriptAdmission, String> {
-    let path = root.join(&pinned.path);
-    let bytes = crate::read_regular_file_nofollow_bounded(&path, SCRIPT_LIMIT_BYTES)?;
+pub fn admit_script(root: &Path, scenario: &Scenario) -> Result<ScriptAdmission, String> {
+    let path = root.join(&scenario.path);
+    let bytes = crate::read_regular_file_bounded(&path, SCRIPT_LIMIT_BYTES)?;
     let document = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
     let script = validate_script(document, &path).map_err(|error| error.to_string())?;
     if let Some(start_save) = script.start_save() {
-        crate::native_save::verify_start_save(root, &pinned.path, start_save)?;
+        crate::native_save::verify_start_save(root, &scenario.path, start_save)?;
     }
-    let runtime = authority.native_runtime_contract_for(pinned)?;
+    let runtime = scenario.runtime_contract();
     if !runtime.has_valid_deadline_order() {
         return Err("native acceptance runtime has invalid deadline ordering".into());
     }
     let script_budgets = script.budgets();
-    validate_outer_deadline_class(
-        pinned,
-        authority.native_runtime_contract().outer_child_timeout_ms,
-        script_budgets.max_wallclock_seconds,
-    )?;
     // The script watchdog and ChildSession supervisor run concurrently. Neither
     // promises a minimum runtime; expiry of either fails the entire scenario.
     // Observer operations occur inside the child's lifetime, not after it.
     Ok(ScriptAdmission {
-        script: pinned.clone(),
+        script: scenario.clone(),
         budgets: script_budgets,
         seed: script.seed(),
         action_count: script.steps().len(),
@@ -61,46 +49,14 @@ pub fn admit_script(
     })
 }
 
-/// Tie a pin's outer deadline to the wall budget its own script declares.
-///
-/// A script that outlasts the default outer deadline must carry the approved
-/// long one, and a script that does not outlast it must not. The wall budget is
-/// a failure ceiling, so a script may finish earlier than its budget and the
-/// outer deadline simply ends a run that does not.
-fn validate_outer_deadline_class(
-    pinned: &PinnedScript,
-    default_timeout_ms: u64,
-    wall_seconds: u64,
-) -> Result<(), String> {
-    let wall_ms = wall_seconds.saturating_mul(1000);
-    match pinned.outer_child_timeout_ms {
-        Some(timeout_ms) if wall_ms <= default_timeout_ms => Err(format!(
-            "native script {} pins outer deadline {timeout_ms} ms but its {wall_seconds} s wall \
-             budget fits the {default_timeout_ms} ms default",
-            pinned.path
-        )),
-        None if wall_ms > default_timeout_ms => Err(format!(
-            "native script {} declares a {wall_seconds} s wall budget past the \
-             {default_timeout_ms} ms default and needs the approved \
-             {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms outer deadline pin",
-            pinned.path
-        )),
-        _ => Ok(()),
-    }
-}
-
 /// Inspect the entire requested set before building or spawning any game.
-pub fn preflight(
-    root: &Path,
-    selected: &[PinnedScript],
-    authority: &Authority,
-) -> Result<Vec<ScriptAdmission>, String> {
+pub fn preflight(root: &Path, selected: &[Scenario]) -> Result<Vec<ScriptAdmission>, String> {
     let mut admissions = Vec::new();
     let mut failures = Vec::new();
-    for pinned in selected {
-        match admit_script(root, pinned, authority) {
+    for scenario in selected {
+        match admit_script(root, scenario) {
             Ok(admission) => admissions.push(admission),
-            Err(error) => failures.push(format!("{}: {error}", pinned.path)),
+            Err(error) => failures.push(format!("{}: {error}", scenario.path)),
         }
     }
     if selected.is_empty() {
@@ -113,221 +69,6 @@ pub fn preflight(
         ));
     }
     Ok(admissions)
-}
-
-/// Accept only the complete event-required suite, with one shared build and policy.
-pub fn validate_success(
-    root: &Path,
-    selected: &[PinnedScript],
-    authority: &Authority,
-    source_sha: &str,
-    policy: &[u8],
-) -> Result<(), String> {
-    let manifest = validate_accounting(root, selected)?;
-    if !manifest.passed {
-        return Err("native suite did not complete the required selection".into());
-    }
-    let snapshot =
-        crate::ci::evidence::EvidenceSnapshot::open_native(root).map_err(|e| e.to_string())?;
-    let mut shared_identity = None;
-    for row in &manifest.scenarios {
-        let proof: uqm_rust::automation::NativeAcceptanceManifest = serde_json::from_slice(
-            snapshot
-                .read(&format!("{}/native-acceptance.json", row.directory))
-                .map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-        validate_success_policy(&proof, &row.script, authority)?;
-        let temporary = materialize_member(&snapshot, &row.directory)?;
-        let scenario = temporary.path().join(&row.directory);
-        let shared =
-            uqm_rust::automation::native_artifacts::SharedInputs::open(&scenario, 1024 * 1024)?
-                .ok_or("S4 success requires protected suite shared descriptors")?;
-        let identity = (shared.descriptor.clone(), proof.executable.clone());
-        correlate_shared_identity(&mut shared_identity, identity)?;
-        let limit = authority
-            .native_runtime_contract()
-            .inventory_limits
-            .member_bytes;
-        let receipt = shared.read(
-            &scenario,
-            "inputs/linked-build/linked-build-receipt.json",
-            limit,
-        )?;
-        let nested_policy = shared.read(&scenario, "inputs/linked-build/gates.json", limit)?;
-        let contracts = crate::ci::evidence::linked_outer_correlation_contracts(
-            Some(&receipt),
-            Some(&nested_policy),
-            Some(policy),
-            source_sha,
-        );
-        if !contracts.is_empty() {
-            return Err(contracts.join(", "));
-        }
-    }
-    Ok(())
-}
-
-fn correlate_shared_identity(
-    prior: &mut Option<(
-        uqm_rust::automation::NativeRetainedInput,
-        uqm_rust::automation::NativeRetainedInput,
-    )>,
-    current: (
-        uqm_rust::automation::NativeRetainedInput,
-        uqm_rust::automation::NativeRetainedInput,
-    ),
-) -> Result<(), String> {
-    if prior.as_ref().is_some_and(|identity| identity != &current) {
-        return Err("native scenarios disagree on shared descriptor or executable".into());
-    }
-    *prior = Some(current);
-    Ok(())
-}
-
-fn validate_success_policy(
-    proof: &uqm_rust::automation::NativeAcceptanceManifest,
-    script: &PinnedScript,
-    authority: &Authority,
-) -> Result<(), String> {
-    validate_script_identity(script, &proof.script)?;
-    let content = &authority.native_acceptance;
-    crate::ci::run::validate_native_runtime_authority(authority, script, proof.runtime_contract)
-        .map_err(|error| error.to_string())?;
-    if proof.acceptance_policy != content.acceptance_policy {
-        return Err("native suite runtime or acceptance policy differs from authority".into());
-    }
-    if proof.content_package.relative_path
-        != format!("inputs/content/packages/{}", content.content_filename)
-        || proof.content_package.byte_length != content.content_byte_length
-        || proof.content_package.sha256 != content.content_sha256
-    {
-        return Err("native suite content package differs from authority".into());
-    }
-    let version = format!("{}\n", content.content_version);
-    if !proof.retained_files.contains(&crate::retained_identity(
-        "inputs/content/version",
-        version.as_bytes(),
-    )) {
-        return Err("native suite content version differs from authority".into());
-    }
-    Ok(())
-}
-
-/// Validate a failed suite for diagnostic transport. Its recorded selection must
-/// be pinned, but this does not establish that it was the event-required selection.
-pub fn validate_failure_diagnostics(root: &Path, authority: &Authority) -> Result<(), String> {
-    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(root)
-        .map_err(|error| error.to_string())?;
-    let selected: Vec<PinnedScript> = serde_json::from_slice(
-        snapshot
-            .read("suite-request.json")
-            .map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    if selected.iter().any(|script| {
-        !authority
-            .native_acceptance
-            .scenario_scripts
-            .contains(script)
-    }) {
-        return Err("native failure suite contains an unpinned script".into());
-    }
-    let manifest = snapshot.scoped(|| validate_accounting(root, &selected))?;
-    if manifest.passed {
-        return Err("a successful native suite cannot be published as failure diagnostics".into());
-    }
-    for row in &manifest.scenarios {
-        let path = format!("{}/native-acceptance-failure.json", row.directory);
-        match snapshot.read(&path) {
-            Ok(bytes) => validate_member_failure(&snapshot, row, bytes, authority)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.to_string()),
-        }
-    }
-    Ok(())
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum MemberFailure {
-    Runtime(Box<uqm_rust::automation::NativeAcceptanceFailureManifest>),
-    Setup(Box<uqm_rust::automation::NativeAcceptanceSetupFailureManifest>),
-}
-
-fn materialize_member(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
-    directory: &str,
-) -> Result<tempfile::TempDir, String> {
-    let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
-    let publisher = crate::ci::evidence::EvidencePublisher::open(temporary.path())
-        .map_err(|error| error.to_string())?;
-    let prefix = format!("{directory}/");
-    for file in snapshot.files() {
-        if file.relative_path.starts_with(&prefix) || file.relative_path.starts_with("shared/") {
-            publisher
-                .create(&file.relative_path, &file.bytes)
-                .map_err(|error| error.to_string())?;
-        }
-    }
-    Ok(temporary)
-}
-
-fn validate_member_failure(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
-    row: &ScenarioAccounting,
-    bytes: &[u8],
-    authority: &Authority,
-) -> Result<(), String> {
-    if !matches!(row.state, ScenarioState::Failed { .. }) {
-        return Err("native child failure belongs to a nonfailed scenario".into());
-    }
-    let failure: MemberFailure =
-        serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
-    let temporary = materialize_member(snapshot, &row.directory)?;
-    let (runtime, policy) = match &failure {
-        MemberFailure::Runtime(failure) => (failure.runtime_contract, failure.acceptance_policy),
-        MemberFailure::Setup(failure) => (failure.runtime_contract, failure.acceptance_policy),
-    };
-    if runtime != authority.native_runtime_contract_for(&row.script)?
-        || policy != authority.native_acceptance.acceptance_policy
-    {
-        return Err(
-            "native failure suite runtime or acceptance policy differs from authority".into(),
-        );
-    }
-    match failure {
-        MemberFailure::Runtime(failure) => {
-            validate_script_identity(&row.script, &failure.script)?;
-            let expected = &authority.native_acceptance;
-            if failure.content_package.relative_path
-                != format!("inputs/content/packages/{}", expected.content_filename)
-                || failure.content_package.byte_length != expected.content_byte_length
-                || failure.content_package.sha256 != expected.content_sha256
-            {
-                return Err("native failure suite content differs from authority".into());
-            }
-            let version = format!("{}\n", expected.content_version);
-            if !failure.retained_files.contains(&crate::retained_identity(
-                "inputs/content/version",
-                version.as_bytes(),
-            )) {
-                return Err("native failure suite content version differs from authority".into());
-            }
-            uqm_rust::automation::validate_native_acceptance_failure_bundle(
-                &temporary.path().join(&row.directory),
-                &failure,
-            )
-            .map_err(|error| format!("native suite child failure: {error:?}"))
-        }
-        MemberFailure::Setup(failure) => {
-            uqm_rust::automation::validate_native_acceptance_setup_failure_bundle(
-                &temporary.path().join(&row.directory),
-                &failure,
-            )
-            .map_err(|error| format!("native suite child setup failure: {error:?}"))
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -417,7 +158,7 @@ fn html_escape(value: &str) -> String {
 }
 
 fn validate_script_identity(
-    expected: &PinnedScript,
+    expected: &Scenario,
     actual: &uqm_rust::automation::NativeRetainedInput,
 ) -> Result<(), String> {
     let filename = Path::new(&expected.path)
@@ -536,23 +277,19 @@ fn validate_transition(previous: &SuiteManifest, next: &SuiteManifest) -> Result
 mod journal_regressions {
     use super::*;
 
-    fn test_authority() -> Authority {
-        serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap()
-    }
-
     fn test_limits() -> uqm_rust::automation::native_window::NativeInventoryLimits {
-        test_authority().native_runtime_contract().inventory_limits
+        crate::native_config::runtime_contract().inventory_limits
     }
 
-    fn pinned(name: &str) -> PinnedScript {
-        PinnedScript {
+    fn pinned(name: &str) -> Scenario {
+        Scenario {
             path: format!("rust/scripts/{name}.json"),
             outer_child_timeout_ms: None,
         }
     }
 
-    fn refused_claim(root: &Path, selected: &[PinnedScript], authority: &Authority) -> String {
-        match from_request(Some(root), selected, authority) {
+    fn refused_claim(root: &Path, selected: &[Scenario]) -> String {
+        match from_request(Some(root), selected) {
             Ok(_) => panic!("a root another run already claimed must not be claimed again"),
             Err(error) => error,
         }
@@ -566,7 +303,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a"), pinned("b")];
         {
-            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut interrupted = SuiteAccounting::create(&root, &selected).unwrap();
             interrupted.begin(0).unwrap();
             // The process stops here: no failure recorded, nothing finalized.
         }
@@ -614,7 +351,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
         {
-            let _interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let _interrupted = SuiteAccounting::create(&root, &selected).unwrap();
         }
         let error = recover_interrupted(&root, &[pinned("b")], test_limits()).unwrap_err();
         assert!(error.contains("different selection"), "{error}");
@@ -631,7 +368,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
         {
-            let _interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let _interrupted = SuiteAccounting::create(&root, &selected).unwrap();
         }
         let recovered = recover_interrupted(&root, &selected, test_limits()).unwrap();
         let failure = recovered.first_failure.clone().unwrap();
@@ -649,18 +386,17 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
         {
-            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut interrupted = SuiteAccounting::create(&root, &selected).unwrap();
             interrupted.begin(0).unwrap();
         }
-        let authority = test_authority();
-        let error = refused_claim(&root, &selected, &authority);
+        let error = refused_claim(&root, &selected);
         assert!(error.contains("recovered as a failure bundle"), "{error}");
         let manifest = validate_accounting(&root, &selected).unwrap();
         assert!(manifest.finalized && !manifest.passed);
 
         // The recovered bundle is now final, so a later claim refuses it
         // outright instead of recovering it again.
-        let error = refused_claim(&root, &selected, &authority);
+        let error = refused_claim(&root, &selected);
         assert!(error.contains("already holds a finalized run"), "{error}");
         assert_eq!(manifest, validate_accounting(&root, &selected).unwrap());
     }
@@ -669,11 +405,11 @@ mod journal_regressions {
     fn scenario_reservations_exhaust_before_launch_and_keep_failure_index() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         assert!(suite.begin(0).is_err());
         let budget = suite.shared_budget();
@@ -709,11 +445,11 @@ mod journal_regressions {
         use uqm_rust::automation::native_artifacts::{SharedInputs, SharedSnapshot};
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         let mut shared =
             SharedSnapshot::create(&root.join("shared"), suite.shared_budget()).unwrap();
@@ -735,7 +471,7 @@ mod journal_regressions {
             .publisher
             .create("scenarios/0001/foreign.log", b"not selected")
             .unwrap();
-        let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(&root).unwrap();
+        let snapshot = crate::evidence::EvidenceSnapshot::open_native(&root).unwrap();
         std::fs::remove_dir_all(&root).unwrap();
         let retained = materialize_member(&snapshot, "scenarios/0000").unwrap();
         let scenario = retained.path().join("scenarios/0000");
@@ -758,11 +494,11 @@ mod journal_regressions {
     fn scenario_accounting_charges_empty_directories_and_refuses_links_and_reuse() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         let scenario = suite.directory(0).unwrap();
         std::fs::create_dir_all(scenario.join("empty/nested")).unwrap();
@@ -785,11 +521,11 @@ mod journal_regressions {
     fn not_run_rows_cannot_hide_reindexed_scenario_outputs() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
             .fail(SuitePhase::Preflight, None, "bad pin".into())
             .unwrap();
@@ -817,11 +553,11 @@ mod journal_regressions {
     fn rewritten_attempt_history_is_rejected_even_with_updated_index_hashes() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         suite
             .fail(SuitePhase::Execute, Some(0), "failure".into())
@@ -829,7 +565,7 @@ mod journal_regressions {
         suite.finish().unwrap();
         let event_path = "suite-events/000001.json";
         let mut event: SuiteManifest = serde_json::from_slice(
-            &crate::ci::evidence::read_regular_relative(&root, event_path).unwrap(),
+            &crate::evidence::read_regular_relative(&root, event_path).unwrap(),
         )
         .unwrap();
         event.scenarios[0].state = ScenarioState::NotRun;
@@ -864,8 +600,8 @@ mod journal_regressions {
 mod teardown_regressions {
     use super::*;
 
-    fn pinned(name: &str) -> PinnedScript {
-        PinnedScript {
+    fn pinned(name: &str) -> Scenario {
+        Scenario {
             path: format!("rust/scripts/{name}.json"),
             outer_child_timeout_ms: None,
         }
@@ -904,12 +640,12 @@ mod teardown_regressions {
 
     fn finalized_failure(
         root: &Path,
-        selected: &[PinnedScript],
+        selected: &[Scenario],
         supervision: ControllerSupervision,
         stdout: &[u8],
         stderr: &[u8],
     ) -> SuiteManifest {
-        let mut suite = SuiteAccounting::create(root, selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(root, selected).unwrap();
         suite.begin(0).unwrap();
         suite
             .record_supervision(0, supervision, stdout, stderr)
@@ -1123,7 +859,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a"), pinned("b")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         suite
             .record_supervision(0, clean_teardown(FaultClass::Exit), b"out", b"err")
@@ -1151,7 +887,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a"), pinned("b")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
 
         assert!(
             suite
@@ -1179,7 +915,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         let mut supervision = clean_teardown(FaultClass::Timeout);
         supervision.timed_out = false;
@@ -1196,7 +932,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
             .fail(SuitePhase::Preflight, None, "bad pin".into())
             .unwrap();
@@ -1216,7 +952,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         suite
             .record_supervision(
@@ -1253,14 +989,10 @@ mod teardown_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
         {
-            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut interrupted = SuiteAccounting::create(&root, &selected).unwrap();
             interrupted.begin(0).unwrap();
         }
-        let limits: uqm_rust::automation::native_window::NativeInventoryLimits =
-            serde_json::from_slice::<Authority>(include_bytes!("../../ci/gates.json"))
-                .unwrap()
-                .native_runtime_contract()
-                .inventory_limits;
+        let limits = crate::native_config::runtime_contract().inventory_limits;
 
         let recovered = recover_interrupted(&root, &selected, limits).unwrap();
 
@@ -1280,7 +1012,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
         let budget = suite.shared_budget();
         let remaining = budget.remaining().unwrap();
@@ -1328,7 +1060,7 @@ mod teardown_regressions {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().join("suite");
         let selected = vec![pinned("a")];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
             .fail(SuitePhase::Preflight, None, "bad pin".into())
             .unwrap();
@@ -1347,7 +1079,7 @@ mod teardown_regressions {
     /// mutation is exercised against the teardown rules rather than being
     /// rejected earlier as an inventory drift.
     fn republish(root: &Path, teardown: &SuiteTeardown) {
-        let publisher = crate::ci::evidence::EvidencePublisher::open(root).unwrap();
+        let publisher = crate::evidence::EvidencePublisher::open(root).unwrap();
         publisher
             .replace(
                 TEARDOWN_RELATIVE,
@@ -1355,7 +1087,7 @@ mod teardown_regressions {
             )
             .unwrap();
         let manifest: SuiteManifest = serde_json::from_slice(
-            &crate::ci::evidence::read_regular_relative(root, "suite-manifest.json").unwrap(),
+            &crate::evidence::read_regular_relative(root, "suite-manifest.json").unwrap(),
         )
         .unwrap();
         let index = SuiteIndex {
@@ -1386,13 +1118,12 @@ mod teardown_regressions {
 /// instead of a fresh suite.
 pub fn from_request(
     evidence_root: Option<&Path>,
-    selected: &[PinnedScript],
-    authority: &Authority,
+    selected: &[Scenario],
 ) -> Result<Option<SuiteAccounting>, String> {
     let Some(root) = evidence_root else {
         return Ok(None);
     };
-    let limits = authority.native_runtime_contract().inventory_limits;
+    let limits = crate::native_config::runtime_contract().inventory_limits;
     if let Some(status) = retained_status(root)? {
         if status.finalized {
             return Err(format!(
@@ -1409,16 +1140,7 @@ pub fn from_request(
                 .map_or_else(|| "no recorded failure".into(), |failure| failure.detail)
         ));
     }
-    SuiteAccounting::create_with_limits(
-        root,
-        selected,
-        matches!(
-            std::env::var("UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT").as_deref(),
-            Ok("1")
-        ),
-        limits,
-    )
-    .map(Some)
+    SuiteAccounting::create_with_limits(root, selected, limits).map(Some)
 }
 
 /// The journal state a previous run left in `root`, if it left one.
@@ -1427,7 +1149,7 @@ pub fn from_request(
 /// any child runs, so its presence is what separates a root some run already
 /// claimed from a root that merely has something else in it.
 fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
-    let bytes = match crate::ci::evidence::read_regular_relative(root, "suite-status.json") {
+    let bytes = match crate::evidence::read_regular_relative(root, "suite-status.json") {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(format!("read retained suite status: {error}")),
@@ -1443,7 +1165,7 @@ fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
         return Ok(Some(status));
     }
     let intent =
-        match crate::ci::evidence::read_regular_relative(root, "suite-finalization-intent.json") {
+        match crate::evidence::read_regular_relative(root, "suite-finalization-intent.json") {
             Ok(bytes) => Some(bytes),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound && !status.finalized => None,
             Err(error) => {
@@ -1455,7 +1177,7 @@ fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
     if let Some(intent) = intent {
         let prior: SuiteManifest =
             serde_json::from_slice(&intent).map_err(|error| error.to_string())?;
-        let prior_event = crate::ci::evidence::read_regular_relative(
+        let prior_event = crate::evidence::read_regular_relative(
             root,
             &format!("suite-events/{:06}.json", prior.sequence),
         )
@@ -1487,7 +1209,7 @@ fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
 /// longer exists, and this one cannot measure it after the fact.
 pub fn recover_interrupted(
     root: &Path,
-    selected: &[PinnedScript],
+    selected: &[Scenario],
     limits: uqm_rust::automation::native_window::NativeInventoryLimits,
 ) -> Result<SuiteManifest, String> {
     recover_interrupted_with(root, selected, limits, |_| Ok(()))
@@ -1495,7 +1217,7 @@ pub fn recover_interrupted(
 
 fn recover_interrupted_with(
     root: &Path,
-    selected: &[PinnedScript],
+    selected: &[Scenario],
     limits: uqm_rust::automation::native_window::NativeInventoryLimits,
     mut boundary: impl FnMut(&str) -> Result<(), String>,
 ) -> Result<SuiteManifest, String> {
@@ -1513,7 +1235,7 @@ fn recover_interrupted_with(
             status.schema
         ));
     }
-    let request = crate::ci::evidence::read_regular_relative(root, "suite-request.json")
+    let request = crate::evidence::read_regular_relative(root, "suite-request.json")
         .map_err(|error| format!("read retained suite request: {error}"))?;
     let expected = serde_json::to_vec_pretty(selected).map_err(|error| error.to_string())?;
     if request != expected
@@ -1531,9 +1253,9 @@ fn recover_interrupted_with(
         ));
     }
     let publisher =
-        crate::ci::evidence::EvidencePublisher::open(root).map_err(|error| error.to_string())?;
+        crate::evidence::EvidencePublisher::open(root).map_err(|error| error.to_string())?;
     let has_intent =
-        match crate::ci::evidence::read_regular_relative(root, "suite-finalization-intent.json") {
+        match crate::evidence::read_regular_relative(root, "suite-finalization-intent.json") {
             Ok(_) => true,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => return Err(error.to_string()),
@@ -1598,7 +1320,7 @@ fn recover_interrupted_with(
     let teardown = vec![None; status.scenarios.len()];
     let mut suite = SuiteAccounting {
         root: root.to_path_buf(),
-        publisher: crate::ci::evidence::EvidencePublisher::open(root)
+        publisher: crate::evidence::EvidencePublisher::open(root)
             .map_err(|error| error.to_string())?,
         manifest: SuiteManifest { sequence, ..status },
         started: std::time::Instant::now(),
@@ -1650,7 +1372,7 @@ struct SharedDescriptorDocument {
 /// bytes are what says which obligations the suite still owed, and a replay
 /// needs every input regardless of which scenario consumed it.
 pub fn shared_members(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    snapshot: &crate::evidence::EvidenceSnapshot,
 ) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
     let bytes = match snapshot.read("shared/descriptor.json") {
         Ok(bytes) => bytes,
@@ -1753,7 +1475,7 @@ pub enum ScenarioState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScenarioAccounting {
-    pub script: PinnedScript,
+    pub script: Scenario,
     pub directory: String,
     pub state: ScenarioState,
     pub elapsed_ms: u64,
@@ -1937,7 +1659,7 @@ impl ControllerSupervision {
 pub struct TeardownRow {
     pub scenario: usize,
     pub directory: String,
-    pub script: PinnedScript,
+    pub script: Scenario,
     /// Absent when this process did not supervise a child for the row, which
     /// is either because none was ever attempted or because the attempt
     /// belonged to a process that no longer exists.
@@ -2012,7 +1734,7 @@ fn derive_process_state_clear(manifest: &SuiteManifest, rows: &[TeardownRow]) ->
 /// claims a supervised child, when a retained log is absent or altered, or
 /// when the clean-teardown claim is not the one the rows actually derive.
 fn validate_teardown(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    snapshot: &crate::evidence::EvidenceSnapshot,
     manifest: &SuiteManifest,
 ) -> Result<SuiteTeardown, String> {
     let bytes = snapshot
@@ -2105,15 +1827,15 @@ fn validate_teardown(
 
 /// The checked teardown receipt of a finalized bundle, for reporting.
 pub fn read_teardown(bundle: &Path, manifest: &SuiteManifest) -> Result<SuiteTeardown, String> {
-    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(bundle)
+    let snapshot = crate::evidence::EvidenceSnapshot::open_native(bundle)
         .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
-    snapshot.scoped(|| validate_teardown(&snapshot, manifest))
+    validate_teardown(&snapshot, manifest)
 }
 
 /// Durable serial accounting. Every transition is published before the next child action.
 pub struct SuiteAccounting {
     root: std::path::PathBuf,
-    publisher: crate::ci::evidence::EvidencePublisher,
+    publisher: crate::evidence::EvidencePublisher,
     manifest: SuiteManifest,
     started: std::time::Instant,
     /// Elapsed time this process did not measure, carried from a journal it
@@ -2130,25 +1852,17 @@ pub struct SuiteAccounting {
 
 impl SuiteAccounting {
     #[cfg(test)]
-    pub fn create(
-        root: &Path,
-        selected: &[PinnedScript],
-        precreated: bool,
-    ) -> Result<Self, String> {
-        let authority: Authority = serde_json::from_slice(include_bytes!("../../ci/gates.json"))
-            .map_err(|error| error.to_string())?;
+    pub fn create(root: &Path, selected: &[Scenario]) -> Result<Self, String> {
         Self::create_with_limits(
             root,
             selected,
-            precreated,
-            authority.native_runtime_contract().inventory_limits,
+            crate::native_config::runtime_contract().inventory_limits,
         )
     }
 
     pub fn create_with_limits(
         root: &Path,
-        selected: &[PinnedScript],
-        precreated: bool,
+        selected: &[Scenario],
         limits: uqm_rust::automation::native_window::NativeInventoryLimits,
     ) -> Result<Self, String> {
         let scenarios = selected
@@ -2173,12 +1887,11 @@ impl SuiteAccounting {
         }
         match std::fs::create_dir(root) {
             Ok(()) => {}
-            Err(error) if precreated && error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(format!("create native suite root: {error}")),
         }
-        let publisher = crate::ci::evidence::EvidencePublisher::open(root)
-            .map_err(|error| error.to_string())?;
-        if !crate::ci::evidence::native_regular_file_inventory(root)
+        let publisher =
+            crate::evidence::EvidencePublisher::open(root).map_err(|error| error.to_string())?;
+        if !crate::evidence::native_regular_file_inventory(root)
             .map_err(|error| error.to_string())?
             .is_empty()
             || std::fs::read_dir(root)
@@ -2430,7 +2143,7 @@ impl SuiteAccounting {
             return Err("native suite completion requires a live attempt".into());
         }
         let relative = format!("{}/native-acceptance.json", row.directory);
-        let bytes = crate::ci::evidence::read_regular_relative(&self.root, &relative)
+        let bytes = crate::evidence::read_regular_relative(&self.root, &relative)
             .map_err(|error| error.to_string())?;
         let proof: uqm_rust::automation::NativeAcceptanceManifest = serde_json::from_slice(&bytes)
             .map_err(|error| format!("parse native scenario proof: {error}"))?;
@@ -2532,7 +2245,7 @@ impl SuiteAccounting {
         if !self.manifest.passed && self.manifest.first_failure.is_none() {
             return Err("native suite cannot silently omit selected scenarios".into());
         }
-        let prior = crate::ci::evidence::read_regular_relative(&self.root, "suite-status.json")
+        let prior = crate::evidence::read_regular_relative(&self.root, "suite-status.json")
             .map_err(|error| error.to_string())?;
         self.publish("suite-finalization-intent.json", &prior)
             .map_err(|error| error.to_string())?;
@@ -2540,7 +2253,7 @@ impl SuiteAccounting {
         self.manifest.finalized = true;
         self.persist_with(&mut published)?;
         // The final manifest is the final immutable event, not another transition.
-        let bytes = crate::ci::evidence::read_regular_relative(&self.root, "suite-status.json")
+        let bytes = crate::evidence::read_regular_relative(&self.root, "suite-status.json")
             .map_err(|error| error.to_string())?;
         self.publish("suite-manifest.json", &bytes)
             .map_err(|error| error.to_string())?;
@@ -2651,7 +2364,7 @@ fn millis(duration: std::time::Duration) -> Result<u64, String> {
 }
 
 fn inventory(root: &Path) -> Result<Vec<uqm_rust::automation::NativeRetainedInput>, String> {
-    Ok(crate::ci::evidence::native_regular_file_inventory(root)
+    Ok(crate::evidence::native_regular_file_inventory(root)
         .map_err(|error| error.to_string())?
         .iter()
         .filter(|file| file.relative_path != "suite-index.json")
@@ -2661,10 +2374,7 @@ fn inventory(root: &Path) -> Result<Vec<uqm_rust::automation::NativeRetainedInpu
 
 /// Validate exact selection, durable transitions and the complete bounded offline index.
 /// A valid failed suite remains failed; this function does not convert diagnostics to proof.
-pub fn validate_accounting(
-    root: &Path,
-    selected: &[PinnedScript],
-) -> Result<SuiteManifest, String> {
+pub fn validate_accounting(root: &Path, selected: &[Scenario]) -> Result<SuiteManifest, String> {
     if selected.is_empty()
         || selected
             .iter()
@@ -2675,12 +2385,11 @@ pub fn validate_accounting(
     {
         return Err("native suite expected selection must be nonempty and unique".into());
     }
-    let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(root)
-        .map_err(|error| error.to_string())?;
-    snapshot.scoped(|| {
+    let snapshot =
+        crate::evidence::EvidenceSnapshot::open_native(root).map_err(|error| error.to_string())?;
+    {
         let read = |path: &str| {
-            crate::ci::evidence::read_regular_relative(root, path)
-                .map_err(|error| error.to_string())
+            crate::evidence::read_regular_relative(root, path).map_err(|error| error.to_string())
         };
         let manifest: SuiteManifest = serde_json::from_slice(&read("suite-manifest.json")?)
             .map_err(|error| error.to_string())?;
@@ -2719,11 +2428,29 @@ pub fn validate_accounting(
         validate_retained_journal(&snapshot, &manifest, &index)?;
         validate_retained_scenarios(&snapshot, &manifest)?;
         Ok(manifest)
-    })
+    }
+}
+
+fn materialize_member(
+    snapshot: &crate::evidence::EvidenceSnapshot,
+    directory: &str,
+) -> Result<tempfile::TempDir, String> {
+    let temporary = tempfile::tempdir().map_err(|error| error.to_string())?;
+    let publisher = crate::evidence::EvidencePublisher::open(temporary.path())
+        .map_err(|error| error.to_string())?;
+    let prefix = format!("{directory}/");
+    for file in snapshot.files() {
+        if file.relative_path.starts_with(&prefix) || file.relative_path.starts_with("shared/") {
+            publisher
+                .create(&file.relative_path, &file.bytes)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(temporary)
 }
 
 fn validate_retained_journal(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    snapshot: &crate::evidence::EvidenceSnapshot,
     manifest: &SuiteManifest,
     index: &SuiteIndex,
 ) -> Result<(), String> {
@@ -2769,7 +2496,7 @@ fn validate_retained_journal(
 }
 
 fn validate_retained_scenarios(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    snapshot: &crate::evidence::EvidenceSnapshot,
     manifest: &SuiteManifest,
 ) -> Result<(), String> {
     for file in snapshot
@@ -2811,7 +2538,7 @@ fn validate_retained_scenarios(
 }
 
 fn validate_completed_snapshot(
-    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    snapshot: &crate::evidence::EvidenceSnapshot,
     directory: &str,
 ) -> Result<(), String> {
     let temporary = materialize_member(snapshot, directory)?;
@@ -2872,9 +2599,9 @@ mod tests {
     mod accounting_tests {
         use super::*;
 
-        fn selection() -> Vec<PinnedScript> {
+        fn selection() -> Vec<Scenario> {
             ["a", "b", "c"]
-                .map(|id| PinnedScript {
+                .map(|id| Scenario {
                     path: format!("rust/scripts/{id}.json"),
                     outer_child_timeout_ms: None,
                 })
@@ -2886,7 +2613,7 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("suite");
             let selected = selection();
-            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
             suite.begin(0).unwrap();
             suite
                 .fail(SuitePhase::Execute, Some(0), "observer failed".into())
@@ -2911,13 +2638,13 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("suite");
             let selected = selection();
-            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
             suite
                 .fail(SuitePhase::Preflight, None, "digest mismatch".into())
                 .unwrap();
             suite.finish().unwrap();
             let before = std::fs::read(root.join("suite-manifest.json")).unwrap();
-            assert!(SuiteAccounting::create(&root, &selected, true).is_err());
+            assert!(SuiteAccounting::create(&root, &selected).is_err());
             assert_eq!(
                 before,
                 std::fs::read(root.join("suite-manifest.json")).unwrap()
@@ -2934,7 +2661,7 @@ mod tests {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("suite");
             let selected = selection();
-            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
             assert!(suite.begin(1).is_err());
             suite.begin(0).unwrap();
             assert!(suite.finish().is_err());
@@ -2946,38 +2673,17 @@ mod tests {
     }
 
     #[test]
-    fn all_pinned_script_watchdogs_are_admitted_without_rewriting_actions() {
+    fn every_script_is_admitted_without_rewriting_actions() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
             .parent()
             .unwrap();
-        let authority = crate::ci::authority::load_authority(root).unwrap();
-        let admitted = preflight(
-            root,
-            &authority.native_acceptance.scenario_scripts,
-            &authority,
-        )
-        .unwrap();
-        assert_eq!(admitted.len(), 40);
-        assert_eq!(
-            admitted
-                .iter()
-                .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
-                .count(),
-            24
-        );
-        assert_eq!(
-            admitted
-                .iter()
-                .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
-                .count(),
-            16
-        );
+        let scenarios = crate::native_config::scenarios(root).unwrap();
+        let admitted = preflight(root, &scenarios).unwrap();
+        assert_eq!(admitted.len(), scenarios.len());
         for admission in &admitted {
-            let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS
-                .contains(&admission.script.path.as_str())
-            {
+            let expected = if admission.budgets.max_wallclock_seconds > 300 {
                 900_000
             } else {
                 300_000
@@ -3004,18 +2710,17 @@ mod tests {
             .unwrap()
             .parent()
             .unwrap();
-        let authority = crate::ci::authority::load_authority(root).unwrap();
-        let mut scripts = authority.native_acceptance.scenario_scripts[..2].to_vec();
-        for (index, script) in scripts.iter_mut().enumerate() {
-            script.path = format!("rust/scripts/missing-{index}.json");
-        }
-        let error = preflight(root, &scripts, &authority).unwrap_err();
+        let scripts: Vec<Scenario> = (0..2)
+            .map(|index| Scenario {
+                path: format!("rust/scripts/missing-{index}.json"),
+                outer_child_timeout_ms: None,
+            })
+            .collect();
+        let error = preflight(root, &scripts).unwrap_err();
         for script in scripts {
             assert!(error.contains(&script.path));
         }
-        assert!(preflight(root, &[], &authority)
-            .unwrap_err()
-            .contains("empty"));
+        assert!(preflight(root, &[]).unwrap_err().contains("empty"));
     }
 }
 
@@ -3023,183 +2728,17 @@ mod tests {
 mod finalization_regressions {
     use super::*;
 
-    fn retained_completed_suite(root: &Path, authority: &Authority) -> SuiteAccounting {
-        let fixture = std::env::var("UQM_COMPLETED_NATIVE_FIXTURE")
-            .expect("set UQM_COMPLETED_NATIVE_FIXTURE to an authentic native suite");
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
-        let source = Path::new(&fixture);
-        let source_manifest: SuiteManifest =
-            serde_json::from_slice(&std::fs::read(source.join("suite-manifest.json")).unwrap())
-                .unwrap();
-        assert_eq!(source_manifest.scenarios[0].script, selected[0]);
-        let source_teardown = read_teardown(source, &source_manifest).unwrap();
-        let mut suite = SuiteAccounting::create(root, &selected, false).unwrap();
-        suite.begin(0).unwrap();
-        let publisher = crate::ci::evidence::EvidencePublisher::open(root).unwrap();
-        for file in crate::ci::evidence::native_regular_file_inventory(source).unwrap() {
-            if file.relative_path.starts_with("shared/")
-                || file.relative_path.starts_with("scenarios/0000/")
-            {
-                publisher.create(&file.relative_path, &file.bytes).unwrap();
-            }
-        }
-        suite
-            .record_supervision(
-                0,
-                source_teardown.scenarios[0].supervision.clone().unwrap(),
-                b"",
-                b"",
-            )
-            .unwrap();
-        suite.complete(0).unwrap();
-        suite
-    }
-
-    #[test]
-    #[ignore = "requires authentic retained native proof via UQM_COMPLETED_NATIVE_FIXTURE"]
-    fn retained_completed_native_rejects_reindexed_unsupported_teardown_public_and_s4() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("suite");
-        let mut suite = retained_completed_suite(&root, &authority);
-        suite.finish().unwrap();
-        let manifest = validate_accounting(&root, &selected).unwrap();
-        let source = std::env::var("UQM_COMPLETED_NATIVE_SOURCE_SHA").unwrap();
-        let policy = include_bytes!("../../ci/gates.json");
-        validate_success(&root, &selected, &authority, &source, policy).unwrap();
-        let mut teardown = read_teardown(&root, &manifest).unwrap();
-        let row = teardown.scenarios[0].supervision.as_mut().unwrap();
-        assert_eq!(row.class, FaultClass::Completed);
-        assert_eq!(row.exit_code, Some(0));
-        assert_eq!(row.signal, None);
-        assert_eq!(row.termination_signal, "none");
-        assert_eq!(row.pipe_cleanup, "complete");
-        row.process_group_cleanup = "not-supported".into();
-        teardown.process_state_clear = true;
-        let publisher = crate::ci::evidence::EvidencePublisher::open(&root).unwrap();
-        publisher
-            .replace(
-                TEARDOWN_RELATIVE,
-                &serde_json::to_vec_pretty(&teardown).unwrap(),
-            )
-            .unwrap();
-        let index = SuiteIndex {
-            schema: "uqm-native-suite-index-v1".into(),
-            passed: true,
-            files: inventory(&root).unwrap(),
-        };
-        publisher
-            .replace(
-                "suite-index.json",
-                &serde_json::to_vec_pretty(&index).unwrap(),
-            )
-            .unwrap();
-        for error in [
-            validate_accounting(&root, &selected).unwrap_err(),
-            validate_success(&root, &selected, &authority, &source, policy).unwrap_err(),
-        ] {
-            assert!(error.contains("contradicts the fault class"), "{error}");
-        }
-    }
-
-    #[test]
-    #[ignore = "requires authentic retained native proof via UQM_COMPLETED_NATIVE_FIXTURE"]
-    fn retained_completed_native_torn_success_recovers_failed_without_replaying() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
-        let limits = authority.native_runtime_contract().inventory_limits;
-        for boundary in [
-            "suite-finalization-intent.json",
-            "suite-final-event",
-            "suite-status.json",
-            "suite-manifest.json",
-            TEARDOWN_RELATIVE,
-            "suite-gallery.json",
-            "suite-gallery.html",
-            "before:suite-index.json",
-            "remove:suite-manifest.json",
-            "remove:suite-teardown.json",
-            "remove:suite-gallery.json",
-            "remove:suite-gallery.html",
-            "remove:suite-index.json",
-            "remove:final-event",
-            "replace:suite-status.json",
-            "remove:suite-finalization-intent.json",
-            "index-publication-budget",
-        ] {
-            let temp = tempfile::tempdir().unwrap();
-            let root = temp.path().join("suite");
-            let mut suite = retained_completed_suite(&root, &authority);
-            let prior = retained_status(&root).unwrap().unwrap();
-            let immutable =
-                std::fs::read(root.join(format!("suite-events/{:06}.json", prior.sequence)))
-                    .unwrap();
-            let cleanup = boundary.starts_with("remove:") || boundary.starts_with("replace:");
-            if boundary == "index-publication-budget" {
-                *suite.diagnostics.get_mut("suite-index.json").unwrap() = 0;
-            }
-            suite
-                .finish_with(|name| {
-                    if name
-                        == if cleanup {
-                            "before:suite-index.json"
-                        } else {
-                            boundary
-                        }
-                    {
-                        Err("publication interrupted".into())
-                    } else {
-                        Ok(())
-                    }
-                })
-                .unwrap_err();
-            if cleanup {
-                recover_interrupted_with(&root, &selected, limits, |name| {
-                    if name == boundary {
-                        Err("cleanup interrupted".into())
-                    } else {
-                        Ok(())
-                    }
-                })
-                .unwrap_err();
-            }
-            assert!(
-                suite.manifest.passed,
-                "would have published success: {boundary}"
-            );
-            let recovered = recover_interrupted(&root, &selected, limits).unwrap();
-            assert!(recovered.finalized && !recovered.passed, "{boundary}");
-            assert_eq!(recovered.scenarios, prior.scenarios);
-            assert_eq!(
-                std::fs::read(root.join(format!("suite-events/{:06}.json", prior.sequence)))
-                    .unwrap(),
-                immutable
-            );
-            assert_eq!(validate_accounting(&root, &selected).unwrap(), recovered);
-            assert!(read_teardown(&root, &recovered).unwrap().scenarios[0]
-                .supervision
-                .is_none());
-            assert!(validate_success(
-                &root,
-                &selected,
-                &authority,
-                "unused",
-                include_bytes!("../../ci/gates.json")
-            )
-            .unwrap_err()
-            .contains("did not complete"));
+    fn test_scenario() -> Scenario {
+        Scenario {
+            path: "rust/scripts/battle-v1.json".into(),
+            outer_child_timeout_ms: None,
         }
     }
 
     #[test]
     fn interrupted_recovery_cleanup_is_restartable_at_every_remove_and_replace() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
-        let limits = authority.native_runtime_contract().inventory_limits;
+        let selected = vec![test_scenario()];
+        let limits = crate::native_config::runtime_contract().inventory_limits;
         for boundary in [
             "remove:suite-manifest.json",
             "remove:suite-teardown.json",
@@ -3221,7 +2760,7 @@ mod finalization_regressions {
         ] {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("suite");
-            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
             suite
                 .fail(SuitePhase::Build, None, "build interrupted".into())
                 .unwrap();
@@ -3256,38 +2795,11 @@ mod finalization_regressions {
     }
 
     #[test]
-    fn rehashed_mixed_descriptors_and_executables_do_not_form_one_build() {
-        let descriptor = crate::retained_identity("shared/descriptor.json", b"descriptor A");
-        let executable = crate::retained_identity("inputs/uqm", b"build A");
-        let mut prior = None;
-        correlate_shared_identity(&mut prior, (descriptor.clone(), executable.clone())).unwrap();
-        correlate_shared_identity(&mut prior, (descriptor.clone(), executable.clone())).unwrap();
-        assert!(correlate_shared_identity(
-            &mut prior,
-            (
-                crate::retained_identity("shared/descriptor.json", b"descriptor B"),
-                executable.clone()
-            )
-        )
-        .is_err());
-        assert!(correlate_shared_identity(
-            &mut prior,
-            (
-                descriptor,
-                crate::retained_identity("inputs/uqm", b"build B")
-            )
-        )
-        .is_err());
-    }
-
-    #[test]
     fn recovery_intent_cannot_rewrite_the_prior_immutable_event() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
+        let selected = vec![test_scenario()];
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("suite");
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
             .fail(SuitePhase::Build, None, "original failure".into())
             .unwrap();
@@ -3308,7 +2820,7 @@ mod finalization_regressions {
         assert!(recover_interrupted(
             &root,
             &selected,
-            authority.native_runtime_contract().inventory_limits
+            crate::native_config::runtime_contract().inventory_limits
         )
         .unwrap_err()
         .contains("contradicts the journal"));
@@ -3316,10 +2828,8 @@ mod finalization_regressions {
 
     #[test]
     fn every_interrupted_final_document_recovers_without_execution_or_success() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
-        let limits = authority.native_runtime_contract().inventory_limits;
+        let selected = vec![test_scenario()];
+        let limits = crate::native_config::runtime_contract().inventory_limits;
         for boundary in [
             "suite-finalization-intent.json",
             "suite-final-event",
@@ -3332,7 +2842,7 @@ mod finalization_regressions {
         ] {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("suite");
-            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
             suite
                 .fail(SuitePhase::Build, None, "build interrupted".into())
                 .unwrap();
@@ -3358,11 +2868,11 @@ mod finalization_regressions {
     fn success_teardown_requires_a_completed_drained_verified_child() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("suite");
-        let selected = vec![PinnedScript {
+        let selected = vec![Scenario {
             path: "rust/scripts/fixture.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
             .fail(SuitePhase::Build, None, "fixture".into())
             .unwrap();
@@ -3401,14 +2911,14 @@ mod finalization_regressions {
             }
             let rows = vec![if mutation == 0 { None } else { Some(row) }];
             let receipt = SuiteTeardown::build(&manifest, &rows);
-            crate::ci::evidence::EvidencePublisher::open(&root)
+            crate::evidence::EvidencePublisher::open(&root)
                 .unwrap()
                 .replace(
                     TEARDOWN_RELATIVE,
                     &serde_json::to_vec_pretty(&receipt).unwrap(),
                 )
                 .unwrap();
-            let snapshot = crate::ci::evidence::EvidenceSnapshot::open_native(&root).unwrap();
+            let snapshot = crate::evidence::EvidenceSnapshot::open_native(&root).unwrap();
             assert_eq!(
                 validate_teardown(&snapshot, &manifest).is_ok(),
                 mutation == 4,
@@ -3417,6 +2927,3 @@ mod finalization_regressions {
         }
     }
 }
-
-#[cfg(test)]
-mod outer_deadline_tests;

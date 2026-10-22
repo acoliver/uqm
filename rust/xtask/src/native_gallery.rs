@@ -26,8 +26,8 @@ use std::path::{Component, Path};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ci::authority::PinnedScript;
-use crate::ci::evidence::{EvidencePublisher, EvidenceSnapshot};
+use crate::evidence::{EvidencePublisher, EvidenceSnapshot};
+use crate::native_config::Scenario;
 use crate::native_suite::{ScenarioAccounting, ScenarioState, SuiteManifest};
 use uqm_rust::automation::native_checkpoint::{CheckpointClass, NativeCheckpointPlan};
 use uqm_rust::automation::{
@@ -110,7 +110,7 @@ pub(crate) struct GalleryStage {
 #[serde(deny_unknown_fields)]
 pub(crate) struct GalleryScenario {
     pub index: usize,
-    pub script: PinnedScript,
+    pub script: Scenario,
     pub directory: String,
     pub state: String,
     pub detail: Option<String>,
@@ -288,7 +288,7 @@ struct ScenarioPlan {
 
 fn scenario_plan(
     scripts: &BTreeMap<String, Vec<u8>>,
-    pinned: &PinnedScript,
+    pinned: &Scenario,
 ) -> Result<Option<ScenarioPlan>, String> {
     let filename = Path::new(&pinned.path)
         .file_name()
@@ -821,8 +821,8 @@ mod tests {
 
     const SCRIPT: &str = r#"{"version":1,"name":"gallery-fixture","seed":7,"budgets":{"max_input_ticks":1000,"max_presentations":1000,"max_wallclock_seconds":60},"steps":[{"action":"capture","label":"menu"},{"action":"assert_battle_frames","minimum":4},{"action":"finish"}]}"#;
 
-    fn pinned(path: &str) -> PinnedScript {
-        PinnedScript {
+    fn pinned(path: &str) -> Scenario {
+        Scenario {
             path: path.to_string(),
             outer_child_timeout_ms: None,
         }
@@ -1077,7 +1077,7 @@ mod tests {
             suite_passed: false,
             scenarios: vec![GalleryScenario {
                 index: 0,
-                script: PinnedScript {
+                script: Scenario {
                     path: hostile.into(),
                     outer_child_timeout_ms: None,
                 },

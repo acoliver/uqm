@@ -372,7 +372,6 @@ mod tests {
             .to_path_buf();
         let roots = [
             repo.join("rust/src/automation"),
-            repo.join("rust/harness"),
             repo.join(".github/workflows"),
         ];
         for root in roots {

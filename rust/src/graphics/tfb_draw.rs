@@ -1431,8 +1431,10 @@ fn filled_image_canvas(source: &Canvas, fill_color: Color) -> Result<Canvas, Can
 
     filled.with_pixels_mut(|filled_pixels| {
         for (source_pixel, filled_pixel) in source_pixels
-            .chunks_exact(4)
-            .zip(filled_pixels.chunks_exact_mut(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(filled_pixels.as_chunks_mut::<4>().0.iter_mut())
         {
             let source_alpha = source_pixel[3] as u16;
             if source_alpha == 0 {
@@ -3467,8 +3469,10 @@ fn test_draw_filled_image_repeated_scaling_does_not_grow() {
     assert_eq!(image.filled().unwrap().extent(), Extent::new(4, 4));
     let green_pixels = destination
         .pixels()
-        .chunks_exact(4)
-        .filter(|pixel| *pixel == [0, 255, 0, 255])
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|pixel| **pixel == [0, 255, 0, 255])
         .count();
     assert_eq!(green_pixels, 32);
 }

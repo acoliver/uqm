@@ -74,12 +74,16 @@ fn reference_initial_pcm_gain_and_clock() {
     let mut pcm = vec![0; reference.len() / 2];
     decoder("mix").decode(&mut pcm).unwrap();
     let actual_peak = pcm
-        .chunks_exact(2)
-        .map(|v| f32::from(i16::from_le_bytes(v.try_into().unwrap())).abs() / 32767.0)
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|v| f32::from(i16::from_le_bytes(*v)).abs() / 32767.0)
         .fold(0.0_f32, f32::max);
     let reference_peak = reference
-        .chunks_exact(4)
-        .map(|v| f32::from_le_bytes(v.try_into().unwrap()).abs())
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|v| f32::from_le_bytes(*v).abs())
         .fold(0.0_f32, f32::max);
     assert!(
         (actual_peak - reference_peak).abs() < 1.0 / 32767.0,
@@ -111,9 +115,14 @@ fn reference_pcm_pitch_gain_pan_and_effects() {
         let mut absolute_error = 0.0_f64;
         let mut peak = 0.0_f32;
         let mut reference_peak = 0.0_f32;
-        for (actual, expected) in pcm.chunks_exact(2).zip(reference.chunks_exact(4)) {
-            let actual = f32::from(i16::from_le_bytes(actual.try_into().unwrap())) / 32767.0;
-            let expected = f32::from_le_bytes(expected.try_into().unwrap());
+        for (actual, expected) in pcm
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(reference.as_chunks::<4>().0.iter())
+        {
+            let actual = f32::from(i16::from_le_bytes(*actual)) / 32767.0;
+            let expected = f32::from_le_bytes(*expected);
             absolute_error += f64::from((actual - expected).abs());
             peak = peak.max(actual.abs());
             reference_peak = reference_peak.max(expected.abs());
@@ -129,11 +138,13 @@ fn reference_pcm_pitch_gain_pan_and_effects() {
             .enumerate()
         {
             let error: f64 = actual
-                .chunks_exact(2)
-                .zip(expected.chunks_exact(4))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .zip(expected.as_chunks::<4>().0.iter())
                 .map(|(a, e)| {
-                    (f64::from(i16::from_le_bytes(a.try_into().unwrap())) / 32767.0
-                        - f64::from(f32::from_le_bytes(e.try_into().unwrap())))
+                    (f64::from(i16::from_le_bytes(*a)) / 32767.0
+                        - f64::from(f32::from_le_bytes(*e)))
                     .abs()
                 })
                 .sum();

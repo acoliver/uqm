@@ -2,12 +2,12 @@
 //!
 //! `native` is the single user-facing entry for the real-window autoplay
 //! runner: `list` the pinned scenario inventory, `run` a selected suite,
-//! `validate` a retained bundle offline, `report` one, `replay` a recorded run
-//! from its retained inputs, and render the checkpoint `gallery`.
+//! `validate` a retained bundle offline, `report` one, and render the
+//! checkpoint `gallery`.
 //!
 //! This module owns argument parsing and dispatch and nothing else. `run`
 //! delegates to the existing suite adapter in the crate root, `validate` to
-//! [`crate::native_suite`], `replay` to [`crate::native_replay`] and `gallery`
+//! [`crate::native_suite`] and `gallery`
 //! to [`crate::native_gallery`]. No run, validation or catalog logic is
 //! reimplemented here.
 //!
@@ -17,8 +17,6 @@
 //! seed, selects a weaker build or narrows an assertion.
 
 use std::path::{Path, PathBuf};
-
-use crate::ci::authority::Authority;
 
 /// The native acceptance drives the linked build's real OS window.
 ///
@@ -257,7 +255,6 @@ pub fn usage() -> String {
      smoke --artifacts DIR --content DIR [--pr N]\n  \
      validate BUNDLE [--scenario NAME]... [--all]\n  \
      report BUNDLE [--json]\n  \
-     replay BUNDLE --output DIR [--scenario NAME]... [--seed N]\n  \
      gallery BUNDLE --output DIR [--json]\n  \
      extract-save --artifacts SUITE_OR_SCENARIO_DIR --slot N --output rust/scripts/saves/NAME.sav"
         .into()
@@ -273,7 +270,6 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<(), String> {
         "smoke" => smoke(root, &options),
         "validate" => validate(root, &options),
         "report" => report(&options),
-        "replay" => replay(root, &options),
         "gallery" => gallery(&options),
         "extract-save" => extract_save(root, &options),
         other => Err(format!("unknown native command '{other}'\n{}", usage())),
@@ -288,16 +284,15 @@ fn list(root: &Path, options: &Options) -> Result<(), String> {
         [only] => Some(only.as_str()),
         _ => return Err("native list takes at most one DOMAIN".into()),
     };
-    let authority = load_authority(root)?;
     let required = uqm_rust::automation::suite::required_suite();
     let mut rows = Vec::new();
-    for pinned in &authority.native_acceptance.scenario_scripts {
+    for pinned in &crate::native_config::scenarios(root)? {
         let stem = scenario_stem(&pinned.path)?;
         let tags = tags_for(&stem);
         if domain.is_some_and(|domain| !tags.iter().any(|tag| tag == domain)) {
             continue;
         }
-        let admission = crate::native_suite::admit_script(root, pinned, &authority)?;
+        let admission = crate::native_suite::admit_script(root, pinned)?;
         rows.push(serde_json::json!({
             "scenario": stem,
             "path": pinned.path,
@@ -310,7 +305,7 @@ fn list(root: &Path, options: &Options) -> Result<(), String> {
     }
     if domain.is_some() && rows.is_empty() {
         return Err(format!(
-            "no pinned scenario carries the tag {}; known tags come from the scenario matrix",
+            "no scenario carries the tag {}; known tags come from the scenario matrix",
             domain.unwrap_or_default()
         ));
     }
@@ -397,11 +392,10 @@ fn run_suite(root: &Path, options: &Options) -> Result<(), String> {
             options.positional.join(" ")
         ));
     }
-    let authority = load_authority(root)?;
-    check_declared(options, &authority)?;
+    check_declared(options)?;
     let selection = options.selection();
     if let Some(seed) = options.seed {
-        check_seed(root, &authority, selection.as_deref(), seed)?;
+        check_seed(root, selection.as_deref(), seed)?;
     }
     let artifacts = options.required_path(
         &options.artifacts,
@@ -428,7 +422,6 @@ fn run_selection(
             scenarios,
             evidence_root: Some(artifacts),
             content_root: Some(content),
-            verify_workflow_selection: true,
         },
     )
 }
@@ -472,7 +465,7 @@ fn smoke(root: &Path, options: &Options) -> Result<(), String> {
 }
 
 /// Check what the caller declared against what this command actually drives.
-fn check_declared(options: &Options, authority: &Authority) -> Result<(), String> {
+fn check_declared(options: &Options) -> Result<(), String> {
     if let Some(profile) = &options.profile {
         if profile != NATIVE_PROFILE {
             return Err(format!(
@@ -490,11 +483,11 @@ fn check_declared(options: &Options, authority: &Authority) -> Result<(), String
         }
     }
     if let Some(platform) = &options.platform {
-        let declared = &authority.native_acceptance.platform;
+        let declared = crate::native_config::PLATFORM;
         if platform != declared {
             return Err(format!(
-                "--platform {platform} is not the platform the authority declares for native \
-                 acceptance, which is {declared}"
+                "--platform {platform} is not the platform native acceptance runs on, which is \
+                 {declared}"
             ));
         }
     }
@@ -506,14 +499,9 @@ fn check_declared(options: &Options, authority: &Authority) -> Result<(), String
 /// The seed belongs to the script and to the resolved scenario identity that
 /// every checkpoint id is derived from. Applying a different one here would
 /// change what the run proves, so a mismatch is refused instead.
-fn check_seed(
-    root: &Path,
-    authority: &Authority,
-    selection: Option<&str>,
-    seed: u32,
-) -> Result<(), String> {
-    let selected = crate::selected_acceptance_scripts(authority, selection)?;
-    let differing: Vec<String> = crate::native_suite::preflight(root, &selected, authority)?
+fn check_seed(root: &Path, selection: Option<&str>, seed: u32) -> Result<(), String> {
+    let selected = crate::native_config::select(root, selection)?;
+    let differing: Vec<String> = crate::native_suite::preflight(root, &selected)?
         .into_iter()
         .filter(|admission| admission.seed != seed)
         .map(|admission| format!("{} (seed {})", admission.script.path, admission.seed))
@@ -537,19 +525,13 @@ fn validate(root: &Path, options: &Options) -> Result<(), String> {
         "offline validation checks that a retained bundle is internally consistent. It does not \
          start the game and is not a gameplay replay."
     );
-    if std::env::var_os("UQM_CI_EVENT_NAME").is_some() {
-        crate::validate_native_suite_bundle(root, &bundle, options.selection().as_deref())
-    } else {
-        let authority = load_authority(root)?;
-        let selected =
-            crate::selected_acceptance_scripts(&authority, options.selection().as_deref())?;
-        let manifest = crate::native_suite::validate_accounting(&bundle, &selected)?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?
-        );
-        suite_result(&manifest)
-    }
+    let selected = crate::native_config::select(root, options.selection().as_deref())?;
+    let manifest = crate::native_suite::validate_accounting(&bundle, &selected)?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?
+    );
+    suite_result(&manifest)
 }
 
 /// Summarise a retained bundle, including the obligations it did not satisfy.
@@ -570,7 +552,7 @@ fn report_bundle(bundle: &Path, json: bool) -> Result<(), String> {
     };
     let bundle = bundle.to_path_buf();
     let manifest: crate::native_suite::SuiteManifest = serde_json::from_slice(
-        &crate::ci::evidence::read_regular_relative(&bundle, "suite-manifest.json")
+        &crate::evidence::read_regular_relative(&bundle, "suite-manifest.json")
             .map_err(|error| format!("read suite-manifest.json: {error}"))?,
     )
     .map_err(|error| format!("parse suite-manifest.json: {error}"))?;
@@ -689,26 +671,6 @@ fn child_summary(row: &crate::native_suite::TeardownRow) -> String {
     }
 }
 
-/// Re-execute a recorded run from its retained inputs.
-fn replay(root: &Path, options: &Options) -> Result<(), String> {
-    options.require_only("replay", &["--output", "--scenario", "--seed"])?;
-    let bundle = options.positional_one("replay", "BUNDLE")?;
-    let output = options.required_path(
-        &options.output,
-        "native replay requires --output DIR: a fresh directory for the replay evidence",
-    )?;
-    let _display_awake = crate::display_awake::hold_display_awake()?;
-    crate::native_replay::replay(
-        root,
-        &crate::native_replay::ReplayRequest {
-            prior: &bundle,
-            output: &output,
-            scenarios: options.selection().as_deref(),
-            seed: options.seed,
-        },
-    )
-}
-
 /// Render the checkpoint catalog for a retained bundle.
 fn gallery(options: &Options) -> Result<(), String> {
     options.require_only("gallery", &["--output", "--json"])?;
@@ -758,14 +720,7 @@ fn extract_save(root: &Path, options: &Options) -> Result<(), String> {
     let slot = options
         .slot
         .ok_or("native extract-save requires --slot N: the slot the run saved to")?;
-    let authority = load_authority(root)?;
-    crate::native_save::extract_save(root, &authority, &run, slot, &root.join(out))
-}
-
-fn load_authority(root: &Path) -> Result<Authority, String> {
-    let authority = crate::ci::authority::load_authority(root)?;
-    crate::ci::authority::validate_authority(&authority)?;
-    Ok(authority)
+    crate::native_save::extract_save(root, &run, slot, &root.join(out))
 }
 
 #[cfg(test)]
@@ -860,16 +815,14 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("--seed"), "{error}");
         assert!(error.contains("--output"), "{error}");
-        assert!(options
-            .require_only("replay", &["--output", "--scenario", "--seed"])
-            .is_ok());
+        assert!(options.require_only("run", &["--seed"]).is_ok());
     }
 
     #[test]
     fn an_unknown_command_names_the_ones_that_exist() {
         let error = run(Path::new("/"), &["reply".to_string()]).unwrap_err();
         assert!(error.contains("unknown native command 'reply'"), "{error}");
-        for command in ["list", "run", "validate", "report", "replay", "gallery"] {
+        for command in ["list", "run", "validate", "report", "gallery"] {
             assert!(error.contains(command), "{command} missing from usage");
         }
     }
@@ -886,26 +839,21 @@ mod tests {
         assert!(run(root, &arguments("gallery bundle"))
             .unwrap_err()
             .contains("--output DIR"));
-        assert!(run(root, &arguments("replay bundle"))
-            .unwrap_err()
-            .contains("--output DIR"));
     }
 
     #[test]
     fn declared_profile_renderer_and_platform_are_checked_not_applied() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
         for (text, expected) in [
             ("--profile debug", "canonical release build"),
             ("--renderer sdl2-software-dummy", "sdl2-native-window"),
             ("--platform linux", "which is macos"),
         ] {
-            let error = check_declared(&parse(text).unwrap(), &authority).unwrap_err();
+            let error = check_declared(&parse(text).unwrap()).unwrap_err();
             assert!(error.contains(expected), "{text}: {error}");
         }
         let accepted =
             parse("--profile release --renderer sdl2-native-window --platform macos").unwrap();
-        assert!(check_declared(&accepted, &authority).is_ok());
+        assert!(check_declared(&accepted).is_ok());
     }
 
     #[cfg(target_os = "macos")]
@@ -916,10 +864,7 @@ mod tests {
             &parse("--profile debug").unwrap(),
         )
         .unwrap_err();
-        assert!(
-            error.contains("canonical release build") || error.contains("gates.json"),
-            "{error}"
-        );
+        assert!(error.contains("canonical release build"), "{error}");
     }
 
     #[cfg(target_os = "macos")]
@@ -959,13 +904,12 @@ mod tests {
     }
 
     /// A retained failure bundle, produced through the real accounting.
-    fn failed_bundle(root: &Path) -> Vec<crate::ci::authority::PinnedScript> {
-        let selected = vec![crate::ci::authority::PinnedScript {
+    fn failed_bundle(root: &Path) -> Vec<crate::native_config::Scenario> {
+        let selected = vec![crate::native_config::Scenario {
             path: "rust/scripts/report-fixture.json".into(),
             outer_child_timeout_ms: None,
         }];
-        let mut suite =
-            crate::native_suite::SuiteAccounting::create(root, &selected, false).unwrap();
+        let mut suite = crate::native_suite::SuiteAccounting::create(root, &selected).unwrap();
         suite.begin(0).unwrap();
         suite
             .record_supervision(
@@ -1029,11 +973,9 @@ mod tests {
     }
 
     #[test]
-    fn every_pinned_scenario_resolves_to_a_scenario_name() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
-        assert_eq!(authority.native_acceptance.scenario_scripts.len(), 40);
-        for pinned in &authority.native_acceptance.scenario_scripts {
+    fn every_scenario_resolves_to_a_scenario_name() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for pinned in &crate::native_config::scenarios(&root).unwrap() {
             assert!(!scenario_stem(&pinned.path).unwrap().is_empty());
         }
     }

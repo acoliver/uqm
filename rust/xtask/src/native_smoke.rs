@@ -1,6 +1,6 @@
 //! `native smoke`: a short playability check of the game on a real window.
 //!
-//! The smoke set (`rust/ci/smoke.json`) is the smallest set of existing
+//! The smoke set (`rust/xtask/smoke.json`) is the smallest set of existing
 //! scenarios that together play the main menu, flight in a solar system and in
 //! hyperspace, orbit, landing and takeoff, a conversation, a battle, and a save
 //! followed by a load. Each scenario runs through the same code path as
@@ -14,7 +14,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
-pub const SMOKE_SET: &str = "rust/ci/smoke.json";
+pub const SMOKE_SET: &str = "rust/xtask/smoke.json";
 const SMOKE_SCHEMA: &str = "uqm-smoke-v1";
 const RECEIPT_SCHEMA: &str = "uqm-smoke-receipt-v1";
 
@@ -354,21 +354,14 @@ mod tests {
     }
 
     #[test]
-    fn every_smoke_scenario_is_pinned_in_gates_and_the_six_functions_are_covered() {
+    fn every_smoke_scenario_exists_and_the_six_functions_are_covered() {
         let root = repo_root();
         let set = SmokeSet::load(&root).unwrap();
-        let gates: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(root.join("rust/ci/gates.json")).unwrap())
-                .unwrap();
-        let pinned: Vec<String> = gates["native_acceptance"]["scenario_scripts"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|script| script["path"].as_str())
-            .filter_map(|path| Path::new(path).file_stem()?.to_str().map(str::to_string))
-            .collect();
         for scenario in &set.scenarios {
-            assert!(pinned.contains(scenario), "{scenario} is not in gates.json");
+            assert!(
+                root.join(format!("rust/scripts/{scenario}.json")).is_file(),
+                "{scenario} has no script"
+            );
         }
         for function in REQUIRED_FUNCTIONS {
             assert!(

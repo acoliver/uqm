@@ -1621,12 +1621,8 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
     if !root.is_absolute() {
         return Err("evidence root must be absolute".to_string());
     }
-    let precreated_root = matches!(
-        std::env::var("UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT").as_deref(),
-        Ok("1")
-    );
     let script_source_dir = script.parent().map(Path::to_path_buf);
-    let fresh_root = create_fresh_root(root, precreated_root)?;
+    let fresh_root = create_fresh_root(root)?;
     let root = fresh_root.path();
     let _budget = super::native_budget::begin(root, runtime_contract.inventory_limits)?;
     let mut child_spawned = false;
@@ -3024,7 +3020,7 @@ impl Drop for FreshRoot {
     }
 }
 
-fn create_fresh_root(root: &Path, allow_precreated: bool) -> Result<FreshRoot, String> {
+fn create_fresh_root(root: &Path) -> Result<FreshRoot, String> {
     use std::ffi::CString;
     use std::os::fd::{AsRawFd as _, FromRawFd as _};
     use std::os::unix::ffi::OsStrExt as _;
@@ -3041,7 +3037,6 @@ fn create_fresh_root(root: &Path, allow_precreated: bool) -> Result<FreshRoot, S
     let filename_os = root
         .file_name()
         .ok_or_else(|| format!("evidence root has no filename: {}", root.display()))?;
-    let bound_path = parent_path.join(filename_os);
     let parent = CString::new(parent_path.as_os_str().as_bytes())
         .map_err(|_| "evidence root parent contains a NUL byte".to_string())?;
     let filename = CString::new(filename_os.as_bytes())
@@ -3072,16 +3067,12 @@ fn create_fresh_root(root: &Path, allow_precreated: bool) -> Result<FreshRoot, S
         ));
     }
     let previous_directory = unsafe { std::os::fd::OwnedFd::from_raw_fd(previous_directory) };
-    let created = if unsafe { libc::mkdirat(parent_fd.as_raw_fd(), filename.as_ptr(), 0o700) } == 0
-    {
-        true
-    } else {
-        let error = std::io::Error::last_os_error();
-        if !allow_precreated || error.raw_os_error() != Some(libc::EEXIST) {
-            return Err(format!("create evidence root: {error}"));
-        }
-        false
-    };
+    if unsafe { libc::mkdirat(parent_fd.as_raw_fd(), filename.as_ptr(), 0o700) } != 0 {
+        return Err(format!(
+            "create evidence root: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
     let directory = unsafe {
         libc::openat(
             parent_fd.as_raw_fd(),
@@ -3091,34 +3082,23 @@ fn create_fresh_root(root: &Path, allow_precreated: bool) -> Result<FreshRoot, S
     };
     if directory < 0 {
         let error = std::io::Error::last_os_error();
-        if created {
-            unsafe {
-                libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
-            }
+        unsafe {
+            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
         }
         return Err(format!("bind evidence root: {error}"));
     }
     let directory = unsafe { std::os::fd::OwnedFd::from_raw_fd(directory) };
-    if created && unsafe { libc::fchmod(directory.as_raw_fd(), 0o750) } != 0 {
+    if unsafe { libc::fchmod(directory.as_raw_fd(), 0o750) } != 0 {
         let error = std::io::Error::last_os_error();
         unsafe {
             libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
         }
         return Err(format!("publish evidence root: {error}"));
     }
-    if !created {
-        let mut members = fs::read_dir(&bound_path)
-            .map_err(|error| format!("inspect precreated evidence root: {error}"))?;
-        if members.next().is_some() {
-            return Err("precreated evidence root is not empty".to_string());
-        }
-    }
     if unsafe { libc::fchdir(directory.as_raw_fd()) } != 0 {
         let error = std::io::Error::last_os_error();
-        if created {
-            unsafe {
-                libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
-            }
+        unsafe {
+            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
         }
         return Err(format!("enter bound evidence root: {error}"));
     }
@@ -3149,7 +3129,6 @@ fn validate_shared_linked_build(
         &receipt.native_build_evidence,
         &receipt.cargo_manifest,
         &receipt.cargo_lock,
-        &receipt.authority,
         &receipt.canonical_toolchain,
     ] {
         let bytes = shared.read(root, &expected.relative_path, limit)?;
@@ -3160,7 +3139,6 @@ fn validate_shared_linked_build(
     validate_native_linked_build_semantics(
         &read("provider-report.json")?,
         &read("native-build-evidence.json")?,
-        &read("gates.json")?,
         &read("canonical-toolchain.json")?,
     )
     .map_err(|error| format!("shared linked-build semantics: {error:?}"))
@@ -3190,18 +3168,11 @@ fn retain_linked_build_proof(
         member_limit,
     )
     .map_err(|error| format!("read linked-build native build evidence: {error:?}"))?;
-    let authority = read_bounded_regular(&source_root.join("gates.json"), member_limit)
-        .map_err(|error| format!("read linked-build authority: {error:?}"))?;
     let canonical_toolchain =
         read_bounded_regular(&source_root.join("canonical-toolchain.json"), member_limit)
             .map_err(|error| format!("read linked-build canonical toolchain: {error:?}"))?;
-    validate_native_linked_build_semantics(
-        &provider_report,
-        &build_evidence,
-        &authority,
-        &canonical_toolchain,
-    )
-    .map_err(|error| format!("linked-build semantic validation failed: {error:?}"))?;
+    validate_native_linked_build_semantics(&provider_report, &build_evidence, &canonical_toolchain)
+        .map_err(|error| format!("linked-build semantic validation failed: {error:?}"))?;
     let members = [
         ("cargo-messages.jsonl", &receipt.cargo_messages),
         ("rust-archive.a", &receipt.rust_archive),
@@ -3211,7 +3182,6 @@ fn retain_linked_build_proof(
         ("native-build-evidence.json", &receipt.native_build_evidence),
         ("Cargo.toml", &receipt.cargo_manifest),
         ("Cargo.lock", &receipt.cargo_lock),
-        ("gates.json", &receipt.authority),
         ("canonical-toolchain.json", &receipt.canonical_toolchain),
     ];
     let mut retained = Vec::new();
@@ -3325,7 +3295,6 @@ fn validate_linked_build_receipt(
         ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
-        ("inputs/linked-build/gates.json", &receipt.authority),
         (
             "inputs/linked-build/canonical-toolchain.json",
             &receipt.canonical_toolchain,
@@ -4296,7 +4265,6 @@ mod tests {
             native_build_evidence: input("inputs/linked-build/native-build-evidence.json"),
             cargo_manifest: input("inputs/linked-build/Cargo.toml"),
             cargo_lock: input("inputs/linked-build/Cargo.lock"),
-            authority: input("inputs/linked-build/gates.json"),
             canonical_toolchain: input("inputs/linked-build/canonical-toolchain.json"),
         }
     }
@@ -5090,7 +5058,7 @@ mod tests {
         let outside = tempfile::tempdir().unwrap();
         let requested = parent.path().join("evidence");
         let retained = parent.path().join("retained");
-        let root = create_fresh_root(&requested, false).unwrap();
+        let root = create_fresh_root(&requested).unwrap();
         assert_eq!(
             fs::metadata(&requested).unwrap().permissions().mode() & 0o777,
             0o750
@@ -5103,30 +5071,6 @@ mod tests {
         assert_eq!(fs::read(retained.join("proof")).unwrap(), b"bound");
         assert!(!outside.path().join("proof").exists());
         fs::remove_file(requested).unwrap();
-    }
-
-    #[test]
-    fn precreated_evidence_root_must_be_empty_and_remains_bound() {
-        let _cwd_guard = CWD_TEST_LOCK.lock().unwrap();
-        let parent = tempfile::tempdir().unwrap();
-        let requested = parent.path().join("evidence");
-        fs::create_dir(&requested).unwrap();
-
-        let root = create_fresh_root(&requested, true).unwrap();
-        fs::write(root.path().join("proof"), b"bound").unwrap();
-        drop(root);
-        assert_eq!(fs::read(requested.join("proof")).unwrap(), b"bound");
-    }
-
-    #[test]
-    fn precreated_evidence_root_rejects_existing_members() {
-        let _cwd_guard = CWD_TEST_LOCK.lock().unwrap();
-        let parent = tempfile::tempdir().unwrap();
-        let requested = parent.path().join("evidence");
-        fs::create_dir(&requested).unwrap();
-        fs::write(requested.join("stale"), b"stale").unwrap();
-
-        assert!(create_fresh_root(&requested, true).is_err());
     }
 
     #[test]

@@ -845,7 +845,6 @@ pub struct NativeLinkedBuildReceipt {
     pub native_build_evidence: NativeRetainedInput,
     pub cargo_manifest: NativeRetainedInput,
     pub cargo_lock: NativeRetainedInput,
-    pub authority: NativeRetainedInput,
     pub canonical_toolchain: NativeRetainedInput,
 }
 
@@ -3838,7 +3837,6 @@ fn validate_linked_build_receipt_bundle(
         ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
-        ("inputs/linked-build/gates.json", &receipt.authority),
         (
             "inputs/linked-build/canonical-toolchain.json",
             &receipt.canonical_toolchain,
@@ -3869,9 +3867,8 @@ fn validate_linked_build_receipt_bundle(
     let evidence = validate_retained_input(root, &receipt.native_build_evidence, limit)?;
     validate_retained_input(root, &receipt.cargo_manifest, limit)?;
     validate_retained_input(root, &receipt.cargo_lock, limit)?;
-    let authority = validate_retained_input(root, &receipt.authority, limit)?;
     let canonical_toolchain = validate_retained_input(root, &receipt.canonical_toolchain, limit)?;
-    validate_native_linked_build_semantics(&provider, &evidence, &authority, &canonical_toolchain)
+    validate_native_linked_build_semantics(&provider, &evidence, &canonical_toolchain)
 }
 
 fn validate_linked_cargo_messages(
@@ -3965,30 +3962,16 @@ fn cargo_target_has_kind(message: &serde_json::Value, expected: &str) -> bool {
 pub fn validate_native_linked_build_semantics(
     provider_bytes: &[u8],
     evidence_bytes: &[u8],
-    authority_bytes: &[u8],
     canonical_toolchain_bytes: &[u8],
 ) -> Result<(), NativeWindowProofError> {
     let provider: LinkedProviderReport =
         serde_json::from_slice(provider_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
     let evidence: LinkedNativeBuildEvidence =
         serde_json::from_slice(evidence_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
-    let authority: serde_json::Value =
-        serde_json::from_slice(authority_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
     let canonical_toolchain: LinkedToolchainIdentity =
         serde_json::from_slice(canonical_toolchain_bytes)
             .map_err(|_| NativeWindowProofError::Receipt)?;
-    let authority_ledger = authority
-        .pointer("/ledger_identity/sha256")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(NativeWindowProofError::Receipt)?;
-    let rust_prefix = authority
-        .pointer("/tools/rust/expected_output_prefix")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(NativeWindowProofError::Receipt)?;
-    if authority.get("schema").and_then(serde_json::Value::as_str) == Some("uqm-s4-ci-authority-v1")
-        && provider.ledger_sha256 == authority_ledger
-        && evidence.toolchain == canonical_toolchain
-        && evidence.toolchain.rustc.version.starts_with(rust_prefix)
+    if evidence.toolchain == canonical_toolchain
         && valid_linked_provider_report(&provider)
         && valid_linked_build_evidence(&evidence)
     {
@@ -4756,7 +4739,7 @@ mod tests {
         };
         let linked_root = root.path().join("inputs/linked-build");
         fs::create_dir_all(&linked_root).unwrap();
-        let linked_members: [(&str, &[u8]); 10] = [
+        let linked_members: [(&str, &[u8]); 9] = [
             (
                 "cargo-messages.jsonl",
                 concat!(
@@ -4780,10 +4763,6 @@ mod tests {
             ),
             ("Cargo.toml", b"[package]\nname = \"uqm\"\n"),
             ("Cargo.lock", b"# lock\n"),
-            (
-                "gates.json",
-                br#"{"schema":"uqm-s4-ci-authority-v1","ledger_identity":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"tools":{"rust":{"expected_output_prefix":"rustc 1.97.1 "}}}"#,
-            ),
             (
                 "canonical-toolchain.json",
                 br#"{"target":"aarch64-apple-darwin","rustc":{"executable":"/rustc","version":"rustc 1.97.1 test","sha256":"aa","effective_args":[]},"cargo":{"executable":"/cargo","version":"1","sha256":"aa","effective_args":[]},"cc":{"executable":"/cc","version":"1","sha256":"aa","effective_args":[]},"ar":{"executable":"/ar","version":"1","sha256":"aa","effective_args":[]},"nm":{"executable":"/nm","version":"1","sha256":"aa","effective_args":[]},"pkg_config":{"executable":"/pkg-config","version":"1","sha256":"aa","effective_args":[]},"linker":{"executable":"/linker","version":"1","sha256":"aa","effective_args":[]}}"#,
@@ -4834,7 +4813,6 @@ mod tests {
             native_build_evidence: linked_input("native-build-evidence.json"),
             cargo_manifest: linked_input("Cargo.toml"),
             cargo_lock: linked_input("Cargo.lock"),
-            authority: linked_input("gates.json"),
             canonical_toolchain: linked_input("canonical-toolchain.json"),
         };
         fs::write(
@@ -5302,7 +5280,6 @@ mod tests {
             "native_build_evidence",
             "cargo_manifest",
             "cargo_lock",
-            "authority",
             "canonical_toolchain",
         ] {
             let mut changed = linked_receipt_value.clone();
@@ -5336,7 +5313,6 @@ mod tests {
             "inputs/linked-build/native-build-evidence.json",
             "inputs/linked-build/Cargo.toml",
             "inputs/linked-build/Cargo.lock",
-            "inputs/linked-build/gates.json",
             "inputs/linked-build/canonical-toolchain.json",
         ] {
             let path = root.path().join(member);
@@ -5377,7 +5353,7 @@ mod tests {
     }
 
     #[test]
-    fn forged_publications_and_authority_bindings_are_rejected() {
+    fn forged_publications_and_linked_build_members_are_rejected() {
         let (root, _receipt, manifest) = playable_acceptance_fixture();
         let descriptor_bound = descriptor_bound_manifest(&manifest);
         let (linked_receipt_path, linked_receipt_bytes, linked_receipt_value) =
@@ -5428,32 +5404,6 @@ mod tests {
             fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
         }
         missing_publication.publications.remove(121);
-        let authority_path = root.path().join("inputs/linked-build/gates.json");
-        let mut forged_authority: serde_json::Value =
-            serde_json::from_slice(&fs::read(&authority_path).unwrap()).unwrap();
-        forged_authority["ledger_identity"]["sha256"] = serde_json::json!("b".repeat(64));
-        let forged_authority = serde_json::to_vec(&forged_authority).unwrap();
-        let member = "inputs/linked-build/gates.json";
-        let original_member = fs::read(root.path().join(member)).unwrap();
-        let mut changed_receipt = linked_receipt_value.clone();
-        let mut changed_manifest = descriptor_bound.clone();
-        publish_rehashed_linked_mutation(
-            root.path(),
-            &mut changed_manifest,
-            &mut changed_receipt,
-            &linked_receipt_path,
-            member,
-            "authority",
-            &forged_authority,
-        );
-        assert_eq!(
-            validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
-            Err(NativeWindowProofError::Receipt),
-            "accepted coherently rehashed retained member {member}"
-        );
-        fs::write(root.path().join(member), original_member).unwrap();
-        fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
-
         let canonical_path = root
             .path()
             .join("inputs/linked-build/canonical-toolchain.json");
@@ -5477,15 +5427,6 @@ mod tests {
             &mut changed_manifest,
             &mut changed_receipt,
             &linked_receipt_path,
-            "inputs/linked-build/canonical-toolchain.json",
-            "canonical_toolchain",
-            &forged_canonical,
-        );
-        publish_rehashed_linked_mutation(
-            root.path(),
-            &mut changed_manifest,
-            &mut changed_receipt,
-            &linked_receipt_path,
             "inputs/linked-build/native-build-evidence.json",
             "native_build_evidence",
             &forged_evidence,
@@ -5493,7 +5434,7 @@ mod tests {
         assert_eq!(
             validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
             Err(NativeWindowProofError::Receipt),
-            "accepted coherently rehashed toolchain and build evidence"
+            "accepted build evidence whose toolchain differs from the canonical toolchain"
         );
         fs::write(canonical_path, original_canonical).unwrap();
         fs::write(evidence_path, original_evidence).unwrap();
