@@ -321,6 +321,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::WaitForBattleFrames(_)
         | Action::WaitForBattleShipLoss(_)
         | Action::WaitForDispatch(_)
+        | Action::WaitForState(_)
         | Action::SelectCommunicationResponse(_)
         | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
@@ -441,6 +442,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForBattleFrames(_)
                     | Action::WaitForBattleShipLoss(_)
                     | Action::WaitForDispatch(_)
+                    | Action::WaitForState(_)
                     | Action::SelectCommunicationResponse(_)
                     | Action::WaitForCommunicationResponses(_)
                     | Action::WaitForPlanetSideStart(_)
@@ -1184,6 +1186,38 @@ fn reduce_condition_wait(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::WaitForState(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: wait.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitForState(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForState(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::SelectCommunicationResponse(select), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -1418,6 +1452,7 @@ fn reduce_capture_and_assertion(
         | (Action::RecordSavedHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspacePositionRestored(_), ActionPhase::WaitingForInput)
         | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
+        | (Action::AssertState(_), ActionPhase::WaitingForInput)
         | (Action::AssertShipElement(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
@@ -2125,6 +2160,58 @@ mod tests {
         let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
         assert_eq!(t.new_state.step_index, 1);
         assert_eq!(t.effects, EffectPlan::none());
+    }
+
+    fn state_predicate() -> crate::automation::campaign_state::StatePredicate {
+        serde_json::from_str(r#"{"all":[{"key":"sis:fuel","op":"eq","value":896}]}"#).unwrap()
+    }
+
+    #[test]
+    fn state_assertion_advances_without_input_effects() {
+        let actions = [Action::AssertState(state_predicate()), Action::Finish];
+        let config = cfg(&actions);
+        let t = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(t.new_state.step_index, 1);
+        assert_eq!(t.effects, EffectPlan::none());
+    }
+
+    #[test]
+    fn state_wait_advances_when_reached_and_expires_at_its_bound() {
+        use crate::automation::script::WaitForStateStep;
+        let actions = [
+            Action::WaitForState(WaitForStateStep {
+                predicate: state_predicate(),
+                max_ticks: 2,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let first = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            first.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 1 }
+        );
+        let reached = scheduler_reduce(&first.new_state, &config, SchedulerEvent::ConditionReached);
+        assert_eq!(reached.new_state.step_index, 1);
+
+        let second = scheduler_reduce(&first.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            second.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 0 }
+        );
+        let expired = scheduler_reduce(&second.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
     }
 
     #[test]

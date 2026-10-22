@@ -30,6 +30,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertHyperspaceDisplacement(_)
         | Action::AssertHyperspacePositionRestored(_)
         | Action::AssertShipResources(_)
+        | Action::AssertState(_)
         | Action::AssertShipElement(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
@@ -37,6 +38,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::WaitForPlanetSideStart(_)
         | Action::WaitForPlanetSideEnd(_)
         | Action::WaitForDispatch(_)
+        | Action::WaitForState(_)
         | Action::WaitForBattleFrames(_)
         | Action::WaitForBattleShipLoss(_)
         | Action::WaitForCommunicationResponses(_)

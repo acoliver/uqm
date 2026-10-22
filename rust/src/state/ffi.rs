@@ -723,6 +723,18 @@ unsafe fn normalize_state_bytes_mut<'a>(bytes: *mut u8, bit_count: usize) -> Opt
     Some(std::slice::from_raw_parts_mut(bytes, byte_count))
 }
 
+/// The value of a named story bit, or `None` when the game state has not been
+/// created or the name is not in the key table.
+///
+/// Unlike `rust_get_game_state`, an uninitialized state is not read as zero.
+#[must_use]
+pub fn named_state_value(name: &str) -> Option<u8> {
+    let (start_bit, end_bit) = super::game_state_keys::bit_range(name)?;
+    let guard = GLOBAL_GAME_STATE.lock().ok()?;
+    let state = guard.as_ref()?;
+    Some(state.get_state(start_bit as usize, end_bit as usize))
+}
+
 fn guard_convert_value<R, F>(mutex: &Mutex<Option<GameState>>, f: F) -> R
 where
     F: FnOnce(&GameState) -> R,

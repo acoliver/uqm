@@ -24,6 +24,7 @@ pub mod artifact;
 pub mod battle_fight;
 pub mod battle_observer;
 pub mod battle_outcome;
+pub mod campaign_state;
 pub mod capture;
 pub mod child_session;
 pub mod coordinator;
@@ -148,8 +149,8 @@ pub use script::{
     ShipResourcesAssertion, StartSave, TapMenuKeyStep, TapPlayerKeyStep, TurnDirection,
     TurnFlagshipStep, ValidatedScript, WaitForBattleFramesStep, WaitForBattleShipLossStep,
     WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep,
-    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
-    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
+    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitForStateStep,
+    WaitInputTicksStep, WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{

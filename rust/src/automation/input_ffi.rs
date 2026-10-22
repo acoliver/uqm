@@ -256,6 +256,47 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
     None
 }
 
+/// The flagship's `CrewEnlisted` and `NumLanders`, in that order.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some((
+            std::ptr::addr_of!((*sis_state).crew_enlisted).read(),
+            std::ptr::addr_of!((*sis_state).num_landers).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no flagship state to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
+    None
+}
+
+/// The game clock's `(day, month, year)` indices.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let clock = std::ptr::addr_of!(GLOB_DATA.game_state.game_clock);
+        Some((
+            std::ptr::addr_of!((*clock).day_index).read(),
+            std::ptr::addr_of!((*clock).month_index).read(),
+            std::ptr::addr_of!((*clock).year_index).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no clock to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
+    None
+}
+
 /// The flagship's authoritative `ElementAmounts`, indexed by element category.
 ///
 /// The lander hold is added to these when it returns to the ship, so they

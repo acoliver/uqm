@@ -13,6 +13,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 //! @requirement REQ-SCRIPT-001..006
 
+use crate::automation::campaign_state::StatePredicate;
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::c_extern::ONE_SECOND;
@@ -665,6 +666,15 @@ pub struct WaitForDispatchStep {
 #[serde(deny_unknown_fields)]
 pub struct GameOptionsAssertion {}
 
+/// Wait until the campaign state satisfies `predicate`, for at most
+/// `max_ticks` input callbacks.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForStateStep {
+    pub predicate: StatePredicate,
+    pub max_ticks: u64,
+}
+
 /// Assert that a communication response list has at least `minimum` choices.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -865,6 +875,8 @@ pub enum Action {
     RecordSavedHyperspacePosition(RecordSavedHyperspacePositionStep),
     AssertHyperspacePositionRestored(HyperspacePositionRestoredAssertion),
     AssertShipResources(ShipResourcesAssertion),
+    AssertState(StatePredicate),
+    WaitForState(WaitForStateStep),
     AssertShipElement(ShipElementAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     WaitForBattleShipLoss(WaitForBattleShipLossStep),
@@ -1917,6 +1929,16 @@ fn validate_wait_step(
 ) -> Option<Result<(), AutomationError>> {
     let (max_ticks, field) = match step {
         Action::WaitForDispatch(wait) => (wait.max_ticks, "wait_for_dispatch"),
+        Action::WaitForState(wait) => {
+            if let Err(reason) = wait.predicate.validate() {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("wait_for_state: {reason}"),
+                )));
+            }
+            (wait.max_ticks, "wait_for_state")
+        }
         Action::WaitForBattleFrames(wait) => {
             if wait.minimum == 0 {
                 return Some(Err(AutomationError::step(
@@ -2155,6 +2177,15 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_ship_resources: state fuel_on_board, res_units or both",
+                ));
+            }
+        }
+        Action::AssertState(predicate) => {
+            if let Err(reason) = predicate.validate() {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("assert_state: {reason}"),
                 ));
             }
         }
@@ -4171,6 +4202,65 @@ mod tests {
             let text = resource_script(step);
             assert!(parse_script(text.as_bytes(), p()).is_err(), "{step}");
         }
+    }
+
+    fn validated(step: &str) -> Result<ValidatedScript, AutomationError> {
+        let text = resource_script(step);
+        validate_script(parse_script(text.as_bytes(), p())?, p())
+    }
+
+    #[test]
+    fn assert_state_parses_a_predicate_over_named_keys() {
+        let script = validated(
+            r#"{"action":"assert_state","all":[{"key":"story:STARBASE_AVAILABLE","op":"eq","value":1},{"key":"sis:fuel","op":"ge","value":896}]}"#,
+        )
+        .unwrap();
+        let Action::AssertState(predicate) = &script.steps()[0] else {
+            panic!("expected assert_state");
+        };
+        assert_eq!(predicate.all.len(), 2);
+        assert_eq!(predicate.all[1].key, "sis:fuel");
+    }
+
+    #[test]
+    fn assert_state_rejects_unknown_keys_values_and_shapes_at_parse_time() {
+        for step in [
+            r#"{"action":"assert_state","all":[{"key":"story:NOT_A_BIT","op":"eq","value":1}]}"#,
+            r#"{"action":"assert_state","all":[{"key":"sis:gold","op":"eq","value":1}]}"#,
+            r#"{"action":"assert_state","all":[{"key":"story:MOONBASE_DESTROYED","op":"eq","value":2}]}"#,
+            r#"{"action":"assert_state","all":[]}"#,
+            r#"{"action":"assert_state","all":[{"key":"sis:fuel","op":"gt","value":1}]}"#,
+            r#"{"action":"assert_state","all":[{"key":"sis:fuel","op":"eq","value":-1}]}"#,
+            r#"{"action":"assert_state","all":[{"key":"sis:fuel","op":"eq","value":1}],"grant":1}"#,
+            r#"{"action":"assert_state"}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
+    }
+
+    #[test]
+    fn wait_for_state_needs_a_valid_predicate_and_a_positive_bound() {
+        let script = validated(
+            r#"{"action":"wait_for_state","predicate":{"all":[{"key":"activity","op":"eq","value":4}]},"max_ticks":2}"#,
+        )
+        .unwrap();
+        assert!(matches!(&script.steps()[0], Action::WaitForState(wait) if wait.max_ticks == 2));
+        for step in [
+            r#"{"action":"wait_for_state","predicate":{"all":[{"key":"activity","op":"eq","value":4}]},"max_ticks":0}"#,
+            r#"{"action":"wait_for_state","predicate":{"all":[{"key":"nope","op":"eq","value":4}]},"max_ticks":5}"#,
+            r#"{"action":"wait_for_state","predicate":{"all":[{"key":"activity","op":"eq","value":4}]}}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
+    }
+
+    #[test]
+    fn wait_for_state_charges_its_bound_to_the_input_budget() {
+        let step = r#"{"action":"wait_for_state","predicate":{"all":[{"key":"activity","op":"eq","value":4}]},"max_ticks":50}"#;
+        let text = format!(
+            r#"{{"version":1,"name":"r","budgets":{{"max_input_ticks":10,"max_presentations":4,"max_wallclock_seconds":1}},"steps":[{step},{{"action":"finish"}}]}}"#
+        );
+        assert!(validate_script(parse_script(text.as_bytes(), p()).unwrap(), p()).is_err());
     }
 
     #[test]
