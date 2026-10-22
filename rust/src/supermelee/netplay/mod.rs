@@ -12,4 +12,5 @@
 mod abi {
     include!(concat!(env!("OUT_DIR"), "/netplay_abi.rs"));
 }
+mod checkbuf;
 mod crc;
