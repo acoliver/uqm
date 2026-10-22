@@ -9,6 +9,7 @@ pub mod decode;
 pub mod encode;
 pub mod error;
 pub mod format;
+pub mod lzh;
 pub mod runtime;
 pub mod slots;
 pub mod types;

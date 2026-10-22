@@ -1,6 +1,3 @@
-sc2/src/libs/decomp/lzdecode.c
-sc2/src/libs/decomp/lzencode.c
-sc2/src/libs/decomp/update.c
 sc2/src/libs/file/dirs.c
 sc2/src/libs/graphics/cmap.c
 sc2/src/libs/graphics/context.c
