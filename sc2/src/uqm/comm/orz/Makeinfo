@@ -1,2 +1,2 @@
-uqm_CFILES="orzc.c"
+uqm_CFILES=""
 uqm_HFILES="resinst.h strings.h"

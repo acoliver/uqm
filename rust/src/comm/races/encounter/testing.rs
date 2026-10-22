@@ -19,6 +19,9 @@ pub(in crate::comm::races) enum Effect<H> {
     Talk(u16),
     Gauges(i16, i16, i32),
     Talking(bool),
+    RemoveEscorts(u16),
+    Palette(u16),
+    FadePalette(u16, i16),
     Remove(usize, u16),
     DrawCargo(u8, u8),
     Capacity,
@@ -122,8 +125,8 @@ impl<H: Copy, E> ScriptApi<H> for Fake<H, E> {
     fn gauges(&mut self, crew: i16, fuel: i16, units: i32) {
         self.effects.push(Effect::Gauges(crew, fuel, units));
     }
-    fn palette(&mut self, _: u16) {
-        panic!("unexpected palette selection")
+    fn palette(&mut self, index: u16) {
+        self.effects.push(Effect::Palette(index))
     }
     fn talk_segue(&mut self, track: u16) {
         self.effects.push(Effect::Talk(track));
@@ -131,8 +134,8 @@ impl<H: Copy, E> ScriptApi<H> for Fake<H, E> {
     fn disable_animation(&mut self, _: usize) {
         panic!("unexpected ambient animation effect")
     }
-    fn fade_palette(&mut self, _: u16, _: i16) {
-        panic!("unexpected palette fade")
+    fn fade_palette(&mut self, index: u16, duration: i16) {
+        self.effects.push(Effect::FadePalette(index, duration))
     }
 }
 impl<H: Copy, E> EncounterApi<H> for Fake<H, E> {
