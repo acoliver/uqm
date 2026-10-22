@@ -16,6 +16,7 @@
 //! The main VControl state is protected by a RwLock for thread-safe access
 //! from event handlers.
 
+mod c_api;
 pub mod ffi;
 #[cfg(test)]
 mod ffi_behavior_tests;
@@ -23,6 +24,7 @@ pub mod joystick;
 pub mod keyboard;
 pub mod keynames;
 pub mod menu_binding;
+mod sdl_input;
 pub mod templates;
 pub mod vcontrol;
 

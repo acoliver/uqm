@@ -1,9 +1,7 @@
 //! C FFI bindings for VControl
 //!
-//! Exports C-compatible functions for the input system.
-//! All exported functions use the `rust_` prefix to avoid symbol conflicts
-//! with the C implementation. The C code uses #ifdef USE_RUST_INPUT to
-//! choose between C and Rust implementations.
+//! Prefixed entry points shared by Rust callers and the unprefixed C ABI
+//! in `c_api`.
 
 use std::ffi::{c_char, c_int, c_uchar, c_void, CStr};
 use std::ptr;
@@ -26,10 +24,7 @@ const VCONTROL_JOYAXIS: c_int = 2;
 const VCONTROL_JOYBUTTON: c_int = 3;
 const VCONTROL_JOYHAT: c_int = 4;
 
-/// C-compatible gesture structure
-/// Must match the VCONTROL_GESTURE struct in rust_vcontrol.h
-/// The C struct has a union for gesture data that we represent as a nested
-/// struct for FFI compatibility.
+/// C-compatible gesture structure: a 32-bit tag followed by a 12-byte union.
 #[repr(C)]
 pub struct VCONTROL_GESTURE {
     pub gesture_type: c_int,
@@ -37,7 +32,7 @@ pub struct VCONTROL_GESTURE {
     pub gesture: GestureUnion,
 }
 
-/// Gesture union data - layout matches C union in rust_vcontrol.h
+/// Gesture union data retaining the C VCONTROL_GESTURE layout.
 #[repr(C)]
 pub union GestureUnion {
     pub key: c_int,

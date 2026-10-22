@@ -9,6 +9,7 @@ use std::ptr;
 
 use serial_test::serial;
 
+use super::c_api::{VControl_DumpGesture, VControl_ParseGesture};
 use super::ffi::*;
 use super::vcontrol::VCONTROL;
 
@@ -53,14 +54,14 @@ impl Drop for Input {
 fn parse(spec: &str) -> VCONTROL_GESTURE {
     let mut gesture: VCONTROL_GESTURE = unsafe { zeroed() };
     let spec = CString::new(spec).unwrap();
-    unsafe { rust_VControl_ParseGesture(&mut gesture, spec.as_ptr()) };
+    unsafe { VControl_ParseGesture(&mut gesture, spec.as_ptr()) };
     gesture
 }
 
 fn dump(gesture: &mut VCONTROL_GESTURE, capacity: c_int) -> (c_int, String) {
     let mut buf = vec![0x7fu8; 64];
     let written =
-        unsafe { rust_VControl_DumpGesture(buf.as_mut_ptr() as *mut c_char, capacity, gesture) };
+        unsafe { VControl_DumpGesture(buf.as_mut_ptr() as *mut c_char, capacity, gesture) };
     let text = CStr::from_bytes_until_nul(&buf)
         .unwrap()
         .to_str()
@@ -658,7 +659,7 @@ fn parsing_malformed_specs_leaves_the_gesture_empty() {
 fn parsing_clears_whatever_the_gesture_held_before() {
     let mut gesture = parse("key Space");
     let spec = c"nonsense";
-    unsafe { rust_VControl_ParseGesture(&mut gesture, spec.as_ptr()) };
+    unsafe { VControl_ParseGesture(&mut gesture, spec.as_ptr()) };
     assert_eq!(gesture.gesture_type, VCONTROL_NONE);
     unsafe {
         rust_VControl_ParseGesture(ptr::null_mut(), spec.as_ptr());

@@ -1,8 +1,2 @@
-# When USE_RUST_INPUT is set, use Rust VControl implementation
-if [ -z "$USE_RUST_INPUT" ] || [ "$USE_RUST_INPUT" = "0" ]; then
-	uqm_CFILES="input.c keynames.c vcontrol.c"
-	uqm_HFILES="input.h keynames.h vcontrol.h"
-else
-	uqm_CFILES="input.c keynames.c rust_vcontrol_impl.c"
-	uqm_HFILES="input.h keynames.h vcontrol.h rust_input.h rust_vcontrol.h"
-fi
+uqm_CFILES=""
+uqm_HFILES="input.h"

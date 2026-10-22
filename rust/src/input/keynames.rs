@@ -810,6 +810,19 @@ pub unsafe extern "C" fn rust_VControl_code2name(code: c_int) -> *const c_char {
     CSTR_KEYNAMES[CSTR_KEYNAMES.len() - 1].as_ptr() as *const c_char
 }
 
+/// # Safety
+/// `name` must point to a NUL-terminated key name.
+#[no_mangle]
+pub unsafe extern "C" fn VControl_name2code(name: *const c_char) -> c_int {
+    rust_VControl_name2code(name)
+}
+
+/// Returns a static NUL-terminated key name.
+#[no_mangle]
+pub extern "C" fn VControl_code2name(code: c_int) -> *const c_char {
+    unsafe { rust_VControl_code2name(code) }
+}
+
 /// Get joystick button name
 pub fn joy_button_name(joy_index: u32, button: i32) -> String {
     format!("Joy{}Button{}", joy_index, button)
@@ -835,6 +848,32 @@ pub fn joy_hat_name(joy_index: u32, hat: i32, direction: u8) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn every_table_entry_round_trips_through_both_c_apis() {
+        assert_eq!(KEYNAMES.len(), 119);
+        assert_eq!(KEYNAMES.len(), CSTR_KEYNAMES.len());
+        for (entry, c_name) in KEYNAMES.iter().zip(CSTR_KEYNAMES) {
+            let c_name = CStr::from_bytes_with_nul(c_name).unwrap();
+            assert_eq!(c_name.to_str().unwrap(), entry.name);
+            assert_eq!(key_name(entry.code), entry.name);
+            unsafe {
+                assert_eq!(rust_VControl_name2code(c_name.as_ptr()), entry.code);
+                assert_eq!(VControl_name2code(c_name.as_ptr()), entry.code);
+                assert_eq!(CStr::from_ptr(VControl_code2name(entry.code)), c_name);
+            }
+            if entry.code != 0 {
+                assert_eq!(
+                    key_from_name(&entry.name.to_ascii_uppercase()),
+                    Some(entry.code)
+                );
+            }
+        }
+        unsafe {
+            assert_eq!(CStr::from_ptr(VControl_code2name(-1)), c"Unknown");
+            assert_eq!(VControl_name2code(c"not a key".as_ptr()), 0);
+        }
+    }
+
     use super::*;
 
     #[test]
