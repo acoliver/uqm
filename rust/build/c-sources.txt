@@ -2,9 +2,6 @@ sc2/src/libs/decomp/lzdecode.c
 sc2/src/libs/decomp/lzencode.c
 sc2/src/libs/decomp/update.c
 sc2/src/libs/file/dirs.c
-sc2/src/libs/graphics/bbox.c
-sc2/src/libs/graphics/boxint.c
-sc2/src/libs/graphics/clipline.c
 sc2/src/libs/graphics/cmap.c
 sc2/src/libs/graphics/context.c
 sc2/src/libs/graphics/dcqueue.c
@@ -14,7 +11,6 @@ sc2/src/libs/graphics/font.c
 sc2/src/libs/graphics/frame.c
 sc2/src/libs/graphics/gfx_common.c
 sc2/src/libs/graphics/gfxload.c
-sc2/src/libs/graphics/intersec.c
 sc2/src/libs/graphics/loaddisp.c
 sc2/src/libs/graphics/pixmap.c
 sc2/src/libs/graphics/resgfx.c

@@ -9,6 +9,7 @@ pub mod drawable;
 pub mod ffi;
 pub mod font;
 pub mod frame;
+pub mod geometry_ffi;
 pub mod gfx_common;
 pub mod pixmap;
 pub mod render_context;
