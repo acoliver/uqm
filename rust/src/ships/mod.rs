@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod ffi_contract;
 pub mod lifecycle;
 pub mod loader;
+pub mod master_native;
 pub mod native;
 pub mod queue;
 pub mod races;

@@ -3,6 +3,7 @@
 // @requirement Foundation module for shared types extracted from ships
 
 pub mod ai;
+pub mod ai_entry;
 pub mod battle_controls;
 pub mod battle_types;
 pub mod c_bridge;
@@ -18,6 +19,7 @@ pub mod lifecycle;
 pub mod netplay;
 pub mod process_loop;
 pub mod ship_runtime;
+pub mod sounds;
 pub mod tactical;
 pub mod velocity;
 pub mod weapon;
