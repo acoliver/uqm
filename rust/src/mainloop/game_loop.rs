@@ -57,6 +57,8 @@ pub trait GameLoopOps {
     fn add_initial_game_events(&self);
     /// Safe lifecycle boundary for one-shot deterministic automation scenes.
     fn activate_automation_start_scene(&self) {}
+    /// The main loop is ending a game because the flagship was destroyed.
+    fn note_flagship_destroyed(&self) {}
 
     // --- Per-frame preamble ---
     fn set_status_message_mode_default(&self);
@@ -233,7 +235,11 @@ pub fn run_game_lifecycle_impl<O: GameLoopOps + ?Sized>(ops: &O) -> Result<(), M
             let state = ops.get_game_state();
 
             // Break condition (starcon.c:310-320)
-            match state_machine::check_break(activity, &state) {
+            let break_action = state_machine::check_break(activity, &state);
+            if break_action != BreakAction::Continue && state.crew_enlisted == 0xFFFF {
+                ops.note_flagship_destroyed();
+            }
+            match break_action {
                 BreakAction::Continue => {}
                 BreakAction::InitBlackUrqCommunication => {
                     ops.init_communication(BLACKURQ_CONVERSATION);
@@ -344,6 +350,10 @@ mod cffi {
 
         fn activate_automation_start_scene(&self) {
             crate::automation::coordinator::Coordinator::activate_start_scene();
+        }
+
+        fn note_flagship_destroyed(&self) {
+            crate::automation::campaign_state::record_flagship_destroyed();
         }
 
         fn set_status_message_mode_default(&self) {
@@ -589,6 +599,12 @@ mod tests {
                 .borrow_mut()
                 .calls
                 .push("activate_automation_start_scene");
+        }
+        fn note_flagship_destroyed(&self) {
+            self.inner
+                .borrow_mut()
+                .calls
+                .push("note_flagship_destroyed");
         }
         fn set_status_message_mode_default(&self) {
             self.inner
@@ -837,6 +853,42 @@ mod tests {
         // battle because CHECK_ABORT was set.
         let battle_count = ops.calls().iter().filter(|c| **c == "battle").count();
         assert_eq!(battle_count, 1);
+    }
+
+    #[test]
+    fn test_dead_flagship_ends_the_game_and_is_reported_once() {
+        let ops = MockOps::new();
+        ops.inner.borrow_mut().start_game_returns = vec![true, false];
+        ops.inner.borrow_mut().game_state.crew_enlisted = 0xFFFF;
+
+        run_game_lifecycle_impl(&ops).unwrap();
+
+        let calls = ops.calls();
+        let reported = calls
+            .iter()
+            .filter(|call| **call == "note_flagship_destroyed")
+            .count();
+        assert_eq!(reported, 1);
+        let teardown = calls.iter().position(|c| *c == "uninit_game_structures");
+        let note = calls.iter().position(|c| *c == "note_flagship_destroyed");
+        assert!(
+            note < teardown,
+            "reported before the structures are torn down"
+        );
+    }
+
+    #[test]
+    fn test_living_flagship_is_not_reported_destroyed() {
+        let ops = MockOps::new();
+        ops.inner.borrow_mut().start_game_returns = vec![true, false];
+        ops.inner.borrow_mut().post_dispatch_activity = Some(ActivityValue::from_kind_and_flags(
+            ActivityKind::WonLastBattle,
+            0,
+        ));
+
+        run_game_lifecycle_impl(&ops).unwrap();
+
+        assert!(!ops.calls().contains(&"note_flagship_destroyed"));
     }
 
     /// @plan PLAN-20260707-MAINLOOP.P06

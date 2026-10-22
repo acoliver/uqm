@@ -636,7 +636,7 @@ mod tests {
                 captures += expected_captures;
             }
         }
-        assert_eq!(captures, 183);
+        assert_eq!(captures, 191);
         assert_eq!(classes.len(), 4);
     }
 }

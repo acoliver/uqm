@@ -11,6 +11,7 @@
 //! `story:X eq 0` cannot pass before the game state exists.
 
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,9 @@ pub enum StateKey {
     DateDay,
     DateMonth,
     DateYear,
+    /// 1 once the main loop has ended a game because the flagship was
+    /// destroyed (`CrewEnlisted == 0xffff`), 0 before. Never cleared during a run.
+    FlagshipDestroyed,
     /// A named story bit from `STATE_KEYS`.
     Story(&'static str),
 }
@@ -59,9 +63,10 @@ impl StateKey {
             "date:day" => Ok(Self::DateDay),
             "date:month" => Ok(Self::DateMonth),
             "date:year" => Ok(Self::DateYear),
+            "game:flagship_destroyed" => Ok(Self::FlagshipDestroyed),
             _ => Err(format!(
                 "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
-                 date:day|month|year or story:NAME"
+                 date:day|month|year, game:flagship_destroyed or story:NAME"
             )),
         }
     }
@@ -73,6 +78,7 @@ impl StateKey {
             Self::Activity | Self::SisCrew | Self::DateYear => u32::from(u16::MAX),
             Self::SisFuel | Self::SisRu => u32::MAX,
             Self::SisLanders | Self::DateDay | Self::DateMonth => u32::from(u8::MAX),
+            Self::FlagshipDestroyed => 1,
             Self::Story(name) => {
                 let (start, end) = bit_range(name).unwrap_or((0, 0));
                 (1u32 << (end - start + 1)) - 1
@@ -246,6 +252,16 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
     conditions.next().is_none()
 }
 
+static FLAGSHIP_DESTROYED: AtomicBool = AtomicBool::new(false);
+
+/// Record that the main loop ended a game because the flagship died.
+///
+/// The restart menu that follows tears the game structures down, so the
+/// crew word is gone by the time a script could read it; this flag outlives it.
+pub fn record_flagship_destroyed() {
+    FLAGSHIP_DESTROYED.store(true, Ordering::SeqCst);
+}
+
 /// The running game, read on the game thread.
 pub struct LiveCampaign;
 
@@ -264,6 +280,9 @@ impl StateSource for LiveCampaign {
             StateKey::DateDay => input_ffi::game_date().map(|(day, _, _)| u32::from(day)),
             StateKey::DateMonth => input_ffi::game_date().map(|(_, month, _)| u32::from(month)),
             StateKey::DateYear => input_ffi::game_date().map(|(_, _, year)| u32::from(year)),
+            StateKey::FlagshipDestroyed => {
+                Some(u32::from(FLAGSHIP_DESTROYED.load(Ordering::SeqCst)))
+            }
         }
     }
 }
@@ -286,6 +305,7 @@ mod tests {
                 StateKey::DateDay => "date:day",
                 StateKey::DateMonth => "date:month",
                 StateKey::DateYear => "date:year",
+                StateKey::FlagshipDestroyed => "game:flagship_destroyed",
                 StateKey::Story(name) => name,
             };
             self.0.get(name).copied()
@@ -389,6 +409,21 @@ mod tests {
             evaluation.failure_label("state_mismatch", &both),
             "state_mismatch|sis:fuel=900|sis:ru=2500|want:sis:fuel:eq:896|want:sis:ru:ge:2500"
         );
+    }
+
+    #[test]
+    fn the_flagship_destroyed_flag_is_a_zero_or_one_key() {
+        assert_eq!(
+            StateKey::parse("game:flagship_destroyed"),
+            Ok(StateKey::FlagshipDestroyed)
+        );
+        let two = predicate(r#"{"all":[{"key":"game:flagship_destroyed","op":"eq","value":2}]}"#);
+        assert!(two.validate().is_err());
+        let wanted =
+            predicate(r#"{"all":[{"key":"game:flagship_destroyed","op":"eq","value":1}]}"#);
+        assert!(wanted.validate().is_ok());
+        assert!(!evaluate(&wanted, &fake(&[("game:flagship_destroyed", 0)])).held);
+        assert!(evaluate(&wanted, &fake(&[("game:flagship_destroyed", 1)])).held);
     }
 
     #[test]
