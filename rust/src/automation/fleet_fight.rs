@@ -22,6 +22,7 @@ pub struct Observation {
     pub counters: [u8; 2],
     pub flagship_crew: Option<u16>,
     pub picker: Option<Picker>,
+    pub encounter_menu: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -35,6 +36,7 @@ pub enum Progress {
 pub struct FleetFight {
     ticks: u64,
     started: bool,
+    preview_ticks: u64,
     initial: [u8; 2],
     last: [u8; 2],
     picks: u32,
@@ -58,6 +60,18 @@ impl FleetFight {
         };
         if obs.activity & (0x1000 | 0x2000 | 0x4000) != 0 {
             return Progress::Failed("fleet_fight_aborted_or_loaded".into());
+        }
+        if !self.started && obs.encounter_menu {
+            if self.ticks >= max_ticks {
+                return Progress::Failed("fleet_fight_timeout:encounter_menu".into());
+            }
+            self.preview_ticks += 1;
+            // The real encounter menu opens on Hail. One Down selects Attack.
+            return Progress::Input(match self.preview_ticks {
+                1 => Some(MenuKey::Down),
+                5 => Some(MenuKey::Select),
+                _ => None,
+            });
         }
         let in_battle = obs.activity & 0x0200 != 0;
         if !self.started {
@@ -128,7 +142,28 @@ mod tests {
             counters,
             flagship_crew: Some(46),
             picker: None,
+            encounter_menu: false,
         }
+    }
+
+    #[test]
+    fn encounter_preview_attacks_by_menu_input_before_observing_battle_counters() {
+        let mut fight = FleetFight::default();
+        let mut preview = obs([0, 0]);
+        preview.activity = 3;
+        preview.encounter_menu = true;
+        assert_eq!(
+            fight.observe(100, preview.clone()),
+            Progress::Input(Some(MenuKey::Down))
+        );
+        for _ in 0..3 {
+            assert_eq!(fight.observe(100, preview.clone()), Progress::Input(None));
+        }
+        assert_eq!(
+            fight.observe(100, preview),
+            Progress::Input(Some(MenuKey::Select))
+        );
+        assert_eq!(fight.observe(100, obs([5, 3])), Progress::Input(None));
     }
 
     #[test]

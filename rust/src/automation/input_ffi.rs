@@ -939,6 +939,7 @@ pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
         counters: [player, enemy],
         flagship_crew: sis_crew_and_landers().map(|(crew, _)| crew),
         picker,
+        encounter_menu: super::ui_observation::encounter_menu_active(),
     }
 }
 

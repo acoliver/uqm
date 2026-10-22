@@ -43,6 +43,7 @@ pub enum StateKey {
     EscortSpecies(u8),
     CyborgEnabled,
     CombatSpeed,
+    EncounterMenu,
     DateDay,
     DateMonth,
     DateYear,
@@ -104,6 +105,7 @@ impl StateKey {
             "escorts:count" => Ok(Self::EscortCount),
             "combat:cyborg" => Ok(Self::CyborgEnabled),
             "combat:speed" => Ok(Self::CombatSpeed),
+            "encounter:menu" => Ok(Self::EncounterMenu),
             "sis:fuel" => Ok(Self::SisFuel),
             "sis:ru" => Ok(Self::SisRu),
             "sis:crew" => Ok(Self::SisCrew),
@@ -139,7 +141,7 @@ impl StateKey {
             | Self::SisDrive(_)
             | Self::SisJet(_)
             | Self::SisModule(_) => u32::from(u8::MAX),
-            Self::FlagshipDestroyed | Self::CyborgEnabled => 1,
+            Self::FlagshipDestroyed | Self::CyborgEnabled | Self::EncounterMenu => 1,
             Self::CombatSpeed => 3,
             Self::EscortCount | Self::EscortSpecies(_) => 12,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
@@ -366,6 +368,9 @@ impl StateSource for LiveCampaign {
             StateKey::SisMineralMass => {
                 input_ffi::sis_fittings().map(|(_, _, _, mass)| u32::from(mass))
             }
+            StateKey::EncounterMenu => {
+                Some(u32::from(super::ui_observation::encounter_menu_active()))
+            }
             StateKey::EscortCount => input_ffi::escort_roster().map(|ships| ships.len() as u32),
             StateKey::EscortSpecies(race) => input_ffi::escort_roster().map(|ships| {
                 ships
@@ -478,6 +483,7 @@ mod tests {
                 StateKey::EscortSpecies(_) => "escorts:species",
                 StateKey::CyborgEnabled => "combat:cyborg",
                 StateKey::CombatSpeed => "combat:speed",
+                StateKey::EncounterMenu => "encounter:menu",
                 StateKey::SisFuel => "sis:fuel",
                 StateKey::SisRu => "sis:ru",
                 StateKey::SisCrew => "sis:crew",
