@@ -2,14 +2,21 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-#![allow(dead_code)]
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
+mod dialogue;
+#[cfg(test)]
+mod parity_tests;
+mod phrases;
 
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    Combat,
+    Menagerie,
+    Normal,
+}
 
 // ---------------------------------------------------------------------------
 // String indices (from strings.h)
@@ -78,7 +85,6 @@ const IF_WE_APOLOGIZE: u32 = 59;
 const PROBABLY_NOT: u32 = 60;
 const TRY_ANY_WAY: u32 = 61;
 const NOPE: u32 = 62;
-const APOLOGIZE_IN_SPACE: u32 = 63;
 const APOLOGY_1: u32 = 64;
 const NOT_ACCEPTED_1: u32 = 65;
 const APOLOGY_2: u32 = 66;
@@ -119,149 +125,160 @@ const GOODBYE_AND_DIE_HOSTILE_SPACE_3: u32 = 100;
 const GOODBYE_AND_DIE_HOSTILE_SPACE_4: u32 = 101;
 const OUT_TAKES: u32 = 102;
 
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
+fn text_layout(screen_width: i32) -> (CPoint, u16) {
+    let text_width = screen_width - 80;
+    (
+        CPoint {
+            x: (1 + (text_width >> 1) + (text_width >> 2)) as i16,
+            y: 0,
+        },
+        ((text_width - 16) >> 1) as u16,
+    )
+}
 
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
+fn descriptor(screen_width: i32) -> CLocData {
+    let (baseline, width) = text_layout(screen_width);
+    let mut desc = CLocData {
+        alien_frame_res: c"comm.vux.graphics".as_ptr(),
+        alien_font_res: c"comm.vux.font".as_ptr(),
+        alien_colormap_res: c"comm.vux.colortable".as_ptr(),
+        alien_song_res: c"comm.vux.music".as_ptr(),
+        conversation_phrases_res: c"comm.vux.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: baseline,
+        alien_text_width: width,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 17,
+        ..CLocData::default()
     };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+    let specs = [
+        (12, 3, 1 << 0, (28, 28), (28, 28), 0),
+        (15, 5, 1 << 0, (28, 28), (28, 28), 0),
+        (20, 14, 1 << 1, (28, 0), (28, 0), 0),
+        (34, 7, 1 << 1, (28, 28), (28, 28), 0),
+        (41, 6, 1 << 0, (28, 28), (28, 28), 0),
+        (47, 11, 1 << 1, (28, 28), (28, 28), 0),
+        (58, 3, 1 << 0, (28, 28), (28, 28), 0),
+        (61, 4, 1 << 0, (28, 28), (28, 28), 0),
+        (65, 4, 1 << 0, (28, 28), (28, 28), 0),
+        (69, 2, 1 << 0, (28, 28), (28, 28), 0),
+        (71, 3, 1 << 2, (42, 0), (840, 2520), 0),
+        (74, 6, 1 << 2, (56, 56), (56, 56), 0),
+        (80, 5, 1 << 2, (56, 56), (56, 56), 1 << 14),
+        (85, 5, 1 << 2, (56, 56), (56, 56), 0),
+        (90, 5, 1 << 2, (56, 56), (56, 56), 1 << 12),
+        (95, 4, 1 << 2, (56, 56), (4200, 4200), 0),
+        (99, 4, 1 << 2, (56, 56), (4200, 4200), 0),
+    ];
+    for (index, (start, frames, flags, frame_rate, restart_rate, block_mask)) in
+        specs.into_iter().enumerate()
+    {
+        desc.alien_ambient_array[index] = animation(start, frames, flags, frame_rate, restart_rate);
+        desc.alien_ambient_array[index].block_mask = block_mask;
+    }
+    desc.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        desc.init_encounter_func = live::intro as *const () as *const _;
+        desc.post_encounter_func = live::post as *const () as *const _;
+        desc.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    desc
 }
 
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+
+    fn run(f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut dialogue::Dialogue { api: &mut api });
+    }
+
+    extern "C" fn combat(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
+    }
+    extern "C" fn menagerie(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Menagerie, response as i32));
+    }
+    extern "C" fn normal(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Normal, response as i32));
+    }
+
+    fn callback(handler: Handler) -> extern "C" fn(u32) {
+        match handler {
+            Handler::Combat => combat,
+            Handler::Menagerie => menagerie,
+            Handler::Normal => normal,
+        }
+    }
+
+    pub(super) extern "C" fn intro() {
+        run(|dialogue| dialogue.intro());
+    }
+    pub(super) extern "C" fn post() {}
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn init_vux_comm() -> *mut CLocData {
+        static mut DESCRIPTOR: Option<CLocData> = None;
+        extern "C" {
+            static ScreenWidth: i32;
+        }
+        let descriptor = (&mut *std::ptr::addr_of_mut!(DESCRIPTOR))
+            .get_or_insert_with(|| super::descriptor(ScreenWidth));
+        (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
+        run(|dialogue| dialogue.initialize());
+        descriptor
     }
 }
 
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.vux.graphics\0";
-const RACE_FONT: &[u8] = b"comm.vux.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.vux.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.vux.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.vux.dialogue\0";
-
-/// Vux race dialogue implementation.
 pub struct VuxDialogue;
 
 impl super::RaceDialogue for VuxDialogue {
     fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_vux_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor(320))
         }
     }
 
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
 
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
 
     fn uninit(&self) -> u32 {
+        #[cfg(not(test))]
+        return live::uninit() as u32;
+        #[cfg(test)]
         0
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-        assert!(
-            bit_range("KNOW_ZEX_WANTS_MONSTER").is_some(),
-            "missing game state key: KNOW_ZEX_WANTS_MONSTER"
-        );
-        assert!(
-            bit_range("VUX_BEAST_ON_SHIP").is_some(),
-            "missing game state key: VUX_BEAST_ON_SHIP"
-        );
-        assert!(
-            bit_range("VUX_HOME_VISITS").is_some(),
-            "missing game state key: VUX_HOME_VISITS"
-        );
-        assert!(
-            bit_range("VUX_INFO").is_some(),
-            "missing game state key: VUX_INFO"
-        );
-    }
-}
+mod tests;
