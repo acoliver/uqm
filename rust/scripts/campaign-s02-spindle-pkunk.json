@@ -12,809 +12,115 @@
   },
   "seed": 1437213463,
   "steps": [
-    {
-      "action": "wait_for_main_menu_ready"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 15
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 45
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 50
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "star:current",
-          "op": "eq",
-          "value": 82
-        },
-        {
-          "key": "sis:ru",
-          "op": "eq",
-          "value": 2304
-        },
-        {
-          "key": "sis:fuel",
-          "op": "eq",
-          "value": 800
-        },
-        {
-          "key": "sis:crew",
-          "op": "eq",
-          "value": 46
-        },
-        {
-          "key": "sis:landers",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:0",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:5",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:6",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:mineral_mass",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "story:STARBASE_AVAILABLE",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "story:MOONBASE_DESTROYED",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "story:RADIOACTIVES_PROVIDED",
-          "op": "eq",
-          "value": 1
-        }
-      ]
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "sis:fuel",
-          "op": "eq",
-          "value": 800
-        },
-        {
-          "key": "sis:ru",
-          "op": "eq",
-          "value": 2304
-        },
-        {
-          "key": "sis:crew",
-          "op": "eq",
-          "value": 46
-        },
-        {
-          "key": "star:current",
-          "op": "eq",
-          "value": 82
-        }
-      ]
-    },
-    {
-      "action": "navigate_to_moon",
-      "planet": 2,
-      "moon": 0,
-      "max_ticks": 6000
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 120
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 60
-    },
-    {
-      "action": "wait_for_communication_responses",
-      "minimum": 2,
-      "max_ticks": 3000
-    },
-    {
-      "action": "select_response",
-      "phrase": "goodbye_commander",
-      "max_ticks": 2000
-    },
-    {
-      "action": "wait_for_communication_end",
-      "minimum_completions": 1,
-      "max_ticks": 5000
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 60
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 60
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 20
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "sis:fuel",
-          "op": "eq",
-          "value": 5000
-        },
-        {
-          "key": "sis:ru",
-          "op": "eq",
-          "value": 1464
-        }
-      ]
-    },
-    {
-      "action": "capture",
-      "label": "paid-840-ru-for-42-fuel"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 40
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 60
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 60
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 20
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 1,
-      "settle": 1
-    },
-    {
-      "action": "assert_game_options"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 20
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "combat:cyborg",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "combat:speed",
-          "op": "eq",
-          "value": 1
-        }
-      ]
-    },
-    {
-      "action": "capture",
-      "label": "cyborg-normal-rendered-setting"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 30
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 6000
-    },
-    {
-      "action": "fly_to_star",
-      "target": "Gamma Krueger",
-      "max_ticks": 30000
-    },
-    {
-      "action": "capture",
-      "label": "pkunk-home-system"
-    },
-    {
-      "action": "navigate_to_planet",
-      "planet": 0,
-      "max_ticks": 6000
-    },
-    {
-      "action": "navigate_to_orbit",
-      "planet": 0,
-      "max_ticks": 6000
-    },
-    {
-      "action": "wait_for_communication_responses",
-      "minimum": 2,
-      "max_ticks": 5000
-    },
-    {
-      "action": "capture",
-      "label": "peaceful-pkunk-home-contact"
-    },
-    {
-      "action": "select_response",
-      "phrase": "we_are_vindicator0",
-      "max_ticks": 2000
-    },
-    {
-      "action": "select_response",
-      "phrase": "we_need_help",
-      "max_ticks": 2000
-    },
-    {
-      "action": "wait_for_communication_end",
-      "minimum_completions": 2,
-      "max_ticks": 5000
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "story:CLEAR_SPINDLE_ON_SHIP",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "story:PKUNK_MANNER",
-          "op": "eq",
-          "value": 3
-        },
-        {
-          "key": "escorts:count",
-          "op": "eq",
-          "value": 5
-        },
-        {
-          "key": "escorts:species:4",
-          "op": "eq",
-          "value": 4
-        }
-      ]
-    },
-    {
-      "action": "capture",
-      "label": "spindle-and-four-fury-escorts"
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 6000
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 20
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 1,
-      "settle": 1
-    },
-    {
-      "action": "assert_game_options"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 30
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 15
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 45
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 30
-    },
-    {
-      "action": "capture",
-      "label": "saved-spindle-pkunk-slot-1"
-    },
-    {
-      "action": "finish"
-    }
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "star:current", "op": "eq", "value": 82}, {"key": "sis:ru", "op": "eq", "value": 2304}, {"key": "sis:fuel", "op": "eq", "value": 800}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "sis:landers", "op": "eq", "value": 1}, {"key": "sis:drive:0", "op": "eq", "value": 1}, {"key": "sis:drive:5", "op": "eq", "value": 1}, {"key": "sis:drive:6", "op": "eq", "value": 1}, {"key": "sis:mineral_mass", "op": "eq", "value": 0}, {"key": "story:STARBASE_AVAILABLE", "op": "eq", "value": 1}, {"key": "story:MOONBASE_DESTROYED", "op": "eq", "value": 1}, {"key": "story:RADIOACTIVES_PROVIDED", "op": "eq", "value": 1}]},
+    {"action": "assert_state", "all": [{"key": "sis:fuel", "op": "eq", "value": 800}, {"key": "sis:ru", "op": "eq", "value": 2304}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "star:current", "op": "eq", "value": 82}]},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 0, "max_ticks": 6000},
+    {"action": "wait_input_ticks", "count": 120},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 60},
+    {"action": "wait_for_communication_responses", "minimum": 2, "max_ticks": 3000},
+    {"action": "select_response", "phrase": "goodbye_commander", "max_ticks": 2000},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 5000},
+    {"action": "wait_input_ticks", "count": 60},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 60},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 20},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "assert_state", "all": [{"key": "sis:fuel", "op": "eq", "value": 5000}, {"key": "sis:ru", "op": "eq", "value": 1464}]},
+    {"action": "capture", "label": "paid-840-ru-for-42-fuel"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 40},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 60},
+    {"action": "wait_input_ticks", "count": 60},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 20},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 1},
+    {"action": "assert_game_options"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 20},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "assert_state", "all": [{"key": "combat:cyborg", "op": "eq", "value": 1}, {"key": "combat:speed", "op": "eq", "value": 1}]},
+    {"action": "capture", "label": "cyborg-normal-rendered-setting"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 30},
+    {"action": "navigate_to_hyperspace", "max_ticks": 6000},
+    {"action": "fly_to_star", "target": "Gamma Krueger", "max_ticks": 30000},
+    {"action": "capture", "label": "pkunk-home-system"},
+    {"action": "navigate_to_planet", "planet": 0, "max_ticks": 6000},
+    {"action": "navigate_to_orbit", "planet": 0, "max_ticks": 6000},
+    {"action": "wait_for_communication_responses", "minimum": 2, "max_ticks": 5000},
+    {"action": "capture", "label": "peaceful-pkunk-home-contact"},
+    {"action": "select_response", "phrase": "we_are_vindicator0", "max_ticks": 2000},
+    {"action": "select_response", "phrase": "we_need_help", "max_ticks": 2000},
+    {"action": "wait_for_communication_end", "minimum_completions": 2, "max_ticks": 5000},
+    {"action": "assert_state", "all": [{"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}, {"key": "story:PKUNK_MANNER", "op": "eq", "value": 3}, {"key": "escorts:count", "op": "eq", "value": 5}, {"key": "escorts:species:4", "op": "eq", "value": 4}]},
+    {"action": "capture", "label": "spindle-and-four-fury-escorts"},
+    {"action": "navigate_to_hyperspace", "max_ticks": 6000},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 20},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 1},
+    {"action": "assert_game_options"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 30},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "saved-spindle-pkunk-slot-1"},
+    {"action": "finish"}
   ]
 }
