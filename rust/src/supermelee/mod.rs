@@ -5,3 +5,5 @@ pub mod c_bridge;
 pub mod error;
 pub mod setup;
 pub mod types;
+
+pub mod netplay;

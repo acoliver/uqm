@@ -168,7 +168,6 @@ sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/meleesetup.c
 sc2/src/uqm/supermelee/netplay/checkbuf.c
 sc2/src/uqm/supermelee/netplay/checksum.c
-sc2/src/uqm/supermelee/netplay/crc.c
 sc2/src/uqm/supermelee/netplay/netconnection.c
 sc2/src/uqm/supermelee/netplay/netinput.c
 sc2/src/uqm/supermelee/netplay/netmelee.c
