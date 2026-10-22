@@ -165,7 +165,6 @@ sc2/src/uqm/supermelee/netplay/netsend.c
 sc2/src/uqm/supermelee/netplay/netstate.c
 sc2/src/uqm/supermelee/netplay/notify.c
 sc2/src/uqm/supermelee/netplay/notifyall.c
-sc2/src/uqm/supermelee/netplay/proto/ready.c
 sc2/src/uqm/supermelee/netplay/proto/reset.c
 sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/tactrans.c
