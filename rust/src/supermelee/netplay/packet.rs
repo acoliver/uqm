@@ -11,7 +11,7 @@ macro_rules! packet_data {
         pub static mut packetTypeData: [PacketTypeData; 18] = [$(PacketTypeData {
             len: size_of::<$ty>(), handler: {
                 unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                    super::abi::$handler(conn, packet.cast())
+                    super::packethandlers::$handler(conn, packet.cast())
                 }
                 Some(dispatch)
             },
