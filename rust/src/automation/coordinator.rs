@@ -819,6 +819,15 @@ impl Coordinator {
         } else if let Some(Action::WaitForCommunicationResponses(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
+            // Hail through the encounter preview when waiting for dialogue.
+            // The first preview callback initializes its menu and ignores input.
+            if crate::automation::ui_observation::encounter_menu_active() {
+                let select = crate::automation::script::MenuKey::Select.index();
+                if !inject_menu_key(i32::from(select), i32::from(inner.input_seen % 4 == 3)) {
+                    self.reject_input(inner, "menu", i32::from(select), 1);
+                    return scheduler_event;
+                }
+            }
             let snapshot = crate::automation::ui_observation::conversation_snapshot();
             if snapshot.has_fresh_responses(
                 wait.minimum,
