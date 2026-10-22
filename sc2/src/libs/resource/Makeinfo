@@ -1,3 +1,2 @@
-uqm_CFILES="direct.c stringbank.c
-		"
+uqm_CFILES=""
 uqm_HFILES="stringbank.h"
