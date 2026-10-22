@@ -401,3 +401,35 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         Callback_uninit();
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn notifications_visit_only_connected_peers() {
+    unsafe {
+        let mut a = connection(NetState_NetState_inBattle);
+        let mut b = connection(NetState_NetState_inBattle);
+        let slots = std::ptr::addr_of_mut!(netConnections).cast::<*mut NetConnection>();
+        let saved = [*slots, *slots.add(1)];
+        *slots = &mut *a;
+        *slots.add(1) = &mut *b;
+        b.stateFlags.connected = false;
+        Netplay_NotifyAll_battleInput(0x23);
+        assert_eq!(a.queue.size, 1);
+        assert_eq!(b.queue.size, 0);
+        assert_eq!(
+            (*(*a.queue.first).packet.cast::<Packet_BattleInput>()).state,
+            0x23
+        );
+        b.stateFlags.connected = true;
+        Netplay_NotifyAll_checksum(37, 0x12345678);
+        assert_eq!(a.queue.size, 2);
+        assert_eq!(b.queue.size, 1);
+        let packet = (*b.queue.first).packet.cast::<Packet_Checksum>();
+        assert_eq!(u32::from_be((*packet).frameNr), 37);
+        assert_eq!(u32::from_be((*packet).checksum), 0x12345678);
+        *slots = saved[0];
+        *slots.add(1) = saved[1];
+        PacketQueue_uninit(&raw mut a.queue);
+        PacketQueue_uninit(&raw mut b.queue);
+    }
+}
