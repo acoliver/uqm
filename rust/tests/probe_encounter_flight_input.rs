@@ -783,7 +783,7 @@ fn the_second_commander_visit_waits_for_its_offer_before_the_first_pick() {
 // preparation are derived here from the game's own rules and data: the
 // opening tank and fuel price in `globdata.c`, Luna's density and radius in
 // `gensol.c`, the landing cost and Outfit rounding of the Rust port, and the
-// Commander's reward in `starbas.c`. Nothing below copies an observed value.
+// Commander's reward from the Rust dialogue. Nothing below copies an observed value.
 // ---------------------------------------------------------------------------
 
 use uqm_rust::planet_side::selection::landing_fuel_needed;
@@ -856,10 +856,7 @@ impl DerivedPreparation {
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
-        let reward = number_after(
-            &c_source("comm/starbas/starbas.c"),
-            "DeltaSISGauges (0, 0, ",
-        );
+        let reward = u32::from(uqm_rust::comm::races::starbas::STARBASE_READY_REWARD);
         Self {
             opening_fuel,
             opening_res_units,

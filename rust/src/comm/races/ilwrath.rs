@@ -1,273 +1,622 @@
-//! Ilwrath dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
+//! Ilwrath dialogue, ported from the original C script.
 
-#![allow(dead_code)]
+use super::encounter::EncounterApi;
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const NEVER_ENOUGH: u32 = 1;
-const OK_WARSHIP: u32 = 2;
-const OK_DWE: u32 = 3;
-const OK_YOUBOO: u32 = 4;
-const OK_DILRAT: u32 = 5;
-const BIG_FUN: u32 = 6;
-const FAST_AS_CAN: u32 = 7;
-const GLORIOUS_WORSHIP: u32 = 8;
-const ON_WAY: u32 = 9;
-const GODS_RETURN_1: u32 = 10;
-const GODS_RETURN_2: u32 = 11;
-const GODS_RETURN_3: u32 = 12;
-const JUST_GRUNTS: u32 = 13;
-const GRUNTS_AGAIN: u32 = 14;
-const WHAT_ORDERS: u32 = 15;
-const WE_WORSHIP_1: u32 = 16;
-const WE_WORSHIP_2: u32 = 17;
-const WE_WORSHIP_3: u32 = 18;
-const SUBSEQUENT_CHMMR_HELLO: u32 = 19;
-const INIT_CHMMR_HELLO: u32 = 20;
-const OK_ENOUGH_ILWRATH: u32 = 21;
-const OK_ENOUGH_GODS: u32 = 22;
-const SEND_MESSAGE: u32 = 23;
-const CAME_FROM: u32 = 24;
-const WHO_BLASTS_WHO: u32 = 25;
-const NO_SURRENDER: u32 = 26;
-const NOT_REASONABLE: u32 = 27;
-const SUBSEQUENT_HOME_HELLO: u32 = 28;
-const GENERAL_INFO: u32 = 29;
-const GOODBYE_AND_DIE: u32 = 30;
-const DECEIVERS: u32 = 31;
-const NO_PEACE: u32 = 32;
-const NO_ALLIANCE: u32 = 33;
-const ILWRATH_BELIEVE: u32 = 34;
-const OK_KILL_THRADDASH: u32 = 35;
-const GOODBYE_GODS: u32 = 36;
-const INIT_HELLO_SPACE: u32 = 37;
-const SUBSEQUENT_HELLO_SPACE_1: u32 = 38;
-const SUBSEQUENT_HELLO_SPACE_2: u32 = 39;
-const SUBSEQUENT_HELLO_SPACE_3: u32 = 40;
-const SUBSEQUENT_HELLO_SPACE_4: u32 = 41;
-const GENERAL_INFO_SPACE_1: u32 = 42;
-const GENERAL_INFO_SPACE_2: u32 = 43;
-const GENERAL_INFO_SPACE_3: u32 = 44;
-const GENERAL_INFO_SPACE_4: u32 = 45;
-const GENERAL_INFO_SPACE_5: u32 = 46;
-const STRENGTH_NOT_ALL: u32 = 47;
-const NO_SLAY_BY_THOUSANDS: u32 = 48;
-const NO_EASE_UP: u32 = 49;
-const GOODBYE_AND_DIE_SPACE: u32 = 50;
-const INIT_HOME_HELLO: u32 = 51;
-const GOODBYE_AND_DIE_HOMEWORLD: u32 = 52;
-const SO_MUCH_TO_KNOW: u32 = 53;
-const LONG_AGO: u32 = 54;
-const KILLED_GOOD_GODS: u32 = 55;
-const CHANNEL_44: u32 = 56;
-const BECAUSE_44: u32 = 57;
-const WHAT_ABOUT_ILWRATH: u32 = 58;
-const ABOUT_PHYSIO: u32 = 59;
-const ABOUT_HISTORY: u32 = 60;
-const ABOUT_CULTURE: u32 = 61;
-const ABOUT_URQUAN: u32 = 62;
-const URQUAN_TOO_NICE: u32 = 63;
-const OF_COURSE_WERE_EVIL: u32 = 64;
-const DONT_CONFUSE_US: u32 = 65;
-const ON_WAY_TO_THRADDASH: u32 = 66;
-const HAPPY_FIGHTING_THRADDASH: u32 = 67;
-const SAY_WARSHIP: u32 = 68;
-const SAY_DWE: u32 = 69;
-const SAY_YOUBOO: u32 = 70;
-const SAY_DILLRAT: u32 = 71;
-const ENOUGH_ORDERS: u32 = 72;
-const OTHER_DIVINE_ORDERS: u32 = 73;
-const WORSHIP_US: u32 = 74;
-const BYE_GODS: u32 = 75;
-const ENOUGH_ILWRATH: u32 = 76;
-const ENOUGH_GODS: u32 = 77;
-const WHERE_YOU_COME_FROM: u32 = 78;
-const IT_WILL_BE_A_PLEASURE: u32 = 79;
-const BE_REASONABLE: u32 = 80;
-const SURRENDER: u32 = 81;
-const WHATS_UP: u32 = 82;
-const BYE: u32 = 83;
-const WANT_PEACE: u32 = 84;
-const WANT_ALLIANCE: u32 = 85;
-const GO_KILL_THRADDASH: u32 = 86;
-const WHATS_UP_SPACE_1: u32 = 87;
-const WHATS_UP_SPACE_2: u32 = 88;
-const WHATS_UP_SPACE_3: u32 = 89;
-const WHATS_UP_SPACE_4: u32 = 90;
-const WHATS_UP_SPACE_5: u32 = 91;
-const YOU_ARE_WEAK: u32 = 92;
-const SLAY_BY_THOUSANDS: u32 = 93;
-const EASE_UP: u32 = 94;
-const BYE_SPACE: u32 = 95;
-const BYE_HOMEWORLD: u32 = 96;
-const WANT_INFO_ON_GODS: u32 = 97;
-const WHEN_START_WORSHIP: u32 = 98;
-const ANY_GOOD_GODS: u32 = 99;
-const HOW_TALK_WITH_GODS: u32 = 100;
-const WHY_44: u32 = 101;
-const WANT_INFO_ON_ILWRATH: u32 = 102;
-const WHAT_ABOUT_PHYSIO: u32 = 103;
-const WHAT_ABOUT_HISTORY: u32 = 104;
-const WHAT_ABOUT_CULTURE: u32 = 105;
-const WHAT_ABOUT_URQUAN: u32 = 106;
-const ARE_YOU_EVIL: u32 = 107;
-const BUT_EVIL_IS_DEFINED: u32 = 108;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    CombatIsInevitable,
+    IlwrathGods,
+    IlwrathInfo,
+    IlwrathHome,
+    GodsOrder,
+    GodsSpeak,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.ilwrath.graphics\0";
-const RACE_FONT: &[u8] = b"comm.ilwrath.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.ilwrath.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.ilwrath.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.ilwrath.dialogue\0";
-
-/// Ilwrath race dialogue implementation.
-pub struct IlwrathDialogue;
-
-impl super::RaceDialogue for IlwrathDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
+    fn handle(&mut self, handler: Handler, r: u16) {
+        match handler {
+            Handler::CombatIsInevitable => self.combat_is_inevitable(r),
+            Handler::IlwrathGods => self.ilwrath_gods(r),
+            Handler::IlwrathInfo => self.ilwrath_info(r),
+            Handler::IlwrathHome => self.ilwrath_home(r),
+            Handler::GodsOrder => self.gods_order(r),
+            Handler::GodsSpeak => self.gods_speak(r),
         }
     }
-
+    fn initialize(&mut self, _desc: &mut CLocData) {
+        let peaceful = self.api.get("PROBE_ILWRATH_ENCOUNTER") != 0
+            || self.api.get("GLOBAL_FLAGS_AND_DATA") & ((1 << 4) | (1 << 5)) != 0
+            || self.api.activity() as u8 == 5;
+        self.api.segue(u32::from(!peaceful));
+    }
+    fn combat_is_inevitable(&mut self, r: u16) {
+        self.api.segue(1);
+        if r == YOU_ARE_WEAK {
+            self.api.npc(i32::from(STRENGTH_NOT_ALL));
+        } else if r == SLAY_BY_THOUSANDS {
+            self.api.npc(i32::from(NO_SLAY_BY_THOUSANDS));
+        } else if r == EASE_UP {
+            self.api.npc(i32::from(NO_EASE_UP));
+        } else if r == BYE_SPACE {
+            self.api.npc(i32::from(GOODBYE_AND_DIE_SPACE));
+        } else if r == BYE_HOMEWORLD {
+            self.api.npc(i32::from(GOODBYE_AND_DIE_HOMEWORLD));
+        } else if r == WANT_PEACE {
+            self.api.npc(i32::from(NO_PEACE));
+        } else if r == WANT_ALLIANCE {
+            self.api.npc(i32::from(NO_ALLIANCE));
+        } else if r == BUT_EVIL_IS_DEFINED {
+            self.api.npc(i32::from(DONT_CONFUSE_US));
+        } else if r == BYE_GODS {
+            self.api.npc(i32::from(GOODBYE_GODS));
+            self.api.segue(0);
+        }
+        if r == WHATS_UP {
+            self.api.npc(i32::from(GENERAL_INFO));
+            self.api.response(BYE, Handler::CombatIsInevitable, &[]);
+        } else if ((((r == WHATS_UP_SPACE_1) || (r == WHATS_UP_SPACE_2))
+            || (r == WHATS_UP_SPACE_3))
+            || (r == WHATS_UP_SPACE_4))
+            || (r == WHATS_UP_SPACE_5)
+        {
+            let mut num_visits: u8;
+            num_visits = self.api.get("ILWRATH_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_4));
+                }
+                4 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_5));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("ILWRATH_INFO", num_visits);
+        } else {
+            if r == BYE {
+                self.api.npc(i32::from(GOODBYE_AND_DIE));
+            } else if r == WHERE_YOU_COME_FROM {
+                self.api.npc(i32::from(CAME_FROM));
+            }
+            if r == IT_WILL_BE_A_PLEASURE {
+                self.api.npc(i32::from(WHO_BLASTS_WHO));
+            }
+            if r == SURRENDER {
+                self.api.npc(i32::from(NO_SURRENDER));
+            }
+            if r == BE_REASONABLE {
+                self.api.npc(i32::from(NOT_REASONABLE));
+            }
+        }
+    }
+    fn ilwrath_gods(&mut self, r: u16) {
+        let mut gods_left: bool;
+        gods_left = false;
+        if r == WANT_INFO_ON_GODS {
+            self.api.npc(i32::from(SO_MUCH_TO_KNOW));
+        } else if r == WHEN_START_WORSHIP {
+            self.api.npc(i32::from(LONG_AGO));
+            self.api.disable(WHEN_START_WORSHIP);
+        } else if r == ANY_GOOD_GODS {
+            self.api.npc(i32::from(KILLED_GOOD_GODS));
+            self.api.disable(ANY_GOOD_GODS);
+        } else if r == HOW_TALK_WITH_GODS {
+            self.api.npc(i32::from(CHANNEL_44));
+            self.api.disable(HOW_TALK_WITH_GODS);
+        } else if r == WHY_44 {
+            self.api.npc(i32::from(BECAUSE_44));
+            self.api.disable(WHY_44);
+        }
+        if self.api.enabled(WHEN_START_WORSHIP) {
+            self.api
+                .response(WHEN_START_WORSHIP, Handler::IlwrathGods, &[]);
+            gods_left = true;
+        }
+        if self.api.enabled(ANY_GOOD_GODS) {
+            self.api.response(ANY_GOOD_GODS, Handler::IlwrathGods, &[]);
+            gods_left = true;
+        }
+        if self.api.enabled(HOW_TALK_WITH_GODS) {
+            self.api
+                .response(HOW_TALK_WITH_GODS, Handler::IlwrathGods, &[]);
+            gods_left = true;
+        } else if self.api.enabled(WHY_44) {
+            self.api.response(WHY_44, Handler::IlwrathGods, &[]);
+            gods_left = true;
+        }
+        self.api.response(ENOUGH_GODS, Handler::IlwrathHome, &[]);
+        if !(gods_left) {
+            self.api.disable(WANT_INFO_ON_GODS);
+        }
+    }
+    fn ilwrath_info(&mut self, r: u16) {
+        if r == WANT_INFO_ON_ILWRATH {
+            self.api.npc(i32::from(WHAT_ABOUT_ILWRATH));
+        } else if r == WHAT_ABOUT_PHYSIO {
+            self.api.npc(i32::from(ABOUT_PHYSIO));
+            self.api.disable(WHAT_ABOUT_PHYSIO);
+        } else if r == WHAT_ABOUT_HISTORY {
+            self.api.npc(i32::from(ABOUT_HISTORY));
+            self.api.disable(WHAT_ABOUT_HISTORY);
+        } else if r == WHAT_ABOUT_CULTURE {
+            self.api.npc(i32::from(ABOUT_CULTURE));
+            self.api.disable(WHAT_ABOUT_CULTURE);
+        } else if r == WHAT_ABOUT_URQUAN {
+            self.api.npc(i32::from(URQUAN_TOO_NICE));
+            self.api.disable(WHAT_ABOUT_URQUAN);
+        } else if r == ARE_YOU_EVIL {
+            self.api.npc(i32::from(OF_COURSE_WERE_EVIL));
+            self.api.disable(ARE_YOU_EVIL);
+        }
+        if self.api.enabled(WHAT_ABOUT_PHYSIO) {
+            self.api
+                .response(WHAT_ABOUT_PHYSIO, Handler::IlwrathInfo, &[]);
+        }
+        if self.api.enabled(WHAT_ABOUT_HISTORY) {
+            self.api
+                .response(WHAT_ABOUT_HISTORY, Handler::IlwrathInfo, &[]);
+        }
+        if self.api.enabled(WHAT_ABOUT_CULTURE) {
+            self.api
+                .response(WHAT_ABOUT_CULTURE, Handler::IlwrathInfo, &[]);
+        }
+        if self.api.enabled(WHAT_ABOUT_URQUAN) {
+            self.api
+                .response(WHAT_ABOUT_URQUAN, Handler::IlwrathInfo, &[]);
+        }
+        if self.api.enabled(ARE_YOU_EVIL) {
+            self.api.response(ARE_YOU_EVIL, Handler::IlwrathInfo, &[]);
+        } else {
+            self.api
+                .response(BUT_EVIL_IS_DEFINED, Handler::CombatIsInevitable, &[]);
+        }
+        self.api.response(ENOUGH_ILWRATH, Handler::IlwrathHome, &[]);
+    }
+    fn ilwrath_home(&mut self, r: u16) {
+        if r == 0 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("ILWRATH_HOME_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_HOME_HELLO));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_HOME_HELLO));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("ILWRATH_HOME_VISITS", num_visits);
+        } else if r == ENOUGH_GODS {
+            self.api.npc(i32::from(OK_ENOUGH_GODS));
+        } else if r == ENOUGH_ILWRATH {
+            self.api.npc(i32::from(OK_ENOUGH_ILWRATH));
+        }
+        if self.api.enabled(WANT_INFO_ON_GODS) {
+            self.api
+                .response(WANT_INFO_ON_GODS, Handler::IlwrathGods, &[]);
+        }
+        if self.api.enabled(WANT_INFO_ON_ILWRATH) {
+            self.api
+                .response(WANT_INFO_ON_ILWRATH, Handler::IlwrathInfo, &[]);
+        }
+        self.api
+            .response(WANT_PEACE, Handler::CombatIsInevitable, &[]);
+        self.api
+            .response(WANT_ALLIANCE, Handler::CombatIsInevitable, &[]);
+        self.api
+            .response(BYE_HOMEWORLD, Handler::CombatIsInevitable, &[]);
+    }
+    fn gods_order(&mut self, r: u16) {
+        let mut orders_left: bool;
+        orders_left = false;
+        if r == OTHER_DIVINE_ORDERS {
+            self.api.npc(i32::from(WHAT_ORDERS));
+        } else if r == SAY_WARSHIP {
+            self.api.npc(i32::from(OK_WARSHIP));
+            self.api.disable(SAY_WARSHIP);
+        } else if r == SAY_DWE {
+            self.api.npc(i32::from(OK_DWE));
+            self.api.disable(SAY_DWE);
+        } else if r == SAY_YOUBOO {
+            self.api.npc(i32::from(OK_YOUBOO));
+            self.api.disable(SAY_YOUBOO);
+        } else if r == SAY_DILLRAT {
+            self.api.npc(i32::from(OK_DILRAT));
+            self.api.disable(SAY_DILLRAT);
+        }
+        if self.api.enabled(SAY_WARSHIP) {
+            self.api.response(SAY_WARSHIP, Handler::GodsOrder, &[]);
+            orders_left = true;
+        }
+        if self.api.enabled(SAY_DWE) {
+            self.api.response(SAY_DWE, Handler::GodsOrder, &[]);
+            orders_left = true;
+        }
+        if self.api.enabled(SAY_YOUBOO) {
+            self.api.response(SAY_YOUBOO, Handler::GodsOrder, &[]);
+            orders_left = true;
+        }
+        if self.api.enabled(SAY_DILLRAT) {
+            self.api.response(SAY_DILLRAT, Handler::GodsOrder, &[]);
+            orders_left = true;
+        }
+        self.api.response(ENOUGH_ORDERS, Handler::GodsSpeak, &[]);
+        if !(orders_left) {
+            self.api.disable(OTHER_DIVINE_ORDERS);
+        }
+    }
+    fn gods_speak(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == 0 {
+            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+                self.api.npc(i32::from(GLORIOUS_WORSHIP));
+            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+                self.api.npc(i32::from(ON_WAY));
+            } else {
+                num_visits = self.api.get("ILWRATH_GODS_SPOKEN");
+                let res = {
+                    let old = num_visits;
+                    num_visits += 1;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(ILWRATH_BELIEVE));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(GODS_RETURN_1));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(GODS_RETURN_2));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(GODS_RETURN_3));
+                        num_visits -= 1;
+                    }
+                    _ => {}
+                }
+                self.api.set("ILWRATH_GODS_SPOKEN", num_visits);
+            }
+        } else if r == GO_KILL_THRADDASH {
+            self.api.npc(i32::from(OK_KILL_THRADDASH));
+            self.api.set("ILWRATH_DECEIVED", 1_u8);
+            self.api.advance_ilwrath();
+        } else if r == WORSHIP_US {
+            num_visits = self.api.get("ILWRATH_WORSHIP");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(WE_WORSHIP_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(WE_WORSHIP_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(WE_WORSHIP_3));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("ILWRATH_WORSHIP", num_visits);
+            self.api.disable(WORSHIP_US);
+        } else if r == ENOUGH_ORDERS {
+            self.api.npc(i32::from(NEVER_ENOUGH));
+        }
+        if !(self.api.get("ILWRATH_DECEIVED") != 0) {
+            self.api
+                .response(GO_KILL_THRADDASH, Handler::GodsSpeak, &[]);
+        }
+        if self.api.enabled(WORSHIP_US) {
+            self.api.response(WORSHIP_US, Handler::GodsSpeak, &[]);
+        }
+        if self.api.enabled(OTHER_DIVINE_ORDERS) {
+            self.api
+                .response(OTHER_DIVINE_ORDERS, Handler::GodsOrder, &[]);
+        }
+        self.api
+            .response(BYE_GODS, Handler::CombatIsInevitable, &[]);
+    }
+    fn ilwrath_space(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == 0 {
+            num_visits = self.api.get("ILWRATH_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_HELLO_SPACE));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_HELLO_SPACE_1));
+                }
+                2 => {
+                    self.api.npc(i32::from(SUBSEQUENT_HELLO_SPACE_2));
+                }
+                3 => {
+                    self.api.npc(i32::from(SUBSEQUENT_HELLO_SPACE_3));
+                }
+                4 => {
+                    self.api.npc(i32::from(SUBSEQUENT_HELLO_SPACE_4));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("ILWRATH_VISITS", num_visits);
+        }
+        num_visits = self.api.get("ILWRATH_INFO");
+        match num_visits {
+            0 => {
+                self.api
+                    .response(WHATS_UP_SPACE_1, Handler::CombatIsInevitable, &[]);
+            }
+            1 => {
+                self.api
+                    .response(WHATS_UP_SPACE_2, Handler::CombatIsInevitable, &[]);
+            }
+            2 => {
+                self.api
+                    .response(WHATS_UP_SPACE_3, Handler::CombatIsInevitable, &[]);
+            }
+            3 => {
+                self.api
+                    .response(WHATS_UP_SPACE_4, Handler::CombatIsInevitable, &[]);
+            }
+            4 => {
+                self.api
+                    .response(WHATS_UP_SPACE_5, Handler::CombatIsInevitable, &[]);
+            }
+            _ => {}
+        }
+        self.api
+            .response(YOU_ARE_WEAK, Handler::CombatIsInevitable, &[]);
+        self.api
+            .response(SLAY_BY_THOUSANDS, Handler::CombatIsInevitable, &[]);
+        self.api.response(EASE_UP, Handler::CombatIsInevitable, &[]);
+        self.api
+            .response(BYE_SPACE, Handler::CombatIsInevitable, &[]);
+    }
+    fn intro(&mut self) {
+        let mut num_visits: u8;
+        if self.api.get("PROBE_ILWRATH_ENCOUNTER") != 0 {
+            self.api.npc(i32::from(SEND_MESSAGE));
+            self.api
+                .response(WHERE_YOU_COME_FROM, Handler::CombatIsInevitable, &[]);
+            self.api
+                .response(IT_WILL_BE_A_PLEASURE, Handler::CombatIsInevitable, &[]);
+            self.api
+                .response(SURRENDER, Handler::CombatIsInevitable, &[]);
+            self.api
+                .response(BE_REASONABLE, Handler::CombatIsInevitable, &[]);
+        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+            self.ilwrath_home(0_u16);
+        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
+            num_visits = self.api.get("ILWRATH_CHMMR_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_CHMMR_HELLO));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_CHMMR_HELLO));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("ILWRATH_CHMMR_VISITS", num_visits);
+            self.api
+                .response(WHATS_UP, Handler::CombatIsInevitable, &[]);
+            self.api.response(BYE, Handler::CombatIsInevitable, &[]);
+        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 5)) != 0 {
+            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+                self.api.npc(i32::from(BIG_FUN));
+            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+                self.api.npc(i32::from(FAST_AS_CAN));
+            } else {
+                self.api.npc(i32::from(JUST_GRUNTS));
+            }
+            self.api.segue(0);
+        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 4)) != 0 {
+            self.gods_speak(0_u16);
+        } else {
+            self.api.segue(0);
+            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+                self.api.npc(i32::from(HAPPY_FIGHTING_THRADDASH));
+            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+                self.api.npc(i32::from(ON_WAY_TO_THRADDASH));
+            } else {
+                self.ilwrath_space(0_u16);
+            }
+        }
+    }
+    fn post_ilwrath_enc(&mut self) {}
+}
+fn descriptor() -> CLocData {
+    let mut desc = CLocData {
+        alien_frame_res: c"comm.ilwrath.graphics".as_ptr(),
+        alien_font_res: c"comm.ilwrath.font".as_ptr(),
+        alien_colormap_res: c"comm.ilwrath.colortable".as_ptr(),
+        alien_song_res: c"comm.ilwrath.music".as_ptr(),
+        conversation_phrases_res: c"comm.ilwrath.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 164, y: 70 },
+        alien_text_width: 288,
+        alien_text_align: 1,
+        alien_text_valign: 1,
+        num_animations: 4,
+        ..CLocData::default()
+    };
+    desc.alien_ambient_array[0] = animation(6, 5, 2, (42, 0), (840, 2520));
+    desc.alien_ambient_array[1] = animation(11, 5, 2, (42, 0), (840, 2520));
+    desc.alien_ambient_array[2] = animation(16, 5, 2, (42, 0), (840, 2520));
+    desc.alien_ambient_array[3] = animation(21, 6, 2, (42, 0), (840, 2520));
+    desc.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
+        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
+        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+    }
+    desc
+}
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+    extern "C" fn combat_is_inevitable(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::CombatIsInevitable,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn ilwrath_gods(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::IlwrathGods,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn ilwrath_info(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::IlwrathInfo,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn ilwrath_home(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::IlwrathHome,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn gods_order(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::GodsOrder,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn gods_speak(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::GodsSpeak,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    fn callback(handler: Handler) -> extern "C" fn(u32) {
+        match handler {
+            Handler::CombatIsInevitable => combat_is_inevitable,
+            Handler::IlwrathGods => ilwrath_gods,
+            Handler::IlwrathInfo => ilwrath_info,
+            Handler::IlwrathHome => ilwrath_home,
+            Handler::GodsOrder => gods_order,
+            Handler::GodsSpeak => gods_speak,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_ilwrath_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter descriptor and initial battle segue.
+    ///
+    /// # Safety
+    /// Game thread only. The caller must copy the descriptor before another encounter.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_ilwrath_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize(desc));
+        desc
+    }
+}
+pub struct IlwrathDialogue;
+impl super::RaceDialogue for IlwrathDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_ilwrath_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-        assert!(
-            bit_range("ILWRATH_CHMMR_VISITS").is_some(),
-            "missing game state key: ILWRATH_CHMMR_VISITS"
-        );
-        assert!(
-            bit_range("ILWRATH_DECEIVED").is_some(),
-            "missing game state key: ILWRATH_DECEIVED"
-        );
-        assert!(
-            bit_range("ILWRATH_FIGHT_THRADDASH").is_some(),
-            "missing game state key: ILWRATH_FIGHT_THRADDASH"
-        );
-        assert!(
-            bit_range("ILWRATH_GODS_SPOKEN").is_some(),
-            "missing game state key: ILWRATH_GODS_SPOKEN"
-        );
-    }
-}
+mod tests;

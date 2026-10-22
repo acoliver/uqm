@@ -24,6 +24,7 @@ pub mod blackur;
 pub mod chmmr;
 pub mod comandr;
 pub mod druuge;
+mod encounter;
 pub mod ilwrath;
 pub mod melnorm;
 pub mod mycon;

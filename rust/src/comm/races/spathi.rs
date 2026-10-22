@@ -1,299 +1,750 @@
-//! Spathi dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
+//! Spathi dialogue, ported from the original C script.
 
-#![allow(dead_code)]
+use super::encounter::EncounterApi;
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+const SPATHI_SHIP: u16 = 6;
+const GOOD_GUY: u16 = 1;
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const SORRY_ABOUT_THAT: u32 = 1;
-const IDENTIFY: u32 = 2;
-const I_FWIFFO: u32 = 3;
-const HI_THERE: u32 = 4;
-const ARE_YOU_SURE: u32 = 5;
-const DONT_KILL: u32 = 6;
-const WE_FIGHT_1: u32 = 7;
-const WE_FIGHT_2: u32 = 8;
-const OK_WONT: u32 = 9;
-const DO_CULTURAL: u32 = 10;
-const WEZZY_WEZZAH: u32 = 11;
-const DIE_SLUGBOY: u32 = 12;
-const BEGIN_RITUAL: u32 = 13;
-const MUST_DO_RITUAL_AT_HOME: u32 = 14;
-const YOU_WONT_DIE_YET: u32 = 15;
-const ETERNAL_GRATITUDE: u32 = 16;
-const WE_FIGHT: u32 = 17;
-const PAY_FOR_CRIMES: u32 = 18;
-const CLUTCH_MAVEN: u32 = 19;
-const YOU_MAY_LIVE: u32 = 20;
-const HONEST_AND_FRIENDLY: u32 = 21;
-const WHAT_ARE_COORDINATES: u32 = 22;
-const COORDINATES_ARE: u32 = 23;
-const TELL_ME_COORDINATES: u32 = 24;
-const FAKE_COORDINATES: u32 = 25;
-const TOO_SCARY: u32 = 26;
-const YOUVE_GOT_ME_ALL_WRONG: u32 = 27;
-const SORRY_NO_COORDS: u32 = 28;
-const WHAT_DOING_ON_PLUTO_1: u32 = 29;
-const ABOUT_20_YEARS_AGO: u32 = 30;
-const WHAT_DOING_ON_PLUTO_2: u32 = 31;
-const WHEN_URQUAN_ARRIVED: u32 = 32;
-const WHERE_ARE_URQUAN: u32 = 33;
-const URQUAN_LEFT: u32 = 34;
-const WHAT_ABOUT_OTHER_RACES: u32 = 35;
-const ABOUT_OTHER_RACES: u32 = 36;
-const WHAT_DOING_ON_PLUTO_3: u32 = 37;
-const WHAT_ABOUT_YOURSELF: u32 = 38;
-const ABOUT_MYSELF: u32 = 39;
-const STATIONED_ON_EARTH_MOON: u32 = 40;
-const WHAT_BLAZE_OF_GLORY: u32 = 41;
-const BLAZE_IS: u32 = 42;
-const WHAT_ABOUT_MOONBASE: u32 = 43;
-const SET_UP_BASE: u32 = 44;
-const WHAT_ABOUT_ILWRATH: u32 = 45;
-const ABOUT_ILWRATH: u32 = 46;
-const WHAT_ABOUT_OTHER_SPATHI: u32 = 47;
-const REALLY_THOUSANDS: u32 = 48;
-const SPATHI_ARE: u32 = 49;
-const WHAT_ENEMY: u32 = 50;
-const ENEMY_IS: u32 = 51;
-const WHEN_ILWRATH: u32 = 52;
-const THEN_ILWRATH: u32 = 53;
-const WHY_YOU_HERE: u32 = 54;
-const DREW_SHORT_STRAW: u32 = 55;
-const HOW_MANY_CREW: u32 = 56;
-const JUST_ME: u32 = 57;
-const THOUSANDS: u32 = 58;
-const FULL_OF_MONSTERS: u32 = 59;
-const HOW_TRUE: u32 = 60;
-const JOIN_US: u32 = 61;
-const WILL_JOIN: u32 = 62;
-const WONT_JOIN_1: u32 = 63;
-const GIVE_SHIP_OR_DIE: u32 = 64;
-const WONT_JOIN_2: u32 = 65;
-const WONT_JOIN_3: u32 = 66;
-const GEE_THANKS: u32 = 67;
-const CHANGED_MIND: u32 = 68;
-const YOURE_FORGIVEN: u32 = 69;
-const THANKS_FOR_FORGIVENESS: u32 = 70;
-const HATE_YOU_FOREVER_SPACE: u32 = 71;
-const INIT_ANGRY_HELLO_SPACE: u32 = 72;
-const SUBSEQUENT_ANGRY_HELLO_SPACE: u32 = 73;
-const INIT_NEUTRAL_HELLO_SPACE: u32 = 74;
-const SUBSEQUENT_NEUTRAL_HELLO_SPACE: u32 = 75;
-const INIT_FRIENDLY_HELLO_SPACE: u32 = 76;
-const SUBSEQUENT_FRIENDLY_HELLO_SPACE: u32 = 77;
-const INIT_ALLIED_HELLO_SPACE: u32 = 78;
-const SUBSEQUENT_ALLIED_HELLO_SPACE: u32 = 79;
-const GIVE_INFO_SPACE: u32 = 80;
-const HERES_SOME_INFO: u32 = 81;
-const WE_SORRY_SPACE: u32 = 82;
-const APOLOGIZE_AT_HOMEWORLD: u32 = 83;
-const WE_FIGHT_AGAIN_SPACE: u32 = 84;
-const OK_FIGHT_AGAIN_SPACE: u32 = 85;
-const BYE_ANGRY_SPACE: u32 = 86;
-const GOODBYE_ANGRY_SPACE: u32 = 87;
-const LOOK_WEIRD: u32 = 88;
-const YOU_LOOK_WEIRD: u32 = 89;
-const NO_LOOK_REALLY_WEIRD: u32 = 90;
-const NO_YOU_LOOK_REALLY_WEIRD: u32 = 91;
-const COME_IN_PEACE: u32 = 92;
-const AGAINST_NATURE: u32 = 93;
-const PREPARE_TO_DIE: u32 = 94;
-const ALWAYS_PREPARED: u32 = 95;
-const SINCE_FRIENDLY_GIVE_STUFF: u32 = 96;
-const GIVE_ADVICE: u32 = 97;
-const WHATS_UP_SPACE_1: u32 = 98;
-const GENERAL_INFO_SPACE_1: u32 = 99;
-const BYE_FRIENDLY_SPACE: u32 = 100;
-const GOODBYE_FRIENDLY_SPACE: u32 = 101;
-const LOOKING_FOR_A_FEW_GOOD_SQUIDS: u32 = 102;
-const URQUAN_SLAVES: u32 = 103;
-const WHY_SLAVES: u32 = 104;
-const UMGAH_TRICK: u32 = 105;
-const TELL_US_ABOUT_YOU: u32 = 106;
-const ABOUT_US: u32 = 107;
-const WHAT_YOU_REALLY_WANT: u32 = 108;
-const WANT_THIS: u32 = 109;
-const HOW_ABOUT_ALLIANCE: u32 = 110;
-const SURE: u32 = 111;
-const PART_IN_PEACE: u32 = 112;
-const KEEP_IT_SECRET: u32 = 113;
-const HEARD_YOURE_COWARDS: u32 = 114;
-const DARN_TOOTIN: u32 = 115;
-const WANNA_FIGHT: u32 = 116;
-const YES_WE_DO: u32 = 117;
-const SO_LETS_FIGHT: u32 = 118;
-const OK_LETS_FIGHT: u32 = 119;
-const SO_LETS_FIGHT_ALREADY: u32 = 120;
-const DONT_REALLY_WANT_TO_FIGHT: u32 = 121;
-const ATTACK_YOU_NOW: u32 = 122;
-const YIPES: u32 = 123;
-const WHATS_UP_SPACE_2: u32 = 124;
-const GENERAL_INFO_SPACE_2: u32 = 125;
-const GIVE_US_INFO_FROM_SPACE: u32 = 126;
-const GET_INFO_FROM_SPATHIWA: u32 = 127;
-const GIVE_US_RESOURCES_SPACE: u32 = 128;
-const GET_RESOURCES_FROM_SPATHIWA: u32 = 129;
-const WHAT_DO_FOR_FUN: u32 = 130;
-const DO_THIS_FOR_FUN: u32 = 131;
-const BYE_ALLY_SPACE: u32 = 132;
-const GOODBYE_ALLY_SPACE: u32 = 133;
-const OK_WE_FIGHT_AT_PLUTO: u32 = 134;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    ExitConversation,
+    SpathiOnPluto,
+    SpathiMustGrovel,
+    SpathiAllies,
+    SpathiFriendly,
+    SpathiBefriend,
+    SpathiAntagonize,
+    SpathiNeutral,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+#[derive(Default)]
+struct Session {
+    refusals: u8,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
+struct Dialogue<'a, A> {
+    api: &'a mut A,
+    session: &'a mut Session,
 }
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    unsafe { crate::mainloop::c_extern::get_current_activity() }
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.spathi.graphics\0";
-const RACE_FONT: &[u8] = b"comm.spathi.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.spathi.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.spathi.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.spathi.dialogue\0";
-
-/// Spathi race dialogue implementation.
-pub struct SpathiDialogue;
-
-impl super::RaceDialogue for SpathiDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
+    fn handle(&mut self, handler: Handler, r: u16) {
+        match handler {
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::SpathiOnPluto => self.spathi_on_pluto(r),
+            Handler::SpathiMustGrovel => self.spathi_must_grovel(r),
+            Handler::SpathiAllies => self.spathi_allies(r),
+            Handler::SpathiFriendly => self.spathi_friendly(r),
+            Handler::SpathiBefriend => self.spathi_befriend(r),
+            Handler::SpathiAntagonize => self.spathi_antagonize(r),
+            Handler::SpathiNeutral => self.spathi_neutral(r),
         }
     }
-
+    fn initialize(&mut self, desc: &mut CLocData) {
+        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
+            desc.alien_alt_song_res = c"comm.fwiffo.music".as_ptr();
+            desc.alien_song_flags |= 1;
+        } else {
+            desc.alien_song_flags &= !1;
+        }
+        let peaceful = self.api.get("FOUND_PLUTO_SPATHI") == 1
+            || self.api.get("SPATHI_MANNER") == 3
+            || self.api.activity() as u8 == 5;
+        self.api.segue(u32::from(!peaceful));
+    }
+    fn exit_conversation(&mut self, r: u16) {
+        self.api.segue(0);
+        if r == BYE_ALLY_SPACE {
+            self.api.npc(i32::from(GOODBYE_ALLY_SPACE));
+        } else if r == BYE_FRIENDLY_SPACE {
+            self.api.npc(i32::from(GOODBYE_FRIENDLY_SPACE));
+        } else if r == PART_IN_PEACE {
+            self.api.npc(i32::from(KEEP_IT_SECRET));
+        } else if r == WE_SORRY_SPACE {
+            self.api.npc(i32::from(APOLOGIZE_AT_HOMEWORLD));
+        } else if r == GIVE_INFO_SPACE {
+            self.api.npc(i32::from(HERES_SOME_INFO));
+        } else if r == BYE_ANGRY_SPACE {
+            self.api.npc(i32::from(GOODBYE_ANGRY_SPACE));
+        } else if r == ATTACK_YOU_NOW {
+            self.api.npc(i32::from(YIPES));
+            self.api.segue(1);
+        } else if r == WE_FIGHT_AGAIN_SPACE {
+            self.api.npc(i32::from(OK_FIGHT_AGAIN_SPACE));
+            self.api.segue(1);
+        } else if (((((r == DIE_SLUGBOY) || (r == WE_FIGHT_1)) || (r == WE_FIGHT_2))
+            || (r == PAY_FOR_CRIMES))
+            || (r == TELL_ME_COORDINATES))
+            || (r == CHANGED_MIND)
+        {
+            if r == TELL_ME_COORDINATES {
+                self.api.npc(i32::from(FAKE_COORDINATES));
+            }
+            self.api.npc(i32::from(OK_WE_FIGHT_AT_PLUTO));
+            self.api.segue(1);
+        } else if r == JOIN_US {
+            if self.api.escort_feasibility(SPATHI_SHIP) == 0 {
+                self.api.npc(i32::from(TOO_SCARY));
+            } else {
+                self.api.npc(i32::from(WILL_JOIN));
+                self.api.talk_segue(!0_u16);
+                self.api.add_escorts(SPATHI_SHIP, 1);
+                self.api.fwiffo_crew();
+            }
+        }
+    }
+    fn spathi_on_pluto(&mut self, r: u16) {
+        if r == HI_THERE {
+            self.api.npc(i32::from(ARE_YOU_SURE));
+        } else if r == DONT_KILL {
+            self.api.npc(i32::from(OK_WONT));
+        } else if r == YOURE_FORGIVEN {
+            self.api.npc(i32::from(THANKS_FOR_FORGIVENESS));
+        } else if r == YOU_WONT_DIE_YET {
+            self.api.npc(i32::from(ETERNAL_GRATITUDE));
+        } else if r == YOU_MAY_LIVE {
+            self.api.npc(i32::from(GEE_THANKS));
+        } else if r == YOUVE_GOT_ME_ALL_WRONG {
+            self.api.npc(i32::from(SORRY_NO_COORDS));
+        } else if r == WHAT_DOING_ON_PLUTO_1 {
+            self.api.npc(i32::from(ABOUT_20_YEARS_AGO));
+            self.api.disable(WHAT_DOING_ON_PLUTO_1);
+        } else if r == WHAT_DOING_ON_PLUTO_2 {
+            self.api.npc(i32::from(WHEN_URQUAN_ARRIVED));
+            self.api.disable(WHAT_DOING_ON_PLUTO_2);
+        } else if r == WHAT_DOING_ON_PLUTO_3 {
+            self.api.npc(i32::from(STATIONED_ON_EARTH_MOON));
+            self.api.disable(WHAT_DOING_ON_PLUTO_3);
+        } else if r == WHAT_ABOUT_ILWRATH {
+            self.api.npc(i32::from(ABOUT_ILWRATH));
+            self.api.disable(WHAT_ABOUT_ILWRATH);
+        } else if r == WHEN_ILWRATH {
+            self.api.npc(i32::from(THEN_ILWRATH));
+            self.api.disable(WHEN_ILWRATH);
+        } else if r == WHAT_ABOUT_MOONBASE {
+            self.api.npc(i32::from(SET_UP_BASE));
+            self.api.disable(WHAT_ABOUT_MOONBASE);
+        } else if r == WHAT_ABOUT_OTHER_SPATHI {
+            self.api.npc(i32::from(SPATHI_ARE));
+            self.api.disable(WHAT_ABOUT_OTHER_SPATHI);
+        } else if r == HOW_MANY_CREW {
+            self.api.npc(i32::from(THOUSANDS));
+            self.api.disable(HOW_MANY_CREW);
+        } else if r == REALLY_THOUSANDS {
+            self.api.npc(i32::from(JUST_ME));
+            self.api.disable(REALLY_THOUSANDS);
+        } else if r == FULL_OF_MONSTERS {
+            self.api.npc(i32::from(HOW_TRUE));
+            self.api.disable(FULL_OF_MONSTERS);
+        } else if r == WHAT_ENEMY {
+            self.api.npc(i32::from(ENEMY_IS));
+            self.api.disable(WHAT_ENEMY);
+        } else if r == WHY_YOU_HERE {
+            self.api.npc(i32::from(DREW_SHORT_STRAW));
+            self.api.disable(WHY_YOU_HERE);
+        } else if r == WHERE_ARE_URQUAN {
+            self.api.npc(i32::from(URQUAN_LEFT));
+            self.api.disable(WHERE_ARE_URQUAN);
+        } else if r == WHAT_ABOUT_OTHER_RACES {
+            self.api.npc(i32::from(ABOUT_OTHER_RACES));
+            self.api.disable(WHAT_ABOUT_OTHER_RACES);
+        } else if r == WHAT_BLAZE_OF_GLORY {
+            self.api.npc(i32::from(BLAZE_IS));
+            self.api.disable(WHAT_BLAZE_OF_GLORY);
+        } else if r == WHAT_ABOUT_YOURSELF {
+            self.api.npc(i32::from(ABOUT_MYSELF));
+            self.api.disable(WHAT_ABOUT_YOURSELF);
+        } else if r == JOIN_US {
+            if self.session.refusals == 0 {
+                self.api.npc(i32::from(WONT_JOIN_1));
+                self.session.refusals += 1;
+            } else if self.session.refusals == 1 {
+                self.api.npc(i32::from(WONT_JOIN_2));
+                self.session.refusals += 1;
+            } else {
+                self.api.npc(i32::from(WONT_JOIN_3));
+            }
+        }
+        if self.api.enabled(WHAT_DOING_ON_PLUTO_1) {
+            self.api
+                .response(WHAT_DOING_ON_PLUTO_1, Handler::SpathiOnPluto, &[]);
+        } else if self.api.enabled(WHAT_DOING_ON_PLUTO_2) {
+            self.api
+                .response(WHAT_DOING_ON_PLUTO_2, Handler::SpathiOnPluto, &[]);
+        } else if self.api.enabled(WHAT_DOING_ON_PLUTO_3) {
+            self.api
+                .response(WHAT_DOING_ON_PLUTO_3, Handler::SpathiOnPluto, &[]);
+        } else {
+            if self.api.enabled(WHAT_ABOUT_ILWRATH) {
+                self.api
+                    .response(WHAT_ABOUT_ILWRATH, Handler::SpathiOnPluto, &[]);
+            } else if self.api.enabled(WHEN_ILWRATH) {
+                self.api.response(WHEN_ILWRATH, Handler::SpathiOnPluto, &[]);
+            }
+            if self.api.enabled(WHAT_ABOUT_MOONBASE) {
+                self.api
+                    .response(WHAT_ABOUT_MOONBASE, Handler::SpathiOnPluto, &[]);
+            } else if self.api.enabled(WHAT_ABOUT_OTHER_SPATHI) {
+                self.api
+                    .response(WHAT_ABOUT_OTHER_SPATHI, Handler::SpathiOnPluto, &[]);
+            } else {
+                if self.api.enabled(HOW_MANY_CREW) {
+                    self.api
+                        .response(HOW_MANY_CREW, Handler::SpathiOnPluto, &[]);
+                } else if self.api.enabled(REALLY_THOUSANDS) {
+                    self.api
+                        .response(REALLY_THOUSANDS, Handler::SpathiOnPluto, &[]);
+                } else if self.api.enabled(FULL_OF_MONSTERS) {
+                    self.api
+                        .response(FULL_OF_MONSTERS, Handler::SpathiOnPluto, &[]);
+                }
+                if self.api.enabled(WHAT_ENEMY) {
+                    self.api.response(WHAT_ENEMY, Handler::SpathiOnPluto, &[]);
+                } else if self.api.enabled(WHY_YOU_HERE) {
+                    self.api.response(WHY_YOU_HERE, Handler::SpathiOnPluto, &[]);
+                }
+            }
+        }
+        if self.api.enabled(WHERE_ARE_URQUAN) {
+            self.api
+                .response(WHERE_ARE_URQUAN, Handler::SpathiOnPluto, &[]);
+        } else if self.api.enabled(WHAT_ABOUT_OTHER_RACES) {
+            self.api
+                .response(WHAT_ABOUT_OTHER_RACES, Handler::SpathiOnPluto, &[]);
+        } else if self.api.enabled(WHAT_BLAZE_OF_GLORY) {
+            self.api
+                .response(WHAT_BLAZE_OF_GLORY, Handler::SpathiOnPluto, &[]);
+        } else if self.api.enabled(WHAT_ABOUT_YOURSELF) {
+            self.api
+                .response(WHAT_ABOUT_YOURSELF, Handler::SpathiOnPluto, &[]);
+        }
+        if !(self.api.enabled(FULL_OF_MONSTERS)) {
+            self.api.response(JOIN_US, Handler::ExitConversation, &[]);
+        } else {
+            self.api.response(JOIN_US, Handler::SpathiOnPluto, &[]);
+        }
+        self.api
+            .response(CHANGED_MIND, Handler::ExitConversation, &[]);
+    }
+    fn spathi_must_grovel(&mut self, r: u16) {
+        if r == IDENTIFY {
+            self.api.npc(i32::from(I_FWIFFO));
+            self.api
+                .response(DO_CULTURAL, Handler::SpathiMustGrovel, &[]);
+            self.api
+                .response(YOURE_FORGIVEN, Handler::SpathiOnPluto, &[]);
+            self.api
+                .response(DIE_SLUGBOY, Handler::ExitConversation, &[]);
+        } else if r == DO_CULTURAL {
+            self.api.npc(i32::from(WEZZY_WEZZAH));
+            self.api
+                .response(BEGIN_RITUAL, Handler::SpathiMustGrovel, &[]);
+            self.api
+                .response(YOU_WONT_DIE_YET, Handler::SpathiOnPluto, &[]);
+            self.api
+                .response(WE_FIGHT_2, Handler::ExitConversation, &[]);
+        } else if r == BEGIN_RITUAL {
+            self.api.npc(i32::from(MUST_DO_RITUAL_AT_HOME));
+            self.api.response(YOU_MAY_LIVE, Handler::SpathiOnPluto, &[]);
+            self.api
+                .response(PAY_FOR_CRIMES, Handler::ExitConversation, &[]);
+            self.api
+                .response(WHAT_ARE_COORDINATES, Handler::SpathiMustGrovel, &[]);
+        } else {
+            self.api.npc(i32::from(COORDINATES_ARE));
+            self.api
+                .response(YOUVE_GOT_ME_ALL_WRONG, Handler::SpathiOnPluto, &[]);
+            self.api
+                .response(TELL_ME_COORDINATES, Handler::ExitConversation, &[]);
+        }
+    }
+    fn spathi_allies(&mut self, r: u16) {
+        if r == 0 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("SPATHI_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_ALLIED_HELLO_SPACE));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_ALLIED_HELLO_SPACE));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("SPATHI_VISITS", num_visits);
+        } else if r == WHATS_UP_SPACE_2 {
+            self.api.npc(i32::from(GENERAL_INFO_SPACE_2));
+            self.api.disable(WHATS_UP_SPACE_2);
+        } else if r == GIVE_US_INFO_FROM_SPACE {
+            self.api.npc(i32::from(GET_INFO_FROM_SPATHIWA));
+            self.api.disable(GIVE_US_INFO_FROM_SPACE);
+        } else if r == GIVE_US_RESOURCES_SPACE {
+            self.api.npc(i32::from(GET_RESOURCES_FROM_SPATHIWA));
+            self.api.disable(GIVE_US_RESOURCES_SPACE);
+        } else if r == WHAT_DO_FOR_FUN {
+            self.api.npc(i32::from(DO_THIS_FOR_FUN));
+            self.api.disable(WHAT_DO_FOR_FUN);
+        }
+        if self.api.enabled(WHATS_UP_SPACE_2) {
+            self.api
+                .response(WHATS_UP_SPACE_2, Handler::SpathiAllies, &[]);
+        }
+        if self.api.enabled(GIVE_US_INFO_FROM_SPACE) {
+            self.api
+                .response(GIVE_US_INFO_FROM_SPACE, Handler::SpathiAllies, &[]);
+        }
+        if self.api.enabled(GIVE_US_RESOURCES_SPACE) {
+            self.api
+                .response(GIVE_US_RESOURCES_SPACE, Handler::SpathiAllies, &[]);
+        }
+        if self.api.enabled(WHAT_DO_FOR_FUN) {
+            self.api
+                .response(WHAT_DO_FOR_FUN, Handler::SpathiAllies, &[]);
+        }
+        self.api
+            .response(BYE_ALLY_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn spathi_friendly(&mut self, r: u16) {
+        if r == 0 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("SPATHI_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_FRIENDLY_HELLO_SPACE));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_FRIENDLY_HELLO_SPACE));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("SPATHI_VISITS", num_visits);
+        } else if r == SINCE_FRIENDLY_GIVE_STUFF {
+            self.api.npc(i32::from(GIVE_ADVICE));
+            self.api.disable(SINCE_FRIENDLY_GIVE_STUFF);
+        } else if r == WHATS_UP_SPACE_1 {
+            self.api.npc(i32::from(GENERAL_INFO_SPACE_1));
+            self.api.disable(WHATS_UP_SPACE_1);
+        }
+        if self.api.enabled(WHATS_UP_SPACE_1) {
+            self.api
+                .response(WHATS_UP_SPACE_1, Handler::SpathiFriendly, &[]);
+        }
+        if self.api.enabled(SINCE_FRIENDLY_GIVE_STUFF) {
+            self.api
+                .response(SINCE_FRIENDLY_GIVE_STUFF, Handler::SpathiFriendly, &[]);
+        }
+        self.api
+            .response(BYE_FRIENDLY_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn spathi_befriend(&mut self, r: u16) {
+        let mut info_left: bool;
+        let mut last_stack: u8;
+        let mut p_str: [u16; 2] = [0; 2];
+        info_left = false;
+        last_stack = 0;
+        p_str[1] = 0;
+        p_str[0] = p_str[1];
+        if r == COME_IN_PEACE {
+            self.api.npc(i32::from(AGAINST_NATURE));
+        } else if r == LOOKING_FOR_A_FEW_GOOD_SQUIDS {
+            self.api.npc(i32::from(URQUAN_SLAVES));
+            self.api.disable(LOOKING_FOR_A_FEW_GOOD_SQUIDS);
+        } else if r == WHY_SLAVES {
+            self.api.npc(i32::from(UMGAH_TRICK));
+            self.api.disable(WHY_SLAVES);
+        } else if r == TELL_US_ABOUT_YOU {
+            self.api.npc(i32::from(ABOUT_US));
+            self.api.disable(TELL_US_ABOUT_YOU);
+            last_stack = 1;
+        } else if r == WHAT_YOU_REALLY_WANT {
+            self.api.npc(i32::from(WANT_THIS));
+            self.api.disable(WHAT_YOU_REALLY_WANT);
+        } else if r == HOW_ABOUT_ALLIANCE {
+            self.api.npc(i32::from(SURE));
+            self.api.disable(HOW_ABOUT_ALLIANCE);
+        }
+        if self.api.enabled(LOOKING_FOR_A_FEW_GOOD_SQUIDS) {
+            p_str[0] = LOOKING_FOR_A_FEW_GOOD_SQUIDS;
+        } else if self.api.enabled(WHY_SLAVES) {
+            p_str[0] = WHY_SLAVES;
+        }
+        if self.api.enabled(TELL_US_ABOUT_YOU) {
+            p_str[1] = TELL_US_ABOUT_YOU;
+        } else if self.api.enabled(WHAT_YOU_REALLY_WANT) {
+            p_str[1] = WHAT_YOU_REALLY_WANT;
+        }
+        if p_str[last_stack as usize] != 0 {
+            info_left = true;
+            self.api
+                .response(p_str[last_stack as usize], Handler::SpathiBefriend, &[]);
+        }
+        last_stack ^= 1;
+        if p_str[last_stack as usize] != 0 {
+            info_left = true;
+            self.api
+                .response(p_str[last_stack as usize], Handler::SpathiBefriend, &[]);
+        }
+        if self.api.enabled(HOW_ABOUT_ALLIANCE) {
+            info_left = true;
+            self.api
+                .response(HOW_ABOUT_ALLIANCE, Handler::SpathiBefriend, &[]);
+        }
+        if !(info_left) {
+            self.api.set("SPATHI_STACK1", 1_u8);
+            self.spathi_neutral(r);
+        }
+    }
+    fn spathi_antagonize(&mut self, r: u16) {
+        if r == PREPARE_TO_DIE {
+            self.api.npc(i32::from(ALWAYS_PREPARED));
+            self.api.set("SPATHI_STACK2", 1_u8);
+        } else if r == HEARD_YOURE_COWARDS {
+            self.api.npc(i32::from(DARN_TOOTIN));
+            self.api.disable(HEARD_YOURE_COWARDS);
+        } else if r == WANNA_FIGHT {
+            self.api.npc(i32::from(YES_WE_DO));
+            self.api.disable(WANNA_FIGHT);
+        } else if r == SO_LETS_FIGHT {
+            self.api.npc(i32::from(OK_LETS_FIGHT));
+            self.api.disable(SO_LETS_FIGHT);
+        } else if r == SO_LETS_FIGHT_ALREADY {
+            self.api.npc(i32::from(DONT_REALLY_WANT_TO_FIGHT));
+            self.api.disable(SO_LETS_FIGHT_ALREADY);
+        }
+        if self.api.enabled(WANNA_FIGHT) {
+            self.api
+                .response(WANNA_FIGHT, Handler::SpathiAntagonize, &[]);
+        } else if self.api.enabled(SO_LETS_FIGHT) {
+            self.api
+                .response(SO_LETS_FIGHT, Handler::SpathiAntagonize, &[]);
+        } else if self.api.enabled(SO_LETS_FIGHT_ALREADY) {
+            self.api
+                .response(SO_LETS_FIGHT_ALREADY, Handler::SpathiAntagonize, &[]);
+        }
+        if self.api.enabled(HEARD_YOURE_COWARDS) {
+            self.api
+                .response(HEARD_YOURE_COWARDS, Handler::SpathiAntagonize, &[]);
+        }
+        self.api
+            .response(ATTACK_YOU_NOW, Handler::ExitConversation, &[]);
+    }
+    fn spathi_neutral(&mut self, r: u16) {
+        if r == 0 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("SPATHI_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_NEUTRAL_HELLO_SPACE));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_NEUTRAL_HELLO_SPACE));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("SPATHI_VISITS", num_visits);
+        } else if r == LOOK_WEIRD {
+            self.api.npc(i32::from(YOU_LOOK_WEIRD));
+            self.api.set("SPATHI_STACK0", 1_u8);
+        } else if r == NO_LOOK_REALLY_WEIRD {
+            self.api.npc(i32::from(NO_YOU_LOOK_REALLY_WEIRD));
+            self.api.set("SPATHI_STACK0", 2_u8);
+        }
+        match self.api.get("SPATHI_STACK0") {
+            0 => {
+                self.api.response(LOOK_WEIRD, Handler::SpathiNeutral, &[]);
+            }
+            1 => {
+                self.api
+                    .response(NO_LOOK_REALLY_WEIRD, Handler::SpathiNeutral, &[]);
+            }
+            _ => {}
+        }
+        if self.api.get("SPATHI_STACK1") == 0 {
+            self.api
+                .response(COME_IN_PEACE, Handler::SpathiBefriend, &[]);
+        }
+        if self.api.get("SPATHI_STACK2") == 0 {
+            self.api
+                .response(PREPARE_TO_DIE, Handler::SpathiAntagonize, &[]);
+        } else {
+            self.api
+                .response(ATTACK_YOU_NOW, Handler::ExitConversation, &[]);
+        }
+        self.api
+            .response(PART_IN_PEACE, Handler::ExitConversation, &[]);
+    }
+    fn intro(&mut self) {
+        let manner: u8 = self.api.get("SPATHI_MANNER");
+        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
+            self.session.refusals = 0;
+            self.api.npc(i32::from(SORRY_ABOUT_THAT));
+            if self.api.get("SPATHI_HOME_VISITS") == 7 {
+                self.api.set("KNOW_SPATHI_PASSWORD", 0_u8);
+                self.api.set("SPATHI_HOME_VISITS", 0_u8);
+            }
+            self.api.response(IDENTIFY, Handler::SpathiMustGrovel, &[]);
+            self.api.response(HI_THERE, Handler::SpathiOnPluto, &[]);
+            self.api.response(DONT_KILL, Handler::SpathiOnPluto, &[]);
+            self.api
+                .response(WE_FIGHT_1, Handler::ExitConversation, &[]);
+        } else if manner == 2 {
+            self.api.npc(i32::from(HATE_YOU_FOREVER_SPACE));
+            self.api.segue(1);
+        } else if manner == 1 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("SPATHI_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(INIT_ANGRY_HELLO_SPACE));
+                }
+                1 => {
+                    self.api.npc(i32::from(SUBSEQUENT_ANGRY_HELLO_SPACE));
+                    num_visits -= 1;
+                }
+                _ => {}
+            }
+            self.api.set("SPATHI_VISITS", num_visits);
+            self.api
+                .response(GIVE_INFO_SPACE, Handler::ExitConversation, &[]);
+            self.api
+                .response(WE_SORRY_SPACE, Handler::ExitConversation, &[]);
+            self.api
+                .response(WE_FIGHT_AGAIN_SPACE, Handler::ExitConversation, &[]);
+            self.api
+                .response(BYE_ANGRY_SPACE, Handler::ExitConversation, &[]);
+        } else if self.api.alliance(SPATHI_SHIP) == GOOD_GUY {
+            self.spathi_allies(0_u16);
+        } else if self.api.get("SPATHI_QUEST") != 0 {
+            self.spathi_friendly(0_u16);
+        } else {
+            self.spathi_neutral(0_u16);
+        }
+    }
+    fn post_spathi_enc(&mut self) {
+        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
+            self.api.set("FOUND_PLUTO_SPATHI", 2);
+        } else if self.api.get_segue() == 1 {
+            let manner = self.api.get("SPATHI_MANNER");
+            if manner != 2 {
+                self.api.set("SPATHI_MANNER", 1);
+                if manner != 1 {
+                    self.api.set("SPATHI_VISITS", 0);
+                    if self.api.get("SPATHI_HOME_VISITS") != 7 {
+                        self.api.set("SPATHI_HOME_VISITS", 0);
+                    }
+                }
+            }
+        }
+    }
+}
+fn descriptor() -> CLocData {
+    let mut desc = CLocData {
+        alien_frame_res: c"comm.spathi.graphics".as_ptr(),
+        alien_font_res: c"comm.spathi.font".as_ptr(),
+        alien_colormap_res: c"comm.spathi.colortable".as_ptr(),
+        alien_song_res: c"comm.spathi.music".as_ptr(),
+        conversation_phrases_res: c"comm.spathi.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 164, y: 0 },
+        alien_text_width: 288,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 8,
+        ..CLocData::default()
+    };
+    desc.alien_ambient_array[0] = animation(1, 6, 2, (42, 0), (0, 840));
+    desc.alien_ambient_array[0].block_mask = 2;
+    desc.alien_ambient_array[1] = animation(7, 9, 2, (42, 0), (42, 0));
+    desc.alien_ambient_array[1].block_mask = 1;
+    desc.alien_ambient_array[2] = animation(16, 4, 2, (84, 56), (84, 56));
+    desc.alien_ambient_array[2].block_mask = 16;
+    desc.alien_ambient_array[3] = animation(20, 4, 4, (56, 56), (56, 56));
+    desc.alien_ambient_array[3].block_mask = 32;
+    desc.alien_ambient_array[4] = animation(24, 5, 4, (56, 0), (840, 2520));
+    desc.alien_ambient_array[4].block_mask = 4;
+    desc.alien_ambient_array[5] = animation(34, 4, 4, (56, 0), (840, 2520));
+    desc.alien_ambient_array[5].block_mask = 8;
+    desc.alien_ambient_array[6] = animation(38, 3, 4, (56, 0), (840, 2520));
+    desc.alien_ambient_array[7] = animation(41, 3, 4, (56, 0), (840, 2520));
+    desc.alien_talk_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    #[cfg(not(test))]
+    {
+        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
+        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
+        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+    }
+    desc
+}
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        static mut SESSION: Option<Session> = None;
+        // Only the game thread dispatches these callbacks.
+        let session =
+            unsafe { (&mut *std::ptr::addr_of_mut!(SESSION)).get_or_insert_with(Session::default) };
+        f(&mut Dialogue {
+            api: &mut api,
+            session,
+        });
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_on_pluto(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiOnPluto,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_must_grovel(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiMustGrovel,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_allies(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiAllies,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_friendly(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiFriendly,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_befriend(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiBefriend,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_antagonize(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiAntagonize,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn spathi_neutral(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::SpathiNeutral,
+                u16::try_from(r).expect("response reference exceeds COUNT"),
+            )
+        });
+    }
+    fn callback(handler: Handler) -> extern "C" fn(u32) {
+        match handler {
+            Handler::ExitConversation => exit_conversation,
+            Handler::SpathiOnPluto => spathi_on_pluto,
+            Handler::SpathiMustGrovel => spathi_must_grovel,
+            Handler::SpathiAllies => spathi_allies,
+            Handler::SpathiFriendly => spathi_friendly,
+            Handler::SpathiBefriend => spathi_befriend,
+            Handler::SpathiAntagonize => spathi_antagonize,
+            Handler::SpathiNeutral => spathi_neutral,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_spathi_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter descriptor and initial battle segue.
+    ///
+    /// # Safety
+    /// Game thread only. The caller must copy the descriptor before another encounter.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_spathi_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize(desc));
+        desc
+    }
+}
+pub struct SpathiDialogue;
+impl super::RaceDialogue for SpathiDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_spathi_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("FOUND_PLUTO_SPATHI").is_some(),
-            "missing game state key: FOUND_PLUTO_SPATHI"
-        );
-        assert!(
-            bit_range("KNOW_SPATHI_PASSWORD").is_some(),
-            "missing game state key: KNOW_SPATHI_PASSWORD"
-        );
-        assert!(
-            bit_range("SPATHI_HOME_VISITS").is_some(),
-            "missing game state key: SPATHI_HOME_VISITS"
-        );
-        assert!(
-            bit_range("SPATHI_MANNER").is_some(),
-            "missing game state key: SPATHI_MANNER"
-        );
-        assert!(
-            bit_range("SPATHI_QUEST").is_some(),
-            "missing game state key: SPATHI_QUEST"
-        );
-    }
-}
+mod tests;

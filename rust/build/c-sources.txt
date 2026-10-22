@@ -64,7 +64,6 @@ sc2/src/uqm/comm/arilou/arilouc.c
 sc2/src/uqm/comm/blackur/blackurc.c
 sc2/src/uqm/comm/chmmr/chmmrc.c
 sc2/src/uqm/comm/druuge/druugec.c
-sc2/src/uqm/comm/ilwrath/ilwrathc.c
 sc2/src/uqm/comm/melnorm/melnorm.c
 sc2/src/uqm/comm/mycon/myconc.c
 sc2/src/uqm/comm/orz/orzc.c
@@ -74,8 +73,6 @@ sc2/src/uqm/comm/shofixt/shofixt.c
 sc2/src/uqm/comm/slyhome/slyhome.c
 sc2/src/uqm/comm/slyland/slyland.c
 sc2/src/uqm/comm/spahome/spahome.c
-sc2/src/uqm/comm/spathi/spathic.c
-sc2/src/uqm/comm/starbas/starbas.c
 sc2/src/uqm/comm/supox/supoxc.c
 sc2/src/uqm/comm/syreen/syreenc.c
 sc2/src/uqm/comm/talkpet/talkpet.c
