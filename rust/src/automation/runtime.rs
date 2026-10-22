@@ -146,7 +146,7 @@ impl RuntimeModel {
     pub fn record_abi_entry(&self) {
         let _ = self
             .abi_entry
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1));
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1));
     }
 
     /// Get the ABI entry count.
@@ -159,7 +159,7 @@ impl RuntimeModel {
     pub fn record_active_gate_entry(&self) {
         let _ = self
             .active_gate_entry
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1));
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1));
     }
 
     /// Get the active gate entry count.
@@ -457,6 +457,21 @@ impl Default for LockOrderTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entry_counters_saturate_without_wrapping() {
+        let model = RuntimeModel::new();
+        model.abi_entry.store(u64::MAX - 1, Ordering::Release);
+        model
+            .active_gate_entry
+            .store(u64::MAX - 1, Ordering::Release);
+        for _ in 0..2 {
+            model.record_abi_entry();
+            model.record_active_gate_entry();
+            assert_eq!(model.abi_entry_count(), u64::MAX);
+            assert_eq!(model.active_gate_count(), u64::MAX);
+        }
+    }
 
     // --- ABI shell: inactive fast path ---
 

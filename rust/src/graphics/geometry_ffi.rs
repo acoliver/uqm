@@ -483,8 +483,11 @@ extern "C" {
     ) -> u8;
 }
 
+#[path = "intersection.rs"]
+mod intersection;
+
 /// # Safety
-/// Pointer arguments must be valid for the duration of the call; graphics ABI
+/// Controls and their frames must be valid for the duration of the call;
 /// callers must obey the single graphics-thread access contract.
 #[no_mangle]
 pub unsafe extern "C" fn DrawablesIntersect(
@@ -492,74 +495,15 @@ pub unsafe extern "C" fn DrawablesIntersect(
     b: *mut IntersectControl,
     max_time: u16,
 ) -> u16 {
-    if _GraphicsStatusFlags & 4 == 0 || max_time == 0 {
-        return 0;
-    }
-    let a = &mut *a;
-    let b = &mut *b;
-    a.last_time_val = 0;
-    b.last_time_val = 0;
-    let (fa, fb) = (a.stamp.frame, b.stamp.frame);
-    if fa.is_null() || fb.is_null() {
-        return 0;
-    }
-    let (fa, fb) = (&*fa, &*fb);
-    if fa.image.is_null() || fb.image.is_null() {
-        return 0;
-    }
-    let start_a = Point {
-        x: a.stamp.origin.x.wrapping_sub(fa.hot_spot.x),
-        y: a.stamp.origin.y.wrapping_sub(fa.hot_spot.y),
-    };
-    let start_b = Point {
-        x: b.stamp.origin.x.wrapping_sub(fb.hot_spot.x),
-        y: b.stamp.origin.y.wrapping_sub(fb.hot_spot.y),
-    };
-    let deltas = [
-        i32::from(a.end_point.x) - i32::from(a.stamp.origin.x),
-        i32::from(a.end_point.y) - i32::from(a.stamp.origin.y),
-        i32::from(b.end_point.x) - i32::from(b.stamp.origin.x),
-        i32::from(b.end_point.y) - i32::from(b.stamp.origin.y),
-    ];
-    for t in 1..=max_time.min(257) {
-        let at =
-            |start: i16, delta: i32| (i32::from(start) + delta * i32::from(t - 1) / 256) as i16;
-        let pa = Point {
-            x: at(start_a.x, deltas[0]),
-            y: at(start_a.y, deltas[1]),
-        };
-        let pb = Point {
-            x: at(start_b.x, deltas[2]),
-            y: at(start_b.y, deltas[3]),
-        };
-        let (mut ra, mut rb, mut overlap) = (
-            Rect {
-                corner: pa,
-                extent: fa.bounds,
-            },
-            Rect {
-                corner: pb,
-                extent: fb.bounds,
-            },
-            Rect::default(),
-        );
-        if BoxIntersect(&mut ra, &mut rb, &mut overlap) != 0
-            && TFB_DrawImage_Intersect(fa.image, pa, fb.image, pb, &overlap) != 0
-        {
-            a.last_time_val = t;
-            b.last_time_val = t;
-            a.end_point = Point {
-                x: pa.x.wrapping_add(fa.hot_spot.x),
-                y: pa.y.wrapping_add(fa.hot_spot.y),
-            };
-            b.end_point = Point {
-                x: pb.x.wrapping_add(fb.hot_spot.x),
-                y: pb.y.wrapping_add(fb.hot_spot.y),
-            };
-            return t;
-        }
-    }
-    0
+    intersection::drawables_intersect(
+        a,
+        b,
+        max_time,
+        _GraphicsStatusFlags & 4 != 0,
+        |image0, origin0, image1, origin1, rect| {
+            TFB_DrawImage_Intersect(image0, origin0, image1, origin1, rect) != 0
+        },
+    )
 }
 
 #[cfg(test)]
