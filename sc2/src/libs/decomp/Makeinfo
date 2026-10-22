@@ -1,2 +1,2 @@
-uqm_CFILES="lzdecode.c lzencode.c update.c"
-uqm_HFILES="lzh.h"
+uqm_CFILES=""
+uqm_HFILES=""
