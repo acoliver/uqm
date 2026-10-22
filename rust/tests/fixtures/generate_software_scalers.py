@@ -85,6 +85,19 @@ void rules(int pattern, int edges, Uint32 *dst_p) {
             lib.rules(pattern, edges, pixels)
             data += struct.pack('<4I', *pixels)
     (out / 'hq2x-rules.bin').write_bytes(data)
+    data = bytearray(b"HQIN\0\0\0\0")
+    for fmt in range(4):
+        for pattern in range(256):
+            source_pixels = [0x173583ff] * 9
+            for bit, index in enumerate([0, 1, 2, 3, 5, 6, 7, 8]):
+                if pattern & (1 << bit):
+                    source_pixels[index] = 0xf5fcf1ff
+            s = (ctypes.c_uint32 * 9)(*source_pixels)
+            d = (ctypes.c_uint32 * 36)()
+            r = (ctypes.c_int * 4)(0, 0, 3, 3)
+            lib.scale(5, 3, 3, 3, 6, fmt, s, d, r)
+            data += struct.pack('<4I', d[14], d[15], d[20], d[21])
+    (out / 'hq2x-neighborhoods.bin').write_bytes(data)
     data = bytearray()
     seed = 0x18A4E217
     for kind in range(6):

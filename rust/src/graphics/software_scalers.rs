@@ -404,3 +404,57 @@ pub static Scale_C_Functions: [ScaleFuncDef; 6] = [
         func: Scale_Nearest,
     },
 ];
+
+// The command-line parser still writes this setting. As with the former
+// USE_RUST_GFX build, screen filters use the scalar integer implementation.
+#[no_mangle]
+pub static mut force_platform: libc::c_int = 0;
+
+#[no_mangle]
+pub extern "C" fn Scale_Init() {
+    let _ = yuv_table();
+}
+
+#[no_mangle]
+pub extern "C" fn Scale_PrepPlatform(
+    flags: libc::c_int,
+    _fmt: *const SDL_PixelFormat,
+) -> ScaleFunc {
+    Scale_C_Functions
+        .iter()
+        .find(|entry| flags & entry.flag == entry.flag)
+        .expect("the scaler table ends with its default entry")
+        .func
+}
+
+/// Render a complete SDL screen into the renderer's byte-oriented RGBX buffer.
+///
+/// # Safety
+/// `src` must point to a live 32-bit SDL screen surface. The output buffer
+/// must contain exactly four bytes per pixel at twice the source dimensions.
+/// Source pixels must not alias `buffer` and must remain stable during the call.
+pub(crate) unsafe fn scale_surface_to_rgbx(src: *mut SDL_Surface, flags: i32, buffer: &mut [u8]) {
+    let source = &*src;
+    let width = source.w * 2;
+    let height = source.h * 2;
+    let mut pixels = vec![0u32; (width * height) as usize];
+    assert_eq!(buffer.len(), pixels.len() * 4);
+    // This descriptor borrows aligned pixel storage and the source format;
+    // neither is an SDL resource owned by the descriptor.
+    let mut dst: SDL_Surface = std::mem::zeroed();
+    dst.w = width;
+    dst.h = height;
+    dst.pitch = width * 4;
+    dst.format = source.format;
+    dst.pixels = pixels.as_mut_ptr().cast();
+    let mut region = SDL_Rect {
+        x: 0,
+        y: 0,
+        w: source.w,
+        h: source.h,
+    };
+    Scale_PrepPlatform(flags, source.format)(src, &mut dst, &mut region);
+    for (pixel, bytes) in pixels.into_iter().zip(buffer.as_chunks_mut::<4>().0) {
+        *bytes = pixel.to_ne_bytes();
+    }
+}

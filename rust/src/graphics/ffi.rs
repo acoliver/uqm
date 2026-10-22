@@ -12,8 +12,7 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::render::BlendMode;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::graphics::pixmap::{Pixmap, PixmapFormat};
-use crate::graphics::scaling::{Hq2xScaler, ScaleMode as RustScaleMode, ScaleParams, Scaler};
+use crate::graphics::software_scalers::scale_surface_to_rgbx;
 use xbrz::scale_rgba;
 
 /// Number of screens (Main, Extra, Transition)
@@ -117,12 +116,10 @@ struct RustGraphicsState {
     surfaces: [*mut SDL_Surface; TFB_GFX_NUMSCREENS],
     /// Format conversion surface
     format_conv_surf: *mut SDL_Surface,
-    /// Soft-scaled buffers (HQ2x or xBRZ), if enabled
+    /// Soft-scaled buffers (integer 2x filters or xBRZ), if enabled
     scaled_buffers: [Option<Vec<u8>>; TFB_GFX_NUMSCREENS],
-    /// Rust HQ2x scaler
-    hq2x: Hq2xScaler,
-    /// Whether we've logged that HQ2x is active
-    hq2x_logged: bool,
+    /// Whether we've logged that a 2x software filter is active
+    software_scaler_logged: bool,
     /// Whether we've logged that xBRZ is active
     xbrz_logged: bool,
     /// Init flags passed from C
@@ -352,8 +349,7 @@ pub unsafe extern "C" fn rust_gfx_init(
         surfaces,
         format_conv_surf,
         scaled_buffers: [None, None, None],
-        hq2x: Hq2xScaler::new(),
-        hq2x_logged: false,
+        software_scaler_logged: false,
         xbrz_logged: false,
         flags,
         width: width as u32,
@@ -363,18 +359,8 @@ pub unsafe extern "C" fn rust_gfx_init(
         presentation_count: 0,
     };
 
-    // Configure soft scaling when requested (HQ2x or xBRZ)
-    let scale_any =
-        flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
-    let use_soft_scaler = scale_any != 0 && (flags & (1 << 3)) == 0; // SOFT_ONLY = SCALE_ANY & ~BILINEAR
-    if use_soft_scaler {
-        let scale_factor = if (flags & (1 << 8)) != 0 {
-            3
-        } else if (flags & (1 << 9)) != 0 {
-            4
-        } else {
-            2
-        };
+    // Use the same software-scaler policy for allocation and presentation.
+    if let Some(scale_factor) = scale_factor_from_flags(flags) {
         let buffer_size = (SCREEN_WIDTH * scale_factor * SCREEN_HEIGHT * scale_factor * 4) as usize;
         for i in 0..TFB_GFX_NUMSCREENS {
             state.scaled_buffers[i] = Some(vec![0u8; buffer_size]);
@@ -668,70 +654,39 @@ pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const 
         let src_w = SCREEN_WIDTH as usize;
         let src_h = SCREEN_HEIGHT as usize;
 
-        // SAFETY: src_surface was checked non-null above and is owned by RustGraphicsState.
-        let src_pitch = unsafe {
-            let surf = &*src_surface;
-            if surf.pixels.is_null() || surf.pitch <= 0 {
-                return;
-            }
-            surf.pitch as usize
-        };
-
-        // Step 1: Convert RGBX→RGBA into a Pixmap
-        let nz_one = match std::num::NonZeroU32::new(1) {
-            Some(v) => v,
-            None => return, // unreachable: 1 != 0
-        };
-        let mut pixmap =
-            match Pixmap::new(nz_one, SCREEN_WIDTH, SCREEN_HEIGHT, PixmapFormat::Rgba32) {
-                Ok(p) => p,
-                Err(_) => return,
-            };
-
-        unsafe {
-            let surf = &*src_surface;
-            let src_bytes = std::slice::from_raw_parts(surf.pixels as *const u8, src_pitch * src_h);
-            convert_rgbx_to_rgba(src_bytes, pixmap.data_mut(), src_w, src_h, src_pitch);
-        }
-
-        // Step 2: Run scaler
         let using_xbrz = (state.flags & ((1 << 8) | (1 << 9))) != 0;
-        let scaled_rgba: Vec<u8>;
-        let scaled_w: usize;
-        let scaled_h: usize;
+        let scaled_w = src_w * factor as usize;
+        let scaled_h = src_h * factor as usize;
 
-        if using_xbrz {
-            if !state.xbrz_logged {
-                rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", factor));
-                state.xbrz_logged = true;
-            }
-            scaled_rgba = scale_rgba(pixmap.data(), src_w, src_h, factor as usize);
-            scaled_w = src_w * factor as usize;
-            scaled_h = src_h * factor as usize;
-        } else {
-            if !state.hq2x_logged {
-                rust_bridge_log_msg("RUST_GFX: HQ2x scaler active");
-                state.hq2x_logged = true;
-            }
-            let params = ScaleParams::new(512, RustScaleMode::Hq2x);
-            match state.hq2x.scale(&pixmap, params) {
-                Ok(scaled_pixmap) => {
-                    scaled_rgba = scaled_pixmap.data().to_vec();
-                    scaled_w = src_w * 2;
-                    scaled_h = src_h * 2;
-                }
-                Err(_) => return,
-            }
-        }
-
-        // Step 3: Convert RGBA→RGBX into the scaled buffer
         if let Some(buffer) = state.scaled_buffers[screen_idx].as_mut() {
             let out_stride = scaled_w * 4;
-            let needed = out_stride * scaled_h;
-            if buffer.len() < needed {
-                return;
+            if using_xbrz {
+                if !state.xbrz_logged {
+                    rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", factor));
+                    state.xbrz_logged = true;
+                }
+                let mut rgba = vec![0; src_w * src_h * 4];
+                unsafe {
+                    let surf = &*src_surface;
+                    let src_pitch = surf.pitch as usize;
+                    let src_bytes =
+                        std::slice::from_raw_parts(surf.pixels.cast::<u8>(), src_pitch * src_h);
+                    convert_rgbx_to_rgba(src_bytes, &mut rgba, src_w, src_h, src_pitch);
+                }
+                let scaled = scale_rgba(&rgba, src_w, src_h, factor as usize);
+                convert_rgba_to_rgbx(&scaled, buffer, scaled_w, scaled_h);
+            } else {
+                if !state.software_scaler_logged {
+                    rust_bridge_log_msg(&format!(
+                        "RUST_GFX: integer 2x scaler active (flags {:#x})",
+                        state.flags
+                    ));
+                    state.software_scaler_logged = true;
+                }
+                unsafe {
+                    scale_surface_to_rgbx(src_surface.cast(), state.flags, buffer);
+                }
             }
-            convert_rgba_to_rgbx(&scaled_rgba, buffer, scaled_w, scaled_h);
 
             // Step 4: Create texture at scaled dimensions
             // REQ-SCALE-040: texture dimensions = SCREEN_WIDTH*factor × SCREEN_HEIGHT*factor
@@ -888,8 +843,8 @@ pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
 ///
 /// - Bit 8 = xBRZ 3× (factor 3)
 /// - Bit 9 = xBRZ 4× (factor 4)
-/// - Bit 7 = HQ2x   (factor 2)
-/// - Otherwise = 1 (no software scaling)
+/// - Bits 4 through 7 = integer 2x filters (factor 2)
+/// - Otherwise no software scaling
 ///
 /// Returns `Some(factor)` when a software scaler is active, `None` when only
 /// bilinear or no scaling is requested.
@@ -897,12 +852,9 @@ pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P12
 /// @requirement REQ-SCALE-020, REQ-SCALE-025
 fn scale_factor_from_flags(flags: c_int) -> Option<u32> {
-    let scale_any =
-        flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
-    let bilinear_only = scale_any != 0
-        && (flags & (1 << 3)) != 0
-        && (flags & ((1 << 7) | (1 << 8) | (1 << 9))) == 0;
-    if scale_any == 0 || bilinear_only {
+    // TFB_GFXFLAGS_SCALE_SOFT_ONLY excludes only the bilinear bit.
+    let soft_only = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9);
+    if flags & soft_only == 0 {
         return None;
     }
     if (flags & (1 << 8)) != 0 {
@@ -1527,20 +1479,37 @@ mod tests {
         }
     }
 
+    #[test]
+    fn software_allocation_uses_the_c_soft_only_flag_mask() {
+        for bit in 4..=9 {
+            let expected = if bit == 8 {
+                3
+            } else if bit == 9 {
+                4
+            } else {
+                2
+            };
+            assert_eq!(
+                scale_factor_from_flags((1 << 3) | (1 << bit)),
+                Some(expected)
+            );
+        }
+    }
+
     /// REQ-SCALE-025: bilinear-only does NOT trigger software scaling.
     ///
     /// When only SCALE_BILINEAR (bit 3) is set without any of the software
-    /// scaler bits (7/8/9), the unscaled path should be used.
+    /// scaler bits (4 through 9), the unscaled path should be used.
     #[test]
     fn test_bilinear_only_no_software_scale() {
         {
             // Bilinear only (bit 3) → None (no software scaling)
             assert_eq!(scale_factor_from_flags(1 << 3), None);
 
-            // Bilinear + biadapt (bits 3+4), no soft scaler → None
-            assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 4)), None);
+            // Biadapt requests a software buffer even with bilinear also set.
+            assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 4)), Some(2));
 
-            // Bilinear + HQ2x → Some(2) (HQ2x wins)
+            // Bilinear + HQ2x allocates a 2x software buffer.
             assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 7)), Some(2));
 
             // Bilinear + xBRZ3 → Some(3)
