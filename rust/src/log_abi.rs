@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use libc::FILE;
 
+pub const LOG_WARNING: i32 = 3;
 const LOG_DEBUG: i32 = 5;
 const MAX_LOG_ENTRY_SIZE: usize = 256;
 
@@ -83,13 +84,37 @@ pub extern "C" fn log_captureLines(_num: c_int) {}
 pub unsafe extern "C" fn log_addV(level: c_int, fmt: *const c_char, args: *mut c_void) {
     let mut message = [0 as c_char; MAX_LOG_ENTRY_SIZE];
     vsnprintf(message.as_mut_ptr(), MAX_LOG_ENTRY_SIZE - 1, fmt, args);
+    echo(level, message.as_ptr());
+}
+
+fn echo(level: c_int, message: *const c_char) {
     if level <= MAX_STREAM_LEVEL {
-        libc::fprintf(
-            STREAM_OUT.load(Ordering::Relaxed),
-            c"%s\n".as_ptr(),
-            message.as_ptr(),
-        );
+        // SAFETY: STREAM_OUT is a live FILE set by log_init/log_setOutput and
+        // `message` is NUL-terminated.
+        unsafe {
+            libc::fprintf(
+                STREAM_OUT.load(Ordering::Relaxed),
+                c"%s\n".as_ptr(),
+                message,
+            );
+        }
     }
+}
+
+/// Logs a message already formatted by Rust code, with the same filtering as
+/// [`log_addV`]. Messages are dropped until `log_init` has set the stream.
+pub fn log_message(level: c_int, message: &str) {
+    if STREAM_OUT.load(Ordering::Relaxed).is_null() {
+        return;
+    }
+    let mut text = [0 as c_char; MAX_LOG_ENTRY_SIZE];
+    for (slot, byte) in text[..MAX_LOG_ENTRY_SIZE - 1]
+        .iter_mut()
+        .zip(message.bytes())
+    {
+        *slot = byte as c_char;
+    }
+    echo(level, text.as_ptr());
 }
 
 /// Same as [`log_addV`]; the C version differed only in how it queued the

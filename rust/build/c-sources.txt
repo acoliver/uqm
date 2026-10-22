@@ -61,7 +61,6 @@ sc2/src/libs/strings/getstr.c
 sc2/src/libs/strings/sfileins.c
 sc2/src/libs/strings/sresins.c
 sc2/src/libs/strings/strings.c
-sc2/src/libs/strings/unicode.c
 sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/libs/video/legacyplayer.c
 sc2/src/libs/video/vfileins.c
