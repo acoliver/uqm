@@ -67,7 +67,6 @@ sc2/src/uqm/comm.c
 sc2/src/uqm/comm/arilou/arilouc.c
 sc2/src/uqm/comm/blackur/blackurc.c
 sc2/src/uqm/comm/chmmr/chmmrc.c
-sc2/src/uqm/comm/comandr/comandr.c
 sc2/src/uqm/comm/druuge/druugec.c
 sc2/src/uqm/comm/ilwrath/ilwrathc.c
 sc2/src/uqm/comm/melnorm/melnorm.c
