@@ -88,6 +88,7 @@ fn run() -> Result<(), String> {
     generate_global_state_abi_bindings()?;
     generate_ship_abi_bindings()?;
     generate_netplay_abi_bindings()?;
+    generate_graphics_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     let links = platform_links(&target_os)?;
@@ -308,6 +309,32 @@ fn require_some<T>(value: Option<T>, context: &str) -> T {
 /// depend on whatever happens to be installed on the machine. Selecting no
 /// formatter removes the dependency and the fallback together.
 const ABI_BINDING_FORMATTER: bindgen::Formatter = bindgen::Formatter::None;
+fn generate_graphics_abi_bindings() -> Result<(), String> {
+    let headers = [
+        "../sc2/src/libs/graphics/gfxintrn.h",
+        "../sc2/src/libs/graphics/tfb_prim.h",
+        "../sc2/src/options.h",
+    ];
+    let mut builder = bindgen::Builder::default();
+    for header in headers {
+        println!("cargo:rerun-if-changed={header}");
+        builder = builder.header(header);
+    }
+    let bindings = builder
+        .clang_arg("-I../sc2").clang_arg("-I../sc2/src")
+        .allowlist_type("(frame_desc|drawable_desc|font_desc|FontPage|tfb_char|context_desc|PRIMITIVE|RESOURCE_DATA)")
+        .allowlist_function("(TFB_.*|BoxIntersect|AllocDrawable|CreateDrawable|FixContextFontEffect|SetContextForeGroundColor|GetContextValidRect|BatchGraphics|UnbatchGraphics|LoadResourceFromPath|InstallResTypeVectors|res_.*|LengthResFile|GetStringAddress|uio_(fgets|ftell|fseek|fread|fclose|fopen|openDir|mountDir|closeDir|unmountDir|openDirRelative)|.*DirEntry.*|getCharFromString)")
+        .allowlist_var("(_CurFramePtr|_CurFontPtr|_pCurContext|_locPrim|_GraphicsStatusFlags|_cur_resfile_name|contentDir|repository|QuitPosted|.*DRAWABLE|WANT_PIXMAP|MAPPED_TO_DISPLAY|FBK_DIRTY|TFB_SCREEN_MAIN|.*PRIM|NUM_PRIMS|END_OF_LIST|BATCH_BUILD_PAGE|DRAW_REPLACE_MODE|ALIGN_.*|MAX_DELTAS|CHARACTER_PAGE_MASK|uio_FSTYPE_ZIP|uio_MOUNT_RDONLY|uio_MOUNT_TOP|match_MATCH_SUBSTRING)")
+        .blocklist_function("(uio_.*|TFB_DrawImage_New|TFB_DrawCanvas_Rescale_Nearest)")
+        .generate_comments(false).layout_tests(true).formatter(ABI_BINDING_FORMATTER)
+        .generate().map_err(|e| format!("cannot generate graphics ABI: {e}"))?;
+    fs::write(
+        output_directory()?.join("graphics_abi.rs"),
+        bindings.to_string(),
+    )
+    .map_err(|e| format!("cannot write graphics ABI: {e}"))
+}
+
 /// Live race ABI, including the member alignments required by RACE_DESC.
 fn generate_ship_abi_bindings() -> Result<(), String> {
     let bindings = bindgen::Builder::default()

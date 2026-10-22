@@ -5,7 +5,7 @@ fi
 uqm_CFILES="cmap.c context.c drawable.c filegfx.c
 		dcqueue.c gfxload.c
 		font.c frame.c gfx_common.c loaddisp.c
-		pixmap.c resgfx.c tfb_draw.c tfb_prim.c widgets.c"
+		resgfx.c tfb_draw.c tfb_prim.c widgets.c"
 
 uqm_HFILES="bbox.h cmap.h context.h dcqueue.h drawable.h drawcmd.h font.h
 		gfx_common.h gfxintrn.h prim.h tfb_draw.h tfb_prim.h widgets.h"
