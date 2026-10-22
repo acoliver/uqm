@@ -1,4 +1,3 @@
-sc2/src/libs/file/dirs.c
 sc2/src/libs/graphics/cmap.c
 sc2/src/libs/graphics/context.c
 sc2/src/libs/graphics/dcqueue.c
