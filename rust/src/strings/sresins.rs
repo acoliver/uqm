@@ -8,7 +8,7 @@ use crate::resource::ffi_bridge::{
 };
 use crate::resource::ffi_types::ResourceData;
 use crate::strings::getstr::{_GetBinaryTableData, _GetConversationData, _GetStringData};
-use crate::strings::strings::StringTable;
+use crate::strings::string_table::StringTable;
 
 unsafe extern "C" fn get_string_table_file_data(
     pathname: *const c_char,

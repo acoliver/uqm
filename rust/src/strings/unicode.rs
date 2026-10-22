@@ -534,10 +534,10 @@ mod tests {
     fn copy_terminates_and_pads_like_strncpy() {
         let mut dst = [0x55u8; 8];
         unsafe {
-            assert!(utf8StringCopy(dst.as_mut_ptr(), 0, b"x\0".as_ptr()).is_null());
-            utf8StringCopy(dst.as_mut_ptr(), 3, b"abcdef\0".as_ptr());
+            assert!(utf8StringCopy(dst.as_mut_ptr(), 0, c"x".as_ptr().cast()).is_null());
+            utf8StringCopy(dst.as_mut_ptr(), 3, c"abcdef".as_ptr().cast());
             assert_eq!(&dst[..4], b"ab\0\x55");
-            utf8StringCopy(dst.as_mut_ptr(), 6, b"a\0".as_ptr());
+            utf8StringCopy(dst.as_mut_ptr(), 6, c"a".as_ptr().cast());
             assert_eq!(&dst[..6], b"a\0\0\0\0\0");
         }
     }
@@ -572,12 +572,12 @@ mod tests {
             assert_eq!(getUniCharFromString(back.as_mut_ptr(), 8, src.as_ptr()), 3);
             assert_eq!(&back[..4], &[0x68, 0xe9, 0x20ac, 0]);
             assert_eq!(
-                getUniCharFromString(back.as_mut_ptr(), 3, b"abcd\0".as_ptr()),
+                getUniCharFromString(back.as_mut_ptr(), 3, c"abcd".as_ptr().cast()),
                 2
             );
             assert_eq!(&back[..3], &[0x61, 0x62, 0]);
             assert_eq!(
-                getUniCharFromString(back.as_mut_ptr(), 0, b"abcd\0".as_ptr()),
+                getUniCharFromString(back.as_mut_ptr(), 0, c"abcd".as_ptr().cast()),
                 0
             );
         }

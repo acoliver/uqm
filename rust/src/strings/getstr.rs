@@ -17,7 +17,7 @@ use crate::resource::ffi_bridge::{
     res_CloseResFile, res_OpenResFile, GetResourceData, LengthResFile,
 };
 use crate::resource::ffi_types::ResourceData;
-use crate::strings::strings::{
+use crate::strings::string_table::{
     AllocStringTable, StringTable, StringTableEntry, HAS_NAMEINDEX, HAS_SOUND_CLIPS, HAS_TIMESTAMP,
 };
 
@@ -243,7 +243,7 @@ impl<T: LineSource> Companions<T> {
         let src = self.timestamp_src.as_mut().expect("timestamp source");
         let read_ok = src.read_line(&mut line);
         match read_ok.then(|| timestamp_value(&line, name)).flatten() {
-            Some(value) if value.is_empty() => self.timestamps.push_empty(),
+            Some([]) => self.timestamps.push_empty(),
             Some(value) => self.timestamps.push_terminated(&[value]),
             None => {
                 log_message(

@@ -7,7 +7,7 @@ use crate::resource::ffi_bridge::{
     _cur_resfile_name, res_CloseResFile, res_OpenResFile, LengthResFile,
 };
 use crate::strings::getstr::_GetStringData;
-use crate::strings::strings::StringTable;
+use crate::strings::string_table::StringTable;
 
 /// Loads a `STRTAB`-format file. Returns NULL if the file cannot be opened
 /// or another resource load is in progress.

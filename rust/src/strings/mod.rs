@@ -3,5 +3,5 @@
 pub mod getstr;
 pub mod sfileins;
 pub mod sresins;
-pub mod strings;
+pub mod string_table;
 pub mod unicode;
