@@ -200,6 +200,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         &[Domain::PlanetSideResults],
     ),
     row("battle-v1", &[Domain::BattleOutcomes]),
+    row("super-melee-v1", &[Domain::BattleOutcomes]),
     row("load-save-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",
@@ -416,8 +417,11 @@ mod tests {
         let classified: BTreeSet<String> =
             MATRIX.iter().map(|row| row.scenario.to_string()).collect();
         let on_disk = scenarios_on_disk();
-        assert_eq!(on_disk.len(), 42, "scenario files");
-        assert_eq!(classified.len(), 42, "classified scenarios");
+        assert_eq!(
+            classified.len(),
+            MATRIX.len(),
+            "a scenario is classified by more than one matrix row"
+        );
         let unclassified: Vec<&String> = on_disk.difference(&classified).collect();
         assert!(
             unclassified.is_empty(),

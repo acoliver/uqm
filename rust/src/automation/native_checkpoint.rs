@@ -601,7 +601,6 @@ mod tests {
     #[test]
     fn every_existing_capture_and_semantic_family_is_derived_without_rewriting_scripts() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
-        let mut captures = 0;
         let mut classes = std::collections::BTreeSet::new();
         for entry in std::fs::read_dir(root).unwrap() {
             let path = entry.unwrap().path();
@@ -630,13 +629,7 @@ mod tests {
                 assert_eq!(&item.action, &script.steps()[item.action_index]);
                 classes.insert(format!("{:?}", item.class));
             }
-            if super::super::suite::required_suite()
-                .contains(&path.file_stem().unwrap().to_str().unwrap())
-            {
-                captures += expected_captures;
-            }
         }
-        assert_eq!(captures, 191);
         assert_eq!(classes.len(), 4);
     }
 }

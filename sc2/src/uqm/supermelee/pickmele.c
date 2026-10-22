@@ -41,6 +41,7 @@
 #include "libs/log.h"
 #include "libs/mathlib.h"
 
+extern int rust_automation_service_boundary (void);
 
 #define NUM_PICKMELEE_ROWS 2
 #define NUM_PICKMELEE_COLUMNS 7
@@ -676,6 +677,10 @@ MeleeGameOver (void)
 			PulsedInputState.menu[KEY_MENU_CANCEL];
 	do
 	{
+		/* The result screen waits for a button, so a scripted press must be
+		 * injected here exactly as WaitForAnyButtonUntil does. */
+		if (rust_automation_service_boundary ())
+			break;
 		UpdateInputState ();
 		ButtonState = PulsedInputState.menu[KEY_MENU_SELECT] ||
 				PulsedInputState.menu[KEY_MENU_CANCEL];
@@ -686,7 +691,9 @@ MeleeGameOver (void)
 		}
 
 		Async_process ();
-		TaskSwitch ();
+		/* Sleeping presents a frame per pass; TaskSwitch alone never does
+		 * when the game runs without a separate render thread. */
+		SleepThread (ONE_SECOND / 40);
 	} while (!(GLOBAL (CurrentActivity) & CHECK_ABORT) && (!ButtonState
 			&& (!(PlayerControl[0] & PlayerControl[1] & PSYTRON_CONTROL)
 			|| GetTimeCounter () < TimeOut)));

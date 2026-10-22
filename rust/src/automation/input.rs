@@ -21,15 +21,15 @@ use crate::automation::trace::{RecordKind, TraceRecord};
 //  Menu key index mapping (from controls.h)
 // ===========================================================================
 
-/// The six menu key indices from `controls.h`.
+/// The scriptable menu key indices from `controls.h`.
 ///
 /// These match the C enum values:
 /// `KEY_MENU_UP=5, KEY_MENU_DOWN=6, KEY_MENU_LEFT=7, KEY_MENU_RIGHT=8,
-/// KEY_MENU_SELECT=9, KEY_MENU_CANCEL=10`.
+/// KEY_MENU_SELECT=9, KEY_MENU_CANCEL=10, KEY_MENU_DELETE=18`.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-SCRIPT-005, REQ-INJECT-003
-pub const MENU_KEY_INDICES: [u8; 6] = [5, 6, 7, 8, 9, 10];
+pub const MENU_KEY_INDICES: [u8; 7] = [5, 6, 7, 8, 9, 10, 18];
 
 /// Total number of menu keys (from `NUM_MENU_KEYS` in controls.h).
 pub const NUM_MENU_KEYS: u8 = 24;
@@ -44,6 +44,7 @@ pub fn menu_key_to_index(key: MenuKey) -> u8 {
         MenuKey::Right => MENU_KEY_INDICES[3],
         MenuKey::Select => MENU_KEY_INDICES[4],
         MenuKey::Cancel => MENU_KEY_INDICES[5],
+        MenuKey::Delete => MENU_KEY_INDICES[6],
     }
 }
 

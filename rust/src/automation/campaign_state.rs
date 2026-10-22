@@ -36,6 +36,11 @@ pub enum StateKey {
     /// 1 once the main loop has ended a game because the flagship was
     /// destroyed (`CrewEnlisted == 0xffff`), 0 before. Never cleared during a run.
     FlagshipDestroyed,
+    /// Ships left on side 0 of the battle in progress, or of the last one
+    /// (`battle_counter[0]`).
+    BattleShipsP1,
+    /// Ships left on side 1 (`battle_counter[1]`).
+    BattleShipsP2,
     /// A named story bit from `STATE_KEYS`.
     Story(&'static str),
 }
@@ -64,9 +69,11 @@ impl StateKey {
             "date:month" => Ok(Self::DateMonth),
             "date:year" => Ok(Self::DateYear),
             "game:flagship_destroyed" => Ok(Self::FlagshipDestroyed),
+            "battle:ships_p1" => Ok(Self::BattleShipsP1),
+            "battle:ships_p2" => Ok(Self::BattleShipsP2),
             _ => Err(format!(
                 "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
-                 date:day|month|year, game:flagship_destroyed or story:NAME"
+                 date:day|month|year, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
             )),
         }
     }
@@ -79,6 +86,7 @@ impl StateKey {
             Self::SisFuel | Self::SisRu => u32::MAX,
             Self::SisLanders | Self::DateDay | Self::DateMonth => u32::from(u8::MAX),
             Self::FlagshipDestroyed => 1,
+            Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
             Self::Story(name) => {
                 let (start, end) = bit_range(name).unwrap_or((0, 0));
                 (1u32 << (end - start + 1)) - 1
@@ -283,6 +291,8 @@ impl StateSource for LiveCampaign {
             StateKey::FlagshipDestroyed => {
                 Some(u32::from(FLAGSHIP_DESTROYED.load(Ordering::SeqCst)))
             }
+            StateKey::BattleShipsP1 => input_ffi::battle_fleets().map(|(p1, _)| u32::from(p1)),
+            StateKey::BattleShipsP2 => input_ffi::battle_fleets().map(|(_, p2)| u32::from(p2)),
         }
     }
 }
@@ -306,6 +316,8 @@ mod tests {
                 StateKey::DateMonth => "date:month",
                 StateKey::DateYear => "date:year",
                 StateKey::FlagshipDestroyed => "game:flagship_destroyed",
+                StateKey::BattleShipsP1 => "battle:ships_p1",
+                StateKey::BattleShipsP2 => "battle:ships_p2",
                 StateKey::Story(name) => name,
             };
             self.0.get(name).copied()

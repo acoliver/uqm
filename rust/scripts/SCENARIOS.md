@@ -83,6 +83,18 @@ reach deterministically inside the budget, so the script never claims which
 side won. Which side lost the ship is visible in the `start`/`left` fields.
 This has not run live; the first live run decides whether 3000 ticks is enough.
 
+`super-melee-v1.json` plays a Super Melee match to its end. It enters the
+fleet editor with the real menu keys, uses `delete` (the editor's
+`KEY_MENU_DELETE`) to remove every ship but the first from each side, and
+starts the battle. `assert_state` requires `battle:ships_p1` and
+`battle:ships_p2` to both read 1 once combat frames are drawn, so a setup that
+left extra ships fails. The human ship takes no further input, and
+`wait_for_state` requires the final counters (`battle:ships_p1` 0,
+`battle:ships_p2` 1). The result screen waits for a button, so the script waits
+out the battle's ending, presses select, then requires the activity word to
+return to the Super Melee setup value. The result screen presents no frames, so
+it cannot be captured.
+
 Successful trace evidence includes:
 
 ```text
