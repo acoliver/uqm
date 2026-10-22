@@ -30,6 +30,7 @@ pub mod mycon;
 pub mod orz;
 pub mod pkunk;
 pub mod rebel;
+mod script;
 pub mod shofixt;
 pub mod slyhome;
 pub mod slyland;

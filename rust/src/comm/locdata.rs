@@ -295,6 +295,52 @@ pub struct CLocData {
     pub alien_song: *mut c_void,           // MUSIC_REF
     pub conversation_phrases: *mut c_void, // STRING
 }
+
+assert_c_layout!(
+    CAnimationDesc,
+    global_state::ANIMATION_DESC {
+        start_index: StartIndex,
+        num_frames: NumFrames,
+        anim_flags: AnimFlags,
+        base_frame_rate: BaseFrameRate,
+        random_frame_rate: RandomFrameRate,
+        base_restart_rate: BaseRestartRate,
+        random_restart_rate: RandomRestartRate,
+        block_mask: BlockMask,
+    }
+);
+assert_c_layout!(
+    CLocData,
+    global_state::LOCDATA {
+        init_encounter_func: init_encounter_func,
+        post_encounter_func: post_encounter_func,
+        uninit_encounter_func: uninit_encounter_func,
+        alien_frame_res: AlienFrameRes,
+        alien_font_res: AlienFontRes,
+        alien_text_fcolor: AlienTextFColor,
+        alien_text_bcolor: AlienTextBColor,
+        alien_text_baseline: AlienTextBaseline,
+        alien_text_width: AlienTextWidth,
+        alien_text_align: AlienTextAlign,
+        alien_text_valign: AlienTextValign,
+        alien_colormap_res: AlienColorMapRes,
+        alien_song_res: AlienSongRes,
+        alien_alt_song_res: AlienAltSongRes,
+        alien_song_flags: AlienSongFlags,
+        conversation_phrases_res: ConversationPhrasesRes,
+        num_animations: NumAnimations,
+        alien_ambient_array: AlienAmbientArray,
+        alien_transition_desc: AlienTransitionDesc,
+        alien_talk_desc: AlienTalkDesc,
+        alien_number_speech: AlienNumberSpeech,
+        alien_frame: AlienFrame,
+        alien_font: AlienFont,
+        alien_colormap: AlienColorMap,
+        alien_song: AlienSong,
+        conversation_phrases: ConversationPhrases,
+    }
+);
+
 fn color_to_u32(c: CColor) -> u32 {
     ((c.r as u32) << 24) | ((c.g as u32) << 16) | ((c.b as u32) << 8) | (c.a as u32)
 }
