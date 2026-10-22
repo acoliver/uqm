@@ -192,33 +192,6 @@
       "provider": "native_object:native/2xscalers.c.o"
     },
     {
-      "source": "sc2/src/libs/graphics/sdl/2xscalers_3dnow.c",
-      "source_sha256": "c78a4437b42be6f083d9654c11ca6d09c07f77b7422f999cb1dffa1dbc7d6cb5",
-      "object_output": "2xscalers_3dnow.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/2xscalers_3dnow.c.o"
-    },
-    {
-      "source": "sc2/src/libs/graphics/sdl/2xscalers_mmx.c",
-      "source_sha256": "55188266f3443a87d61db3da2dd5d6ca7da1b251d15b50073afaf09b29442ff1",
-      "object_output": "2xscalers_mmx.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/2xscalers_mmx.c.o"
-    },
-    {
-      "source": "sc2/src/libs/graphics/sdl/2xscalers_sse.c",
-      "source_sha256": "3f7949513d41b942327f7d33dad9cce0890ffb55cac51db95f2cce8bc9e2ec81",
-      "object_output": "2xscalers_sse.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/2xscalers_sse.c.o"
-    },
-    {
       "source": "sc2/src/libs/graphics/sdl/biadv2x.c",
       "source_sha256": "f35f3f5051f189ee5afef4c153667be288ff6abe8b64b11bc39d97634902899d",
       "object_output": "biadv2x.c.o",
@@ -264,15 +237,6 @@
       "provider": "native_object:native/nearest2x.c.o"
     },
     {
-      "source": "sc2/src/libs/graphics/sdl/opengl.c",
-      "source_sha256": "55eb04f935cbb827e7db459a1ae9594a55c28f1cf39035521bbbee8ed071cf98",
-      "object_output": "opengl.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/opengl.c.o"
-    },
-    {
       "source": "sc2/src/libs/graphics/sdl/palette.c",
       "source_sha256": "c4a4d05f6c0393e621ca78eda4973c3e6d83395c17f520f3db17f472a588c482",
       "object_output": "palette.c.o",
@@ -300,15 +264,6 @@
       "provider": "native_object:native/primitives.c.o"
     },
     {
-      "source": "sc2/src/libs/graphics/sdl/pure.c",
-      "source_sha256": "16c1639857051668759919e1745d1dc3abbb29c976673dadf374ca5789b444ce",
-      "object_output": "pure.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/pure.c.o"
-    },
-    {
       "source": "sc2/src/libs/graphics/sdl/rotozoom.c",
       "source_sha256": "cb1919a35c9fcf9c2209b8cdd17c6d1e0795cd8816e4c95cd61e8ba947b4ac34",
       "object_output": "rotozoom.c.o",
@@ -325,15 +280,6 @@
       "owner": "GFX",
       "production_profile": "production",
       "provider": "native_object:native/scalers.c.o"
-    },
-    {
-      "source": "sc2/src/libs/graphics/sdl/sdl1_common.c",
-      "source_sha256": "9a52c6031831800384fdb3f4fdd6c4513d178b705cc66d3bc8b16c622d9ff4b9",
-      "object_output": "sdl1_common.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "GFX",
-      "production_profile": "production",
-      "provider": "native_object:native/sdl1_common.c.o"
     },
     {
       "source": "sc2/src/libs/graphics/sdl/sdl2_common.c",
@@ -406,15 +352,6 @@
       "owner": "GFX",
       "production_profile": "production",
       "provider": "native_object:native/widgets.c.o"
-    },
-    {
-      "source": "sc2/src/libs/input/input_common.c",
-      "source_sha256": "8f67781ee786f6863a83a1c2fdaf0c1360c517809040436aefafa12acfadecff",
-      "object_output": "input_common.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "INPUT",
-      "production_profile": "production",
-      "provider": "native_object:native/input_common.c.o"
     },
     {
       "source": "sc2/src/libs/input/sdl/input.c",
@@ -516,15 +453,6 @@
       "provider": "native_object:native/netmanager_bsd.c.o"
     },
     {
-      "source": "sc2/src/libs/network/netport.c",
-      "source_sha256": "fe2d073f38a6c8c47da091c37917e2d2b337611c715dd07ab94059406ea87cd9",
-      "object_output": "netport.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "NETWORK",
-      "production_profile": "production",
-      "provider": "native_object:native/netport.c.o"
-    },
-    {
       "source": "sc2/src/libs/network/network_bsd.c",
       "source_sha256": "990e6aac5d6e65e1db26948e0657105cc782a960b3ca9af0c6156258409ecfb8",
       "object_output": "network_bsd.c.o",
@@ -561,51 +489,6 @@
       "provider": "native_object:native/direct.c.o"
     },
     {
-      "source": "sc2/src/libs/resource/filecntl.c",
-      "source_sha256": "f776378e720f7f56a44ca4270c5fa17cb5a6ef52a9aefa08a060d434dfb3c6b5",
-      "object_output": "filecntl.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/filecntl.c.o"
-    },
-    {
-      "source": "sc2/src/libs/resource/getres.c",
-      "source_sha256": "4243d18424f85f2c197f3aeff9c082708823289fc8b58ec47047a2a837f41c1c",
-      "object_output": "getres.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/getres.c.o"
-    },
-    {
-      "source": "sc2/src/libs/resource/loadres.c",
-      "source_sha256": "cab5abb4341b6773b6b0b1dee84254c1faab8a53b0e1b24a54848e7bc20e832b",
-      "object_output": "loadres.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/loadres.c.o"
-    },
-    {
-      "source": "sc2/src/libs/resource/propfile.c",
-      "source_sha256": "5cef0ba3285bba46a7b9e72c15f5c2aae2098147d04951701b8d3430aed1c775",
-      "object_output": "propfile.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/propfile.c.o"
-    },
-    {
-      "source": "sc2/src/libs/resource/resinit.c",
-      "source_sha256": "6b17d062ee7eb1d263b1598ddfc58d0d0480375282a3be57f7dab749392d3e85",
-      "object_output": "resinit.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/resinit.c.o"
-    },
-    {
       "source": "sc2/src/libs/resource/stringbank.c",
       "source_sha256": "b4a9e8c4434c7a9b6c2bf55fbd45a6e6690a68c231a3170bf6597edc3d3b9e44",
       "object_output": "stringbank.c.o",
@@ -624,15 +507,6 @@
       "provider": "native_object:native/audiocore_rust.c.o"
     },
     {
-      "source": "sc2/src/libs/sound/decoders/aiffaud.c",
-      "source_sha256": "6f430b11084c4c620981bb2c096725a1d932e3646d6296a7484eb56d2137d10b",
-      "object_output": "aiffaud.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "CODEC_OTHER",
-      "production_profile": "production",
-      "provider": "native_object:native/aiffaud.c.o"
-    },
-    {
       "source": "sc2/src/libs/sound/decoders/decoder.c",
       "source_sha256": "d18136b0d2a6745bf1c4e0228a13f88bf57dd321d4012f42a341bcfd9ed79f47",
       "object_output": "decoder.c.o",
@@ -640,51 +514,6 @@
       "owner": "CODEC_OTHER",
       "production_profile": "production",
       "provider": "native_object:native/decoder.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/decoders/dukaud.c",
-      "source_sha256": "c7fad67207f2a9117243cc4dde5ea907a4106c1ddfabd0e51b5e09833c267c96",
-      "object_output": "dukaud.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "CODEC_OTHER",
-      "production_profile": "production",
-      "provider": "native_object:native/dukaud.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/decoders/wav.c",
-      "source_sha256": "4f108c4df0f69d55d3d18838cb0984a1bd1d9dd9c0f4f1565406c4c19fc61333",
-      "object_output": "wav.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "CODEC_OTHER",
-      "production_profile": "production",
-      "provider": "native_object:native/wav.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/fileinst.c",
-      "source_sha256": "8148865056bc614436d58e660e1ff55a47f24d41c62c6b60e5fa0c9c3cd8587d",
-      "object_output": "fileinst.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "AUDIO",
-      "production_profile": "production",
-      "provider": "native_object:native/fileinst.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/mixer/nosound/audiodrv_nosound.c",
-      "source_sha256": "cb364d458bc8c523a33694cf6c4254a6bf06db9d5e6f76418c9d01c6aab3543d",
-      "object_output": "audiodrv_nosound.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "AUDIO",
-      "production_profile": "production",
-      "provider": "native_object:native/audiodrv_nosound.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/mixer/sdl/audiodrv_sdl.c",
-      "source_sha256": "e310ff0d7f43501428acdfc2b938fe552ad14c23b943e3748f50df078de961c9",
-      "object_output": "audiodrv_sdl.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "AUDIO",
-      "production_profile": "production",
-      "provider": "native_object:native/audiodrv_sdl.c.o"
     },
     {
       "source": "sc2/src/libs/sound/music.c",
@@ -721,24 +550,6 @@
       "owner": "AUDIO",
       "production_profile": "production",
       "provider": "native_object:native/sound.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/stream.c",
-      "source_sha256": "20b5a61ce8a9e5064b185e6bcb0f39e310a8f1c774c57406bf4b72e96027a948",
-      "object_output": "stream.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "AUDIO",
-      "production_profile": "production",
-      "provider": "native_object:native/stream.c.o"
-    },
-    {
-      "source": "sc2/src/libs/sound/trackplayer.c",
-      "source_sha256": "c7893ac265599c75125234638e69e78ae2e8c6a18ce70f562b9f92608d96d7eb",
-      "object_output": "trackplayer.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "AUDIO",
-      "production_profile": "production",
-      "provider": "native_object:native/trackplayer.c.o"
     },
     {
       "source": "sc2/src/libs/strings/getstr.c",
@@ -804,24 +615,6 @@
       "provider": "native_object:native/rust_thrcommon.c.o"
     },
     {
-      "source": "sc2/src/libs/threads/sdl/sdlthreads.c",
-      "source_sha256": "12798821bc537e0fd01dfff67163f6962d365d20e9b701873b7accb2a4d18547",
-      "object_output": "sdlthreads.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RUNTIME",
-      "production_profile": "production",
-      "provider": "native_object:native/sdlthreads.c.o"
-    },
-    {
-      "source": "sc2/src/libs/threads/thrcommon.c",
-      "source_sha256": "88100ee68d10e4421ba033c93c4af7d5bfb3137aa1fc33afdf7bc38ea859364d",
-      "object_output": "thrcommon.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RUNTIME",
-      "production_profile": "production",
-      "provider": "native_object:native/thrcommon.c.o"
-    },
-    {
       "source": "sc2/src/libs/time/sdl/sdltime.c",
       "source_sha256": "b37791d02cbf646d5f624a44a56ffdb6617a52021b8a1b17edf9ea6196d9e9fc",
       "object_output": "sdltime.c.o",
@@ -840,51 +633,6 @@
       "provider": "native_object:native/timecommon.c.o"
     },
     {
-      "source": "sc2/src/libs/uio/debug.c",
-      "source_sha256": "edb384e67966f844ba6d70620b339f7d579db02f781e2eadb8e4b4d339461da8",
-      "object_output": "debug.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/debug.c.o"
-    },
-    {
-      "source": "sc2/src/libs/uio/paths.c",
-      "source_sha256": "9de55b665d8b505e1b8cf51a43224d39dd61cc2b9be45a20310f79367419f5a8",
-      "object_output": "paths.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/paths.c.o"
-    },
-    {
-      "source": "sc2/src/libs/uio/uioutils.c",
-      "source_sha256": "1016a85c403979ef184e4be25dc2e1b354bc71da6d3120bb3e87185de0ac15ea",
-      "object_output": "uioutils.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/uioutils.c.o"
-    },
-    {
-      "source": "sc2/src/libs/uio/zip/zip.c",
-      "source_sha256": "da6d391223e89d377bad15ba5dd262d7db32cf3be35cf06be39524e67286ff98",
-      "object_output": "zip.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "RESOURCE",
-      "production_profile": "production",
-      "provider": "native_object:native/zip.c.o"
-    },
-    {
-      "source": "sc2/src/libs/video/dukvid.c",
-      "source_sha256": "2b8c252206fd18a04c9df07dfce86a7ac10145d526bed3fecb839bf7230112ba",
-      "object_output": "dukvid.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "VIDEO",
-      "production_profile": "production",
-      "provider": "native_object:native/dukvid.c.o"
-    },
-    {
       "source": "sc2/src/libs/video/legacyplayer.c",
       "source_sha256": "db53c3abf6dee862f3f0a2b656b1196bc44dc93ec5dd1bd7bac0436dc5ea549b",
       "object_output": "legacyplayer.c.o",
@@ -892,15 +640,6 @@
       "owner": "VIDEO",
       "production_profile": "production",
       "provider": "native_object:native/legacyplayer.c.o"
-    },
-    {
-      "source": "sc2/src/libs/video/rust_video.c",
-      "source_sha256": "170d402da465c0ade082853028959457a20f538dec22d79b9a92ce4c8919189a",
-      "object_output": "rust_video.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "VIDEO",
-      "production_profile": "production",
-      "provider": "native_object:native/rust_video.c.o"
     },
     {
       "source": "sc2/src/libs/video/vfileins.c",
@@ -928,15 +667,6 @@
       "owner": "VIDEO",
       "production_profile": "production",
       "provider": "native_object:native/videodec.c.o"
-    },
-    {
-      "source": "sc2/src/libs/video/vidplayer.c",
-      "source_sha256": "95d1d37cc9b4566d927e8d19b4fdba68b6e2925c2e0de9b651bc80a551a23496",
-      "object_output": "vidplayer.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "VIDEO",
-      "production_profile": "production",
-      "provider": "native_object:native/vidplayer.c.o"
     },
     {
       "source": "sc2/src/libs/video/vresins.c",
@@ -1333,15 +1063,6 @@
       "owner": "CORE_NATIVE",
       "production_profile": "production",
       "provider": "native_object:native/cyborg.c.o"
-    },
-    {
-      "source": "sc2/src/uqm/demo.c",
-      "source_sha256": "089722a0d96e0c9a816518bae60b544d4f6b60b914b063e6d14ca9f14895ba89",
-      "object_output": "demo.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "CORE_NATIVE",
-      "production_profile": "production",
-      "provider": "native_object:native/demo.c.o"
     },
     {
       "source": "sc2/src/uqm/dummy.c",

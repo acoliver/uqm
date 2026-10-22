@@ -4,27 +4,23 @@ if [ -n "$USE_RUST_UIO" ]; then
 fi
 
 uqm_SUBDIRS="stdio"
-uqm_CFILES="charhashtable.c defaultfs.c fileblock.c fstypes.c gphys.c io.c
-		ioaux.c match.c mount.c mounttree.c paths.c physical.c uiostream.c
-		uioutils.c utils.c"
-uqm_HFILES="charhashtable.h fileblock.h fstypes.h getint.h
+uqm_CFILES="defaultfs.c fileblock.c fstypes.c gphys.c io.c
+		ioaux.c match.c mount.c mounttree.c physical.c uiostream.c
+		utils.c"
+uqm_HFILES="charhashtable.h fstypes.h getint.h
 		gphys.h io.h iointrn.h match.h mem.h mount.h mounttree.h
-		paths.h physical.h types.h uioport.h uiostream.h uioutils.h utils.h"
+		paths.h physical.h types.h uioport.h uiostream.h utils.h"
 
 	# Exclude C UIO sources when Rust implementations are enabled
 if [ -n "$USE_RUST_UIO" ]; then
-	uqm_CFILES="charhashtable.c paths.c uioutils.c"
-	uqm_HFILES="charhashtable.h paths.h uioutils.h"
+	uqm_CFILES=""
+	uqm_HFILES="charhashtable.h paths.h "
 	uqm_SUBDIRS=""
 fi
 
 
-if [ -n "$uqm_USE_ZIP_IO" ]; then
-	uqm_SUBDIRS="$uqm_SUBDIRS zip"
-fi
-
 #if [ -n "$DEBUG" -o -n "$uqm_UIO_DEBUG" ]; then
-	uqm_CFILES="$uqm_CFILES debug.c"
+	uqm_CFILES="$uqm_CFILES "
 	uqm_HFILES="$uqm_HFILES debug.h"
 #fi
 
