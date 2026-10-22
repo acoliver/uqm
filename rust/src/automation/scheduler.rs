@@ -1449,6 +1449,7 @@ fn reduce_capture_and_assertion(
         | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
         | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
+        | (Action::AssertHyperspaceStationary(_), ActionPhase::WaitingForInput)
         | (Action::RecordSavedHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspacePositionRestored(_), ActionPhase::WaitingForInput)
         | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)

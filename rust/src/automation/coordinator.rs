@@ -1825,6 +1825,30 @@ impl Coordinator {
                 }
             }
         }
+        if let Some(Action::AssertHyperspaceStationary(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner.flight_position.assert_stationary(
+                mode::require_live(),
+                flight_position::live_position(),
+                assertion.maximum_logical_units,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
         if let Some(Action::RecordSavedHyperspacePosition(_)) =
             self.actions.get(inner.sched_state.step_index)
         {

@@ -35,6 +35,13 @@ pub enum FlightPositionError {
         saved: HyperspacePosition,
         observed: HyperspacePosition,
     },
+    /// The ship moved farther than the allowed distance.
+    Moved {
+        from: HyperspacePosition,
+        to: HyperspacePosition,
+        moved: u64,
+        allowed: u64,
+    },
     /// The ship moved less than the required distance.
     Insufficient {
         from: HyperspacePosition,
@@ -58,6 +65,15 @@ impl FlightPositionError {
             Self::NotRestored { saved, observed } => format!(
                 "hyperspace_position_restore_failed:saved={},{}:observed={},{}",
                 saved.log_x, saved.log_y, observed.log_x, observed.log_y
+            ),
+            Self::Moved {
+                from,
+                to,
+                moved,
+                allowed,
+            } => format!(
+                "hyperspace_stationary_failed:from={},{}:to={},{}:moved={moved}:maximum={allowed}",
+                from.log_x, from.log_y, to.log_x, to.log_y
             ),
             Self::Insufficient {
                 from,
@@ -93,6 +109,31 @@ impl VerifiedDisplacement {
             self.to.log_y,
             self.moved,
             self.required
+        )
+    }
+}
+
+/// A displacement that stayed within its maximum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VerifiedStationary {
+    pub from: HyperspacePosition,
+    pub to: HyperspacePosition,
+    pub moved: u64,
+    pub allowed: u64,
+}
+
+impl VerifiedStationary {
+    /// The semantic trace label that records this proof.
+    #[must_use]
+    pub fn trace_label(&self) -> String {
+        format!(
+            "hyperspace_stationary_verified:from={},{}:to={},{}:moved={}:maximum={}",
+            self.from.log_x,
+            self.from.log_y,
+            self.to.log_x,
+            self.to.log_y,
+            self.moved,
+            self.allowed
         )
     }
 }
@@ -232,6 +273,42 @@ impl FlightPositionTracker {
             required,
         })
     }
+
+    /// Require at most `maximum` logical units of movement since the snapshot,
+    /// consuming the snapshot whether or not the requirement holds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when there is no snapshot, the game is not in
+    /// hyperspace, or the ship moved more than `maximum`.
+    pub fn assert_stationary(
+        &mut self,
+        mode: Result<GameMode, String>,
+        position: Option<HyperspacePosition>,
+        maximum: u32,
+    ) -> Result<VerifiedStationary, FlightPositionError> {
+        let from = self
+            .baseline
+            .take()
+            .ok_or(FlightPositionError::NoBaseline)?;
+        let to = require_hyperspace(mode, position)?;
+        let allowed = u64::from(maximum);
+        let moved = distance(from, to);
+        if moved > allowed {
+            return Err(FlightPositionError::Moved {
+                from,
+                to,
+                moved,
+                allowed,
+            });
+        }
+        Ok(VerifiedStationary {
+            from,
+            to,
+            moved,
+            allowed,
+        })
+    }
 }
 
 fn require_hyperspace(
@@ -308,6 +385,48 @@ mod tests {
         assert!(error
             .trace_label()
             .starts_with("hyperspace_displacement_failed:"));
+    }
+
+    #[test]
+    fn a_ship_that_keeps_moving_is_not_stationary() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record(hyperspace(), at(1752, 1450)).unwrap();
+        let error = tracker
+            .assert_stationary(hyperspace(), at(1752, 1462), 0)
+            .unwrap_err();
+        assert_eq!(
+            error.trace_label(),
+            "hyperspace_stationary_failed:from=1752,1450:to=1752,1462:moved=12:maximum=0"
+        );
+    }
+
+    #[test]
+    fn a_settled_ship_is_stationary_and_the_baseline_is_consumed() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record(hyperspace(), at(1752, 1450)).unwrap();
+        let proof = tracker
+            .assert_stationary(hyperspace(), at(1752, 1450), 0)
+            .unwrap();
+        assert_eq!(
+            proof.trace_label(),
+            "hyperspace_stationary_verified:from=1752,1450:to=1752,1450:moved=0:maximum=0"
+        );
+        assert_eq!(
+            tracker
+                .assert_stationary(hyperspace(), at(1752, 1450), 0)
+                .unwrap_err(),
+            FlightPositionError::NoBaseline
+        );
+    }
+
+    #[test]
+    fn stationary_needs_hyperspace() {
+        let mut tracker = FlightPositionTracker::default();
+        tracker.record(hyperspace(), at(1, 1)).unwrap();
+        let error = tracker
+            .assert_stationary(Ok(GameMode::Solar), at(1, 1), 0)
+            .unwrap_err();
+        assert!(matches!(error, FlightPositionError::NotHyperspace { .. }));
     }
 
     #[test]
