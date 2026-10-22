@@ -1,2 +1,2 @@
-uqm_CFILES="slylandr.c"
-uqm_HFILES="icode.h resinst.h slylandr.h"
+uqm_CFILES=""
+uqm_HFILES="icode.h slylandr.h"
