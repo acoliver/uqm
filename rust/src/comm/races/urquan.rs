@@ -2,20 +2,30 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-#![allow(dead_code)]
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
+mod api;
+mod dialogue;
+mod phrases;
 
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
+#[cfg(test)]
+mod parity_tests;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    Combat,
+    Normal,
+    Hypno,
+    MentionCompulsion,
+    DescribePet,
+    DescribeCompulsion,
+    Loser,
+}
 // ---------------------------------------------------------------------------
 // String indices (from strings.h)
 // ---------------------------------------------------------------------------
 
-const NULL_PHRASE: u32 = 0;
 const HELLO_SAMATRA: u32 = 1;
 const SENSE_EVIL: u32 = 2;
 const INIT_URQUAN_WAKE_UP: u32 = 3;
@@ -93,112 +103,158 @@ const WHATS_UP_4: u32 = 74;
 const GENERAL_INFO_4: u32 = 75;
 const OUT_TAKES: u32 = 76;
 
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
+fn text_layout(screen_width: i32) -> (CPoint, u16) {
+    let text_width = screen_width - 80;
+    (
+        CPoint {
+            x: (1 + (text_width >> 1)) as i16,
+            y: 0,
+        },
+        (text_width - 16) as u16,
+    )
+}
 
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
+fn descriptor(screen_width: i32) -> CLocData {
+    let (baseline, width) = text_layout(screen_width);
+    let mut d = CLocData {
+        alien_frame_res: c"comm.urquan.graphics".as_ptr(),
+        alien_font_res: c"comm.urquan.font".as_ptr(),
+        alien_colormap_res: c"comm.urquan.colortable".as_ptr(),
+        alien_song_res: c"comm.urquan.music".as_ptr(),
+        conversation_phrases_res: c"comm.urquan.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: baseline,
+        alien_text_width: width,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 7,
+        ..CLocData::default()
     };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+    d.alien_ambient_array[0] = animation(7, 6, 1 << 1, (84, 0), (84, 0));
+    for (index, start) in [13, 16, 19].into_iter().enumerate() {
+        d.alien_ambient_array[index + 1] = animation(start, 3, 1 << 2, (42, 0), (840, 2520));
+    }
+    for (index, (start, frames)) in [(22, 7), (29, 7), (36, 8)].into_iter().enumerate() {
+        d.alien_ambient_array[index + 4] = animation(start, frames, 1 << 1, (56, 0), (840, 2520));
+    }
+    d.alien_transition_desc = animation(1, 2, 0, (140, 0), (0, 0));
+    d.alien_talk_desc = animation(2, 5, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
 }
 
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+
+    fn run(f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut dialogue::Dialogue { api: &mut api });
+    }
+
+    extern "C" fn combat(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
+    }
+    extern "C" fn normal(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Normal, response as i32));
+    }
+    extern "C" fn hypno(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Hypno, response as i32));
+    }
+    extern "C" fn mention_compulsion(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::MentionCompulsion, response as i32));
+    }
+    extern "C" fn describe_pet(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::DescribePet, response as i32));
+    }
+    extern "C" fn describe_compulsion(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::DescribeCompulsion, response as i32));
+    }
+    extern "C" fn loser(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Loser, response as i32));
+    }
+
+    fn callback(handler: Handler) -> extern "C" fn(u32) {
+        match handler {
+            Handler::Combat => combat,
+            Handler::Normal => normal,
+            Handler::Hypno => hypno,
+            Handler::MentionCompulsion => mention_compulsion,
+            Handler::DescribePet => describe_pet,
+            Handler::DescribeCompulsion => describe_compulsion,
+            Handler::Loser => loser,
+        }
+    }
+
+    pub(super) extern "C" fn intro() {
+        run(|dialogue| dialogue.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|dialogue| dialogue.post());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn init_urquan_comm() -> *mut CLocData {
+        static mut DESCRIPTOR: Option<CLocData> = None;
+        extern "C" {
+            static ScreenWidth: i32;
+        }
+        let descriptor = (&mut *std::ptr::addr_of_mut!(DESCRIPTOR))
+            .get_or_insert_with(|| super::descriptor(ScreenWidth));
+        (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
+        run(|dialogue| dialogue.initialize());
+        descriptor
     }
 }
 
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    unsafe { crate::mainloop::c_extern::get_current_activity() }
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.urquan.graphics\0";
-const RACE_FONT: &[u8] = b"comm.urquan.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.urquan.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.urquan.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.urquan.dialogue\0";
-
-/// Urquan race dialogue implementation.
 pub struct UrquanDialogue;
 
 impl super::RaceDialogue for UrquanDialogue {
     fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_urquan_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor(320))
         }
     }
 
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
 
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
 
     fn uninit(&self) -> u32 {
+        #[cfg(not(test))]
+        return live::uninit() as u32;
+        #[cfg(test)]
         0
     }
 }
@@ -207,35 +263,38 @@ impl super::RaceDialogue for UrquanDialogue {
 mod tests {
     use super::*;
 
+    use crate::state::game_state_keys::bit_range;
+
     #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
+    fn descriptor_matches_c_resource_and_animation_configuration() {
+        let desc = descriptor(320);
+        assert_eq!(desc.num_animations, 7);
+        assert_eq!(desc.alien_text_baseline.x, 121);
+        assert_eq!(desc.alien_text_width, 224);
+        assert_eq!(desc.alien_ambient_array[0].start_index, 7);
+        assert_eq!(desc.alien_ambient_array[0].num_frames, 6);
+        assert_eq!(desc.alien_ambient_array[1].anim_flags, 1 << 2);
+        assert_eq!(desc.alien_ambient_array[6].start_index, 36);
+        assert_eq!(desc.alien_ambient_array[6].num_frames, 8);
+        assert_eq!(desc.alien_transition_desc.base_frame_rate, 140);
+        assert_eq!(desc.alien_talk_desc.base_restart_rate, 70);
     }
 
     #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("AWARE_OF_SAMATRA").is_some(),
-            "missing game state key: AWARE_OF_SAMATRA"
-        );
-        assert!(
-            bit_range("KNOW_URQUAN_STORY").is_some(),
-            "missing game state key: KNOW_URQUAN_STORY"
-        );
-        assert!(
-            bit_range("KOHR_AH_FRENZY").is_some(),
-            "missing game state key: KOHR_AH_FRENZY"
-        );
-        assert!(
-            bit_range("MENTIONED_PET_COMPULSION").is_some(),
-            "missing game state key: MENTIONED_PET_COMPULSION"
-        );
-        assert!(
-            bit_range("PLAYER_HYPNOTIZED").is_some(),
-            "missing game state key: PLAYER_HYPNOTIZED"
-        );
+    fn urquan_state_keys_exist() {
+        for key in [
+            "AWARE_OF_SAMATRA",
+            "KNOW_URQUAN_STORY",
+            "KOHR_AH_FRENZY",
+            "MENTIONED_PET_COMPULSION",
+            "PLAYER_HYPNOTIZED",
+            "URQUAN_VISITS",
+            "URQUAN_HYPNO_VISITS",
+            "URQUAN_INFO",
+            "URQUAN_PROBE_GRPOFFS0",
+            "PROBE_MESSAGE_DELIVERED",
+        ] {
+            assert!(bit_range(key).is_some(), "missing game state key: {key}");
+        }
     }
 }
