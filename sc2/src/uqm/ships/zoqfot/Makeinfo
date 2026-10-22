@@ -1,2 +1,2 @@
 uqm_CFILES=""
-uqm_HFILES="icode.h resinst.h zoqfot.h"
+uqm_HFILES="icode.h zoqfot.h"
