@@ -15,7 +15,6 @@ sc2/src/libs/graphics/sdl/biadv2x.c
 sc2/src/libs/graphics/sdl/bilinear2x.c
 sc2/src/libs/graphics/sdl/canvas.c
 sc2/src/libs/graphics/sdl/hq2x.c
-sc2/src/libs/graphics/sdl/nearest2x.c
 sc2/src/libs/graphics/sdl/palette.c
 sc2/src/libs/graphics/sdl/png2sdl.c
 sc2/src/libs/graphics/sdl/primitives.c
