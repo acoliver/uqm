@@ -19,6 +19,7 @@ use super::ogg::OggDecoder;
 
 /// C-compatible decoder formats structure
 /// Matches TFB_DecoderFormats from decoder.h
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct TFB_DecoderFormats {
     pub big_endian: bool,

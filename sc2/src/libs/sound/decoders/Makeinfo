@@ -1,4 +1,3 @@
-uqm_CFILES="decoder.c "
 uqm_HFILES="aiffaud.h decoder.h dukaud.h wav.h"
 
 if [ "$uqm_OGGVORBIS" '!=' "none" ]; then

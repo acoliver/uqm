@@ -16,6 +16,7 @@
 pub mod aiff;
 pub mod aiff_ffi;
 pub mod decoder;
+pub mod decoder_api;
 #[cfg(test)]
 pub(crate) mod decoder_vtable_tests;
 pub mod dukaud;
