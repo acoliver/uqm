@@ -1,3 +1,6 @@
+#[path = "umgah_native.rs"]
+mod native;
+
 // Umgah Drone - Antimatter cone + retropropulsion zip
 // @plan PLAN-20260314-SHIPS.P11
 

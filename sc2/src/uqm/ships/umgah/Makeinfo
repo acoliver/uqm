@@ -1,2 +1,2 @@
-uqm_CFILES="umgah.c"
-uqm_HFILES="icode.h resinst.h umgah.h"
+uqm_CFILES=""
+uqm_HFILES="icode.h umgah.h"
