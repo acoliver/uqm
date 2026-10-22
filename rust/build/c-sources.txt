@@ -54,7 +54,6 @@ sc2/src/libs/resource/stringbank.c
 sc2/src/libs/sound/audiocore_rust.c
 sc2/src/libs/sound/decoders/decoder.c
 sc2/src/libs/sound/music.c
-sc2/src/libs/sound/sfx.c
 sc2/src/libs/sound/sound.c
 sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/libs/video/legacyplayer.c
