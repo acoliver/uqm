@@ -19,6 +19,7 @@ use std::os::raw::c_int;
 
 use super::types::CommData;
 
+mod alliance;
 pub mod arilou;
 pub mod blackur;
 pub mod chmmr;

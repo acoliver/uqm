@@ -22,6 +22,15 @@ pub(super) trait ScriptApi<H> {
     fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]);
     fn enabled(&self, phrase: u16) -> bool;
     fn disable(&mut self, phrase: u16);
+    fn alliance_fragments(&self, first: u16) -> Vec<i32> {
+        let name = i32::from(self.get("NEW_ALLIANCE_NAME"));
+        let first = i32::from(first);
+        let mut fragments = vec![first + name];
+        if name == 3 {
+            fragments.extend([GLOBAL_PLAYER_NAME, first + 4]);
+        }
+        fragments
+    }
     fn supplies(&self) -> Supplies;
     fn add_lander(&mut self);
     fn gauges(&mut self, crew: i16, fuel: i16, units: i32);

@@ -1,5 +1,6 @@
 use super::*;
 use crate::comm::races::encounter::testing::Effect;
+use crate::comm::races::script::GLOBAL_PLAYER_NAME;
 #[test]
 fn fuel_prices_capacity_shortfall_and_large_fill() {
     for (r, units) in [(137, 1), (139, 5), (140, 10), (141, 25)] {

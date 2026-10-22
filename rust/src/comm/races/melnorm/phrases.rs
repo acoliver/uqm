@@ -161,7 +161,6 @@ pub(super) const CANNONS: u16 = 244;
 pub(super) const TRACKERS: u16 = 245;
 pub(super) const DEFENSES: u16 = 246;
 pub(super) const NAME_1: u16 = 247;
-pub(super) const NAME_41: u16 = 251;
 pub(super) const ENUMERATE_ONE: u16 = 252;
 pub(super) const ENUMERATE_TWO: u16 = 253;
 pub(super) const ENUMERATE_THREE: u16 = 254;
