@@ -62,12 +62,12 @@ struct PlatformLinks {
 fn platform_links(target_os: &str) -> Result<PlatformLinks, String> {
     match target_os {
         "macos" => Ok(PlatformLinks {
-            packages: &["libpng", "liblzma", "bzip2"],
+            packages: &["liblzma", "bzip2"],
             libraries: &["sandbox", "z", "m", "objc"],
             frameworks: &["Cocoa", "CoreAudio", "AudioToolbox", "CoreFoundation"],
         }),
         "linux" => Ok(PlatformLinks {
-            packages: &["libpng", "liblzma"],
+            packages: &["liblzma"],
             libraries: &["z", "m", "bz2"],
             frameworks: &[],
         }),
