@@ -214,8 +214,16 @@ mod tests {
             fight.observe(100, next.clone());
         }
         assert_eq!(
-            fight.observe(100, next),
+            fight.observe(100, next.clone()),
             Progress::Input(Some(MenuKey::Right))
+        );
+        next.picker.as_mut().unwrap().cursor.x = 4;
+        for _ in 0..3 {
+            assert_eq!(fight.observe(100, next.clone()), Progress::Input(None));
+        }
+        assert_eq!(
+            fight.observe(100, next),
+            Progress::Input(Some(MenuKey::Select))
         );
         fight.observe(100, obs([4, 0]));
         let mut ended = obs([0, 0]);
@@ -225,6 +233,7 @@ mod tests {
         };
         assert!(label.contains("enemy_left=0"));
         assert!(label.contains("enemy_initial=3"));
+        assert!(label.contains("picks=2"));
         assert!(label.contains("flagship_crew=46"));
     }
 
