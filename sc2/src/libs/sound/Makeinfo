@@ -18,4 +18,4 @@ fi
 # The C files keep globals (soundSource, musicVolume, etc.) and
 # resource loaders (_GetMusicData, _GetSoundBankData, etc.).
 
-uqm_HFILES="audiocore.h sndintrn.h sound.h stream.h trackint.h trackplayer.h audio_heart_rust.h"
+uqm_HFILES="audiocore.h sndintrn.h sound.h stream.h trackint.h trackplayer.h"

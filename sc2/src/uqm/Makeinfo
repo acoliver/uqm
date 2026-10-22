@@ -51,6 +51,5 @@ uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		starmap.h rust_comm.h
 		units.h uqmdebug.h util.h velocity.h weapon.h
 		rust_bridge_mainloop.h
-		rust_bridge_restart.h
-		rust_bridge_main2.h"
+		rust_bridge_restart.h"
 

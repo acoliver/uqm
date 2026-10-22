@@ -7,8 +7,8 @@ uqm_SUBDIRS="stdio"
 uqm_CFILES="charhashtable.c defaultfs.c fileblock.c fstypes.c gphys.c io.c
 		ioaux.c match.c mount.c mounttree.c paths.c physical.c uiostream.c
 		uioutils.c utils.c"
-uqm_HFILES="charhashtable.h defaultfs.h fileblock.h fstypes.h getint.h
-		gphys.h ioaux.h io.h iointrn.h match.h mem.h mount.h mounttree.h
+uqm_HFILES="charhashtable.h fileblock.h fstypes.h getint.h
+		gphys.h io.h iointrn.h match.h mem.h mount.h mounttree.h
 		paths.h physical.h types.h uioport.h uiostream.h uioutils.h utils.h"
 
 	# Exclude C UIO sources when Rust implementations are enabled
