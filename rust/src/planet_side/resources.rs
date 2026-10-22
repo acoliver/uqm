@@ -154,7 +154,7 @@ pub struct CffiResourcePort {
 extern "C" {
     fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
     fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(drawable: *mut c_void);
+    fn DestroyDrawable(drawable: *mut c_void) -> u32;
     fn CaptureSound(sound: *mut c_void) -> *mut c_void;
     fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
 }

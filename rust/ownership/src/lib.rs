@@ -78,9 +78,9 @@ pub const EXPECTED_LEDGER_GIST_REVISION: &str = "5aece912bec7e8a2a646bd1bfc95d18
 pub const EXPECTED_LEDGER_SHA256: &str =
     "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
-    "f1b46a6efa1c41de1c155ad4903c14c946e1f16f940260f99fe75170c55b3f90";
+    "3aa91c2ce588c07205f8f9ef3fd090ef948823b2b117492d68da4af6d11aa996";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
-pub const EXPECTED_OBJECT_COUNT: usize = 338;
+pub const EXPECTED_OBJECT_COUNT: usize = 268;
 pub const DISPLIST_OBJECT: &str = "native/displist.c.o";
 pub const REMOVED_HEAP_OBJECT: &str = "native/heap.c.o";
 pub const QUEUE_RUST_PROVIDER: &str = "rust/src/collections/queue.rs";
@@ -93,11 +93,12 @@ pub const STRING_HASH_TABLE_SOURCE: &str = "sc2/src/libs/strings/stringhashtable
 pub const STRING_HASH_TABLE_HEADER: &str = "sc2/src/libs/strings/stringhashtable.h";
 pub const CHAR_HASH_TABLE_OWNER: &str = "RESOURCE/#22";
 pub const STRING_HASH_TABLE_OWNER: &str = "CORE_NATIVE/#22";
-pub const REMOVED_PRODUCTION_PROVIDERS: [&str; 4] = [
+pub const REMOVED_PRODUCTION_PROVIDERS: [&str; 5] = [
     DISPLIST_OBJECT,
     REMOVED_HEAP_OBJECT,
     CHAR_HASH_TABLE_OBJECT,
     STRING_HASH_TABLE_OBJECT,
+    OVAL_OBJECT,
 ];
 pub const RETAINED_CANONICAL_SOURCES: [&str; 7] = [
     "sc2/src/uqm/displist.c",
@@ -152,3 +153,8 @@ pub const HASH_TABLE_SYMBOLS: [&str; 24] = [
     "StringHashTable_newHashTable",
     "StringHashTable_remove",
 ];
+
+pub const OVAL_OBJECT: &str = "native/oval.c.o";
+pub const OVAL_RUST_PROVIDER: &str = "rust/src/planets/render/c_api.rs";
+pub const OVAL_OWNER: &str = "PLANET_GEN/#262";
+pub const OVAL_SYMBOLS: [&str; 2] = ["DrawOval", "DrawFilledOval"];

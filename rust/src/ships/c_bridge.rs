@@ -42,7 +42,7 @@ extern "C" {
         clashing_extern_declarations,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    fn DestroyDrawable(drawable: *mut c_void) -> i32;
+    fn DestroyDrawable(drawable: *mut c_void) -> u32;
 
     #[allow(
         clashing_extern_declarations,

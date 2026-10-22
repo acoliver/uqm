@@ -5,8 +5,8 @@ uqm_CFILES="battle.c border.c build.c cleanup.c
 		gameev.c gameinp.c gameopt.c getchar.c globdata.c
 		cons_res.c grpinfo.c hyper.c init.c intel.c intro.c ipdisp.c load.c
 		load_legacy.c
-		loadship.c master.c menu.c misc.c oscill.c outfit.c pickship.c
-		plandata.c process.c restart.c save.c settings.c setup.c setupmenu.c
+		loadship.c master.c menu.c misc.c oscill.c outfit.c
+		process.c restart.c save.c settings.c setup.c setupmenu.c
 		ship.c shipstat.c shipyard.c sis.c sounds.c starbase.c starcon.c
 		starmap.c state.c status.c tactrans.c uqmdebug.c util.c
 		weapon.c"
@@ -17,11 +17,6 @@ if [ "$uqm_USE_RUST_CLOCK" = "1" ]; then
 	uqm_CFILES="$uqm_CFILES clock_rust.c"
 else
 	uqm_CFILES="$uqm_CFILES clock.c"
-fi
-
-# Exclude rust_comm.c when USE_RUST_COMM is disabled
-if [ "$uqm_USE_RUST_COMM" = "1" ]; then
-	uqm_CFILES="$uqm_CFILES rust_comm.c"
 fi
 
 # Include Rust bridge helpers when Rust subsystems are enabled

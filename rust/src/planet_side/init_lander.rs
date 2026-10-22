@@ -91,7 +91,7 @@ extern "C" {
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
     fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
     fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(drawable: *mut c_void);
+    fn DestroyDrawable(drawable: *mut c_void) -> u32;
     fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
     fn GetStorageBayCapacity() -> u16;
 }

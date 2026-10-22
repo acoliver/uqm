@@ -597,14 +597,12 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
     match target_os {
         "macos" => {
             // The library records no #[link] for the C archive so pure test
-            // builds stay C-free; every binary that must resolve the C
-            // registration symbols force-loads the archive itself.
-            for binary in ["uqm", "menu_binding_probe"] {
-                println!(
-                    "cargo:rustc-link-arg-bin={binary}=-Wl,-force_load,{}",
-                    archive.display()
-                );
-            }
+            // builds stay C-free; the game binary force-loads the archive
+            // itself to resolve the C registration symbols.
+            println!(
+                "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
+                archive.display()
+            );
         }
         "linux" => {
             println!("cargo:rustc-link-lib=static:+whole-archive,-bundle=uqm_c");
@@ -747,7 +745,9 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let planets = "../sc2/src/uqm/planets/planets.h";
     let game_strings = "../sc2/src/uqm/gamestr.h";
     let star_indexes = "../sc2/src/uqm/gendef.h";
+    let generate = "../sc2/src/uqm/planets/generate.h";
     let drawable = "../sc2/src/libs/graphics/drawable.h";
+    let ship_build = "../sc2/src/uqm/build.h";
     for header in [
         globdata,
         events,
@@ -757,7 +757,9 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         planets,
         game_strings,
         star_indexes,
+        generate,
         drawable,
+        ship_build,
     ] {
         println!("cargo:rerun-if-changed={header}");
     }
@@ -770,19 +772,27 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(planets)
         .header(game_strings)
         .header(star_indexes)
+        .header(generate)
         .header(drawable)
+        .header(ship_build)
+        .allowlist_function(
+            "(planetOuterLocation|XFormIPLoc|EscortFeasibilityStudy|_clip_line|DrawBatch\
+             |DrawLine|DrawOval|DrawFilledOval|GetContextForeGroundColor\
+             |GetContextFGFrame|GetContextClipRect|GetContextDrawMode)",
+        )
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
             "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
              |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC|ELEMENT\
-             |STARSHIP)",
+             |STARSHIP|GenerateFunctions|gfx_object)",
         )
         .opaque_type("(tfb_image|drawable_desc|race_desc|RACE_DESC)")
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
-             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM)",
+             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup\
+             |ScreenWidth|ScreenHeight)",
         )
         .generate_comments(false)
         .layout_tests(true)

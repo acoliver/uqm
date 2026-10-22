@@ -136,6 +136,14 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("explore-planet-v1", &[Domain::NavigationOrbitScan]),
     row("real-sol-autopilot", &[Domain::NavigationOrbitScan]),
     row(
+        "real-sol-earth-orbit",
+        &[Domain::NewGame, Domain::NavigationOrbitScan],
+    ),
+    row(
+        "real-sol-pluto-orbit-scan",
+        &[Domain::NewGame, Domain::NavigationOrbitScan],
+    ),
+    row(
         "real-sol-luna-moonbase-departure",
         &[Domain::NavigationOrbitScan],
     ),
@@ -150,6 +158,27 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::CommunicationChoices,
             Domain::NavigationOrbitScan,
             Domain::PlanetSideResults,
+            Domain::BattleOutcomes,
+            Domain::Starbase,
+        ],
+    ),
+    row(
+        "real-sol-alliance-from-mercury",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::PlanetSideResults,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+            Domain::Starbase,
+        ],
+    ),
+    row(
+        "real-sol-alliance-from-luna",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
             Domain::BattleOutcomes,
             Domain::Starbase,
         ],
@@ -343,7 +372,6 @@ mod tests {
             .to_path_buf();
         let roots = [
             repo.join("rust/src/automation"),
-            repo.join("rust/harness"),
             repo.join(".github/workflows"),
         ];
         for root in roots {
@@ -380,6 +408,8 @@ mod tests {
         let classified: BTreeSet<String> =
             MATRIX.iter().map(|row| row.scenario.to_string()).collect();
         let on_disk = scenarios_on_disk();
+        assert_eq!(on_disk.len(), 40, "scenario files");
+        assert_eq!(classified.len(), 40, "classified scenarios");
         let unclassified: Vec<&String> = on_disk.difference(&classified).collect();
         assert!(
             unclassified.is_empty(),

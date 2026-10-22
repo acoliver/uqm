@@ -1,6 +1,7 @@
 //!
 //! Phase 2: Graphics subsystem core functionality.
 //!
+pub mod additive;
 pub mod cmap;
 pub mod context;
 pub mod dcqueue;

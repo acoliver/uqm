@@ -60,7 +60,6 @@ extern "C" {
     fn SetContextFont(font: *mut c_void) -> *mut c_void;
     fn SetContextFontEffect(frame: *mut c_void) -> *mut c_void;
     fn GetContextFontLeading(leading: *mut i16);
-    fn GetContextClipRect(rect: *mut CRect);
     fn font_DrawText(text: *mut CText);
     fn DrawFilledRectangle(rect: *mut CRect);
     fn DrawRectangle(rect: *mut CRect);
@@ -239,16 +238,24 @@ impl Gfx for CffiPlatform {
     }
 
     fn context_clip_rect(&self) -> Rect {
-        let mut rect = CRect::default();
+        use crate::c_bindings::global_state as c;
+
+        let mut rect = c::RECT {
+            corner: c::POINT { x: 0, y: 0 },
+            extent: c::EXTENT {
+                width: 0,
+                height: 0,
+            },
+        };
         // SAFETY: `rect` is a valid out-parameter.
-        unsafe { GetContextClipRect(&mut rect) };
+        unsafe { c::GetContextClipRect(&mut rect) };
         Rect {
             corner: Point {
                 x: rect.corner.x,
                 y: rect.corner.y,
             },
-            width: rect.width,
-            height: rect.height,
+            width: rect.extent.width,
+            height: rect.extent.height,
         }
     }
 

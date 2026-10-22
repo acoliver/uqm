@@ -532,6 +532,7 @@ impl Manifest {
         let expected: BTreeSet<_> = crate::QUEUE_SYMBOLS
             .iter()
             .chain(crate::HASH_TABLE_SYMBOLS.iter())
+            .chain(crate::OVAL_SYMBOLS.iter())
             .copied()
             .chain(verified.iter().map(|contract| contract.symbol.as_str()))
             .collect();
@@ -539,7 +540,7 @@ impl Manifest {
             diagnostics.push(diag(
                 DiagnosticCode::ManifestDrift,
                 Some("symbol_contracts"),
-                "internal symbol inventory differs from the queue and hash-table ABI exports",
+                "internal symbol inventory differs from the queue, hash-table and oval ABI exports",
             ));
         }
         let external_names: BTreeSet<_> = self
@@ -570,15 +571,13 @@ impl Manifest {
                 "declaration differs from ledger v7 S1/S2 provider and source-ownership boundary",
             ));
         }
-        if self
-            .objects
-            .iter()
-            .any(|object| object.path == crate::REMOVED_HEAP_OBJECT)
-        {
+        if let Some(object) = self.objects.iter().find(|object| {
+            [crate::REMOVED_HEAP_OBJECT, crate::OVAL_OBJECT].contains(&object.path.as_str())
+        }) {
             diagnostics.push(diag(
                 DiagnosticCode::UnassignedObject,
-                Some(crate::REMOVED_HEAP_OBJECT),
-                "stale heap provider must not appear in production inventory",
+                Some(&object.path),
+                "removed heap or oval provider must not appear in production inventory",
             ));
         }
         for path in [
@@ -652,6 +651,13 @@ fn expected_symbol_contract(symbol: &str) -> Option<(&'static str, &'static str,
             crate::STRING_HASH_TABLE_OWNER,
             crate::HASH_TABLE_RUST_PROVIDER,
             crate::STRING_HASH_TABLE_OBJECT,
+        ));
+    }
+    if crate::OVAL_SYMBOLS.contains(&symbol) {
+        return Some((
+            crate::OVAL_OWNER,
+            crate::OVAL_RUST_PROVIDER,
+            crate::OVAL_OBJECT,
         ));
     }
     None

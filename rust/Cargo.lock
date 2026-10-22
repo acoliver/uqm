@@ -2154,19 +2154,15 @@ dependencies = [
 name = "uqm-xtask"
 version = "0.8.0"
 dependencies = [
- "clang-sys",
  "image",
  "libc",
  "png",
- "quote",
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "syn 2.0.119",
  "tempfile",
  "uqm",
  "uqm-ownership",
- "zip",
 ]
 
 [[package]]

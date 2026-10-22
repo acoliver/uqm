@@ -202,15 +202,32 @@ fn unreadable_manifest_is_reported_as_io_error() {
 fn production_archive_is_explicitly_feature_gated() {
     let root = repo_root();
     let build_script = std::fs::read_to_string(root.join("rust/build.rs")).unwrap();
-    let verifier =
-        std::fs::read_to_string(root.join("rust/ownership/verify-production.sh")).unwrap();
-
     assert!(build_script.contains("env::var_os(\"CARGO_FEATURE_LINKED_C_ARCHIVE\")"));
-    assert!(verifier.contains("UQM_CI_SOURCE_ROOT"));
-    assert!(verifier.contains("UQM_CI_CONTROLLER_EXECUTABLE"));
-    assert!(verifier.contains("\"${UQM_CI_CONTROLLER_EXECUTABLE}\" __ci-verify"));
-    assert!(verifier.contains("\"${UQM_CI_CONTROLLER_EXECUTABLE}\" __ci-ownership-production"));
-    assert!(!verifier.contains("python3"));
-    assert!(!verifier.contains("xtask/Cargo.toml"));
-    assert!(!verifier.contains("production-artifacts.json"));
+}
+
+#[test]
+fn ovals_have_exact_rust_contracts_and_no_native_provider() {
+    let manifest = manifest();
+    assert!(!manifest
+        .objects
+        .iter()
+        .any(|object| object.path == uqm_ownership::OVAL_OBJECT));
+    let contracts: Vec<_> = manifest
+        .symbol_contracts
+        .iter()
+        .filter(|contract| uqm_ownership::OVAL_SYMBOLS.contains(&contract.symbol.as_str()))
+        .collect();
+    assert_eq!(contracts.len(), 2);
+    for contract in contracts {
+        assert_eq!(contract.canonical_owner, uqm_ownership::OVAL_OWNER);
+        assert_eq!(
+            contract.active_provider.path,
+            uqm_ownership::OVAL_RUST_PROVIDER
+        );
+        assert_eq!(contract.excluded_providers.len(), 1);
+        assert_eq!(
+            contract.excluded_providers[0].path,
+            uqm_ownership::OVAL_OBJECT
+        );
+    }
 }

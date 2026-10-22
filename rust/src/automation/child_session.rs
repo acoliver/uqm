@@ -2153,10 +2153,10 @@ mod os {
     }
 
     #[cfg(target_os = "macos")]
-    fn process_group_has_other_members(
+    fn process_group_member(
         process_group: u32,
         ignored: &[libc::pid_t],
-    ) -> io::Result<bool> {
+    ) -> io::Result<Option<libc::pid_t>> {
         const PROC_PGRP_ONLY: u32 = 2;
         // Query and retry if the process table grows between calls.
         for _ in 0..3 {
@@ -2205,10 +2205,10 @@ mod os {
                         continue;
                     };
                     if member_group == group && !terminal {
-                        return Ok(true);
+                        return Ok(Some(pid));
                     }
                 }
-                return Ok(false);
+                return Ok(None);
             }
         }
         Err(io::Error::other(
@@ -2234,10 +2234,10 @@ mod os {
     }
 
     #[cfg(target_os = "linux")]
-    fn process_group_has_other_members(
+    fn process_group_member(
         process_group: u32,
         ignored: &[libc::pid_t],
-    ) -> io::Result<bool> {
+    ) -> io::Result<Option<libc::pid_t>> {
         for entry in std::fs::read_dir("/proc")? {
             let entry = entry?;
             let Some(pid) = entry
@@ -2257,10 +2257,17 @@ mod os {
                 continue;
             };
             if linux_stat_is_live_group_member(&stat, process_group) {
-                return Ok(true);
+                return Ok(Some(pid as libc::pid_t));
             }
         }
-        Ok(false)
+        Ok(None)
+    }
+
+    fn process_group_has_other_members(
+        process_group: u32,
+        ignored: &[libc::pid_t],
+    ) -> io::Result<bool> {
+        process_group_member(process_group, ignored).map(|member| member.is_some())
     }
 
     fn signal_process_group(anchor: &LeaderAnchor, signal: libc::c_int) -> io::Result<()> {
@@ -2401,6 +2408,9 @@ mod os {
         pub stderr_bytes: u64,
         pub output_drained: bool,
         pub orphan_check_passed: bool,
+        /// Cleanup failures and exhausted group checks, even when another error
+        /// (such as the run timeout) remains the primary failure.
+        pub cleanup_diagnostics: Vec<String>,
         pub identity: ProcessIdentity,
     }
 
@@ -2413,7 +2423,11 @@ mod os {
 
     impl std::fmt::Display for ChildSessionFailure {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.error.fmt(f)
+            self.error.fmt(f)?;
+            for detail in &self.receipt.cleanup_diagnostics {
+                write!(f, "; cleanup: {detail}")?;
+            }
+            Ok(())
         }
     }
 
@@ -2448,6 +2462,7 @@ mod os {
         kill_sent: bool,
         group_empty: bool,
         failure: Option<ChildSessionError>,
+        cleanup_diagnostics: Vec<String>,
     }
 
     pub struct ChildSession {
@@ -2849,26 +2864,42 @@ mod os {
         }
 
         fn teardown_and_reap(&mut self, mut failure: Option<ChildSessionError>) -> WaitOutcome {
+            let mut cleanup_diagnostics = Vec::new();
             if let Err(error) = self.anchor.observe() {
-                remember_first_failure(&mut failure, ChildSessionError::Wait(error));
+                remember_cleanup_failure(
+                    &mut failure,
+                    &mut cleanup_diagnostics,
+                    ChildSessionError::Wait(error),
+                );
             }
 
             let mut term_sent = false;
-            self.record_group_signal(libc::SIGTERM, &mut term_sent, &mut failure);
+            self.record_group_signal(
+                libc::SIGTERM,
+                &mut term_sent,
+                &mut failure,
+                &mut cleanup_diagnostics,
+            );
 
-            let mut group_empty = self.record_group_wait(&mut failure);
+            let mut group_empty = self.record_group_wait(&mut failure, &mut cleanup_diagnostics);
             let mut kill_sent = false;
             if !group_empty {
-                self.record_group_signal(libc::SIGKILL, &mut kill_sent, &mut failure);
-                group_empty = self.record_group_wait(&mut failure);
+                self.record_group_signal(
+                    libc::SIGKILL,
+                    &mut kill_sent,
+                    &mut failure,
+                    &mut cleanup_diagnostics,
+                );
+                group_empty = self.record_group_wait(&mut failure, &mut cleanup_diagnostics);
             }
 
             if group_empty && self.registration_active {
                 if let Some(protocol) = self.protocol {
                     let pid = self.anchor.pid;
                     if let Err(error) = protocol.exchange(NestedGroupOperation::Unregister, pid) {
-                        remember_first_failure(
+                        remember_cleanup_failure(
                             &mut failure,
+                            &mut cleanup_diagnostics,
                             ChildSessionError::Registration(error),
                         );
                     } else {
@@ -2881,14 +2912,14 @@ mod os {
                 match reap_until(&mut self.child, self.anchor.pid as u32, self.config.grace) {
                     Ok(status) => {
                         if let Err(error) = self.anchor.mark_reaped() {
-                            remember_first_failure(&mut failure, error);
+                            remember_cleanup_failure(&mut failure, &mut cleanup_diagnostics, error);
                         } else {
                             self.cleanup_complete = true;
                         }
                         status
                     }
                     Err(error) => {
-                        remember_first_failure(&mut failure, error);
+                        remember_cleanup_failure(&mut failure, &mut cleanup_diagnostics, error);
                         synthetic_failure_status()
                     }
                 };
@@ -2905,6 +2936,7 @@ mod os {
                 kill_sent,
                 group_empty,
                 failure,
+                cleanup_diagnostics,
             }
         }
 
@@ -2913,24 +2945,30 @@ mod os {
             signal: i32,
             sent: &mut bool,
             failure: &mut Option<ChildSessionError>,
+            cleanup_diagnostics: &mut Vec<String>,
         ) {
             match self.signal_group_if_present(signal) {
                 Ok(was_sent) => *sent = was_sent,
-                Err(error) => remember_first_failure(failure, error),
+                Err(error) => remember_cleanup_failure(failure, cleanup_diagnostics, error),
             }
         }
 
-        fn record_group_wait(&mut self, failure: &mut Option<ChildSessionError>) -> bool {
-            match self.wait_for_group(self.config.grace) {
-                Ok(stopped) => stopped,
-                Err(error) => {
-                    remember_first_failure(failure, error);
-                    false
-                }
-            }
+        fn record_group_wait(
+            &mut self,
+            failure: &mut Option<ChildSessionError>,
+            cleanup_diagnostics: &mut Vec<String>,
+        ) -> bool {
+            record_group_wait_result(
+                self.wait_for_group(self.config.grace),
+                failure,
+                cleanup_diagnostics,
+            )
         }
 
-        fn wait_for_group(&mut self, duration: Duration) -> Result<bool, ChildSessionError> {
+        fn wait_for_group(
+            &mut self,
+            duration: Duration,
+        ) -> Result<Option<String>, ChildSessionError> {
             let deadline = Instant::now()
                 .checked_add(duration)
                 .ok_or_else(|| ChildSessionError::Wait(io::Error::other("deadline overflow")))?;
@@ -2940,17 +2978,17 @@ mod os {
                     Err(error) if error.kind() == ErrorKind::Interrupted => continue,
                     Err(error) => return Err(ChildSessionError::Wait(error)),
                 }
-                if self.anchor.observed
-                    && !process_group_has_other_members(
-                        self.identity.pid,
-                        &self.anchor.ignored_group_members(),
-                    )
-                    .map_err(ChildSessionError::ProcessGroup)?
-                {
-                    return Ok(true);
+                let member = if self.anchor.observed {
+                    process_group_member(self.identity.pid, &self.anchor.ignored_group_members())
+                        .map_err(ChildSessionError::ProcessGroup)?
+                } else {
+                    None
+                };
+                if self.anchor.observed && member.is_none() {
+                    return Ok(None);
                 }
                 if Instant::now() >= deadline {
-                    return Ok(false);
+                    return Ok(Some(group_wait_exhausted_detail(&self.anchor, member)));
                 }
                 thread::sleep(
                     Duration::from_millis(5)
@@ -2979,6 +3017,40 @@ mod os {
                 }),
             }
         }
+    }
+
+    fn group_wait_exhausted_detail(anchor: &LeaderAnchor, member: Option<libc::pid_t>) -> String {
+        format!(
+            "group {} cleanup grace exhausted: leader_observed={}, live_member={member:?}, ignored={:?}",
+            anchor.pid, anchor.observed, anchor.ignored_group_members()
+        )
+    }
+
+    fn record_group_wait_result(
+        result: Result<Option<String>, ChildSessionError>,
+        failure: &mut Option<ChildSessionError>,
+        cleanup_diagnostics: &mut Vec<String>,
+    ) -> bool {
+        match result {
+            Ok(None) => true,
+            Ok(Some(detail)) => {
+                cleanup_diagnostics.push(detail);
+                false
+            }
+            Err(error) => {
+                remember_cleanup_failure(failure, cleanup_diagnostics, error);
+                false
+            }
+        }
+    }
+
+    fn remember_cleanup_failure(
+        failure: &mut Option<ChildSessionError>,
+        cleanup_diagnostics: &mut Vec<String>,
+        error: ChildSessionError,
+    ) {
+        cleanup_diagnostics.push(format!("{error:?}"));
+        remember_first_failure(failure, error);
     }
 
     fn remember_first_failure(failure: &mut Option<ChildSessionError>, error: ChildSessionError) {
@@ -3263,6 +3335,7 @@ mod os {
             output_drained: stdout.as_ref().is_ok_and(|result| result.reached_eof)
                 && stderr.as_ref().is_ok_and(|result| result.reached_eof),
             orphan_check_passed: orphan_ok,
+            cleanup_diagnostics: outcome.cleanup_diagnostics.clone(),
             identity: identity.clone(),
         }
     }
@@ -3641,6 +3714,114 @@ mod os {
             })
             .unwrap_err();
             assert_eq!(error.to_string(), "injected wait failure");
+        }
+
+        #[test]
+        fn cleanup_diagnostics_retain_inspection_errno_after_timeout() {
+            use std::os::unix::process::ExitStatusExt;
+
+            let mut failure = Some(ChildSessionError::Timeout {
+                term_sent: true,
+                kill_sent: true,
+            });
+            let mut cleanup_diagnostics = Vec::new();
+            let inspection = io::Error::from_raw_os_error(libc::EACCES);
+            let expected = format!("ProcessGroup({inspection:?})");
+            let group_empty = record_group_wait_result(
+                Err(ChildSessionError::ProcessGroup(inspection)),
+                &mut failure,
+                &mut cleanup_diagnostics,
+            );
+            assert!(!group_empty);
+            assert!(matches!(failure, Some(ChildSessionError::Timeout { .. })));
+            assert_eq!(
+                cleanup_diagnostics.as_slice(),
+                std::slice::from_ref(&expected)
+            );
+
+            let outcome = WaitOutcome {
+                status: ExitStatus::from_raw(libc::SIGKILL),
+                term_sent: true,
+                kill_sent: true,
+                group_empty,
+                failure,
+                cleanup_diagnostics,
+            };
+            let identity = ProcessIdentity {
+                pid: 123,
+                start_time: "fixture-start".into(),
+                executable_digest: "fixture-digest".into(),
+            };
+            let drained = || {
+                Ok(DrainResult {
+                    reached_eof: true,
+                    ..DrainResult::default()
+                })
+            };
+            let receipt = receipt_from(&identity, &outcome, &drained(), &drained(), group_empty);
+            assert!(!receipt.orphan_check_passed);
+            assert!(receipt.output_drained);
+            assert_eq!(receipt.signal, Some(libc::SIGKILL));
+            assert_eq!(
+                receipt.cleanup_diagnostics.as_slice(),
+                std::slice::from_ref(&expected)
+            );
+            let failure = ChildSessionFailure {
+                error: outcome.failure.unwrap(),
+                receipt: Box::new(receipt),
+            };
+            assert!(failure.to_string().contains(&expected));
+        }
+
+        #[test]
+        fn cleanup_diagnostics_distinguish_unobserved_leader_from_live_member() {
+            let mut anchor = LeaderAnchor {
+                pid: 123,
+                monitor_anchor_pid: Some(124),
+                observed: false,
+                reaped: false,
+            };
+            let mut failure = None;
+            let mut diagnostics = Vec::new();
+            assert!(!record_group_wait_result(
+                Ok(Some(group_wait_exhausted_detail(&anchor, None))),
+                &mut failure,
+                &mut diagnostics,
+            ));
+            anchor.observed = true;
+            assert!(!record_group_wait_result(
+                Ok(Some(group_wait_exhausted_detail(&anchor, Some(125)))),
+                &mut failure,
+                &mut diagnostics,
+            ));
+            assert!(record_group_wait_result(
+                Ok(None),
+                &mut failure,
+                &mut diagnostics
+            ));
+            assert!(failure.is_none());
+            assert_eq!(diagnostics, [
+                "group 123 cleanup grace exhausted: leader_observed=false, live_member=None, ignored=[123, 124]",
+                "group 123 cleanup grace exhausted: leader_observed=true, live_member=Some(125), ignored=[123, 124]",
+            ]);
+        }
+
+        #[test]
+        fn cleanup_diagnostics_do_not_replace_the_first_cleanup_error() {
+            let mut failure = None;
+            let mut diagnostics = Vec::new();
+            for errno in [libc::EACCES, libc::ESRCH] {
+                remember_cleanup_failure(
+                    &mut failure,
+                    &mut diagnostics,
+                    ChildSessionError::ProcessGroup(io::Error::from_raw_os_error(errno)),
+                );
+            }
+            assert!(
+                matches!(failure, Some(ChildSessionError::ProcessGroup(ref error))
+                if error.raw_os_error() == Some(libc::EACCES))
+            );
+            assert_eq!(diagnostics.len(), 2);
         }
 
         #[test]

@@ -113,13 +113,9 @@ name = "uqm-native-acceptance"
 path = "src/bin/uqm-native-acceptance.rs"
 required-features = ["debug-process"]
 
-[[bin]]
-name = "p00_probes"
-path = "probes/p00_probes.rs"
-
-[[bin]]
-name = "menu_binding_probe"
-path = "probes/menu_binding_probe.rs"
+[[test]]
+name = "planets_parity"
+path = "tests/planets_parity.rs"
 required-features = ["linked_c_archive"]
 
 [[test]]

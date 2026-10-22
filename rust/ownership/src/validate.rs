@@ -132,6 +132,7 @@ impl Validator {
         crate::QUEUE_SYMBOLS
             .iter()
             .chain(crate::HASH_TABLE_SYMBOLS.iter())
+            .chain(crate::OVAL_SYMBOLS.iter())
             .copied()
             .chain(
                 self.verified_retirements

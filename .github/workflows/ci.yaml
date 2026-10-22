@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    # Toolchain is pinned so new stable lints do not fail unrelated pull requests.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    env:
+      # Everything except the retained C archive, which the game-build job covers.
+      FEATURES: audio_heart,debug-process
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install --yes build-essential libasound2-dev libbz2-dev liblzma-dev libpng-dev libsdl2-dev pkg-config
+        working-directory: .
+      - uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked --no-default-features --features "$FEATURES" -- -D warnings
+      - run: cargo test --workspace --locked --no-default-features --features "$FEATURES"
+
+  c-ratchet:
+    # Zero-C progress meter: the number of tracked C/C++/Objective-C files may only go down.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count tracked C sources
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          count() { git ls-tree -r --name-only "$1" | grep -Ec '\.(c|h|cc|cpp|hpp|m|mm)$' || true; }
+          head=$(count HEAD)
+          echo "tracked C/C++/Objective-C files: ${head}"
+          if [ -n "${BASE_REF}" ]; then
+            git fetch --quiet --depth=1 origin "${BASE_REF}"
+            base=$(count FETCH_HEAD)
+            echo "base (${BASE_REF}): ${base}"
+            test "${head}" -le "${base}" || { echo "::error::C file count grew from ${base} to ${head}"; exit 1; }
+          fi
+
+  game-build:
+    # Builds and links the real game binary, retained C archive included, like a local `xtask debug`.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install bzip2 libpng pkg-config sdl2 xz
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo run --locked --manifest-path rust/xtask/Cargo.toml -- debug

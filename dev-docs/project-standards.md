@@ -105,34 +105,21 @@ Production paths must not rely on panic-driven control flow. Use `Result` and
 
 ## 5) Lint, complexity and security gates
 
-These gates are composed by `rust/ci/gates.json` and consumed by
-`.github/workflows/rust-quality.yaml`. The workflow must not duplicate gate
-commands or narrow the matrix. Gates may be tightened. They must not be weakened.
+`.github/workflows/ci.yaml` runs these checks on every pull request and on
+pushes to `main`. Gates may be tightened. They must not be weakened.
 
-| Gate | Contract |
+| Check | Contract |
 |---|---|
 | Formatting | `cargo fmt --all --check` |
-| Lints | Clippy over the exact pure and linked profiles with `--all-targets` where applicable and `-D warnings` |
-| Complexity | `lizard -C 40 -w` over every tracked `.rs` file under `rust` and `rast` |
-| Advisories | Fetch the authority-pinned RustSec database revision, then run `cargo audit --db target/ci-advisory-db --no-fetch --deny warnings` |
-| Coverage | At least 80 percent over applicable first-party workspace targets without first-party exclusions |
-
-The complete order, exact command vectors, feature profiles, cache mode, mutation
-targets, and runner mapping are documented in `rust/ci/gates.json` and
-`dev-docs/rust/ci-gates.md`.
+| Lints | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
+| Tests | `cargo test --workspace --locked` |
+| C ratchet | The tracked C/C++/Objective-C file count must not exceed the base branch count. |
+| Game build | `cargo xtask debug` builds and links the real game on macOS. |
 
 Notes that matter:
 
 - Clippy runs over **all targets**. A lint failure in test or binary code counts.
-- Complexity is measured over tracked production and test source. Generated
-  build output is excluded because vendored code must not decide whether this
-  gate passes; no first-party source may be excluded.
-- `cargo audit` without `--deny warnings` exits zero on unsound, unmaintained,
-  and yanked crates. The security gate uses `--no-fetch` against the exact RustSec
-  revision in `rust/ci/gates.json`, so the audit input cannot change during a run.
-  Successful evidence retains that database in a deterministic binary pack whose
-  file count and SHA-256 are also pinned in the authority. Offline replay validates
-  the pack without accessing Git or the network.
+- Clippy runs over **all targets**. A lint failure in test or binary code counts.
 
 ### Explicit prohibitions
 

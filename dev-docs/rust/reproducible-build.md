@@ -40,15 +40,11 @@ repository validation does not fetch mutable network state.
 
 S1's source-derived provider manifest independently enforces exact archive membership, one provider per internal symbol, duplicate/unassigned rejection, `displist.c.o` exclusion, strict final linking, and provider reports. `heap.c.o` has no source and is absent; `heap.h` remains COLLECTIONS-owned.
 
-S4 consumes this matrix and the accepted S2 commands through
-`rust/ci/gates.json`; it does not redefine target, prerequisite, determinism,
-verification, or package semantics. Required CI executes every S2 tuple from an
-isolated empty Cargo home and absent build-output paths. The S4 native-input delta
-is zero and the maximum transitional input count remains 321.
+CI builds the game on macOS through `cargo xtask debug`. The maximum transitional native input count remains 321.
 
 ## Supported matrix and prerequisites
 
-`rust/ci/gates.json` is the machine authority for the exact supported tuples and runner mappings. `rust/build/supported-matrix.json` remains the S2 semantic input and must derive exactly the same tuple set. Supported hosts are current macOS and Linux on `aarch64` and `x86_64`, with SDL2 software rendering/input, UQM 0.8 content, cpal audio (ALSA on Linux), full networking, and directory-manifest packaging. Any other tuple fails before native compilation and reports every dimension.
+`rust/build/supported-matrix.json` remains the S2 semantic input and must derive exactly the same tuple set. Supported hosts are current macOS and Linux on `aarch64` and `x86_64`, with SDL2 software rendering/input, UQM 0.8 content, cpal audio (ALSA on Linux), full networking, and directory-manifest packaging. Any other tuple fails before native compilation and reports every dimension.
 
 Prerequisites are discovered for the active target with `pkg-config`; no Homebrew, `/usr/local`, volume, or user path is configured. Required packages are SDL2, libpng, liblzma, bzip2, and ALSA on Linux, plus `cc`, `ar`, `nm`, Cargo, and rustc. A missing tool or package reports the exact command and target package set that failed.
 

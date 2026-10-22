@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "f1b46a6efa1c41de1c155ad4903c14c946e1f16f940260f99fe75170c55b3f90",
+    "projection_sha256": "3aa91c2ce588c07205f8f9ef3fd090ef948823b2b117492d68da4af6d11aa996",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -717,315 +717,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/random.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/libs/math/random.c",
-      "scan_root": "native",
-      "sha256": "89d354b9362f04c7192977ac9d031b47714b6c80c7a096e514666b84d718d8b1",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/math/mod.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
-      "path": "native/random2.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/libs/math/random2.c",
-      "scan_root": "native",
-      "sha256": "db1f39ac06b669ed7461712e2df5cea5f99dc8bcaab92a00c0996b4d74c1de46",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/math/mod.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
-      "path": "native/sqrt.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/libs/math/sqrt.c",
-      "scan_root": "native",
-      "sha256": "de1fd462ecc0a443c84da74674a9ca93866cb04b3c7bd83eedd88694ffdf33a2",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/math/mod.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
-      "path": "native/drv_nos.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/drv_nos.c",
-      "scan_root": "native",
-      "sha256": "3886ffb2238619e115e99fe971d8549bca057f968785d73253d28c7eb999eabe",
-      "archive_decision": "include",
-      "provider": "native_object:native/drv_nos.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/load_it.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/load_it.c",
-      "scan_root": "native",
-      "sha256": "d30292d3926a987e3b613f154a8c4583164f2f52f29adccabbabe45604fb0ea1",
-      "archive_decision": "include",
-      "provider": "native_object:native/load_it.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/load_mod.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/load_mod.c",
-      "scan_root": "native",
-      "sha256": "6631d1606253a92c7b288fe1c38876d19fb35f6e09b4a927459d3d46870f9e3a",
-      "archive_decision": "include",
-      "provider": "native_object:native/load_mod.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/load_s3m.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/load_s3m.c",
-      "scan_root": "native",
-      "sha256": "8b5f5cfbc1f0cf6b97c11fa1196254c40ca4ee59470e7837c5c038e3a57c3470",
-      "archive_decision": "include",
-      "provider": "native_object:native/load_s3m.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/load_stm.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/load_stm.c",
-      "scan_root": "native",
-      "sha256": "4b81c57cdc3af8d89a1a53d784fee241d2c3c8fa424bf9fcf6ff282304d3a757",
-      "archive_decision": "include",
-      "provider": "native_object:native/load_stm.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/load_xm.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/load_xm.c",
-      "scan_root": "native",
-      "sha256": "f6bdcfb51f83dc9249a8ad026ea09da8a65734e5cd0c4c48fe377bc402970373",
-      "archive_decision": "include",
-      "provider": "native_object:native/load_xm.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mdreg.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mdreg.c",
-      "scan_root": "native",
-      "sha256": "b5423e8069835c0bafd6d4547ff9bb238f64c30d9b98b776dfdc384e2110c685",
-      "archive_decision": "include",
-      "provider": "native_object:native/mdreg.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mdriver.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mdriver.c",
-      "scan_root": "native",
-      "sha256": "cd5d491a124a71f686b287f4e4d6c34f2cba56720269d00408d97f06e48d91f6",
-      "archive_decision": "include",
-      "provider": "native_object:native/mdriver.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mdulaw.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mdulaw.c",
-      "scan_root": "native",
-      "sha256": "0a555e45ed0e320b66ea34a100a29ed2772f178d6da4b8f27b18dbd3d674d4a3",
-      "archive_decision": "include",
-      "provider": "native_object:native/mdulaw.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mloader.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mloader.c",
-      "scan_root": "native",
-      "sha256": "b840681ab22f23185bf3e770a78097572db9d815817075c46308babf476e2774",
-      "archive_decision": "include",
-      "provider": "native_object:native/mloader.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mlreg.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mlreg.c",
-      "scan_root": "native",
-      "sha256": "195235201d36de32bc861098e6cdbe9a1676ca6360acde6264d3f1acf5cabed2",
-      "archive_decision": "include",
-      "provider": "native_object:native/mlreg.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mlutil.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mlutil.c",
-      "scan_root": "native",
-      "sha256": "eb6c43b91d94cbed8fddb8b5ec2ef21bcc230f625e23d2fc466271347ae9aa0d",
-      "archive_decision": "include",
-      "provider": "native_object:native/mlutil.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mmalloc.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mmalloc.c",
-      "scan_root": "native",
-      "sha256": "5804e98cb64cba1a2bf62443c24fec298da51957931359002519e8b1e8b2100c",
-      "archive_decision": "include",
-      "provider": "native_object:native/mmalloc.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mmerror.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mmerror.c",
-      "scan_root": "native",
-      "sha256": "7e1e84d0340fd28f1243366a20e316e0ab4287c4843e90661cabe8b3d97fc8ec",
-      "archive_decision": "include",
-      "provider": "native_object:native/mmerror.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mmio.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mmio.c",
-      "scan_root": "native",
-      "sha256": "2309987a8943665f9150e83b165e83c7f21ec5d400fb20e42e92fba4d2dbb700",
-      "archive_decision": "include",
-      "provider": "native_object:native/mmio.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mplayer.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mplayer.c",
-      "scan_root": "native",
-      "sha256": "2393772312766d591affc098769327676c5b9672a644acdfce2f56df7bf73a98",
-      "archive_decision": "include",
-      "provider": "native_object:native/mplayer.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/munitrk.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/munitrk.c",
-      "scan_root": "native",
-      "sha256": "6df66b3ba0361524ae39af516e1e87109ef4a51e13f30cb62e45ac726c0fb774",
-      "archive_decision": "include",
-      "provider": "native_object:native/munitrk.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/mwav.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/mwav.c",
-      "scan_root": "native",
-      "sha256": "b8ed545d9198e2750e435f81fd89dae422321c9a26641bc3a3b8d2d9ea6e3e10",
-      "archive_decision": "include",
-      "provider": "native_object:native/mwav.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/npertab.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/npertab.c",
-      "scan_root": "native",
-      "sha256": "64c66e11f66d3c7432e3d59ba199ecab9b0028b8408606368491cf52fc02b73e",
-      "archive_decision": "include",
-      "provider": "native_object:native/npertab.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/sloader.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/sloader.c",
-      "scan_root": "native",
-      "sha256": "65735d64127ae93b3812cf1db7636e4449424c9ad375f1dd60f2e1d896ec1df9",
-      "archive_decision": "include",
-      "provider": "native_object:native/sloader.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/virtch.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/virtch.c",
-      "scan_root": "native",
-      "sha256": "c286e3e17a13a8e6c942e5ca93d4ff74bd606b450275e2203f6503fc200be05b",
-      "archive_decision": "include",
-      "provider": "native_object:native/virtch.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/virtch2.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/virtch2.c",
-      "scan_root": "native",
-      "sha256": "ec5fe08ff73b1b15944265449092319f6d751293e6e7925cd02b2a6bbbb7dcbe",
-      "archive_decision": "include",
-      "provider": "native_object:native/virtch2.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/virtch_common.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/mikmod/virtch_common.c",
-      "scan_root": "native",
-      "sha256": "85c392da62fb49619dc7be21e8cba15ef55bcb009916f56be39501466f01f8ac",
-      "archive_decision": "include",
-      "provider": "native_object:native/virtch_common.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/connect.c.o",
       "issue": "NETWORK",
       "canonical_source": "sc2/src/libs/network/connect/connect.c",
@@ -1246,7 +937,7 @@
       "issue": "CODEC_OTHER",
       "canonical_source": "sc2/src/libs/sound/decoders/decoder.c",
       "scan_root": "native",
-      "sha256": "1aab6e880982cb5df38665d5bea34a0a78a6309640843627773b77524275544a",
+      "sha256": "d18136b0d2a6745bf1c4e0228a13f88bf57dd321d4012f42a341bcfd9ed79f47",
       "archive_decision": "include",
       "provider": "native_object:native/decoder.c.o",
       "reason": "Transitional C ambient archive member",
@@ -1261,18 +952,6 @@
       "sha256": "c7fad67207f2a9117243cc4dde5ea907a4106c1ddfabd0e51b5e09833c267c96",
       "archive_decision": "include",
       "provider": "native_object:native/dukaud.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/modaud.c.o",
-      "issue": "CODEC_MOD",
-      "canonical_source": "sc2/src/libs/sound/decoders/modaud.c",
-      "scan_root": "native",
-      "sha256": "a15ce8a59413cd9d5a6d7fb1db3cf3a6b97e29be2fcf563b1cd07eb776b59526",
-      "archive_decision": "include",
-      "provider": "native_object:native/modaud.c.o",
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
@@ -1744,17 +1423,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/battlecontrols.c.o",
-      "issue": "BATTLE",
-      "canonical_source": "sc2/src/uqm/battlecontrols.c",
-      "scan_root": "native",
-      "sha256": "92db0bf5a3a07f8628bab7554041de86e75dfe0bbafc94deebab49f288e02a19",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/battle/battle_controls.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
       "path": "native/border.c.o",
       "issue": "LIFECYCLE",
       "canonical_source": "sc2/src/uqm/border.c",
@@ -1813,17 +1481,6 @@
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
-    },
-    {
-      "path": "native/collide.c.o",
-      "issue": "BATTLE",
-      "canonical_source": "sc2/src/uqm/collide.c",
-      "scan_root": "native",
-      "sha256": "446f9a2c3ec6eaba9387e1672f96a5eb8ebc0d89153a65e67b7500b698167ab4",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/battle/collision.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
       "path": "native/comm.c.o",
@@ -2353,17 +2010,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/gendef.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/uqm/gendef.c",
-      "scan_root": "native",
-      "sha256": "ea76f8c8723ec3ee8e9612b1c58c591dfdf3416f5dba21e7021cf913f069daf9",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/battle/gendef.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
       "path": "native/getchar.c.o",
       "issue": "LIFECYCLE",
       "canonical_source": "sc2/src/uqm/getchar.c",
@@ -2386,17 +2032,6 @@
       "reason": "Recompiled in rust/build.rs with RUST_OWNS_MAIN",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
-    },
-    {
-      "path": "native/gravity.c.o",
-      "issue": "BATTLE",
-      "canonical_source": "sc2/src/uqm/gravity.c",
-      "scan_root": "native",
-      "sha256": "df5c53118d8bac89af791e1c92049e32d3e86e19d13fbe3025ddf939e366f7e2",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/battle/gravity.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
       "path": "native/grpinfo.c.o",
@@ -2567,42 +2202,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/pickship.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/uqm/pickship.c",
-      "scan_root": "native",
-      "sha256": "f4362292d461e84e1921d037d033c3f385c81100c521a3fe262b5847fae6af9c",
-      "archive_decision": "include",
-      "provider": "native_object:native/pickship.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/plandata.c.o",
-      "issue": "CORE_NATIVE",
-      "canonical_source": "sc2/src/uqm/plandata.c",
-      "scan_root": "native",
-      "sha256": "09bcdc468f525f862334054377a5cdb12a1bb697d2f07baac90f0639970da338",
-      "archive_decision": "include",
-      "provider": "native_object:native/plandata.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/calc.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/calc.c",
-      "scan_root": "native",
-      "sha256": "eb19397bbe10e1387708a43acc47b4b83764bfcdb8c3224030d34128480cd18b",
-      "archive_decision": "include",
-      "provider": "native_object:native/calc.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/cargo.c.o",
       "issue": "PLANETSIDE_INTEGRATION",
       "canonical_source": "sc2/src/uqm/planets/cargo.c",
@@ -2627,366 +2226,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/genand.c.o",
-      "issue": "GEN_GENAND",
-      "canonical_source": "sc2/src/uqm/planets/generate/genand.c",
-      "scan_root": "native",
-      "sha256": "5d96ba0212c3fbcb53d45df96b62e2de6653ad5bf85280d9efd9afc84e7ce0d4",
-      "archive_decision": "include",
-      "provider": "native_object:native/genand.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genburv.c.o",
-      "issue": "GEN_GENBURV",
-      "canonical_source": "sc2/src/uqm/planets/generate/genburv.c",
-      "scan_root": "native",
-      "sha256": "72d19514a632ff0b30d99f39202de20cb7f61cc9a32b39581411706822caf494",
-      "archive_decision": "include",
-      "provider": "native_object:native/genburv.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genchmmr.c.o",
-      "issue": "GEN_GENCHMMR",
-      "canonical_source": "sc2/src/uqm/planets/generate/genchmmr.c",
-      "scan_root": "native",
-      "sha256": "b1998fb72661df8080453427cb734638816c33e08a1b6d036e5d3449c94d77c2",
-      "archive_decision": "include",
-      "provider": "native_object:native/genchmmr.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gencol.c.o",
-      "issue": "GEN_GENCOL",
-      "canonical_source": "sc2/src/uqm/planets/generate/gencol.c",
-      "scan_root": "native",
-      "sha256": "e2b3e6f3ad806377b22564ff147d318b9fb4708cbaad20fe1e5e63173193203c",
-      "archive_decision": "include",
-      "provider": "native_object:native/gencol.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gendefault.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/generate/gendefault.c",
-      "scan_root": "native",
-      "sha256": "be5d0175f5a193b48e4cd17869a4a09dfaacca2791ca0ec1f07c8602ca014910",
-      "archive_decision": "include",
-      "provider": "native_object:native/gendefault.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gendru.c.o",
-      "issue": "GEN_GENDRU",
-      "canonical_source": "sc2/src/uqm/planets/generate/gendru.c",
-      "scan_root": "native",
-      "sha256": "dc73997dd1c2a33e6f07406d8e4c8572afcf18a32d6c8d4ec97e757b35e92a16",
-      "archive_decision": "include",
-      "provider": "native_object:native/gendru.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genilw.c.o",
-      "issue": "GEN_GENILW",
-      "canonical_source": "sc2/src/uqm/planets/generate/genilw.c",
-      "scan_root": "native",
-      "sha256": "2a9eb98fa3745be35140d7608e36529831fd296bc77ebc972b1a992c51097d8c",
-      "archive_decision": "include",
-      "provider": "native_object:native/genilw.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genmel.c.o",
-      "issue": "GEN_GENMEL",
-      "canonical_source": "sc2/src/uqm/planets/generate/genmel.c",
-      "scan_root": "native",
-      "sha256": "23dfe9e80daa408c7a7704778138d218e37477fcee2f67a5d86d33b0941e5617",
-      "archive_decision": "include",
-      "provider": "native_object:native/genmel.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genmyc.c.o",
-      "issue": "GEN_GENMYC",
-      "canonical_source": "sc2/src/uqm/planets/generate/genmyc.c",
-      "scan_root": "native",
-      "sha256": "5b9604174c41f90973655d4003b8844bc01a7e5ca8c2e049635bdad9fc72f61a",
-      "archive_decision": "include",
-      "provider": "native_object:native/genmyc.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genorz.c.o",
-      "issue": "GEN_GENORZ",
-      "canonical_source": "sc2/src/uqm/planets/generate/genorz.c",
-      "scan_root": "native",
-      "sha256": "cb9d2f1d2dcbc80ea497fb5a20348141f85025918880d6d452316f3662d9eab5",
-      "archive_decision": "include",
-      "provider": "native_object:native/genorz.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genpet.c.o",
-      "issue": "GEN_GENPET",
-      "canonical_source": "sc2/src/uqm/planets/generate/genpet.c",
-      "scan_root": "native",
-      "sha256": "8e857fe8f4a503eb05af4b2053f20e23ee71b51aab88de61fea29212b68f7279",
-      "archive_decision": "include",
-      "provider": "native_object:native/genpet.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genpku.c.o",
-      "issue": "GEN_GENPKU",
-      "canonical_source": "sc2/src/uqm/planets/generate/genpku.c",
-      "scan_root": "native",
-      "sha256": "312d1a4cbfd37a476c862b5f0fb078fdba2d3a9f3411d4ae8528a3fa6b9e51e7",
-      "archive_decision": "include",
-      "provider": "native_object:native/genpku.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genrain.c.o",
-      "issue": "GEN_GENRAIN",
-      "canonical_source": "sc2/src/uqm/planets/generate/genrain.c",
-      "scan_root": "native",
-      "sha256": "e90d751ec8b0699597a732484beca8b1ad2eacf6b8cf61534bfda3e408182ce6",
-      "archive_decision": "include",
-      "provider": "native_object:native/genrain.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensam.c.o",
-      "issue": "GEN_GENSAM",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensam.c",
-      "scan_root": "native",
-      "sha256": "e05cca503c2f740f27ab9babe74c9018dd651c388f18551fcd1a4d5ab8214c84",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensam.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genshof.c.o",
-      "issue": "GEN_GENSHOF",
-      "canonical_source": "sc2/src/uqm/planets/generate/genshof.c",
-      "scan_root": "native",
-      "sha256": "e6cdd87a332cabe0cac9cce13a628b0661647c45554df902710eafa2cbb19ca5",
-      "archive_decision": "include",
-      "provider": "native_object:native/genshof.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensly.c.o",
-      "issue": "GEN_GENSLY",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensly.c",
-      "scan_root": "native",
-      "sha256": "07f327be3a088218ef2fecf75d4ebc8ae8fc0f28203d77df7afed6907e700d31",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensly.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensol.c.o",
-      "issue": "GEN_GENSOL",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensol.c",
-      "scan_root": "native",
-      "sha256": "2e9772c579edba343966dd2bd0bd2402cf1c863900c3c4149639af16984f268a",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensol.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genspa.c.o",
-      "issue": "GEN_GENSPA",
-      "canonical_source": "sc2/src/uqm/planets/generate/genspa.c",
-      "scan_root": "native",
-      "sha256": "e1dbdcd89e8aca5bf7dce144ccfa4a7769f6a07c1fe47d8229481524f29e1950",
-      "archive_decision": "include",
-      "provider": "native_object:native/genspa.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensup.c.o",
-      "issue": "GEN_GENSUP",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensup.c",
-      "scan_root": "native",
-      "sha256": "56b8dd14b63689c9d6f2092fc9795a9d9dbd700da3599b2a1f0fb2dc48bd8143",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensup.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gensyr.c.o",
-      "issue": "GEN_GENSYR",
-      "canonical_source": "sc2/src/uqm/planets/generate/gensyr.c",
-      "scan_root": "native",
-      "sha256": "8fa16fbf3278913ad18f03325900d121919aa99003118635e889d4b7d2893b01",
-      "archive_decision": "include",
-      "provider": "native_object:native/gensyr.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genthrad.c.o",
-      "issue": "GEN_GENTHRAD",
-      "canonical_source": "sc2/src/uqm/planets/generate/genthrad.c",
-      "scan_root": "native",
-      "sha256": "190174890c502bd139485f927cd0a7e87c18f1e4bf8bb4df8ca9ab83a5b60e96",
-      "archive_decision": "include",
-      "provider": "native_object:native/genthrad.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gentrap.c.o",
-      "issue": "GEN_GENTRAP",
-      "canonical_source": "sc2/src/uqm/planets/generate/gentrap.c",
-      "scan_root": "native",
-      "sha256": "f4ec9f9a384f5cdb417e43639f9bea023ebf4e4177af043930e0d1cab00b06f6",
-      "archive_decision": "include",
-      "provider": "native_object:native/gentrap.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genutw.c.o",
-      "issue": "GEN_GENUTW",
-      "canonical_source": "sc2/src/uqm/planets/generate/genutw.c",
-      "scan_root": "native",
-      "sha256": "4720501bbf451fe02f0a5e11e68f4158b19dcd2d4da2758810a1d6a7fd15d0f4",
-      "archive_decision": "include",
-      "provider": "native_object:native/genutw.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genvault.c.o",
-      "issue": "GEN_GENVAULT",
-      "canonical_source": "sc2/src/uqm/planets/generate/genvault.c",
-      "scan_root": "native",
-      "sha256": "3b1893adea50edb936ea41ec70add7b0f09aa311a6a5821a7dc2f53365f048dc",
-      "archive_decision": "include",
-      "provider": "native_object:native/genvault.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genvux.c.o",
-      "issue": "GEN_GENVUX",
-      "canonical_source": "sc2/src/uqm/planets/generate/genvux.c",
-      "scan_root": "native",
-      "sha256": "896d9c899e94ea4e68e7e16204094a032d517e0582df7d3b90c7317048cc319a",
-      "archive_decision": "include",
-      "provider": "native_object:native/genvux.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genwreck.c.o",
-      "issue": "GEN_GENWRECK",
-      "canonical_source": "sc2/src/uqm/planets/generate/genwreck.c",
-      "scan_root": "native",
-      "sha256": "4dfe6ee205c75167769e4922ee3cb404ccc4656d805057c057c17bf8a1071052",
-      "archive_decision": "include",
-      "provider": "native_object:native/genwreck.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genyeh.c.o",
-      "issue": "GEN_GENYEH",
-      "canonical_source": "sc2/src/uqm/planets/generate/genyeh.c",
-      "scan_root": "native",
-      "sha256": "a35fbaa1bb93dcfa97a2b3a38ac671468e772d1ce7991bf93d34313e2d63f224",
-      "archive_decision": "include",
-      "provider": "native_object:native/genyeh.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genzfpscout.c.o",
-      "issue": "GEN_GENZFPSCOUT",
-      "canonical_source": "sc2/src/uqm/planets/generate/genzfpscout.c",
-      "scan_root": "native",
-      "sha256": "0def56df3d243b9fcf93da1c75f59516af31af8665323c32ff2987e18e71b2fb",
-      "archive_decision": "include",
-      "provider": "native_object:native/genzfpscout.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/genzoq.c.o",
-      "issue": "GEN_GENZOQ",
-      "canonical_source": "sc2/src/uqm/planets/generate/genzoq.c",
-      "scan_root": "native",
-      "sha256": "21a46b23549419aa8d1969bf8972417f14ddf6af79aa49b053f4bad799bf92d8",
-      "archive_decision": "include",
-      "provider": "native_object:native/genzoq.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/gentopo.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/gentopo.c",
-      "scan_root": "native",
-      "sha256": "362121bb64b9462e9e1496126e75b7211bb8062537eef944e37c4c9672bebfc8",
-      "archive_decision": "include",
-      "provider": "native_object:native/gentopo.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/lander.c.o",
       "issue": "PLANET_GEN",
       "canonical_source": null,
@@ -2996,30 +2235,6 @@
       "provider": "rust_source:rust/src/planet_side/init_lander.rs",
       "reason": "Replaced by Rust native implementation",
       "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
-      "path": "native/orbits.c.o",
-      "issue": "NAVIGATION",
-      "canonical_source": "sc2/src/uqm/planets/orbits.c",
-      "scan_root": "native",
-      "sha256": "6002edee8b0120b2eb997a99c12dc0e2edb51c4e699c278b815aa7db30f5037a",
-      "archive_decision": "include",
-      "provider": "native_object:native/orbits.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
-      "path": "native/oval.c.o",
-      "issue": "PLANET_GEN",
-      "canonical_source": "sc2/src/uqm/planets/oval.c",
-      "scan_root": "native",
-      "sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
-      "archive_decision": "include",
-      "provider": "native_object:native/oval.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
     },
     {
       "path": "native/pl_stuff.c.o",
@@ -3118,18 +2333,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/surface.c.o",
-      "issue": "PLANETSIDE_INTEGRATION",
-      "canonical_source": "sc2/src/uqm/planets/surface.c",
-      "scan_root": "native",
-      "sha256": "b8ae0c2acd3451445c5f46f0c4636e02db5e4925f401cde671304f942b2ce758",
-      "archive_decision": "include",
-      "provider": "native_object:native/surface.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
-    },
-    {
       "path": "native/process.c.o",
       "issue": "BATTLE",
       "canonical_source": "sc2/src/uqm/process.c",
@@ -3146,7 +2349,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/uqm/restart.c",
       "scan_root": "native",
-      "sha256": "f1bab5775ee716fedd3ed490346544fc6b5949bf2e3eced084c80d9d9e5ce18c",
+      "sha256": "05a5f40c39ad9511cae97d919540af5b0cd0ff63a544e5b9f995b9ca452b8bec",
       "archive_decision": "include",
       "provider": "native_object:native/restart.c.o",
       "reason": "Transitional C ambient archive member",
@@ -3194,7 +2397,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/uqm/rust_bridge_restart.c",
       "scan_root": "native",
-      "sha256": "4a024df35cbf7e0cb40966ba9e1ef5e656918057c2cc9525f7abfdb58cd739a6",
+      "sha256": "3d70c874b7f1ff0e0eb740bc3bfb586ea959f1798742e15e34fc9673b67e245d",
       "archive_decision": "include",
       "provider": "native_object:native/rust_bridge_restart.c.o",
       "reason": "Transitional C ambient archive member",
@@ -3212,17 +2415,6 @@
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
-    },
-    {
-      "path": "native/rust_comm.c.o",
-      "issue": "COMM_CORE",
-      "canonical_source": "sc2/src/uqm/rust_comm.c",
-      "scan_root": "native",
-      "sha256": "94e2ddde1ad2375cae2520052fbc51167e65600164ffc94cb262415a9198c873",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/comm/ffi.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
       "path": "native/save.c.o",
@@ -4041,17 +3233,6 @@
       "production_profile": "production"
     },
     {
-      "path": "native/trans.c.o",
-      "issue": "LIFECYCLE",
-      "canonical_source": "sc2/src/uqm/trans.c",
-      "scan_root": "native",
-      "sha256": "2f7e2a76247fccdedf9a20b02dff91f30197fe11fcfa4e54d4956219d2b31c9b",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/math/mod.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
-    },
-    {
       "path": "native/uqmdebug.c.o",
       "issue": "LIFECYCLE",
       "canonical_source": "sc2/src/uqm/uqmdebug.c",
@@ -4074,17 +3255,6 @@
       "reason": "Transitional C ambient archive member",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
-    },
-    {
-      "path": "native/velocity.c.o",
-      "issue": "BATTLE",
-      "canonical_source": "sc2/src/uqm/velocity.c",
-      "scan_root": "native",
-      "sha256": "7cf534541f49e3f2e98f5facd08e2d6f783d3eae859949148bf09eceba757a6d",
-      "archive_decision": "exclude_replaced",
-      "provider": "rust_source:rust/src/battle/velocity.rs",
-      "reason": "Replaced by Rust native implementation",
-      "producing_command": "rust/build/native-inputs.json (source-derived identity; production entries compiled by rust/build.rs)"
     },
     {
       "path": "native/weapon.c.o",
@@ -4575,6 +3745,34 @@
           "path": "native/stringhashtable.c.o"
         }
       ]
+    },
+    {
+      "symbol": "DrawOval",
+      "canonical_owner": "PLANET_GEN/#262",
+      "active_provider": {
+        "kind": "rust_source",
+        "path": "rust/src/planets/render/c_api.rs"
+      },
+      "excluded_providers": [
+        {
+          "kind": "native_object",
+          "path": "native/oval.c.o"
+        }
+      ]
+    },
+    {
+      "symbol": "DrawFilledOval",
+      "canonical_owner": "PLANET_GEN/#262",
+      "active_provider": {
+        "kind": "rust_source",
+        "path": "rust/src/planets/render/c_api.rs"
+      },
+      "excluded_providers": [
+        {
+          "kind": "native_object",
+          "path": "native/oval.c.o"
+        }
+      ]
     }
   ],
   "external_imports": [],
@@ -4585,7 +3783,8 @@
       "native/displist.c.o",
       "native/heap.c.o",
       "native/charhashtable.c.o",
-      "native/stringhashtable.c.o"
+      "native/stringhashtable.c.o",
+      "native/oval.c.o"
     ],
     "removed_permissive_link_modes": [
       "-undefined,dynamic_lookup"

@@ -66,7 +66,6 @@ extern "C" {
 		}
 
 // Hyperspace coordinates of the Sol system
-// Should be the same as in plandata.c
 #define SOL_X  1752
 #define SOL_Y  1450
 

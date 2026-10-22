@@ -75,7 +75,7 @@ extern "C" {
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
     fn load_life_form(selector: u8) -> *mut c_void;
     fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(frame: *mut c_void);
+    fn DestroyDrawable(frame: *mut c_void) -> u32;
 }
 
 impl Drop for CffiSurfaceVisuals {

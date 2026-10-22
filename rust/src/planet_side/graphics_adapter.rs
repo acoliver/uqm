@@ -139,7 +139,7 @@ extern "C" {
     fn ClearDrawable();
     fn DrawStamp(stamp: *mut CStamp);
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn TFB_FlushGraphicsEx(skip_swap: i32);
+    fn TFB_FlushGraphicsEx(skip_swap: u32);
     fn TFB_SwapBuffers(force_full_redraw: i32);
     fn RedrawSurfaceScan(new_location: *const CPoint);
 }

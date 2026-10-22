@@ -1,0 +1,17 @@
+{
+  "schema": "uqm-start-save-provenance-v1",
+  "save": {
+    "path": "rust/scripts/saves/alliance-after-mercury.sav",
+    "slot": 1,
+    "sha256": "0d98178d391025d5870c16ac5d08dc7c0fce0777983fbe429e332ec8b6d5fdb9",
+    "byte_length": 3276
+  },
+  "scenario": {
+    "name": "real-sol-starbase-alliance",
+    "path": "rust/scripts/real-sol-starbase-alliance.json",
+    "sha256": "23c68a6dc83a08433186d6cf47a05ae0e4c647824d567ec0f0a5eae2ff3f9424"
+  },
+  "producing_commit": "c7e103e4fa7d682265d224df278eddd8dc39d6a7",
+  "run_id": "art-real-sol-starbase-alliance/scenarios/0000",
+  "terminal_reason": "success"
+}

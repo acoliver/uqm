@@ -311,10 +311,12 @@ impl GroupHeader {
         out[4..6].copy_from_slice(&self.star_index.to_le_bytes());
         out[6..8].copy_from_slice(&self.year_index.to_le_bytes());
         for (slot, offset) in out[GROUP_OFFSETS_AT..]
-            .chunks_exact_mut(4)
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
             .zip(self.group_offset)
         {
-            slot.copy_from_slice(&offset.to_le_bytes());
+            *slot = offset.to_le_bytes();
         }
     }
 }
@@ -331,8 +333,10 @@ fn capture_scan(star_info: &[u8]) -> Result<Vec<u32>, StateSectionError> {
         });
     }
     Ok(star_info
-        .chunks_exact(4)
-        .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
         .collect())
 }
 

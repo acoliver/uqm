@@ -751,6 +751,7 @@ fn unavailable_receipt(executable_digest: &str) -> ChildSessionReceipt {
         stderr_bytes: 0,
         output_drained: false,
         orphan_check_passed: false,
+        cleanup_diagnostics: Vec::new(),
         identity: uqm_rust::automation::ProcessIdentity {
             pid: 0,
             start_time: String::new(),

@@ -28,7 +28,7 @@ pub const ATTACK: u32 = 1;
 #[allow(clashing_extern_declarations)]
 extern "C" {
     // Resource destruction — these are the C functions (not c_ forwarders)
-    fn DestroyDrawable(handle: *mut std::ffi::c_void);
+    fn DestroyDrawable(handle: *mut std::ffi::c_void) -> u32;
     fn DestroyFont(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
     fn DestroyStringTable(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
     fn DestroyMusic(handle: *mut std::ffi::c_void) -> std::ffi::c_int;

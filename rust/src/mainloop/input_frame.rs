@@ -28,7 +28,7 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
 
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
-    fn TFB_FlushGraphicsEx(skip_swap: i32);
+    fn TFB_FlushGraphicsEx(skip_swap: u32);
     fn TFB_SwapBuffers(force_full_redraw: i32);
 }
 

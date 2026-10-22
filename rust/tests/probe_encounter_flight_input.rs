@@ -456,6 +456,29 @@ fn position(steps: &[Value], from: usize, wanted: impl Fn(&Value) -> bool) -> us
         .expect("expected step is missing")
 }
 
+fn reward_precedes_post_commander_menu(steps: &[Value], farewell: usize, reward: usize) -> bool {
+    let first_menu_input = position(steps, farewell, |step| {
+        matches!(action_of(step), "tap_menu_key" | "set_menu_key")
+    });
+    reward < first_menu_input
+}
+
+#[test]
+fn reward_ordering_distinguishes_checkpoint_navigation_from_post_commander_input() {
+    let mut steps = vec![
+        serde_json::json!({"action": "tap_menu_key", "key": "up"}),
+        serde_json::json!({"action": "select_communication_response", "index": 2}),
+        serde_json::json!({"action": "assert_ship_resources", "res_units": 2500}),
+        serde_json::json!({"action": "tap_menu_key", "key": "down"}),
+    ];
+    assert!(reward_precedes_post_commander_menu(&steps, 1, 2));
+    for action in ["tap_menu_key", "set_menu_key"] {
+        steps[2] = serde_json::json!({"action": action, "key": "up"});
+        steps[3] = serde_json::json!({"action": "assert_ship_resources", "res_units": 2500});
+        assert!(!reward_precedes_post_commander_menu(&steps, 1, 3));
+    }
+}
+
 /// Everything before the first flight step: the preparation.
 fn prep_of(name: &str) -> Vec<Value> {
     let steps = script_steps(name);
@@ -525,9 +548,8 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
             steps[farewell]["index"], 2,
             "{name} says goodbye_commander to the allied Commander"
         );
-        let first_purchase = position(&steps, 0, |step| is_tap(step, "up"));
         assert!(
-            reward < first_purchase,
+            reward_precedes_post_commander_menu(&steps, farewell, reward),
             "{name} must hold the 2500 RU reward before buying fuel"
         );
         // The reward is only paid when the allied Commander greets the moon
@@ -811,41 +833,24 @@ impl DerivedPreparation {
         let fuel_price = u8::try_from(number_after(&globdata, "GLOBAL (FuelCost) = "))
             .expect("fuel price fits a byte");
 
-        // Luna is the second moon of Earth; `gensol.c` fixes its density and
-        // radius, and `CalcGravity` (`calc.c`) is density * radius / 100.
-        let gensol = c_source("planets/generate/gensol.c");
-        let moon_properties = &gensol[gensol
-            .find("// World is a moon.")
-            .expect("moon properties block")..];
-        let earth_moons = &moon_properties[moon_properties
-            .find("case 2: /* moons of EARTH */")
-            .expect("Earth moons block")..];
-        let earth_moons = &earth_moons[..earth_moons
-            .find("case 4: /* moons of JUPITER */")
-            .expect("Jupiter moons block")];
-        let density = number_after(earth_moons, "PlanetInfo.PlanetDensity = ");
-        let radius = number_after(earth_moons, "PlanetInfo.PlanetRadius = ");
-        let gravity = u16::try_from(density * radius / 100).expect("gravity fits");
+        // Derive fuel cost from the production Sol physical owner.
+        let mut lunar_info = unsafe { std::mem::zeroed() };
+        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+            &mut lunar_info,
+            uqm_rust::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
+        );
+        let gravity = lunar_info.PlanetInfo.SurfaceGravity;
         let landing_cost = u32::from(landing_fuel_needed(
             gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
         ));
 
-        // Mercury is planet 0 of Sol; `gensol.c` fixes its density and radius
-        // the same way.
-        let world_properties = &gensol[gensol
-            .find("if (worldIsPlanet (solarSys, world))")
-            .expect("planet properties block")..];
-        let planets = &world_properties[world_properties
-            .find("case 0: /* MERCURY */")
-            .expect("Mercury block")..];
-        let mercury = &planets[..planets.find("case 1: /* VENUS */").expect("Venus block")];
-        let mercury_gravity = u16::try_from(
-            number_after(mercury, "PlanetInfo.PlanetDensity = ")
-                * number_after(mercury, "PlanetInfo.PlanetRadius = ")
-                / 100,
-        )
-        .expect("gravity fits");
+        let mut mercury_info = unsafe { std::mem::zeroed() };
+        uqm_rust::planets::generate::sol::orbital::physical_overrides(
+            &mut mercury_info,
+            uqm_rust::planets::generate::special::Body::Planet(0),
+        );
+        let mercury_gravity = mercury_info.PlanetInfo.SurfaceGravity;
         let mercury_landing_cost = u32::from(landing_fuel_needed(
             mercury_gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),

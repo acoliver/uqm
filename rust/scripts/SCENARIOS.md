@@ -5,6 +5,19 @@ The native UI suite that runs these scenarios is a local gate on a real Mac wind
 Automation can either play through normal game state or, for tests that do not
 need navigation coverage, activate a deterministic start scene.
 
+`real-sol-earth-orbit` and `real-sol-pluto-orbit-scan` are unplayed New Game
+inputs using existing navigation actions. Their exact claims, source-only
+verification limits and commands for execution after lane025 is released are in
+[the special-system input notes](../../docs/special-system-proof-inputs.md).
+Pluto orbit/scan is a Sol path, not Spathi homeworld generator 5 coverage.
+
+## Changing scenarios
+
+Scenarios are plain JSON under `rust/scripts` and can be edited freely: nothing
+pins their digests and CI does not run them. Keep assertion-class steps
+(`assert_*`, `wait_for_*`, `capture`, `fight_battle`, ...) in place when editing,
+because they are what makes a playthrough prove anything.
+
 ## Real Sol probe proof
 
 `real-sol-autopilot.json` is the authoritative regression proof for the opening
@@ -168,8 +181,8 @@ visit then runs, using only menu input:
 
 Budgets: `max_input_ticks` 161743 (the validator's static bound for this step
 list, the minimum it accepts), `max_presentations` 323486 (twice the ticks),
-`max_wallclock_seconds` 900. Its scenario entry in `gates.json` carries the
-approved 900000 ms outer deadline. Neither the allied chain's tail nor the visit has run live; the
+`max_wallclock_seconds` 900. Its scenario entry carries the
+900000 ms outer deadline. Neither the allied chain's tail nor the visit has run live; the
 first live run decides whether the Outfit and Shipyard expectations hold.
 
 ## Scenario audit limits
@@ -990,7 +1003,7 @@ scenarios start from the save it makes.
   `inputs/start-save.sav` in the run. The script then loads it through the real
   main menu: Down, Select (Load Game), Select (slot 0). The final config the run
   retains (`config-final/save/`) holds whatever saves the run wrote.
-- Saves are not fingerprinted in `rust/ci/gates.json`. The provenance file next
+- Saves are not fingerprinted. The provenance file next
   to each save (`saves/allied-starbase.provenance.json`) documents how the save
   was produced: the scenario run, the script it came from and the resources it
   recorded. It is documentation, and admission does not compare it with anything.
@@ -1016,3 +1029,99 @@ shrank to the validator minimum with a 300 s wall budget, so they no longer carr
 900000 ms outer deadline: `starbase-visit-v1` 2897 ticks,
 `real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
 `probe-encounter-v4` 7856 (presentations twice that). None of this has run live.
+
+## Playability smoke
+
+`native smoke` plays the smallest set of existing scenarios that together cover
+the main menu, flight in a solar system and in hyperspace, orbit, landing, the
+lander and takeoff back to orbit, a conversation with response selection, a
+battle, and a save followed by a load. The set and what each scenario covers is
+in `rust/xtask/smoke.json`; it is a subset of the scenarios in
+`rust/scripts`, not a second inventory.
+
+```sh
+cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native smoke \
+  --artifacts DIR --content PATH [--pr N]
+```
+
+Run it for any change to game runtime code, before saying the change works and
+before merging. A tooling-only change (xtask, CI, docs, scripts) does not need
+it. It uses the real Mac window and holds the display awake for the whole
+smoke sequence through the same display-wake holder as `native run`.
+
+Every scenario runs through the same path as `native run --scenario`, in order,
+and the run continues after a failure so the receipt covers the whole set. The
+command exits nonzero if any scenario failed.
+
+The receipt is `DIR/smoke-receipt.json` and `DIR/smoke-receipt.md`: the commit
+SHA and whether the tree was clean, the date, and for each scenario the result,
+terminal reason, duration, capture count, the screen-check result (`passed` or
+the exact failure) and the screenshots directory. The `.md` is a table for a PR
+comment and lists the original OS screenshots (`checkpoint-NNNN.os.png`)
+alongside the cropped client images (`checkpoint-NNNN.png`) a person or the
+image-checking agent has to look at. `--pr N` records the number in the receipt;
+the command posts nothing.
+
+"Fixed" may only be claimed with a passing receipt for that commit whose listed
+frames were looked at. A passing receipt for another commit, or one nobody
+looked at, is not that evidence.
+
+## Checkpoint saves: fix a late step without replaying the chain
+
+The alliance chain (`real-sol-starbase-alliance`) takes three in-flight saves in
+one run, each through the flight Game menu (`cancel, up, up, select`,
+`assert_game_options`, Select to open Save, the slot, Select, Select):
+
+| Slot | Taken | Save file | Used by |
+| ---- | ----- | --------- | ------- |
+| 1 | Flying beside Earth after the Mercury takeoff, radioactives aboard (chain steps 36-58) | `saves/alliance-after-mercury.sav` | `real-sol-alliance-from-mercury` |
+| 2 | Back in the solar system after the Luna moonbase landing, before visit 2 (chain steps 82-101) | `saves/alliance-after-luna.sav` | `real-sol-alliance-from-luna` |
+| 0 | Departing the allied Starbase, the last step of the chain | `saves/allied-starbase.sav` | `starbase-visit-v1`, `real-sol-starbase-to-mars`, `load-save-v1` family, `probe-encounter-v3`/`v4` |
+
+Notes on how the saves are taken:
+
+- The Mercury save is taken after `navigate_to_planet 2` leaves Mercury orbit. The
+  orbit menu is a different menu from the flight Game menu and no script has
+  opened Game options from orbit, so the checkpoint is placed in flight. The
+  chain then resumes with its own `navigate_to_moon 2/1`.
+- `PickGame` opens the picker on the last used slot (`lastUsedSlot` in
+  `gameopt.c`). A fresh game starts on slot 0, so slot 1 is one Down from there,
+  slot 2 is one Down from slot 1, and the final slot 0 save needs two Ups from
+  slot 2. After each save the script presses Select (reopens Game options),
+  asserts it, then Cancel, Down, Select to return to flight, the sequence
+  `load-save-v1` uses, and asserts interplanetary activity.
+- The two from-checkpoint scenarios declare `"start_save": {"slot": 0}`: the
+  harness installs the file as `uqmsave.00` whichever slot it was extracted from,
+  and the script loads it with the same main-menu sequence as
+  `starbase-visit-v1`.
+- The provenance file written by `extract-save` records the chain's last
+  `assert_ship_resources` (896 fuel / 2500 RU). That is right for slot 0 and only
+  documentation for slots 1 and 2.
+
+Regenerating all three from one chain run (a real window, passing run):
+
+```
+xtask native extract-save --artifacts <suite bundle> --slot 0 --output rust/scripts/saves/allied-starbase.sav
+xtask native extract-save --artifacts <suite bundle> --slot 1 --output rust/scripts/saves/alliance-after-mercury.sav
+xtask native extract-save --artifacts <suite bundle> --slot 2 --output rust/scripts/saves/alliance-after-luna.sav
+```
+
+Commit each save with its `.provenance.json`.
+
+The rule: when fixing a late step, run the from-checkpoint scenario that starts
+before it (`real-sol-alliance-from-luna` for visit 2, the Ilwrath fight, the
+alliance and the Starbase menu; `real-sol-alliance-from-mercury` when the Luna
+landing is also in question; `starbase-visit-v1` and the other slot 0 scenarios
+after the Starbase menu). Do not replay the whole chain for that. Run the full
+chain only to regenerate the saves, which is needed when a step before a
+checkpoint changes (conversations, purchases, the Mercury or Luna routes).
+
+The from-checkpoint scripts copy their steps from the chain verbatim (chain steps
+36-95 for Mercury, 59-95 for Luna, original numbering). After the load they
+assert interplanetary activity and at least one radioactive unit aboard. Their
+tick budgets are the validator minimum. Their saves, `alliance-after-mercury.sav`
+and `alliance-after-luna.sav`, were extracted with `xtask native extract-save`
+from a passing run of the chain; each has a provenance file beside it. Only the
+final save, `allied-starbase.sav`, records the chain's last ship-resource
+assertion, because fuel and resource units change between checkpoints. None of
+the from-checkpoint scripts has run live.

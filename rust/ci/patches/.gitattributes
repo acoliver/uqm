@@ -1,2 +1,0 @@
-# A unified diff carries significant leading whitespace on context lines.
-*.patch -whitespace

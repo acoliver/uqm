@@ -103,20 +103,6 @@ pub mod live_queues {
     pub unsafe fn display_list() -> *const CQueue {
         std::ptr::addr_of!(DISP_Q)
     }
-
-    extern "C" {
-        #[link_name = "battle_counter"]
-        static BATTLE_COUNTER: [u8; crate::battle::battle_controls::NUM_PLAYERS];
-    }
-
-    /// `battle_counter`, the ships each side still has in the running battle
-    /// (battle.c). Side 0 is the human player's, side 1 the opponent's.
-    ///
-    /// # Safety
-    /// Game thread only: C changes the counters while ships are picked and die.
-    pub unsafe fn battle_counters() -> [u8; crate::battle::battle_controls::NUM_PLAYERS] {
-        std::ptr::addr_of!(BATTLE_COUNTER).read()
-    }
 }
 
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the

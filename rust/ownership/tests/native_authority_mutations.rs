@@ -28,7 +28,44 @@ fn authorities() -> (
 fn checked_in_native_authorities_are_exactly_bound() {
     let (inputs, dependencies, providers) = authorities();
     validate_native_authority(&root(), &inputs, &dependencies, &providers).unwrap();
-    assert_eq!(inputs.inputs.len(), 321);
+    assert_eq!(inputs.inputs.len(), 261);
+    assert!(inputs
+        .inputs
+        .iter()
+        .all(|input| input.object_output != "oval.c.o"));
+    for source in [
+        "sc2/src/libs/mikmod/drv_nos.c",
+        "sc2/src/libs/mikmod/load_it.c",
+        "sc2/src/libs/mikmod/load_mod.c",
+        "sc2/src/libs/mikmod/load_s3m.c",
+        "sc2/src/libs/mikmod/load_stm.c",
+        "sc2/src/libs/mikmod/load_xm.c",
+        "sc2/src/libs/mikmod/mdreg.c",
+        "sc2/src/libs/mikmod/mdriver.c",
+        "sc2/src/libs/mikmod/mdulaw.c",
+        "sc2/src/libs/mikmod/mloader.c",
+        "sc2/src/libs/mikmod/mlreg.c",
+        "sc2/src/libs/mikmod/mlutil.c",
+        "sc2/src/libs/mikmod/mmalloc.c",
+        "sc2/src/libs/mikmod/mmerror.c",
+        "sc2/src/libs/mikmod/mmio.c",
+        "sc2/src/libs/mikmod/mplayer.c",
+        "sc2/src/libs/mikmod/munitrk.c",
+        "sc2/src/libs/mikmod/mwav.c",
+        "sc2/src/libs/mikmod/npertab.c",
+        "sc2/src/libs/mikmod/sloader.c",
+        "sc2/src/libs/mikmod/virtch.c",
+        "sc2/src/libs/mikmod/virtch2.c",
+        "sc2/src/libs/mikmod/virtch_common.c",
+        "sc2/src/libs/sound/decoders/modaud.c",
+    ] {
+        assert!(!root().join(source).exists());
+        assert!(inputs.inputs.iter().all(|input| input.source != source));
+        assert!(providers
+            .objects
+            .iter()
+            .all(|object| object.canonical_source.as_deref() != Some(source)));
+    }
     assert!(dependencies
         .dependencies
         .iter()
