@@ -173,10 +173,7 @@ sc2/src/uqm/supermelee/netplay/netsend.c
 sc2/src/uqm/supermelee/netplay/netstate.c
 sc2/src/uqm/supermelee/netplay/notify.c
 sc2/src/uqm/supermelee/netplay/notifyall.c
-sc2/src/uqm/supermelee/netplay/packet.c
 sc2/src/uqm/supermelee/netplay/packethandlers.c
-sc2/src/uqm/supermelee/netplay/packetq.c
-sc2/src/uqm/supermelee/netplay/packetsenders.c
 sc2/src/uqm/supermelee/netplay/proto/npconfirm.c
 sc2/src/uqm/supermelee/netplay/proto/ready.c
 sc2/src/uqm/supermelee/netplay/proto/reset.c
