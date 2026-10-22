@@ -852,6 +852,44 @@ mod tests {
     }
 
     #[test]
+    fn alpha_centauri_reload_assertions_equal_the_saved_provenance() {
+        let root = repository_root();
+        let save = root.join("rust/scripts/saves/at-alpha-centauri.sav");
+        let provenance: Provenance = read_json(&provenance_path(&save), MANIFEST_LIMIT).unwrap();
+        let bytes = std::fs::read(save).unwrap();
+        assert_eq!(
+            provenance.campaign_state,
+            saved_campaign_state(&bytes).unwrap()
+        );
+        let path = root.join("rust/scripts/load-alpha-centauri-v1.json");
+        let document = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
+        let wanted = document
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                uqm_rust::automation::Action::AssertState(predicate) => Some(predicate),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(wanted.all.len(), 2);
+        for condition in &wanted.all {
+            assert_eq!(
+                condition.op,
+                uqm_rust::automation::campaign_state::StateOp::Eq
+            );
+            assert_eq!(condition.value, provenance.campaign_state[&condition.key]);
+        }
+        assert!(wanted
+            .all
+            .iter()
+            .any(|condition| condition.key == "star:current"));
+        assert!(wanted
+            .all
+            .iter()
+            .any(|condition| condition.key == "sis:fuel"));
+    }
+
+    #[test]
     fn a_script_whose_save_is_missing_is_refused() {
         let start_save = StartSave {
             path: "saves/missing.sav".into(),

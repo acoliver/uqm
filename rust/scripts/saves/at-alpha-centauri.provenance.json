@@ -1,0 +1,39 @@
+{
+  "schema": "uqm-start-save-provenance-v2",
+  "save": {
+    "path": "rust/scripts/saves/at-alpha-centauri.sav",
+    "slot": 1,
+    "sha256": "1a471a566fe35cb25ba5bc7393c7fa3adc70d686f32e1a20a0868ce0a1f2c5e7",
+    "byte_length": 3343
+  },
+  "scenario": {
+    "name": "fly-to-alpha-centauri-v1",
+    "path": "rust/scripts/fly-to-alpha-centauri-v1.json",
+    "sha256": "0a9cb0b9dc255bd643f1b9b33011cd4f83cb6e3cfc0a3ecd24c81c7fd66635b4"
+  },
+  "producing_commit": "0539a380f7f94727aa7f706b9abdbdd81b575216",
+  "run_id": "pt-p2-2/scenarios/0000",
+  "terminal_reason": "success",
+  "seed": 1437213463,
+  "parent_save": {
+    "path": "saves/allied-starbase.sav",
+    "slot": 0,
+    "sha256": "f899d079a97f6d19944dd0db328e733504eb4a667d933853ee4ac8d481dee510",
+    "byte_length": 3276
+  },
+  "campaign_state": {
+    "activity": 4,
+    "date:day": 18,
+    "date:month": 3,
+    "date:year": 2155,
+    "sis:crew": 46,
+    "sis:fuel": 401,
+    "sis:landers": 1,
+    "sis:ru": 2500,
+    "star:current": 68,
+    "story:MOONBASE_DESTROYED": 1,
+    "story:PROBE_ILWRATH_ENCOUNTER": 0,
+    "story:RADIOACTIVES_PROVIDED": 1,
+    "story:STARBASE_AVAILABLE": 1
+  }
+}
