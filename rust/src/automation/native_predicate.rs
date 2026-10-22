@@ -232,6 +232,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             label == format!("navigation_reached:planet={}", value.planet)
         }
         Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
+        Action::FlyToStar(flight) => super::star_flight::arrival_satisfies(label, flight.target),
         Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
         Action::TurnFlagship(value) => {
             shape(

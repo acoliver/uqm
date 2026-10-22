@@ -22,6 +22,11 @@ use crate::state::game_state_keys::{bit_range, STATE_KEYS};
 pub enum StateKey {
     /// `GLOBAL(CurrentActivity)`, the whole word.
     Activity,
+    StarCurrent,
+    HyperX,
+    HyperY,
+    StarmapCursorX,
+    StarmapCursorY,
     /// `GLOBAL_SIS(FuelOnBoard)`, raw fuel points.
     SisFuel,
     /// `GLOBAL_SIS(ResUnits)`.
@@ -61,6 +66,11 @@ impl StateKey {
         }
         match text {
             "activity" => Ok(Self::Activity),
+            "star:current" => Ok(Self::StarCurrent),
+            "hyper:x" => Ok(Self::HyperX),
+            "hyper:y" => Ok(Self::HyperY),
+            "starmap:cursor_x" => Ok(Self::StarmapCursorX),
+            "starmap:cursor_y" => Ok(Self::StarmapCursorY),
             "sis:fuel" => Ok(Self::SisFuel),
             "sis:ru" => Ok(Self::SisRu),
             "sis:crew" => Ok(Self::SisCrew),
@@ -73,7 +83,7 @@ impl StateKey {
             "battle:ships_p2" => Ok(Self::BattleShipsP2),
             _ => Err(format!(
                 "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
-                 date:day|month|year, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
+                 date:day|month|year, star:current, hyper:x|y, starmap:cursor_x|cursor_y, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
             )),
         }
     }
@@ -82,6 +92,9 @@ impl StateKey {
     #[must_use]
     pub fn max_value(self) -> u32 {
         match self {
+            Self::StarCurrent => (crate::savegame::runtime::star::NUM_SOLAR_SYSTEMS - 1) as u32,
+            Self::HyperX | Self::HyperY => i32::MAX as u32,
+            Self::StarmapCursorX | Self::StarmapCursorY => 9999,
             Self::Activity | Self::SisCrew | Self::DateYear => u32::from(u16::MAX),
             Self::SisFuel | Self::SisRu => u32::MAX,
             Self::SisLanders | Self::DateDay | Self::DateMonth => u32::from(u8::MAX),
@@ -277,6 +290,27 @@ impl StateSource for LiveCampaign {
     fn read(&self, key: StateKey) -> Option<u32> {
         use crate::automation::input_ffi;
         match key {
+            StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
+                let target =
+                    super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
+                let observation = input_ffi::star_flight_observation(target);
+                match key {
+                    StateKey::StarCurrent => observation.current_star.map(u32::from),
+                    StateKey::StarmapCursorX => {
+                        observation.cursor.and_then(|(x, _)| u32::try_from(x).ok())
+                    }
+                    StateKey::StarmapCursorY => {
+                        observation.cursor.and_then(|(_, y)| u32::try_from(y).ok())
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            StateKey::HyperX => {
+                input_ffi::hyperspace_position().and_then(|(x, _)| u32::try_from(x).ok())
+            }
+            StateKey::HyperY => {
+                input_ffi::hyperspace_position().and_then(|(_, y)| u32::try_from(y).ok())
+            }
             StateKey::Story(name) => crate::state::ffi::named_state_value(name).map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
             StateKey::SisFuel => input_ffi::ship_resources().map(|(fuel, _)| fuel),
@@ -308,6 +342,11 @@ mod tests {
         fn read(&self, key: StateKey) -> Option<u32> {
             let name = match key {
                 StateKey::Activity => "activity",
+                StateKey::StarCurrent => "star:current",
+                StateKey::HyperX => "hyper:x",
+                StateKey::HyperY => "hyper:y",
+                StateKey::StarmapCursorX => "starmap:cursor_x",
+                StateKey::StarmapCursorY => "starmap:cursor_y",
                 StateKey::SisFuel => "sis:fuel",
                 StateKey::SisRu => "sis:ru",
                 StateKey::SisCrew => "sis:crew",
@@ -370,6 +409,36 @@ mod tests {
             r#"{"all":[{"key":"sis:fuel","op":"eq","value":1,"extra":2}]}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn flight_keys_preserve_unavailable_values_and_validate_widths() {
+        for (key, maximum) in [
+            ("star:current", 501),
+            ("hyper:x", i32::MAX as u32),
+            ("hyper:y", i32::MAX as u32),
+            ("starmap:cursor_x", 9999),
+            ("starmap:cursor_y", 9999),
+        ] {
+            assert_eq!(StateKey::parse(key).unwrap().max_value(), maximum);
+            let wanted = StatePredicate {
+                all: vec![StateCondition {
+                    key: key.into(),
+                    op: StateOp::Eq,
+                    value: 0,
+                }],
+            };
+            assert!(wanted.validate().is_ok());
+            assert!(!evaluate(&wanted, &fake(&[])).held);
+            let too_wide = StatePredicate {
+                all: vec![StateCondition {
+                    key: key.into(),
+                    op: StateOp::Eq,
+                    value: maximum + 1,
+                }],
+            };
+            assert!(too_wide.validate().is_err());
+        }
     }
 
     #[test]

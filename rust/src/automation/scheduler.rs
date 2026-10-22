@@ -305,6 +305,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
+        | Action::FlyToStar(_)
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
         | Action::CollectPlanetMinerals(_)
@@ -405,6 +406,7 @@ pub fn scheduler_reduce(
                 Action::NavigateToPlanet(_)
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
+                    | Action::FlyToStar(_)
                     | Action::NavigateToHyperspace(_)
                     | Action::TurnFlagship(_)
                     | Action::CollectPlanetMinerals(_)
@@ -852,6 +854,7 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::FlyToStar(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 })
@@ -868,6 +871,7 @@ fn reduce_navigation(
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
+        | (Action::FlyToStar(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining })
@@ -919,6 +923,16 @@ fn reduce_navigation(
             new_state: SchedulerState {
                 phase: ActionPhase::Navigating {
                     remaining: fight.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::FlyToStar(flight), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: flight.max_ticks.saturating_sub(1),
                 },
                 state_version: sv,
                 ..*state
@@ -3428,6 +3442,11 @@ mod budgeted_wait_tests {
                 max_ticks,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+            Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
+                target: crate::automation::star_flight::StarTarget::resolve("Alpha Centauri")
+                    .unwrap(),
+                max_ticks,
+            }),
             Action::TurnFlagship(TurnFlagshipStep {
                 direction: TurnDirection::Right,
                 facings: 4,
@@ -3485,6 +3504,7 @@ mod budgeted_wait_tests {
             Action::NavigateToPlanet(_)
                 | Action::NavigateToMoon(_)
                 | Action::NavigateToOrbit(_)
+                | Action::FlyToStar(_)
                 | Action::NavigateToHyperspace(_)
                 | Action::TurnFlagship(_)
                 | Action::CollectPlanetMinerals(_)

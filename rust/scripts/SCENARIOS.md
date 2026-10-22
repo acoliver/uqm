@@ -1156,3 +1156,26 @@ keeps moving. No state is written and no save is edited.
 
 Live run: fuel 896, 900, 100, 0; the ship stopped at hyperspace 26671,165445 and
 moved 0 units over the 300 tick sample with thrust held.
+
+
+### `fly-to-alpha-centauri-v1`
+
+Loads `saves/allied-starbase.sav`, leaves Sol through ordinary flight and uses
+`fly_to_star {target, max_ticks}` to reach Alpha Centauri (155.9, 99.3).
+Targets accept a zero-based star catalog index or a case-insensitive full name
+from the shipped game strings. Unknown names and out-of-range indices fail parsing.
+
+The controller opens the hyperspace menu and starmap, steers using the live
+cursor's screen projection, selects the destination, reads back autopilot and
+closes the map. All player controls remain released during autopilot flight.
+Arrival requires a live solar system, interplanetary activity and the exact
+catalog index. The scenario independently asserts star 68 and fuel below the
+loaded 896 raw points. It uses no position writes or debug movement.
+
+Read-only campaign keys include `star:current` (catalog index), `hyper:x` and
+`hyper:y` (SIS logical coordinates), and `starmap:cursor_x`/`starmap:cursor_y`
+(universe coordinates, available only while the map is open). Unknown or
+unavailable stars and cursors never read as zero. Encounters receive neutral
+input; flight resumes if they return control. A blocking dialogue, an empty
+tank or failure to arrive exhausts the bounded action with phase, location,
+activity, star and fuel in its failure label.

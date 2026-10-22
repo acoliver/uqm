@@ -205,6 +205,10 @@ pub const MATRIX: &[ScenarioRow] = &[
         "out-of-fuel-v1",
         &[Domain::Starbase, Domain::NavigationOrbitScan],
     ),
+    row(
+        "fly-to-alpha-centauri-v1",
+        &[Domain::SaveLoad, Domain::NavigationOrbitScan],
+    ),
     row("load-save-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",

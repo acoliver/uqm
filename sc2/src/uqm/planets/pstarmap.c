@@ -45,7 +45,7 @@
 #include <stdlib.h>
 
 
-static POINT cursorLoc;
+extern POINT cursorLoc;
 static POINT mapOrigin;
 static int zoomLevel;
 static FRAME StarMapFrame;
@@ -66,7 +66,7 @@ signedDivWithError (long val, long divisor)
 
 #define MAP_FIT_X ((MAX_X_UNIVERSE + 1) / SIS_SCREEN_WIDTH + 1)
 
-static inline COORD
+COORD
 universeToDispx (long ux)
 {
 	return signedDivWithError (((ux - mapOrigin.x) << zoomLevel)
@@ -75,7 +75,7 @@ universeToDispx (long ux)
 }
 #define UNIVERSE_TO_DISPX(ux)  universeToDispx(ux)
 
-static inline COORD
+COORD
 universeToDispy (long uy)
 {
 	return signedDivWithError (((mapOrigin.y - uy) << zoomLevel)
@@ -104,7 +104,7 @@ dispyToUniverse (COORD dy)
 
 static BOOLEAN transition_pending;
 
-static void
+void
 flashCurrentLocation (POINT *where)
 {
 	static BYTE c = 0;
@@ -276,7 +276,7 @@ GetSphereRect (FLEET_INFO *FleetPtr, RECT *pRect, RECT *pRepairRect)
 	}
 }
 
-static void
+void
 DrawStarMap (COUNT race_update, RECT *pClipRect)
 {
 #define GRID_DELTA 500
@@ -589,7 +589,7 @@ EraseCursor (COORD curs_x, COORD curs_y)
 #endif /* OLD */
 }
 
-static void
+void
 ZoomStarMap (SIZE dir)
 {
 #define MAX_ZOOM_SHIFT 4
@@ -623,7 +623,7 @@ ZoomStarMap (SIZE dir)
 	}
 }
 
-static void
+void
 UpdateCursorLocation (int sx, int sy, const POINT *newpt)
 {
 	STAMP s;
@@ -693,7 +693,7 @@ UpdateCursorLocation (int sx, int sy, const POINT *newpt)
 
 #define CURSOR_INFO_BUFSIZE 256
 
-static void
+void
 UpdateCursorInfo (UNICODE *prevbuf)
 {
 	UNICODE buf[CURSOR_INFO_BUFSIZE] = "";
@@ -765,7 +765,7 @@ UpdateCursorInfo (UNICODE *prevbuf)
 	}
 }
 
-static void
+void
 UpdateFuelRequirement (void)
 {
 	UNICODE buf[80];
@@ -1167,7 +1167,7 @@ OnStarNameFrame (TEXTENTRY_STATE *pTES)
 	return TRUE;
 }
 
-static BOOLEAN
+BOOLEAN
 DoStarSearch (MENU_STATE *pMS)
 {
 	TEXTENTRY_STATE tes;
@@ -1207,125 +1207,10 @@ DoStarSearch (MENU_STATE *pMS)
 	return success;
 } 
 
-static BOOLEAN
-DoMoveCursor (MENU_STATE *pMS)
-{
 #define MIN_ACCEL_DELAY (ONE_SECOND / 60)
 #define MAX_ACCEL_DELAY (ONE_SECOND / 8)
 #define STEP_ACCEL_DELAY (ONE_SECOND / 120)
-	static UNICODE last_buf[CURSOR_INFO_BUFSIZE];
-	DWORD TimeIn = GetTimeCounter ();
-
-	if (!pMS->Initialized)
-	{
-		POINT universe;
-
-		pMS->Initialized = TRUE;
-		pMS->InputFunc = DoMoveCursor;
-
-		if (!inHQSpace ())
-			universe = CurStarDescPtr->star_pt;
-		else
-		{
-			universe.x = LOGX_TO_UNIVERSE (GLOBAL_SIS (log_x));
-			universe.y = LOGY_TO_UNIVERSE (GLOBAL_SIS (log_y));
-		}
-		flashCurrentLocation (&universe);
-
-		last_buf[0] = '\0';
-		UpdateCursorInfo (last_buf);
-		UpdateFuelRequirement ();
-
-		return TRUE;
-	}
-	else if (PulsedInputState.menu[KEY_MENU_CANCEL])
-	{
-		return FALSE;
-	}
-	else if (PulsedInputState.menu[KEY_MENU_SELECT])
-	{
-		GLOBAL (autopilot) = cursorLoc;
-#ifdef DEBUG
-		if (instantMove)
-		{
-			PlayMenuSound (MENU_SOUND_INVOKED);
-
-			if (inHQSpace ())
-			{
-				// Move to the new location immediately.
-				doInstantMove ();
-			}
-			else if (LOBYTE (GLOBAL (CurrentActivity)) == IN_INTERPLANETARY)
-			{
-				// We're in a solar system; exit it.
-				GLOBAL (CurrentActivity) |= END_INTERPLANETARY;
-			
-				// Set a hook to move to the new location:
-				debugHook = doInstantMove;
-			}
-
-			return FALSE;
-		}
-#endif
-		DrawStarMap (0, NULL);
-	}
-	else if (PulsedInputState.menu[KEY_MENU_SEARCH])
-	{
-		if (GET_GAME_STATE (ARILOU_SPACE_SIDE) <= 1)
-		{	// HyperSpace search
-			POINT oldpt = cursorLoc;
-
-			if (!DoStarSearch (pMS))
-			{	// search failed or canceled - return cursor
-				UpdateCursorLocation (0, 0, &oldpt);
-			}
-			// make sure cmp fails
-			strcpy (last_buf, "  <random garbage>  ");
-			UpdateCursorInfo (last_buf);
-			UpdateFuelRequirement ();
-
-			SetMenuRepeatDelay (MIN_ACCEL_DELAY, MAX_ACCEL_DELAY,
-					STEP_ACCEL_DELAY, TRUE);
-			SetMenuSounds (MENU_SOUND_NONE, MENU_SOUND_NONE);
-		}
-		else
-		{	// no search in QuasiSpace
-			PlayMenuSound (MENU_SOUND_FAILURE);
-		}
-	}
-	else
-	{
-		SBYTE sx, sy;
-		SIZE ZoomIn, ZoomOut;
-
-		ZoomIn = ZoomOut = 0;
-		if (PulsedInputState.menu[KEY_MENU_ZOOM_IN])
-			ZoomIn = 1;
-		else if (PulsedInputState.menu[KEY_MENU_ZOOM_OUT])
-			ZoomOut = 1;
-
-		ZoomStarMap (ZoomIn - ZoomOut);
-
-		sx = sy = 0;
-		if (PulsedInputState.menu[KEY_MENU_LEFT])    sx =   -1;
-		if (PulsedInputState.menu[KEY_MENU_RIGHT])   sx =    1;
-		if (PulsedInputState.menu[KEY_MENU_UP])      sy =   -1;
-		if (PulsedInputState.menu[KEY_MENU_DOWN])    sy =    1;
-
-		if (sx != 0 || sy != 0)
-		{
-			UpdateCursorLocation (sx, sy, NULL);
-			UpdateCursorInfo (last_buf);
-			UpdateFuelRequirement ();
-		}
-
-		SleepThreadUntil (TimeIn + MIN_ACCEL_DELAY);
-	}
-
-	flashCurrentLocation (NULL);
-
-	return !(GLOBAL (CurrentActivity) & CHECK_ABORT);
-}
+extern BOOLEAN DoMoveCursor (MENU_STATE *pMS);
 
 static void
 RepairMap (COUNT update_race, RECT *pLastRect, RECT *pNextRect)

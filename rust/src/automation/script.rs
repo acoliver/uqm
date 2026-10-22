@@ -870,6 +870,7 @@ pub enum Action {
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
+    FlyToStar(crate::automation::star_flight::FlyToStarStep),
     TurnFlagship(TurnFlagshipStep),
     CollectPlanetMinerals(CollectPlanetMineralsStep),
     FightBattle(FightBattleStep),
@@ -2062,6 +2063,16 @@ fn validate_navigation_step(
                 )));
             }
             navigation.max_ticks
+        }
+        Action::FlyToStar(flight) => {
+            if flight.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "fly_to_star max_ticks must be positive",
+                )));
+            }
+            flight.max_ticks
         }
         Action::NavigateToHyperspace(navigation) => {
             if navigation.max_ticks == 0 {
@@ -4220,6 +4231,22 @@ mod tests {
     fn validated(step: &str) -> Result<ValidatedScript, AutomationError> {
         let text = resource_script(step);
         validate_script(parse_script(text.as_bytes(), p())?, p())
+    }
+
+    #[test]
+    fn fly_to_star_parses_and_rejects_unknown_or_unbounded_targets() {
+        let script =
+            validated(r#"{"action":"fly_to_star","target":"Alpha Centauri","max_ticks":2}"#)
+                .unwrap();
+        assert!(matches!(script.steps()[0], Action::FlyToStar(_)));
+        for step in [
+            r#"{"action":"fly_to_star","target":"Alpha Nope","max_ticks":2}"#,
+            r#"{"action":"fly_to_star","target":502,"max_ticks":2}"#,
+            r#"{"action":"fly_to_star","target":"Sol","max_ticks":0}"#,
+            r#"{"action":"fly_to_star","target":"Sol","max_ticks":2,"instant_move":true}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
     }
 
     #[test]

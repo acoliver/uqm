@@ -291,6 +291,7 @@ struct CoordInner {
     planet_minerals: PlanetMineralsTracker,
     /// Ticks and starting ship counts of the current `fight_battle` step.
     battle_fight: BattleFightTracker,
+    star_flight: crate::automation::star_flight::StarFlight,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -456,6 +457,7 @@ impl Coordinator {
                 flagship_turn: FlagshipTurnTracker::default(),
                 planet_minerals: PlanetMineralsTracker::default(),
                 battle_fight: BattleFightTracker::default(),
+                star_flight: crate::automation::star_flight::StarFlight::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -1217,6 +1219,61 @@ impl Coordinator {
         scheduler_event
     }
 
+    fn service_star_flight(
+        &self,
+        inner: &mut CoordInner,
+        flight: crate::automation::star_flight::FlyToStarStep,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::script::{MenuKey, PlayerKey};
+        use crate::automation::star_flight::{Progress, StarFlight};
+        if inner.sched_state.phase == ActionPhase::WaitingForInput {
+            inner.star_flight = StarFlight::default();
+        }
+        let observation = input_ffi::star_flight_observation(flight.target);
+        let progress = inner.star_flight.observe(flight, observation);
+        let input = match &progress {
+            Progress::Input(key) => *key,
+            _ => None,
+        };
+        for key in [
+            PlayerKey::Thrust,
+            PlayerKey::Down,
+            PlayerKey::Left,
+            PlayerKey::Right,
+            PlayerKey::Weapon,
+            PlayerKey::Special,
+            PlayerKey::Escape,
+        ] {
+            if !inject_player_key(i32::from(key.index()), 0) {
+                self.reject_input(inner, "fly_to_star", -1, -1);
+                return event;
+            }
+        }
+        for key in MenuKey::ALL {
+            if !inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
+                self.reject_input(inner, "fly_to_star", -1, -1);
+                return event;
+            }
+        }
+        match progress {
+            Progress::Input(_) => event,
+            Progress::Selected(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                event
+            }
+            Progress::Arrived(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                SchedulerEvent::NavigationReached
+            }
+            Progress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+        }
+    }
+
     /// Derive real player controls for whichever navigation the current step
     /// is running, and report arrival.
     fn service_navigation(
@@ -1317,6 +1374,10 @@ impl Coordinator {
                 self.reject_input(inner, "navigation", -1, -1);
                 return scheduler_event;
             }
+        } else if let Some(Action::FlyToStar(flight)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_star_flight(inner, *flight, scheduler_event);
         } else if let Some(Action::NavigateToHyperspace(_)) =
             self.actions.get(inner.sched_state.step_index)
         {
