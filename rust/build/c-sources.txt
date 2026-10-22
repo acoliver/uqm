@@ -105,7 +105,6 @@ sc2/src/uqm/ships/pkunk/pkunk.c
 sc2/src/uqm/ships/shofixti/shofixti.c
 sc2/src/uqm/ships/sis_ship/sis_ship.c
 sc2/src/uqm/ships/slylandr/slylandr.c
-sc2/src/uqm/ships/zoqfot/zoqfot.c
 sc2/src/uqm/shipstat.c
 sc2/src/uqm/shipyard.c
 sc2/src/uqm/sis.c
