@@ -37,10 +37,6 @@ sc2/src/libs/input/sdl/input.c
 sc2/src/libs/input/sdl/keynames.c
 sc2/src/libs/input/sdl/rust_vcontrol_impl.c
 sc2/src/libs/log/uqmlog.c
-sc2/src/libs/network/connect/connect.c
-sc2/src/libs/network/connect/listen.c
-sc2/src/libs/network/netmanager/ndesc.c
-sc2/src/libs/network/netmanager/netmanager_bsd.c
 sc2/src/libs/resource/direct.c
 sc2/src/libs/resource/stringbank.c
 sc2/src/libs/threads/rust_thrcommon.c

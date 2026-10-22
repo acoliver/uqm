@@ -1,2 +1,2 @@
-uqm_CFILES="connect.c listen.c"
+uqm_CFILES=""
 uqm_HFILES="connect.h listen.h resolve.h"

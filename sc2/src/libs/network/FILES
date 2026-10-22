@@ -7,9 +7,8 @@ wspiapiwrap.{c,h}     Hack to make sure <wspiapi.h> is #included in exactly
                       one file.
 
 In libs/network/netmanager/:
-ndesc.{c,h}           Defines network descriptors.
-netmanager.h          Handles callbacks for network activity.
-netmanager_bsd.{c,h}  NetManager for systems with BSD sockets.
+ndesc.h               Network descriptor API declarations.
+netmanager.h          Network manager API declarations (implemented in Rust).
 netmanager_win.{c,h}  NetManager for Winsock systems.
 
 In libs/network/socket/:
@@ -17,7 +16,7 @@ socket.h              Socket API declarations.
 socket_win.{c,h}      Socket operations for Winsock sockets.
 
 In libs/network/connect/:
-connect.{c,h}         Routines for establishing outgoing connections.
-listen.{c,h}          Routines for receiving incoming connections.
+connect.h             Outgoing connection API declarations.
+listen.h              Incoming connection API declarations.
 resolve.h             Hostname resolution API declarations.
 
