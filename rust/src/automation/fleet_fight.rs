@@ -66,10 +66,11 @@ impl FleetFight {
                 return Progress::Failed("fleet_fight_timeout:encounter_menu".into());
             }
             self.preview_ticks += 1;
-            // The real encounter menu opens on Hail. One Down selects Attack.
+            // Its first callback initializes the menu and ignores keys. Release
+            // through initialization, then move from Hail to Attack and confirm.
             return Progress::Input(match self.preview_ticks {
-                1 => Some(MenuKey::Down),
-                5 => Some(MenuKey::Select),
+                3 => Some(MenuKey::Down),
+                7 => Some(MenuKey::Select),
                 _ => None,
             });
         }
@@ -152,6 +153,9 @@ mod tests {
         let mut preview = obs([0, 0]);
         preview.activity = 3;
         preview.encounter_menu = true;
+        for _ in 0..2 {
+            assert_eq!(fight.observe(100, preview.clone()), Progress::Input(None));
+        }
         assert_eq!(
             fight.observe(100, preview.clone()),
             Progress::Input(Some(MenuKey::Down))
