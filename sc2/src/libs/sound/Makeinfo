@@ -7,9 +7,9 @@ fi
 
 # Use Rust audio backend when USE_RUST_AUDIO is defined
 if [ -n "$USE_RUST_AUDIO" ]; then
-	uqm_CFILES="audiocore_rust.c sound.c music.c "
+	uqm_CFILES="audiocore_rust.c sound.c "
 else
-	uqm_CFILES="audiocore.c sound.c music.c "
+	uqm_CFILES="audiocore.c sound.c "
 fi
 
 # When USE_RUST_AUDIO_HEART is enabled, the C files are still compiled
