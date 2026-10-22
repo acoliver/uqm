@@ -18,7 +18,6 @@ unsafe extern "C" {
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
-    pub fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
 }
 static ENGINE: Mutex<()> = Mutex::new(());
