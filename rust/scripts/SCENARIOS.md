@@ -1271,3 +1271,11 @@ ordinary landing. `collect_energy_node` is its alternative abandoned-ruins
 pickup path; this segment does not remove the Pkunk to force that path.
 The producer saves through the Game menu to slot 1 and leaves slot 0 unchanged.
 `pkunk-refuel-v1` isolates its paid fuel and settings menu sequence.
+
+For planetary travel, `encounter_response` on `navigate_to_planet` and
+`navigate_to_orbit` explicitly names the patrol farewell to select after Hail.
+The controller resumes steering after communication closes and fails if the
+specified response is not offered. Homeworld contact is not dismissed.
+`stop_at_encounter` on `navigate_to_orbit` can yield at a preview, recorded as
+`contact_reached`, distinct from `orbit_reached`. A communication-response wait
+uses Select to Hail a preview rather than waiting forever outside dialogue.
