@@ -1,6 +1,6 @@
 uqm_CFILES="palette.c primitives.c sdl2_pure.c
 		sdl_common.c sdl2_common.c
-		scalers.c 2xscalers.c
+		scalers.c
 		hq2x.c
 		canvas.c png2sdl.c sdluio.c rotozoom.c"
 uqm_HFILES="2xscalers.h 2xscalers_mmx.h opengl.h palette.h png2sdl.h
