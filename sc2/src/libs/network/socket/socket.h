@@ -27,9 +27,16 @@ typedef struct Socket Socket;
 #ifdef USE_WINSOCK
 #	include "socket_win.h"
 #else
-#	include "socket_bsd.h"
+#	include <sys/socket.h>
 #endif
 
+#ifndef USE_WINSOCK
+#ifdef SOCKET_INTERNAL
+struct Socket {
+	int fd;
+};
+#endif
+#endif
 
 ////////////////////////////////////////////////////////////////////////////
 

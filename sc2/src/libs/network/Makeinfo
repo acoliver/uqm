@@ -8,7 +8,5 @@ if [ -n "$uqm_USE_WINSOCK" ]; then
 		uqm_CFILES="$uqm_CFILES wspiapiwrap.c"
 		uqm_HFILES="$uqm_HFILES wspiapiwrap.h"
 	fi
-else
-	uqm_CFILES="$uqm_CFILES network_bsd.c"
 fi
 
