@@ -1,2 +1,0 @@
-uqm_CFILES="uqmlog.c msgbox_stub.c"
-uqm_HFILES="loginternal.h msgbox.h uqmlog.h"

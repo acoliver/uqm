@@ -77,10 +77,7 @@ struct TaskArray([TaskStruct; TASK_MAX]);
 // SAFETY: every field is atomic.
 unsafe impl Sync for TaskArray {}
 
-static TASKS: TaskArray = {
-    const EMPTY: TaskStruct = TaskStruct::new();
-    TaskArray([EMPTY; TASK_MAX])
-};
+static TASKS: TaskArray = TaskArray([const { TaskStruct::new() }; TASK_MAX]);
 
 #[no_mangle]
 pub extern "C" fn InitTaskSystem() {
