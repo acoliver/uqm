@@ -1,6 +1,9 @@
 // Human Cruiser - Tracking nuke + point-defense laser
 // @plan PLAN-20260314-SHIPS.P11
 
+#[path = "human_native.rs"]
+mod native;
+
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
@@ -22,9 +25,9 @@ const SHIP_MASS: u8 = 6;
 
 const WEAPON_ENERGY_COST: u8 = 9;
 const WEAPON_WAIT: u8 = 10;
-#[cfg(not(test))]
+#[cfg(any(not(test), feature = "linked_c_archive"))]
 const HUMAN_OFFSET: i16 = 42;
-#[cfg(not(test))]
+#[cfg(any(not(test), feature = "linked_c_archive"))]
 const NUKE_OFFSET: i16 = 8;
 const MISSILE_LIFE: u16 = 60;
 const MISSILE_HITS: i16 = 1;
