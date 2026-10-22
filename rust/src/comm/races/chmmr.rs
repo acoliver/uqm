@@ -1,243 +1,564 @@
-//! Chmmr dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const WHY_YOU_HERE_1: u32 = 1;
-const WHY_YOU_HERE_2: u32 = 2;
-const WHY_YOU_HERE_3: u32 = 3;
-const WHY_YOU_HERE_4: u32 = 4;
-const FIND_OUT_WHATS_UP: u32 = 5;
-const HYBRID_PROCESS: u32 = 6;
-const NEED_HELP: u32 = 7;
-const CANT_HELP: u32 = 8;
-const WHY_NO_HELP: u32 = 9;
-const LONG_TIME: u32 = 10;
-const WHAT_IF_MORE_ENERGY: u32 = 11;
-const DANGER_TO_US: u32 = 12;
-const NEED_ADVICE: u32 = 13;
-const WHAT_ADVICE: u32 = 14;
-const HOW_DEFEAT_URQUAN: u32 = 15;
-const DEFEAT_LIKE_SO: u32 = 16;
-const WHAT_ABOUT_TPET: u32 = 17;
-const SCARY_BUT_USEFUL: u32 = 18;
-const WHAT_ABOUT_BOMB: u32 = 19;
-const ABOUT_BOMB: u32 = 20;
-const WHAT_ABOUT_SUN_DEVICE: u32 = 21;
-const ABOUT_SUN_DEVICE: u32 = 22;
-const WHAT_ABOUT_SAMATRA: u32 = 23;
-const ABOUT_SAMATRA: u32 = 24;
-const ENOUGH_ADVICE: u32 = 25;
-const OK_ENOUGH_ADVICE: u32 = 26;
-const BYE_SHIELDED: u32 = 27;
-const GOODBYE_SHIELDED: u32 = 28;
-const WE_ARE_FREE: u32 = 29;
-const WHO_ARE_YOU: u32 = 30;
-const I_AM_CAPTAIN0: u32 = 31;
-const I_AM_CAPTAIN1: u32 = 32;
-const I_AM_CAPTAIN2: u32 = 33;
-const I_AM_SAVIOR: u32 = 34;
-const I_AM_SILLY: u32 = 35;
-const WHY_HAVE_YOU_FREED_US: u32 = 36;
-const SERIOUS_1: u32 = 37;
-const SERIOUS_2: u32 = 38;
-const SILLY: u32 = 39;
-const WILL_HELP_ANALYZE_LOGS: u32 = 40;
-const YOU_KNOW_SAMATRA: u32 = 41;
-const DONT_KNOW_ABOUT_SAMATRA: u32 = 42;
-const NEED_DISTRACTION: u32 = 43;
-const HAVE_TALKING_PET: u32 = 44;
-const NEED_WEAPON: u32 = 45;
-const HAVE_BOMB: u32 = 46;
-const RETURN_WHEN_READY: u32 = 47;
-const YOU_ARE_READY: u32 = 48;
-const FURTHER_ASSISTANCE: u32 = 49;
-const NO_FURTHER_ASSISTANCE: u32 = 50;
-const TECH_HELP: u32 = 51;
-const USE_OUR_SHIPS_BEFORE: u32 = 52;
-const WHERE_WEAPON: u32 = 53;
-const PRECURSOR_WEAPON: u32 = 54;
-const WHERE_DISTRACTION: u32 = 55;
-const PSYCHIC_WEAPONRY: u32 = 56;
-const WHAT_NOW: u32 = 57;
-const WE_WILL_IMPROVE_BOMB: u32 = 58;
-const MODIFY_VESSEL: u32 = 59;
-const WONT_HURT_MY_SHIP: u32 = 60;
-const WILL_DESTROY_IT: u32 = 61;
-const BUMMER_ABOUT_MY_SHIP: u32 = 62;
-const DEAD_SILENCE: u32 = 63;
-const OTHER_ASSISTANCE: u32 = 64;
-const USE_OUR_SHIPS_AFTER: u32 = 65;
-const PROCEED: u32 = 66;
-const TAKE_2_WEEKS: u32 = 67;
-const HELLO_AFTER_BOMB_1: u32 = 68;
-const HELLO_AFTER_BOMB_2: u32 = 69;
-const WHATS_UP_AFTER_BOMB: u32 = 70;
-const GENERAL_INFO_AFTER_BOMB_1: u32 = 71;
-const GENERAL_INFO_AFTER_BOMB_2: u32 = 72;
-const WHAT_DO_AFTER_BOMB: u32 = 73;
-const DO_AFTER_BOMB: u32 = 74;
-const BYE_AFTER_BOMB: u32 = 75;
-const GOODBYE_AFTER_BOMB: u32 = 76;
-const BYE: u32 = 77;
-const GOODBYE: u32 = 78;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Chmmr dialogue, ported from chmmrc.c.
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+mod api;
+use api::ChmmrApi;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    ExitConversation,
+    NotReady,
+    ImproveBomb,
+    ChmmrFree,
+    ChmmrAdvice,
+    ChmmrShielded,
+    AfterBomb,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.chmmr.graphics\0";
-const RACE_FONT: &[u8] = b"comm.chmmr.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.chmmr.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.chmmr.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.chmmr.dialogue\0";
-
-/// Chmmr race dialogue implementation.
-pub struct ChmmrDialogue;
-
-impl super::RaceDialogue for ChmmrDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: ChmmrApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: i32) {
+        match h {
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::NotReady => self.not_ready(r),
+            Handler::ImproveBomb => self.improve_bomb(r),
+            Handler::ChmmrFree => self.chmmr_free(r),
+            Handler::ChmmrAdvice => self.chmmr_advice(r),
+            Handler::ChmmrShielded => self.chmmr_shielded(r),
+            Handler::AfterBomb => self.after_bomb(r),
         }
     }
+    fn exit_conversation(&mut self, r: i32) {
+        self.api.segue(0);
+        if r == BYE {
+            self.api.npc(GOODBYE);
+        } else if r == BYE_SHIELDED {
+            self.api.npc(GOODBYE_SHIELDED);
+        } else if r == BYE_AFTER_BOMB {
+            self.api.npc(GOODBYE_AFTER_BOMB);
+        } else if r == PROCEED {
+            self.api.npc(TAKE_2_WEEKS);
+            self.api.set_allied(
+                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                1 != 0,
+            );
+            self.api.set("CHMMR_HOME_VISITS", 0_u8);
+            self.api.set("CHMMR_STACK", 0_u8);
+            self.api.set("CHMMR_BOMB_STATE", 2_u8);
+            self.api.set("UTWIG_BOMB_ON_SHIP", 0_u8);
+            self.api.refit();
+        }
+    }
+    fn not_ready(&mut self, r: i32) {
+        if r == 0 {
+            self.api.npc(RETURN_WHEN_READY);
+        } else if r == FURTHER_ASSISTANCE {
+            self.api.npc(NO_FURTHER_ASSISTANCE);
+            self.api.disable((FURTHER_ASSISTANCE) as u16);
+        } else if r == TECH_HELP {
+            self.api.npc(USE_OUR_SHIPS_BEFORE);
+            self.api.set_allied(
+                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                1 != 0,
+            );
+        } else if r == WHERE_WEAPON {
+            self.api.npc(PRECURSOR_WEAPON);
+            self.api.disable((WHERE_WEAPON) as u16);
+        } else if r == WHERE_DISTRACTION {
+            self.api.npc(PSYCHIC_WEAPONRY);
+            self.api.disable((WHERE_DISTRACTION) as u16);
+        }
+        if i32::from(
+            self.api
+                .alliance((crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16),
+        ) != 1
+        {
+            self.api
+                .response((TECH_HELP) as u16, Handler::NotReady, &[]);
+        } else if self.api.enabled((FURTHER_ASSISTANCE) as u16) {
+            self.api
+                .response((FURTHER_ASSISTANCE) as u16, Handler::NotReady, &[]);
+        }
+        if self.api.enabled((WHERE_WEAPON) as u16)
+            && !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+        {
+            self.api
+                .response((WHERE_WEAPON) as u16, Handler::NotReady, &[]);
+        }
+        if self.api.enabled((WHERE_DISTRACTION) as u16)
+            && !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+        {
+            self.api
+                .response((WHERE_DISTRACTION) as u16, Handler::NotReady, &[]);
+        }
+        self.api
+            .response((BYE) as u16, Handler::ExitConversation, &[]);
+    }
+    fn improve_bomb(&mut self, r: i32) {
+        if r == 0 {
+            self.api.npc(WE_WILL_IMPROVE_BOMB);
+        } else if r == WHAT_NOW {
+            self.api.npc(MODIFY_VESSEL);
+            self.api.disable((WHAT_NOW) as u16);
+        } else if r == WONT_HURT_MY_SHIP {
+            self.api.npc(WILL_DESTROY_IT);
+            self.api.disable((WONT_HURT_MY_SHIP) as u16);
+        } else if r == BUMMER_ABOUT_MY_SHIP {
+            self.api.npc(DEAD_SILENCE);
+            self.api.disable((BUMMER_ABOUT_MY_SHIP) as u16);
+        } else if r == OTHER_ASSISTANCE {
+            self.api.npc(USE_OUR_SHIPS_AFTER);
+            self.api.set_allied(
+                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                1 != 0,
+            );
+        }
+        if self.api.enabled((WHAT_NOW) as u16) {
+            self.api
+                .response((WHAT_NOW) as u16, Handler::ImproveBomb, &[]);
+        } else if self.api.enabled((WONT_HURT_MY_SHIP) as u16) {
+            self.api
+                .response((WONT_HURT_MY_SHIP) as u16, Handler::ImproveBomb, &[]);
+        } else if self.api.enabled((BUMMER_ABOUT_MY_SHIP) as u16) {
+            self.api
+                .response((BUMMER_ABOUT_MY_SHIP) as u16, Handler::ImproveBomb, &[]);
+        }
+        if i32::from(
+            self.api
+                .alliance((crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16),
+        ) != 1
+        {
+            self.api
+                .response((OTHER_ASSISTANCE) as u16, Handler::ImproveBomb, &[]);
+        }
+        self.api
+            .response((PROCEED) as u16, Handler::ExitConversation, &[]);
+    }
+    fn chmmr_free(&mut self, r: i32) {
+        if (((r == 0) || (r == I_AM_CAPTAIN0)) || (r == I_AM_SAVIOR)) || (r == I_AM_SILLY) {
+            self.api.npc(WHY_HAVE_YOU_FREED_US);
+            self.api.talk_segue((!0_u16 as i32) as u16);
+            self.api.set("CHMMR_EMERGING", 0_u8);
+            self.api
+                .response((SERIOUS_1) as u16, Handler::ChmmrFree, &[]);
+            self.api
+                .response((SERIOUS_2) as u16, Handler::ChmmrFree, &[]);
+            self.api.response((SILLY) as u16, Handler::ChmmrFree, &[]);
+        } else {
+            self.api.npc(WILL_HELP_ANALYZE_LOGS);
+            if i32::from(self.api.get("AWARE_OF_SAMATRA")) != 0 {
+                self.api.npc(YOU_KNOW_SAMATRA);
+            } else {
+                self.api.npc(DONT_KNOW_ABOUT_SAMATRA);
+                self.api.set("AWARE_OF_SAMATRA", 1_u8);
+            }
+            if i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0 {
+                self.api.npc(HAVE_TALKING_PET);
+            } else {
+                self.api.npc(NEED_DISTRACTION);
+            }
+            if i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0 {
+                self.api.npc(HAVE_BOMB);
+            } else {
+                self.api.npc(NEED_WEAPON);
+            }
+            if !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+                || !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+            {
+                self.not_ready(0_u16 as i32);
+            } else {
+                self.improve_bomb(0_u16 as i32);
+            }
+        }
+    }
+    fn chmmr_advice(&mut self, r: i32) {
+        let mut advice_left: i32;
+        if r == NEED_ADVICE {
+            self.api.npc(WHAT_ADVICE);
+        } else if r == HOW_DEFEAT_URQUAN {
+            self.api.npc(DEFEAT_LIKE_SO);
+            self.api.set("CHMMR_BOMB_STATE", 1_u8);
+            self.api.disable((HOW_DEFEAT_URQUAN) as u16);
+        } else if r == WHAT_ABOUT_TPET {
+            self.api.npc(SCARY_BUT_USEFUL);
+            self.api.disable((WHAT_ABOUT_TPET) as u16);
+        } else if r == WHAT_ABOUT_BOMB {
+            self.api.npc(ABOUT_BOMB);
+            self.api.disable((WHAT_ABOUT_BOMB) as u16);
+        } else if r == WHAT_ABOUT_SUN_DEVICE {
+            self.api.npc(ABOUT_SUN_DEVICE);
+            self.api.disable((WHAT_ABOUT_SUN_DEVICE) as u16);
+        } else if r == WHAT_ABOUT_SAMATRA {
+            self.api.npc(ABOUT_SAMATRA);
+            self.api.disable((WHAT_ABOUT_SAMATRA) as u16);
+        }
+        advice_left = 0;
+        if self.api.enabled((HOW_DEFEAT_URQUAN) as u16) {
+            self.api
+                .response((HOW_DEFEAT_URQUAN) as u16, Handler::ChmmrAdvice, &[]);
+            advice_left = 1;
+        }
+        if self.api.enabled((WHAT_ABOUT_TPET) as u16)
+            && (i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+        {
+            self.api
+                .response((WHAT_ABOUT_TPET) as u16, Handler::ChmmrAdvice, &[]);
+            advice_left = 1;
+        }
+        if self.api.enabled((WHAT_ABOUT_BOMB) as u16)
+            && (i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+        {
+            self.api
+                .response((WHAT_ABOUT_BOMB) as u16, Handler::ChmmrAdvice, &[]);
+            advice_left = 1;
+        }
+        if self.api.enabled((WHAT_ABOUT_SUN_DEVICE) as u16)
+            && (i32::from(self.api.get("SUN_DEVICE_ON_SHIP")) != 0)
+        {
+            self.api
+                .response((WHAT_ABOUT_SUN_DEVICE) as u16, Handler::ChmmrAdvice, &[]);
+            advice_left = 1;
+        }
+        if self.api.enabled((WHAT_ABOUT_SAMATRA) as u16)
+            && (i32::from(self.api.get("AWARE_OF_SAMATRA")) != 0)
+        {
+            self.api
+                .response((WHAT_ABOUT_SAMATRA) as u16, Handler::ChmmrAdvice, &[]);
+            advice_left = 1;
+        }
+        self.api
+            .response((ENOUGH_ADVICE) as u16, Handler::ChmmrShielded, &[]);
+        if !(advice_left != 0) {
+            self.api.disable((NEED_ADVICE) as u16);
+        }
+    }
+    fn chmmr_shielded(&mut self, r: i32) {
+        if r == FIND_OUT_WHATS_UP {
+            self.api.npc(HYBRID_PROCESS);
+            self.api.disable((FIND_OUT_WHATS_UP) as u16);
+        } else if r == NEED_HELP {
+            self.api.npc(CANT_HELP);
+            self.api.set("CHMMR_STACK", 1_u8);
+        } else if r == WHY_NO_HELP {
+            self.api.npc(LONG_TIME);
+            self.api.set("CHMMR_STACK", 2_u8);
+        } else if r == WHAT_IF_MORE_ENERGY {
+            self.api.npc(DANGER_TO_US);
+            self.api.set("CHMMR_STACK", 3_u8);
+        } else if r == ENOUGH_ADVICE {
+            self.api.npc(OK_ENOUGH_ADVICE);
+        }
+        match i32::from(self.api.get("CHMMR_STACK")) {
+            0 => {
+                self.api
+                    .response((NEED_HELP) as u16, Handler::ChmmrShielded, &[]);
+            }
+            1 => {
+                self.api
+                    .response((WHY_NO_HELP) as u16, Handler::ChmmrShielded, &[]);
+            }
+            2 => {
+                self.api
+                    .response((WHAT_IF_MORE_ENERGY) as u16, Handler::ChmmrShielded, &[]);
+            }
+            _ => {}
+        }
+        if self.api.enabled((FIND_OUT_WHATS_UP) as u16) {
+            self.api
+                .response((FIND_OUT_WHATS_UP) as u16, Handler::ChmmrShielded, &[]);
+        }
+        if self.api.enabled((NEED_ADVICE) as u16) {
+            self.api
+                .response((NEED_ADVICE) as u16, Handler::ChmmrAdvice, &[]);
+        }
+        self.api
+            .response((BYE_SHIELDED) as u16, Handler::ExitConversation, &[]);
+    }
+    fn after_bomb(&mut self, r: i32) {
+        if r == WHATS_UP_AFTER_BOMB {
+            if i32::from(self.api.get("CHMMR_STACK")) != 0 {
+                self.api.npc(GENERAL_INFO_AFTER_BOMB_2);
+            } else {
+                self.api.npc(GENERAL_INFO_AFTER_BOMB_1);
+                self.api.set("CHMMR_STACK", 1_u8);
+            }
+            self.api.disable((WHATS_UP_AFTER_BOMB) as u16);
+        } else if r == WHAT_DO_AFTER_BOMB {
+            self.api.npc(DO_AFTER_BOMB);
+            self.api.disable((WHAT_DO_AFTER_BOMB) as u16);
+        }
+        if self.api.enabled((WHATS_UP_AFTER_BOMB) as u16) {
+            self.api
+                .response((WHATS_UP_AFTER_BOMB) as u16, Handler::AfterBomb, &[]);
+        }
+        if self.api.enabled((WHAT_DO_AFTER_BOMB) as u16) {
+            self.api
+                .response((WHAT_DO_AFTER_BOMB) as u16, Handler::AfterBomb, &[]);
+        }
+        self.api
+            .response((BYE_AFTER_BOMB) as u16, Handler::ExitConversation, &[]);
+    }
+    fn intro(&mut self) {
+        let mut num_visits: i32;
+        if i32::from(self.api.get("CHMMR_BOMB_STATE")) >= 2 {
+            num_visits = i32::from(self.api.get("CHMMR_HOME_VISITS"));
+            let res = {
+                let old = num_visits;
+                num_visits = (num_visits + 1) as u8 as i32;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(HELLO_AFTER_BOMB_1);
+                }
+                1 => {
+                    self.api.npc(HELLO_AFTER_BOMB_2);
+                    {
+                        num_visits = (num_visits - 1) as u8 as i32;
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("CHMMR_HOME_VISITS", (num_visits) as u8);
+            self.after_bomb(0_u16 as i32);
+        } else if i32::from(self.api.get("CHMMR_UNLEASHED")) != 0 {
+            if !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+                || !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+            {
+                self.not_ready(0_u16 as i32);
+            } else {
+                self.api.npc(YOU_ARE_READY);
+                self.improve_bomb(0_u16 as i32);
+            }
+        } else {
+            num_visits = i32::from(self.api.get("CHMMR_HOME_VISITS"));
+            if !(i32::from(self.api.get("CHMMR_EMERGING")) != 0) {
+                self.api.palette(1);
+                let res = {
+                    let old = num_visits;
+                    num_visits = (num_visits + 1) as u8 as i32;
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(WHY_YOU_HERE_1);
+                    }
+                    1 => {
+                        self.api.npc(WHY_YOU_HERE_2);
+                    }
+                    2 => {
+                        self.api.npc(WHY_YOU_HERE_3);
+                    }
+                    3 => {
+                        self.api.npc(WHY_YOU_HERE_4);
+                        {
+                            num_visits = (num_visits - 1) as u8 as i32;
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.chmmr_shielded(0_u16 as i32);
+            } else {
+                self.api.intro_mode(3, 840 * 2);
+                self.api.npc(WE_ARE_FREE);
+                if num_visits != 0 {
+                    self.chmmr_free(0_u16 as i32);
+                    num_visits = 0;
+                } else {
+                    self.api.npc(WHO_ARE_YOU);
 
+                    self.api.response(
+                        (I_AM_CAPTAIN0) as u16,
+                        Handler::ChmmrFree,
+                        &[
+                            I_AM_CAPTAIN0,
+                            super::script::GLOBAL_PLAYER_NAME,
+                            I_AM_CAPTAIN1,
+                            super::script::GLOBAL_SHIP_NAME,
+                            I_AM_CAPTAIN2,
+                        ],
+                    );
+                    self.api
+                        .response((I_AM_SAVIOR) as u16, Handler::ChmmrFree, &[]);
+                    self.api
+                        .response((I_AM_SILLY) as u16, Handler::ChmmrFree, &[]);
+                }
+                self.api.set("CHMMR_UNLEASHED", 1_u8);
+            }
+            self.api.set("CHMMR_HOME_VISITS", (num_visits) as u8);
+        }
+    }
+    fn post_chmmr_enc(&mut self) {}
+    fn initialize(&mut self) {
+        self.api.segue(0);
+    }
+}
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.chmmr.graphics".as_ptr(),
+        alien_font_res: c"comm.chmmr.font".as_ptr(),
+        alien_colormap_res: c"comm.chmmr.colortable".as_ptr(),
+        alien_song_res: c"comm.chmmr.music".as_ptr(),
+        conversation_phrases_res: c"comm.chmmr.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 0 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 6,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(12, 5, 2, (42, 0), (840, 2520));
+    d.alien_ambient_array[1] = animation(17, 5, 2, (42, 0), (840, 2520));
+    d.alien_ambient_array[2] = animation(22, 5, 2, (42, 0), (840, 2520));
+    d.alien_ambient_array[3] = animation(27, 20, 4, (42, 0), (840, 2520));
+    d.alien_ambient_array[4] = animation(47, 14, 4, (42, 0), (840, 2520));
+    d.alien_ambient_array[5] = animation(61, 24, 4, (42, 0), (840, 2520));
+    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    d.alien_talk_desc = animation(1, 11, 0, (14, 0), (14, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn not_ready(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::NotReady,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn improve_bomb(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ImproveBomb,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn chmmr_free(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ChmmrFree,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn chmmr_advice(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ChmmrAdvice,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn chmmr_shielded(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ChmmrShielded,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    extern "C" fn after_bomb(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::AfterBomb,
+                i32::try_from(r).expect("invalid response"),
+            )
+        });
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::ExitConversation => exit_conversation,
+            Handler::NotReady => not_ready,
+            Handler::ImproveBomb => improve_bomb,
+            Handler::ChmmrFree => chmmr_free,
+            Handler::ChmmrAdvice => chmmr_advice,
+            Handler::ChmmrShielded => chmmr_shielded,
+            Handler::AfterBomb => after_bomb,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_chmmr_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_chmmr_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize());
+        desc
+    }
+}
+pub struct ChmmrDialogue;
+impl super::RaceDialogue for ChmmrDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_chmmr_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("AWARE_OF_SAMATRA").is_some(),
-            "missing game state key: AWARE_OF_SAMATRA"
-        );
-        assert!(
-            bit_range("CHMMR_BOMB_STATE").is_some(),
-            "missing game state key: CHMMR_BOMB_STATE"
-        );
-        assert!(
-            bit_range("CHMMR_EMERGING").is_some(),
-            "missing game state key: CHMMR_EMERGING"
-        );
-        assert!(
-            bit_range("CHMMR_HOME_VISITS").is_some(),
-            "missing game state key: CHMMR_HOME_VISITS"
-        );
-        assert!(
-            bit_range("CHMMR_STACK").is_some(),
-            "missing game state key: CHMMR_STACK"
-        );
-    }
-}
+mod tests;
