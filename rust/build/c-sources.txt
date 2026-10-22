@@ -121,12 +121,10 @@ sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
 sc2/src/uqm/ship.c
 sc2/src/uqm/ships/androsyn/androsyn.c
-sc2/src/uqm/ships/arilou/arilou.c
 sc2/src/uqm/ships/blackurq/blackurq.c
 sc2/src/uqm/ships/chenjesu/chenjesu.c
 sc2/src/uqm/ships/chmmr/chmmr.c
 sc2/src/uqm/ships/druuge/druuge.c
-sc2/src/uqm/ships/ilwrath/ilwrath.c
 sc2/src/uqm/ships/lastbat/lastbat.c
 sc2/src/uqm/ships/melnorme/melnorme.c
 sc2/src/uqm/ships/mmrnmhrm/mmrnmhrm.c
@@ -137,7 +135,6 @@ sc2/src/uqm/ships/probe/probe.c
 sc2/src/uqm/ships/shofixti/shofixti.c
 sc2/src/uqm/ships/sis_ship/sis_ship.c
 sc2/src/uqm/ships/slylandr/slylandr.c
-sc2/src/uqm/ships/spathi/spathi.c
 sc2/src/uqm/ships/supox/supox.c
 sc2/src/uqm/ships/syreen/syreen.c
 sc2/src/uqm/ships/thradd/thradd.c

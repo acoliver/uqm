@@ -145,12 +145,19 @@ fn source_define(path: &str, name: &str) -> String {
     line[prefix.len()..].trim().to_owned()
 }
 
-/// Crew from the ported Cruiser descriptor or the remaining C race sources.
+/// Starting crew from ported descriptors or the remaining C race sources.
 /// A few C ships spell it `MAX_CREW_SIZE`, which `element.h` defines.
 fn source_max_crew(ship_dir: &str) -> u16 {
-    if ship_dir == "human" {
-        use crate::ships::{races::HumanShip, traits::ShipBehavior};
-        return HumanShip.descriptor_template().ship_info.max_crew;
+    use crate::ships::{races::*, traits::ShipBehavior};
+    let ported = match ship_dir {
+        "human" => Some(HumanShip.descriptor_template()),
+        "spathi" => Some(SpathiShip.descriptor_template()),
+        "ilwrath" => Some(IlwrathShip.descriptor_template()),
+        "arilou" => Some(ArilouShip.descriptor_template()),
+        _ => None,
+    };
+    if let Some(desc) = ported {
+        return desc.ship_info.crew_level;
     }
     let uqm = format!("{}/../sc2/src/uqm", env!("CARGO_MANIFEST_DIR"));
     let value = source_define(&format!("{uqm}/ships/{ship_dir}/{ship_dir}.c"), "MAX_CREW");

@@ -1,6 +1,9 @@
 // Ilwrath Avenger - Hellfire spout + cloaking device
 // @plan PLAN-20260314-SHIPS.P11
 
+#[path = "ilwrath_native.rs"]
+mod native;
+
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};

@@ -1,6 +1,9 @@
 // Arilou Skiff - Auto-aiming laser + quasi-space teleport
 // @plan PLAN-20260314-SHIPS.P11
 
+#[path = "arilou_native.rs"]
+mod native;
+
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
