@@ -37,13 +37,7 @@ impl CffiPlanetSideAudio {
 }
 
 #[cfg(feature = "linked_c_archive")]
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct SoundPosition {
-    positional: i32,
-    x: i32,
-    y: i32,
-}
+use crate::sound::types::CSoundPosition as SoundPosition;
 
 #[cfg(feature = "linked_c_archive")]
 extern "C" {

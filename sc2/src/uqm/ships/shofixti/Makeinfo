@@ -1,2 +1,2 @@
-uqm_CFILES="shofixti.c"
-uqm_HFILES="icode.h resinst.h shofixti.h"
+uqm_CFILES=""
+uqm_HFILES="icode.h shofixti.h"
