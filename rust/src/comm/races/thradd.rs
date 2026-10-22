@@ -1,319 +1,914 @@
-//! Thradd dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const HOSTILE_SPACE_HELLO_1: u32 = 1;
-const HOSTILE_SPACE_HELLO_2: u32 = 2;
-const HOSTILE_SPACE_HELLO_3: u32 = 3;
-const HOSTILE_SPACE_HELLO_4: u32 = 4;
-const HOSTILE_HOMEWORLD_HELLO_1: u32 = 5;
-const HOSTILE_HOMEWORLD_HELLO_2: u32 = 6;
-const HOSTILE_HOMEWORLD_HELLO_3: u32 = 7;
-const HOSTILE_HOMEWORLD_HELLO_4: u32 = 8;
-const WHATS_UP_HOSTILE_1: u32 = 9;
-const WHATS_UP_HOSTILE_2: u32 = 10;
-const GENERAL_INFO_HOSTILE_1: u32 = 11;
-const GENERAL_INFO_HOSTILE_2: u32 = 12;
-const GENERAL_INFO_HOSTILE_3: u32 = 13;
-const GENERAL_INFO_HOSTILE_4: u32 = 14;
-const WHAT_ABOUT_YOU_1: u32 = 15;
-const ABOUT_US_1: u32 = 16;
-const WHAT_ABOUT_YOU_2: u32 = 17;
-const ABOUT_US_2: u32 = 18;
-const WHAT_ABOUT_URQUAN_1: u32 = 19;
-const ABOUT_URQUAN_1: u32 = 20;
-const WHAT_ABOUT_URQUAN_2: u32 = 21;
-const ABOUT_URQUAN_2: u32 = 22;
-const GOT_IDEA: u32 = 23;
-const GOOD_IDEA: u32 = 24;
-const WE_GO_TO_IMPRESS_URQUAN_1: u32 = 25;
-const WE_GO_TO_IMPRESS_URQUAN_2: u32 = 26;
-const WE_IMPRESSING_URQUAN_1: u32 = 27;
-const WE_IMPRESSING_URQUAN_2: u32 = 28;
-const WE_IMPRESSED_URQUAN_1: u32 = 29;
-const WE_IMPRESSED_URQUAN_2: u32 = 30;
-const HOSTILE_HELIX_HELLO_1: u32 = 31;
-const HOSTILE_HELIX_HELLO_2: u32 = 32;
-const SUBMIT_1: u32 = 33;
-const NO_SUBMIT_1: u32 = 34;
-const SUBMIT_2: u32 = 35;
-const NO_SUBMIT_2: u32 = 36;
-const BE_FRIENDS_1: u32 = 37;
-const NO_FRIENDS_1: u32 = 38;
-const BE_FRIENDS_2: u32 = 39;
-const NO_FRIENDS_2: u32 = 40;
-const HOW_IMPRESSED_URQUAN_1: u32 = 41;
-const IMPRESSED_LIKE_SO_1: u32 = 42;
-const HOW_IMPRESSED_URQUAN_2: u32 = 43;
-const IMPRESSED_LIKE_SO_2: u32 = 44;
-const BYE_HOSTILE_1: u32 = 45;
-const GOODBYE_HOSTILE_1: u32 = 46;
-const BYE_HOSTILE_2: u32 = 47;
-const GOODBYE_HOSTILE_2: u32 = 48;
-const WHY_YOU_HERE_HOSTILE: u32 = 49;
-const NONE_OF_YOUR_CONCERN: u32 = 50;
-const DEMAND_TO_LAND: u32 = 51;
-const NO_DEMAND: u32 = 52;
-const WHAT_ABOUT_THIS_WORLD: u32 = 53;
-const BLUE_HELIX: u32 = 54;
-const WHATS_HELIX_HOSTILE: u32 = 55;
-const HELIX_IS_HOSTILE: u32 = 56;
-const I_NEED_TO_LAND_LIE: u32 = 57;
-const CAUGHT_LIE: u32 = 58;
-const BYE_HOSTILE_HELIX: u32 = 59;
-const GOODBYE_HOSTILE_HELIX: u32 = 60;
-const DIE_THIEF_1: u32 = 61;
-const DIE_THIEF_2: u32 = 62;
-const AMAZING_PERFORMANCE: u32 = 63;
-const IMPRESSIVE_PERFORMANCE: u32 = 64;
-const ADEQUATE_PERFORMANCE: u32 = 65;
-const HELLO_POLITE_1: u32 = 66;
-const HELLO_POLITE_2: u32 = 67;
-const HELLO_POLITE_3: u32 = 68;
-const HELLO_POLITE_4: u32 = 69;
-const HELLO_RHYME_1: u32 = 70;
-const HELLO_RHYME_2: u32 = 71;
-const HELLO_RHYME_3: u32 = 72;
-const HELLO_RHYME_4: u32 = 73;
-const HELLO_PIG_LATIN_1: u32 = 74;
-const HELLO_PIG_LATIN_2: u32 = 75;
-const HELLO_PIG_LATIN_3: u32 = 76;
-const HELLO_PIG_LATIN_4: u32 = 77;
-const HELLO_LIKE_YOU_1: u32 = 78;
-const HELLO_LIKE_YOU_2: u32 = 79;
-const HELLO_LIKE_YOU_3: u32 = 80;
-const HELLO_LIKE_YOU_4: u32 = 81;
-const WELCOME_SPACE0: u32 = 82;
-const WELCOME_SPACE1: u32 = 83;
-const WELCOME_HOMEWORLD0: u32 = 84;
-const WELCOME_HOMEWORLD1: u32 = 85;
-const WELCOME_HELIX0: u32 = 86;
-const WELCOME_HELIX1: u32 = 87;
-const WHY_YOU_HERE_ALLY: u32 = 88;
-const GUARDING_HELIX_ALLY: u32 = 89;
-const WHATS_HELIX_ALLY: u32 = 90;
-const HELIX_IS_ALLY: u32 = 91;
-const MAY_I_LAND: u32 = 92;
-const SURE_LAND: u32 = 93;
-const WHATS_UP_ALLY: u32 = 94;
-const GENERAL_INFO_ALLY_1: u32 = 95;
-const GENERAL_INFO_ALLY_2: u32 = 96;
-const GENERAL_INFO_ALLY_3: u32 = 97;
-const GENERAL_INFO_ALLY_4: u32 = 98;
-const HOW_SHOULD_WE_ACT: u32 = 99;
-const FRIENDLY: u32 = 100;
-const OK_FRIENDLY: u32 = 101;
-const WACKY: u32 = 102;
-const OK_WACKY: u32 = 103;
-const JUST_LIKE_US: u32 = 104;
-const OK_JUST_LIKE_YOU: u32 = 105;
-const WORK_TO_DO: u32 = 106;
-const CONTEMPLATIVE: u32 = 107;
-const OK_CONTEMPLATIVE: u32 = 108;
-const HOW_GOES_CULTURE: u32 = 109;
-const CONTEMP_GOES_1: u32 = 110;
-const CONTEMP_GOES_2: u32 = 111;
-const FRIENDLY_GOES_1: u32 = 112;
-const FRIENDLY_GOES_2: u32 = 113;
-const WACKY_GOES_1: u32 = 114;
-const WACKY_GOES_2: u32 = 115;
-const LIKE_YOU_GOES_1: u32 = 116;
-const LIKE_YOU_GOES_2: u32 = 117;
-const BYE_ALLY: u32 = 118;
-const GOODBYE_ALLY_1: u32 = 119;
-const GOODBYE_ALLY_2: u32 = 120;
-const GOODBYE_ALLY_3: u32 = 121;
-const GOODBYE_ALLY_4: u32 = 122;
-const BE_POLITE: u32 = 123;
-const OK_POLITE: u32 = 124;
-const SPEAK_PIG_LATIN: u32 = 125;
-const OK_PIG_LATIN: u32 = 126;
-const USE_RHYMES: u32 = 127;
-const OK_RHYMES: u32 = 128;
-const JUST_THE_WAY_WE_DO: u32 = 129;
-const OK_WAY_YOU_DO: u32 = 130;
-const WHAT_NAME_FOR_CULTURE: u32 = 131;
-const ALLIANCE_NAME: u32 = 132;
-const OK_ALLIANCE_NAME: u32 = 133;
-const NAME_TAIL: u32 = 134;
-const YOU_DECIDE: u32 = 135;
-const OK_CULTURE_20: u32 = 136;
-const FAT: u32 = 137;
-const OK_FAT: u32 = 138;
-const THE_SLAVE_EMPIRE0: u32 = 139;
-const THE_SLAVE_EMPIRE1: u32 = 140;
-const OK_SLAVE: u32 = 141;
-const FAT_JERKS: u32 = 142;
-const CULTURE: u32 = 143;
-const SLAVE_EMPIRE: u32 = 144;
-const NAME_1: u32 = 145;
-const NAME_2: u32 = 146;
-const NAME_3: u32 = 147;
-const NAME_40: u32 = 148;
-const NAME_41: u32 = 149;
-const HAVING_FUN_WITH_ILWRATH_1: u32 = 150;
-const HAVING_FUN_WITH_ILWRATH_2: u32 = 151;
-const GO_AWAY_FIGHTING_ILWRATH_1: u32 = 152;
-const GO_AWAY_FIGHTING_ILWRATH_2: u32 = 153;
-const OUT_TAKES: u32 = 154;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Thradd dialogue, ported from thraddc.c.
+use super::alliance::AllianceApi;
+use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    ExitConversation,
+    ThraddAllies,
+    ThraddDemeanor,
+    ThraddCulture,
+    HelixWorld,
+    ThraddHostile,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.thraddash.graphics\0";
-const RACE_FONT: &[u8] = b"comm.thraddash.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.thraddash.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.thraddash.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.thraddash.dialogue\0";
-
-/// Thradd race dialogue implementation.
-pub struct ThraddDialogue;
-
-impl super::RaceDialogue for ThraddDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: u16) {
+        match h {
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::ThraddAllies => self.thradd_allies(r),
+            Handler::ThraddDemeanor => self.thradd_demeanor(r),
+            Handler::ThraddCulture => self.thradd_culture(r),
+            Handler::HelixWorld => self.helix_world(r),
+            Handler::ThraddHostile => self.thradd_hostile(r),
         }
     }
-
+    fn get_culture_name(&self) -> i32 {
+        match self.api.get("THRADD_CULTURE") {
+            1 => i32::from(CULTURE),
+            2 => i32::from(FAT_JERKS),
+            3 => i32::from(SLAVE_EMPIRE),
+            _ => panic!("unknown Thraddash culture"),
+        }
+    }
+    fn polite_phrase(&mut self, which_phrase: u8) {
+        match which_phrase {
+            0 => {
+                self.api.npc(i32::from(HELLO_POLITE_1));
+            }
+            1 => {
+                self.api.npc(i32::from(HELLO_POLITE_2));
+            }
+            2 => {
+                self.api.npc(i32::from(HELLO_POLITE_3));
+            }
+            3 => {
+                self.api.npc(i32::from(HELLO_POLITE_4));
+            }
+            _ => {}
+        }
+    }
+    fn rhyme_phrase(&mut self, which_phrase: u8) {
+        match which_phrase {
+            0 => {
+                self.api.npc(i32::from(HELLO_RHYME_1));
+            }
+            1 => {
+                self.api.npc(i32::from(HELLO_RHYME_2));
+            }
+            2 => {
+                self.api.npc(i32::from(HELLO_RHYME_3));
+            }
+            3 => {
+                self.api.npc(i32::from(HELLO_RHYME_4));
+            }
+            _ => {}
+        }
+    }
+    fn pig_latin_phrase(&mut self, which_phrase: u8) {
+        match which_phrase {
+            0 => {
+                self.api.npc(i32::from(HELLO_PIG_LATIN_1));
+            }
+            1 => {
+                self.api.npc(i32::from(HELLO_PIG_LATIN_2));
+            }
+            2 => {
+                self.api.npc(i32::from(HELLO_PIG_LATIN_3));
+            }
+            3 => {
+                self.api.npc(i32::from(HELLO_PIG_LATIN_4));
+            }
+            _ => {}
+        }
+    }
+    fn like_you_phrase(&mut self, which_phrase: u8) {
+        match which_phrase {
+            0 => {
+                self.api.npc(i32::from(HELLO_LIKE_YOU_1));
+            }
+            1 => {
+                self.api.npc(i32::from(HELLO_LIKE_YOU_2));
+            }
+            2 => {
+                self.api.npc(i32::from(HELLO_LIKE_YOU_3));
+            }
+            3 => {
+                self.api.npc(i32::from(HELLO_LIKE_YOU_4));
+            }
+            _ => {}
+        }
+    }
+    fn exit_conversation(&mut self, r: u16) {
+        self.api.segue(1_u32);
+        if r == BYE_HOSTILE_2 {
+            self.api.npc(i32::from(GOODBYE_HOSTILE_2));
+        } else if r == BYE_HOSTILE_1 {
+            self.api.npc(i32::from(GOODBYE_HOSTILE_1));
+            self.api.set("THRADD_HOSTILE_STACK_5", 1_u8);
+        } else if r == SUBMIT_1 {
+            self.api.npc(i32::from(NO_SUBMIT_1));
+            self.api.set("THRADD_HOSTILE_STACK_2", 1_u8);
+        } else if r == SUBMIT_2 {
+            self.api.npc(i32::from(NO_SUBMIT_2));
+        } else if r == GOT_IDEA {
+            self.api.npc(i32::from(GOOD_IDEA));
+            self.api.segue(0_u32);
+            self.api.event(1, 0_u16, 0_u16, 0_u16, 5_u8);
+            self.api.set("THRADD_STACK_1", 5_u8);
+        } else if r == BYE_HOSTILE_HELIX {
+            self.api.npc(i32::from(GOODBYE_HOSTILE_HELIX));
+        } else if r == BYE_ALLY {
+            let mut num_visits: u8;
+            num_visits = self.api.get("THRADD_STACK_1");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GOODBYE_ALLY_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GOODBYE_ALLY_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(GOODBYE_ALLY_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(GOODBYE_ALLY_4));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("THRADD_STACK_1", num_visits);
+            self.api.segue(0_u32);
+        } else if r == MAY_I_LAND {
+            self.api.npc(i32::from(SURE_LAND));
+            self.api.set("HELIX_UNPROTECTED", 1_u8);
+            self.api.segue(0_u32);
+        } else if r == DEMAND_TO_LAND {
+            self.api.npc(i32::from(NO_DEMAND));
+        } else if r == I_NEED_TO_LAND_LIE {
+            self.api.npc(i32::from(CAUGHT_LIE));
+        } else {
+            if r == CONTEMPLATIVE {
+                self.api.npc(i32::from(OK_CONTEMPLATIVE));
+                self.api.set("THRADD_DEMEANOR", 0_u8);
+            } else if r == FRIENDLY {
+                self.api.npc(i32::from(OK_FRIENDLY));
+                self.api.set("THRADD_DEMEANOR", 1_u8);
+            } else if r == WACKY {
+                self.api.npc(i32::from(OK_WACKY));
+                self.api.set("THRADD_DEMEANOR", 2_u8);
+            } else if r == JUST_LIKE_US {
+                self.api.npc(i32::from(OK_JUST_LIKE_YOU));
+                self.api.set("THRADD_DEMEANOR", 3_u8);
+            }
+            self.api.npc(i32::from(WORK_TO_DO));
+            self.api.segue(0_u32);
+        }
+    }
+    fn thradd_allies(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == WHY_YOU_HERE_ALLY {
+            self.api.npc(i32::from(GUARDING_HELIX_ALLY));
+            self.api.disable(WHY_YOU_HERE_ALLY);
+        } else if r == WHATS_HELIX_ALLY {
+            self.api.npc(i32::from(HELIX_IS_ALLY));
+            self.api.disable(WHATS_HELIX_ALLY);
+        } else if r == WHATS_UP_ALLY {
+            num_visits = self.api.get("THRADD_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GENERAL_INFO_ALLY_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_ALLY_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(GENERAL_INFO_ALLY_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(GENERAL_INFO_ALLY_4));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("THRADD_INFO", num_visits);
+            self.api.disable(WHATS_UP_ALLY);
+        } else if r == HOW_GOES_CULTURE {
+            num_visits = self.api.get("THRADD_DEMEANOR");
+            match i32::from(num_visits) & ((1 << 2) - 1) {
+                0 => {
+                    if !((i32::from(num_visits) & !((1 << 2) - 1)) != 0) {
+                        self.api.npc(i32::from(CONTEMP_GOES_1));
+                    } else {
+                        self.api.npc(i32::from(CONTEMP_GOES_2));
+                    }
+                }
+                1 => {
+                    if !((i32::from(num_visits) & !((1 << 2) - 1)) != 0) {
+                        self.api.npc(i32::from(FRIENDLY_GOES_1));
+                    } else {
+                        self.api.npc(i32::from(FRIENDLY_GOES_2));
+                    }
+                }
+                2 => {
+                    if !((i32::from(num_visits) & !((1 << 2) - 1)) != 0) {
+                        self.api.npc(i32::from(WACKY_GOES_1));
+                    } else {
+                        self.api.npc(i32::from(WACKY_GOES_2));
+                    }
+                }
+                3 => {
+                    if !((i32::from(num_visits) & !((1 << 2) - 1)) != 0) {
+                        self.api.npc(i32::from(LIKE_YOU_GOES_1));
+                    } else {
+                        self.api.npc(i32::from(LIKE_YOU_GOES_2));
+                    }
+                }
+                _ => {}
+            }
+            num_visits |= (1 << 2) as u8;
+            self.api.set("THRADD_DEMEANOR", num_visits);
+            self.api.disable(HOW_GOES_CULTURE);
+        }
+        if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
+            if self.api.enabled(WHY_YOU_HERE_ALLY) {
+                self.api
+                    .response(WHY_YOU_HERE_ALLY, Handler::ThraddAllies, &[]);
+            } else {
+                if self.api.enabled(WHATS_HELIX_ALLY) {
+                    self.api
+                        .response(WHATS_HELIX_ALLY, Handler::ThraddAllies, &[]);
+                }
+                self.api
+                    .response(MAY_I_LAND, Handler::ExitConversation, &[]);
+            }
+        }
+        if self.api.enabled(WHATS_UP_ALLY) {
+            self.api.response(WHATS_UP_ALLY, Handler::ThraddAllies, &[]);
+        }
+        if self.api.enabled(HOW_GOES_CULTURE) {
+            self.api
+                .response(HOW_GOES_CULTURE, Handler::ThraddAllies, &[]);
+        }
+        self.api.response(BYE_ALLY, Handler::ExitConversation, &[]);
+    }
+    fn thradd_demeanor(&mut self, r: u16) {
+        if r == YOU_DECIDE {
+            self.api.npc(i32::from(OK_CULTURE_20));
+            self.api.set("THRADD_CULTURE", 1_u8);
+        } else if r == FAT {
+            self.api.npc(i32::from(OK_FAT));
+            self.api.set("THRADD_CULTURE", 2_u8);
+        } else if r == THE_SLAVE_EMPIRE0 {
+            self.api.set("THRADD_CULTURE", 3_u8);
+            self.api.npc(i32::from(OK_SLAVE));
+        }
+        self.api.npc(i32::from(HOW_SHOULD_WE_ACT));
+        self.api
+            .response(CONTEMPLATIVE, Handler::ExitConversation, &[]);
+        self.api.response(FRIENDLY, Handler::ExitConversation, &[]);
+        self.api.response(WACKY, Handler::ExitConversation, &[]);
+        self.api
+            .response(JUST_LIKE_US, Handler::ExitConversation, &[]);
+    }
+    fn thradd_culture(&mut self, r: u16) {
+        if r == BE_POLITE {
+            self.api.npc(i32::from(OK_POLITE));
+            self.api.set("THRADD_INTRO", 0_u8);
+        } else if r == USE_RHYMES {
+            self.api.npc(i32::from(OK_RHYMES));
+            self.api.set("THRADD_INTRO", 1_u8);
+        } else if r == SPEAK_PIG_LATIN {
+            self.api.npc(i32::from(OK_PIG_LATIN));
+            self.api.set("THRADD_INTRO", 2_u8);
+        } else if r == JUST_THE_WAY_WE_DO {
+            self.api.npc(i32::from(OK_WAY_YOU_DO));
+            self.api.set("THRADD_INTRO", 3_u8);
+        }
+        self.api.npc(i32::from(WHAT_NAME_FOR_CULTURE));
+        let fragments: Vec<i32> = vec![
+            i32::from(THE_SLAVE_EMPIRE0),
+            GLOBAL_PLAYER_NAME,
+            i32::from(THE_SLAVE_EMPIRE1),
+        ];
+        self.api.response(YOU_DECIDE, Handler::ThraddDemeanor, &[]);
+        self.api.response(FAT, Handler::ThraddDemeanor, &[]);
+        self.api
+            .response(THE_SLAVE_EMPIRE0, Handler::ThraddDemeanor, &fragments);
+    }
+    fn thradd_worship(&mut self, _r: u16) {
+        self.api.set("THRADD_VISITS", 0_u8);
+        self.api.set("THRADD_MANNER", 1_u8);
+        self.api.set("THRADD_STACK_1", 0_u8);
+        self.api
+            .set_allied((crate::comm::dispatch::ship::THRADDASH_SHIP) as u16, true);
+        self.api.response(BE_POLITE, Handler::ThraddCulture, &[]);
+        self.api
+            .response(SPEAK_PIG_LATIN, Handler::ThraddCulture, &[]);
+        self.api.response(USE_RHYMES, Handler::ThraddCulture, &[]);
+        self.api
+            .response(JUST_THE_WAY_WE_DO, Handler::ThraddCulture, &[]);
+    }
+    fn helix_world(&mut self, r: u16) {
+        if r == WHY_YOU_HERE_HOSTILE {
+            self.api.npc(i32::from(NONE_OF_YOUR_CONCERN));
+            self.api.set("THRADD_CULTURE", 1_u8);
+        } else if r == WHAT_ABOUT_THIS_WORLD {
+            self.api.npc(i32::from(BLUE_HELIX));
+            self.api.set("THRADD_INTRO", 1_u8);
+        } else if r == WHATS_HELIX_HOSTILE {
+            self.api.npc(i32::from(HELIX_IS_HOSTILE));
+            self.api.set("THRADD_INTRO", 2_u8);
+        } else if r == I_NEED_TO_LAND_LIE {
+            self.api.npc(i32::from(CAUGHT_LIE));
+            self.api.set("THRADD_DEMEANOR", 1_u8);
+        }
+        if !(self.api.get("THRADD_CULTURE") != 0) {
+            self.api
+                .response(WHY_YOU_HERE_HOSTILE, Handler::HelixWorld, &[]);
+        } else {
+            self.api
+                .response(DEMAND_TO_LAND, Handler::ExitConversation, &[]);
+        }
+        match self.api.get("THRADD_INTRO") {
+            0 => {
+                self.api
+                    .response(WHAT_ABOUT_THIS_WORLD, Handler::HelixWorld, &[]);
+            }
+            1 => {
+                self.api
+                    .response(WHATS_HELIX_HOSTILE, Handler::HelixWorld, &[]);
+            }
+            _ => {}
+        }
+        if !(self.api.get("THRADD_DEMEANOR") != 0) {
+            self.api
+                .response(I_NEED_TO_LAND_LIE, Handler::ExitConversation, &[]);
+        }
+        self.api
+            .response(BYE_HOSTILE_HELIX, Handler::ExitConversation, &[]);
+    }
+    fn thradd_hostile(&mut self, r: u16) {
+        if r == WHATS_UP_HOSTILE_1 {
+            self.api.npc(i32::from(GENERAL_INFO_HOSTILE_1));
+            self.api.set("THRADD_INFO", 1_u8);
+            self.api.disable(WHATS_UP_HOSTILE_2);
+        } else if r == WHATS_UP_HOSTILE_2 {
+            let mut num_visits: u8;
+            num_visits = self.api.get("THRADD_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_HOSTILE_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(GENERAL_INFO_HOSTILE_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(GENERAL_INFO_HOSTILE_4));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("THRADD_INFO", num_visits);
+            self.api.disable(WHATS_UP_HOSTILE_2);
+        } else if r == WHAT_ABOUT_YOU_1 {
+            self.api.npc(i32::from(ABOUT_US_1));
+            self.api.set("THRADD_STACK_1", 1_u8);
+        } else if r == WHAT_ABOUT_YOU_2 {
+            self.api.npc(i32::from(ABOUT_US_2));
+            self.api.set("THRADD_STACK_1", 2_u8);
+        } else if r == WHAT_ABOUT_URQUAN_1 {
+            self.api.npc(i32::from(ABOUT_URQUAN_1));
+            self.api.set("THRADD_STACK_1", 3_u8);
+        } else if r == WHAT_ABOUT_URQUAN_2 {
+            self.api.npc(i32::from(ABOUT_URQUAN_2));
+            self.api.set("THRADD_STACK_1", 4_u8);
+        } else if r == BE_FRIENDS_1 {
+            self.api.npc(i32::from(NO_FRIENDS_1));
+            self.api.set("THRADD_HOSTILE_STACK_3", 1_u8);
+        } else if r == BE_FRIENDS_2 {
+            self.api.npc(i32::from(NO_FRIENDS_2));
+            self.api.disable(BE_FRIENDS_2);
+        } else if r == HOW_IMPRESSED_URQUAN_1 {
+            self.api.npc(i32::from(IMPRESSED_LIKE_SO_1));
+            self.api.set("THRADD_HOSTILE_STACK_4", 1_u8);
+        } else if r == HOW_IMPRESSED_URQUAN_2 {
+            self.api.npc(i32::from(IMPRESSED_LIKE_SO_2));
+            self.api.set("THRADD_MISSION", 5_u8);
+        }
+        if i32::from(self.api.get("THRADD_INFO")) == 0 {
+            self.api
+                .response(WHATS_UP_HOSTILE_1, Handler::ThraddHostile, &[]);
+        } else if self.api.enabled(WHATS_UP_HOSTILE_2) {
+            self.api
+                .response(WHATS_UP_HOSTILE_2, Handler::ThraddHostile, &[]);
+        }
+        match self.api.get("THRADD_STACK_1") {
+            0 => {
+                self.api
+                    .response(WHAT_ABOUT_YOU_1, Handler::ThraddHostile, &[]);
+            }
+            1 => {
+                self.api
+                    .response(WHAT_ABOUT_YOU_2, Handler::ThraddHostile, &[]);
+            }
+            2 => {
+                self.api
+                    .response(WHAT_ABOUT_URQUAN_1, Handler::ThraddHostile, &[]);
+            }
+            3 => {
+                self.api
+                    .response(WHAT_ABOUT_URQUAN_2, Handler::ThraddHostile, &[]);
+            }
+            4 => {
+                if !(self.api.get("KOHR_AH_FRENZY") != 0) {
+                    self.api.response(GOT_IDEA, Handler::ExitConversation, &[]);
+                } else {
+                    self.api.set("THRADD_STACK_1", 5_u8);
+                }
+            }
+            _ => {}
+        }
+        if i32::from(self.api.get("THRADD_HOSTILE_STACK_2")) == 0 {
+            self.api.response(SUBMIT_1, Handler::ExitConversation, &[]);
+        } else {
+            self.api.response(SUBMIT_2, Handler::ExitConversation, &[]);
+        }
+        if i32::from(self.api.get("THRADD_HOSTILE_STACK_3")) == 0 {
+            self.api.response(BE_FRIENDS_1, Handler::ThraddHostile, &[]);
+        } else if self.api.enabled(BE_FRIENDS_2) {
+            self.api.response(BE_FRIENDS_2, Handler::ThraddHostile, &[]);
+        }
+        if i32::from(self.api.get("THRADD_MISSION")) == 4 {
+            if i32::from(self.api.get("THRADD_HOSTILE_STACK_4")) == 0 {
+                self.api
+                    .response(HOW_IMPRESSED_URQUAN_1, Handler::ThraddHostile, &[]);
+            } else {
+                self.api
+                    .response(HOW_IMPRESSED_URQUAN_2, Handler::ThraddHostile, &[]);
+            }
+        }
+        if i32::from(self.api.get("THRADD_HOSTILE_STACK_5")) == 0 {
+            self.api
+                .response(BYE_HOSTILE_1, Handler::ExitConversation, &[]);
+        } else {
+            self.api
+                .response(BYE_HOSTILE_2, Handler::ExitConversation, &[]);
+        }
+    }
+    fn intro(&mut self) {
+        let mut num_visits: u8;
+        if i32::from((self.api.activity()) as u8) == 5 {
+            self.api.npc(i32::from(OUT_TAKES));
+            self.api.segue(0_u32);
+            return;
+        }
+        if self.api.get("AQUA_HELIX") != 0 {
+            num_visits = self.api.get("HELIX_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(DIE_THIEF_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(DIE_THIEF_2));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("HELIX_VISITS", num_visits);
+            self.api.segue(1_u32);
+        } else if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+            num_visits = self.api.get("THRADD_VISITS");
+            if self.api.get("THRADD_MANNER") != 0 {
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(HAVING_FUN_WITH_ILWRATH_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(HAVING_FUN_WITH_ILWRATH_2));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+            } else {
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(GO_AWAY_FIGHTING_ILWRATH_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(GO_AWAY_FIGHTING_ILWRATH_2));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+            }
+            self.api.set("THRADD_VISITS", num_visits);
+            self.api.segue(0_u32);
+        } else if self.api.get("THRADD_MANNER") != 0 {
+            let p_str0: u16;
+            let p_str1: u16;
+            num_visits = self.api.get("THRADD_VISITS");
+            match self.api.get("THRADD_INTRO") {
+                0 => {
+                    self.polite_phrase(num_visits);
+                }
+                1 => {
+                    self.rhyme_phrase(num_visits);
+                }
+                2 => {
+                    self.pig_latin_phrase(num_visits);
+                }
+                3 => {
+                    self.like_you_phrase(num_visits);
+                }
+                _ => {}
+            }
+            if i32::from({
+                num_visits = num_visits.wrapping_add(1);
+                num_visits
+            }) < 4
+            {
+                self.api.set("THRADD_VISITS", num_visits);
+            }
+            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
+                p_str0 = WELCOME_HELIX0;
+                p_str1 = WELCOME_HELIX1;
+            } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+                p_str0 = WELCOME_HOMEWORLD0;
+                p_str1 = WELCOME_HOMEWORLD1;
+            } else {
+                p_str0 = WELCOME_SPACE0;
+                p_str1 = WELCOME_SPACE1;
+            }
+            self.api.npc(i32::from(p_str0));
+            let culture = self.get_culture_name();
+            self.api.npc(culture);
+            self.api.npc(i32::from(p_str1));
+            self.thradd_allies(0_u16);
+        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
+            num_visits = self.api.get("HELIX_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(HOSTILE_HELIX_HELLO_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(HOSTILE_HELIX_HELLO_2));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("HELIX_VISITS", num_visits);
+            self.helix_world(0_u16);
+        } else if i32::from(self.api.get("THRADDASH_BODY_COUNT")) >= 25 {
+            self.api.npc(i32::from(AMAZING_PERFORMANCE));
+            self.thradd_worship(0_u16);
+        } else {
+            num_visits = self.api.get("THRADDASH_BODY_COUNT");
+            if (i32::from(num_visits) >= 16) && (i32::from(self.api.get("THRADD_BODY_LEVEL")) == 1)
+            {
+                self.api.set("THRADD_BODY_LEVEL", 2_u8);
+                self.api.npc(i32::from(IMPRESSIVE_PERFORMANCE));
+            } else if (i32::from(num_visits) >= 8)
+                && (i32::from(self.api.get("THRADD_BODY_LEVEL")) == 0)
+            {
+                self.api.set("THRADD_BODY_LEVEL", 1_u8);
+                self.api.npc(i32::from(ADEQUATE_PERFORMANCE));
+            }
+            {
+                if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+                    num_visits = self.api.get("THRADD_HOME_VISITS");
+                    let res = {
+                        let old = num_visits;
+                        num_visits = num_visits.wrapping_add(1);
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_2));
+                        }
+                        2 => {
+                            self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_3));
+                        }
+                        3 => {
+                            self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_4));
+                            {
+                                num_visits = num_visits.wrapping_sub(1);
+                                num_visits
+                            };
+                        }
+                        _ => {}
+                    }
+                    self.api.set("THRADD_HOME_VISITS", num_visits);
+                } else if (i32::from({
+                    num_visits = self.api.get("THRADD_MISSION");
+                    num_visits
+                }) == 0)
+                    || (i32::from(num_visits) > 3)
+                {
+                    num_visits = self.api.get("THRADD_VISITS");
+                    let res = {
+                        let old = num_visits;
+                        num_visits = num_visits.wrapping_add(1);
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
+                        }
+                        2 => {
+                            self.api.npc(i32::from(HOSTILE_SPACE_HELLO_3));
+                        }
+                        3 => {
+                            self.api.npc(i32::from(HOSTILE_SPACE_HELLO_4));
+                            {
+                                num_visits = num_visits.wrapping_sub(1);
+                                num_visits
+                            };
+                        }
+                        _ => {}
+                    }
+                    self.api.set("THRADD_VISITS", num_visits);
+                } else {
+                    match num_visits {
+                        1 => {
+                            if i32::from(self.api.get("THRADD_MISSION_VISITS")) == 0 {
+                                self.api.npc(i32::from(WE_GO_TO_IMPRESS_URQUAN_1));
+                            } else {
+                                self.api.npc(i32::from(WE_GO_TO_IMPRESS_URQUAN_2));
+                            }
+                        }
+                        2 => {
+                            if i32::from(self.api.get("THRADD_MISSION_VISITS")) == 0 {
+                                self.api.npc(i32::from(WE_IMPRESSING_URQUAN_1));
+                            } else {
+                                self.api.npc(i32::from(WE_IMPRESSING_URQUAN_2));
+                            }
+                        }
+                        3 => {
+                            if i32::from(self.api.get("THRADD_MISSION_VISITS")) == 0 {
+                                self.api.npc(i32::from(WE_IMPRESSED_URQUAN_1));
+                            } else {
+                                self.api.npc(i32::from(WE_IMPRESSED_URQUAN_2));
+                            }
+                        }
+                        _ => {}
+                    }
+                    self.api.set("THRADD_MISSION_VISITS", 1_u8);
+                }
+                self.thradd_hostile(0_u16);
+            }
+        }
+    }
+    fn post_thradd_enc(&mut self) {}
+    fn initialize(&mut self) {
+        if (self.api.get("THRADD_MANNER") != 0) || (i32::from((self.api.activity()) as u8) == 5) {
+            self.api.segue(0_u32);
+        } else {
+            self.api.segue(1_u32);
+        }
+    }
+}
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.thradd.graphics".as_ptr(),
+        alien_font_res: c"comm.thradd.font".as_ptr(),
+        alien_colormap_res: c"comm.thradd.colortable".as_ptr(),
+        alien_song_res: c"comm.thradd.music".as_ptr(),
+        conversation_phrases_res: c"comm.thradd.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 0 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 8,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = {
+        let mut a = animation(8, 4, 1, (56, 56), (56, 56));
+        a.block_mask = 16;
+        a
+    };
+    d.alien_ambient_array[1] = animation(12, 9, 2, (42, 0), (840, 2520));
+    d.alien_ambient_array[2] = animation(21, 6, 1, (42, 0), (840, 2520));
+    d.alien_ambient_array[3] = {
+        let mut a = animation(27, 3, 4, (42, 0), (840, 2520));
+        a.block_mask = 16;
+        a
+    };
+    d.alien_ambient_array[4] = {
+        let mut a = animation(30, 12, 10, (70, 0), (840, 840));
+        a.block_mask = 41;
+        a
+    };
+    d.alien_ambient_array[5] = {
+        let mut a = animation(42, 5, 4, (84, 28), (840, 2520));
+        a.block_mask = 80;
+        a
+    };
+    d.alien_ambient_array[6] = {
+        let mut a = animation(47, 5, 4, (84, 28), (840, 2520));
+        a.block_mask = 32;
+        a
+    };
+    d.alien_ambient_array[7] = animation(52, 4, 1, (42, 0), (42, 0));
+    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    d.alien_talk_desc = animation(1, 7, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn thradd_allies(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ThraddAllies,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn thradd_demeanor(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ThraddDemeanor,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn thradd_culture(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ThraddCulture,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn helix_world(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::HelixWorld,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn thradd_hostile(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ThraddHostile,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::ExitConversation => exit_conversation,
+            Handler::ThraddAllies => thradd_allies,
+            Handler::ThraddDemeanor => thradd_demeanor,
+            Handler::ThraddCulture => thradd_culture,
+            Handler::HelixWorld => helix_world,
+            Handler::ThraddHostile => thradd_hostile,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_thradd_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize this encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_thradd_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize());
+        desc
+    }
+}
+pub struct ThraddDialogue;
+impl super::RaceDialogue for ThraddDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_thradd_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("AQUA_HELIX").is_some(),
-            "missing game state key: AQUA_HELIX"
-        );
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-        assert!(
-            bit_range("HELIX_UNPROTECTED").is_some(),
-            "missing game state key: HELIX_UNPROTECTED"
-        );
-        assert!(
-            bit_range("HELIX_VISITS").is_some(),
-            "missing game state key: HELIX_VISITS"
-        );
-        assert!(
-            bit_range("ILWRATH_FIGHT_THRADDASH").is_some(),
-            "missing game state key: ILWRATH_FIGHT_THRADDASH"
-        );
-    }
-}
+mod tests;
