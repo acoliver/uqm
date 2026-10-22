@@ -34,6 +34,7 @@ pub mod ships;
 pub mod sound;
 pub mod starbase;
 pub mod state;
+pub mod strings;
 pub mod threading;
 pub mod time;
 pub mod video;
