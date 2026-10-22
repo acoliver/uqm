@@ -109,7 +109,6 @@ sc2/src/uqm/ships/sis_ship/sis_ship.c
 sc2/src/uqm/ships/slylandr/slylandr.c
 sc2/src/uqm/ships/thradd/thradd.c
 sc2/src/uqm/ships/umgah/umgah.c
-sc2/src/uqm/ships/urquan/urquan.c
 sc2/src/uqm/ships/utwig/utwig.c
 sc2/src/uqm/ships/vux/vux.c
 sc2/src/uqm/ships/yehat/yehat.c
