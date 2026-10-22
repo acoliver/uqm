@@ -63,7 +63,6 @@ sc2/src/uqm/comm/slyland/slyland.c
 sc2/src/uqm/comm/spahome/spahome.c
 sc2/src/uqm/comm/syreen/syreenc.c
 sc2/src/uqm/comm/talkpet/talkpet.c
-sc2/src/uqm/comm/thradd/thraddc.c
 sc2/src/uqm/comm/umgah/umgahc.c
 sc2/src/uqm/comm/urquan/urquanc.c
 sc2/src/uqm/comm/vux/vuxc.c
