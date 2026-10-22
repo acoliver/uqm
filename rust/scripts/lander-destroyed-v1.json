@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "name": "lander-destroyed-v1",
+  "start_save": {
+    "path": "saves/alliance-after-mercury.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 40000,
+    "max_presentations": 80000,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 45
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 50
+    },
+    {
+      "action": "capture",
+      "label": "loaded-alliance-after-mercury"
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "sis:landers",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:crew",
+          "op": "eq",
+          "value": 50
+        }
+      ]
+    },
+    {
+      "action": "navigate_to_planet",
+      "planet": 0,
+      "max_ticks": 6000
+    },
+    {
+      "action": "navigate_to_orbit",
+      "planet": 0,
+      "max_ticks": 6000
+    },
+    {
+      "action": "select_planet_menu",
+      "phase": "orbit",
+      "max_ticks": 200
+    },
+    {
+      "action": "assert_mode",
+      "mode": "orbit"
+    },
+    {
+      "action": "select_planet_menu",
+      "phase": "auto_scan",
+      "max_ticks": 200
+    },
+    {
+      "action": "select_planet_menu",
+      "phase": "dispatch",
+      "max_ticks": 200
+    },
+    {
+      "action": "select_planet_menu",
+      "phase": "landing_site",
+      "max_ticks": 200
+    },
+    {
+      "action": "wait_for_planet_side_start",
+      "max_ticks": 5000
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "sis:crew",
+          "op": "eq",
+          "value": 38
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "mercury-surface-lander-active"
+    },
+    {
+      "action": "wait_for_planet_side_end",
+      "outcome": "destroyed",
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "mercury-lander-destroyed"
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 100
+    },
+    {
+      "action": "assert_mode",
+      "mode": "orbit"
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "sis:landers",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "sis:crew",
+          "op": "eq",
+          "value": 38
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "mercury-orbit-after-lander-loss"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
