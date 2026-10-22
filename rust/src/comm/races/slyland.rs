@@ -2,20 +2,13 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
+use super::script::as_comm_data;
+use crate::comm::types::CommData;
 
 // ---------------------------------------------------------------------------
 // String indices (from strings.h)
 // ---------------------------------------------------------------------------
 
-const NULL_PHRASE: u32 = 0;
 const WE_COME_IN_PEACE_1: u32 = 1;
 const WE_COME_IN_PEACE_2: u32 = 2;
 const WE_COME_IN_PEACE_3: u32 = 3;
@@ -103,72 +96,20 @@ const ENUMERATE_SEVENTY: u32 = 84;
 const ENUMERATE_EIGHTY: u32 = 85;
 const ENUMERATE_NINETY: u32 = 86;
 
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
+mod api;
+use api::SlylandApi;
 
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    Combat,
 }
 
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
 
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
+mod logic;
+mod numbers;
 
 // ---------------------------------------------------------------------------
 // Resource keys (from resinst.h)
@@ -179,34 +120,73 @@ const RACE_FONT: &[u8] = b"comm.probe.font\0";
 const RACE_COLOR_MAP: &[u8] = b"comm.probe.colortable\0";
 const RACE_MUSIC: &[u8] = b"comm.probe.music\0";
 const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.probe.dialogue\0";
+mod descriptor;
+use descriptor::descriptor;
+
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+
+    extern "C" fn combat(response: u32) {
+        run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
+    }
+
+    fn callback(_: Handler) -> extern "C" fn(u32) {
+        combat
+    }
+
+    pub(super) extern "C" fn intro() {
+        run(|dialogue| dialogue.intro());
+    }
+    pub(super) extern "C" fn post() {}
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn init_slyland_comm() -> *mut crate::comm::locdata::CLocData {
+        static mut DESC: Option<crate::comm::locdata::CLocData> = None;
+        extern "C" {
+            static ScreenWidth: i32;
+        }
+        let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
+        d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
+        d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
+        run(|s| s.initialize());
+        d
+    }
+}
+
+#[cfg(test)]
+#[path = "slyland/tests.rs"]
+mod branch_tests;
 
 /// Slyland race dialogue implementation.
 pub struct SlylandDialogue;
 
 impl super::RaceDialogue for SlylandDialogue {
     fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_slyland_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor(320))
         }
     }
 
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
 
-    fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
-    }
+    fn post_encounter(&self) {}
 
     fn uninit(&self) -> u32 {
         0
@@ -228,23 +208,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            bit_range("DESTRUCT_CODE_ON_SHIP").is_some(),
+            crate::state::game_state_keys::bit_range("DESTRUCT_CODE_ON_SHIP").is_some(),
             "missing game state key: DESTRUCT_CODE_ON_SHIP"
         );
         assert!(
-            bit_range("PROBE_EXHIBITED_BUG").is_some(),
+            crate::state::game_state_keys::bit_range("PROBE_EXHIBITED_BUG").is_some(),
             "missing game state key: PROBE_EXHIBITED_BUG"
         );
         assert!(
-            bit_range("SLYLANDRO_PROBE_EXIT").is_some(),
+            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_EXIT").is_some(),
             "missing game state key: SLYLANDRO_PROBE_EXIT"
         );
         assert!(
-            bit_range("SLYLANDRO_PROBE_ID").is_some(),
+            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_ID").is_some(),
             "missing game state key: SLYLANDRO_PROBE_ID"
         );
         assert!(
-            bit_range("SLYLANDRO_PROBE_INFO").is_some(),
+            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_INFO").is_some(),
             "missing game state key: SLYLANDRO_PROBE_INFO"
         );
     }
