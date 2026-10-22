@@ -3510,6 +3510,7 @@ mod budgeted_wait_tests {
             Action::NavigateToPlanet(NavigateToPlanetStep {
                 planet: 1,
                 max_ticks,
+                encounter_response: None,
             }),
             Action::NavigateToMoon(NavigateToMoonStep {
                 planet: 1,
@@ -3520,6 +3521,7 @@ mod budgeted_wait_tests {
                 planet: 1,
                 max_ticks,
                 stop_at_encounter: false,
+                encounter_response: None,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
             Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {

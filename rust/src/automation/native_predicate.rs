@@ -494,6 +494,7 @@ mod tests {
                 planet: 0,
                 max_ticks: 100,
                 stop_at_encounter,
+                encounter_response: None,
             })
         };
         assert!(!wait_or_navigation_satisfied(

@@ -1484,6 +1484,53 @@ impl Coordinator {
         }
     }
 
+    fn service_patrol_contact(&self, inner: &mut CoordInner, phrase: &str) -> bool {
+        use crate::automation::script::MenuKey;
+        // A homeworld is the destination, not a patrol to dismiss.
+        if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(128) {
+            return false;
+        }
+        let preview = crate::automation::ui_observation::encounter_menu_active();
+        let (active, _) = crate::automation::ui_observation::communication_lifecycle();
+        if !preview && !active {
+            return false;
+        }
+        if !Self::set_navigation_controls(Default::default()) {
+            self.reject_input(inner, "patrol_navigation", -1, -1);
+            return true;
+        }
+        let (generation, count, ready) =
+            crate::automation::ui_observation::communication_responses();
+        let mut select = preview && inner.input_seen % 4 == 3;
+        if active && count > 0 && generation > inner.consumed_response_generation {
+            match crate::comm::ffi::offered_response_index(phrase) {
+                Ok(index) if ready => {
+                    assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
+                    select = true;
+                    inner.consumed_response_generation = generation;
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!("patrol_response_selected:generation={generation}:phrase={phrase}"),
+                    );
+                }
+                Ok(_) => {
+                    let _ = crate::sound::trackplayer::jump_track(0);
+                }
+                Err(error) => {
+                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                }
+            }
+        } else if active {
+            let _ = crate::sound::trackplayer::jump_track(0);
+        }
+        if !inject_menu_key(i32::from(MenuKey::Select.index()), i32::from(select)) {
+            self.reject_input(inner, "patrol_hail", -1, -1);
+        }
+        true
+    }
+
     /// Derive real player controls for whichever navigation the current step
     /// is running, and report arrival.
     fn service_navigation(
@@ -1491,6 +1538,14 @@ impl Coordinator {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
+        let patrol_phrase = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
+            _ => None,
+        };
+        if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(inner, phrase)) {
+            return scheduler_event;
+        }
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {

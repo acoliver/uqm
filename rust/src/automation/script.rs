@@ -450,11 +450,14 @@ pub struct ActivityAssertion {
 }
 
 /// A `navigate_to_planet` step drives the real flagship via player controls.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToPlanetStep {
     pub planet: u8,
     pub max_ticks: u64,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    #[serde(default)]
+    pub encounter_response: Option<String>,
 }
 
 /// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
@@ -467,7 +470,7 @@ pub struct NavigateToMoonStep {
 }
 
 /// A `navigate_to_orbit` step targets the planet itself from its inner system.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToOrbitStep {
     pub planet: u8,
@@ -475,6 +478,9 @@ pub struct NavigateToOrbitStep {
     /// Stop at a real Hail/Attack preview during approach, without claiming orbit.
     #[serde(default)]
     pub stop_at_encounter: bool,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    #[serde(default)]
+    pub encounter_response: Option<String>,
 }
 
 /// A `navigate_to_hyperspace` step flies the real flagship out of the current
@@ -2448,6 +2454,20 @@ mod tests {
     // --- REQ-SCRIPT-001: strict UTF-8/root parse ---
 
     #[test]
+    fn navigation_patrol_phrases_are_explicit_and_opt_in() {
+        let script = validated_steps(r#"{"action":"navigate_to_planet","planet":0,"max_ticks":100,"encounter_response":"neutral_bye_space"}"#).unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToPlanet(step) if step.encounter_response.as_deref() == Some("neutral_bye_space"))
+        );
+        let script =
+            validated_steps(r#"{"action":"navigate_to_orbit","planet":0,"max_ticks":100}"#)
+                .unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToOrbit(step) if step.encounter_response.is_none() && !step.stop_at_encounter)
+        );
+    }
+
+    #[test]
     fn rejects_non_utf8_bytes() {
         let bad = b"version\xFF";
         let err = parse_script(bad, p()).unwrap_err();
@@ -2838,6 +2858,7 @@ mod tests {
                     planet: 3,
                     max_ticks: 10,
                     stop_at_encounter: false,
+                    encounter_response: None,
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
                 Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),
