@@ -209,6 +209,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         "fly-to-alpha-centauri-v1",
         &[Domain::SaveLoad, Domain::NavigationOrbitScan],
     ),
+    row("load-alpha-centauri-v1", &[Domain::SaveLoad]),
     row("load-save-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",

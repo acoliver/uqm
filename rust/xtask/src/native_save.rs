@@ -1,23 +1,14 @@
-//! Start saves: the committed save games that later scenarios begin from.
-//!
-//! `real-sol-starbase-alliance` plays the allied Starbase chain once and saves
-//! to slot 0. `extract-save` copies that save out of a passing run's retained
-//! config and writes its provenance, which documents how the save was made. A
-//! scenario declaring `start_save` is admitted only when the save is a regular
-//! file next to the script.
+//! Extract a newly written slot from a passing native scenario.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use uqm_rust::automation::native_window::NATIVE_ACCEPTANCE_SCHEMA;
-use uqm_rust::automation::{parse_script, Action, NativeRetainedInput, StartSave};
+use uqm_rust::automation::{parse_script, validate_script, NativeRetainedInput, StartSave};
 
 use crate::native_suite::{ScenarioState, SuiteManifest};
 
-/// The scenario that plays the chain and produces the save.
-pub const PRODUCER_SCENARIO: &str = "real-sol-starbase-alliance";
-const PRODUCER_SCRIPT: &str = "rust/scripts/real-sol-starbase-alliance.json";
-const PROVENANCE_SCHEMA: &str = "uqm-start-save-provenance-v1";
+const PROVENANCE_SCHEMA: &str = "uqm-start-save-provenance-v2";
 const SAVE_LIMIT: u64 = 4 * 1024 * 1024;
 const TRACE_LIMIT: u64 = 64 * 1024 * 1024;
 const ACCEPTANCE_LIMIT: u64 = 16 * 1024 * 1024;
@@ -51,56 +42,15 @@ pub struct Provenance {
     pub producing_commit: String,
     pub run_id: String,
     pub terminal_reason: String,
-    /// The `assert_ship_resources` step that ran last before the save, for the
-    /// chain's final save only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub asserted_before_save: Option<serde_json::Value>,
+    pub seed: u32,
+    pub parent_save: Option<SaveIdentity>,
+    /// Values decoded from this particular output slot, not a later script assertion.
+    pub campaign_state: std::collections::BTreeMap<String, u32>,
 }
 
 /// Where the provenance of `save` lives: next to it, `<stem>.provenance.json`.
 pub fn provenance_path(save: &Path) -> PathBuf {
     save.with_extension("provenance.json")
-}
-
-/// The resource assertion a slot's save was taken after, when the script's own
-/// assertions describe that save.
-///
-/// The chain's resources change between its checkpoints, so an assertion only
-/// describes the save of the chain's last slot capture. Earlier slots record
-/// none rather than the final chain's values.
-fn asserted_before_save(
-    script_bytes: &[u8],
-    path: &Path,
-    slot: u8,
-) -> Result<Option<serde_json::Value>, String> {
-    let document = parse_script(script_bytes, path).map_err(|error| error.to_string())?;
-    let slot_suffix = format!("-slot-{slot}");
-    let mut slot_captures = document
-        .steps
-        .iter()
-        .enumerate()
-        .filter_map(|(index, action)| match action {
-            Action::Capture(capture) if capture.label.starts_with("saved-") => {
-                Some((index, capture.label.ends_with(&slot_suffix)))
-            }
-            _ => None,
-        });
-    let last_capture = slot_captures.clone().next_back().map(|(index, _)| index);
-    let save_step = slot_captures
-        .find(|(_, is_slot)| *is_slot)
-        .map(|(index, _)| index)
-        .ok_or_else(|| format!("{PRODUCER_SCRIPT} has no capture of a save in slot {slot}"))?;
-    if Some(save_step) != last_capture {
-        return Ok(None);
-    }
-    document.steps[..save_step]
-        .iter()
-        .rev()
-        .find(|action| matches!(action, Action::AssertShipResources(_)))
-        .map(|action| serde_json::to_value(action).map_err(|error| error.to_string()))
-        .transpose()?
-        .ok_or_else(|| format!("{PRODUCER_SCRIPT} asserts no ship resources before its save"))
-        .map(Some)
 }
 
 /// What a suite bundle's scenario records about itself that the extraction
@@ -112,6 +62,7 @@ struct RecordedRun {
     retained_files: Vec<NativeRetainedInput>,
     trace_path: String,
     trace_sha256: String,
+    passed: bool,
 }
 
 #[derive(Deserialize)]
@@ -119,9 +70,7 @@ struct RecordedScript {
     sha256: String,
 }
 
-/// A scenario of a finalized, passing suite bundle that ran exactly the pinned
-/// alliance script, with every artifact read here checked against the digests
-/// the bundle recorded for it.
+/// One selected scenario from a finalized, passing native suite.
 struct ProducingRun {
     scenario_dir: PathBuf,
     run_id: String,
@@ -170,8 +119,8 @@ fn require_digest(
     Ok(())
 }
 
-/// Establish that `artifacts` is the passing run of the alliance script.
-fn verify_run(artifacts: &Path) -> Result<ProducingRun, String> {
+/// Establish that `artifacts` contains the requested passing scenario.
+fn verify_run(artifacts: &Path, scenario: &str) -> Result<ProducingRun, String> {
     let (suite, requested) = locate_suite(artifacts)?;
     let manifest: SuiteManifest = read_json(&suite.join(SUITE_MANIFEST), MANIFEST_LIMIT)?;
     if manifest.schema != SUITE_SCHEMA || !manifest.finalized || !manifest.passed {
@@ -190,28 +139,26 @@ fn verify_run(artifacts: &Path) -> Result<ProducingRun, String> {
         &manifest.request.sha256,
         Some(manifest.request.byte_length),
     )?;
-    let [row] = manifest.scenarios.as_slice() else {
-        return Err(format!(
-            "{} ran {} scenarios; extract-save needs a bundle of exactly the {PRODUCER_SCENARIO} run",
-            suite.display(),
-            manifest.scenarios.len()
-        ));
-    };
-    if row.script.path != PRODUCER_SCRIPT {
-        return Err(format!(
-            "the suite ran {}, not {PRODUCER_SCRIPT}",
-            row.script.path
-        ));
+    let script_path = format!("rust/scripts/{scenario}.json");
+    let mut rows = manifest
+        .scenarios
+        .iter()
+        .filter(|row| row.script.path == script_path);
+    let row = rows
+        .next()
+        .ok_or_else(|| format!("suite did not run {script_path}"))?;
+    if rows.next().is_some() {
+        return Err(format!("suite has more than one {scenario} run"));
     }
     if requested.is_some_and(|directory| directory != row.directory) {
         return Err(format!(
-            "{} is not the {PRODUCER_SCENARIO} scenario of its suite ({})",
+            "{} is not the {scenario} scenario of its suite ({})",
             artifacts.display(),
             row.directory
         ));
     }
     let ScenarioState::Completed { manifest: record } = &row.state else {
-        return Err(format!("the {PRODUCER_SCENARIO} scenario did not complete"));
+        return Err(format!("the {scenario} scenario did not complete"));
     };
     let scenario_dir = suite.join(&row.directory);
     let acceptance_bytes = crate::read_regular_file_bounded(
@@ -236,6 +183,9 @@ fn verify_run(artifacts: &Path) -> Result<ProducingRun, String> {
             "native-acceptance.json has schema {}, expected {NATIVE_ACCEPTANCE_SCHEMA}",
             recorded.schema
         ));
+    }
+    if !recorded.passed {
+        return Err(format!("the {scenario} scenario did not pass"));
     }
     let run_id = format!(
         "{}/{}",
@@ -272,11 +222,27 @@ fn terminal_reason(run: &ProducingRun) -> Result<String, String> {
         .ok_or_else(|| "run trace ends without a terminal_reason".to_string())
 }
 
-/// Copy the slot's save out of a passing alliance run and write its provenance.
+/// Copy a newly written slot out of a passing selected run and record its state.
 ///
 /// `artifacts` is the suite bundle root or its `scenarios/NNNN` directory.
-pub fn extract_save(root: &Path, artifacts: &Path, slot: u8, out: &Path) -> Result<(), String> {
-    let run = verify_run(artifacts)?;
+pub fn extract_save(
+    root: &Path,
+    artifacts: &Path,
+    scenario: &str,
+    slot: u8,
+    out: &Path,
+) -> Result<(), String> {
+    if scenario.is_empty()
+        || !scenario
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err("--scenario must be one scenario name".into());
+    }
+    if slot >= 50 {
+        return Err("--slot must be in 0..50".into());
+    }
+    let run = verify_run(artifacts, scenario)?;
     let reason = terminal_reason(&run)?;
     if reason != "success" {
         return Err(format!(
@@ -284,32 +250,37 @@ pub fn extract_save(root: &Path, artifacts: &Path, slot: u8, out: &Path) -> Resu
             run.run_id
         ));
     }
-    let script_bytes = crate::read_regular_file_bounded(&root.join(PRODUCER_SCRIPT), SAVE_LIMIT)?;
+    let script_path = format!("rust/scripts/{scenario}.json");
+    let script_bytes = crate::read_regular_file_bounded(&root.join(&script_path), SAVE_LIMIT)?;
     let script_sha = crate::hex_sha256(&script_bytes);
     if script_sha != run.recorded.script.sha256 {
         return Err(format!(
-            "{PRODUCER_SCRIPT} in this checkout ({script_sha}) is not the script the run played ({})",
+            "{script_path} in this checkout ({script_sha}) is not the script the run played ({})",
             run.recorded.script.sha256
         ));
     }
-    let asserted = asserted_before_save(&script_bytes, Path::new(PRODUCER_SCRIPT), slot)?;
+    let document =
+        parse_script(&script_bytes, Path::new(&script_path)).map_err(|error| error.to_string())?;
+    let script =
+        validate_script(document, Path::new(&script_path)).map_err(|error| error.to_string())?;
     let slot_file = format!("uqmsave.{slot:02}");
     let save_relative = format!("config-final/save/{slot_file}");
     let save_bytes =
         crate::read_regular_file_bounded(&run.scenario_dir.join(&save_relative), SAVE_LIMIT)?;
-    let retained = run
-        .recorded
-        .retained_files
-        .iter()
-        .find(|file| file.relative_path == save_relative)
-        .ok_or_else(|| format!("the run did not retain {save_relative}"))?;
-    require_digest(
-        &save_relative,
-        &save_bytes,
-        &retained.sha256,
-        Some(retained.byte_length),
-    )?;
-    let commit = git_head(root)?;
+    let save_identity = recorded_file(&run, &save_relative, &save_bytes)?;
+    let parent_save = script.start_save().map(|parent| -> Result<SaveIdentity, String> {
+        let bytes = crate::read_regular_file_bounded(&run.scenario_dir.join("inputs/start-save.sav"), SAVE_LIMIT)?;
+        let retained = recorded_file(&run, "inputs/start-save.sav", &bytes)?;
+        if slot == parent.slot && bytes == save_bytes {
+            return Err("selected slot is unchanged from the installed parent save; no new save was produced".into());
+        }
+        Ok(SaveIdentity {
+            path: parent.path.clone(), slot: parent.slot,
+            sha256: retained.sha256.clone(), byte_length: retained.byte_length,
+        })
+    }).transpose()?;
+    let campaign_state = saved_campaign_state(&save_bytes)?;
+    let commit = producing_commit(&run)?;
     let relative_out = out
         .strip_prefix(root)
         .map_err(|_| format!("--output {} must be inside the repository", out.display()))?
@@ -320,18 +291,20 @@ pub fn extract_save(root: &Path, artifacts: &Path, slot: u8, out: &Path) -> Resu
         save: SaveIdentity {
             path: relative_out,
             slot,
-            sha256: crate::hex_sha256(&save_bytes),
-            byte_length: save_bytes.len() as u64,
+            sha256: save_identity.sha256.clone(),
+            byte_length: save_identity.byte_length,
         },
         scenario: ScenarioIdentity {
-            name: PRODUCER_SCENARIO.into(),
-            path: PRODUCER_SCRIPT.into(),
+            name: scenario.into(),
+            path: script_path,
             sha256: script_sha,
         },
         producing_commit: commit,
         run_id: run.run_id,
         terminal_reason: reason,
-        asserted_before_save: asserted,
+        seed: script.seed(),
+        parent_save,
+        campaign_state,
     };
     std::fs::write(out, &save_bytes)
         .map_err(|error| format!("write {}: {error}", out.display()))?;
@@ -344,16 +317,108 @@ pub fn extract_save(root: &Path, artifacts: &Path, slot: u8, out: &Path) -> Resu
     Ok(())
 }
 
-fn git_head(root: &Path) -> Result<String, String> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(root)
-        .output()
-        .map_err(|error| format!("run git rev-parse HEAD: {error}"))?;
-    if !output.status.success() {
-        return Err("git rev-parse HEAD failed".into());
+fn recorded_file<'a>(
+    run: &'a ProducingRun,
+    relative: &str,
+    bytes: &[u8],
+) -> Result<&'a NativeRetainedInput, String> {
+    let retained = run
+        .recorded
+        .retained_files
+        .iter()
+        .find(|file| file.relative_path == relative)
+        .ok_or_else(|| format!("the run did not retain {relative}"))?;
+    require_digest(
+        relative,
+        bytes,
+        &retained.sha256,
+        Some(retained.byte_length),
+    )?;
+    Ok(retained)
+}
+
+fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<String, u32>, String> {
+    use uqm_rust::savegame::{
+        decode_save,
+        runtime::star::{resolve_star, LoadedStar, CATALOG_LEN},
+    };
+    use uqm_rust::state::{game_state::get_state_bits_raw, game_state_keys::bit_range};
+    let save = decode_save(bytes).map_err(|error| format!("decode produced save: {error}"))?;
+    let story = |name: &str| {
+        let (start, end) = bit_range(name).expect("known story key");
+        u32::from(get_state_bits_raw(
+            &save.game_state,
+            start as usize,
+            end as usize,
+        ))
+    };
+    // The catalog is immutable game data; this process never runs the game.
+    let catalog = unsafe {
+        std::slice::from_raw_parts(
+            std::ptr::addr_of!(uqm_rust::planets::tables::STARMAP_ARRAY).cast(),
+            CATALOG_LEN,
+        )
+    };
+    let star = resolve_star(catalog, story("ARILOU_SPACE_SIDE") as u8, &save.star)
+        .map_err(|error| format!("resolve produced star: {error}"))?;
+    let mut state = std::collections::BTreeMap::from([
+        ("activity".into(), u32::from(save.global.current_activity)),
+        ("sis:fuel".into(), save.summary.sis.fuel_on_board),
+        ("sis:ru".into(), save.summary.sis.res_units),
+        ("sis:crew".into(), u32::from(save.summary.sis.crew_enlisted)),
+        (
+            "sis:landers".into(),
+            u32::from(save.summary.sis.num_landers),
+        ),
+        ("date:day".into(), u32::from(save.global.clock.day_index)),
+        (
+            "date:month".into(),
+            u32::from(save.global.clock.month_index),
+        ),
+        ("date:year".into(), u32::from(save.global.clock.year_index)),
+    ]);
+    if let LoadedStar::Catalog(index) = star {
+        state.insert("star:current".into(), index as u32);
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    for name in [
+        "RADIOACTIVES_PROVIDED",
+        "MOONBASE_DESTROYED",
+        "STARBASE_AVAILABLE",
+        "PROBE_ILWRATH_ENCOUNTER",
+    ] {
+        state.insert(format!("story:{name}"), story(name));
+    }
+    Ok(state)
+}
+
+fn producing_commit(run: &ProducingRun) -> Result<String, String> {
+    const RECEIPT: &str = "inputs/linked-build/linked-build-receipt.json";
+    let bytes = match uqm_rust::automation::native_artifacts::SharedInputs::open(
+        &run.scenario_dir,
+        MANIFEST_LIMIT,
+    )? {
+        Some(shared) => shared.read(&run.scenario_dir, RECEIPT, MANIFEST_LIMIT)?,
+        None => {
+            let bytes =
+                crate::read_regular_file_bounded(&run.scenario_dir.join(RECEIPT), MANIFEST_LIMIT)?;
+            recorded_file(run, RECEIPT, &bytes)?;
+            bytes
+        }
+    };
+    #[derive(Deserialize)]
+    struct Source {
+        source_sha: String,
+    }
+    let source: Source = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    if source.source_sha.len() != 40
+        || !source
+            .source_sha
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("invalid producer source commit in linked build receipt".into());
+    }
+    Ok(source.source_sha)
 }
 
 /// Admit the save a script starts with: it must be a regular file next to
@@ -371,9 +436,7 @@ pub fn verify_start_save(
     if !full.exists() {
         return Err(format!(
             "start save missing: {} (script {script_path} starts from it); regenerate with \
-             `xtask native extract-save --artifacts <alliance suite bundle> --slot <N> --output {}` \
-             after a passing real-sol-starbase-alliance run (see rust/scripts/SCENARIOS.md, \
-             \"Checkpoint saves\")",
+             `xtask native save-extract --scenario <producer> --artifacts <passing bundle> --slot <N> --output {}`",
             relative.display(),
             relative.display()
         ));
@@ -416,7 +479,9 @@ mod tests {
         }
     }
 
-    const SAVE_BYTES: &[u8] = b"allied starbase save";
+    const PRODUCER_SCENARIO: &str = "real-sol-starbase-alliance";
+    const PRODUCER_SCRIPT: &str = "rust/scripts/real-sol-starbase-alliance.json";
+    const SAVE_BYTES: &[u8] = include_bytes!("../../scripts/saves/allied-starbase.sav");
 
     fn producer_scenario() -> crate::native_config::Scenario {
         crate::native_config::scenarios(repository_root())
@@ -444,19 +509,24 @@ mod tests {
                 format!("{{\"event\":\"start\"}}\n{{\"terminal_reason\":\"{terminal_reason}\"}}\n");
             std::fs::write(scenario.join("automation/trace.jsonl"), &trace).unwrap();
             std::fs::write(scenario.join("config-final/save/uqmsave.00"), SAVE_BYTES).unwrap();
+            std::fs::create_dir_all(scenario.join("inputs/linked-build")).unwrap();
+            let receipt = br#"{"source_sha":"0123456789012345678901234567890123456789"}"#;
+            std::fs::write(
+                scenario.join("inputs/linked-build/linked-build-receipt.json"),
+                receipt,
+            )
+            .unwrap();
             let acceptance = serde_json::to_vec_pretty(&serde_json::json!({
                 "schema": NATIVE_ACCEPTANCE_SCHEMA,
+                "passed": true,
                 "script": {
                     "relative_path": "inputs/real-sol-starbase-alliance.json",
                     "byte_length": script_bytes.len(),
                     "sha256": crate::hex_sha256(&script_bytes),
                 },
                 "retained_files": [
-                    {
-                        "relative_path": "config-final/save/uqmsave.00",
-                        "byte_length": SAVE_BYTES.len(),
-                        "sha256": crate::hex_sha256(SAVE_BYTES),
-                    },
+                    crate::retained_identity("inputs/linked-build/linked-build-receipt.json", receipt),
+                    crate::retained_identity("config-final/save/uqmsave.00", SAVE_BYTES),
                 ],
                 "trace_path": "automation/trace.jsonl",
                 "trace_sha256": crate::hex_sha256(trace.as_bytes()),
@@ -476,6 +546,27 @@ mod tests {
 
         fn scenario(&self) -> PathBuf {
             self.suite().join("scenarios/0000")
+        }
+
+        fn use_script(&self, name: &str) {
+            let path = format!("rust/scripts/{name}.json");
+            let script = std::fs::read(repository_root().join(&path)).unwrap();
+            let acceptance_path = self.scenario().join("native-acceptance.json");
+            let mut acceptance: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&acceptance_path).unwrap()).unwrap();
+            acceptance["script"]["sha256"] = crate::hex_sha256(&script).into();
+            let parent =
+                std::fs::read(repository_root().join("rust/scripts/saves/allied-starbase.sav"))
+                    .unwrap();
+            std::fs::write(self.scenario().join("inputs/start-save.sav"), &parent).unwrap();
+            acceptance["retained_files"].as_array_mut().unwrap().push(
+                serde_json::to_value(crate::retained_identity("inputs/start-save.sav", &parent))
+                    .unwrap(),
+            );
+            std::fs::write(&acceptance_path, serde_json::to_vec(&acceptance).unwrap()).unwrap();
+            self.write_manifest(|manifest| {
+                manifest["scenarios"][0]["script"]["path"] = path.into()
+            });
         }
 
         /// Rewrite `suite-manifest.json` for the bundle as it is on disk,
@@ -517,8 +608,8 @@ mod tests {
     #[test]
     fn the_run_is_identified_from_the_suite_bundle_given_either_directory() {
         let bundle = Bundle::new("success");
-        let from_suite = verify_run(&bundle.suite()).unwrap();
-        let from_scenario = verify_run(&bundle.scenario()).unwrap();
+        let from_suite = verify_run(&bundle.suite(), PRODUCER_SCENARIO).unwrap();
+        let from_scenario = verify_run(&bundle.scenario(), PRODUCER_SCENARIO).unwrap();
         assert_eq!(
             from_suite.run_id,
             "art-real-sol-starbase-alliance/scenarios/0000"
@@ -530,25 +621,31 @@ mod tests {
     #[test]
     fn a_run_that_did_not_end_in_success_is_refused() {
         let bundle = Bundle::new("battle_lost");
-        let run = verify_run(&bundle.scenario()).unwrap();
+        let run = verify_run(&bundle.scenario(), PRODUCER_SCENARIO).unwrap();
         assert_eq!(terminal_reason(&run).unwrap(), "battle_lost");
         let out = bundle.directory.path().join("out.sav");
-        let error = extract_save(bundle.directory.path(), &bundle.scenario(), 0, &out).unwrap_err();
+        let error = extract_save(
+            bundle.directory.path(),
+            &bundle.scenario(),
+            PRODUCER_SCENARIO,
+            0,
+            &out,
+        )
+        .unwrap_err();
         assert!(error.contains("not success"), "{error}");
         assert!(!out.exists());
     }
 
     #[test]
-    fn a_run_of_another_script_than_the_alliance_script_is_refused() {
+    fn a_run_of_another_script_is_refused() {
         let bundle = Bundle::new("success");
         bundle.write_manifest(|manifest| {
             manifest["scenarios"][0]["script"]["path"] = "rust/scripts/other.json".into();
         });
-        let error = verify_run(&bundle.scenario()).err().unwrap();
-        assert!(
-            error.contains("not rust/scripts/real-sol-starbase-alliance.json"),
-            "{error}"
-        );
+        let error = verify_run(&bundle.scenario(), PRODUCER_SCENARIO)
+            .err()
+            .unwrap();
+        assert!(error.contains("suite did not run"), "{error}");
     }
 
     #[test]
@@ -558,26 +655,30 @@ mod tests {
             let row = manifest["scenarios"][0].clone();
             manifest["scenarios"].as_array_mut().unwrap().push(row);
         });
-        let error = verify_run(&bundle.suite()).err().unwrap();
-        assert!(error.contains("exactly"), "{error}");
+        let error = verify_run(&bundle.suite(), PRODUCER_SCENARIO)
+            .err()
+            .unwrap();
+        assert!(error.contains("more than one"), "{error}");
 
         let bundle = Bundle::new("success");
         std::fs::create_dir_all(bundle.suite().join("scenarios/0001")).unwrap();
-        let error = verify_run(&bundle.suite().join("scenarios/0001"))
+        let error = verify_run(&bundle.suite().join("scenarios/0001"), PRODUCER_SCENARIO)
             .err()
             .unwrap();
         assert!(error.contains("not the"), "{error}");
 
         let bundle = Bundle::new("success");
         bundle.write_manifest(|manifest| manifest["passed"] = false.into());
-        let error = verify_run(&bundle.suite()).err().unwrap();
+        let error = verify_run(&bundle.suite(), PRODUCER_SCENARIO)
+            .err()
+            .unwrap();
         assert!(error.contains("finalized passing"), "{error}");
     }
 
     #[test]
     fn a_directory_outside_a_suite_bundle_is_refused() {
         let bundle = Bundle::new("success");
-        let error = verify_run(&bundle.scenario().join("automation"))
+        let error = verify_run(&bundle.scenario().join("automation"), PRODUCER_SCENARIO)
             .err()
             .unwrap();
         assert!(error.contains("neither a native suite"), "{error}");
@@ -591,7 +692,7 @@ mod tests {
             "{\"terminal_reason\":\"success\"}\n",
         )
         .unwrap();
-        let run = verify_run(&bundle.scenario()).unwrap();
+        let run = verify_run(&bundle.scenario(), PRODUCER_SCENARIO).unwrap();
         assert!(terminal_reason(&run).unwrap_err().contains("run trace"));
 
         let bundle = Bundle::new("success");
@@ -600,7 +701,9 @@ mod tests {
             b"{\"schema\":\"tampered\"}",
         )
         .unwrap();
-        let error = verify_run(&bundle.scenario()).err().unwrap();
+        let error = verify_run(&bundle.scenario(), PRODUCER_SCENARIO)
+            .err()
+            .unwrap();
         assert!(error.contains("native-acceptance.json"), "{error}");
     }
 
@@ -635,7 +738,14 @@ mod tests {
         let out = repository.path().join("saves/allied-starbase.sav");
         std::fs::create_dir_all(out.parent().unwrap()).unwrap();
 
-        extract_save(repository.path(), &bundle.scenario(), 0, &out).unwrap();
+        extract_save(
+            repository.path(),
+            &bundle.scenario(),
+            PRODUCER_SCENARIO,
+            0,
+            &out,
+        )
+        .unwrap();
 
         assert_eq!(std::fs::read(&out).unwrap(), SAVE_BYTES);
         let provenance: Provenance =
@@ -654,18 +764,129 @@ mod tests {
     }
 
     #[test]
-    fn only_the_final_slots_save_is_described_by_the_scripts_assertion() {
-        let script = std::fs::read(repository_root().join(PRODUCER_SCRIPT)).unwrap();
-        let path = Path::new(PRODUCER_SCRIPT);
-        for slot in [1, 2] {
-            assert_eq!(asserted_before_save(&script, path, slot).unwrap(), None);
+    fn any_selected_scenario_can_produce_but_an_unchanged_parent_slot_is_refused() {
+        let bundle = Bundle::new("success");
+        bundle.use_script("fly-to-alpha-centauri-v1");
+        assert!(verify_run(&bundle.suite(), "fly-to-alpha-centauri-v1").is_ok());
+        let out = repository_root().join("tmp/unwritten-test.sav");
+        let error = extract_save(
+            repository_root(),
+            &bundle.suite(),
+            "fly-to-alpha-centauri-v1",
+            0,
+            &out,
+        )
+        .unwrap_err();
+        assert!(error.contains("unchanged"), "{error}");
+        let error = extract_save(
+            repository_root(),
+            &bundle.suite(),
+            "fly-to-alpha-centauri-v1",
+            1,
+            &out,
+        )
+        .unwrap_err();
+        assert!(error.contains("uqmsave.01"), "{error}");
+        // A different valid slot needs no capture-label convention or resource assertion heuristic.
+        let different = include_bytes!("../../scripts/saves/alliance-after-mercury.sav");
+        std::fs::write(
+            bundle.scenario().join("config-final/save/uqmsave.00"),
+            different,
+        )
+        .unwrap();
+        let acceptance_path = bundle.scenario().join("native-acceptance.json");
+        let mut acceptance: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&acceptance_path).unwrap()).unwrap();
+        acceptance["retained_files"][1] = serde_json::to_value(crate::retained_identity(
+            "config-final/save/uqmsave.00",
+            different,
+        ))
+        .unwrap();
+        std::fs::write(&acceptance_path, serde_json::to_vec(&acceptance).unwrap()).unwrap();
+        bundle.write_manifest(|manifest| {
+            manifest["scenarios"][0]["script"]["path"] =
+                "rust/scripts/fly-to-alpha-centauri-v1.json".into()
+        });
+        let output_dir = repository_root().join("tmp");
+        std::fs::create_dir_all(&output_dir).unwrap();
+        let output = tempfile::tempdir_in(output_dir).unwrap();
+        let out = output.path().join("produced.sav");
+        extract_save(
+            repository_root(),
+            &bundle.suite(),
+            "fly-to-alpha-centauri-v1",
+            0,
+            &out,
+        )
+        .unwrap();
+        let provenance: Provenance = read_json(&provenance_path(&out), MANIFEST_LIMIT).unwrap();
+        assert_eq!(provenance.scenario.name, "fly-to-alpha-centauri-v1");
+        assert_eq!(
+            provenance.parent_save.unwrap().sha256,
+            crate::hex_sha256(SAVE_BYTES)
+        );
+        assert_eq!(provenance.campaign_state["sis:fuel"], 926);
+        assert_eq!(
+            provenance.producing_commit,
+            "0123456789012345678901234567890123456789"
+        );
+    }
+
+    #[test]
+    fn snapshots_describe_each_saved_file_not_the_scripts_last_assertion() {
+        for (bytes, fuel) in [
+            (SAVE_BYTES, 896),
+            (
+                include_bytes!("../../scripts/saves/alliance-after-mercury.sav").as_slice(),
+                926,
+            ),
+            (
+                include_bytes!("../../scripts/saves/alliance-after-luna.sav").as_slice(),
+                896,
+            ),
+        ] {
+            let state = saved_campaign_state(bytes).unwrap();
+            assert_eq!(state["star:current"], 82);
+            assert_eq!(state["sis:fuel"], fuel);
         }
-        let final_slot = asserted_before_save(&script, path, 0).unwrap().unwrap();
-        assert_eq!(final_slot["action"], "assert_ship_resources");
-        assert_eq!(final_slot["fuel_on_board"], 896);
-        assert_eq!(final_slot["res_units"], 2500);
-        let error = asserted_before_save(&script, path, 9).unwrap_err();
-        assert!(error.contains("slot 9"), "{error}");
+    }
+
+    #[test]
+    fn alpha_centauri_reload_assertions_equal_the_saved_provenance() {
+        let root = repository_root();
+        let save = root.join("rust/scripts/saves/at-alpha-centauri.sav");
+        let provenance: Provenance = read_json(&provenance_path(&save), MANIFEST_LIMIT).unwrap();
+        let bytes = std::fs::read(save).unwrap();
+        assert_eq!(
+            provenance.campaign_state,
+            saved_campaign_state(&bytes).unwrap()
+        );
+        let path = root.join("rust/scripts/load-alpha-centauri-v1.json");
+        let document = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
+        let wanted = document
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                uqm_rust::automation::Action::AssertState(predicate) => Some(predicate),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(wanted.all.len(), 2);
+        for condition in &wanted.all {
+            assert_eq!(
+                condition.op,
+                uqm_rust::automation::campaign_state::StateOp::Eq
+            );
+            assert_eq!(condition.value, provenance.campaign_state[&condition.key]);
+        }
+        assert!(wanted
+            .all
+            .iter()
+            .any(|condition| condition.key == "star:current"));
+        assert!(wanted
+            .all
+            .iter()
+            .any(|condition| condition.key == "sis:fuel"));
     }
 
     #[test]

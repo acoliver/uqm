@@ -422,6 +422,33 @@ pub extern "C" fn rust_SelectResponseIndex(index: c_int) -> c_int {
     }
 }
 
+/// Resolve a phrase name against the offered list on the game thread.
+pub fn offered_response_index(phrase: &str) -> Result<usize, String> {
+    #[cfg(not(test))]
+    {
+        use crate::strings::string_table::{
+            GetStringName, GetStringTableCount, SetAbsStringTableIndex,
+        };
+        // The current conversation owns this table until communication teardown.
+        let table = unsafe { super::locdata::COMM_DATA.conversation_phrases.cast() };
+        COMM_STATE
+            .read()
+            .responses()
+            .offered_index(phrase, |reference| unsafe {
+                if reference == 0 || reference > u32::from(GetStringTableCount(table)) {
+                    return None;
+                }
+                let entry = SetAbsStringTableIndex(table, (reference - 1) as u16);
+                let name = GetStringName(entry);
+                (!name.is_null()).then(|| CStr::from_ptr(name).to_string_lossy().into_owned())
+            })
+    }
+    #[cfg(test)]
+    {
+        Err(format!("response_not_offered:phrase={phrase}"))
+    }
+}
+
 /// Get number of responses
 /// # Safety
 ///

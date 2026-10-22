@@ -55,6 +55,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::FightBattle(_)
         | Action::SelectPlanetMenu(_)
         | Action::PickBattleShip(_)
+        | Action::SelectResponse(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
         Action::WaitInputTicks(_)

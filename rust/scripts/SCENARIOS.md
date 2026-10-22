@@ -1021,7 +1021,7 @@ scenarios start from the save it makes.
   recorded. It is documentation, and admission does not compare it with anything.
 - Regeneration rule: when `real-sol-starbase-alliance.json` changes the
   conversation chain or the purchases, regenerate the save. Run the alliance
-  scenario in a real window, then `native extract-save --artifacts <suite bundle
+  scenario in a real window, then `native save-extract --scenario real-sol-starbase-alliance --artifacts <suite bundle
   or its scenarios/NNNN dir> --slot 0 --output
   rust/scripts/saves/allied-starbase.sav`, and commit the save and its
   provenance together. `extract-save` refuses a run whose `terminal_reason` is not
@@ -1106,16 +1106,18 @@ Notes on how the saves are taken:
   harness installs the file as `uqmsave.00` whichever slot it was extracted from,
   and the script loads it with the same main-menu sequence as
   `starbase-visit-v1`.
-- The provenance file written by `extract-save` records the chain's last
-  `assert_ship_resources` (896 fuel / 2500 RU). That is right for slot 0 and only
-  documentation for slots 1 and 2.
+- `save-extract` decodes the selected slot and records its own campaign snapshot.
+  It does not infer a save's state from the last resource assertion or a capture
+  label. It refuses a missing slot, an unchanged installed parent slot, a failed
+  run, a different producer script, or modified retained artifacts. The receipt
+  includes the parent save digest, scenario, seed and linked build's source commit.
 
 Regenerating all three from one chain run (a real window, passing run):
 
 ```
-xtask native extract-save --artifacts <suite bundle> --slot 0 --output rust/scripts/saves/allied-starbase.sav
-xtask native extract-save --artifacts <suite bundle> --slot 1 --output rust/scripts/saves/alliance-after-mercury.sav
-xtask native extract-save --artifacts <suite bundle> --slot 2 --output rust/scripts/saves/alliance-after-luna.sav
+xtask native save-extract --scenario real-sol-starbase-alliance --artifacts <suite bundle> --slot 0 --output rust/scripts/saves/allied-starbase.sav
+xtask native save-extract --scenario real-sol-starbase-alliance --artifacts <suite bundle> --slot 1 --output rust/scripts/saves/alliance-after-mercury.sav
+xtask native save-extract --scenario real-sol-starbase-alliance --artifacts <suite bundle> --slot 2 --output rust/scripts/saves/alliance-after-luna.sav
 ```
 
 Commit each save with its `.provenance.json`.
@@ -1179,3 +1181,34 @@ unavailable stars and cursors never read as zero. Encounters receive neutral
 input; flight resumes if they return control. A blocking dialogue, an empty
 tank or failure to arrive exhausts the bounded action with phase, location,
 activity, star and fuel in its failure label.
+
+
+## Phrase-based response selection and chained saves
+
+```json
+{"action":"select_response","phrase":"we_will_transfer_now","max_ticks":1000}
+```
+
+`phrase` is the name from the current race's conversation string table, not the
+localized display text or an option index. Only an offered, callable response
+can match. A fresh list is required after each choice. The action resolves its
+current index and confirms with the ordinary Select key; it never calls the
+story callback. Missing or ambiguous names fail rather than choosing another
+option. `lost-battle-v1` uses this for the Commander's radioactives transfer.
+
+Any passing native scenario can produce a checkpoint through the real Game/Save
+menu. Select the producer and slot explicitly when extracting:
+
+```sh
+xtask native save-extract --scenario fly-to-alpha-centauri-v1 --artifacts <passing bundle> --slot 1 --output rust/scripts/saves/at-alpha-centauri.sav
+```
+
+`fly-to-alpha-centauri-v1` loads the allied Starbase save, flies to Alpha Centauri
+and saves in slot 1. `load-alpha-centauri-v1` loads the extracted checkpoint and
+asserts the star and raw fuel recorded in its adjacent provenance. Provenance
+values come from decoding the selected saved file, including activity, catalog
+star (when present), fuel, RU, crew, landers, date and opening campaign flags.
+The producer commit comes from the retained linked-build receipt, so extracting
+from another checkout does not change its attribution. A byte-identical rewrite
+of the installed parent slot is refused because retained bytes alone cannot
+prove that it was written again; save to a different slot in that case.

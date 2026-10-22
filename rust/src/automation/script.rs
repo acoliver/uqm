@@ -801,6 +801,14 @@ pub struct SelectCommunicationResponseStep {
     pub max_ticks: u64,
 }
 
+/// Select an offered response by the name in the current conversation string table.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SelectResponseStep {
+    pub phrase: String,
+    pub max_ticks: u64,
+}
+
 /// Wait until the current conversation has registered at least `minimum`
 /// response choices. The production NPC callback registers them after the
 /// dispatch is observed, while speech is still playing; this wait observes
@@ -900,6 +908,7 @@ pub enum Action {
     WaitForBattleShipLoss(WaitForBattleShipLossStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
+    SelectResponse(SelectResponseStep),
     WaitForCommunicationResponses(WaitForCommunicationResponsesStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
@@ -1984,6 +1993,21 @@ fn validate_wait_step(
         Action::WaitForPlanetSideEnd(wait) => (wait.max_ticks, "wait_for_planet_side_end"),
         Action::SelectPlanetMenu(select) => (select.max_ticks, "select_planet_menu"),
         Action::PickBattleShip(pick) => (pick.max_ticks, "pick_battle_ship"),
+        Action::SelectResponse(select) => {
+            if select.phrase.is_empty()
+                || !select
+                    .phrase
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "select_response phrase must be a nonempty string-table name",
+                )));
+            }
+            (select.max_ticks, "select_response")
+        }
         Action::SelectCommunicationResponse(select) => {
             if select.index >= 8 {
                 return Some(Err(AutomationError::step(
@@ -4231,6 +4255,26 @@ mod tests {
     fn validated(step: &str) -> Result<ValidatedScript, AutomationError> {
         let text = resource_script(step);
         validate_script(parse_script(text.as_bytes(), p())?, p())
+    }
+
+    #[test]
+    fn phrase_selection_requires_a_name_and_a_finite_positive_budget() {
+        let script = validated(
+            r#"{"action":"select_response","phrase":"we_will_transfer_now","max_ticks":2}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::SelectResponse(step) if step.phrase == "we_will_transfer_now")
+        );
+        for step in [
+            r#"{"action":"select_response","phrase":"","max_ticks":2}"#,
+            r#"{"action":"select_response","phrase":55,"max_ticks":2}"#,
+            r#"{"action":"select_response","phrase":"x:y","max_ticks":2}"#,
+            r#"{"action":"select_response","phrase":"x","max_ticks":0}"#,
+            r#"{"action":"select_response","phrase":"x","max_ticks":2,"index":0}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
     }
 
     #[test]

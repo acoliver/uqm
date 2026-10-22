@@ -75,8 +75,8 @@
       "label": "commander-radioactives-offer"
     },
     {
-      "action": "select_communication_response",
-      "index": 0,
+      "action": "select_response",
+      "phrase": "we_will_transfer_now",
       "max_ticks": 1000
     },
     {

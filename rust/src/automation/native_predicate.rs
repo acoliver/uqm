@@ -280,6 +280,17 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "battle_ship_picked", &["generation="])
                 && at_least(label, "generation=", 1)
         }
+        Action::SelectResponse(value) => {
+            shape(
+                label,
+                "response_selected",
+                &["generation=", "count=", "index=", "phrase="],
+            ) && at_least(label, "generation=", 1)
+                && number(label, "index=")
+                    .zip(number(label, "count="))
+                    .is_some_and(|(index, count)| index < count)
+                && label.ends_with(&format!(":phrase={}", value.phrase))
+        }
         Action::SelectCommunicationResponse(value) => {
             shape(
                 label,
@@ -337,7 +348,7 @@ impl PredicateHistory {
         let label = record.label.as_deref().unwrap_or_default();
         match action {
             Action::WaitForDispatch(_) => advance(&mut self.dispatch, number(label, "generation=")),
-            Action::SelectCommunicationResponse(_) => {
+            Action::SelectCommunicationResponse(_) | Action::SelectResponse(_) => {
                 advance(&mut self.response, number(label, "generation="))
             }
             // Waiting observes a list but consumes nothing: only a list newer
@@ -421,6 +432,30 @@ mod tests {
         record.kind = RecordKind::SemanticAssertion;
         record.label = Some(label.into());
         record
+    }
+
+    #[test]
+    fn phrase_checkpoints_require_the_requested_name_and_a_fresh_response_generation() {
+        let action: Action = serde_json::from_value(
+            json!({"action":"select_response","phrase":"we_will_transfer_now","max_ticks":100}),
+        )
+        .unwrap();
+        assert_eq!(
+            super::super::native_checkpoint::checkpoint_class(&action),
+            Some(super::super::native_checkpoint::CheckpointClass::Navigation)
+        );
+        let good =
+            record("response_selected:generation=2:count=3:index=1:phrase=we_will_transfer_now");
+        let mut history = PredicateHistory::default();
+        assert!(history.verify(&action, std::slice::from_ref(&good), &frame()));
+        assert!(!history.verify(&action, std::slice::from_ref(&good), &frame()));
+        for label in [
+            "response_selected:generation=3:count=3:index=1:phrase=what_will_you_give_us",
+            "response_selected:generation=3:count=1:index=1:phrase=we_will_transfer_now",
+            "response_selected:generation=0:count=3:index=1:phrase=we_will_transfer_now",
+        ] {
+            assert!(!satisfied(&action, &[record(label)], &frame()));
+        }
     }
 
     #[test]

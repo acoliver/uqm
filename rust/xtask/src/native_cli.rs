@@ -256,7 +256,7 @@ pub fn usage() -> String {
      validate BUNDLE [--scenario NAME]... [--all]\n  \
      report BUNDLE [--json]\n  \
      gallery BUNDLE --output DIR [--json]\n  \
-     extract-save --artifacts SUITE_OR_SCENARIO_DIR --slot N --output rust/scripts/saves/NAME.sav"
+     save-extract --scenario NAME --artifacts SUITE_OR_SCENARIO_DIR --slot N --output rust/scripts/saves/NAME.sav"
         .into()
 }
 
@@ -271,7 +271,7 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<(), String> {
         "validate" => validate(root, &options),
         "report" => report(&options),
         "gallery" => gallery(&options),
-        "extract-save" => extract_save(root, &options),
+        "save-extract" | "extract-save" => extract_save(root, &options),
         other => Err(format!("unknown native command '{other}'\n{}", usage())),
     }
 }
@@ -706,12 +706,21 @@ fn gallery(options: &Options) -> Result<(), String> {
     Ok(())
 }
 
-/// Copy the save a passing alliance run produced into the repository.
+/// Copy the save a selected passing native scenario produced into the repository.
 fn extract_save(root: &Path, options: &Options) -> Result<(), String> {
-    options.require_only("extract-save", &["--artifacts", "--slot", "--output"])?;
+    options.require_only(
+        "save-extract",
+        &["--scenario", "--artifacts", "--slot", "--output"],
+    )?;
+    if !options.positional.is_empty() {
+        return Err("save-extract takes no positional arguments".into());
+    }
+    let [scenario] = options.scenarios.as_slice() else {
+        return Err("save-extract requires exactly one --scenario NAME".into());
+    };
     let run = options.required_path(
         &options.artifacts,
-        "native extract-save requires --artifacts DIR: the alliance suite bundle or its scenarios/NNNN directory",
+        "native extract-save requires --artifacts DIR: the selected suite bundle or its scenarios/NNNN directory",
     )?;
     let out = options.required_path(
         &options.output,
@@ -720,7 +729,7 @@ fn extract_save(root: &Path, options: &Options) -> Result<(), String> {
     let slot = options
         .slot
         .ok_or("native extract-save requires --slot N: the slot the run saved to")?;
-    crate::native_save::extract_save(root, &run, slot, &root.join(out))
+    crate::native_save::extract_save(root, &run, scenario, slot, &root.join(out))
 }
 
 #[cfg(test)]
@@ -969,6 +978,21 @@ mod tests {
             error.contains("does not name the contract it failed"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn save_extraction_requires_one_producer_and_an_output_slot() {
+        for command in [
+            "save-extract --artifacts a --slot 1 --output b",
+            "save-extract --scenario x --scenario y --artifacts a --slot 1 --output b",
+            "save-extract --scenario x --artifacts a --output b",
+            "save-extract junk --scenario x --artifacts a --slot 1 --output b",
+        ] {
+            assert!(
+                run(Path::new("/"), &arguments(command)).is_err(),
+                "{command}"
+            );
+        }
     }
 
     #[test]

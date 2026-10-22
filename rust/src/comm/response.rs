@@ -105,6 +105,28 @@ impl ResponseSystem {
         &self.responses
     }
 
+    /// Resolve only offered, callable responses. Names belong to the active race's table.
+    pub fn offered_index(
+        &self,
+        phrase: &str,
+        name: impl Fn(u32) -> Option<String>,
+    ) -> Result<usize, String> {
+        let mut matches = self
+            .responses
+            .iter()
+            .enumerate()
+            .filter_map(|(index, response)| {
+                (response.response_func.is_some()
+                    && name(response.response_ref).as_deref() == Some(phrase))
+                .then_some(index)
+            });
+        match (matches.next(), matches.next()) {
+            (Some(index), None) => Ok(index),
+            (None, _) => Err(format!("response_not_offered:phrase={phrase}")),
+            _ => Err(format!("response_ambiguous:phrase={phrase}")),
+        }
+    }
+
     /// Get number of responses
     pub fn count(&self) -> usize {
         self.responses.len()
@@ -376,5 +398,52 @@ mod tests {
         assert_eq!(responses.len(), 2);
         assert_eq!(responses[0].response_ref, 1);
         assert_eq!(responses[1].response_ref, 2);
+    }
+}
+
+#[cfg(test)]
+mod phrase_selection_tests {
+    use super::*;
+    extern "C" fn callback(_: u32) {}
+    fn name(reference: u32) -> Option<String> {
+        match reference {
+            55 => Some("we_will_transfer_now".into()),
+            56 => Some("what_will_you_give_us".into()),
+            _ => None,
+        }
+    }
+    #[test]
+    fn phrase_selection_tracks_identity_when_commander_options_move() {
+        for references in [[55, 56], [56, 55]] {
+            let mut responses = ResponseSystem::new();
+            for reference in references {
+                responses.add_response(ResponseEntry::new(
+                    reference,
+                    "localized text",
+                    Some(callback),
+                ));
+            }
+            let index = responses
+                .offered_index("we_will_transfer_now", name)
+                .unwrap();
+            assert_eq!(responses.get(index).unwrap().response_ref, 55);
+            assert!(responses.offered_index("not_offered", name).is_err());
+        }
+    }
+    #[test]
+    fn absent_disabled_and_ambiguous_choices_never_select_another_response() {
+        let mut responses = ResponseSystem::new();
+        responses.add_response(ResponseEntry::text_only(55, "disabled"));
+        assert!(responses
+            .offered_index("we_will_transfer_now", name)
+            .is_err());
+        responses.clear();
+        for _ in 0..2 {
+            responses.add_response(ResponseEntry::new(55, "duplicate", Some(callback)));
+        }
+        assert!(responses
+            .offered_index("we_will_transfer_now", name)
+            .unwrap_err()
+            .contains("ambiguous"));
     }
 }

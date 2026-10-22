@@ -6,7 +6,7 @@
     "slot": 0
   },
   "budgets": {
-    "max_input_ticks": 11100,
+    "max_input_ticks": 11600,
     "max_presentations": 22200,
     "max_wallclock_seconds": 600
   },
@@ -109,6 +109,73 @@
     {
       "action": "capture",
       "label": "arrived-alpha-centauri-fuel-spent"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 20
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 1
+    },
+    {
+      "action": "assert_game_options"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 30
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 45
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 30
+    },
+    {
+      "action": "capture",
+      "label": "saved-alpha-centauri-slot-1"
     },
     {
       "action": "finish"
