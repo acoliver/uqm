@@ -27,6 +27,7 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
+    use crate::battle::world_elements::do_damage;
     use crate::ships::native::{
         cosine, element, facing_to_angle, frame_count, object_cloaked, put_element, sine, starship,
         wrap_delta,
@@ -34,7 +35,6 @@ mod engine {
     use std::{mem, ptr};
 
     extern "C" {
-        fn do_damage(element: *mut ELEMENT, damage: i16);
         static mut blast: [FRAME; 0];
     }
 
