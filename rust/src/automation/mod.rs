@@ -76,6 +76,7 @@ pub mod setup;
 pub mod ship_element;
 pub mod ship_resources;
 pub mod star_flight;
+pub mod story_actions;
 pub mod suite;
 pub mod sync_model;
 pub mod trace;

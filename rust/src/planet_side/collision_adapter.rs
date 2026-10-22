@@ -115,6 +115,19 @@ fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
         })
     });
     super::telemetry::publish_deposits(deposits, near);
+    super::telemetry::publish_energy(
+        surface
+            .world
+            .iter()
+            .filter_map(|(_, entity)| {
+                if let SurfaceEntityKind::EnergyNode { node } = &entity.kind {
+                    Some((*node, entity.position.x, entity.position.y))
+                } else {
+                    None
+                }
+            })
+            .collect(),
+    );
 }
 
 /// Concrete Rust collision adapter. Geometry and classification are both
@@ -222,7 +235,11 @@ where
                 special_effects::begin(crew);
                 let result = persist_pickup(&mut self.generator, &mut self.persistence, mapping);
                 effects = special_effects::finish();
-                result?
+                let retrieved = result?;
+                if retrieved {
+                    super::telemetry::energy_retrieved(mapping.node.get());
+                }
+                retrieved
             }
             CollisionOutcome::NoEffect
             | CollisionOutcome::CrewDamage(_)

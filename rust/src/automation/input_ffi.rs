@@ -276,6 +276,25 @@ pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
     None
 }
 
+type SisFittings = ([u8; 11], [u8; 8], [u8; 16], u16);
+
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn sis_fittings() -> Option<SisFittings> {
+    unsafe {
+        let sis = std::ptr::addr_of!(GLOB_DATA.sis_state).read();
+        Some((
+            sis.drive_slots,
+            sis.jet_slots,
+            sis.module_slots,
+            sis.total_element_mass,
+        ))
+    }
+}
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn sis_fittings() -> Option<SisFittings> {
+    None
+}
+
 /// The game clock's `(day, month, year)` indices.
 #[cfg(feature = "linked_c_archive")]
 pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
