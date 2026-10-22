@@ -16,7 +16,7 @@ mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
     extern "C" {
-        fn SetRaceAllied(race: u16, flag: u8) -> u16;
+        fn SetRaceAllied(race: u16, flag: u32) -> u16;
         fn StartSphereTracking(race: u16) -> u16;
         fn AddEvent(
             kind: i32,
@@ -29,7 +29,7 @@ mod live {
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
-                SetRaceAllied(race, u8::from(allied));
+                SetRaceAllied(race, u32::from(allied));
             }
         }
         fn track(&mut self, race: u16) {
