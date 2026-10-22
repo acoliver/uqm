@@ -25,7 +25,7 @@
 #ifdef USE_WINSOCK
 #	include "netmanager_win.h"
 #else
-#	include "netmanager_bsd.h"
+typedef struct SocketManagementDataBsd SocketManagementData;
 #endif
 
 #include "ndesc.h"

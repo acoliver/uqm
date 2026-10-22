@@ -1,3 +1,27 @@
+#[cfg(test)]
+#[path = "network/tests.rs"]
+mod async_tests;
+pub mod connect;
+pub mod descriptor;
+pub mod listen;
+pub mod manager;
+
+unsafe fn set_errno(err: libc::c_int) {
+    #[cfg(target_os = "linux")]
+    {
+        *libc::__errno_location() = err;
+    }
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        *libc::__error() = err;
+    }
+}
+
 use libc::{c_char, c_int, c_void, size_t, socklen_t, ssize_t};
 use std::ptr;
 
@@ -427,10 +451,8 @@ pub unsafe extern "C" fn splitAddrInfoOnFamily(
     rest: *mut *mut libc::addrinfo,
     rest_end: *mut *mut *mut libc::addrinfo,
 ) {
-    let mut selected_head = ptr::null_mut();
-    let mut rest_head = ptr::null_mut();
-    let mut selected_next = &mut selected_head as *mut *mut libc::addrinfo;
-    let mut rest_next = &mut rest_head as *mut *mut libc::addrinfo;
+    let mut selected_next = selected;
+    let mut rest_next = rest;
     let mut current = info;
     while !current.is_null() {
         let next = (*current).ai_next;
@@ -445,9 +467,7 @@ pub unsafe extern "C" fn splitAddrInfoOnFamily(
     }
     *selected_next = ptr::null_mut();
     *rest_next = ptr::null_mut();
-    *selected = selected_head;
     *selected_end = selected_next;
-    *rest = rest_head;
     *rest_end = rest_next;
 }
 
