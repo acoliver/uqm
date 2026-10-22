@@ -110,6 +110,7 @@
     {"action": "assert_state", "all": [{"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}, {"key": "story:PKUNK_MANNER", "op": "eq", "value": 3}, {"key": "escorts:count", "op": "eq", "value": 5}, {"key": "escorts:species:4", "op": "eq", "value": 4}]},
     {"action": "capture", "label": "spindle-and-four-fury-escorts"},
     {"action": "navigate_to_hyperspace", "max_ticks": 6000},
+    {"action": "wait_input_ticks", "count": 120},
     {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 20},
     {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
     {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
