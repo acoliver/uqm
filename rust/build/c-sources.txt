@@ -40,7 +40,6 @@ sc2/src/libs/graphics/widgets.c
 sc2/src/libs/input/sdl/input.c
 sc2/src/libs/input/sdl/keynames.c
 sc2/src/libs/input/sdl/rust_vcontrol_impl.c
-sc2/src/libs/list/list.c
 sc2/src/libs/log/msgbox_stub.c
 sc2/src/libs/log/uqmlog.c
 sc2/src/libs/network/connect/connect.c
