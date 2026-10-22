@@ -33,6 +33,7 @@ pub mod mod_ffi;
 mod mod_vtable_tests;
 pub mod null;
 pub mod ogg;
+pub mod resource_types;
 pub mod rodio_audio;
 pub mod rodio_backend;
 mod tracker;

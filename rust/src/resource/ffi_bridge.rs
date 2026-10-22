@@ -54,8 +54,6 @@ extern "C" {
     // C subsystem type registration functions — called from InitResourceSystem
     fn InstallGraphicResTypes() -> c_int;
     fn InstallStringTableResType() -> c_int;
-    #[cfg(not(feature = "audio_heart"))]
-    fn InstallAudioResTypes() -> c_int;
     fn InstallVideoResType() -> c_int;
     fn InstallCodeResType() -> c_int;
 }
@@ -76,7 +74,7 @@ unsafe fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int {
 }
 
 // When audio_heart feature is enabled, register Rust audio resource callbacks
-// instead of C's InstallAudioResTypes.
+// (the C resource loaders no longer exist).
 #[cfg(all(not(test), feature = "audio_heart"))]
 use crate::sound::heart_ffi::{DestroyMusic, DestroySound, LoadMusicFile, LoadSoundFile};
 
@@ -329,10 +327,6 @@ pub unsafe extern "C" fn InitResourceSystem() -> *mut c_void {
                     Some(rust_free_music),
                     None,
                 );
-            }
-            #[cfg(not(feature = "audio_heart"))]
-            {
-                InstallAudioResTypes();
             }
             InstallVideoResType();
             InstallCodeResType();

@@ -55,7 +55,6 @@ extern BOOLEAN InitSound (int argc, char *argv[]);
 extern void UninitSound (void);
 extern SOUND_REF LoadSoundFile (const char *pStr);
 extern MUSIC_REF LoadMusicFile (const char *pStr);
-extern BOOLEAN InstallAudioResTypes (void);
 extern SOUND_REF LoadSoundInstance (RESOURCE res);
 extern MUSIC_REF LoadMusicInstance (RESOURCE res);
 extern BOOLEAN DestroySound (SOUND_REF SoundRef);
