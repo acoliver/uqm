@@ -78,3 +78,5 @@ pub use tfb_draw::{
 
 pub mod native_abi;
 pub mod pixmap_abi;
+
+pub mod cmap_abi;
