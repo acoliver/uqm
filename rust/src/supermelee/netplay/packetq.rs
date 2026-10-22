@@ -1,0 +1,119 @@
+use super::abi::{NetConnection, Packet, PacketQueue, PacketQueueLink};
+use super::packet::Packet_delete;
+use std::ptr;
+
+/// # Safety
+/// `queue` must point to its final, writable location and not own existing links.
+#[no_mangle]
+pub unsafe extern "C" fn PacketQueue_init(queue: *mut PacketQueue) {
+    (*queue).size = 0;
+    (*queue).first = ptr::null_mut();
+    (*queue).end = &raw mut (*queue).first;
+}
+
+/// # Safety
+/// `queue` must be initialized and its packets must not be in use.
+#[no_mangle]
+pub unsafe extern "C" fn PacketQueue_uninit(queue: *mut PacketQueue) {
+    let mut link = (*queue).first;
+    while !link.is_null() {
+        let next = (*link).next;
+        Packet_delete((*link).packet);
+        libc::free(link.cast());
+        link = next;
+    }
+}
+
+/// # Safety
+/// `conn` must be connected with an initialized queue. Ownership of `packet` is transferred.
+#[no_mangle]
+pub unsafe extern "C" fn queuePacket(conn: *mut NetConnection, packet: *mut Packet) {
+    assert!((*conn).stateFlags.connected);
+    let queue = &raw mut (*conn).queue;
+    let link = libc::malloc(size_of::<PacketQueueLink>()).cast::<PacketQueueLink>();
+    assert!(!link.is_null());
+    link.write(PacketQueueLink {
+        packet,
+        next: ptr::null_mut(),
+    });
+    *(*queue).end = link;
+    (*queue).end = &raw mut (*link).next;
+    (*queue).size += 1;
+}
+
+unsafe fn flush(queue: *mut PacketQueue, mut send: impl FnMut(*mut Packet) -> i32) -> i32 {
+    let mut link = (*queue).first;
+    while !link.is_null() {
+        if send((*link).packet) == -1 {
+            (*queue).first = link;
+            return -1;
+        }
+        let next = (*link).next;
+        Packet_delete((*link).packet);
+        libc::free(link.cast());
+        (*queue).size -= 1;
+        link = next;
+    }
+    (*queue).first = ptr::null_mut();
+    (*queue).end = &raw mut (*queue).first;
+    0
+}
+
+/// # Safety
+/// `conn` must be connected with an initialized queue, exclusively owned by the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn flushPacketQueue(conn: *mut NetConnection) -> i32 {
+    assert!((*conn).stateFlags.connected);
+    flush(&raw mut (*conn).queue, |packet| {
+        super::abi::sendPacket(conn, packet)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::abi::Packet_Ping;
+    use super::super::packet::Packet_Ping_create;
+    use super::*;
+
+    #[test]
+    fn fifo_retry_retains_unsent_suffix_and_resets_tail() {
+        unsafe {
+            let mut conn: NetConnection = std::mem::zeroed();
+            conn.stateFlags.connected = true;
+            PacketQueue_init(&raw mut conn.queue);
+            for id in 1..=3 {
+                queuePacket(&mut conn, Packet_Ping_create(id).cast());
+            }
+            assert_eq!(conn.queue.size, 3);
+            let mut sent = Vec::new();
+            assert_eq!(
+                flush(&raw mut conn.queue, |packet| {
+                    let id = u32::from_be((*packet.cast::<Packet_Ping>()).id);
+                    if id == 2 {
+                        return -1;
+                    }
+                    sent.push(id);
+                    0
+                }),
+                -1
+            );
+            assert_eq!(sent, [1]);
+            assert_eq!(conn.queue.size, 2);
+            queuePacket(&mut conn, Packet_Ping_create(4).cast());
+            assert_eq!(
+                flush(&raw mut conn.queue, |packet| {
+                    sent.push(u32::from_be((*packet.cast::<Packet_Ping>()).id));
+                    0
+                }),
+                0
+            );
+            assert_eq!(sent, [1, 2, 3, 4]);
+            assert_eq!(conn.queue.size, 0);
+            assert!(conn.queue.first.is_null());
+            assert_eq!(conn.queue.end, &raw mut conn.queue.first);
+            queuePacket(&mut conn, Packet_Ping_create(5).cast());
+            assert_eq!(conn.queue.size, 1);
+            PacketQueue_uninit(&raw mut conn.queue);
+        }
+    }
+}
