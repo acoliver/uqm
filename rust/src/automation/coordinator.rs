@@ -294,6 +294,7 @@ struct CoordInner {
     fleet_fight: crate::automation::fleet_fight::FleetFight,
     star_flight: crate::automation::star_flight::StarFlight,
     star_encounter_active: bool,
+    patrol_response_pending: bool,
     device: crate::automation::story_actions::DeviceTracker,
     energy: crate::automation::story_actions::EnergyTracker,
     finalized: bool,
@@ -464,6 +465,7 @@ impl Coordinator {
                 fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
                 star_encounter_active: false,
+                patrol_response_pending: false,
                 device: Default::default(),
                 energy: Default::default(),
                 finalized: false,
@@ -1486,12 +1488,21 @@ impl Coordinator {
 
     fn service_patrol_contact(&self, inner: &mut CoordInner, phrase: &str) -> bool {
         use crate::automation::script::MenuKey;
+        let (active, completions) = crate::automation::ui_observation::communication_lifecycle();
+        if inner.patrol_response_pending && !active {
+            inner.consumed_communication_completions = completions;
+            inner.patrol_response_pending = false;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!("patrol_communication_completed:count={completions}"),
+            );
+        }
         // A homeworld is the destination, not a patrol to dismiss.
         if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(128) {
             return false;
         }
         let preview = crate::automation::ui_observation::encounter_menu_active();
-        let (active, _) = crate::automation::ui_observation::communication_lifecycle();
         if !preview && !active {
             return false;
         }
@@ -1508,6 +1519,7 @@ impl Coordinator {
                     assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
                     select = true;
                     inner.consumed_response_generation = generation;
+                    inner.patrol_response_pending = true;
                     self.write_trace_labeled(
                         inner,
                         RecordKind::SemanticAssertion,
