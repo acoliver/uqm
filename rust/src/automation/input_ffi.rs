@@ -803,6 +803,67 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 //  Unit tests
 // ===========================================================================
 
+/// Read-only interstellar observations, copied at the automation game-thread boundary.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn star_flight_observation(
+    target: super::star_flight::StarTarget,
+) -> super::star_flight::Observation {
+    use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
+    extern "C" {
+        static CurStarDescPtr: *const CStarDesc;
+        fn universeToDispx(x: std::ffi::c_long) -> i16;
+        fn universeToDispy(y: std::ffi::c_long) -> i16;
+        #[cfg(feature = "debug-process")]
+        static instantMove: i32;
+    }
+    // SAFETY: the coordinator is called synchronously on the game thread.
+    unsafe {
+        let current = std::ptr::addr_of!(CurStarDescPtr).read() as usize;
+        let base = std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY) as usize;
+        let offset = current.wrapping_sub(base);
+        let entry_size = std::mem::size_of::<CStarDesc>();
+        let current_star = (offset < NUM_SOLAR_SYSTEMS * entry_size
+            && offset.is_multiple_of(entry_size))
+        .then_some((offset / entry_size) as u16);
+        let cursor = crate::planets::starmap_cursor::cursor();
+        let (tx, ty) = target.coordinates();
+        let cursor_delta = cursor.map_or((0, 0), |(x, y)| {
+            (
+                universeToDispx(tx.into()) - universeToDispx(x.into()),
+                universeToDispy(ty.into()) - universeToDispy(y.into()),
+            )
+        });
+        let autopilot = std::ptr::addr_of!(GLOB_DATA.game_state.autopilot).read();
+        super::star_flight::Observation {
+            activity: crate::mainloop::ffi::get_current_activity().0,
+            current_star,
+            solar_active: departure_snapshot().active != 0,
+            cursor,
+            cursor_delta,
+            autopilot: (autopilot.x >= 0 && autopilot.y >= 0).then_some((autopilot.x, autopilot.y)),
+            position: hyperspace_position(),
+            fuel: ship_resources().map(|(fuel, _)| fuel),
+            instant_move: {
+                #[cfg(feature = "debug-process")]
+                {
+                    instantMove != 0
+                }
+                #[cfg(not(feature = "debug-process"))]
+                {
+                    false
+                }
+            },
+        }
+    }
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn star_flight_observation(
+    _target: super::star_flight::StarTarget,
+) -> super::star_flight::Observation {
+    super::star_flight::Observation::default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

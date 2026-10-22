@@ -17,3 +17,6 @@ pub mod surface;
 pub mod tables;
 pub mod topography;
 pub mod universe_units;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod starmap_cursor;

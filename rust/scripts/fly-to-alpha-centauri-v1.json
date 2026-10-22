@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "name": "fly-to-alpha-centauri-v1",
+  "start_save": {
+    "path": "saves/allied-starbase.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 11100,
+    "max_presentations": 22200,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 45
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 50
+    },
+    {
+      "action": "capture",
+      "label": "loaded-allied-start-save"
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 896,
+      "res_units": 2500
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "star:current",
+          "op": "eq",
+          "value": 82
+        }
+      ]
+    },
+    {
+      "action": "navigate_to_hyperspace",
+      "max_ticks": 1800
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 3
+    },
+    {
+      "action": "capture",
+      "label": "left-sol-in-hyperspace"
+    },
+    {
+      "action": "fly_to_star",
+      "target": "Alpha Centauri",
+      "max_ticks": 9000
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "star:current",
+          "op": "eq",
+          "value": 68
+        },
+        {
+          "key": "sis:fuel",
+          "op": "le",
+          "value": 895
+        },
+        {
+          "key": "sis:fuel",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "arrived-alpha-centauri-fuel-spent"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
