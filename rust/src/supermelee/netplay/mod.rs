@@ -42,3 +42,5 @@ mod netmisc;
 mod notify;
 
 mod notifyall;
+
+mod netmelee;

@@ -134,7 +134,6 @@ sc2/src/uqm/supermelee/buildpick.c
 sc2/src/uqm/supermelee/loadmele.c
 sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/meleesetup.c
-sc2/src/uqm/supermelee/netplay/netmelee.c
 sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/tactrans.c
 sc2/src/uqm/uqmdebug.c
