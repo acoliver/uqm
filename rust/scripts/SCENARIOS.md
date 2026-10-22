@@ -13,24 +13,10 @@ Pluto orbit/scan is a Sol path, not Spathi homeworld generator 5 coverage.
 
 ## Changing scenarios
 
-CI compares each scenario with its version on the merge base with main (the
-assertion ratchet, `dev-docs/rust/ci-gates.md`). You may add scenarios, add
-steps, tighten assertions, and edit plain steps (input taps and holds, settles,
-waits without checks). These count as weakening and fail the gate:
-
-- deleting a scenario or removing it from `scenario_scripts`;
-- removing an assertion-class step (`assert_*`, `wait_for_*`, `capture`,
-  `fight_battle`, `pick_battle_ship`, `collect_planet_minerals`,
-  `select_communication_response`, `navigate_to_*`, `expect_quit`);
-- lowering a `minimum*` or `count`, relaxing `expect_change`, or changing any
-  exact value (`equals`, `mode`, `fuel_on_board`, `res_units`, `encounter`,
-  `dialogue`, `outcome`, `planet`, `moon`, ...);
-- raising `max_ticks`, a timeout, or a script budget to more than twice its
-  old value, or raising `outer_child_timeout_ms` at all.
-
-A reviewed weakening needs a commit message line `Weakens-assertion: <reason>`
-somewhere in the pushed range. Agents may use that trailer only with Andrew's
-explicit approval.
+Scenarios are plain JSON under `rust/scripts` and can be edited freely: nothing
+pins their digests and CI does not run them. Keep assertion-class steps
+(`assert_*`, `wait_for_*`, `capture`, `fight_battle`, ...) in place when editing,
+because they are what makes a playthrough prove anything.
 
 ## Real Sol probe proof
 
@@ -195,8 +181,8 @@ visit then runs, using only menu input:
 
 Budgets: `max_input_ticks` 161743 (the validator's static bound for this step
 list, the minimum it accepts), `max_presentations` 323486 (twice the ticks),
-`max_wallclock_seconds` 900. Its scenario entry in `gates.json` carries the
-approved 900000 ms outer deadline. Neither the allied chain's tail nor the visit has run live; the
+`max_wallclock_seconds` 900. Its scenario entry carries the
+900000 ms outer deadline. Neither the allied chain's tail nor the visit has run live; the
 first live run decides whether the Outfit and Shipyard expectations hold.
 
 ## Scenario audit limits
@@ -1017,7 +1003,7 @@ scenarios start from the save it makes.
   `inputs/start-save.sav` in the run. The script then loads it through the real
   main menu: Down, Select (Load Game), Select (slot 0). The final config the run
   retains (`config-final/save/`) holds whatever saves the run wrote.
-- Saves are not fingerprinted in `rust/ci/gates.json`. The provenance file next
+- Saves are not fingerprinted. The provenance file next
   to each save (`saves/allied-starbase.provenance.json`) documents how the save
   was produced: the scenario run, the script it came from and the resources it
   recorded. It is documentation, and admission does not compare it with anything.
@@ -1050,8 +1036,8 @@ shrank to the validator minimum with a 300 s wall budget, so they no longer carr
 the main menu, flight in a solar system and in hyperspace, orbit, landing, the
 lander and takeoff back to orbit, a conversation with response selection, a
 battle, and a save followed by a load. The set and what each scenario covers is
-in `rust/ci/smoke.json`; it is a subset of the pinned scenarios in
-`gates.json`, not a second inventory.
+in `rust/xtask/smoke.json`; it is a subset of the scenarios in
+`rust/scripts`, not a second inventory.
 
 ```sh
 cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native smoke \
