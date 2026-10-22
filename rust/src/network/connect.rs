@@ -35,7 +35,7 @@ pub struct ConnectState {
     info: *mut libc::addrinfo,
     info_ptr: *mut libc::addrinfo,
     resolve_state: *mut ResolveState,
-    nd: *mut NetDescriptor,
+    pub(super) nd: *mut NetDescriptor,
     alarm: *mut AlarmHandle,
 }
 
