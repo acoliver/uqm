@@ -5,100 +5,74 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use uqm_ownership::{
-    apply_toolchain_environment, canonical_absolute, canonical_build_environment,
-    discover_package_identities, load_native_dependencies, load_native_inputs,
-    parse_dependency_file, reject_noncanonical_build_flags, resolve_toolchain, target_key,
-    validate_native_authority, validate_observed_dependencies, write_build_evidence,
-    NativeBuildEvidence, NativeCompileProfile, NativeInputManifest, PreprocessorDefine,
-    ProductionProfile, ToolchainIdentity, ValidateOptions, Validator, BUILD_EVIDENCE_FILE,
-    BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS, DISPLIST_OBJECT, LINKED_TEST_PROFILE_ID,
-    PRODUCTION_PROFILE_ID, REPOSITORY_INCLUDE_ROOTS,
-};
-
-const DEPENDENCY_AUTHORITY: &str = "build/native-dependencies.json";
-const INPUT_AUTHORITY: &str = "build/native-inputs.json";
-const PROVIDER_AUTHORITY: &str = "ownership/native-provider-manifest.json";
-const EXTERNAL_NATIVE_ALLOWLIST: &str = "ownership/external-native-allowlist.json";
+/// One C source per line, relative to the repository root. Deleting a ported
+/// C file means deleting it and its line here.
+const C_SOURCE_LIST: &str = "build/c-sources.txt";
 const SDL_PACKAGE: [&str; 1] = ["sdl2"];
+const REPOSITORY_INCLUDE_ROOTS: [&str; 3] = ["sc2", "sc2/src", "sc2/src/libs/uio"];
+const COMPILE_FLAGS: [&str; 3] = ["-std=gnu99", "-O2", "-fPIC"];
 
-/// Read one group of the external native allowlist for the target being built.
-///
-/// Every entry must carry its policy, and every target must be a non-empty
-/// string: an entry that matches nothing would silently drop a library from the
-/// link line, which is the failure this allowlist exists to prevent.
-fn allowlisted(group: &str, target_os: &str) -> Result<Vec<String>, String> {
-    let path = Path::new(EXTERNAL_NATIVE_ALLOWLIST);
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("read {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
-    let document: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|error| format!("parse {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
+/// Preprocessor defines every C object is compiled with.
+const C_DEFINES: [&str; 36] = [
+    "GFXMODULE_SDL",
+    "HAVE_JOYSTICK",
+    "HAVE_ZIP=1",
+    "NETPLAY=NETPLAY_FULL",
+    "OVCODEC_NONE",
+    "RUST_OWNS_MAIN",
+    "SDL_DIR=SDL2",
+    "THREADLIB_SDL",
+    "USE_INTERNAL_MIKMOD",
+    "USE_PLATFORM_ACCEL",
+    "USE_RUST_AIFF",
+    "USE_RUST_AUDIO",
+    "USE_RUST_AUDIO_HEART",
+    "USE_RUST_BRIDGE",
+    "USE_RUST_CLOCK",
+    "USE_RUST_COMM",
+    "USE_RUST_DUKAUD",
+    "USE_RUST_FILE",
+    "USE_RUST_GFX",
+    "USE_RUST_INPUT",
+    "USE_RUST_MAINLOOP=1",
+    "USE_RUST_MEM",
+    "USE_RUST_MIXER",
+    "USE_RUST_MOD",
+    "USE_RUST_OGG",
+    "USE_RUST_RESOURCE",
+    "USE_RUST_RESTART",
+    "USE_RUST_SHIPS",
+    "USE_RUST_STATE",
+    "USE_RUST_SUPERMELEE",
+    "USE_RUST_THREADS",
+    "USE_RUST_UIO",
+    "USE_RUST_VIDEO",
+    "USE_RUST_VIDPLAYER",
+    "USE_RUST_WAV",
+    "_THREAD_SAFE",
+];
 
-    let entries = document
-        .get(group)
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} has no {group} array"))?;
+/// Libraries and frameworks the game links besides SDL, per target OS.
+struct PlatformLinks {
+    packages: &'static [&'static str],
+    libraries: &'static [&'static str],
+    frameworks: &'static [&'static str],
+}
 
-    let mut selected = Vec::new();
-    for entry in entries {
-        let id = entry
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry lacks id"))?;
-        for required in ["license", "provenance", "security_owner", "update_policy"] {
-            if entry
-                .get(required)
-                .and_then(serde_json::Value::as_str)
-                .is_none_or(str::is_empty)
-            {
-                return Err(format!(
-                    "{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lacks {required}"
-                ));
-            }
-        }
-
-        let targets = entry
-            .get("targets")
-            .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| {
-                format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lacks targets")
-            })?;
-        if targets.is_empty() {
-            return Err(format!(
-                "{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lists no targets"
-            ));
-        }
-
-        let mut applies = false;
-        for target in targets {
-            let target = target
-                .as_str()
-                .filter(|text| !text.is_empty())
-                .ok_or_else(|| {
-                    format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} has a malformed target")
-                })?;
-            if target.starts_with(target_os) {
-                applies = true;
-            }
-        }
-
-        if applies {
-            let name = match group {
-                "packages" => entry
-                    .get("pkg_config")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| {
-                        format!("{EXTERNAL_NATIVE_ALLOWLIST} package {id} lacks pkg_config")
-                    })?,
-                _ => id,
-            };
-            selected.push(name.to_owned());
-        }
+fn platform_links(target_os: &str) -> Result<PlatformLinks, String> {
+    match target_os {
+        "macos" => Ok(PlatformLinks {
+            packages: &["libpng", "liblzma", "bzip2"],
+            libraries: &["sandbox", "z", "m", "objc"],
+            frameworks: &["Cocoa", "CoreAudio", "AudioToolbox", "CoreFoundation"],
+        }),
+        "linux" => Ok(PlatformLinks {
+            packages: &["libpng", "liblzma"],
+            libraries: &["z", "m", "bz2"],
+            frameworks: &[],
+        }),
+        other => Err(format!("unsupported target OS: {other}")),
     }
-
-    selected.sort();
-    selected.dedup();
-    Ok(selected)
 }
 
 fn main() {
@@ -108,201 +82,30 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    println!("cargo:rerun-if-env-changed=UQM_DEPENDENCY_CAPTURE");
-    let target = env_value("TARGET")?;
-    let toolchain = resolve_toolchain(Path::new("."), &target)?;
-    apply_toolchain_environment(&toolchain);
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
-    println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
     generate_global_state_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
+    let links = platform_links(&target_os)?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
-        reject_noncanonical_build_flags(&toolchain)?;
-        validate_toolchain_marker(&toolchain)?;
-        let production_packages = allowlisted("packages", &target_os)?;
-        let production_packages: Vec<&str> = production_packages
-            .iter()
-            .map(String::as_str)
-            .filter(|package| !SDL_PACKAGE.contains(package))
-            .collect();
-        if production_packages.is_empty() {
-            return Err(format!(
-                "{EXTERNAL_NATIVE_ALLOWLIST} allows no packages for target OS {target_os}"
-            ));
-        }
-        packages.extend(discover_packages(&production_packages)?);
-        emit_allowlisted_platform_links(&target_os)?;
-        link_c_objects(&packages, &toolchain)?;
+        packages.extend(discover_packages(links.packages)?);
+        build_c_archive(&target_os, &packages)?;
     } else {
         emit_package_links(&packages);
-        emit_allowlisted_platform_links(&target_os)?;
     }
+    emit_platform_links(&links);
     Ok(())
 }
 
-fn validate_toolchain_marker(actual: &ToolchainIdentity) -> Result<(), String> {
-    println!("cargo:rerun-if-env-changed=UQM_CANONICAL_TOOLCHAIN");
-    let marker = env::var("UQM_CANONICAL_TOOLCHAIN").map_err(|_| {
-        "linked production builds require canonical xtask toolchain resolution".to_string()
-    })?;
-    let expected: ToolchainIdentity = serde_json::from_str(&marker)
-        .map_err(|error| format!("invalid UQM_CANONICAL_TOOLCHAIN marker: {error}"))?;
-    if &expected != actual {
-        return Err(format!(
-            "build.rs effective toolchain differs from canonical xtask selection: expected {expected:?}; actual {actual:?}"
-        ));
-    }
-    Ok(())
-}
 fn fail(message: impl Display) -> ! {
-    eprintln!("S1 ownership/strict-link validation failed: {message}");
+    eprintln!("build failed: {message}");
     std::process::exit(1)
-}
-
-fn require<T, E: Display>(result: Result<T, E>, context: &str) -> T {
-    match result {
-        Ok(value) => value,
-        Err(error) => fail(format!("{context}: {error}")),
-    }
-}
-
-fn require_some<T>(value: Option<T>, context: &str) -> T {
-    match value {
-        Some(value) => value,
-        None => fail(context),
-    }
-}
-
-fn authority_paths(rust_root: &Path) -> [PathBuf; 3] {
-    [
-        rust_root.join(INPUT_AUTHORITY),
-        rust_root.join(DEPENDENCY_AUTHORITY),
-        rust_root.join(PROVIDER_AUTHORITY),
-    ]
-}
-
-fn link_c_objects(packages: &NativePackages, toolchain: &ToolchainIdentity) -> Result<(), String> {
-    let rust_root = PathBuf::from(
-        env::var("CARGO_MANIFEST_DIR")
-            .map_err(|error| format!("CARGO_MANIFEST_DIR is unavailable: {error}"))?,
-    );
-    let repo_root = rust_root
-        .parent()
-        .ok_or_else(|| "Rust crate has no repository parent".to_string())?
-        .canonicalize()
-        .map_err(|error| format!("cannot canonicalize repository root: {error}"))?;
-    let [input_path, dependency_path, provider_path] = authority_paths(&rust_root);
-    for path in [&input_path, &dependency_path, &provider_path] {
-        println!("cargo:rerun-if-changed={}", path.display());
-    }
-    let validator =
-        Validator::from_manifest_file(&provider_path).map_err(|error| error.to_string())?;
-    validator
-        .validate(&ValidateOptions::production(repo_root.clone()))
-        .map_err(|error| error.to_string())?;
-    let inputs = load_native_inputs(&input_path)?;
-    let dependencies = load_native_dependencies(&dependency_path)?;
-    validate_native_authority(&repo_root, &inputs, &dependencies, validator.manifest())?;
-    let profile_authority = validate_active_profile(&inputs, &validator)?;
-    let target_os = env_value("CARGO_CFG_TARGET_OS")?;
-    let target_arch = env_value("CARGO_CFG_TARGET_ARCH")?;
-    let target = target_key(&target_os, &target_arch)?;
-    validate_package_defines(&target, &packages.defines, &profile_authority.defines)?;
-
-    for dependency in &dependencies.dependencies {
-        println!("cargo:rerun-if-changed=../{}", dependency.path);
-    }
-    let out_dir = output_directory()?;
-    let object_dir = out_dir.join("native");
-    fs::create_dir_all(&object_dir)
-        .map_err(|error| format!("cannot create {}: {error}", object_dir.display()))?;
-    let profile =
-        native_compile_profile(&repo_root, &target, toolchain, profile_authority, packages)?;
-    let evidence =
-        native_build_evidence(&repo_root, &target, toolchain, profile_authority, &profile)?;
-    write_build_evidence(&out_dir.join(BUILD_EVIDENCE_FILE), &evidence)?;
-    let observed = compile_native_inputs(&inputs, &repo_root, &object_dir, &profile)?;
-    if let Ok(capture_path) = env::var("UQM_DEPENDENCY_CAPTURE") {
-        write_dependency_capture(Path::new(&capture_path), &target, &observed, &inputs)?;
-    } else {
-        validate_observed_dependencies(&observed, &inputs, &dependencies, &target)?;
-    }
-    let archive_context = ArchiveContext {
-        root: &repo_root,
-        out_dir: &out_dir,
-        object_dir: &object_dir,
-        target_os: &target_os,
-        packages,
-        toolchain,
-    };
-    create_and_validate_archive(&inputs, &validator, &archive_context)
-}
-
-fn active_cargo_features() -> Vec<String> {
-    let mut features: Vec<_> = env::vars_os()
-        .filter_map(|(name, _)| name.into_string().ok())
-        .filter_map(|name| name.strip_prefix("CARGO_FEATURE_").map(str::to_string))
-        .map(|name| match name.as_str() {
-            "DEBUG_PROCESS" => "debug-process".into(),
-            _ => name.to_ascii_lowercase(),
-        })
-        .collect();
-    features.sort();
-    features
-}
-
-fn validate_active_profile<'a>(
-    inputs: &'a NativeInputManifest,
-    validator: &Validator,
-) -> Result<&'a ProductionProfile, String> {
-    println!("cargo:rerun-if-env-changed=UQM_NATIVE_PROFILE");
-    let selected = env::var("UQM_NATIVE_PROFILE").unwrap_or_else(|_| PRODUCTION_PROFILE_ID.into());
-    let authority = match selected.as_str() {
-        PRODUCTION_PROFILE_ID => {
-            validator
-                .validate_production_profile(&inputs.production_profile)
-                .map_err(|error| error.to_string())?;
-            &inputs.production_profile
-        }
-        LINKED_TEST_PROFILE_ID => &inputs.linked_test_profile,
-        _ => return Err(format!("unknown native profile '{selected}'")),
-    };
-    let actual_features = active_cargo_features();
-    if actual_features != authority.cargo_features {
-        return Err(format!(
-            "active Cargo features differ from '{}' authority: expected {:?}, got {actual_features:?}",
-            authority.id, authority.cargo_features
-        ));
-    }
-    Ok(authority)
-}
-
-fn validate_package_defines(
-    target: &str,
-    discovered: &BTreeSet<(String, Option<String>)>,
-    authoritative: &[PreprocessorDefine],
-) -> Result<(), String> {
-    let mut expected: BTreeSet<_> = authoritative
-        .iter()
-        .map(|define| (define.name.clone(), define.value.clone()))
-        .collect();
-    if target.contains("linux") {
-        expected.insert(("_REENTRANT".into(), None));
-    }
-    if let Some(unknown) = discovered.difference(&expected).next() {
-        return Err(format!(
-            "pkg-config preprocessor define differs from authoritative profile: {unknown:?}"
-        ));
-    }
-    Ok(())
 }
 
 struct NativePackages {
     include_paths: BTreeSet<PathBuf>,
-    defines: BTreeSet<(String, Option<String>)>,
     link_paths: BTreeSet<PathBuf>,
     link_files: BTreeSet<PathBuf>,
     libraries: BTreeSet<String>,
@@ -313,7 +116,6 @@ struct NativePackages {
 impl NativePackages {
     fn extend(&mut self, other: Self) {
         self.include_paths.extend(other.include_paths);
-        self.defines.extend(other.defines);
         self.link_paths.extend(other.link_paths);
         self.link_files.extend(other.link_files);
         self.libraries.extend(other.libraries);
@@ -325,7 +127,6 @@ impl NativePackages {
 fn discover_packages(packages: &[&str]) -> Result<NativePackages, String> {
     let mut result = NativePackages {
         include_paths: BTreeSet::new(),
-        defines: BTreeSet::new(),
         link_paths: BTreeSet::new(),
         link_files: BTreeSet::new(),
         libraries: BTreeSet::new(),
@@ -336,16 +137,8 @@ fn discover_packages(packages: &[&str]) -> Result<NativePackages, String> {
         let library = pkg_config::Config::new()
             .cargo_metadata(false)
             .probe(package)
-            .map_err(|error| {
-                format!("structured pkg-config discovery failed for {package}: {error}")
-            })?;
-        if library.ld_args.iter().any(|args| !args.is_empty()) {
-            return Err(format!(
-                "pkg-config returned unsupported raw linker arguments for {package}"
-            ));
-        }
+            .map_err(|error| format!("pkg-config discovery failed for {package}: {error}"))?;
         result.include_paths.extend(library.include_paths);
-        result.defines.extend(library.defines);
         result.link_paths.extend(library.link_paths);
         result.link_files.extend(library.link_files);
         result.libraries.extend(library.libs);
@@ -355,241 +148,88 @@ fn discover_packages(packages: &[&str]) -> Result<NativePackages, String> {
     Ok(result)
 }
 
-fn native_compile_profile(
-    root: &Path,
-    target: &str,
-    toolchain: &ToolchainIdentity,
-    authority: &ProductionProfile,
-    packages: &NativePackages,
-) -> Result<NativeCompileProfile, String> {
-    let mut ordered_defines = vec![
-        format!("-DUQM_BUILD_DATE=\"{}\"", build_date()?),
-        "-D__DATE__=UQM_BUILD_DATE".into(),
-        "-D__TIME__=\"00:00:00\"".into(),
-    ];
-    ordered_defines.extend(
-        authority
-            .defines
-            .iter()
-            .map(PreprocessorDefine::compiler_argument),
+/// Compile every listed C source and archive the objects into `libuqm_c.a`.
+fn build_c_archive(target_os: &str, packages: &NativePackages) -> Result<(), String> {
+    let rust_root = PathBuf::from(env_value("CARGO_MANIFEST_DIR")?);
+    let repo_root = rust_root
+        .parent()
+        .ok_or_else(|| "Rust crate has no repository parent".to_string())?
+        .to_path_buf();
+    let list_path = rust_root.join(C_SOURCE_LIST);
+    println!("cargo:rerun-if-changed={}", list_path.display());
+    // Headers are not tracked individually; any change under sc2/src rebuilds.
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("sc2/src").display()
     );
-    let mut ordered_include_roots: Vec<_> = packages
-        .include_paths
-        .iter()
-        .map(|path| path.to_string_lossy().into_owned())
+    let list = fs::read_to_string(&list_path)
+        .map_err(|error| format!("cannot read {}: {error}", list_path.display()))?;
+    let sources: Vec<&str> = list
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .collect();
-    ordered_include_roots.extend(
-        REPOSITORY_INCLUDE_ROOTS
-            .iter()
-            .map(|path| root.join(path).to_string_lossy().into_owned()),
-    );
-    let mut command_template = vec![toolchain.cc.executable.clone()];
-    command_template.extend(ordered_defines.iter().cloned());
-    for include in &ordered_include_roots {
-        command_template.extend(["-I".into(), include.clone()]);
-    }
-    command_template.extend(authority.compile_flags.iter().cloned());
-    command_template.extend(DEPENDENCY_FLAGS.iter().map(|value| (*value).into()));
-    command_template.extend([
-        "-c".into(),
-        "<canonical-source>".into(),
-        "-o".into(),
-        "<object-output>".into(),
-    ]);
-    Ok(NativeCompileProfile {
-        target: target.into(),
-        compiler: toolchain.cc.executable.clone(),
-        ordered_defines,
-        ordered_include_roots,
-        ordered_compile_flags: authority.compile_flags.clone(),
-        dependency_flags: DEPENDENCY_FLAGS
-            .iter()
-            .map(|value| (*value).into())
-            .collect(),
-        command_template,
-    })
-}
 
-fn native_build_evidence(
-    root: &Path,
-    target: &str,
-    toolchain: &ToolchainIdentity,
-    authority: &ProductionProfile,
-    profile: &NativeCompileProfile,
-) -> Result<NativeBuildEvidence, String> {
-    let epoch = source_date_epoch()?;
-    let active_features = active_cargo_features();
-    if active_features != authority.cargo_features {
-        return Err(format!(
-            "active semantic Cargo features differ from '{}' profile: expected {:?}, got {active_features:?}",
-            authority.id, authority.cargo_features
-        ));
-    }
-    Ok(NativeBuildEvidence {
-        schema: BUILD_EVIDENCE_SCHEMA.into(),
-        source_date_epoch: epoch,
-        build_date: build_date()?,
-        target: target.into(),
-        active_features,
-        toolchain: toolchain.clone(),
-        packages: discover_package_identities(
-            root,
-            &toolchain.pkg_config,
-            uqm_ownership::production_packages(target),
-        )?,
-        compile_profile: profile.clone(),
-        build_environment: canonical_build_environment(toolchain, epoch),
-    })
-}
+    let out_dir = output_directory()?;
+    let object_dir = out_dir.join("native");
+    fs::create_dir_all(&object_dir)
+        .map_err(|error| format!("cannot create {}: {error}", object_dir.display()))?;
 
-fn compile_native_inputs(
-    inputs: &NativeInputManifest,
-    root: &Path,
-    object_dir: &Path,
-    profile: &NativeCompileProfile,
-) -> Result<BTreeSet<String>, String> {
-    let mut observed = BTreeSet::new();
-    for input in &inputs.inputs {
-        let output = object_dir.join(&input.object_output);
-        let depfile = output.with_extension("d");
-        let source = canonical_absolute(root, &input.source)?;
-        let argv = profile.compiler_argv(&source, &output, &depfile);
-        let (compiler, arguments) = argv
-            .split_first()
-            .ok_or_else(|| "canonical compiler invocation is empty".to_string())?;
-        let status = Command::new(compiler)
-            .args(arguments)
-            .status()
-            .map_err(|error| format!("cannot compile {}: {error}", source.display()))?;
-        if !status.success() {
+    let compiler = env::var("CC").unwrap_or_else(|_| "cc".into());
+    let mut common: Vec<String> = C_DEFINES
+        .iter()
+        .map(|define| format!("-D{define}"))
+        .collect();
+    if env::var_os("CARGO_FEATURE_DEBUG_PROCESS").is_some() {
+        common.push("-DDEBUG".into());
+    }
+    for include in &packages.include_paths {
+        common.extend(["-I".into(), include.to_string_lossy().into_owned()]);
+    }
+    for root in REPOSITORY_INCLUDE_ROOTS {
+        common.extend([
+            "-I".into(),
+            repo_root.join(root).to_string_lossy().into_owned(),
+        ]);
+    }
+    common.extend(COMPILE_FLAGS.map(String::from));
+
+    let mut objects = Vec::with_capacity(sources.len());
+    for source in &sources {
+        let object = object_dir.join(format!("{}.o", source.replace('/', "__")));
+        run_status(
+            Command::new(&compiler)
+                .args(&common)
+                .arg("-c")
+                .arg(repo_root.join(source))
+                .arg("-o")
+                .arg(&object),
+            &format!("compile {source}"),
+        )?;
+        objects.push(object);
+    }
+
+    let archive = out_dir.join("libuqm_c.a");
+    match fs::remove_file(&archive) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
             return Err(format!(
-                "C compiler rejected canonical input {}",
-                source.display()
-            ));
+                "cannot remove stale {}: {error}",
+                archive.display()
+            ))
         }
-        observed.extend(parse_dependency_file(&depfile, root)?);
-        println!("cargo:rerun-if-changed=../{}", input.source);
     }
-    Ok(observed)
-}
-
-fn write_dependency_capture(
-    path: &Path,
-    target: &str,
-    observed: &BTreeSet<String>,
-    inputs: &NativeInputManifest,
-) -> Result<(), String> {
-    let sources: BTreeSet<_> = inputs
-        .inputs
-        .iter()
-        .map(|input| input.source.as_str())
-        .collect();
-    let dependencies: Vec<_> = observed
-        .iter()
-        .filter(|path| !sources.contains(path.as_str()))
-        .cloned()
-        .collect();
-    let mut bytes = serde_json::to_vec_pretty(&serde_json::json!({
-        "schema": "uqm-native-dependency-capture-v1",
-        "target": target,
-        "dependencies": dependencies,
-    }))
-    .map_err(|error| format!("cannot serialize dependency capture: {error}"))?;
-    bytes.push(b'\n');
-    fs::write(path, bytes).map_err(|error| {
-        format!(
-            "cannot write dependency capture {}: {error}",
-            path.display()
-        )
-    })
-}
-
-struct ArchiveContext<'a> {
-    root: &'a Path,
-    out_dir: &'a Path,
-    object_dir: &'a Path,
-    target_os: &'a str,
-    packages: &'a NativePackages,
-    toolchain: &'a ToolchainIdentity,
-}
-
-fn create_and_validate_archive(
-    inputs: &NativeInputManifest,
-    validator: &Validator,
-    context: &ArchiveContext<'_>,
-) -> Result<(), String> {
-    let canonical_inputs = archive_sidecar_inputs(inputs, validator.manifest())?;
-    if canonical_inputs.iter().any(|path| path == DISPLIST_OBJECT) {
-        return Err(format!(
-            "excluded duplicate provider reached archive membership: {DISPLIST_OBJECT}"
-        ));
-    }
-    let sidecar = context.out_dir.join("uqm-c-objects.manifest");
-    fs::write(&sidecar, format!("{}\n", canonical_inputs.join("\n")))
-        .map_err(|error| format!("cannot write {}: {error}", sidecar.display()))?;
-    validator
-        .validate(&ValidateOptions {
-            repo_root: context.root.to_path_buf(),
-            check_disk_objects: false,
-            check_archive: true,
-            archive_path: Some(sidecar),
-            check_strict_link: true,
-        })
-        .map_err(|error| error.to_string())?;
-    let mut objects: Vec<_> = inputs
-        .inputs
-        .iter()
-        .map(|input| context.object_dir.join(&input.object_output))
-        .collect();
-    objects.sort();
-    let archive = context.out_dir.join("libuqm_c.a");
-    remove_if_present(&archive)?;
     run_status(
-        Command::new(&context.toolchain.ar.executable)
-            .env("ZERO_AR_DATE", "1")
+        Command::new(env::var("AR").unwrap_or_else(|_| "ar".into()))
             .arg("rcs")
             .arg(&archive)
             .args(&objects),
-        "production archive creation",
+        "archive creation",
     )?;
-    validator
-        .validate_archive_file(&archive, Path::new(&context.toolchain.ar.executable))
-        .map_err(|error| error.to_string())?;
-    write_provider_report(validator, context.out_dir)?;
-    emit_archive_link(context.target_os, context.out_dir, &archive)?;
-    emit_package_links(context.packages);
+    emit_archive_link(target_os, &out_dir, &archive)?;
+    emit_package_links(packages);
     Ok(())
-}
-
-fn archive_sidecar_inputs(
-    inputs: &NativeInputManifest,
-    providers: &uqm_ownership::Manifest,
-) -> Result<Vec<String>, String> {
-    let recompiled: BTreeSet<_> = providers
-        .recompiled_objects
-        .iter()
-        .map(|item| item.object_output.as_str())
-        .collect();
-    let mut paths = Vec::with_capacity(inputs.inputs.len());
-    for input in &inputs.inputs {
-        if recompiled.contains(input.object_output.as_str()) {
-            paths.push(input.source.clone());
-        } else {
-            paths.push(format!("native/{}", input.object_output));
-        }
-    }
-    paths.sort();
-    Ok(paths)
-}
-
-fn write_provider_report(validator: &Validator, out_dir: &Path) -> Result<(), String> {
-    let path = out_dir.join("provider-report.json");
-    let report = validator
-        .generate_report()
-        .to_json()
-        .map_err(|error| error.to_string())?;
-    fs::write(&path, format!("{report}\n"))
-        .map_err(|error| format!("cannot write {}: {error}", path.display()))
 }
 
 fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<(), String> {
@@ -607,7 +247,7 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
         "linux" => {
             println!("cargo:rustc-link-lib=static:+whole-archive,-bundle=uqm_c");
         }
-        other => return Err(format!("unsupported validated target OS: {other}")),
+        other => return Err(format!("unsupported target OS: {other}")),
     }
     Ok(())
 }
@@ -630,18 +270,27 @@ fn emit_package_links(packages: &NativePackages) {
     }
 }
 
-/// Link the libraries and frameworks the allowlist permits for this target.
-///
-/// These are named rather than discovered through pkg-config, so the allowlist
-/// is the only place that decides whether they are linked at all.
-fn emit_allowlisted_platform_links(target_os: &str) -> Result<(), String> {
-    for library in allowlisted("direct_libraries", target_os)? {
+fn emit_platform_links(links: &PlatformLinks) {
+    for library in links.libraries {
         println!("cargo:rustc-link-lib={library}");
     }
-    for framework in allowlisted("frameworks", target_os)? {
+    for framework in links.frameworks {
         println!("cargo:rustc-link-lib=framework={framework}");
     }
-    Ok(())
+}
+
+fn require<T, E: Display>(result: Result<T, E>, context: &str) -> T {
+    match result {
+        Ok(value) => value,
+        Err(error) => fail(format!("{context}: {error}")),
+    }
+}
+
+fn require_some<T>(value: Option<T>, context: &str) -> T {
+    match value {
+        Some(value) => value,
+        None => fail(context),
+    }
 }
 
 /// Bindgen's default formatter shells out to `rustfmt`.
@@ -897,31 +546,6 @@ fn output_directory() -> Result<PathBuf, String> {
 
 fn env_value(name: &str) -> Result<String, String> {
     env::var(name).map_err(|error| format!("{name} is unavailable: {error}"))
-}
-
-fn build_date() -> Result<String, String> {
-    println!("cargo:rerun-if-env-changed=UQM_BUILD_DATE");
-    let value = env::var("UQM_BUILD_DATE").unwrap_or_else(|_| "Jan  1 1970".to_string());
-    if value.is_empty() || value.contains('"') || value.contains('\n') {
-        return Err("UQM_BUILD_DATE is not a valid C string value".to_string());
-    }
-    Ok(value)
-}
-
-fn source_date_epoch() -> Result<u64, String> {
-    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
-    let value = env_value("SOURCE_DATE_EPOCH")?;
-    value
-        .parse()
-        .map_err(|error| format!("invalid SOURCE_DATE_EPOCH {value:?}: {error}"))
-}
-
-fn remove_if_present(path: &Path) -> Result<(), String> {
-    match fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("cannot remove stale {}: {error}", path.display())),
-    }
 }
 
 fn generate_state_bindings(globdata_path: &Path) {

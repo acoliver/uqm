@@ -14,9 +14,9 @@ The 3,600-second native step, 9,300-second complete S4 run, native child bounds 
 
 This policy is chosen before new native gameplay results. It replaces the earlier planning assumption that each inner watchdog reserves its full duration. Fixed waits and input sequences remain intact. There is no CPU-time substitution, checkpoint timer reset, scenario skipping or distribution across tuples.
 
-## Build provenance
+## Build
 
-`production` records one build. `prove` performs two clean builds and records their matching identities and artifact vectors. `verify` requires that proof and checks it against live inputs without rebuilding. Use `prove` then `verify` for production proof, or `package`, which performs both. A single-build manifest remains usable by the local gameplay runner but does not pass the stronger production verifier. See [reproducible-build.md](reproducible-build.md) for exact commands.
+The runner builds the linked game with `cargo build` through `xtask native`; see [reproducible-build.md](reproducible-build.md).
 
 ## Native images and execution
 

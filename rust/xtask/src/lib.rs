@@ -2,11 +2,10 @@
 //! running the native-window scenarios against it.
 //!
 //! Usage: `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- <command>`
-//! with `debug`, `release`, `test`, `capture-dependencies` or `native`.
+//! with `debug`, `release`, `test` or `native`.
 
 use std::collections::BTreeSet;
 use std::env;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,10 +13,6 @@ use std::process::{Command, ExitCode};
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
-use uqm_ownership::{
-    apply_toolchain_environment, reject_noncanonical_build_flags, resolve_toolchain,
-    ToolchainIdentity, BUILD_EVIDENCE_FILE,
-};
 use uqm_rust::automation::native_runner as native_acceptance_runner;
 use uqm_rust::automation::{
     NativeLinkedBuildReceipt, NativeRetainedInput, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
@@ -47,9 +42,7 @@ struct ProductionPaths {
     executable: PathBuf,
     rust_archive: PathBuf,
     c_archive: PathBuf,
-    object_sidecar: PathBuf,
-    provider_report: PathBuf,
-    build_evidence: PathBuf,
+    out_dir: PathBuf,
 }
 
 struct LinkedBuildProof {
@@ -89,13 +82,12 @@ fn run() -> Result<(), String> {
         "debug" => build(&root, false),
         "release" => build(&root, true),
         "test" => test_linked(&root),
-        "capture-dependencies" => capture_dependencies(&root),
         _ => Err(format!("unknown command '{command}'\n{}", usage())),
     }
 }
 
 fn usage() -> String {
-    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|capture-dependencies|native>".into()
+    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native>".into()
 }
 
 fn repository_root() -> Result<PathBuf, String> {
@@ -108,8 +100,7 @@ fn repository_root() -> Result<PathBuf, String> {
 
 /// Build the linked game binary the way a developer does.
 fn build(root: &Path, release: bool) -> Result<(), String> {
-    let toolchain = prepare_canonical_build(root)?;
-    let mut command = Command::new(&toolchain.cargo.executable);
+    let mut command = Command::new(cargo_program());
     command
         .current_dir(root)
         .args(["build", "--locked", "--manifest-path", "rust/Cargo.toml"]);
@@ -128,54 +119,22 @@ fn build(root: &Path, release: bool) -> Result<(), String> {
 
 /// The tests that need the retained C archive linked in.
 fn test_linked(root: &Path) -> Result<(), String> {
-    let toolchain = prepare_canonical_build(root)?;
     run_command(
-        Command::new(&toolchain.cargo.executable)
-            .current_dir(root)
-            .env("UQM_NATIVE_PROFILE", "linked-test")
-            .args([
-                "test",
-                "--locked",
-                "--manifest-path",
-                "rust/Cargo.toml",
-                "--no-default-features",
-                "--features",
-                LINKED_TEST_FEATURES,
-                "--test",
-                "linked_provider_fixture",
-                "--test",
-                "planets_parity",
-            ]),
+        Command::new(cargo_program()).current_dir(root).args([
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--no-default-features",
+            "--features",
+            LINKED_TEST_FEATURES,
+            "--test",
+            "linked_provider_fixture",
+            "--test",
+            "planets_parity",
+        ]),
         "Cargo test linked fixtures",
     )
-}
-
-/// Regenerate the C dependency capture for review.
-fn capture_dependencies(root: &Path) -> Result<(), String> {
-    let toolchain = prepare_canonical_build(root)?;
-    let target = uqm_ownership::target_key(env::consts::OS, env::consts::ARCH)?;
-    let path = root
-        .join("rust/target")
-        .join(format!("native-dependencies-{target}.candidate.json"));
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("cannot create {}: {error}", parent.display()))?;
-    }
-    env::set_var("UQM_DEPENDENCY_CAPTURE", &path);
-    let result = cargo_json_build(root, &toolchain, "production", true, BUILD_FEATURES);
-    env::remove_var("UQM_DEPENDENCY_CAPTURE");
-    result?;
-    if !path.is_file() {
-        return Err(format!(
-            "dependency capture was not produced: {}",
-            path.display()
-        ));
-    }
-    println!(
-        "review target-scoped dependency candidate: {}",
-        path.display()
-    );
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -232,11 +191,8 @@ pub(crate) fn require_native_platform(is_macos: bool) -> Result<(), String> {
 /// Build the release linked binary and stage everything the runner needs to
 /// check that the game it launches is the one this build produced.
 fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
-    let toolchain = prepare_canonical_build(root)?;
-    let (output, arguments, paths) =
-        cargo_json_build(root, &toolchain, "linked-test", true, LINKED_TEST_FEATURES)?;
-    let marker = serde_json::to_string(&toolchain)
-        .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
+    let cargo = cargo_program();
+    let (output, arguments, paths) = cargo_json_build(root, &cargo, true, LINKED_TEST_FEATURES)?;
     let directory = tempfile::tempdir()
         .map_err(|error| format!("create linked-build proof directory: {error}"))?;
     let member_limit = native_config::runtime_contract()
@@ -254,43 +210,23 @@ fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
     )?;
     let rust_archive = stage_file("rust-archive.a", &paths.rust_archive)?;
     let c_archive = stage_file("c-archive.a", &paths.c_archive)?;
-    let object_sidecar = stage_file("object-sidecar.manifest", &paths.object_sidecar)?;
-    let provider_report = stage_file("provider-report.json", &paths.provider_report)?;
-    let native_build_evidence = stage_file("native-build-evidence.json", &paths.build_evidence)?;
     let executable_bytes = read_regular_file_bounded(&paths.executable, member_limit)?;
     let cargo_manifest = stage_file("Cargo.toml", &root.join("rust/Cargo.toml"))?;
     let cargo_lock = stage_file("Cargo.lock", &root.join("rust/Cargo.lock"))?;
-    let canonical_toolchain = stage_linked_build_bytes(
-        directory.path(),
-        "canonical-toolchain.json",
-        marker.as_bytes(),
-        member_limit,
-    )?;
     let receipt = NativeLinkedBuildReceipt {
         schema: NATIVE_LINKED_BUILD_RECEIPT_SCHEMA.to_string(),
         source_sha: git_text(root, &["rev-parse", "HEAD"], "HEAD")?,
-        cargo_command: std::iter::once(toolchain.cargo.executable.clone())
-            .chain(arguments)
-            .collect(),
-        native_profile: "linked-test".to_string(),
+        cargo_command: std::iter::once(cargo).chain(arguments).collect(),
         feature: LINKED_TEST_FEATURES.to_string(),
         cargo_executable_path: path_text(&paths.executable, "Cargo executable")?,
         cargo_rust_archive_path: path_text(&paths.rust_archive, "Cargo Rust archive")?,
-        cargo_out_dir: paths
-            .build_evidence
-            .parent()
-            .ok_or_else(|| "Cargo OUT_DIR is missing".to_string())
-            .and_then(|out_dir| path_text(out_dir, "Cargo OUT_DIR"))?,
+        cargo_out_dir: path_text(&paths.out_dir, "Cargo OUT_DIR")?,
         executable: retained_identity("inputs/uqm", &executable_bytes),
         cargo_messages: messages,
         rust_archive,
         c_archive,
-        object_sidecar,
-        provider_report,
-        native_build_evidence,
         cargo_manifest,
         cargo_lock,
-        canonical_toolchain,
     };
     let receipt_bytes = serde_json::to_vec_pretty(&receipt)
         .map_err(|error| format!("serialize linked-build receipt: {error}"))?;
@@ -609,12 +545,8 @@ fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<
             "cargo-messages.jsonl",
             "rust-archive.a",
             "c-archive.a",
-            "object-sidecar.manifest",
-            "provider-report.json",
-            "native-build-evidence.json",
             "Cargo.toml",
             "Cargo.lock",
-            "canonical-toolchain.json",
         ]
         .map(retained_linked_path),
     );
@@ -725,62 +657,15 @@ fn measure_tree(root: &Path) -> Result<(u64, u64), String> {
 // Toolchain and build plumbing
 // ---------------------------------------------------------------------------
 
-/// Resolve the toolchain once and publish it to the environment, where
-/// `build.rs` checks that its own resolution agrees with it.
-fn prepare_canonical_build(root: &Path) -> Result<ToolchainIdentity, String> {
-    env::set_var("SOURCE_DATE_EPOCH", source_date_epoch(root)?.to_string());
-    env::set_var("UQM_BUILD_DATE", source_date(root)?);
-    env::set_var("CARGO", rust_tool_program("CARGO", "cargo")?);
-    env::set_var("RUSTC", rust_tool_program("RUSTC", "rustc")?);
-    let host = host_target()?;
-    // The first resolution picks the tools; exporting them and resolving again
-    // yields the identity the build script will see.
-    let selected = resolve_toolchain(root, &host)
-        .map_err(|error| format!("resolve canonical toolchain: {error}"))?;
-    apply_canonical_toolchain_environment(&selected);
-    let toolchain = resolve_toolchain(root, &host)
-        .map_err(|error| format!("re-resolve canonical toolchain: {error}"))?;
-    reject_noncanonical_build_flags(&toolchain)?;
-    apply_canonical_toolchain_environment(&toolchain);
-    env::set_var(
-        "UQM_CANONICAL_TOOLCHAIN",
-        serde_json::to_string(&toolchain)
-            .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?,
-    );
-    Ok(toolchain)
-}
-
-fn apply_canonical_toolchain_environment(toolchain: &ToolchainIdentity) {
-    apply_toolchain_environment(toolchain);
-    env::set_var("RUSTC_LINKER", &toolchain.linker.executable);
-}
-
-/// The real toolchain binary for `tool`, not the rustup proxy: Cargo hands
-/// build scripts the real path, so the marker has to name the same one.
-fn rust_tool_program(variable: &str, tool: &str) -> Result<String, String> {
-    if let Ok(program) = env::var(variable) {
-        let path = fs::canonicalize(&program)
-            .map_err(|error| format!("cannot resolve {variable} executable {program}: {error}"))?;
-        if path.file_name().and_then(OsStr::to_str) == Some(tool) {
-            return Ok(path.to_string_lossy().into_owned());
-        }
-    }
-    let output = process::run(Command::new("rustup").args(["which", tool]), None);
-    if !output.succeeded() {
-        return Err(output.failure_detail(&format!("rustup which {tool}")));
-    }
-    let program = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if program.is_empty() {
-        return Err(format!("rustup did not report a {tool} executable"));
-    }
-    Ok(program)
+/// The cargo that launched this task, so builds use the same toolchain.
+fn cargo_program() -> String {
+    env::var("CARGO").unwrap_or_else(|_| "cargo".into())
 }
 
 /// Build `uqm` with `--message-format=json` and locate what it produced.
 fn cargo_json_build(
     root: &Path,
-    toolchain: &ToolchainIdentity,
-    native_profile: &str,
+    cargo: &str,
     release: bool,
     features: &str,
 ) -> Result<(Vec<u8>, Vec<String>, ProductionPaths), String> {
@@ -797,16 +682,10 @@ fn cargo_json_build(
         "--message-format=json-render-diagnostics",
     ]);
     let arguments: Vec<String> = arguments.into_iter().map(str::to_string).collect();
-    let output = process::run(
-        Command::new(&toolchain.cargo.executable)
-            .current_dir(root)
-            .env("UQM_NATIVE_PROFILE", native_profile)
-            .args(&arguments),
-        None,
-    );
+    let output = process::run(Command::new(cargo).current_dir(root).args(&arguments), None);
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
     if !output.succeeded() {
-        return Err(output.failure_detail(&format!("{native_profile} Cargo build")));
+        return Err(output.failure_detail("Cargo build"));
     }
     let paths = parse_production_paths(root, &output.stdout)?;
     Ok((output.stdout, arguments, paths))
@@ -885,9 +764,7 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
         executable: exactly_one(executables, "uqm executable")?,
         rust_archive: exactly_one(rust_archives, "uqm Rust archive")?,
         c_archive: out_dir.join("libuqm_c.a"),
-        object_sidecar: out_dir.join("uqm-c-objects.manifest"),
-        provider_report: out_dir.join("provider-report.json"),
-        build_evidence: out_dir.join(BUILD_EVIDENCE_FILE),
+        out_dir,
     })
 }
 
@@ -920,35 +797,6 @@ fn exactly_one<T: std::fmt::Debug + Ord>(paths: BTreeSet<T>, label: &str) -> Res
         .ok_or_else(|| format!("current Cargo invocation did not identify {label}"))
 }
 
-fn source_date_epoch(root: &Path) -> Result<u64, String> {
-    if let Ok(value) = env::var("SOURCE_DATE_EPOCH") {
-        return value
-            .parse()
-            .map_err(|error| format!("invalid SOURCE_DATE_EPOCH '{value}': {error}"));
-    }
-    git_text(
-        root,
-        &["show", "-s", "--format=%ct", "HEAD"],
-        "source epoch",
-    )?
-    .parse()
-    .map_err(|error| format!("git source epoch is invalid: {error}"))
-}
-
-fn source_date(root: &Path) -> Result<String, String> {
-    git_text(
-        root,
-        &[
-            "show",
-            "-s",
-            "--date=format:%b %e %Y",
-            "--format=%cd",
-            "HEAD",
-        ],
-        "source date",
-    )
-}
-
 fn git_text(root: &Path, arguments: &[&str], label: &str) -> Result<String, String> {
     let output = process::run(
         Command::new("git")
@@ -964,18 +812,6 @@ fn git_text(root: &Path, arguments: &[&str], label: &str) -> Result<String, Stri
     String::from_utf8(output.stdout)
         .map(|value| value.trim().to_string())
         .map_err(|error| format!("git {label} is not UTF-8: {error}"))
-}
-
-fn host_target() -> Result<String, String> {
-    let output = process::run(Command::new("rustc").arg("-vV"), None);
-    if !output.succeeded() {
-        return Err(output.failure_detail("rustc host query"));
-    }
-    String::from_utf8(output.stdout)
-        .map_err(|error| format!("rustc output is not UTF-8: {error}"))?
-        .lines()
-        .find_map(|line| line.strip_prefix("host: ").map(str::to_string))
-        .ok_or_else(|| "rustc did not report a host target".into())
 }
 
 /// Run a command with its output going straight to this terminal.
