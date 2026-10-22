@@ -159,6 +159,7 @@ fn source_max_crew(ship_dir: &str) -> u16 {
         "syreen" => Some(SyreenShip.descriptor_template()),
         "druuge" => Some(DruugeShip.descriptor_template()),
         "mycon" => Some(MyconShip.descriptor_template()),
+        "chmmr" => Some(ChmmrShip.descriptor_template()),
         _ => None,
     };
     if let Some(desc) = ported {
