@@ -4,12 +4,20 @@
 //! intentional: changing either changes pixels produced by the original game.
 
 use sdl2_sys::{SDL_PixelFormat, SDL_Rect, SDL_Surface};
+use std::sync::OnceLock;
+
+mod advanced;
+mod biadaptive;
+mod hq_rules;
 
 #[derive(Clone, Copy)]
 enum Filter {
     Nearest,
     Bilinear,
     Triscan,
+    Advanced,
+    Biadaptive,
+    Hq,
 }
 
 struct Image<'a> {
@@ -146,7 +154,11 @@ unsafe fn scale(
     if !matches!(filter, Filter::Nearest) {
         expand_rect(
             region,
-            1,
+            if matches!(filter, Filter::Advanced | Filter::Biadaptive) {
+                2
+            } else {
+                1
+            },
             &SDL_Rect {
                 x: 0,
                 y: 0,
@@ -166,6 +178,9 @@ unsafe fn scale(
                     image.pixel(x + 1, y + 1),
                 ]),
                 Filter::Triscan => triscan(&image, fmt, x, y),
+                Filter::Advanced => advanced::advanced(&image, fmt, x, y),
+                Filter::Biadaptive => biadaptive::biadaptive(&image, x, y),
+                Filter::Hq => hq(&image, fmt, x, y),
             };
             let offset = y as usize * 2 * stride + x as usize * 2;
             output[offset..offset + 2].copy_from_slice(&p[..2]);
@@ -210,3 +225,182 @@ pub unsafe extern "C" fn Scale_TriScanFilter(
 
 #[cfg(test)]
 mod tests;
+
+fn blend_1111(a: u32, b: u32, c: u32, d: u32) -> u32 {
+    ((a & 0xfcfcfcfc) >> 2)
+        + ((b & 0xfcfcfcfc) >> 2)
+        + ((c & 0xfcfcfcfc) >> 2)
+        + ((d & 0xfcfcfcfc) >> 2)
+}
+
+fn blend_31(a: u32, b: u32) -> u32 {
+    half(a) + ((a & 0xfcfcfcfc) >> 2) + ((b & 0xfcfcfcfc) >> 2)
+}
+
+fn blend_211(a: u32, b: u32, c: u32) -> u32 {
+    half(a) + ((b & 0xfcfcfcfc) >> 2) + ((c & 0xfcfcfcfc) >> 2)
+}
+
+fn blend_521(a: u32, b: u32, c: u32) -> u32 {
+    half(a)
+        + ((a & 0xf8f8f8f8) >> 3)
+        + ((b & 0xfcfcfcfc) >> 2)
+        + ((c & 0xf8f8f8f8) >> 3)
+        + 0x02020202
+}
+
+fn blend_611(a: u32, b: u32, c: u32) -> u32 {
+    half(a)
+        + ((a & 0xfcfcfcfc) >> 2)
+        + ((b & 0xf8f8f8f8) >> 3)
+        + ((c & 0xf8f8f8f8) >> 3)
+        + 0x02020202
+}
+
+fn blend_233(a: u32, b: u32, c: u32) -> u32 {
+    ((a & 0xfcfcfcfc) >> 2)
+        + ((b & 0xfcfcfcfc) >> 2)
+        + ((b & 0xf8f8f8f8) >> 3)
+        + ((c & 0xfcfcfcfc) >> 2)
+        + ((c & 0xf8f8f8f8) >> 3)
+        + 0x02020202
+}
+
+fn blend_e11(a: u32, b: u32, c: u32) -> u32 {
+    half(a)
+        + ((a & 0xfcfcfcfc) >> 2)
+        + ((a & 0xf8f8f8f8) >> 3)
+        + ((b & 0xf0f0f0f0) >> 4)
+        + ((c & 0xf0f0f0f0) >> 4)
+        + 0x03030303
+}
+
+fn rgb_delta(fmt: &SDL_PixelFormat, a: u32, b: u32) -> i32 {
+    let a = rgb(fmt, a);
+    let b = rgb(fmt, b);
+    (0..3).map(|i| (a[i] - b[i]) * (a[i] - b[i])).sum()
+}
+
+fn intensity(fmt: &SDL_PixelFormat, p: u32) -> i32 {
+    rgb(fmt, p)
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| (YUV_MATRIX[i][0] * c) >> 14)
+        .sum()
+}
+
+fn yuv_table() -> &'static [u32] {
+    static TABLE: OnceLock<Box<[u32]>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        (0..0x8000)
+            .map(|i| {
+                let channels = [(i >> 10) & 31, (i >> 5) & 31, i & 31].map(|c| (c << 3) | (c >> 3));
+                let component =
+                    |j| (0..3).map(|k| channels[k] * YUV_MATRIX[k][j]).sum::<i32>() >> 15;
+                ((component(0) << 16) | ((64 + component(1)) << 8) | (64 + component(2))) as u32
+            })
+            .collect()
+    })
+}
+
+fn to_yuv(fmt: &SDL_PixelFormat, p: u32) -> u32 {
+    let index = (((p >> (fmt.Rshift + 3)) & 31) << 10)
+        | (((p >> (fmt.Gshift + 3)) & 31) << 5)
+        | ((p >> (fmt.Bshift + 3)) & 31);
+    yuv_table()[index as usize]
+}
+
+fn diff_yuv(a: u32, b: u32) -> bool {
+    let delta = |mask| ((a & mask) as i32 - (b & mask) as i32).abs();
+    let ret = ((0x40 << 16) - delta(0xff0000))
+        | ((0x12 << 8) - delta(0x00ff00))
+        | (0x0c - delta(0x0000ff));
+    ret < 0
+}
+
+fn hq(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
+    let mut pix = [0; 10];
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            pix[((dy + 1) * 3 + dx + 2) as usize] = image.pixel(x + dx, y + dy);
+        }
+    }
+    let yuv = pix.map(|p| to_yuv(fmt, p));
+    let mut pattern = 0u8;
+    for (bit, i) in [1, 2, 3, 4, 6, 7, 8, 9].into_iter().enumerate() {
+        if diff_yuv(yuv[5], yuv[i]) {
+            pattern |= 1 << bit;
+        }
+    }
+    let edges = [(4, 2), (2, 6), (8, 4), (6, 8)].map(|(a, b)| diff_yuv(yuv[a], yuv[b]));
+    hq_rules::rules(pattern, edges, &pix)
+}
+
+/// # Safety
+/// Same surface and region requirements as `Scale_Nearest`.
+#[no_mangle]
+pub unsafe extern "C" fn Scale_BiAdaptFilter(
+    src: *mut SDL_Surface,
+    dst: *mut SDL_Surface,
+    region: *mut SDL_Rect,
+) {
+    scale(src, dst, region, Filter::Biadaptive);
+}
+
+/// # Safety
+/// Same surface and region requirements as `Scale_Nearest`.
+#[no_mangle]
+pub unsafe extern "C" fn Scale_BiAdaptAdvFilter(
+    src: *mut SDL_Surface,
+    dst: *mut SDL_Surface,
+    region: *mut SDL_Rect,
+) {
+    scale(src, dst, region, Filter::Advanced);
+}
+
+/// # Safety
+/// Same surface and region requirements as `Scale_Nearest`.
+#[no_mangle]
+pub unsafe extern "C" fn Scale_HqFilter(
+    src: *mut SDL_Surface,
+    dst: *mut SDL_Surface,
+    region: *mut SDL_Rect,
+) {
+    scale(src, dst, region, Filter::Hq);
+}
+
+pub type ScaleFunc = unsafe extern "C" fn(*mut SDL_Surface, *mut SDL_Surface, *mut SDL_Rect);
+
+#[repr(C)]
+pub struct ScaleFuncDef {
+    pub flag: i32,
+    pub func: ScaleFunc,
+}
+
+#[no_mangle]
+pub static Scale_C_Functions: [ScaleFuncDef; 6] = [
+    ScaleFuncDef {
+        flag: 1 << 3,
+        func: Scale_BilinearFilter,
+    },
+    ScaleFuncDef {
+        flag: 1 << 4,
+        func: Scale_BiAdaptFilter,
+    },
+    ScaleFuncDef {
+        flag: 1 << 5,
+        func: Scale_BiAdaptAdvFilter,
+    },
+    ScaleFuncDef {
+        flag: 1 << 6,
+        func: Scale_TriScanFilter,
+    },
+    ScaleFuncDef {
+        flag: 1 << 7,
+        func: Scale_HqFilter,
+    },
+    ScaleFuncDef {
+        flag: 0,
+        func: Scale_Nearest,
+    },
+];

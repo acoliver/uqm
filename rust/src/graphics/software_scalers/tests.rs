@@ -23,11 +23,14 @@ fn c_scaler_surface_fixtures() {
         let (input, rest) = rest.split_at((sp * h) as usize);
         let (expected, rest) = rest.split_at((dp * h * 2) as usize);
         records = rest;
-        let filter = match kind {
-            0 => Filter::Nearest,
-            1 => Filter::Bilinear,
-            2 => Filter::Triscan,
-            _ => continue,
+        let scaler: ScaleFunc = match kind {
+            0 => Scale_Nearest,
+            1 => Scale_BilinearFilter,
+            2 => Scale_TriScanFilter,
+            3 => Scale_BiAdaptAdvFilter,
+            4 => Scale_BiAdaptFilter,
+            5 => Scale_HqFilter,
+            _ => panic!("unknown fixture scaler"),
         };
         let mut input = input.to_vec();
         let mut output = vec![0xdeadbeef; expected.len()];
@@ -59,7 +62,7 @@ fn c_scaler_surface_fixtures() {
             h: header[9] as i32,
         };
         unsafe {
-            scale(&mut src, &mut dst, &mut rect, filter);
+            scaler(&mut src, &mut dst, &mut rect);
         }
         assert_eq!(
             [rect.x, rect.y, rect.w, rect.h],
@@ -76,7 +79,7 @@ fn c_scaler_surface_fixtures() {
         );
         checked[kind as usize] += 1;
     }
-    assert_eq!(&checked[..3], &[64; 3]);
+    assert_eq!(checked, [64; 6]);
 }
 
 #[test]
@@ -101,4 +104,27 @@ fn rectangle_expansion_matches_limit_rules() {
 fn packed_blends_keep_original_rounding() {
     assert_eq!(blend_11(0x01030507, 0x03050709), 0x01030507);
     assert_eq!(bilinear([0xffffffff; 4]), [0xfefefefe; 4]);
+}
+
+#[test]
+fn all_hq_patterns_and_conditional_edges_match_c() {
+    let fixture = include_bytes!("../../../tests/fixtures/hq2x-rules.bin");
+    assert_eq!(&fixture[..8], b"HQ2X\0\0\0\0");
+    let expected = words(&fixture[8..]);
+    let pixels = std::array::from_fn(|i| {
+        0x10203040u32
+            .wrapping_mul(i as u32)
+            .wrapping_add(0x07050301)
+    });
+    for pattern in 0..=255u8 {
+        for edge_bits in 0..16 {
+            let edges = std::array::from_fn(|i| edge_bits & (1 << i) != 0);
+            let offset = (pattern as usize * 16 + edge_bits) * 4;
+            assert_eq!(
+                hq_rules::rules(pattern, edges, &pixels),
+                &expected[offset..offset + 4],
+                "pattern {pattern}, edges {edge_bits}"
+            );
+        }
+    }
 }
