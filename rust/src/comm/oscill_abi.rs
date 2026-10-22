@@ -30,7 +30,7 @@ mod runtime {
         fn SetContextFGFrame(frame: *mut frame_desc) -> *mut frame_desc;
         fn SetContextClipRect(rect: *const CRect) -> i32;
         fn SetContextForeGroundColor(color: CColor) -> CColor;
-        fn DrawStamp(stamp: *const CStamp);
+        fn DrawStamp(stamp: *mut CStamp);
         fn DrawLine(line: *const Line);
         fn BatchGraphics();
         fn UnbatchGraphics();
@@ -119,7 +119,7 @@ mod runtime {
             SetContextFGFrame(SCOPE_WORK);
             SetContextClipRect(std::ptr::null());
             stamp.frame = SCOPE_FRAME.cast();
-            DrawStamp(&stamp);
+            DrawStamp(&raw mut stamp);
             SetContextForeGroundColor(SCOPE_COLOR);
             for i in 0..i32::from(SCOPE_WIDTH) - 1 {
                 DrawLine(&Line {
@@ -138,7 +138,7 @@ mod runtime {
         } else {
             stamp.frame = SCOPE_FRAME.cast();
         }
-        DrawStamp(&stamp);
+        DrawStamp(&raw mut stamp);
     }
 
     /// # Safety
@@ -191,8 +191,8 @@ mod runtime {
             LAST_OFFSET = offset;
             BUTTON.origin.x = (i32::from(SLIDER.origin.x) + offset) as i16;
             BatchGraphics();
-            DrawStamp(&raw const SLIDER);
-            DrawStamp(&raw const BUTTON);
+            DrawStamp(&raw mut SLIDER);
+            DrawStamp(&raw mut BUTTON);
             UnbatchGraphics();
         }
     }

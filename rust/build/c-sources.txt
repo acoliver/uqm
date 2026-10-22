@@ -33,7 +33,6 @@ sc2/src/uqm/cleanup.c
 sc2/src/uqm/clock_rust.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm.c
-sc2/src/uqm/commanim.c
 sc2/src/uqm/commglue.c
 sc2/src/uqm/confirm.c
 sc2/src/uqm/cons_res.c
