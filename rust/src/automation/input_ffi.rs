@@ -883,6 +883,65 @@ pub(crate) fn star_flight_observation(
     super::star_flight::Observation::default()
 }
 
+/// Player-selected combat settings: enabled flag and speed selector.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
+    // Game thread, read only while the input callback owns the live game.
+    let flags = unsafe { std::ptr::addr_of!(GLOB_DATA.game_state.glob_flags).read() };
+    Some((flags & (1 << 5) != 0, flags >> 6))
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
+    None
+}
+
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
+    crate::state::ffi::named_state_value("STARBASE_AVAILABLE")?;
+    use crate::comm::dispatch::CShipFragment;
+    use crate::savegame::runtime::queues::{walk, QueueKind};
+    unsafe {
+        let queue = &*std::ptr::addr_of!(GLOB_DATA.game_state.built_ship_q);
+        Some(
+            walk::<CShipFragment>(queue, QueueKind::BuiltShips)
+                .expect("live escort queue")
+                .into_iter()
+                .map(|ship| ((*ship).race_id, (*ship).crew_level))
+                .collect(),
+        )
+    }
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
+    None
+}
+
+pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
+    let (cyborg, speed) = cyborg_settings().unwrap_or((false, 0));
+    let (player, enemy) = battle_fleets().unwrap_or((0, 0));
+    #[cfg(feature = "linked_c_archive")]
+    let picker = {
+        let (generation, active) = super::ui_observation::ship_picker_observation();
+        active.then(|| super::fleet_fight::Picker {
+            generation,
+            cursor: super::ui_observation::ship_picker_cursor(),
+            escorts: crate::pickship::ffi::live_escort_indices(),
+        })
+    };
+    #[cfg(not(feature = "linked_c_archive"))]
+    let picker = None;
+    super::fleet_fight::Observation {
+        activity: crate::mainloop::ffi::get_current_activity().0,
+        cyborg,
+        speed,
+        counters: [player, enemy],
+        flagship_crew: sis_crew_and_landers().map(|(crew, _)| crew),
+        picker,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

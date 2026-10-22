@@ -884,6 +884,9 @@ pub enum Action {
     TurnFlagship(TurnFlagshipStep),
     CollectPlanetMinerals(CollectPlanetMineralsStep),
     FightBattle(FightBattleStep),
+    /// Finish an ordinary whole-fleet encounter using normal-speed Cyborg,
+    /// confirming replacement escort choices through the real ship picker.
+    FightEncounter(FightBattleStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -2150,12 +2153,12 @@ fn validate_navigation_step(
             }
             collect.max_ticks
         }
-        Action::FightBattle(fight) => {
+        Action::FightBattle(fight) | Action::FightEncounter(fight) => {
             if fight.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
                     path,
                     index,
-                    "fight_battle requires positive max_ticks",
+                    "fight actions require positive max_ticks",
                 )));
             }
             fight.max_ticks
@@ -4448,6 +4451,19 @@ mod tests {
     fn collect_planet_minerals_counts_against_the_input_budget() {
         let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn fight_encounter_validates_its_closed_input_contract() {
+        assert!(validated_steps(r#"{"action":"fight_encounter","max_ticks":3000}"#).is_ok());
+        assert!(validated_steps(r#"{"action":"fight_encounter","max_ticks":0}"#).is_err());
+        for bad in [
+            r#"{"action":"fight_encounter"}"#,
+            r#"{"action":"fight_encounter","max_ticks":10,"speed":3}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
     }
 
     #[test]

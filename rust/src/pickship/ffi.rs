@@ -132,6 +132,14 @@ fn player_queue() -> *const crate::comm::locdata::CQueue {
     unsafe { live_queues::player_ships(RPG_PLAYER_NUM) }
 }
 
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn live_escort_indices() -> Vec<u16> {
+    escort_links()
+        .into_iter()
+        .filter_map(|(_, escort)| escort.alive.then_some(escort.index))
+        .collect()
+}
+
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
 /// tail.
 fn escort_links() -> Vec<(*mut c_void, Escort)> {
@@ -176,6 +184,7 @@ fn pulsed_directions() -> (Direction, bool) {
 /// # Safety
 /// `state` is the picker's state, which `DoInput` is running.
 unsafe fn change_selection(state: &mut PickerState) {
+    crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
     let area = highlight(state.frame, state.cursor);
     state.flash = CRect {
         corner: CPoint {

@@ -277,6 +277,28 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "minimum=") == Some(u64::from(value.minimum_units))
                 && at_least(label, "units=", u64::from(value.minimum_units))
         }
+        Action::FightEncounter(value) => {
+            shape(
+                label,
+                "fleet_won",
+                &[
+                    "player_left=",
+                    "enemy_left=",
+                    "ticks=",
+                    "flagship_crew=",
+                    "enemy_initial=",
+                    "picks=",
+                    "speed=",
+                ],
+            ) && at_least(label, "player_left=", 1)
+                && number(label, "enemy_left=") == Some(0)
+                && number(label, "flagship_crew=")
+                    .is_some_and(|crew| crew > 0 && crew < u64::from(u16::MAX))
+                && at_least(label, "enemy_initial=", 1)
+                && at_least(label, "ticks=", 1)
+                && number(label, "ticks=").is_some_and(|ticks| ticks <= value.max_ticks)
+                && number(label, "speed=") == Some(1)
+        }
         Action::FightBattle(value) => {
             shape(
                 label,
@@ -901,6 +923,24 @@ mod tests {
             "planet_minerals_collect_failed:category=radioactive:minimum=2:reason=timeout:units=0",
         ] {
             assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn whole_fleet_proof_requires_empty_enemy_fleet_normal_speed_and_living_flagship() {
+        let action =
+            Action::FightEncounter(crate::automation::script::FightBattleStep { max_ticks: 900 });
+        let good = "fleet_won:player_left=3:enemy_left=0:ticks=600:flagship_crew=46:enemy_initial=5:picks=3:speed=1";
+        assert!(semantic_satisfied(&action, good));
+        for bad in [
+            good.replace("enemy_left=0", "enemy_left=1"),
+            good.replace("speed=1", "speed=3"),
+            good.replace("flagship_crew=46", "flagship_crew=65535"),
+            good.replace("ticks=600", "ticks=901"),
+            good.replace("enemy_initial=5", "enemy_initial=0"),
+            good.replace("player_left=3", "player_left=0"),
+        ] {
+            assert!(!semantic_satisfied(&action, &bad), "{bad}");
         }
     }
 

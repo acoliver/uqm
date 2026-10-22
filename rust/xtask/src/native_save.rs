@@ -393,7 +393,19 @@ fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<Strin
     if let LoadedStar::Catalog(index) = star {
         state.insert("star:current".into(), index as u32);
     }
+    state.insert("escorts:count".into(), save.ship_queue.len() as u32);
+    for race in 0..25u8 {
+        state.insert(
+            format!("escorts:species:{race}"),
+            save.ship_queue
+                .iter()
+                .filter(|ship| ship.race_id == race && ship.crew_level > 0)
+                .count() as u32,
+        );
+    }
     for name in [
+        "CLEAR_SPINDLE_ON_SHIP",
+        "PKUNK_MANNER",
         "RADIOACTIVES_PROVIDED",
         "MOONBASE_DESTROYED",
         "STARBASE_AVAILABLE",

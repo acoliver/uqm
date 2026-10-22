@@ -39,6 +39,10 @@ pub enum StateKey {
     SisJet(u8),
     SisModule(u8),
     SisMineralMass,
+    EscortCount,
+    EscortSpecies(u8),
+    CyborgEnabled,
+    CombatSpeed,
     DateDay,
     DateMonth,
     DateYear,
@@ -82,6 +86,14 @@ impl StateKey {
                     .ok_or_else(|| format!("invalid fitting slot '{text}'"));
             }
         }
+        if let Some(species) = text.strip_prefix("escorts:species:") {
+            return species
+                .parse::<u8>()
+                .ok()
+                .filter(|race| *race < 25)
+                .map(Self::EscortSpecies)
+                .ok_or_else(|| format!("invalid escort race '{text}'"));
+        }
         match text {
             "activity" => Ok(Self::Activity),
             "star:current" => Ok(Self::StarCurrent),
@@ -89,6 +101,9 @@ impl StateKey {
             "hyper:y" => Ok(Self::HyperY),
             "starmap:cursor_x" => Ok(Self::StarmapCursorX),
             "starmap:cursor_y" => Ok(Self::StarmapCursorY),
+            "escorts:count" => Ok(Self::EscortCount),
+            "combat:cyborg" => Ok(Self::CyborgEnabled),
+            "combat:speed" => Ok(Self::CombatSpeed),
             "sis:fuel" => Ok(Self::SisFuel),
             "sis:ru" => Ok(Self::SisRu),
             "sis:crew" => Ok(Self::SisCrew),
@@ -124,7 +139,9 @@ impl StateKey {
             | Self::SisDrive(_)
             | Self::SisJet(_)
             | Self::SisModule(_) => u32::from(u8::MAX),
-            Self::FlagshipDestroyed => 1,
+            Self::FlagshipDestroyed | Self::CyborgEnabled => 1,
+            Self::CombatSpeed => 3,
+            Self::EscortCount | Self::EscortSpecies(_) => 12,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
             Self::Story(name) => {
                 let (start, end) = bit_range(name).unwrap_or((0, 0));
@@ -349,6 +366,19 @@ impl StateSource for LiveCampaign {
             StateKey::SisMineralMass => {
                 input_ffi::sis_fittings().map(|(_, _, _, mass)| u32::from(mass))
             }
+            StateKey::EscortCount => input_ffi::escort_roster().map(|ships| ships.len() as u32),
+            StateKey::EscortSpecies(race) => input_ffi::escort_roster().map(|ships| {
+                ships
+                    .iter()
+                    .filter(|(id, crew)| *id == race && *crew > 0)
+                    .count() as u32
+            }),
+            StateKey::CyborgEnabled => {
+                input_ffi::cyborg_settings().map(|(enabled, _)| u32::from(enabled))
+            }
+            StateKey::CombatSpeed => {
+                input_ffi::cyborg_settings().map(|(_, speed)| u32::from(speed))
+            }
             StateKey::SisFuel => input_ffi::ship_resources().map(|(fuel, _)| fuel),
             StateKey::SisRu => input_ffi::ship_resources().map(|(_, ru)| ru),
             StateKey::SisCrew => input_ffi::sis_crew_and_landers().map(|(crew, _)| u32::from(crew)),
@@ -371,6 +401,37 @@ impl StateSource for LiveCampaign {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn escort_and_combat_keys_validate_and_never_invent_an_unavailable_roster() {
+        assert_eq!(
+            StateKey::parse("escorts:species:4"),
+            Ok(StateKey::EscortSpecies(4))
+        );
+        for bad in [
+            "escorts:species:25",
+            "escorts:species:-1",
+            "escorts:species:pkunk",
+        ] {
+            assert!(StateKey::parse(bad).is_err());
+        }
+        for key in [
+            "escorts:count",
+            "escorts:species:4",
+            "combat:cyborg",
+            "combat:speed",
+        ] {
+            let predicate = StatePredicate {
+                all: vec![StateCondition {
+                    key: key.into(),
+                    op: StateOp::Eq,
+                    value: 0,
+                }],
+            };
+            assert!(predicate.validate().is_ok());
+            assert!(!evaluate(&predicate, &fake(&[])).held);
+        }
+    }
 
     #[test]
     fn equipment_keys_validate_slot_bounds_and_byte_values() {
@@ -413,6 +474,10 @@ mod tests {
                 StateKey::HyperY => "hyper:y",
                 StateKey::StarmapCursorX => "starmap:cursor_x",
                 StateKey::StarmapCursorY => "starmap:cursor_y",
+                StateKey::EscortCount => "escorts:count",
+                StateKey::EscortSpecies(_) => "escorts:species",
+                StateKey::CyborgEnabled => "combat:cyborg",
+                StateKey::CombatSpeed => "combat:speed",
                 StateKey::SisFuel => "sis:fuel",
                 StateKey::SisRu => "sis:ru",
                 StateKey::SisCrew => "sis:crew",

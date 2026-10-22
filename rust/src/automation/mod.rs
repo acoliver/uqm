@@ -30,6 +30,7 @@ pub mod child_session;
 pub mod coordinator;
 pub mod error;
 pub mod flagship_turn;
+pub mod fleet_fight;
 pub mod flight_position;
 pub mod identity;
 pub mod input;
