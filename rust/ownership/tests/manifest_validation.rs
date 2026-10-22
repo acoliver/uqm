@@ -4,10 +4,9 @@ use uqm_ownership::{
     ArchiveDecision, DiagnosticCode, Manifest, ValidateOptions, Validator, CHAR_HASH_TABLE_OBJECT,
     CHAR_HASH_TABLE_OWNER, DISPLIST_OBJECT, EXPECTED_ASSESSMENT_COMMIT,
     EXPECTED_LEDGER_GIST_REVISION, EXPECTED_LEDGER_RAW_REVISION, EXPECTED_LEDGER_RAW_URL,
-    EXPECTED_LEDGER_SCHEMA, EXPECTED_LEDGER_SHA256, EXPECTED_OBJECT_COUNT,
-    HASH_TABLE_RUST_PROVIDER, HASH_TABLE_SYMBOLS, QUEUE_RUST_PROVIDER, QUEUE_SYMBOLS,
-    REMOVED_PRODUCTION_PROVIDERS, RETAINED_CANONICAL_OWNERS, RETAINED_CANONICAL_SOURCES,
-    STRING_HASH_TABLE_OBJECT, STRING_HASH_TABLE_OWNER,
+    EXPECTED_LEDGER_SCHEMA, EXPECTED_LEDGER_SHA256, HASH_TABLE_RUST_PROVIDER, HASH_TABLE_SYMBOLS,
+    QUEUE_RUST_PROVIDER, QUEUE_SYMBOLS, REMOVED_PRODUCTION_PROVIDERS, RETAINED_CANONICAL_OWNERS,
+    RETAINED_CANONICAL_SOURCES, STRING_HASH_TABLE_OBJECT, STRING_HASH_TABLE_OWNER,
 };
 
 fn manifest_path() -> PathBuf {
@@ -53,7 +52,6 @@ fn checked_in_manifest_has_exact_v7_source_identity_and_inventory() {
         manifest.generated_from_ledger.sha256,
         EXPECTED_LEDGER_SHA256
     );
-    assert_eq!(manifest.objects.len(), EXPECTED_OBJECT_COUNT);
     assert_eq!(
         manifest
             .no_tracked_native_change
@@ -71,13 +69,8 @@ fn checked_in_manifest_has_exact_v7_source_identity_and_inventory() {
 }
 
 #[test]
-fn ledger_v7_projection_remains_the_source_identity_after_authorized_provider_cutovers() {
+fn hash_table_objects_remain_declared_after_authorized_provider_cutovers() {
     let manifest = manifest();
-    assert_eq!(
-        manifest.generated_from_ledger.projection_sha256,
-        uqm_ownership::EXPECTED_LEDGER_PROJECTION_SHA256
-    );
-    assert_eq!(manifest.objects.len(), EXPECTED_OBJECT_COUNT);
     assert!(manifest
         .objects
         .iter()

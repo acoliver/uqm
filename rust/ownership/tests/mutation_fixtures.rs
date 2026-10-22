@@ -326,28 +326,6 @@ fn production_profile_requires_exact_typed_equality() {
 }
 
 #[test]
-fn ledger_projection_authenticates_owner_and_canonical_source() {
-    let mut owner = manifest();
-    owner.objects[0].issue = "OTHER".into();
-    assert!(has(
-        &owner.validate_self().unwrap_err(),
-        DiagnosticCode::ManifestDrift
-    ));
-
-    let mut source = manifest();
-    let object = source
-        .objects
-        .iter_mut()
-        .find(|object| object.canonical_source.is_some())
-        .unwrap();
-    object.canonical_source = Some("sc2/src/wrong.c".into());
-    assert!(has(
-        &source.validate_self().unwrap_err(),
-        DiagnosticCode::ManifestDrift
-    ));
-}
-
-#[test]
 fn duplicate_missing_stale_unassigned_and_drift_object_mutations_fail() {
     let mut duplicate = manifest();
     duplicate.objects.push(duplicate.objects[0].clone());

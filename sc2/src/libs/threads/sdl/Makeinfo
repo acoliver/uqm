@@ -1,2 +1,2 @@
-uqm_CFILES="sdlthreads.c"
+uqm_CFILES=""
 uqm_HFILES="sdlthreads.h"

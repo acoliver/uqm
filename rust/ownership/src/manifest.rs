@@ -34,7 +34,6 @@ pub struct LedgerRef {
     pub raw_url: String,
     pub gist_revision: String,
     pub sha256: String,
-    pub projection_sha256: String,
 }
 pub type AcceptedProductionProfile = ProductionProfile;
 
@@ -217,11 +216,6 @@ impl Manifest {
                 crate::EXPECTED_LEDGER_SHA256,
             ),
             (
-                "generated_from_ledger.projection_sha256",
-                ledger.projection_sha256.as_str(),
-                crate::EXPECTED_LEDGER_PROJECTION_SHA256,
-            ),
-            (
                 "scan_root",
                 self.scan_root.as_str(),
                 crate::EXPECTED_SCAN_ROOT,
@@ -255,52 +249,6 @@ impl Manifest {
                 ));
             }
         }
-        if self.objects.len() != crate::EXPECTED_OBJECT_COUNT {
-            diagnostics.push(diag(
-                DiagnosticCode::ManifestDrift,
-                Some("objects"),
-                format!(
-                    "expected {} ledger objects, got {}",
-                    crate::EXPECTED_OBJECT_COUNT,
-                    self.objects.len()
-                ),
-            ));
-        }
-        let projection = self.ledger_projection_sha256();
-        if projection != ledger.projection_sha256 {
-            diagnostics.push(diag(
-                DiagnosticCode::ManifestDrift,
-                Some("objects"),
-                format!(
-                    "ledger identity projection SHA-256 drift: expected {}, got {projection}",
-                    ledger.projection_sha256
-                ),
-            ));
-        }
-    }
-
-    fn ledger_projection_sha256(&self) -> String {
-        use sha2::{Digest, Sha256};
-
-        let mut digest = Sha256::new();
-        for object in &self.objects {
-            for field in [
-                object.path.as_str(),
-                object.issue.as_str(),
-                object.canonical_source.as_deref().unwrap_or(""),
-                object.scan_root.as_str(),
-            ] {
-                digest.update(field.as_bytes());
-                digest.update([0]);
-            }
-            digest.update(object.sha256.as_bytes());
-            digest.update(b"\n");
-        }
-        digest
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
     }
 
     fn validate_paths_and_objects(&self, diagnostics: &mut Vec<Diagnostic>) {

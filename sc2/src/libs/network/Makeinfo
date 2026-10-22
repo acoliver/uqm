@@ -1,5 +1,5 @@
 uqm_SUBDIRS="connect netmanager socket"
-uqm_CFILES="netport.c"
+uqm_CFILES=""
 uqm_HFILES="bytesex.h netport.h network.h"
 
 if [ -n "$uqm_USE_WINSOCK" ]; then
