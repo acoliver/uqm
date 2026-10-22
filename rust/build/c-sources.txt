@@ -60,7 +60,6 @@ sc2/src/uqm/ipdisp.c
 sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
 sc2/src/uqm/loadship.c
-sc2/src/uqm/master.c
 sc2/src/uqm/menu.c
 sc2/src/uqm/misc.c
 sc2/src/uqm/oscill.c
