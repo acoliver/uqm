@@ -1,447 +1,1073 @@
-//! Melnorm dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
+//! Melnorme dialogue and trading, ported from melnorm.c.
 
-#![allow(dead_code)]
+use super::encounter::EncounterApi;
+use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
+use crate::comm::locdata::{CColor, CLocData, CPoint, CSisState};
+use crate::comm::types::CommData;
+mod api;
+mod numbers;
+mod phrases;
+mod rescue;
+use api::MelnormApi;
+use phrases::*;
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const HELLO_NOW_DOWN_TO_BUSINESS_1: u32 = 1;
-const HELLO_NOW_DOWN_TO_BUSINESS_2: u32 = 2;
-const HELLO_NOW_DOWN_TO_BUSINESS_3: u32 = 3;
-const KNOW_OF_YOU: u32 = 4;
-const HOW_KNOW: u32 = 5;
-const KNOW_BECAUSE: u32 = 6;
-const WHAT_ABOUT_YOURSELVES: u32 = 7;
-const NO_TALK_ABOUT_OURSELVES: u32 = 8;
-const WHAT_FACTORS: u32 = 9;
-const FACTORS_ARE: u32 = 10;
-const WHAT_ABOUT_UNIVERSE: u32 = 11;
-const NO_FREE_LUNCH: u32 = 12;
-const GIVING_IS_GOOD_1: u32 = 13;
-const GIVING_IS_BAD_1: u32 = 14;
-const GIVING_IS_GOOD_2: u32 = 15;
-const GIVING_IS_BAD_2: u32 = 16;
-const GET_ON_WITH_BUSINESS: u32 = 17;
-const TRADE_IS_FOR_THE_WEAK: u32 = 18;
-const WERE_NOT_AFRAID: u32 = 19;
-const NO_TRADE_NOW: u32 = 20;
-const OK_NO_TRADE_NOW_BYE: u32 = 21;
-const HELLO_AND_DOWN_TO_BUSINESS_1: u32 = 22;
-const HELLO_AND_DOWN_TO_BUSINESS_2: u32 = 23;
-const HELLO_AND_DOWN_TO_BUSINESS_3: u32 = 24;
-const HELLO_AND_DOWN_TO_BUSINESS_4: u32 = 25;
-const HELLO_AND_DOWN_TO_BUSINESS_5: u32 = 26;
-const HELLO_AND_DOWN_TO_BUSINESS_6: u32 = 27;
-const HELLO_AND_DOWN_TO_BUSINESS_7: u32 = 28;
-const HELLO_AND_DOWN_TO_BUSINESS_8: u32 = 29;
-const HELLO_AND_DOWN_TO_BUSINESS_9: u32 = 30;
-const HELLO_AND_DOWN_TO_BUSINESS_10: u32 = 31;
-const WHATS_MY_CREDIT: u32 = 32;
-const HELLO_SLIGHTLY_ANGRY_1: u32 = 33;
-const HELLO_SLIGHTLY_ANGRY_2: u32 = 34;
-const HELLO_SLIGHTLY_ANGRY_3: u32 = 35;
-const EXPLORE_RELATIONSHIP: u32 = 36;
-const EXAMPLE_OF_RELATIONSHIP: u32 = 37;
-const EXCUSE_1: u32 = 38;
-const NO_EXCUSE_1: u32 = 39;
-const EXCUSE_2: u32 = 40;
-const NO_EXCUSE_2: u32 = 41;
-const EXCUSE_3: u32 = 42;
-const NO_EXCUSE_3: u32 = 43;
-const WE_APOLOGIZE: u32 = 44;
-const APOLOGY_ACCEPTED: u32 = 45;
-const SO_WE_CAN_ATTACK: u32 = 46;
-const DECEITFUL_HUMAN: u32 = 47;
-const BYE_MELNORME_SLIGHTLY_ANGRY: u32 = 48;
-const MELNORME_SLIGHTLY_ANGRY_GOODBYE: u32 = 49;
-const HELLO_HATE_YOU_1: u32 = 50;
-const HELLO_HATE_YOU_2: u32 = 51;
-const HELLO_HATE_YOU_3: u32 = 52;
-const WELL_IF_THATS_THE_WAY_YOU_FEEL: u32 = 53;
-const YOU_HATE_US_SO_WE_GO_AWAY: u32 = 54;
-const HATE_YOU_GOODBYE: u32 = 55;
-const WE_FIGHT_AGAIN: u32 = 56;
-const RESCUE_EXPLANATION: u32 = 57;
-const RESCUE_AGAIN_1: u32 = 58;
-const RESCUE_AGAIN_2: u32 = 59;
-const RESCUE_AGAIN_3: u32 = 60;
-const RESCUE_AGAIN_4: u32 = 61;
-const RESCUE_AGAIN_5: u32 = 62;
-const CHANGED_MIND: u32 = 63;
-const NO_CHANGED_MIND: u32 = 64;
-const YES_CHANGED_MIND: u32 = 65;
-const SHOULD_WE_HELP_YOU: u32 = 66;
-const YES_HELP: u32 = 67;
-const NO_HELP: u32 = 68;
-const RESCUE_OFFER: u32 = 69;
-const RESCUE_TANKS: u32 = 70;
-const RESCUE_HOME: u32 = 71;
-const TAKE_IT: u32 = 72;
-const LEAVE_IT: u32 = 73;
-const HAPPY_TO_HAVE_RESCUED: u32 = 74;
-const MAYBE_SEE_YOU_LATER: u32 = 75;
-const GOODBYE_AND_GOODLUCK: u32 = 76;
-const GOODBYE_AND_GOODLUCK_AGAIN: u32 = 77;
-const HELLO_PISSED_OFF_1: u32 = 78;
-const HELLO_PISSED_OFF_2: u32 = 79;
-const HELLO_PISSED_OFF_3: u32 = 80;
-const BEG_FORGIVENESS: u32 = 81;
-const LOTS_TO_MAKE_UP_FOR: u32 = 82;
-const YOU_ARE_SO_RIGHT: u32 = 83;
-const ONE_LAST_CHANCE: u32 = 84;
-const OK_STRIP_ME: u32 = 85;
-const NO_STRIP_NOW: u32 = 86;
-const NOT_WORTH_STRIPPING: u32 = 87;
-const FAIR_JUSTICE: u32 = 88;
-const BYE_MELNORME_PISSED_OFF: u32 = 89;
-const MELNORME_PISSED_OFF_GOODBYE: u32 = 90;
-const FIGHT_SOME_MORE: u32 = 91;
-const OK_FIGHT_SOME_MORE: u32 = 92;
-const WHY_BLUE_LIGHT: u32 = 93;
-const BLUE_IS_MAD: u32 = 94;
-const WE_STRONG_1: u32 = 95;
-const YOU_NOT_STRONG_1: u32 = 96;
-const WE_STRONG_2: u32 = 97;
-const YOU_NOT_STRONG_2: u32 = 98;
-const WE_STRONG_3: u32 = 99;
-const YOU_NOT_STRONG_3: u32 = 100;
-const JUST_TESTING: u32 = 101;
-const REALLY_TESTING: u32 = 102;
-const YES_REALLY_TESTING: u32 = 103;
-const TEST_RESULTS: u32 = 104;
-const YOURE_ON: u32 = 105;
-const YOU_GIVE_US_NO_CHOICE: u32 = 106;
-const TRADING_INFO: u32 = 107;
-const BUY_OR_SELL: u32 = 108;
-const GOODBYE: u32 = 109;
-const WHY_TURNED_PURPLE: u32 = 110;
-const BUY: u32 = 111;
-const SELL: u32 = 112;
-const TURNED_PURPLE_BECAUSE: u32 = 113;
-const NOTHING_TO_SELL: u32 = 114;
-const WHAT_TO_SELL: u32 = 115;
-const OK_DONE_SELLING: u32 = 116;
-const SELL_LIFE_DATA: u32 = 117;
-const SOLD_LIFE_DATA1: u32 = 118;
-const SOLD_LIFE_DATA2: u32 = 119;
-const SOLD_LIFE_DATA3: u32 = 120;
-const SELL_RAINBOW_LOCATIONS: u32 = 121;
-const SOLD_RAINBOW_LOCATIONS1: u32 = 122;
-const SOLD_RAINBOW_LOCATIONS2: u32 = 123;
-const SOLD_RAINBOW_LOCATIONS3: u32 = 124;
-const SELL_PRECURSOR_FIND: u32 = 125;
-const SOLD_PRECURSOR_FIND: u32 = 126;
-const CHANGED_MIND_NO_SELL: u32 = 127;
-const DONE_SELLING: u32 = 128;
-const NEED_CREDIT: u32 = 129;
-const WHAT_TO_BUY: u32 = 130;
-const WHAT_MORE_TO_BUY: u32 = 131;
-const OK_DONE_BUYING: u32 = 132;
-const BUY_FUEL: u32 = 133;
-const DONE_BUYING: u32 = 134;
-const BE_LEAVING_NOW: u32 = 135;
-const HOW_MUCH_FUEL: u32 = 136;
-const BUY_1_FUEL: u32 = 137;
-const GOT_FUEL: u32 = 138;
-const BUY_5_FUEL: u32 = 139;
-const BUY_10_FUEL: u32 = 140;
-const BUY_25_FUEL: u32 = 141;
-const DONE_BUYING_FUEL: u32 = 142;
-const FRIENDLY_GOODBYE: u32 = 143;
-const CREDIT_IS0: u32 = 144;
-const CREDIT_IS1: u32 = 145;
-const NEED_MORE_CREDIT0: u32 = 146;
-const NEED_MORE_CREDIT1: u32 = 147;
-const BUY_FUEL_INTRO: u32 = 148;
-const NO_ROOM_FOR_FUEL: u32 = 149;
-const BUY_INFO: u32 = 150;
-const BUY_TECHNOLOGY: u32 = 151;
-const BUY_CURRENT_EVENTS: u32 = 152;
-const BUY_ALIEN_RACES: u32 = 153;
-const BUY_HISTORY: u32 = 154;
-const DONE_BUYING_INFO: u32 = 155;
-const NO_BUY_INFO: u32 = 156;
-const BUY_INFO_INTRO: u32 = 157;
-const OK_BUY_INFO: u32 = 158;
-const OK_NO_BUY_INFO: u32 = 159;
-const OK_DONE_BUYING_INFO: u32 = 160;
-const OK_BUY_EVENT_1: u32 = 161;
-const OK_BUY_EVENT_2: u32 = 162;
-const OK_BUY_EVENT_3: u32 = 163;
-const OK_BUY_EVENT_4: u32 = 164;
-const OK_BUY_EVENT_5: u32 = 165;
-const OK_BUY_EVENT_6: u32 = 166;
-const OK_BUY_EVENT_7: u32 = 167;
-const OK_BUY_EVENT_8: u32 = 168;
-const OK_BUY_ALIEN_RACE_1: u32 = 169;
-const OK_BUY_ALIEN_RACE_2: u32 = 170;
-const OK_BUY_ALIEN_RACE_3: u32 = 171;
-const OK_BUY_ALIEN_RACE_4: u32 = 172;
-const OK_BUY_ALIEN_RACE_5: u32 = 173;
-const OK_BUY_ALIEN_RACE_6: u32 = 174;
-const OK_BUY_ALIEN_RACE_7: u32 = 175;
-const OK_BUY_ALIEN_RACE_8: u32 = 176;
-const OK_BUY_ALIEN_RACE_9: u32 = 177;
-const OK_BUY_ALIEN_RACE_10: u32 = 178;
-const OK_BUY_ALIEN_RACE_11: u32 = 179;
-const OK_BUY_ALIEN_RACE_12: u32 = 180;
-const OK_BUY_ALIEN_RACE_13: u32 = 181;
-const OK_BUY_ALIEN_RACE_14: u32 = 182;
-const OK_BUY_ALIEN_RACE_15: u32 = 183;
-const OK_BUY_ALIEN_RACE_16: u32 = 184;
-const OK_BUY_HISTORY_1: u32 = 185;
-const OK_BUY_HISTORY_2: u32 = 186;
-const OK_BUY_HISTORY_3: u32 = 187;
-const OK_BUY_HISTORY_4: u32 = 188;
-const OK_BUY_HISTORY_5: u32 = 189;
-const OK_BUY_HISTORY_6: u32 = 190;
-const OK_BUY_HISTORY_7: u32 = 191;
-const OK_BUY_HISTORY_8: u32 = 192;
-const OK_BUY_HISTORY_9: u32 = 193;
-const INFO_ALL_GONE: u32 = 194;
-const BUY_NEW_TECH: u32 = 195;
-const NO_BUY_NEW_TECH: u32 = 196;
-const DONE_BUYING_NEW_TECH: u32 = 197;
-const FILL_ME_UP: u32 = 198;
-const OK_FILL_YOU_UP: u32 = 199;
-const BUY_NEW_TECH_INTRO: u32 = 200;
-const OK_BUY_NEW_TECH: u32 = 201;
-const OK_NO_BUY_NEW_TECH: u32 = 202;
-const OK_DONE_BUYING_NEW_TECH: u32 = 203;
-const OK_DONE_BUYING_FUEL: u32 = 204;
-const NEW_TECH_1: u32 = 205;
-const NEW_TECH_2: u32 = 206;
-const NEW_TECH_3: u32 = 207;
-const NEW_TECH_4: u32 = 208;
-const NEW_TECH_5: u32 = 209;
-const NEW_TECH_6: u32 = 210;
-const NEW_TECH_7: u32 = 211;
-const NEW_TECH_8: u32 = 212;
-const NEW_TECH_9: u32 = 213;
-const NEW_TECH_10: u32 = 214;
-const NEW_TECH_11: u32 = 215;
-const NEW_TECH_12: u32 = 216;
-const NEW_TECH_13: u32 = 217;
-const OK_BUY_NEW_TECH_1: u32 = 218;
-const OK_BUY_NEW_TECH_2: u32 = 219;
-const OK_BUY_NEW_TECH_3: u32 = 220;
-const OK_BUY_NEW_TECH_4: u32 = 221;
-const OK_BUY_NEW_TECH_5: u32 = 222;
-const OK_BUY_NEW_TECH_6: u32 = 223;
-const OK_BUY_NEW_TECH_7: u32 = 224;
-const OK_BUY_NEW_TECH_8: u32 = 225;
-const OK_BUY_NEW_TECH_9: u32 = 226;
-const OK_BUY_NEW_TECH_10: u32 = 227;
-const OK_BUY_NEW_TECH_11: u32 = 228;
-const OK_BUY_NEW_TECH_12: u32 = 229;
-const OK_BUY_NEW_TECH_13: u32 = 230;
-const CHARITY: u32 = 231;
-const NEW_TECH_ALL_GONE: u32 = 232;
-const WE_ARE_FROM_ALLIANCE0: u32 = 233;
-const STRIP_HEAD: u32 = 234;
-const LANDERS: u32 = 235;
-const THRUSTERS: u32 = 236;
-const JETS: u32 = 237;
-const PODS: u32 = 238;
-const BAYS: u32 = 239;
-const DYNAMOS: u32 = 240;
-const FURNACES: u32 = 241;
-const GUNS: u32 = 242;
-const BLASTERS: u32 = 243;
-const CANNONS: u32 = 244;
-const TRACKERS: u32 = 245;
-const DEFENSES: u32 = 246;
-const NAME_1: u32 = 247;
-const NAME_2: u32 = 248;
-const NAME_3: u32 = 249;
-const NAME_40: u32 = 250;
-const NAME_41: u32 = 251;
-const ENUMERATE_ONE: u32 = 252;
-const ENUMERATE_TWO: u32 = 253;
-const ENUMERATE_THREE: u32 = 254;
-const ENUMERATE_FOUR: u32 = 255;
-const ENUMERATE_FIVE: u32 = 256;
-const ENUMERATE_SIX: u32 = 257;
-const ENUMERATE_SEVEN: u32 = 258;
-const ENUMERATE_EIGHT: u32 = 259;
-const ENUMERATE_NINE: u32 = 260;
-const ENUMERATE_TEN: u32 = 261;
-const ENUMERATE_ELEVEN: u32 = 262;
-const ENUMERATE_TWELVE: u32 = 263;
-const ENUMERATE_THIRTEEN: u32 = 264;
-const ENUMERATE_FOURTEEN: u32 = 265;
-const ENUMERATE_FIFTEEN: u32 = 266;
-const ENUMERATE_SIXTEEN: u32 = 267;
-const END_LIST_WITH_AND: u32 = 268;
-const ENUMERATE_ZERO: u32 = 269;
-const ENUMERATE_SEVENTEEN: u32 = 270;
-const ENUMERATE_EIGHTEEN: u32 = 271;
-const ENUMERATE_NINETEEN: u32 = 272;
-const ENUMERATE_TWENTY: u32 = 273;
-const ENUMERATE_THIRTY: u32 = 274;
-const ENUMERATE_FOURTY: u32 = 275;
-const ENUMERATE_FIFTY: u32 = 276;
-const ENUMERATE_SIXTY: u32 = 277;
-const ENUMERATE_SEVENTY: u32 = 278;
-const ENUMERATE_EIGHTY: u32 = 279;
-const ENUMERATE_NINETY: u32 = 280;
-const ENUMERATE_HUNDRED: u32 = 281;
-const ENUMERATE_THOUSAND: u32 = 282;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    ExitConversation,
+    DoRescue,
+    DoBuy,
+    DoSell,
+    NatureOfConversation,
+    DoBluster,
+    DoFirstMeeting,
+    DoMelnormeMiffed,
+    DoMelnormePissed,
 }
 
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
+const fn empty_ship() -> CSisState {
+    CSisState {
+        log_x: 0,
+        log_y: 0,
+        res_units: 0,
+        fuel_on_board: 0,
+        crew_enlisted: 0,
+        total_element_mass: 0,
+        total_bio_mass: 0,
+        module_slots: [22; 16],
+        drive_slots: [20; 11],
+        jet_slots: [21; 8],
+        num_landers: 0,
+        element_amounts: [0; 8],
+        ship_name: [0; 16],
+        commander_name: [0; 16],
+        planet_name: [0; 16],
     }
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
+struct Session {
+    local_stack0: u8,
+    local_stack1: u8,
+    asked_to_buy: bool,
+    prev_msg_mode: i32,
+    rescue_fuel: u16,
+    sis_copy: CSisState,
 }
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"melnorm\0";
-const RACE_FONT: &[u8] = b"melnormfont\0";
-const RACE_COLOR_MAP: &[u8] = b"melnormcolr\0";
-const RACE_MUSIC: &[u8] = b"melnormmusic\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.melnorm.dialogue\0";
-
-/// Melnorm race dialogue implementation.
-pub struct MelnormDialogue;
-
-impl super::RaceDialogue for MelnormDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl Session {
+    const fn new() -> Self {
+        Self {
+            local_stack0: 0,
+            local_stack1: 0,
+            asked_to_buy: false,
+            prev_msg_mode: 0,
+            rescue_fuel: 0,
+            sis_copy: empty_ship(),
         }
     }
+}
+struct Dialogue<'a, A> {
+    api: &'a mut A,
+    session: &'a mut Session,
+}
 
+#[derive(Clone, Copy)]
+enum Tech {
+    Module(usize, u8),
+    Shield(u8),
+    State(&'static str),
+}
+const TECHS: [Tech; 13] = [
+    Tech::Module(10, 80),
+    Tech::State("IMPROVED_LANDER_SPEED"),
+    Tech::Module(13, 80),
+    Tech::Shield(0),
+    Tech::State("IMPROVED_LANDER_CARGO"),
+    Tech::Module(6, 20),
+    Tech::State("IMPROVED_LANDER_SHOT"),
+    Tech::Shield(1),
+    Tech::Module(12, 100),
+    Tech::Shield(2),
+    Tech::Shield(3),
+    Tech::Module(11, 120),
+    Tech::Module(8, 80),
+];
+impl<A: MelnormApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: u16) {
+        match h {
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::DoRescue => self.do_rescue(r),
+            Handler::DoBuy => self.do_buy(r),
+            Handler::DoSell => self.do_sell(r),
+            Handler::NatureOfConversation => self.nature_of_conversation(r),
+            Handler::DoBluster => self.do_bluster(r),
+            Handler::DoFirstMeeting => self.do_first_meeting(r),
+            Handler::DoMelnormeMiffed => self.do_melnorme_miffed(r),
+            Handler::DoMelnormePissed => self.do_melnorme_pissed(r),
+        }
+    }
+    fn initialize(&mut self, _desc: &mut CLocData) {
+        self.session.local_stack0 = 0;
+        self.session.local_stack1 = 0;
+        self.session.prev_msg_mode = 0;
+        self.api.segue(0);
+        self.session.asked_to_buy = false;
+    }
+    fn has_tech(&self, i: usize) -> bool {
+        match TECHS[i] {
+            Tech::Module(id, _) => self.api.module_cost(id) != 0,
+            Tech::Shield(bit) => self.api.get("LANDER_SHIELDS") & (1 << bit) != 0,
+            Tech::State(key) => self.api.get(key) != 0,
+        }
+    }
+    fn grant_tech(&mut self, i: usize) {
+        match TECHS[i] {
+            Tech::Module(id, cost) => self.api.set_module_cost(id, cost),
+            Tech::Shield(bit) => self.api.set(
+                "LANDER_SHIELDS",
+                self.api.get("LANDER_SHIELDS") | (1 << bit),
+            ),
+            Tech::State(key) => self.api.set(key, 1),
+        }
+    }
+    fn next_tech(&self) -> Option<usize> {
+        (0..TECHS.len()).find(|&i| !self.has_tech(i))
+    }
+    fn credits(&self) -> u16 {
+        u16::from_le_bytes([
+            self.api.get("MELNORME_CREDIT0"),
+            self.api.get("MELNORME_CREDIT1"),
+        ])
+    }
+    fn set_credits(&mut self, credits: u16) {
+        let [lo, hi] = credits.to_le_bytes();
+        self.api.set("MELNORME_CREDIT0", lo);
+        self.api.set("MELNORME_CREDIT1", hi);
+    }
+    fn delta_credit(&mut self, delta: i16) -> bool {
+        let credit = self.credits();
+        if delta >= 0 || -i32::from(delta) <= i32::from(credit) {
+            self.set_credits(credit.wrapping_add(delta as u16));
+            self.api.draw_status();
+            true
+        } else {
+            self.api.npc(i32::from(NEED_MORE_CREDIT0));
+            self.api.number(-i32::from(delta) - i32::from(credit));
+            self.api.npc(i32::from(NEED_MORE_CREDIT1));
+            false
+        }
+    }
+    fn any_info(&self) -> bool {
+        self.api.get("MELNORME_EVENTS_INFO_STACK") < 8
+            || self.api.get("MELNORME_ALIEN_INFO_STACK") < 16
+            || self.api.get("MELNORME_HISTORY_INFO_STACK") < 9
+    }
+    fn info(&mut self, r: u16) {
+        let (key, first, count) = match r {
+            BUY_CURRENT_EVENTS => ("MELNORME_EVENTS_INFO_STACK", OK_BUY_EVENT_1, 8),
+            BUY_ALIEN_RACES => ("MELNORME_ALIEN_INFO_STACK", OK_BUY_ALIEN_RACE_1, 16),
+            BUY_HISTORY => ("MELNORME_HISTORY_INFO_STACK", OK_BUY_HISTORY_1, 9),
+            _ => unreachable!(),
+        };
+        let stack = self.api.get(key);
+        let phrase = first + u16::from(stack.min(count - 1));
+        if r == BUY_ALIEN_RACES {
+            if phrase == OK_BUY_ALIEN_RACE_14 && self.api.get("FOUND_PLUTO_SPATHI") == 0 {
+                self.api.set("KNOW_SPATHI_PASSWORD", 1);
+                self.api.set("SPATHI_HOME_VISITS", 7);
+            }
+            if phrase == OK_BUY_ALIEN_RACE_15 {
+                if self.api.get("KNOW_ABOUT_SHATTERED") < 2 {
+                    self.api.set("KNOW_ABOUT_SHATTERED", 2);
+                }
+                self.api.set("KNOW_SYREEN_WORLD_SHATTERED", 1);
+            }
+        }
+        self.api.npc(i32::from(phrase));
+        self.api.set(key, stack.wrapping_add(1));
+    }
+    fn capacity(&self) -> u32 {
+        1000 + self
+            .api
+            .ship()
+            .module_slots
+            .iter()
+            .map(|&m| match m {
+                5 => 5000,
+                6 => 10000,
+                _ => 0,
+            })
+            .sum::<u32>()
+    }
+    fn buy_menu(&mut self, capacity: u32) {
+        if self.api.ship().fuel_on_board < capacity {
+            self.api.response(BUY_FUEL, Handler::DoBuy, &[]);
+        }
+        if self.next_tech().is_some() {
+            self.api.response(BUY_TECHNOLOGY, Handler::DoBuy, &[]);
+        }
+        if self.any_info() {
+            self.api.response(BUY_INFO, Handler::DoBuy, &[]);
+        }
+        self.api
+            .response(DONE_BUYING, Handler::NatureOfConversation, &[]);
+        self.api
+            .response(BE_LEAVING_NOW, Handler::ExitConversation, &[]);
+    }
+    fn do_buy(&mut self, r: u16) {
+        let credit = self.credits();
+        let capacity = self.capacity();
+        if credit == 0 {
+            self.session.asked_to_buy = true;
+            self.api.npc(i32::from(NEED_CREDIT));
+            self.nature_of_conversation(r);
+        } else if [
+            BUY_FUEL,
+            BUY_1_FUEL,
+            BUY_5_FUEL,
+            BUY_10_FUEL,
+            BUY_25_FUEL,
+            FILL_ME_UP,
+        ]
+        .contains(&r)
+        {
+            let needed = match r {
+                BUY_1_FUEL => 1,
+                BUY_5_FUEL => 5,
+                BUY_10_FUEL => 10,
+                BUY_25_FUEL => 25,
+                FILL_ME_UP => (capacity - self.api.ship().fuel_on_board).div_ceil(100) as i16,
+                _ => 0,
+            };
+            let mut no_room = false;
+            if needed == 0 {
+                if self.api.get("MELNORME_FUEL_PROCEDURE") == 0 {
+                    self.api.npc(i32::from(BUY_FUEL_INTRO));
+                    self.api.set("MELNORME_FUEL_PROCEDURE", 1);
+                }
+            } else if self.api.ship().fuel_on_board / 100 + needed as u32 > capacity / 100 {
+                self.api.npc(i32::from(NO_ROOM_FOR_FUEL));
+                no_room = true;
+            } else if i32::from(needed) <= i32::from(credit) {
+                self.api.npc(i32::from(GOT_FUEL));
+                let mut fuel = needed as u32 * 100;
+                while fuel > 0x3fff {
+                    self.api.gauges(0, 0x3fff, 0);
+                    fuel -= 0x3fff;
+                }
+                self.api.gauges(0, fuel as i16, 0);
+            }
+            if !no_room && needed != 0 {
+                self.delta_credit(-needed);
+                if self.api.ship().fuel_on_board >= capacity {
+                    self.buy_menu(capacity);
+                    return;
+                }
+            }
+            self.api.npc(i32::from(HOW_MUCH_FUEL));
+            for p in [
+                BUY_1_FUEL,
+                BUY_5_FUEL,
+                BUY_10_FUEL,
+                BUY_25_FUEL,
+                FILL_ME_UP,
+                DONE_BUYING_FUEL,
+            ] {
+                self.api.response(p, Handler::DoBuy, &[]);
+            }
+        } else if r == BUY_TECHNOLOGY || r == BUY_NEW_TECH {
+            if self.api.get("MELNORME_TECH_PROCEDURE") == 0 {
+                self.api.npc(i32::from(BUY_NEW_TECH_INTRO));
+                self.api.set("MELNORME_TECH_PROCEDURE", 1);
+            }
+            if r == BUY_NEW_TECH {
+                let Some(i) = self.next_tech() else {
+                    self.buy_menu(capacity);
+                    return;
+                };
+                if !self.delta_credit(-150) {
+                    self.buy_menu(capacity);
+                    return;
+                }
+                self.grant_tech(i);
+                self.api.npc(i32::from(OK_BUY_NEW_TECH_1) + i as i32);
+            }
+            let Some(i) = self.next_tech() else {
+                self.api.npc(i32::from(NEW_TECH_ALL_GONE));
+                self.buy_menu(capacity);
+                return;
+            };
+            self.api.npc(i32::from(NEW_TECH_1) + i as i32);
+            self.api.response(BUY_NEW_TECH, Handler::DoBuy, &[]);
+            self.api.response(NO_BUY_NEW_TECH, Handler::DoBuy, &[]);
+        } else if [BUY_INFO, BUY_CURRENT_EVENTS, BUY_ALIEN_RACES, BUY_HISTORY].contains(&r) {
+            if self.api.get("MELNORME_INFO_PROCEDURE") == 0 {
+                self.api.npc(i32::from(BUY_INFO_INTRO));
+                self.api.set("MELNORME_INFO_PROCEDURE", 1);
+            } else if r == BUY_INFO {
+                self.api.npc(i32::from(OK_BUY_INFO));
+            } else {
+                if !self.delta_credit(-75) {
+                    self.buy_menu(capacity);
+                    return;
+                }
+                self.info(r);
+            }
+            if !self.any_info() {
+                self.api.npc(i32::from(INFO_ALL_GONE));
+                self.buy_menu(capacity);
+                return;
+            }
+            for (key, n, p) in [
+                ("MELNORME_EVENTS_INFO_STACK", 8, BUY_CURRENT_EVENTS),
+                ("MELNORME_ALIEN_INFO_STACK", 16, BUY_ALIEN_RACES),
+                ("MELNORME_HISTORY_INFO_STACK", 9, BUY_HISTORY),
+            ] {
+                if self.api.get(key) < n {
+                    self.api.response(p, Handler::DoBuy, &[]);
+                }
+            }
+            self.api.response(DONE_BUYING_INFO, Handler::DoBuy, &[]);
+        } else {
+            self.api.npc(i32::from(match r {
+                DONE_BUYING_FUEL => OK_DONE_BUYING_FUEL,
+                NO_BUY_NEW_TECH => OK_NO_BUY_NEW_TECH,
+                DONE_BUYING_INFO => OK_DONE_BUYING_INFO,
+                _ => WHAT_TO_BUY,
+            }));
+            self.buy_menu(capacity);
+        }
+    }
+    fn new_rainbows(&self) -> u8 {
+        let mask = u16::from_le_bytes([
+            self.api.get("RAINBOW_WORLD0"),
+            self.api.get("RAINBOW_WORLD1"),
+        ]);
+        (mask.count_ones() as u8).wrapping_sub(self.api.get("MELNORME_RAINBOW_COUNT"))
+    }
+    fn do_sell(&mut self, r: u16) {
+        let mut rainbows = self.new_rainbows();
+        let mut queued = false;
+        if r != SELL {
+            if r == SELL_LIFE_DATA {
+                let bio = self.api.ship().total_bio_mass;
+                let added = bio.wrapping_mul(2) as i16;
+                self.api.npc(i32::from(SOLD_LIFE_DATA1));
+                self.api.number(i32::from(bio));
+                self.api.npc(i32::from(SOLD_LIFE_DATA2));
+                self.api.number(i32::from(added));
+                self.api.npc(i32::from(SOLD_LIFE_DATA3));
+                if rainbows != 0 {
+                    self.api.npc(i32::from(WHAT_TO_SELL));
+                    queued = true;
+                }
+                self.api.talk_segue(1);
+                self.api.draw_cargo(255, 255);
+                self.api.sleep(420);
+                self.api.now();
+                self.api.draw_cargo(8, 8);
+                loop {
+                    self.api.now();
+                    let mut ship = self.api.ship();
+                    if self.api.skip_sale() {
+                        self.delta_credit(ship.total_bio_mass.wrapping_mul(2) as i16);
+                        ship.total_bio_mass = 0;
+                    } else {
+                        ship.total_bio_mass = ship.total_bio_mass.wrapping_sub(1);
+                        self.api.set_ship(ship);
+                        self.delta_credit(2);
+                    }
+                    self.api.set_ship(ship);
+                    self.api.draw_cargo(8, 8);
+                    if ship.total_bio_mass == 0 {
+                        break;
+                    }
+                }
+                self.api.sleep(420);
+                self.api.clear_display();
+            } else {
+                let added = i16::from(rainbows) * 500;
+                self.api.npc(i32::from(SOLD_RAINBOW_LOCATIONS1));
+                self.api.number(i32::from(rainbows));
+                self.api.npc(i32::from(SOLD_RAINBOW_LOCATIONS2));
+                self.api.number(i32::from(added));
+                self.api.npc(i32::from(SOLD_RAINBOW_LOCATIONS3));
+                self.api.set(
+                    "MELNORME_RAINBOW_COUNT",
+                    rainbows.wrapping_add(self.api.get("MELNORME_RAINBOW_COUNT")),
+                );
+                rainbows = 0;
+                self.delta_credit(added);
+            }
+            self.session.asked_to_buy = false;
+        }
+        if self.api.ship().total_bio_mass != 0 || rainbows != 0 {
+            if !queued {
+                self.api.npc(i32::from(WHAT_TO_SELL));
+            }
+            if self.api.ship().total_bio_mass != 0 {
+                self.api.response(SELL_LIFE_DATA, Handler::DoSell, &[]);
+            }
+            if rainbows != 0 {
+                self.api
+                    .response(SELL_RAINBOW_LOCATIONS, Handler::DoSell, &[]);
+            }
+            self.api
+                .response(DONE_SELLING, Handler::NatureOfConversation, &[]);
+        } else {
+            if r == SELL {
+                self.api.npc(i32::from(NOTHING_TO_SELL));
+            }
+            self.api.disable(SELL);
+            self.nature_of_conversation(r);
+        }
+    }
+    fn nature_of_conversation(&mut self, mut r: u16) {
+        if r == GET_ON_WITH_BUSINESS {
+            self.api.set("MELNORME_YACK_STACK2", 5);
+            r = 0;
+        }
+        self.delta_credit(0);
+        let credit = self.credits();
+        if r == 0 {
+            let stack = self.api.get("MELNORME_YACK_STACK2").wrapping_sub(5);
+            self.api.npc(i32::from(
+                HELLO_AND_DOWN_TO_BUSINESS_1 + u16::from(stack.min(9)),
+            ));
+            self.api.set(
+                "MELNORME_YACK_STACK2",
+                if stack < 9 {
+                    stack + 6
+                } else {
+                    stack.wrapping_add(5)
+                },
+            );
+        }
+        if self.api.ship().fuel_on_board > 0
+            || self.api.ship().total_bio_mass != 0
+            || credit != 0
+            || self.new_rainbows() != 0
+        {
+            if self.api.get("TRADED_WITH_MELNORME") == 0 {
+                self.api.set("TRADED_WITH_MELNORME", 1);
+                self.api.npc(i32::from(TRADING_INFO));
+            }
+            if r == 0 {
+                self.api.npc(i32::from(BUY_OR_SELL));
+                self.api.talk_segue(1);
+                self.api.fade_palette(1, 420);
+                self.api.talk_segue(u16::MAX);
+            } else if r == WHY_TURNED_PURPLE {
+                self.api.set("WHY_MELNORME_PURPLE", 1);
+                self.api.npc(i32::from(TURNED_PURPLE_BECAUSE));
+            } else if r == DONE_SELLING {
+                self.api.npc(i32::from(OK_DONE_SELLING));
+            } else if r == DONE_BUYING {
+                self.api.npc(i32::from(OK_DONE_BUYING));
+            }
+            if self.api.get("WHY_MELNORME_PURPLE") == 0 {
+                self.api
+                    .response(WHY_TURNED_PURPLE, Handler::NatureOfConversation, &[]);
+            }
+            if !self.session.asked_to_buy {
+                self.api.response(BUY, Handler::DoBuy, &[]);
+            }
+            if self.api.enabled(SELL) {
+                self.api.response(SELL, Handler::DoSell, &[]);
+            }
+            self.api.response(GOODBYE, Handler::ExitConversation, &[]);
+        } else if self.api.get("MELNORME_RESCUE_REFUSED") != 0 {
+            self.api.npc(i32::from(CHANGED_MIND));
+            self.api.response(YES_CHANGED_MIND, Handler::DoRescue, &[]);
+            self.api
+                .response(NO_CHANGED_MIND, Handler::ExitConversation, &[]);
+        } else {
+            let n = self.api.get("MELNORME_RESCUE_COUNT");
+            self.api
+                .npc(i32::from(RESCUE_EXPLANATION + u16::from(n.min(5))));
+            if n < 5 {
+                self.api.set("MELNORME_RESCUE_COUNT", n + 1);
+            }
+            self.api.npc(i32::from(SHOULD_WE_HELP_YOU));
+            self.api.response(YES_HELP, Handler::DoRescue, &[]);
+            self.api.response(NO_HELP, Handler::ExitConversation, &[]);
+        }
+    }
+    fn yack0_respond(&mut self) {
+        match self.api.get("MELNORME_YACK_STACK0") {
+            0 => {
+                let i = self.api.get("NEW_ALLIANCE_NAME");
+                let mut fragments = vec![
+                    i32::from(WE_ARE_FROM_ALLIANCE0),
+                    i32::from(NAME_1) + i32::from(i),
+                ];
+                if i == 3 {
+                    fragments.extend_from_slice(&[GLOBAL_PLAYER_NAME, i32::from(NAME_41)]);
+                }
+                self.api
+                    .response(WE_ARE_FROM_ALLIANCE0, Handler::DoFirstMeeting, &fragments);
+            }
+            1 => self.api.response(HOW_KNOW, Handler::DoFirstMeeting, &[]),
+            _ => {}
+        }
+    }
+    fn do_first_meeting(&mut self, r: u16) {
+        let mut last_stack = 0;
+        if r == 0 {
+            let mut n = self.api.get("MELNORME_BUSINESS_COUNT");
+            match n {
+                0..=1 => {
+                    self.api.npc(1 + i32::from(n));
+                    n += 1;
+                }
+                2 => self.api.npc(3),
+                _ => {
+                    n = n.wrapping_add(1);
+                }
+            }
+            self.api.set("MELNORME_BUSINESS_COUNT", n);
+        } else if r == WE_ARE_FROM_ALLIANCE0 {
+            self.api.set("MELNORME_YACK_STACK0", 1);
+            self.api.npc(i32::from(KNOW_OF_YOU));
+        } else if r == HOW_KNOW {
+            self.api.set("MELNORME_YACK_STACK0", 2);
+            self.api.npc(i32::from(KNOW_BECAUSE));
+        } else if r == WHAT_ABOUT_YOURSELVES {
+            last_stack = 1;
+            self.api.set("MELNORME_YACK_STACK1", 1);
+            self.api.npc(i32::from(NO_TALK_ABOUT_OURSELVES));
+        } else if r == WHAT_FACTORS {
+            last_stack = 1;
+            self.api.set("MELNORME_YACK_STACK1", 2);
+            self.api.npc(i32::from(FACTORS_ARE));
+        } else if r == WHAT_ABOUT_UNIVERSE {
+            last_stack = 2;
+            self.api.set("MELNORME_YACK_STACK2", 1);
+            self.api.npc(i32::from(NO_FREE_LUNCH));
+        } else if r == GIVING_IS_GOOD_1 {
+            last_stack = 2;
+            self.api.set("MELNORME_YACK_STACK2", 2);
+            self.api.npc(i32::from(GIVING_IS_BAD_1));
+        } else if r == GIVING_IS_GOOD_2 {
+            last_stack = 2;
+            self.api.set("MELNORME_YACK_STACK2", 3);
+            self.api.npc(i32::from(GIVING_IS_BAD_2));
+        } else if r == YES_REALLY_TESTING {
+            self.api.fade_palette(0, 420);
+            self.api.npc(i32::from(TEST_RESULTS));
+        } else if r == WE_APOLOGIZE {
+            self.api.set("MELNORME_ANGER", 0);
+            self.api.fade_palette(0, 420);
+            self.api.npc(i32::from(APOLOGY_ACCEPTED));
+        }
+        let mut stacks = [0, 1, 2];
+        stacks.swap(0, last_stack);
+        for stack in stacks {
+            match stack {
+                0 => self.yack0_respond(),
+                1 => self.yack1_respond(),
+                _ => self.yack2_respond(),
+            }
+        }
+        self.api
+            .response(NO_TRADE_NOW, Handler::ExitConversation, &[]);
+    }
+    fn post_melnorme_enc(&mut self) {
+        if self.session.prev_msg_mode != 0 {
+            self.api.status_mode(self.session.prev_msg_mode);
+        }
+        self.api.draw_status();
+    }
+}
+
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.melnorme.graphics".as_ptr(),
+        alien_font_res: c"comm.melnorme.font".as_ptr(),
+        alien_colormap_res: c"comm.melnorme.colortable".as_ptr(),
+        alien_song_res: c"comm.melnorme.music".as_ptr(),
+        conversation_phrases_res: c"comm.melnorme.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 0 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 4,
+        alien_number_speech: numbers::descriptor(),
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(6, 5, 4, (70, 0), (3360, 3360));
+    d.alien_ambient_array[0].block_mask = 2;
+    d.alien_ambient_array[1] = animation(11, 9, 4, (42, 0), (3360, 3360));
+    d.alien_ambient_array[1].block_mask = 1;
+    d.alien_ambient_array[2] = animation(20, 2, 4, (84, 56), (840, 2520));
+    d.alien_ambient_array[3] = animation(22, 2, 4, (84, 56), (840, 2520));
+    d.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+impl<A: MelnormApi> Dialogue<'_, A> {
+    fn exit_conversation(&mut self, r: u16) {
+        if r == NO_TRADE_NOW {
+            self.api.npc(i32::from(OK_NO_TRADE_NOW_BYE));
+        } else if r == YOURE_ON {
+            self.api.npc(i32::from(YOU_GIVE_US_NO_CHOICE));
+            self.api.set("MELNORME_ANGER", 1_u8);
+            self.api.segue(1);
+        } else if r == SO_WE_CAN_ATTACK {
+            self.api.npc(i32::from(DECEITFUL_HUMAN));
+            self.api.set("MELNORME_ANGER", 2_u8);
+            self.api.segue(1);
+        } else if r == BYE_MELNORME_SLIGHTLY_ANGRY {
+            self.api.npc(i32::from(MELNORME_SLIGHTLY_ANGRY_GOODBYE));
+        } else if r == OK_STRIP_ME {
+            if self.ship_worth() < 80 {
+                self.api.npc(i32::from(NOT_WORTH_STRIPPING));
+            } else {
+                self.api.set("MELNORME_ANGER", 0_u8);
+                self.strip_ship(65535);
+                self.api.npc(i32::from(FAIR_JUSTICE));
+            }
+        } else if r == FIGHT_SOME_MORE {
+            self.api.npc(i32::from(OK_FIGHT_SOME_MORE));
+            self.api.set("MELNORME_ANGER", 3_u8);
+            self.api.segue(1);
+        } else if r == BYE_MELNORME_PISSED_OFF {
+            self.api.npc(i32::from(MELNORME_PISSED_OFF_GOODBYE));
+        } else if r == WELL_IF_THATS_THE_WAY_YOU_FEEL {
+            self.api.npc(i32::from(WE_FIGHT_AGAIN));
+            self.api.segue(1);
+        } else if r == YOU_HATE_US_SO_WE_GO_AWAY {
+            self.api.npc(i32::from(HATE_YOU_GOODBYE));
+        } else if r == TAKE_IT {
+            self.strip_ship(0);
+            self.api.npc(i32::from(HAPPY_TO_HAVE_RESCUED));
+        } else if r == LEAVE_IT {
+            self.api.set("MELNORME_RESCUE_REFUSED", 1_u8);
+            self.api.npc(i32::from(MAYBE_SEE_YOU_LATER));
+        } else if r == NO_HELP {
+            self.api.set("MELNORME_RESCUE_REFUSED", 1_u8);
+            self.api.npc(i32::from(GOODBYE_AND_GOODLUCK));
+        } else if r == NO_CHANGED_MIND {
+            self.api.npc(i32::from(GOODBYE_AND_GOODLUCK_AGAIN));
+        } else if r == BE_LEAVING_NOW || r == GOODBYE {
+            self.api.npc(i32::from(FRIENDLY_GOODBYE));
+        }
+    }
+    fn do_bluster(&mut self, r: u16) {
+        if r == TRADE_IS_FOR_THE_WEAK {
+            self.api.fade_palette(2, 420);
+            self.api.set("MELNORME_YACK_STACK2", 4_u8);
+            self.api.npc(i32::from(WERE_NOT_AFRAID));
+        } else if r == WHY_BLUE_LIGHT {
+            self.api.set("WHY_MELNORME_BLUE", 1_u8);
+            self.api.npc(i32::from(BLUE_IS_MAD));
+        } else if r == WE_STRONG_1 {
+            self.session.local_stack0 = 1;
+            self.api.npc(i32::from(YOU_NOT_STRONG_1));
+        } else if r == WE_STRONG_2 {
+            self.session.local_stack0 = 2;
+            self.api.npc(i32::from(YOU_NOT_STRONG_2));
+        } else if r == WE_STRONG_3 {
+            self.session.local_stack0 = 3;
+            self.api.npc(i32::from(YOU_NOT_STRONG_3));
+        } else if r == JUST_TESTING {
+            self.session.local_stack1 = 1;
+            self.api.npc(i32::from(REALLY_TESTING));
+        }
+        if !(self.api.get("WHY_MELNORME_BLUE") != 0) {
+            self.api.response(WHY_BLUE_LIGHT, Handler::DoBluster, &[]);
+        }
+        match self.session.local_stack0 {
+            0 => {
+                self.api.response(WE_STRONG_1, Handler::DoBluster, &[]);
+            }
+            1 => {
+                self.api.response(WE_STRONG_2, Handler::DoBluster, &[]);
+            }
+            2 => {
+                self.api.response(WE_STRONG_3, Handler::DoBluster, &[]);
+            }
+            _ => {}
+        }
+        match self.session.local_stack1 {
+            0 => {
+                self.api.response(JUST_TESTING, Handler::DoBluster, &[]);
+            }
+            1 => {
+                self.api
+                    .response(YES_REALLY_TESTING, Handler::DoFirstMeeting, &[]);
+            }
+            _ => {}
+        }
+        self.api.response(YOURE_ON, Handler::ExitConversation, &[]);
+    }
+    fn yack1_respond(&mut self) {
+        match self.api.get("MELNORME_YACK_STACK1") {
+            0 => {
+                self.api
+                    .response(WHAT_ABOUT_YOURSELVES, Handler::DoFirstMeeting, &[]);
+            }
+            1 => {
+                self.api
+                    .response(WHAT_FACTORS, Handler::DoFirstMeeting, &[]);
+                self.api
+                    .response(GET_ON_WITH_BUSINESS, Handler::NatureOfConversation, &[]);
+            }
+            2 => {
+                self.api
+                    .response(GET_ON_WITH_BUSINESS, Handler::NatureOfConversation, &[]);
+            }
+            _ => {}
+        }
+    }
+    fn yack2_respond(&mut self) {
+        match self.api.get("MELNORME_YACK_STACK2") {
+            0 => {
+                self.api
+                    .response(WHAT_ABOUT_UNIVERSE, Handler::DoFirstMeeting, &[]);
+            }
+            1 => {
+                self.api
+                    .response(GIVING_IS_GOOD_1, Handler::DoFirstMeeting, &[]);
+            }
+            2 => {
+                self.api
+                    .response(GIVING_IS_GOOD_2, Handler::DoFirstMeeting, &[]);
+            }
+            3 => {
+                self.api
+                    .response(TRADE_IS_FOR_THE_WEAK, Handler::DoBluster, &[]);
+            }
+            _ => {}
+        }
+    }
+    fn do_melnorme_miffed(&mut self, r: u16) {
+        if r == 0 {
+            let mut miffed_count: u8;
+            miffed_count = self.api.get("MELNORME_MIFFED_COUNT");
+            let res = {
+                let old = miffed_count;
+                miffed_count += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(HELLO_SLIGHTLY_ANGRY_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(HELLO_SLIGHTLY_ANGRY_2));
+                }
+                _ => {
+                    miffed_count -= 1;
+                    self.api.npc(i32::from(HELLO_SLIGHTLY_ANGRY_3));
+                }
+            }
+            self.api.set("MELNORME_MIFFED_COUNT", miffed_count);
+            self.api.fade_palette(2, 420);
+        } else if r == EXPLORE_RELATIONSHIP {
+            self.api.set("MELNORME_YACK_STACK3", 1_u8);
+            self.api.npc(i32::from(EXAMPLE_OF_RELATIONSHIP));
+        } else if r == EXCUSE_1 {
+            self.api.set("MELNORME_YACK_STACK3", 2_u8);
+            self.api.npc(i32::from(NO_EXCUSE_1));
+        } else if r == EXCUSE_2 {
+            self.api.set("MELNORME_YACK_STACK3", 3_u8);
+            self.api.npc(i32::from(NO_EXCUSE_2));
+        } else if r == EXCUSE_3 {
+            self.api.set("MELNORME_YACK_STACK3", 4_u8);
+            self.api.npc(i32::from(NO_EXCUSE_3));
+        }
+        match self.api.get("MELNORME_YACK_STACK3") {
+            0 => {
+                self.api
+                    .response(EXPLORE_RELATIONSHIP, Handler::DoMelnormeMiffed, &[]);
+            }
+            1 => {
+                self.api.response(EXCUSE_1, Handler::DoMelnormeMiffed, &[]);
+            }
+            2 => {
+                self.api.response(EXCUSE_2, Handler::DoMelnormeMiffed, &[]);
+            }
+            3 => {
+                self.api.response(EXCUSE_3, Handler::DoMelnormeMiffed, &[]);
+            }
+            _ => {}
+        }
+        self.api
+            .response(WE_APOLOGIZE, Handler::DoFirstMeeting, &[]);
+        self.api
+            .response(SO_WE_CAN_ATTACK, Handler::ExitConversation, &[]);
+        self.api
+            .response(BYE_MELNORME_SLIGHTLY_ANGRY, Handler::ExitConversation, &[]);
+    }
+    fn do_melnorme_pissed(&mut self, r: u16) {
+        if r == 0 {
+            let mut pissed_count: u8;
+            pissed_count = self.api.get("MELNORME_PISSED_COUNT");
+            let res = {
+                let old = pissed_count;
+                pissed_count += 1;
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(HELLO_PISSED_OFF_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(HELLO_PISSED_OFF_2));
+                }
+                _ => {
+                    pissed_count -= 1;
+                    self.api.npc(i32::from(HELLO_PISSED_OFF_3));
+                }
+            }
+            self.api.set("MELNORME_PISSED_COUNT", pissed_count);
+            self.api.fade_palette(2, 420);
+        } else if r == BEG_FORGIVENESS {
+            self.api.set("MELNORME_YACK_STACK4", 1_u8);
+            self.api.npc(i32::from(LOTS_TO_MAKE_UP_FOR));
+        } else if r == YOU_ARE_SO_RIGHT {
+            self.api.set("MELNORME_YACK_STACK4", 2_u8);
+            self.api.npc(i32::from(ONE_LAST_CHANCE));
+        }
+        match self.api.get("MELNORME_YACK_STACK4") {
+            0 => {
+                self.api
+                    .response(BEG_FORGIVENESS, Handler::DoMelnormePissed, &[]);
+            }
+            1 => {
+                self.api
+                    .response(YOU_ARE_SO_RIGHT, Handler::DoMelnormePissed, &[]);
+            }
+            2 => {
+                self.api
+                    .response(OK_STRIP_ME, Handler::ExitConversation, &[]);
+            }
+            _ => {}
+        }
+        self.api
+            .response(FIGHT_SOME_MORE, Handler::ExitConversation, &[]);
+        self.api
+            .response(BYE_MELNORME_PISSED_OFF, Handler::ExitConversation, &[]);
+    }
+    fn do_melnorme_hate(&mut self, r: u16) {
+        let mut hate_count: u8;
+        let _ = r;
+        hate_count = self.api.get("MELNORME_HATE_COUNT");
+        let res = {
+            let old = hate_count;
+            hate_count += 1;
+            old
+        };
+        match res {
+            0 => {
+                self.api.npc(i32::from(HELLO_HATE_YOU_1));
+            }
+            1 => {
+                self.api.npc(i32::from(HELLO_HATE_YOU_2));
+            }
+            _ => {
+                hate_count -= 1;
+                self.api.npc(i32::from(HELLO_HATE_YOU_3));
+            }
+        }
+        self.api.set("MELNORME_HATE_COUNT", hate_count);
+        self.api.fade_palette(2, 420);
+        self.api.response(
+            WELL_IF_THATS_THE_WAY_YOU_FEEL,
+            Handler::ExitConversation,
+            &[],
+        );
+        self.api
+            .response(YOU_HATE_US_SO_WE_GO_AWAY, Handler::ExitConversation, &[]);
+    }
+    fn intro(&mut self) {
+        self.session.prev_msg_mode = self.api.status_mode(3);
+        if self.api.get("MET_MELNORME") == 0 {
+            self.api.set("MET_MELNORME", 1_u8);
+            self.do_first_meeting(0);
+        } else {
+            match self.api.get("MELNORME_ANGER") {
+                0 => {
+                    if self.api.get("MELNORME_YACK_STACK2") <= 5 {
+                        self.do_first_meeting(0);
+                    } else {
+                        self.nature_of_conversation(0);
+                    }
+                }
+                1 => {
+                    self.do_melnorme_miffed(0);
+                }
+                2 => {
+                    self.do_melnorme_pissed(0);
+                }
+                _ => {
+                    self.do_melnorme_hate(0);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+    static mut SESSION: Session = Session::new();
+
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        unsafe {
+            f(&mut Dialogue {
+                api: &mut api,
+                session: &mut *std::ptr::addr_of_mut!(SESSION),
+            });
+        }
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_rescue(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoRescue,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_buy(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoBuy,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_sell(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoSell,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn nature_of_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::NatureOfConversation,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_bluster(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoBluster,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_first_meeting(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoFirstMeeting,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_melnorme_miffed(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoMelnormeMiffed,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn do_melnorme_pissed(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DoMelnormePissed,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::ExitConversation => exit_conversation,
+            Handler::DoRescue => do_rescue,
+            Handler::DoBuy => do_buy,
+            Handler::DoSell => do_sell,
+            Handler::NatureOfConversation => nature_of_conversation,
+            Handler::DoBluster => do_bluster,
+            Handler::DoFirstMeeting => do_first_meeting,
+            Handler::DoMelnormeMiffed => do_melnorme_miffed,
+            Handler::DoMelnormePissed => do_melnorme_pissed,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_melnorme_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize the encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_melnorme_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize(desc));
+        desc
+    }
+}
+pub struct MelnormDialogue;
+impl super::RaceDialogue for MelnormDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_melnorme_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("FOUND_PLUTO_SPATHI").is_some(),
-            "missing game state key: FOUND_PLUTO_SPATHI"
-        );
-        assert!(
-            bit_range("IMPROVED_LANDER_CARGO").is_some(),
-            "missing game state key: IMPROVED_LANDER_CARGO"
-        );
-        assert!(
-            bit_range("IMPROVED_LANDER_SHOT").is_some(),
-            "missing game state key: IMPROVED_LANDER_SHOT"
-        );
-        assert!(
-            bit_range("IMPROVED_LANDER_SPEED").is_some(),
-            "missing game state key: IMPROVED_LANDER_SPEED"
-        );
-        assert!(
-            bit_range("KNOW_ABOUT_SHATTERED").is_some(),
-            "missing game state key: KNOW_ABOUT_SHATTERED"
-        );
-    }
-}
+mod tests;
