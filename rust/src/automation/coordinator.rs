@@ -293,6 +293,7 @@ struct CoordInner {
     battle_fight: BattleFightTracker,
     fleet_fight: crate::automation::fleet_fight::FleetFight,
     star_flight: crate::automation::star_flight::StarFlight,
+    star_encounter_active: bool,
     device: crate::automation::story_actions::DeviceTracker,
     energy: crate::automation::story_actions::EnergyTracker,
     finalized: bool,
@@ -462,6 +463,7 @@ impl Coordinator {
                 battle_fight: BattleFightTracker::default(),
                 fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
+                star_encounter_active: false,
                 device: Default::default(),
                 energy: Default::default(),
                 finalized: false,
@@ -1364,6 +1366,48 @@ impl Coordinator {
         }
     }
 
+    fn service_fleet_fight(
+        &self,
+        inner: &mut CoordInner,
+        max_ticks: u64,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::fleet_fight::Progress;
+        let progress = inner.fleet_fight.observe(
+            max_ticks,
+            crate::automation::input_ffi::fleet_fight_observation(),
+        );
+        let key = match &progress {
+            Progress::Input(key) => *key,
+            _ => None,
+        };
+        for menu in crate::automation::script::MenuKey::ALL {
+            if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
+                self.reject_input(inner, "fight_encounter", -1, -1);
+                return event;
+            }
+        }
+        for index in 0..7 {
+            if !inject_player_key(index, 0) {
+                self.reject_input(inner, "fight_encounter", index, 0);
+                return event;
+            }
+        }
+        match progress {
+            Progress::Input(_) => {}
+            Progress::Won(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                inner.fleet_fight = crate::automation::fleet_fight::FleetFight::default();
+                return SchedulerEvent::NavigationReached;
+            }
+            Progress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+            }
+        }
+        event
+    }
+
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
@@ -1374,6 +1418,18 @@ impl Coordinator {
         use crate::automation::star_flight::{Progress, StarFlight};
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.star_flight = StarFlight::default();
+            inner.star_encounter_active = false;
+        }
+        if crate::automation::ui_observation::encounter_menu_active() {
+            inner.star_encounter_active = true;
+        }
+        if inner.star_encounter_active {
+            let result = self.service_fleet_fight(inner, flight.max_ticks, event);
+            if result == SchedulerEvent::NavigationReached {
+                inner.star_encounter_active = false;
+            }
+            // A fleet win resumes the interrupted flight, not the next action.
+            return event;
         }
         let observation = input_ffi::star_flight_observation(flight.target);
         let progress = inner.star_flight.observe(flight, observation);
@@ -1545,39 +1601,7 @@ impl Coordinator {
         } else if let Some(Action::FightEncounter(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            use crate::automation::fleet_fight::Progress;
-            let progress = inner.fleet_fight.observe(
-                fight.max_ticks,
-                crate::automation::input_ffi::fleet_fight_observation(),
-            );
-            let key = match &progress {
-                Progress::Input(key) => *key,
-                _ => None,
-            };
-            for menu in crate::automation::script::MenuKey::ALL {
-                if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
-                    self.reject_input(inner, "fight_encounter", -1, -1);
-                    return scheduler_event;
-                }
-            }
-            for index in 0..7 {
-                if !inject_player_key(index, 0) {
-                    self.reject_input(inner, "fight_encounter", index, 0);
-                    return scheduler_event;
-                }
-            }
-            match progress {
-                Progress::Input(_) => {}
-                Progress::Won(label) => {
-                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-                    inner.fleet_fight = crate::automation::fleet_fight::FleetFight::default();
-                    scheduler_event = SchedulerEvent::NavigationReached;
-                }
-                Progress::Failed(label) => {
-                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                }
-            }
+            scheduler_event = self.service_fleet_fight(inner, fight.max_ticks, scheduler_event);
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
