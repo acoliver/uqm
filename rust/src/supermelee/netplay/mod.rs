@@ -32,3 +32,5 @@ mod netoptions;
 mod netinput;
 
 mod netconnection;
+
+mod netrcv;
