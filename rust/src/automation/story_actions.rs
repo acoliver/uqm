@@ -276,9 +276,18 @@ pub fn device_evidence_holds(device: Device, state: &str) -> bool {
         } else {
             return false;
         };
-        if !(DEVICE_STORY_KEYS.contains(&key) || ["fuel", "activity"].contains(&key))
-            || map.insert(key.to_owned(), value).is_some()
-        {
+        let maximum = if DEVICE_STORY_KEYS.contains(&key) {
+            super::campaign_state::StateKey::parse(&format!("story:{key}"))
+                .expect("device story key")
+                .max_value()
+        } else {
+            match key {
+                "fuel" => u32::MAX,
+                "activity" => u32::from(u16::MAX),
+                _ => return false,
+            }
+        };
+        if value > maximum || map.insert(key.to_owned(), value).is_some() {
             return false;
         }
     }
@@ -310,7 +319,8 @@ pub fn device_effect_holds(
             ][usize::from(id - 4)];
             before[key] == 1
                 && after[key] == 0
-                && after["ULTRON_CONDITION"] == before["ULTRON_CONDITION"].saturating_add(1)
+                && before["ULTRON_CONDITION"] > 0
+                && Some(after["ULTRON_CONDITION"]) == before["ULTRON_CONDITION"].checked_add(1)
         }
         12 | 13 => {
             changed_to_one("USED_BROADCASTER")
@@ -324,6 +334,49 @@ pub fn device_effect_holds(
 mod tests {
     use super::*;
     use crate::planet_side::model::SurfacePoint;
+
+    #[test]
+    fn device_menu_opens_with_normal_flight_and_orbit_inputs() {
+        for (in_orbit, first) in [(false, MenuKey::Cancel), (true, MenuKey::Down)] {
+            let mut tracker = DeviceTracker::default();
+            let step = UseDeviceStep {
+                device: Device::SunDevice,
+                max_ticks: 100,
+            };
+            let observation = DeviceObservation {
+                in_orbit,
+                ..Default::default()
+            };
+            for tick in 1..=25 {
+                let wanted = match tick {
+                    1 => Some(first),
+                    13 => Some(MenuKey::Down),
+                    25 => Some(MenuKey::Select),
+                    _ => None,
+                };
+                assert_eq!(
+                    tracker.observe(step, observation.clone()),
+                    DeviceProgress::Input(wanted)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn discovery_reports_are_dismissed_with_bounded_button_pulses() {
+        let mut tracker = EnergyTracker::default();
+        let step = CollectEnergyNodeStep { max_ticks: 10 };
+        let mut observation = energy();
+        observation.report_active = true;
+        assert_eq!(
+            tracker.observe(step, &observation),
+            EnergyProgress::DismissReport(true)
+        );
+        assert_eq!(
+            tracker.observe(step, &observation),
+            EnergyProgress::DismissReport(false)
+        );
+    }
 
     fn energy() -> EnergyObservation {
         EnergyObservation {

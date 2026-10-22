@@ -372,6 +372,36 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
+    #[test]
+    fn equipment_keys_validate_slot_bounds_and_byte_values() {
+        for (key, expected) in [
+            ("sis:drive:10", StateKey::SisDrive(10)),
+            ("sis:jet:7", StateKey::SisJet(7)),
+            ("sis:module:15", StateKey::SisModule(15)),
+        ] {
+            assert_eq!(StateKey::parse(key), Ok(expected));
+            assert_eq!(expected.max_value(), 255);
+        }
+        for key in [
+            "sis:drive:11",
+            "sis:jet:8",
+            "sis:module:16",
+            "sis:module:-1",
+            "sis:drive:x",
+        ] {
+            assert!(StateKey::parse(key).is_err(), "{key}");
+        }
+        assert!(StatePredicate {
+            all: vec![StateCondition {
+                key: "sis:drive:0".into(),
+                op: StateOp::Eq,
+                value: 256
+            }]
+        }
+        .validate()
+        .is_err());
+    }
+
     struct Fake(HashMap<&'static str, u32>);
 
     impl StateSource for Fake {

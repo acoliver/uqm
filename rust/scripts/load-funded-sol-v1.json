@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "load-funded-sol-v1",
+  "start_save": {
+    "path": "saves/funded-sol.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 1000,
+    "max_presentations": 2000,
+    "max_wallclock_seconds": 120
+  },
+  "seed": 1437213463,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "star:current", "op": "eq", "value": 82}, {"key": "sis:ru", "op": "eq", "value": 2304}, {"key": "sis:fuel", "op": "eq", "value": 800}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "sis:landers", "op": "eq", "value": 1}, {"key": "sis:drive:0", "op": "eq", "value": 1}, {"key": "sis:drive:5", "op": "eq", "value": 1}, {"key": "sis:drive:6", "op": "eq", "value": 1}, {"key": "sis:mineral_mass", "op": "eq", "value": 0}, {"key": "story:STARBASE_AVAILABLE", "op": "eq", "value": 1}, {"key": "story:MOONBASE_DESTROYED", "op": "eq", "value": 1}, {"key": "story:RADIOACTIVES_PROVIDED", "op": "eq", "value": 1}]},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "capture", "label": "loaded-funded-sol-checkpoint"},
+    {"action": "finish"}
+  ]
+}
