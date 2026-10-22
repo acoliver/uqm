@@ -114,7 +114,6 @@ sc2/src/uqm/ships/chenjesu/chenjesu.c
 sc2/src/uqm/ships/chmmr/chmmr.c
 sc2/src/uqm/ships/lastbat/lastbat.c
 sc2/src/uqm/ships/melnorme/melnorme.c
-sc2/src/uqm/ships/mmrnmhrm/mmrnmhrm.c
 sc2/src/uqm/ships/orz/orz.c
 sc2/src/uqm/ships/pkunk/pkunk.c
 sc2/src/uqm/ships/probe/probe.c
