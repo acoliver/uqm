@@ -1,241 +1,396 @@
-//! Blackur dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
+//! Kohr-Ah dialogue, ported from blackurq.c.
+use super::script::{animation, as_comm_data};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+mod api;
+use api::BlackurApi;
 
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const SENSE_EVIL: u32 = 1;
-const HELLO_AND_DIE_1: u32 = 2;
-const HELLO_AND_DIE_2: u32 = 3;
-const HELLO_AND_DIE_3: u32 = 4;
-const HELLO_AND_DIE_4: u32 = 5;
-const HELLO_AND_DIE_5: u32 = 6;
-const HELLO_AND_DIE_6: u32 = 7;
-const HELLO_AND_DIE_7: u32 = 8;
-const HELLO_AND_DIE_8: u32 = 9;
-const HELLO_SAMATRA: u32 = 10;
-const WE_KILL_ALL_1: u32 = 11;
-const WE_KILL_ALL_2: u32 = 12;
-const WE_KILL_ALL_3: u32 = 13;
-const WE_KILL_ALL_4: u32 = 14;
-const WHY_KILL_ALL_1: u32 = 15;
-const WHY_KILL_ALL_2: u32 = 16;
-const WHY_KILL_ALL_3: u32 = 17;
-const WHY_KILL_ALL_4: u32 = 18;
-const KILL_BECAUSE_1: u32 = 19;
-const KILL_BECAUSE_2: u32 = 20;
-const KILL_BECAUSE_3: u32 = 21;
-const KILL_BECAUSE_4: u32 = 22;
-const PLEASE_DONT_KILL_1: u32 = 23;
-const WILL_KILL_1: u32 = 24;
-const PLEASE_DONT_KILL_2: u32 = 25;
-const WILL_KILL_2: u32 = 26;
-const PLEASE_DONT_KILL_3: u32 = 27;
-const WILL_KILL_3: u32 = 28;
-const PLEASE_DONT_KILL_4: u32 = 29;
-const WILL_KILL_4: u32 = 30;
-const BYE_FRENZY_1: u32 = 31;
-const BYE_FRENZY_2: u32 = 32;
-const BYE_FRENZY_3: u32 = 33;
-const BYE_FRENZY_4: u32 = 34;
-const GOODBYE_AND_DIE_FRENZY_1: u32 = 35;
-const GOODBYE_AND_DIE_FRENZY_2: u32 = 36;
-const GOODBYE_AND_DIE_FRENZY_3: u32 = 37;
-const GOODBYE_AND_DIE_FRENZY_4: u32 = 38;
-const THREAT_1: u32 = 39;
-const RESISTANCE_IS_USELESS_1: u32 = 40;
-const THREAT_2: u32 = 41;
-const RESISTANCE_IS_USELESS_2: u32 = 42;
-const THREAT_3: u32 = 43;
-const RESISTANCE_IS_USELESS_3: u32 = 44;
-const THREAT_4: u32 = 45;
-const RESISTANCE_IS_USELESS_4: u32 = 46;
-const KEY_PHRASE: u32 = 47;
-const RESPONSE_TO_KEY_PHRASE: u32 = 48;
-const WHY_DO_YOU_DESTROY: u32 = 49;
-const WE_WERE_SLAVES: u32 = 50;
-const RELATIONSHIP_WITH_URQUAN: u32 = 51;
-const WE_ARE_URQUAN_TOO: u32 = 52;
-const WHAT_ABOUT_CULTURE: u32 = 53;
-const BONE_GARDENS: u32 = 54;
-const HOW_LEAVE_ME_ALONE: u32 = 55;
-const YOU_DIE: u32 = 56;
-const GUESS_THATS_ALL: u32 = 57;
-const THEN_DIE: u32 = 58;
-const WHAT_ARE_YOU_HOVERING_OVER: u32 = 59;
-const BONE_PILE: u32 = 60;
-const YOU_SURE_ARE_CREEPY: u32 = 61;
-const YES_CREEPY: u32 = 62;
-const STOP_THAT_GROSS_BLINKING: u32 = 63;
-const DIE_HUMAN: u32 = 64;
-const PLEAD_1: u32 = 65;
-const PLEADING_IS_USELESS_1: u32 = 66;
-const PLEAD_2: u32 = 67;
-const PLEADING_IS_USELESS_2: u32 = 68;
-const PLEAD_3: u32 = 69;
-const PLEADING_IS_USELESS_3: u32 = 70;
-const PLEAD_4: u32 = 71;
-const PLEADING_IS_USELESS_4: u32 = 72;
-const BYE: u32 = 73;
-const GOODBYE_AND_DIE: u32 = 74;
-const GAME_OVER_DUDE: u32 = 75;
-const OUT_TAKES: u32 = 76;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    Combat,
+    Story,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"blackur\0";
-const RACE_FONT: &[u8] = b"blackurfont\0";
-const RACE_COLOR_MAP: &[u8] = b"blackurcolr\0";
-const RACE_MUSIC: &[u8] = b"blackurmusic\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.blackur.dialogue\0";
-
-/// Blackur race dialogue implementation.
-pub struct BlackurDialogue;
-
-impl super::RaceDialogue for BlackurDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+impl<A: BlackurApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: i32) {
+        match h {
+            Handler::Combat => self.combat(r),
+            Handler::Story => self.story(r),
         }
     }
-
+    fn sequence(&mut self, key: &str, phrases: &[i32]) -> u8 {
+        let n = self.api.get(key);
+        if let Some(&p) = phrases.get(usize::from(n)) {
+            self.api.npc(p);
+        }
+        if usize::from(n) + 1 == phrases.len() {
+            n
+        } else {
+            n.wrapping_add(1)
+        }
+    }
+    fn advance_sequence(&mut self, key: &str, phrases: &[i32]) {
+        let next = self.sequence(key, phrases);
+        self.api.set(key, next);
+    }
+    fn combat(&mut self, r: i32) {
+        self.api.segue(1);
+        match r {
+            x if x == BYE => {
+                self.api.npc(if self.api.get("KOHR_AH_BYES") == 0 {
+                    GOODBYE_AND_DIE
+                } else {
+                    DIE_HUMAN
+                });
+                self.api.set("KOHR_AH_BYES", 1);
+            }
+            x if x == GUESS_THATS_ALL => self.api.npc(THEN_DIE),
+            x if x == WHAT_ARE_YOU_HOVERING_OVER => {
+                self.api.npc(BONE_PILE);
+                self.api.set("KOHR_AH_INFO", 1);
+            }
+            x if x == YOU_SURE_ARE_CREEPY => {
+                self.api.npc(YES_CREEPY);
+                self.api.set("KOHR_AH_INFO", 2);
+            }
+            x if x == STOP_THAT_GROSS_BLINKING => {
+                self.api.npc(DIE_HUMAN);
+                self.api.set("KOHR_AH_INFO", 3);
+            }
+            x if [THREAT_1, THREAT_2, THREAT_3, THREAT_4].contains(&x) => self.advance_sequence(
+                "KOHR_AH_REASONS",
+                &[
+                    RESISTANCE_IS_USELESS_1,
+                    RESISTANCE_IS_USELESS_2,
+                    RESISTANCE_IS_USELESS_3,
+                    RESISTANCE_IS_USELESS_4,
+                ],
+            ),
+            x if [PLEAD_1, PLEAD_2, PLEAD_3, PLEAD_4].contains(&x) => {
+                let n = self.api.get("KOHR_AH_PLEAD");
+                match n {
+                    0 => self.api.npc(PLEADING_IS_USELESS_1),
+                    1 => self.api.npc(PLEADING_IS_USELESS_2),
+                    2 | 3 => self.api.npc(PLEADING_IS_USELESS_4),
+                    _ => {}
+                }
+                self.api.set(
+                    "KOHR_AH_PLEAD",
+                    if matches!(n, 2 | 3) {
+                        n
+                    } else {
+                        n.wrapping_add(1)
+                    },
+                );
+            }
+            x if [
+                WHY_KILL_ALL_1,
+                WHY_KILL_ALL_2,
+                WHY_KILL_ALL_3,
+                WHY_KILL_ALL_4,
+            ]
+            .contains(&x) =>
+            {
+                self.advance_sequence(
+                    "KOHR_AH_REASONS",
+                    &[
+                        KILL_BECAUSE_1,
+                        KILL_BECAUSE_2,
+                        KILL_BECAUSE_3,
+                        KILL_BECAUSE_4,
+                    ],
+                )
+            }
+            x if [
+                PLEASE_DONT_KILL_1,
+                PLEASE_DONT_KILL_2,
+                PLEASE_DONT_KILL_3,
+                PLEASE_DONT_KILL_4,
+            ]
+            .contains(&x) =>
+            {
+                self.advance_sequence(
+                    "KOHR_AH_PLEAD",
+                    &[WILL_KILL_1, WILL_KILL_2, WILL_KILL_3, WILL_KILL_4],
+                )
+            }
+            x if [BYE_FRENZY_1, BYE_FRENZY_2, BYE_FRENZY_3, BYE_FRENZY_4].contains(&x) => self
+                .advance_sequence(
+                    "KOHR_AH_INFO",
+                    &[
+                        GOODBYE_AND_DIE_FRENZY_1,
+                        GOODBYE_AND_DIE_FRENZY_2,
+                        GOODBYE_AND_DIE_FRENZY_3,
+                        GOODBYE_AND_DIE_FRENZY_4,
+                    ],
+                ),
+            _ => {}
+        }
+    }
+    fn frenzy(&mut self, _: i32) {
+        let n = self.api.get("KOHR_AH_REASONS") as usize;
+        if n < 4 {
+            self.api
+                .response((WHY_KILL_ALL_1 + n as i32) as u16, Handler::Combat, &[]);
+        }
+        let n = self.api.get("KOHR_AH_PLEAD") as usize;
+        if n < 4 {
+            self.api.response(
+                (PLEASE_DONT_KILL_1 + n as i32 * 2) as u16,
+                Handler::Combat,
+                &[],
+            );
+        }
+        let n = self.api.get("KOHR_AH_INFO") as usize;
+        if n < 4 {
+            self.api
+                .response((BYE_FRENZY_1 + n as i32) as u16, Handler::Combat, &[]);
+        }
+    }
+    fn story(&mut self, r: i32) {
+        match r {
+            x if x == KEY_PHRASE => {
+                self.api.npc(RESPONSE_TO_KEY_PHRASE);
+                self.api.set("KNOW_KOHR_AH_STORY", 2);
+            }
+            x if x == WHY_DO_YOU_DESTROY => {
+                self.api.npc(WE_WERE_SLAVES);
+                self.api.disable(r as u16);
+            }
+            x if x == RELATIONSHIP_WITH_URQUAN => {
+                self.api.npc(WE_ARE_URQUAN_TOO);
+                self.api.disable(r as u16);
+            }
+            x if x == WHAT_ABOUT_CULTURE => {
+                self.api.npc(BONE_GARDENS);
+                self.api.disable(r as u16);
+            }
+            x if x == HOW_LEAVE_ME_ALONE => {
+                self.api.npc(YOU_DIE);
+                self.api.disable(r as u16);
+            }
+            _ => {}
+        }
+        for p in [
+            WHY_DO_YOU_DESTROY,
+            RELATIONSHIP_WITH_URQUAN,
+            WHAT_ABOUT_CULTURE,
+            HOW_LEAVE_ME_ALONE,
+        ] {
+            if self.api.enabled(p as u16) {
+                self.api.response(p as u16, Handler::Story, &[]);
+            }
+        }
+        self.api
+            .response(GUESS_THATS_ALL as u16, Handler::Combat, &[]);
+    }
+    fn die_human(&mut self, _: i32) {
+        let n = self.api.get("KOHR_AH_REASONS") as usize;
+        if n < 4 {
+            self.api
+                .response((THREAT_1 + n as i32 * 2) as u16, Handler::Combat, &[]);
+        }
+        if self.api.get("KNOW_KOHR_AH_STORY") == 1 {
+            self.api.response(KEY_PHRASE as u16, Handler::Story, &[]);
+        }
+        match self.api.get("KOHR_AH_INFO") {
+            0 => self
+                .api
+                .response(WHAT_ARE_YOU_HOVERING_OVER as u16, Handler::Combat, &[]),
+            1 => self
+                .api
+                .response(YOU_SURE_ARE_CREEPY as u16, Handler::Combat, &[]),
+            2 => self
+                .api
+                .response(STOP_THAT_GROSS_BLINKING as u16, Handler::Combat, &[]),
+            _ => {}
+        }
+        match self.api.get("KOHR_AH_PLEAD") {
+            0 => self.api.response(PLEAD_1 as u16, Handler::Combat, &[]),
+            1 => self.api.response(PLEAD_2 as u16, Handler::Combat, &[]),
+            2 | 3 => self.api.response(PLEAD_4 as u16, Handler::Combat, &[]),
+            _ => {}
+        }
+        self.api.response(BYE as u16, Handler::Combat, &[]);
+    }
+    fn intro(&mut self) {
+        let activity = self.api.activity() as u8;
+        if activity == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+            self.api.npc(OUT_TAKES);
+            self.api.segue(0);
+            return;
+        }
+        if self.api.get("KOHR_AH_KILLED_ALL") != 0 {
+            self.api.npc(GAME_OVER_DUDE);
+            self.api.segue(0);
+            return;
+        }
+        if self.api.get("KOHR_AH_SENSES_EVIL") == 0 && self.api.get("TALKING_PET_ON_SHIP") != 0 {
+            self.api.npc(SENSE_EVIL);
+            self.api.set("KOHR_AH_SENSES_EVIL", 1);
+        }
+        if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
+            && self.api.in_samatra_battle()
+        {
+            self.api.npc(HELLO_SAMATRA);
+            self.api.set("AWARE_OF_SAMATRA", 1);
+            self.api.segue(1);
+            return;
+        }
+        if self.api.get("KOHR_AH_FRENZY") != 0 {
+            let next = self.sequence(
+                "KOHR_AH_VISITS",
+                &[WE_KILL_ALL_1, WE_KILL_ALL_2, WE_KILL_ALL_3, WE_KILL_ALL_4],
+            );
+            self.frenzy(0);
+            self.api.set("KOHR_AH_VISITS", next);
+        } else {
+            let next = self.sequence(
+                "KOHR_AH_VISITS",
+                &[
+                    HELLO_AND_DIE_1,
+                    HELLO_AND_DIE_2,
+                    HELLO_AND_DIE_3,
+                    HELLO_AND_DIE_4,
+                ],
+            );
+            self.die_human(0);
+            self.api.set("KOHR_AH_VISITS", next);
+        }
+    }
+    fn initialize(&mut self) {
+        self.api.segue(
+            if self.api.get("KOHR_AH_KILLED_ALL") == 0
+                && self.api.activity() as u8 != crate::comm::dispatch::WON_LAST_BATTLE as u8
+            {
+                1
+            } else {
+                0
+            },
+        );
+    }
+}
+fn text_layout(screen_width: i32) -> (CPoint, u16) {
+    let text_width = screen_width - 80;
+    (
+        CPoint {
+            x: (1 + (text_width >> 1)) as i16,
+            y: 0,
+        },
+        (text_width - 16) as u16,
+    )
+}
+fn descriptor(screen_width: i32) -> CLocData {
+    let (baseline, width) = text_layout(screen_width);
+    let mut d = CLocData {
+        alien_frame_res: c"comm.kohrah.graphics".as_ptr(),
+        alien_font_res: c"comm.kohrah.font".as_ptr(),
+        alien_colormap_res: c"comm.kohrah.colortable".as_ptr(),
+        alien_song_res: c"comm.kohrah.music".as_ptr(),
+        conversation_phrases_res: c"comm.kohrah.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: baseline,
+        alien_text_width: width,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 8,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(7, 6, 2, (56, 0), (840, 2520));
+    d.alien_ambient_array[1] = animation(13, 7, 2, (56, 0), (840, 2520));
+    for (i, s) in [20, 23, 26].into_iter().enumerate() {
+        d.alien_ambient_array[i + 2] = animation(s, 3, 4, (56, 0), (840, 2520));
+    }
+    d.alien_ambient_array[5] = animation(29, 4, 1, (84, 0), (84, 0));
+    d.alien_ambient_array[6] = animation(33, 5, 0x0a, (84, 0), (840, 2520));
+    d.alien_ambient_array[7] = animation(38, 4, 2, (84, 0), (840, 2520));
+    d.alien_transition_desc = animation(1, 2, 0, (140, 0), (0, 0));
+    d.alien_talk_desc = animation(2, 5, 0, (56, 0), (70, 0));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::super::script::live::LiveScript;
+    use super::*;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut a = LiveScript { callback };
+        f(&mut Dialogue { api: &mut a });
+    }
+    extern "C" fn combat(r: u32) {
+        run(|s| s.handle(Handler::Combat, r as i32));
+    }
+    extern "C" fn story(r: u32) {
+        run(|s| s.handle(Handler::Story, r as i32));
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::Combat => combat,
+            Handler::Story => story,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {}
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn init_blackurq_comm() -> *mut CLocData {
+        static mut D: Option<CLocData> = None;
+        extern "C" {
+            static ScreenWidth: i32;
+        }
+        let d = (&mut *std::ptr::addr_of_mut!(D)).get_or_insert_with(|| descriptor(ScreenWidth));
+        (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
+        run(|s| s.initialize());
+        d
+    }
+}
+pub struct BlackurDialogue;
+impl super::RaceDialogue for BlackurDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_blackurq_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor(320))
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("AWARE_OF_SAMATRA").is_some(),
-            "missing game state key: AWARE_OF_SAMATRA"
-        );
-        assert!(
-            bit_range("KNOW_KOHR_AH_STORY").is_some(),
-            "missing game state key: KNOW_KOHR_AH_STORY"
-        );
-        assert!(
-            bit_range("KOHR_AH_BYES").is_some(),
-            "missing game state key: KOHR_AH_BYES"
-        );
-        assert!(
-            bit_range("KOHR_AH_FRENZY").is_some(),
-            "missing game state key: KOHR_AH_FRENZY"
-        );
-        assert!(
-            bit_range("KOHR_AH_INFO").is_some(),
-            "missing game state key: KOHR_AH_INFO"
-        );
-    }
-}
+mod tests;
