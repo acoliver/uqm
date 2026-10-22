@@ -1026,7 +1026,7 @@ save's provenance), re-dock with `navigate_to_moon 2/0` (the allied Starbase
 opens its menu with no conversation) and assert `starbase` mode and the same
 resources again, followed by their own earlier steps unchanged. Their budgets
 shrank to the validator minimum with a 300 s wall budget, so they no longer carry the
-900000 ms outer deadline: `starbase-visit-v1` 2897 ticks,
+900000 ms outer deadline: `starbase-visit-v1` 2898 ticks,
 `real-sol-starbase-to-mars` 32603, `probe-encounter-v3` 7656 and
 `probe-encounter-v4` 7856 (presentations twice that). None of this has run live.
 

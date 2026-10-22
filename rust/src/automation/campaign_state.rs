@@ -1,0 +1,429 @@
+//! Read-only campaign state for `assert_state` and `wait_for_state`.
+//!
+//! A script names the values it expects by key (`story:MOONBASE_DESTROYED`,
+//! `sis:fuel`, `activity`, ...) and compares each with a closed set of
+//! operators. Keys are validated when the script is parsed, so a misspelled
+//! story bit fails admission instead of reading zero at run time.
+//!
+//! The comparison is pure: values come from a [`StateSource`], which is the
+//! live game on the game thread and a fake in tests. A value the source cannot
+//! read is reported as unavailable and never compares as zero, so
+//! `story:X eq 0` cannot pass before the game state exists.
+
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
+use crate::state::game_state_keys::{bit_range, STATE_KEYS};
+
+/// A value a script can observe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateKey {
+    /// `GLOBAL(CurrentActivity)`, the whole word.
+    Activity,
+    /// `GLOBAL_SIS(FuelOnBoard)`, raw fuel points.
+    SisFuel,
+    /// `GLOBAL_SIS(ResUnits)`.
+    SisRu,
+    /// `GLOBAL_SIS(CrewEnlisted)`; `0xffff` is the game's dead-flagship value.
+    SisCrew,
+    /// `GLOBAL_SIS(NumLanders)`.
+    SisLanders,
+    DateDay,
+    DateMonth,
+    DateYear,
+    /// A named story bit from `STATE_KEYS`.
+    Story(&'static str),
+}
+
+impl StateKey {
+    /// Parse a script key.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message naming the accepted forms when the key is unknown.
+    pub fn parse(text: &str) -> Result<Self, String> {
+        if let Some(name) = text.strip_prefix("story:") {
+            return STATE_KEYS
+                .iter()
+                .find(|(known, _, _)| *known == name)
+                .map(|(known, _, _)| Self::Story(known))
+                .ok_or_else(|| format!("unknown story bit '{name}'"));
+        }
+        match text {
+            "activity" => Ok(Self::Activity),
+            "sis:fuel" => Ok(Self::SisFuel),
+            "sis:ru" => Ok(Self::SisRu),
+            "sis:crew" => Ok(Self::SisCrew),
+            "sis:landers" => Ok(Self::SisLanders),
+            "date:day" => Ok(Self::DateDay),
+            "date:month" => Ok(Self::DateMonth),
+            "date:year" => Ok(Self::DateYear),
+            _ => Err(format!(
+                "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
+                 date:day|month|year or story:NAME"
+            )),
+        }
+    }
+
+    /// The largest value the underlying field can hold.
+    #[must_use]
+    pub fn max_value(self) -> u32 {
+        match self {
+            Self::Activity | Self::SisCrew | Self::DateYear => u32::from(u16::MAX),
+            Self::SisFuel | Self::SisRu => u32::MAX,
+            Self::SisLanders | Self::DateDay | Self::DateMonth => u32::from(u8::MAX),
+            Self::Story(name) => {
+                let (start, end) = bit_range(name).unwrap_or((0, 0));
+                (1u32 << (end - start + 1)) - 1
+            }
+        }
+    }
+}
+
+/// How an observed value is compared with the expected one.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StateOp {
+    Eq,
+    Ne,
+    Ge,
+    Le,
+}
+
+impl StateOp {
+    fn holds(self, observed: u32, wanted: u32) -> bool {
+        match self {
+            Self::Eq => observed == wanted,
+            Self::Ne => observed != wanted,
+            Self::Ge => observed >= wanted,
+            Self::Le => observed <= wanted,
+        }
+    }
+}
+
+impl fmt::Display for StateOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Eq => "eq",
+            Self::Ne => "ne",
+            Self::Ge => "ge",
+            Self::Le => "le",
+        })
+    }
+}
+
+/// One comparison. `key` is validated by [`StatePredicate::validate`].
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StateCondition {
+    pub key: String,
+    pub op: StateOp,
+    pub value: u32,
+}
+
+/// Every condition must hold.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StatePredicate {
+    pub all: Vec<StateCondition>,
+}
+
+impl StatePredicate {
+    /// Reject an empty predicate, unknown keys and values the field cannot hold.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message describing the first invalid condition.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.all.is_empty() {
+            return Err("predicate needs at least one condition in 'all'".into());
+        }
+        for condition in &self.all {
+            let key = StateKey::parse(&condition.key)?;
+            if condition.value > key.max_value() {
+                return Err(format!(
+                    "value {} exceeds the maximum {} for '{}'",
+                    condition.value,
+                    key.max_value(),
+                    condition.key
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where observed values come from.
+pub trait StateSource {
+    /// The current value, or `None` when it cannot be read.
+    fn read(&self, key: StateKey) -> Option<u32>;
+}
+
+/// The result of comparing a predicate with a source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Evaluation {
+    /// Each condition's key with the value read, in predicate order.
+    pub observed: Vec<(String, Option<u32>)>,
+    /// True when every value was readable and every comparison held.
+    pub held: bool,
+}
+
+/// Read every key of `predicate` once and compare.
+///
+/// The predicate must have passed [`StatePredicate::validate`].
+#[must_use]
+pub fn evaluate(predicate: &StatePredicate, source: &dyn StateSource) -> Evaluation {
+    let mut held = true;
+    let observed = predicate
+        .all
+        .iter()
+        .map(|condition| {
+            let value = StateKey::parse(&condition.key)
+                .ok()
+                .and_then(|key| source.read(key));
+            held &= value.is_some_and(|value| condition.op.holds(value, condition.value));
+            (condition.key.clone(), value)
+        })
+        .collect();
+    Evaluation { observed, held }
+}
+
+impl Evaluation {
+    /// A trace label of the form `prefix|key=value|...`.
+    ///
+    /// A key that could not be read prints `unavailable`, which no offline
+    /// check accepts as a number.
+    #[must_use]
+    pub fn label(&self, prefix: &str) -> String {
+        let mut label = prefix.to_string();
+        for (key, value) in &self.observed {
+            match value {
+                Some(value) => label.push_str(&format!("|{key}={value}")),
+                None => label.push_str(&format!("|{key}=unavailable")),
+            }
+        }
+        label
+    }
+
+    /// A failure label that also carries what each condition required.
+    #[must_use]
+    pub fn failure_label(&self, prefix: &str, predicate: &StatePredicate) -> String {
+        let mut label = self.label(prefix);
+        for condition in &predicate.all {
+            label.push_str(&format!(
+                "|want:{}:{}:{}",
+                condition.key, condition.op, condition.value
+            ));
+        }
+        label
+    }
+}
+
+/// Whether a retained `prefix|key=value|...` label proves `predicate`.
+///
+/// Re-checks the recorded numbers against the script's own conditions, so a
+/// label from a different predicate or an unavailable value never satisfies it.
+#[must_use]
+pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) -> bool {
+    let mut fields = label.split('|');
+    if fields.next() != Some(prefix) {
+        return false;
+    }
+    let mut conditions = predicate.all.iter();
+    for field in fields {
+        let (Some(condition), Some((key, value))) = (conditions.next(), field.split_once('='))
+        else {
+            return false;
+        };
+        let Ok(value) = value.parse::<u32>() else {
+            return false;
+        };
+        if key != condition.key || !condition.op.holds(value, condition.value) {
+            return false;
+        }
+    }
+    conditions.next().is_none()
+}
+
+/// The running game, read on the game thread.
+pub struct LiveCampaign;
+
+impl StateSource for LiveCampaign {
+    fn read(&self, key: StateKey) -> Option<u32> {
+        use crate::automation::input_ffi;
+        match key {
+            StateKey::Story(name) => crate::state::ffi::named_state_value(name).map(u32::from),
+            StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
+            StateKey::SisFuel => input_ffi::ship_resources().map(|(fuel, _)| fuel),
+            StateKey::SisRu => input_ffi::ship_resources().map(|(_, ru)| ru),
+            StateKey::SisCrew => input_ffi::sis_crew_and_landers().map(|(crew, _)| u32::from(crew)),
+            StateKey::SisLanders => {
+                input_ffi::sis_crew_and_landers().map(|(_, landers)| u32::from(landers))
+            }
+            StateKey::DateDay => input_ffi::game_date().map(|(day, _, _)| u32::from(day)),
+            StateKey::DateMonth => input_ffi::game_date().map(|(_, month, _)| u32::from(month)),
+            StateKey::DateYear => input_ffi::game_date().map(|(_, _, year)| u32::from(year)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    struct Fake(HashMap<&'static str, u32>);
+
+    impl StateSource for Fake {
+        fn read(&self, key: StateKey) -> Option<u32> {
+            let name = match key {
+                StateKey::Activity => "activity",
+                StateKey::SisFuel => "sis:fuel",
+                StateKey::SisRu => "sis:ru",
+                StateKey::SisCrew => "sis:crew",
+                StateKey::SisLanders => "sis:landers",
+                StateKey::DateDay => "date:day",
+                StateKey::DateMonth => "date:month",
+                StateKey::DateYear => "date:year",
+                StateKey::Story(name) => name,
+            };
+            self.0.get(name).copied()
+        }
+    }
+
+    fn predicate(json: &str) -> StatePredicate {
+        serde_json::from_str(json).expect("predicate parses")
+    }
+
+    fn fake(values: &[(&'static str, u32)]) -> Fake {
+        Fake(values.iter().copied().collect())
+    }
+
+    #[test]
+    fn known_keys_parse_and_unknown_keys_are_rejected() {
+        assert_eq!(
+            StateKey::parse("story:MOONBASE_DESTROYED"),
+            Ok(StateKey::Story("MOONBASE_DESTROYED"))
+        );
+        assert_eq!(StateKey::parse("sis:fuel"), Ok(StateKey::SisFuel));
+        assert!(StateKey::parse("story:NO_SUCH_BIT")
+            .unwrap_err()
+            .contains("NO_SUCH_BIT"));
+        assert!(StateKey::parse("sis:gold").is_err());
+        assert!(StateKey::parse("").is_err());
+    }
+
+    #[test]
+    fn validation_rejects_empty_unknown_and_oversized_conditions() {
+        assert!(predicate(r#"{"all":[]}"#).validate().is_err());
+        let unknown = predicate(r#"{"all":[{"key":"story:NOPE","op":"eq","value":1}]}"#);
+        assert!(unknown.validate().is_err());
+        let wide_bit =
+            predicate(r#"{"all":[{"key":"story:MOONBASE_DESTROYED","op":"eq","value":2}]}"#);
+        assert!(wide_bit.validate().unwrap_err().contains("maximum 1"));
+        let crew = predicate(r#"{"all":[{"key":"sis:crew","op":"ge","value":65536}]}"#);
+        assert!(crew.validate().is_err());
+        let fine = predicate(r#"{"all":[{"key":"sis:fuel","op":"ge","value":4000000000}]}"#);
+        assert!(fine.validate().is_ok());
+    }
+
+    #[test]
+    fn parsing_rejects_unknown_operators_and_fields() {
+        assert!(serde_json::from_str::<StatePredicate>(
+            r#"{"all":[{"key":"sis:fuel","op":"gt","value":1}]}"#
+        )
+        .is_err());
+        assert!(serde_json::from_str::<StatePredicate>(
+            r#"{"all":[{"key":"sis:fuel","op":"eq","value":1,"extra":2}]}"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn every_operator_compares_as_named() {
+        let source = fake(&[("sis:fuel", 896)]);
+        for (op, value, expected) in [
+            ("eq", 896, true),
+            ("eq", 895, false),
+            ("ne", 895, true),
+            ("ne", 896, false),
+            ("ge", 896, true),
+            ("ge", 897, false),
+            ("le", 896, true),
+            ("le", 895, false),
+        ] {
+            let text = format!(r#"{{"all":[{{"key":"sis:fuel","op":"{op}","value":{value}}}]}}"#);
+            assert_eq!(
+                evaluate(&predicate(&text), &source).held,
+                expected,
+                "{op} {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unavailable_value_never_compares_as_zero() {
+        let wants_zero =
+            predicate(r#"{"all":[{"key":"story:STARBASE_AVAILABLE","op":"eq","value":0}]}"#);
+        let evaluation = evaluate(&wants_zero, &fake(&[]));
+        assert!(!evaluation.held);
+        assert_eq!(
+            evaluation.observed,
+            vec![("story:STARBASE_AVAILABLE".into(), None)]
+        );
+        assert!(evaluation
+            .label("state_verified")
+            .ends_with("story:STARBASE_AVAILABLE=unavailable"));
+        assert!(evaluate(&wants_zero, &fake(&[("STARBASE_AVAILABLE", 0)])).held);
+    }
+
+    #[test]
+    fn a_mismatch_reports_every_actual_value_and_what_was_wanted() {
+        let both = predicate(
+            r#"{"all":[{"key":"sis:fuel","op":"eq","value":896},{"key":"sis:ru","op":"ge","value":2500}]}"#,
+        );
+        let evaluation = evaluate(&both, &fake(&[("sis:fuel", 900), ("sis:ru", 2500)]));
+        assert!(!evaluation.held);
+        assert_eq!(
+            evaluation.failure_label("state_mismatch", &both),
+            "state_mismatch|sis:fuel=900|sis:ru=2500|want:sis:fuel:eq:896|want:sis:ru:ge:2500"
+        );
+    }
+
+    #[test]
+    fn a_dead_flagship_crew_word_is_preserved() {
+        let dead = predicate(r#"{"all":[{"key":"sis:crew","op":"eq","value":65535}]}"#);
+        assert!(evaluate(&dead, &fake(&[("sis:crew", 0xffff)])).held);
+    }
+
+    #[test]
+    fn retained_labels_prove_only_the_predicate_they_were_recorded_for() {
+        let wanted = predicate(
+            r#"{"all":[{"key":"story:STARBASE_AVAILABLE","op":"eq","value":1},{"key":"sis:fuel","op":"ge","value":896}]}"#,
+        );
+        let good = "state_verified|story:STARBASE_AVAILABLE=1|sis:fuel=896";
+        assert!(label_satisfies(good, "state_verified", &wanted));
+        assert!(!label_satisfies(good, "state_reached", &wanted));
+        assert!(!label_satisfies(
+            "state_verified|story:STARBASE_AVAILABLE=0|sis:fuel=896",
+            "state_verified",
+            &wanted
+        ));
+        assert!(!label_satisfies(
+            "state_verified|story:STARBASE_AVAILABLE=1|sis:fuel=unavailable",
+            "state_verified",
+            &wanted
+        ));
+        assert!(!label_satisfies(
+            "state_verified|story:STARBASE_AVAILABLE=1",
+            "state_verified",
+            &wanted
+        ));
+        assert!(!label_satisfies(
+            "state_verified|sis:fuel=896|story:STARBASE_AVAILABLE=1",
+            "state_verified",
+            &wanted
+        ));
+    }
+}

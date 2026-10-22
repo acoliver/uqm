@@ -128,6 +128,9 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
         Action::AssertShipResources(value) => {
             super::ship_resources::verified_label_satisfies(label, *value)
         }
+        Action::AssertState(predicate) => {
+            super::campaign_state::label_satisfies(label, "state_verified", predicate)
+        }
         Action::AssertShipElement(value) => {
             shape(
                 label,
@@ -167,6 +170,9 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 &["lost=", "minimum=", "start=", "left="],
             ) && number(label, "minimum=") == Some(u64::from(value.minimum_ships))
                 && at_least(label, "lost=", u64::from(value.minimum_ships))
+        }
+        Action::WaitForState(value) => {
+            super::campaign_state::label_satisfies(label, "state_reached", &value.predicate)
         }
         Action::WaitForDispatch(value) => {
             shape(

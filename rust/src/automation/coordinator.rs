@@ -19,6 +19,7 @@ use crate::automation::battle_fight::{
     BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
 };
 use crate::automation::battle_outcome::{self, BattleLossTracker};
+use crate::automation::campaign_state;
 use crate::automation::flagship_turn::{self, FlagshipTurnTracker, TurnProgress};
 use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
@@ -973,6 +974,29 @@ impl Coordinator {
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
                 }
             }
+        } else if let Some(Action::WaitForState(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let expired =
+                inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
+            let evaluation =
+                campaign_state::evaluate(&wait.predicate, &campaign_state::LiveCampaign);
+            if expired {
+                // The scheduler ends the proof on this tick; say what the
+                // game state was instead of leaving a bare mismatch.
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    evaluation.failure_label("state_wait_expired", &wait.predicate),
+                );
+            } else if evaluation.held {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    evaluation.label("state_reached"),
+                );
+            }
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1869,6 +1893,25 @@ impl Coordinator {
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
                     return true;
                 }
+            }
+        }
+        if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
+        {
+            let evaluation = campaign_state::evaluate(predicate, &campaign_state::LiveCampaign);
+            if evaluation.held {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    evaluation.label("state_verified"),
+                );
+            } else {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    evaluation.failure_label("state_mismatch", predicate),
+                );
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                return true;
             }
         }
         if let Some(Action::AssertShipElement(assertion)) =
