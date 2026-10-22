@@ -1,0 +1,422 @@
+{
+  "version": 1,
+  "name": "super-melee-v1",
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 420
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 90
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 0
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 20
+    },
+    {
+      "action": "capture",
+      "label": "melee-one-ship-each"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 60
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 512
+    },
+    {
+      "action": "tap_player_key",
+      "key": "weapon",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 60
+    },
+    {
+      "action": "assert_battle_frames",
+      "minimum": 30
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "battle:ships_p1",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "battle:ships_p2",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "melee-battle-start"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 0
+          },
+          {
+            "key": "battle:ships_p2",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 9000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 300
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "activity",
+            "op": "eq",
+            "value": 0
+          }
+        ]
+      },
+      "max_ticks": 600
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 0
+    },
+    {
+      "action": "capture",
+      "label": "melee-setup-after-match"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
