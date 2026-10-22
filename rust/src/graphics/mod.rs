@@ -14,6 +14,7 @@ pub mod gfx_common;
 pub mod pixmap;
 pub mod render_context;
 pub mod scaling;
+pub mod software_scalers;
 pub mod tfb_draw;
 
 pub mod canvas_ffi;
