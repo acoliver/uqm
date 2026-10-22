@@ -97,7 +97,6 @@ sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
 sc2/src/uqm/ship.c
 sc2/src/uqm/ships/lastbat/lastbat.c
-sc2/src/uqm/ships/pkunk/pkunk.c
 sc2/src/uqm/ships/sis_ship/sis_ship.c
 sc2/src/uqm/shipstat.c
 sc2/src/uqm/shipyard.c
