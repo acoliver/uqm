@@ -1,2 +1,1 @@
-uqm_CFILES="getstr.c sfileins.c sresins.c"
 uqm_HFILES="strintrn.h"
