@@ -1,7 +1,7 @@
 //! Melnorme dialogue and trading, ported from melnorm.c.
 
 use super::encounter::EncounterApi;
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
+use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint, CSisState};
 use crate::comm::types::CommData;
 mod api;
@@ -493,14 +493,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn yack0_respond(&mut self) {
         match self.api.get("MELNORME_YACK_STACK0") {
             0 => {
-                let i = self.api.get("NEW_ALLIANCE_NAME");
-                let mut fragments = vec![
-                    i32::from(WE_ARE_FROM_ALLIANCE0),
-                    i32::from(NAME_1) + i32::from(i),
-                ];
-                if i == 3 {
-                    fragments.extend_from_slice(&[GLOBAL_PLAYER_NAME, i32::from(NAME_41)]);
-                }
+                let mut fragments = vec![i32::from(WE_ARE_FROM_ALLIANCE0)];
+                fragments.extend(self.api.alliance_fragments(NAME_1));
                 self.api
                     .response(WE_ARE_FROM_ALLIANCE0, Handler::DoFirstMeeting, &fragments);
             }
