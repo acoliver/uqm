@@ -154,6 +154,9 @@ fn source_max_crew(ship_dir: &str) -> u16 {
         "spathi" => Some(SpathiShip.descriptor_template()),
         "ilwrath" => Some(IlwrathShip.descriptor_template()),
         "arilou" => Some(ArilouShip.descriptor_template()),
+        "androsyn" => Some(AndrosynthShip::default().descriptor_template()),
+        "supox" => Some(SupoxShip.descriptor_template()),
+        "syreen" => Some(SyreenShip.descriptor_template()),
         _ => None,
     };
     if let Some(desc) = ported {

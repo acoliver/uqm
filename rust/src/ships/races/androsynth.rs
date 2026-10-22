@@ -1,6 +1,9 @@
 // Androsynth Guardian - Tracking bubbles + blazer comet form
 // @plan PLAN-20260314-SHIPS.P11
 
+#[path = "androsynth_native.rs"]
+mod native;
+
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
@@ -72,7 +75,7 @@ impl ShipBehavior for AndrosynthShip {
             },
             fleet: FleetStuff {
                 strength: u16::MAX,      // INFINITE_RADIUS
-                known_loc: (5000, 5000), // MAX_X_UNIVERSE>>1, MAX_Y_UNIVERSE>>1
+                known_loc: (4999, 4999), // MAX_X_UNIVERSE>>1, MAX_Y_UNIVERSE>>1
             },
             characteristics: Characteristics {
                 max_thrust: MAX_THRUST,
@@ -90,7 +93,7 @@ impl ShipBehavior for AndrosynthShip {
             ship_data: ShipData::default(),
             intel: IntelStuff {
                 maneuverability_index: 0,
-                weapon_range: 2500, // LONG_RANGE_WEAPON >> 2
+                weapon_range: 1000, // LONG_RANGE_WEAPON >> 2
             },
         }
     }
