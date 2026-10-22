@@ -71,7 +71,6 @@ sc2/src/uqm/comm/umgah/umgahc.c
 sc2/src/uqm/comm/urquan/urquanc.c
 sc2/src/uqm/comm/vux/vuxc.c
 sc2/src/uqm/comm/yehat/yehatc.c
-sc2/src/uqm/comm/zoqfot/zoqfotc.c
 sc2/src/uqm/commanim.c
 sc2/src/uqm/commglue.c
 sc2/src/uqm/confirm.c
