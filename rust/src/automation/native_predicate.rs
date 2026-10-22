@@ -231,7 +231,11 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
         Action::NavigateToPlanet(value) => {
             label == format!("navigation_reached:planet={}", value.planet)
         }
-        Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
+        Action::NavigateToOrbit(value) => {
+            label == format!("orbit_reached:planet={}", value.planet)
+                || (value.stop_at_encounter
+                    && label == format!("contact_reached:planet={}", value.planet))
+        }
         Action::UseDevice(step) => {
             shape(
                 label,
@@ -480,6 +484,34 @@ mod tests {
         record.kind = RecordKind::SemanticAssertion;
         record.label = Some(label.into());
         record
+    }
+
+    #[test]
+    fn contact_is_not_orbit_and_requires_explicit_interruption_permission() {
+        use crate::automation::script::NavigateToOrbitStep;
+        let action = |stop_at_encounter| {
+            Action::NavigateToOrbit(NavigateToOrbitStep {
+                planet: 0,
+                max_ticks: 100,
+                stop_at_encounter,
+            })
+        };
+        assert!(!wait_or_navigation_satisfied(
+            &action(false),
+            "contact_reached:planet=0"
+        ));
+        assert!(wait_or_navigation_satisfied(
+            &action(true),
+            "contact_reached:planet=0"
+        ));
+        assert!(!wait_or_navigation_satisfied(
+            &action(true),
+            "contact_reached:planet=1"
+        ));
+        assert!(wait_or_navigation_satisfied(
+            &action(false),
+            "orbit_reached:planet=0"
+        ));
     }
 
     #[test]

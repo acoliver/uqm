@@ -472,6 +472,9 @@ pub struct NavigateToMoonStep {
 pub struct NavigateToOrbitStep {
     pub planet: u8,
     pub max_ticks: u64,
+    /// Stop at a real Hail/Attack preview during approach, without claiming orbit.
+    #[serde(default)]
+    pub stop_at_encounter: bool,
 }
 
 /// A `navigate_to_hyperspace` step flies the real flagship out of the current
@@ -2833,7 +2836,8 @@ mod tests {
                 }),
                 Action::NavigateToOrbit(NavigateToOrbitStep {
                     planet: 3,
-                    max_ticks: 10
+                    max_ticks: 10,
+                    stop_at_encounter: false,
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
                 Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),

@@ -1532,6 +1532,8 @@ impl Coordinator {
                 i32::from(navigation.planet),
                 None,
             );
+            let contact = navigation.stop_at_encounter
+                && crate::automation::ui_observation::encounter_menu_active();
             let reached = snapshot.active != 0
                 && snapshot.in_orbit != 0
                 && snapshot.inner_planet == i32::from(navigation.planet)
@@ -1557,19 +1559,27 @@ impl Coordinator {
                     target_guard_active: false,
                 },
             );
-            if reached {
+            if reached || contact {
                 if !Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
                 ) {
                     self.reject_input(inner, "navigation", -1, -1);
                     return scheduler_event;
                 }
-                inner.orbit_transition_pending = true;
+                inner.orbit_transition_pending = !contact;
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
-                    format!("orbit_reached:planet={}", navigation.planet),
+                    format!(
+                        "{}:planet={}",
+                        if contact {
+                            "contact_reached"
+                        } else {
+                            "orbit_reached"
+                        },
+                        navigation.planet
+                    ),
                 );
             } else if !Self::set_navigation_controls(control) {
                 self.reject_input(inner, "navigation", -1, -1);

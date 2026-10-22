@@ -3519,6 +3519,7 @@ mod budgeted_wait_tests {
             Action::NavigateToOrbit(NavigateToOrbitStep {
                 planet: 1,
                 max_ticks,
+                stop_at_encounter: false,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
             Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
