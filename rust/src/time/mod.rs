@@ -4,6 +4,7 @@
 //! time-based events and game progression.
 
 pub mod clock_bridge;
+pub mod counter_abi;
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;

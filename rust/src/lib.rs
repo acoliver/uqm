@@ -20,6 +20,7 @@ pub mod game_init;
 pub mod graphics;
 pub mod input;
 pub mod io;
+pub mod log_abi;
 pub mod logging;
 pub mod mainloop;
 pub mod math;

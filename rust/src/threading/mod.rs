@@ -26,6 +26,7 @@ pub mod critical_timer;
 pub mod pacing;
 #[cfg(target_os = "macos")]
 pub mod qos;
+pub mod task_abi;
 
 #[cfg(test)]
 mod ffi_tests;
