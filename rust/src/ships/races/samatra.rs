@@ -1,3 +1,5 @@
+#[path = "samatra_native.rs"]
+mod native;
 // Sa-Matra (Last Battle) - Boss ship: yellow comets + green sentinels + shield generators
 // @plan PLAN-20260314-SHIPS.P13
 
@@ -68,13 +70,13 @@ impl ShipBehavior for SamatraShip {
     }
 
     /// C: samatra_postprocess — spawns yellow comets and green sentinels.
-    /// All sub-element logic (comets, sentinels, generators, gates) stays in C.
+    /// Live sub-element callbacks are implemented in samatra_native.rs.
     fn postprocess(
         &mut self,
         _ship: &mut ShipState,
         _ctx: &BattleContext,
     ) -> Result<(), ShipsError> {
-        // Sa-Matra postprocess is entirely C-side sub-element management:
+        // This detached model has no engine element queue. The native callbacks:
         // - Spawn comets when weapon_counter==0 and active_comets < MAX_COMETS
         // - Spawn sentinels when special_counter==0 and active < MAX_SENTINELS
         // - All gated by num_generators > 0
