@@ -1,2 +1,2 @@
-uqm_CFILES="thradd.c"
-uqm_HFILES="icode.h resinst.h thradd.h"
+uqm_CFILES=""
+uqm_HFILES="icode.h thradd.h"
