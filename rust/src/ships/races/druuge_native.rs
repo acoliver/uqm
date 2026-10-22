@@ -81,6 +81,12 @@ mod engine {
 
     #[no_mangle]
     pub extern "C" fn init_druuge() -> *mut RACE_DESC {
+        unsafe {
+            DRUUGE_DESC.preprocess_func = Some(druuge_preprocess);
+            DRUUGE_DESC.postprocess_func = Some(druuge_postprocess);
+            DRUUGE_DESC.init_weapon_func = Some(initialize_cannon);
+            DRUUGE_DESC.cyborg_control.intelligence_func = Some(druuge_intelligence);
+        }
         &raw mut DRUUGE_DESC
     }
 

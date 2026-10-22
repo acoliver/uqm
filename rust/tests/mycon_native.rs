@@ -4,6 +4,8 @@
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
+static ENGINE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg_attr(
     target_os = "macos",
     link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
@@ -18,6 +20,7 @@ unsafe extern "C" {
 
 #[test]
 fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
+    let _engine = ENGINE.lock().unwrap();
     unsafe {
         let d = *init_mycon();
         assert_eq!(d.ship_info.ship_flags, (FIRES_FORE | SEEKING_WEAPON) as u16);
@@ -79,6 +82,7 @@ fn descriptor_and_plasmoid_callbacks_match_mycon_c_data() {
 
 #[test]
 fn plasma_launch_and_postprocess_boundaries_match_c() {
+    let _engine = ENGINE.lock().unwrap();
     unsafe {
         assert_ne!(
             InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),

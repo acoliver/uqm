@@ -78,6 +78,11 @@ mod engine {
 
     #[no_mangle]
     pub extern "C" fn init_mycon() -> *mut RACE_DESC {
+        unsafe {
+            MYCON_DESC.postprocess_func = Some(mycon_postprocess);
+            MYCON_DESC.init_weapon_func = Some(initialize_plasma);
+            MYCON_DESC.cyborg_control.intelligence_func = Some(mycon_intelligence);
+        }
         &raw mut MYCON_DESC
     }
 

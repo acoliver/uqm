@@ -70,6 +70,7 @@ impl Ship {
 
 #[test]
 fn descriptor_matches_druuge_c_data() {
+    let _battle = Battlefield::new();
     unsafe {
         let d = *init_druuge();
         assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
