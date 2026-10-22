@@ -134,7 +134,6 @@ sc2/src/uqm/ships/probe/probe.c
 sc2/src/uqm/ships/shofixti/shofixti.c
 sc2/src/uqm/ships/sis_ship/sis_ship.c
 sc2/src/uqm/ships/slylandr/slylandr.c
-sc2/src/uqm/ships/supox/supox.c
 sc2/src/uqm/ships/syreen/syreen.c
 sc2/src/uqm/ships/thradd/thradd.c
 sc2/src/uqm/ships/umgah/umgah.c
