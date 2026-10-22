@@ -1,4 +1,4 @@
 uqm_SUBDIRS="proto"
-uqm_CFILES="  netmelee.c netmisc.c     notify.c notifyall.c"
+uqm_CFILES="  netmelee.c      notify.c notifyall.c"
 uqm_HFILES="checkbuf.h checksum.h crc.h netconnection.h netinput.h netmelee.h netmisc.h netoptions.h netplay.h netsend.h netstate.h notifyall.h notify.h packet.h packetq.h packetsenders.h"
 
