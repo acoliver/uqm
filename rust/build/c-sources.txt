@@ -43,7 +43,6 @@ sc2/src/libs/network/netmanager/ndesc.c
 sc2/src/libs/network/netmanager/netmanager_bsd.c
 sc2/src/libs/resource/direct.c
 sc2/src/libs/resource/stringbank.c
-sc2/src/libs/sound/decoders/decoder.c
 sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/libs/video/legacyplayer.c
 sc2/src/libs/video/vfileins.c
