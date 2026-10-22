@@ -167,6 +167,7 @@ fn source_max_crew(ship_dir: &str) -> u16 {
         "thradd" => Some(ThraddashShip.descriptor_template()),
         "umgah" => Some(UmgahShip.descriptor_template()),
         "vux" => Some(VuxShip.descriptor_template()),
+        "yehat" => Some(YehatShip.descriptor_template()),
         _ => None,
     };
     if let Some(desc) = ported {
