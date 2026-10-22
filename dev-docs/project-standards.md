@@ -19,12 +19,10 @@ test native source, or internal migration ABI. Retained C is transitional and
 is being deleted, not maintained. Adding C to solve a problem moves the project
 backwards; port the subsystem instead.
 
-**External libraries are the exception, and they are governed.** Only entries in
-`rust/ownership/external-native-allowlist.json` may be linked. Each carries a
-licence, provenance, security owner, update policy and the targets it applies
-to. Vendoring or patching any of them is forbidden, because a patched copy is
-first-party native code again. `build.rs` derives what it links from that file
-and fails on an entry that does not declare its policy.
+**External libraries are the exception, and they are governed.** Only the
+libraries named in `rust/build.rs` (SDL2, libpng, liblzma, bzip2 and the
+platform libraries) may be linked. Vendoring or patching any of them is
+forbidden, because a patched copy is first-party native code again.
 
 ---
 
@@ -62,7 +60,7 @@ decided in one place; a second place that can also decide is a duplicate
 authority even when the two currently agree.
 
 When a subsystem is cut over, the superseded provider, bridge, object and build
-entry, generated binding and ownership flag are removed in the same change.
+entry (its line in `rust/build/c-sources.txt`) and generated binding are removed in the same change.
 
 ---
 

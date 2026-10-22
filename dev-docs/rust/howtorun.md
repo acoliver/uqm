@@ -195,7 +195,6 @@ grep 'features' rust/Cargo.toml          # Cargo features
 rust/
 ├── Cargo.toml              # deps, audio_heart/linked_c_archive features, staticlib+rlib library
 ├── build.rs                # bindings plus manifest-validated production archive linking
-├── ownership/              # S1 provider manifest, validator, fixtures, strict-link replay
 ├── tests/                  # integration tests
 │   ├── sound_integration.rs
 │   ├── phase2_integration_tests.rs
@@ -313,7 +312,3 @@ Full details are in `howtoconfigure.md`. The essential mental model:
 
 
 ---
-
-## S1 Production Ownership Verification
-
-Production emits `provider-report.json` and exact-path `uqm-c-objects.manifest` beside `libuqm_c.a`. Run `rust/ownership/verify-production.sh`; it does not force a build; it first recomputes live git, tracked-worktree, toolchain, target/profile/features, and all five artifact identities through `xtask verify`, then validates real archive membership and symbols. Run `xtask prove` first when fresh two-clean-build evidence is required. Clean root orchestration remains S2 scope.

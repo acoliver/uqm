@@ -831,7 +831,6 @@ pub struct NativeLinkedBuildReceipt {
     pub schema: String,
     pub source_sha: String,
     pub cargo_command: Vec<String>,
-    pub native_profile: String,
     pub feature: String,
     pub cargo_executable_path: String,
     pub cargo_rust_archive_path: String,
@@ -840,119 +839,8 @@ pub struct NativeLinkedBuildReceipt {
     pub cargo_messages: NativeRetainedInput,
     pub rust_archive: NativeRetainedInput,
     pub c_archive: NativeRetainedInput,
-    pub object_sidecar: NativeRetainedInput,
-    pub provider_report: NativeRetainedInput,
-    pub native_build_evidence: NativeRetainedInput,
     pub cargo_manifest: NativeRetainedInput,
     pub cargo_lock: NativeRetainedInput,
-    pub canonical_toolchain: NativeRetainedInput,
-}
-
-const NATIVE_BUILD_EVIDENCE_SCHEMA: &str = "uqm-native-build-evidence-v1";
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedProviderReport {
-    schema: String,
-    entries: Vec<LinkedProviderEntry>,
-    ledger_sha256: String,
-    symbols: Vec<LinkedProviderSymbol>,
-    tracked_native_file_delta: i32,
-    summary: LinkedProviderSummary,
-    #[serde(default)]
-    diagnostics: Vec<serde_json::Value>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedProviderEntry {
-    path: String,
-    issue: String,
-    provider: String,
-    archive_decision: serde_json::Value,
-    status: String,
-    #[serde(default)]
-    diagnostics: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedProviderSymbol {
-    symbol: String,
-    canonical_owner: String,
-    provider_kind: serde_json::Value,
-    provider_path: String,
-    excluded_provider_paths: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedProviderSummary {
-    total_objects: usize,
-    included: usize,
-    excluded: usize,
-    duplicate_providers_excluded: usize,
-    recompiled: usize,
-    replaced: usize,
-    violations: usize,
-    passed: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedNativeBuildEvidence {
-    schema: String,
-    source_date_epoch: u64,
-    build_date: String,
-    target: String,
-    active_features: Vec<String>,
-    toolchain: LinkedToolchainIdentity,
-    packages: Vec<LinkedPackageIdentity>,
-    compile_profile: LinkedCompileProfile,
-    build_environment: std::collections::BTreeMap<String, String>,
-}
-
-#[derive(Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct LinkedToolIdentity {
-    executable: String,
-    version: String,
-    sha256: String,
-    effective_args: Vec<String>,
-}
-
-#[derive(Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct LinkedToolchainIdentity {
-    target: String,
-    rustc: LinkedToolIdentity,
-    cargo: LinkedToolIdentity,
-    cc: LinkedToolIdentity,
-    ar: LinkedToolIdentity,
-    nm: LinkedToolIdentity,
-    pkg_config: LinkedToolIdentity,
-    linker: LinkedToolIdentity,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedPackageIdentity {
-    name: String,
-    version: String,
-    cflags: Vec<String>,
-    libs: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LinkedCompileProfile {
-    target: String,
-    compiler: String,
-    ordered_defines: Vec<String>,
-    ordered_include_roots: Vec<String>,
-    ordered_compile_flags: Vec<String>,
-    dependency_flags: Vec<String>,
-    command_template: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3777,7 +3665,6 @@ fn validate_linked_build_receipt_bundle(
         serde_json::from_slice(&receipt_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
     if receipt.schema != NATIVE_LINKED_BUILD_RECEIPT_SCHEMA
         || !is_lower_hex(&receipt.source_sha, 40)
-        || receipt.native_profile != "linked-test"
         || receipt.feature != "audio_heart,debug-process,linked_c_archive"
         || receipt.executable != manifest.executable
         || receipt
@@ -3823,24 +3710,8 @@ fn validate_linked_build_receipt_bundle(
         ),
         ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
         ("inputs/linked-build/c-archive.a", &receipt.c_archive),
-        (
-            "inputs/linked-build/object-sidecar.manifest",
-            &receipt.object_sidecar,
-        ),
-        (
-            "inputs/linked-build/provider-report.json",
-            &receipt.provider_report,
-        ),
-        (
-            "inputs/linked-build/native-build-evidence.json",
-            &receipt.native_build_evidence,
-        ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
-        (
-            "inputs/linked-build/canonical-toolchain.json",
-            &receipt.canonical_toolchain,
-        ),
     ];
     for (path, expected) in members {
         if expected.relative_path != path
@@ -3858,17 +3729,13 @@ fn validate_linked_build_receipt_bundle(
         &receipt.executable,
         &receipt.rust_archive,
         &receipt.c_archive,
-        &receipt.object_sidecar,
     ] {
         validate_retained_input(root, input, limit)?;
     }
     validate_linked_cargo_messages(&receipt, &cargo_messages)?;
-    let provider = validate_retained_input(root, &receipt.provider_report, limit)?;
-    let evidence = validate_retained_input(root, &receipt.native_build_evidence, limit)?;
     validate_retained_input(root, &receipt.cargo_manifest, limit)?;
     validate_retained_input(root, &receipt.cargo_lock, limit)?;
-    let canonical_toolchain = validate_retained_input(root, &receipt.canonical_toolchain, limit)?;
-    validate_native_linked_build_semantics(&provider, &evidence, &canonical_toolchain)
+    Ok(())
 }
 
 fn validate_linked_cargo_messages(
@@ -3957,130 +3824,6 @@ fn cargo_target_has_kind(message: &serde_json::Value, expected: &str) -> bool {
     message["target"]["kind"]
         .as_array()
         .is_some_and(|kinds| kinds.iter().any(|kind| kind == expected))
-}
-
-pub fn validate_native_linked_build_semantics(
-    provider_bytes: &[u8],
-    evidence_bytes: &[u8],
-    canonical_toolchain_bytes: &[u8],
-) -> Result<(), NativeWindowProofError> {
-    let provider: LinkedProviderReport =
-        serde_json::from_slice(provider_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
-    let evidence: LinkedNativeBuildEvidence =
-        serde_json::from_slice(evidence_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
-    let canonical_toolchain: LinkedToolchainIdentity =
-        serde_json::from_slice(canonical_toolchain_bytes)
-            .map_err(|_| NativeWindowProofError::Receipt)?;
-    if evidence.toolchain == canonical_toolchain
-        && valid_linked_provider_report(&provider)
-        && valid_linked_build_evidence(&evidence)
-    {
-        Ok(())
-    } else {
-        Err(NativeWindowProofError::Receipt)
-    }
-}
-
-fn valid_linked_provider_report(provider: &LinkedProviderReport) -> bool {
-    let summary = &provider.summary;
-    provider.schema == "uqm-provider-report-v1"
-        && provider.ledger_sha256.len() == 64
-        && provider
-            .ledger_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-        && provider.tracked_native_file_delta == 0
-        && provider.diagnostics.is_empty()
-        && summary.passed
-        && summary.violations == 0
-        && summary.total_objects == provider.entries.len()
-        && summary.included + summary.excluded == summary.total_objects
-        && summary.duplicate_providers_excluded + summary.recompiled + summary.replaced
-            == summary.excluded
-        && provider.entries.iter().all(|entry| {
-            !entry.path.is_empty()
-                && !entry.issue.is_empty()
-                && !entry.provider.is_empty()
-                && entry.archive_decision.is_string()
-                && entry.status == "ok"
-                && entry.diagnostics.is_empty()
-        })
-        && provider.symbols.iter().all(|symbol| {
-            !symbol.symbol.is_empty()
-                && !symbol.canonical_owner.is_empty()
-                && symbol.provider_kind.is_string()
-                && !symbol.provider_path.is_empty()
-                && symbol
-                    .excluded_provider_paths
-                    .iter()
-                    .all(|path| !path.is_empty())
-        })
-}
-
-fn linked_build_targets_correlate(native_target: &str, rust_target: &str) -> bool {
-    matches!(
-        (native_target, rust_target),
-        ("macos-aarch64", "aarch64-apple-darwin")
-            | ("macos-x86_64", "x86_64-apple-darwin")
-            | ("linux-aarch64", "aarch64-unknown-linux-gnu")
-            | ("linux-x86_64", "x86_64-unknown-linux-gnu")
-    )
-}
-
-fn valid_linked_build_evidence(evidence: &LinkedNativeBuildEvidence) -> bool {
-    let expected = ["audio_heart", "debug-process", "linked_c_archive"];
-    let tools = [
-        &evidence.toolchain.rustc,
-        &evidence.toolchain.cargo,
-        &evidence.toolchain.cc,
-        &evidence.toolchain.ar,
-        &evidence.toolchain.nm,
-        &evidence.toolchain.pkg_config,
-        &evidence.toolchain.linker,
-    ];
-    evidence.schema == NATIVE_BUILD_EVIDENCE_SCHEMA
-        && evidence.source_date_epoch > 0
-        && !evidence.build_date.is_empty()
-        && evidence
-            .active_features
-            .iter()
-            .map(String::as_str)
-            .eq(expected)
-        && !evidence.target.is_empty()
-        && linked_build_targets_correlate(&evidence.target, &evidence.toolchain.target)
-        && tools.iter().all(|tool| {
-            !tool.executable.is_empty()
-                && !tool.version.is_empty()
-                && !tool.sha256.is_empty()
-                && tool.effective_args.iter().all(|arg| !arg.is_empty())
-        })
-        && !evidence.packages.is_empty()
-        && evidence.packages.iter().all(|package| {
-            !package.name.is_empty()
-                && !package.version.is_empty()
-                && package.cflags.iter().all(|flag| !flag.is_empty())
-                && package.libs.iter().all(|flag| !flag.is_empty())
-        })
-        && evidence.compile_profile.target == evidence.target
-        && !evidence.compile_profile.compiler.is_empty()
-        && evidence
-            .compile_profile
-            .ordered_defines
-            .iter()
-            .any(|define| define == "-DDEBUG")
-        && evidence
-            .compile_profile
-            .ordered_include_roots
-            .iter()
-            .all(|root| !root.is_empty())
-        && evidence
-            .compile_profile
-            .ordered_compile_flags
-            .iter()
-            .all(|flag| !flag.is_empty())
-        && evidence.compile_profile.dependency_flags == ["-MMD", "-MF", "<depfile>"]
-        && !evidence.compile_profile.command_template.is_empty()
-        && !evidence.build_environment.is_empty()
 }
 
 pub fn validate_native_acceptance_bundle(
@@ -4239,30 +3982,6 @@ mod tests {
             ),
             Err(NativeWindowObserverError::Ambiguous { pid: 7, count: 2 })
         );
-    }
-
-    #[test]
-    fn linked_native_and_rust_targets_must_describe_the_same_supported_host() {
-        for (native, rust) in [
-            ("macos-aarch64", "aarch64-apple-darwin"),
-            ("macos-x86_64", "x86_64-apple-darwin"),
-            ("linux-aarch64", "aarch64-unknown-linux-gnu"),
-            ("linux-x86_64", "x86_64-unknown-linux-gnu"),
-        ] {
-            assert!(linked_build_targets_correlate(native, rust));
-        }
-        assert!(!linked_build_targets_correlate(
-            "macos-aarch64",
-            "x86_64-apple-darwin"
-        ));
-        assert!(!linked_build_targets_correlate(
-            "linux-aarch64",
-            "aarch64-apple-darwin"
-        ));
-        assert!(!linked_build_targets_correlate(
-            "test-target",
-            "test-target"
-        ));
     }
 
     fn process() -> NativeProcessIdentity {
@@ -4430,32 +4149,6 @@ mod tests {
         }
     }
 
-    fn publish_rehashed_linked_mutation(
-        root: &Path,
-        manifest: &mut NativeAcceptanceManifest,
-        receipt: &mut serde_json::Value,
-        receipt_path: &Path,
-        member: &str,
-        receipt_field: &str,
-        bytes: &[u8],
-    ) {
-        fs::write(root.join(member), bytes).unwrap();
-        receipt[receipt_field]["byte_length"] = serde_json::json!(bytes.len() as u64);
-        receipt[receipt_field]["sha256"] =
-            serde_json::json!(format!("{:x}", Sha256::digest(bytes)));
-        let receipt_bytes = serde_json::to_vec(receipt).unwrap();
-        fs::write(receipt_path, &receipt_bytes).unwrap();
-        for retained in &mut manifest.retained_files {
-            if retained.relative_path == member {
-                retained.byte_length = bytes.len() as u64;
-                retained.sha256 = format!("{:x}", Sha256::digest(bytes));
-            } else if retained.relative_path == "inputs/linked-build/linked-build-receipt.json" {
-                retained.byte_length = receipt_bytes.len() as u64;
-                retained.sha256 = format!("{:x}", Sha256::digest(&receipt_bytes));
-            }
-        }
-    }
-
     #[test]
     fn command_paths_accept_only_absolute_or_descriptor_bound_normal_paths() {
         assert!(valid_bound_command_path("/tmp/uqm"));
@@ -4544,14 +4237,6 @@ mod tests {
             runtime_contract().inventory_limits
         )
         .is_ok());
-    }
-
-    /// Read the retained linked-build receipt as bytes and parsed JSON.
-    fn linked_receipt_state(root: &Path) -> (PathBuf, Vec<u8>, serde_json::Value) {
-        let path = root.join("inputs/linked-build/linked-build-receipt.json");
-        let bytes = fs::read(&path).unwrap();
-        let value = serde_json::from_slice(&bytes).unwrap();
-        (path, bytes, value)
     }
 
     /// Build the accepted playable bundle used by the acceptance-validation tests.
@@ -4739,7 +4424,7 @@ mod tests {
         };
         let linked_root = root.path().join("inputs/linked-build");
         fs::create_dir_all(&linked_root).unwrap();
-        let linked_members: [(&str, &[u8]); 9] = [
+        let linked_members: [(&str, &[u8]); 5] = [
             (
                 "cargo-messages.jsonl",
                 concat!(
@@ -4752,21 +4437,8 @@ mod tests {
             ),
             ("rust-archive.a", b"rust archive"),
             ("c-archive.a", b"c archive"),
-            ("object-sidecar.manifest", b"object sidecar"),
-            (
-                "provider-report.json",
-                br#"{"schema":"uqm-provider-report-v1","entries":[],"ledger_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","symbols":[],"tracked_native_file_delta":0,"summary":{"total_objects":0,"included":0,"excluded":0,"duplicate_providers_excluded":0,"recompiled":0,"replaced":0,"violations":0,"passed":true},"diagnostics":[]}"#,
-            ),
-            (
-                "native-build-evidence.json",
-                br#"{"schema":"uqm-native-build-evidence-v1","source_date_epoch":1,"build_date":"1970-01-01","target":"macos-aarch64","active_features":["audio_heart","debug-process","linked_c_archive"],"toolchain":{"target":"aarch64-apple-darwin","rustc":{"executable":"/rustc","version":"rustc 1.97.1 test","sha256":"aa","effective_args":[]},"cargo":{"executable":"/cargo","version":"1","sha256":"aa","effective_args":[]},"cc":{"executable":"/cc","version":"1","sha256":"aa","effective_args":[]},"ar":{"executable":"/ar","version":"1","sha256":"aa","effective_args":[]},"nm":{"executable":"/nm","version":"1","sha256":"aa","effective_args":[]},"pkg_config":{"executable":"/pkg-config","version":"1","sha256":"aa","effective_args":[]},"linker":{"executable":"/linker","version":"1","sha256":"aa","effective_args":[]}},"packages":[{"name":"sdl2","version":"1","cflags":[],"libs":[]}],"compile_profile":{"target":"macos-aarch64","compiler":"/cc","ordered_defines":["-DDEBUG"],"ordered_include_roots":[],"ordered_compile_flags":[],"dependency_flags":["-MMD","-MF","<depfile>"],"command_template":["/cc"]},"build_environment":{"SOURCE_DATE_EPOCH":"1"}}"#,
-            ),
             ("Cargo.toml", b"[package]\nname = \"uqm\"\n"),
             ("Cargo.lock", b"# lock\n"),
-            (
-                "canonical-toolchain.json",
-                br#"{"target":"aarch64-apple-darwin","rustc":{"executable":"/rustc","version":"rustc 1.97.1 test","sha256":"aa","effective_args":[]},"cargo":{"executable":"/cargo","version":"1","sha256":"aa","effective_args":[]},"cc":{"executable":"/cc","version":"1","sha256":"aa","effective_args":[]},"ar":{"executable":"/ar","version":"1","sha256":"aa","effective_args":[]},"nm":{"executable":"/nm","version":"1","sha256":"aa","effective_args":[]},"pkg_config":{"executable":"/pkg-config","version":"1","sha256":"aa","effective_args":[]},"linker":{"executable":"/linker","version":"1","sha256":"aa","effective_args":[]}}"#,
-            ),
         ];
         let linked_input = |filename: &str| {
             let bytes = linked_members
@@ -4799,7 +4471,6 @@ mod tests {
                 "uqm".to_string(),
                 "--message-format=json-render-diagnostics".to_string(),
             ],
-            native_profile: "linked-test".to_string(),
             feature: "audio_heart,debug-process,linked_c_archive".to_string(),
             cargo_executable_path: "/tmp/uqm".to_string(),
             cargo_rust_archive_path: "/tmp/libuqm_rust-a.a".to_string(),
@@ -4808,12 +4479,8 @@ mod tests {
             cargo_messages: linked_input("cargo-messages.jsonl"),
             rust_archive: linked_input("rust-archive.a"),
             c_archive: linked_input("c-archive.a"),
-            object_sidecar: linked_input("object-sidecar.manifest"),
-            provider_report: linked_input("provider-report.json"),
-            native_build_evidence: linked_input("native-build-evidence.json"),
             cargo_manifest: linked_input("Cargo.toml"),
             cargo_lock: linked_input("Cargo.lock"),
-            canonical_toolchain: linked_input("canonical-toolchain.json"),
         };
         fs::write(
             linked_root.join("linked-build-receipt.json"),
@@ -5243,7 +4910,6 @@ mod tests {
                 "cargo_command",
                 serde_json::json!(["/toolchain/cargo", "build"]),
             ),
-            ("native_profile", serde_json::json!("wrong")),
             ("feature", serde_json::json!("audio_heart")),
             ("cargo_executable_path", serde_json::json!("/tmp/other")),
             ("cargo_rust_archive_path", serde_json::json!("/tmp/other.a")),
@@ -5275,12 +4941,8 @@ mod tests {
             "cargo_messages",
             "rust_archive",
             "c_archive",
-            "object_sidecar",
-            "provider_report",
-            "native_build_evidence",
             "cargo_manifest",
             "cargo_lock",
-            "canonical_toolchain",
         ] {
             let mut changed = linked_receipt_value.clone();
             changed[field]["sha256"] = serde_json::json!("0".repeat(64));
@@ -5308,12 +4970,8 @@ mod tests {
             "inputs/linked-build/cargo-messages.jsonl",
             "inputs/linked-build/rust-archive.a",
             "inputs/linked-build/c-archive.a",
-            "inputs/linked-build/object-sidecar.manifest",
-            "inputs/linked-build/provider-report.json",
-            "inputs/linked-build/native-build-evidence.json",
             "inputs/linked-build/Cargo.toml",
             "inputs/linked-build/Cargo.lock",
-            "inputs/linked-build/canonical-toolchain.json",
         ] {
             let path = root.path().join(member);
             let original = fs::read(&path).unwrap();
@@ -5353,92 +5011,10 @@ mod tests {
     }
 
     #[test]
-    fn forged_publications_and_linked_build_members_are_rejected() {
+    fn forged_publications_are_rejected() {
         let (root, _receipt, manifest) = playable_acceptance_fixture();
-        let descriptor_bound = descriptor_bound_manifest(&manifest);
-        let (linked_receipt_path, linked_receipt_bytes, linked_receipt_value) =
-            linked_receipt_state(root.path());
         let mut missing_publication = manifest.clone();
-        for (member, receipt_field, mutate) in [
-            (
-                "inputs/linked-build/provider-report.json",
-                "provider_report",
-                "schema",
-            ),
-            (
-                "inputs/linked-build/native-build-evidence.json",
-                "native_build_evidence",
-                "schema",
-            ),
-        ] {
-            let member_path = root.path().join(member);
-            let original = fs::read(&member_path).unwrap();
-            let mut value: serde_json::Value = serde_json::from_slice(&original).unwrap();
-            value[mutate] = serde_json::json!("wrong");
-            let changed_member = serde_json::to_vec(&value).unwrap();
-            fs::write(&member_path, &changed_member).unwrap();
-            let mut changed_receipt = linked_receipt_value.clone();
-            changed_receipt[receipt_field]["byte_length"] =
-                serde_json::json!(changed_member.len() as u64);
-            changed_receipt[receipt_field]["sha256"] =
-                serde_json::json!(format!("{:x}", Sha256::digest(&changed_member)));
-            let changed_receipt = serde_json::to_vec(&changed_receipt).unwrap();
-            fs::write(&linked_receipt_path, &changed_receipt).unwrap();
-            let mut changed_manifest = descriptor_bound.clone();
-            for retained in &mut changed_manifest.retained_files {
-                if retained.relative_path == member {
-                    retained.byte_length = changed_member.len() as u64;
-                    retained.sha256 = format!("{:x}", Sha256::digest(&changed_member));
-                } else if retained.relative_path == "inputs/linked-build/linked-build-receipt.json"
-                {
-                    retained.byte_length = changed_receipt.len() as u64;
-                    retained.sha256 = format!("{:x}", Sha256::digest(&changed_receipt));
-                }
-            }
-            assert_eq!(
-                validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
-                Err(NativeWindowProofError::Receipt),
-                "accepted semantically invalid {member}"
-            );
-            fs::write(member_path, original).unwrap();
-            fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
-        }
         missing_publication.publications.remove(121);
-        let canonical_path = root
-            .path()
-            .join("inputs/linked-build/canonical-toolchain.json");
-        let evidence_path = root
-            .path()
-            .join("inputs/linked-build/native-build-evidence.json");
-        let original_canonical = fs::read(&canonical_path).unwrap();
-        let original_evidence = fs::read(&evidence_path).unwrap();
-        let mut forged_canonical: serde_json::Value =
-            serde_json::from_slice(&original_canonical).unwrap();
-        forged_canonical["rustc"]["version"] = serde_json::json!("rustc 9.99.9 forged");
-        let forged_canonical = serde_json::to_vec(&forged_canonical).unwrap();
-        let mut forged_evidence: serde_json::Value =
-            serde_json::from_slice(&original_evidence).unwrap();
-        forged_evidence["toolchain"] = serde_json::from_slice(&forged_canonical).unwrap();
-        let forged_evidence = serde_json::to_vec(&forged_evidence).unwrap();
-        let mut changed_receipt = linked_receipt_value.clone();
-        let mut changed_manifest = descriptor_bound.clone();
-        publish_rehashed_linked_mutation(
-            root.path(),
-            &mut changed_manifest,
-            &mut changed_receipt,
-            &linked_receipt_path,
-            "inputs/linked-build/native-build-evidence.json",
-            "native_build_evidence",
-            &forged_evidence,
-        );
-        assert_eq!(
-            validate_linked_build_receipt_bundle(root.path(), &changed_manifest),
-            Err(NativeWindowProofError::Receipt),
-            "accepted build evidence whose toolchain differs from the canonical toolchain"
-        );
-        fs::write(canonical_path, original_canonical).unwrap();
-        fs::write(evidence_path, original_evidence).unwrap();
-        fs::write(&linked_receipt_path, &linked_receipt_bytes).unwrap();
         assert_eq!(
             validate_native_acceptance_bundle(root.path(), &missing_publication),
             Err(NativeWindowProofError::Receipt)

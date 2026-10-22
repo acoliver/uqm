@@ -20,9 +20,8 @@ transitional C object expects:
 
 The `linked_c_archive` Cargo feature is the explicit production-link boundary.
 Without it, Cargo builds and tests do not compile transitional native inputs.
-With it, `rust/build.rs` validates `rust/build/native-inputs.json` and
-`rust/ownership/native-provider-manifest.json`, compiles tracked canonical
-sources, then strictly links the transitional archive.
+With it, `rust/build.rs` compiles the sources listed in
+`rust/build/c-sources.txt`, then strictly links the transitional archive.
 
 ---
 
@@ -111,9 +110,9 @@ Cargo, which prevents Cargo → native build → Cargo recursion. Production is:
 cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production
 ```
 
-`linked_c_archive` makes `rust/build.rs` validate and compile the exact tracked
-sources in `rust/build/native-inputs.json`. It rejects rather than inspects or consumes
-`sc2/obj/release` or `sc2/build.vars`. See `reproducible-build.md`.
+`linked_c_archive` makes `rust/build.rs` compile the sources listed in
+`rust/build/c-sources.txt`. It does not consume `sc2/obj/release` or
+`sc2/build.vars`. See `reproducible-build.md`.
 
 ---
 
@@ -320,7 +319,3 @@ The provider manifest validates the Cargo feature pair and the corresponding
 
 
 ---
-
-## S1 Native Provider Manifest
-
-The production-inverted Rust binary derives archive membership only from `rust/ownership/native-provider-manifest.json`. `rust/build.rs` validates the complete exact-path object inventory and hashes before archive creation. `sc2/obj/release/src/uqm/displist.c.o` is rejected while `rust/src/collections/queue.rs` is the sole queue provider. Permissive unresolved internal-symbol linking is not a supported configuration. See `ownership-and-strict-linking.md`.

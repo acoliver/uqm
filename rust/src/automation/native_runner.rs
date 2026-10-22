@@ -8,8 +8,8 @@ use crate::automation::command_executable_digest;
 #[cfg(test)]
 use crate::automation::native_window::NativeInventoryLimits;
 use crate::automation::native_window::{
-    native_window_trace_semantic_snapshot, validate_native_linked_build_semantics,
-    NativeAcceptanceFailureContract, NativeAcceptancePolicy, NativeWindowRuntimeContract,
+    native_window_trace_semantic_snapshot, NativeAcceptanceFailureContract, NativeAcceptancePolicy,
+    NativeWindowRuntimeContract,
 };
 use crate::automation::{
     capture_native_window, native_acceptance_failure_inventory, native_acceptance_inventory,
@@ -3124,24 +3124,15 @@ fn validate_shared_linked_build(
         &receipt.cargo_messages,
         &receipt.rust_archive,
         &receipt.c_archive,
-        &receipt.object_sidecar,
-        &receipt.provider_report,
-        &receipt.native_build_evidence,
         &receipt.cargo_manifest,
         &receipt.cargo_lock,
-        &receipt.canonical_toolchain,
     ] {
         let bytes = shared.read(root, &expected.relative_path, limit)?;
         if bytes.len() as u64 != expected.byte_length || sha256_hex(&bytes) != expected.sha256 {
             return Err("shared linked-build member differs from exact build receipt".into());
         }
     }
-    validate_native_linked_build_semantics(
-        &read("provider-report.json")?,
-        &read("native-build-evidence.json")?,
-        &read("canonical-toolchain.json")?,
-    )
-    .map_err(|error| format!("shared linked-build semantics: {error:?}"))
+    Ok(())
 }
 
 fn retain_linked_build_proof(
@@ -3160,29 +3151,12 @@ fn retain_linked_build_proof(
         read_bounded_regular(&source_root.join("cargo-messages.jsonl"), member_limit)
             .map_err(|error| format!("read linked-build Cargo messages: {error:?}"))?;
     validate_linked_build_cargo_messages(&receipt, &cargo_messages)?;
-    let provider_report =
-        read_bounded_regular(&source_root.join("provider-report.json"), member_limit)
-            .map_err(|error| format!("read linked-build provider report: {error:?}"))?;
-    let build_evidence = read_bounded_regular(
-        &source_root.join("native-build-evidence.json"),
-        member_limit,
-    )
-    .map_err(|error| format!("read linked-build native build evidence: {error:?}"))?;
-    let canonical_toolchain =
-        read_bounded_regular(&source_root.join("canonical-toolchain.json"), member_limit)
-            .map_err(|error| format!("read linked-build canonical toolchain: {error:?}"))?;
-    validate_native_linked_build_semantics(&provider_report, &build_evidence, &canonical_toolchain)
-        .map_err(|error| format!("linked-build semantic validation failed: {error:?}"))?;
     let members = [
         ("cargo-messages.jsonl", &receipt.cargo_messages),
         ("rust-archive.a", &receipt.rust_archive),
         ("c-archive.a", &receipt.c_archive),
-        ("object-sidecar.manifest", &receipt.object_sidecar),
-        ("provider-report.json", &receipt.provider_report),
-        ("native-build-evidence.json", &receipt.native_build_evidence),
         ("Cargo.toml", &receipt.cargo_manifest),
         ("Cargo.lock", &receipt.cargo_lock),
-        ("canonical-toolchain.json", &receipt.canonical_toolchain),
     ];
     let mut retained = Vec::new();
     let retention = (|| -> Result<(), String> {
@@ -3235,7 +3209,6 @@ fn validate_linked_build_receipt(
             .source_sha
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        || receipt.native_profile != "linked-test"
         || receipt.feature != "audio_heart,debug-process,linked_c_archive"
         || receipt.executable != *executable
         || !Path::new(&receipt.cargo_executable_path).is_absolute()
@@ -3281,24 +3254,8 @@ fn validate_linked_build_receipt(
         ),
         ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
         ("inputs/linked-build/c-archive.a", &receipt.c_archive),
-        (
-            "inputs/linked-build/object-sidecar.manifest",
-            &receipt.object_sidecar,
-        ),
-        (
-            "inputs/linked-build/provider-report.json",
-            &receipt.provider_report,
-        ),
-        (
-            "inputs/linked-build/native-build-evidence.json",
-            &receipt.native_build_evidence,
-        ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
-        (
-            "inputs/linked-build/canonical-toolchain.json",
-            &receipt.canonical_toolchain,
-        ),
     ];
     if expected_paths
         .into_iter()
@@ -4251,7 +4208,6 @@ mod tests {
             schema: NATIVE_LINKED_BUILD_RECEIPT_SCHEMA.to_string(),
             source_sha: "a".repeat(40),
             cargo_command: Vec::new(),
-            native_profile: "linked-test".to_string(),
             feature: "audio_heart,debug-process,linked_c_archive".to_string(),
             cargo_executable_path: "/target/release/uqm".to_string(),
             cargo_rust_archive_path: "/target/release/deps/libuqm_rust-test.a".to_string(),
@@ -4260,12 +4216,8 @@ mod tests {
             cargo_messages: input("inputs/linked-build/cargo-messages.jsonl"),
             rust_archive: input("inputs/linked-build/rust-archive.a"),
             c_archive: input("inputs/linked-build/c-archive.a"),
-            object_sidecar: input("inputs/linked-build/object-sidecar.manifest"),
-            provider_report: input("inputs/linked-build/provider-report.json"),
-            native_build_evidence: input("inputs/linked-build/native-build-evidence.json"),
             cargo_manifest: input("inputs/linked-build/Cargo.toml"),
             cargo_lock: input("inputs/linked-build/Cargo.lock"),
-            canonical_toolchain: input("inputs/linked-build/canonical-toolchain.json"),
         }
     }
 
