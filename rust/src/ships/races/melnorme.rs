@@ -1,3 +1,6 @@
+#[path = "melnorme_native.rs"]
+mod native;
+
 // Melnorme Trader - Charged pumpup blaster + confusion pulse
 // @plan PLAN-20260314-SHIPS.P13
 

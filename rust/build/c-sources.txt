@@ -111,7 +111,6 @@ sc2/src/uqm/setupmenu.c
 sc2/src/uqm/ship.c
 sc2/src/uqm/ships/blackurq/blackurq.c
 sc2/src/uqm/ships/lastbat/lastbat.c
-sc2/src/uqm/ships/melnorme/melnorme.c
 sc2/src/uqm/ships/orz/orz.c
 sc2/src/uqm/ships/pkunk/pkunk.c
 sc2/src/uqm/ships/probe/probe.c
