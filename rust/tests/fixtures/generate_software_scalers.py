@@ -78,7 +78,7 @@ void rules(int pattern, int edges, Uint32 *dst_p) {
     subprocess.run(['cc', '-shared', '-fPIC', '-O2', *files, str(work / 'wrapper.c'), *flags, '-o', str(work / 'oracle.dylib')], check=True)
     lib = ctypes.CDLL(str(work / 'oracle.dylib'))
     lib.Scale_Init()
-    data = bytearray()
+    data = bytearray(b"HQ2X\0\0\0\0")
     for pattern in range(256):
         for edges in range(16):
             pixels = (ctypes.c_uint32 * 4)()
