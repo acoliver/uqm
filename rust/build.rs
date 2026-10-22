@@ -86,6 +86,7 @@ fn run() -> Result<(), String> {
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
     generate_global_state_abi_bindings()?;
+    generate_ship_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     let links = platform_links(&target_os)?;
@@ -306,6 +307,27 @@ fn require_some<T>(value: Option<T>, context: &str) -> T {
 /// depend on whatever happens to be installed on the machine. Selecting no
 /// formatter removes the dependency and the fallback together.
 const ABI_BINDING_FORMATTER: bindgen::Formatter = bindgen::Formatter::None;
+/// Live race ABI, including the member alignments required by RACE_DESC.
+fn generate_ship_abi_bindings() -> Result<(), String> {
+    let bindings = bindgen::Builder::default()
+        .header("../sc2/src/uqm/ships/ship.h")
+        .clang_arg("-I../sc2")
+        .clang_arg("-I../sc2/src")
+        .allowlist_type("(RACE_DESC|STARSHIP|ELEMENT|EVALUATE_DESC|MISSILE_BLOCK|LASER_BLOCK)")
+        .allowlist_function("(initialize_missile|initialize_laser|TrackShip|ship_intelligence|DeltaEnergy|AllocElement|SetAbsFrameIndex|SetAbsStringTableIndex|ProcessSound|SetVelocityVector)")
+        .allowlist_var("(disp_q|PLAYER_SHIP|APPEARING|DISAPPEARING|NONSOLID|FINITE_LIFE|CHANGING|IGNORE_SIMILAR|SEEKING_WEAPON|POINT_DEFENSE|FIRES_FORE|LEFT|RIGHT|WEAPON|SPECIAL|ENEMY_SHIP_INDEX|ENEMY_WEAPON_INDEX|ONE_SHIFT)")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate_comments(false)
+        .layout_tests(true)
+        .formatter(ABI_BINDING_FORMATTER)
+        .generate()
+        .map_err(|error| format!("cannot generate ship ABI bindings: {error}"))?;
+    fs::write(
+        output_directory()?.join("ship_abi.rs"),
+        bindings.to_string(),
+    )
+    .map_err(|error| format!("cannot write generated ship ABI bindings: {error}"))
+}
 
 fn generate_hash_abi_bindings() -> Result<(), String> {
     let out_dir = output_directory()?;
