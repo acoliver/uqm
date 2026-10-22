@@ -39,12 +39,8 @@ sc2/src/libs/input/sdl/rust_vcontrol_impl.c
 sc2/src/libs/log/uqmlog.c
 sc2/src/libs/network/connect/connect.c
 sc2/src/libs/network/connect/listen.c
-sc2/src/libs/network/connect/resolve.c
 sc2/src/libs/network/netmanager/ndesc.c
 sc2/src/libs/network/netmanager/netmanager_bsd.c
-sc2/src/libs/network/network_bsd.c
-sc2/src/libs/network/socket/socket.c
-sc2/src/libs/network/socket/socket_bsd.c
 sc2/src/libs/resource/direct.c
 sc2/src/libs/resource/stringbank.c
 sc2/src/libs/sound/decoders/decoder.c
