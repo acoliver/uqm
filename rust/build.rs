@@ -667,7 +667,7 @@ enum UqmNetplayConstants {
         .clang_arg("-I../sc2/src")
         .clang_arg("-DNETPLAY=NETPLAY_FULL")
         .clang_arg("-DNETCONNECTION_INTERNAL")
-        .allowlist_type("(NetConnection|BattleStateData|ChecksumBuffer|crc_State|ELEMENT|STATE|Packet.*|UqmNetplayConstants)")
+        .allowlist_type("(NetStateData|NetplayOptions|NetConnection|BattleStateData|ChecksumBuffer|crc_State|ELEMENT|STATE|Packet.*|UqmNetplayConstants)")
         .allowlist_function("(NetConnection_.*|send.*|getBattleInput.*|BattleInputBuffer_push|Netplay_.*|resetFeedback|abortFeedback|confirmationCancelled|Melee_RemoteChange_.*|updateRandomSeed|updateMeleeSelection|TFB_SeedRandom)")
         .allowlist_var("(packetTypeData|disp_q|battleFrameCount|NETPLAY_.*|BATTLE_FRAME_RATE|MELEE_FLEET_SIZE|MAX_TEAM_CHARS|NUM_MELEE_SHIPS|UQM_.*_VERSION)")
         .generate_comments(false)

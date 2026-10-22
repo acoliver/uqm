@@ -148,13 +148,10 @@ sc2/src/uqm/supermelee/loadmele.c
 sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/meleesetup.c
 sc2/src/uqm/supermelee/netplay/netconnection.c
-sc2/src/uqm/supermelee/netplay/netinput.c
 sc2/src/uqm/supermelee/netplay/netmelee.c
 sc2/src/uqm/supermelee/netplay/netmisc.c
-sc2/src/uqm/supermelee/netplay/netoptions.c
 sc2/src/uqm/supermelee/netplay/netrcv.c
 sc2/src/uqm/supermelee/netplay/netsend.c
-sc2/src/uqm/supermelee/netplay/netstate.c
 sc2/src/uqm/supermelee/netplay/notify.c
 sc2/src/uqm/supermelee/netplay/notifyall.c
 sc2/src/uqm/supermelee/pickmele.c

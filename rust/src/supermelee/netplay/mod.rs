@@ -24,3 +24,9 @@ use crate::network::set_errno;
 mod npconfirm;
 mod ready;
 mod reset;
+
+mod netstate;
+
+mod netoptions;
+
+mod netinput;
