@@ -34,7 +34,6 @@ sc2/src/libs/graphics/tfb_draw.c
 sc2/src/libs/graphics/tfb_prim.c
 sc2/src/libs/graphics/widgets.c
 sc2/src/libs/input/sdl/input.c
-sc2/src/libs/input/sdl/keynames.c
 sc2/src/libs/log/uqmlog.c
 sc2/src/libs/resource/direct.c
 sc2/src/libs/resource/stringbank.c
