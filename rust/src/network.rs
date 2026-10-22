@@ -462,8 +462,18 @@ mod tests {
             assert!(!listener.is_null());
             assert_eq!(Socket_setReuseAddr(listener), 0);
             let mut address: libc::sockaddr_in = std::mem::zeroed();
-            address.sin_len = std::mem::size_of::<libc::sockaddr_in>() as u8;
-            address.sin_family = libc::AF_INET as u8;
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd",
+                target_os = "dragonfly"
+            ))]
+            {
+                address.sin_len = std::mem::size_of::<libc::sockaddr_in>() as u8;
+            }
+            address.sin_family = libc::AF_INET as _;
             address.sin_addr.s_addr = u32::from_ne_bytes([127, 0, 0, 1]);
             address.sin_port = 0;
             assert_eq!(
