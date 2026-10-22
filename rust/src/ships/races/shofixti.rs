@@ -1,3 +1,6 @@
+#[path = "shofixti_native.rs"]
+mod native;
+
 // Shofixti Scout - Dart gun + glory device
 // @plan PLAN-20260314-SHIPS.P11
 
