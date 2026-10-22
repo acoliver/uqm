@@ -19,6 +19,7 @@ pub mod lifecycle;
 pub mod netplay;
 pub mod process_loop;
 pub mod ship_runtime;
+pub mod sounds;
 pub mod tactical;
 pub mod velocity;
 pub mod weapon;

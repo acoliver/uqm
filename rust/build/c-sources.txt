@@ -89,7 +89,6 @@ sc2/src/uqm/ship.c
 sc2/src/uqm/shipstat.c
 sc2/src/uqm/shipyard.c
 sc2/src/uqm/sis.c
-sc2/src/uqm/sounds.c
 sc2/src/uqm/starbase.c
 sc2/src/uqm/starcon.c
 sc2/src/uqm/starmap.c
