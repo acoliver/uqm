@@ -323,6 +323,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::WaitForBattleShipLoss(_)
         | Action::WaitForDispatch(_)
         | Action::WaitForState(_)
+        | Action::SelectResponse(_)
         | Action::SelectCommunicationResponse(_)
         | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
@@ -445,6 +446,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForBattleShipLoss(_)
                     | Action::WaitForDispatch(_)
                     | Action::WaitForState(_)
+                    | Action::SelectResponse(_)
                     | Action::SelectCommunicationResponse(_)
                     | Action::WaitForCommunicationResponses(_)
                     | Action::WaitForPlanetSideStart(_)
@@ -1232,20 +1234,26 @@ fn reduce_condition_wait(
                 effects: EffectPlan::none(),
             }
         }
-        (Action::SelectCommunicationResponse(select), ActionPhase::WaitingForInput) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCondition {
-                        remaining: select.max_ticks.saturating_sub(1),
-                    },
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
         (
-            Action::SelectCommunicationResponse(_),
+            Action::SelectCommunicationResponse(
+                crate::automation::script::SelectCommunicationResponseStep { max_ticks, .. },
+            )
+            | Action::SelectResponse(crate::automation::script::SelectResponseStep {
+                max_ticks, ..
+            }),
+            ActionPhase::WaitingForInput,
+        ) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (
+            Action::SelectCommunicationResponse(_) | Action::SelectResponse(_),
             ActionPhase::WaitingCondition { remaining: 0 },
         ) => SchedulerTransition {
             new_state: SchedulerState {
@@ -1255,18 +1263,19 @@ fn reduce_condition_wait(
             },
             effects: EffectPlan::none(),
         },
-        (Action::SelectCommunicationResponse(_), ActionPhase::WaitingCondition { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCondition {
-                        remaining: remaining.saturating_sub(1),
-                    },
-                    state_version: sv,
-                    ..*state
+        (
+            Action::SelectCommunicationResponse(_) | Action::SelectResponse(_),
+            ActionPhase::WaitingCondition { remaining },
+        ) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: remaining.saturating_sub(1),
                 },
-                effects: EffectPlan::none(),
-            }
-        }
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::WaitForCommunicationResponses(wait), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -3221,6 +3230,41 @@ mod tests {
         );
         assert_eq!(reached.new_state.step_index, 1);
         assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
+    fn phrase_selection_waits_for_fresh_choices_and_expires() {
+        let actions = [
+            Action::SelectResponse(crate::automation::script::SelectResponseStep {
+                phrase: "we_will_transfer_now".into(),
+                max_ticks: 2,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 1 }
+        );
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+        assert_eq!(reached.new_state.step_index, 1);
+        let exhausted =
+            scheduler_reduce(&waiting.new_state, &config, SchedulerEvent::AdmittedInput);
+        let expired =
+            scheduler_reduce(&exhausted.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
     }
 
     #[test]

@@ -670,14 +670,14 @@ impl Coordinator {
             return false;
         };
         let inner = coord.inner.lock();
-        let Some(Action::SelectCommunicationResponse(select)) =
-            coord.actions.get(inner.sched_state.step_index)
-        else {
-            return false;
+        let index = match coord.actions.get(inner.sched_state.step_index) {
+            Some(Action::SelectCommunicationResponse(select)) => select.index,
+            Some(Action::SelectResponse(_)) => 0,
+            _ => return false,
         };
         let (generation, count, ready) =
             crate::automation::ui_observation::communication_responses();
-        generation > inner.consumed_response_generation && count > select.index && !ready
+        generation > inner.consumed_response_generation && count > index && !ready
     }
 
     /// Report whether a response action later in the current synchronous
@@ -699,6 +699,7 @@ impl Coordinator {
             .take(SEMANTIC_LOOKAHEAD)
             .any(|action| {
                 matches!(action, Action::SelectCommunicationResponse(select) if response_count > select.index)
+                    || matches!(action, Action::SelectResponse(_))
             })
     }
 
@@ -842,6 +843,39 @@ impl Coordinator {
                         snapshot.response_count
                     ),
                 );
+            }
+        } else if let Some(Action::SelectResponse(select)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let (generation, count, ready) =
+                crate::automation::ui_observation::communication_responses();
+            if !released_semantic_select
+                && generation > inner.consumed_response_generation
+                && count > 0
+            {
+                match crate::comm::ffi::offered_response_index(&select.phrase) {
+                    Ok(index) if ready => {
+                        assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
+                        let key_index =
+                            i32::from(crate::automation::script::MenuKey::Select.index());
+                        if !inject_menu_key(key_index, 1) {
+                            self.reject_input(inner, "menu", key_index, 1);
+                            return scheduler_event;
+                        }
+                        inner.release_semantic_select = true;
+                        inner.consumed_response_generation = generation;
+                        scheduler_event = SchedulerEvent::ConditionReached;
+                        self.write_trace_labeled(inner, RecordKind::SemanticAssertion,
+                            format!("response_selected:generation={generation}:count={count}:index={index}:phrase={}", select.phrase));
+                    }
+                    Ok(_) => {
+                        let _ = crate::sound::trackplayer::jump_track(0);
+                    }
+                    Err(error) => {
+                        self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                        self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    }
+                }
             }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
