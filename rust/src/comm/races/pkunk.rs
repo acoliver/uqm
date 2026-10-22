@@ -1,350 +1,1168 @@
-//! Pkunk dialogue state machine — ported from C.
-//!
-//! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
-
-#![allow(dead_code)]
-
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
-use crate::comm::segue::Segue;
-use crate::comm::types::{CommData, TextAlign, TextValign};
-use crate::state::game_state_keys::bit_range;
-
-// ---------------------------------------------------------------------------
-// String indices (from strings.h)
-// ---------------------------------------------------------------------------
-
-const NULL_PHRASE: u32 = 0;
-const GIVE_SPINDLE: u32 = 1;
-const NAME_1: u32 = 2;
-const NAME_2: u32 = 3;
-const NAME_3: u32 = 4;
-const NAME_40: u32 = 5;
-const NAME_41: u32 = 6;
-const NEUTRAL_SPACE_HELLO_1: u32 = 7;
-const NEUTRAL_SPACE_HELLO_3: u32 = 8;
-const NEUTRAL_SPACE_HELLO_2: u32 = 9;
-const NEUTRAL_SPACE_HELLO_4: u32 = 10;
-const FRIENDLY_SPACE_HELLO_1: u32 = 11;
-const FRIENDLY_SPACE_HELLO_2: u32 = 12;
-const FRIENDLY_SPACE_HELLO_3: u32 = 13;
-const FRIENDLY_SPACE_HELLO_4: u32 = 14;
-const FRIENDLY_SPACE_HELLO_5: u32 = 15;
-const FRIENDLY_SPACE_HELLO_6: u32 = 16;
-const FRIENDLY_SPACE_HELLO_7: u32 = 17;
-const FRIENDLY_SPACE_HELLO_8: u32 = 18;
-const NEUTRAL_HOMEWORLD_HELLO_1: u32 = 19;
-const NEUTRAL_HOMEWORLD_HELLO_2: u32 = 20;
-const NEUTRAL_HOMEWORLD_HELLO_3: u32 = 21;
-const NEUTRAL_HOMEWORLD_HELLO_4: u32 = 22;
-const FRIENDLY_HOMEWORLD_HELLO_1: u32 = 23;
-const FRIENDLY_HOMEWORLD_HELLO_2: u32 = 24;
-const FRIENDLY_HOMEWORLD_HELLO_3: u32 = 25;
-const FRIENDLY_HOMEWORLD_HELLO_4: u32 = 26;
-const FRIENDLY_HOMEWORLD_HELLO_5: u32 = 27;
-const FRIENDLY_HOMEWORLD_HELLO_6: u32 = 28;
-const FRIENDLY_HOMEWORLD_HELLO_7: u32 = 29;
-const FRIENDLY_HOMEWORLD_HELLO_8: u32 = 30;
-const WHATS_UP_NEUTRAL: u32 = 31;
-const GENERAL_INFO_NEUTRAL_1: u32 = 32;
-const GENERAL_INFO_NEUTRAL_2: u32 = 33;
-const GENERAL_INFO_NEUTRAL_3: u32 = 34;
-const GENERAL_INFO_NEUTRAL_4: u32 = 35;
-const GOOD_REASON_1: u32 = 36;
-const WE_GO_HOME_1: u32 = 37;
-const GOOD_REASON_2: u32 = 38;
-const WE_GO_HOME_2: u32 = 39;
-const BAD_REASON_1: u32 = 40;
-const NO_GO_HOME_1: u32 = 41;
-const BAD_REASON_2: u32 = 42;
-const NO_GO_HOME_2: u32 = 43;
-const SENSE_KOHRAH_VICTORY: u32 = 44;
-const SPIRITUAL_PROBLEMS_1: u32 = 45;
-const SPIRITUAL_PROBLEMS_2: u32 = 46;
-const SPIRITUAL_PROBLEMS_3: u32 = 47;
-const SPIRITUAL_PROBLEMS_4: u32 = 48;
-const HATE_YOU_FOREVER_1: u32 = 49;
-const HATE_YOU_FOREVER_2: u32 = 50;
-const HATE_YOU_FOREVER_3: u32 = 51;
-const HATE_YOU_FOREVER_4: u32 = 52;
-const MIGRATING_SPACE_1: u32 = 53;
-const MIGRATING_SPACE_2: u32 = 54;
-const MIGRATING_SPACE_3: u32 = 55;
-const MIGRATING_SPACE_4: u32 = 56;
-const MIGRATING_SPACE_5: u32 = 57;
-const MIGRATING_SPACE_6: u32 = 58;
-const MIGRATING_SPACE_7: u32 = 59;
-const MIGRATING_SPACE_8: u32 = 60;
-const DIE_IDIOT_FOOLS: u32 = 61;
-const VERY_WELL: u32 = 62;
-const WHY_INSULTS: u32 = 63;
-const RELEASE_TENSION: u32 = 64;
-const WHAT_ABOUT_YOU_ANGRY: u32 = 65;
-const ABOUT_US_ANGRY: u32 = 66;
-const WHAT_ABOUT_YOU: u32 = 67;
-const SHOULD_BE_FRIENDS: u32 = 68;
-const YES_FRIENDS: u32 = 69;
-const TRY_TO_BE_NICER: u32 = 70;
-const CANT_ASK_FOR_MORE: u32 = 71;
-const VISIT_OUR_HOMEWORLD: u32 = 72;
-const CAN_BE_FRIENDS: u32 = 73;
-const BYE_ANGRY: u32 = 74;
-const GOODBYE_ANGRY: u32 = 75;
-const WE_CONQUER: u32 = 76;
-const WHY_CONQUER: u32 = 77;
-const CONQUER_BECAUSE_1: u32 = 78;
-const NOT_CONQUER_10: u32 = 79;
-const NOT_CONQUER_11: u32 = 80;
-const NOT_CONQUER_12: u32 = 81;
-const NOT_CONQUER_1: u32 = 82;
-const CONQUER_BECAUSE_2: u32 = 83;
-const NOT_CONQUER_2: u32 = 84;
-const MUST_CONQUER: u32 = 85;
-const BAD_IDEA: u32 = 86;
-const NO_CONQUEST: u32 = 87;
-const GOOD_IDEA: u32 = 88;
-const WE_ARE_VINDICATOR0: u32 = 89;
-const WE_ARE_VINDICATOR1: u32 = 90;
-const WE_ARE_VINDICATOR2: u32 = 91;
-const WHY_YOU_HERE: u32 = 92;
-const WE_HERE_TO_HELP: u32 = 93;
-const NEED_HELP: u32 = 94;
-const WE_NEED_HELP: u32 = 95;
-const GIVE_HELP: u32 = 96;
-const EXPLORING_UNIVERSE: u32 = 97;
-const SENSE_DEEPER_CONFLICT: u32 = 98;
-const FUN_CRUISE: u32 = 99;
-const REPRESS: u32 = 100;
-const WHY_ILWRATH_FIGHT: u32 = 101;
-const ILWRATH_FIGHT_BECAUSE: u32 = 102;
-const WHEN_FIGHT_START: u32 = 103;
-const FIGHT_START_WHEN: u32 = 104;
-const HOW_GOES_FIGHT: u32 = 105;
-const FIGHT_GOES: u32 = 106;
-const HOW_GOES_WAR: u32 = 107;
-const WAR_GOES_1: u32 = 108;
-const WAR_GOES_2: u32 = 109;
-const WAR_GOES_3: u32 = 110;
-const WAR_GOES_4: u32 = 111;
-const HOW_STOP_FIGHT: u32 = 112;
-const STOP_FIGHT_LIKE_SO: u32 = 113;
-const ENOUGH_ILWRATH: u32 = 114;
-const OK_ENOUGH_ILWRATH: u32 = 115;
-const WHAT_ABOUT_HISTORY: u32 = 116;
-const ABOUT_HISTORY: u32 = 117;
-const WHAT_ABOUT_YEHAT: u32 = 118;
-const ABOUT_YEHAT: u32 = 119;
-const WHAT_ABOUT_CULTURE: u32 = 120;
-const ABOUT_CULTURE: u32 = 121;
-const ELABORATE_CULTURE: u32 = 122;
-const OK_ELABORATE_CULTURE: u32 = 123;
-const WHAT_ABOUT_FUTURE: u32 = 124;
-const ABOUT_FUTURE: u32 = 125;
-const ENOUGH_ABOUT_YOU: u32 = 126;
-const OK_ENOUGH_ABOUT_US: u32 = 127;
-const ABOUT_US: u32 = 128;
-const WHERE_FLEET_1: u32 = 129;
-const WHERE_FLEET_2: u32 = 130;
-const WHERE_FLEET_3: u32 = 131;
-const MIGRATING_HOMEWORLD_1: u32 = 132;
-const MIGRATING_HOMEWORLD_2: u32 = 133;
-const MIGRATING_HOMEWORLD_3: u32 = 134;
-const RETURNING_FROM_YEHAT_1: u32 = 135;
-const RETURNING_FROM_YEHAT_2: u32 = 136;
-const AM_WORRIED_1: u32 = 137;
-const AM_WORRIED_2: u32 = 138;
-const AM_WORRIED_3: u32 = 139;
-const DONT_WORRY_1: u32 = 140;
-const DONT_WORRY_2: u32 = 141;
-const DONT_WORRY_3: u32 = 142;
-const FORM_ALLIANCE: u32 = 143;
-const GO_TO_HOMEWORLD: u32 = 144;
-const CAN_YOU_HELP: u32 = 145;
-const GO_TO_HOMEWORLD_AGAIN: u32 = 146;
-const HOSTILE_GREETING: u32 = 147;
-const DONT_BE_HOSTILE: u32 = 148;
-const OBEY: u32 = 149;
-const NO_OBEY: u32 = 150;
-const NEUTRAL_BYE_SPACE: u32 = 151;
-const NEUTRAL_GOODBYE_SPACE: u32 = 152;
-const SHIP_GIFT: u32 = 153;
-const NO_ROOM: u32 = 154;
-const FRIENDLY_BYE_SPACE: u32 = 155;
-const FRIENDLY_GOODBYE_SPACE: u32 = 156;
-const BYE_FRIENDLY: u32 = 157;
-const GOODBYE_FRIENDLY: u32 = 158;
-const ALMOST_ALLIANCE: u32 = 159;
-const INIT_NO_ROOM: u32 = 160;
-const INIT_SHIP_GIFT: u32 = 161;
-const SUIT_YOURSELF: u32 = 162;
-const GOODBYE_MIGRATION: u32 = 163;
-const WHAT_ABOUT_ILWRATH: u32 = 164;
-const ABOUT_ILWRATH: u32 = 165;
-const WHATS_UP_SPACE: u32 = 166;
-const SHIPS_AT_HOME: u32 = 167;
-const GENERAL_INFO_SPACE_1: u32 = 168;
-const GENERAL_INFO_SPACE_2: u32 = 169;
-const GENERAL_INFO_SPACE_3: u32 = 170;
-const GENERAL_INFO_SPACE_4: u32 = 171;
-const GENERAL_INFO_SPACE_5: u32 = 172;
-const GENERAL_INFO_SPACE_6: u32 = 173;
-const GENERAL_INFO_SPACE_7: u32 = 174;
-const GENERAL_INFO_SPACE_8: u32 = 175;
-const TELL_MY_FORTUNE: u32 = 176;
-const FORTUNE_IS_1: u32 = 177;
-const FORTUNE_IS_2: u32 = 178;
-const FORTUNE_IS_3: u32 = 179;
-const FORTUNE_IS_4: u32 = 180;
-const FORTUNE_IS_5: u32 = 181;
-const FORTUNE_IS_6: u32 = 182;
-const FORTUNE_IS_7: u32 = 183;
-const FORTUNE_IS_8: u32 = 184;
-const OUT_TAKES: u32 = 185;
-
-// ---------------------------------------------------------------------------
-// Game state helpers
-// ---------------------------------------------------------------------------
-
-fn get_gs(key: &str) -> u8 {
-    let (start, end) = match bit_range(key) {
-        Some(r) => r,
-        None => return 0,
-    };
-    unsafe { rust_get_game_state_bits(start as c_int, end as c_int) }
+//! Pkunk dialogue, ported from pkunkc.c.
+use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+use crate::comm::types::CommData;
+mod phrases;
+use phrases::*;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handler {
+    ExitConversation,
+    PkunkAngry,
+    DiscussConquer,
+    OfferAlliance,
+    AboutPkunk,
+    AboutIlwrath,
+    PkunkHome,
+    PkunkFriendlySpace,
+    PkunkNeutralSpace,
+    PkunkMigrate,
 }
-
-fn set_gs(key: &str, val: u8) {
-    if let Some((start, end)) = bit_range(key) {
-        unsafe { rust_set_game_state_bits(start as c_int, end as c_int, val) };
-    }
+struct Dialogue<'a, A> {
+    api: &'a mut A,
 }
-
-extern "C" {
-    fn rust_NPCPhrase_cb(index: c_int, cb: Option<extern "C" fn()>);
-    fn rust_PhraseEnabled(index: c_int) -> c_int;
-    fn rust_DisablePhrase(index: c_int);
-    fn DoResponsePhrase(
-        response_ref: u32,
-        response_func: Option<extern "C" fn(u32)>,
-        construct_str: *const c_char,
-    );
-    fn rust_get_game_state_bits(start: c_int, end: c_int) -> u8;
-    fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
-}
-
-fn npc_phrase(index: u32) {
-    if index == 0 {
-        return;
-    }
-    unsafe { rust_NPCPhrase_cb(index as c_int, None) };
-}
-
-fn phrase_enabled(index: u32) -> bool {
-    unsafe { rust_PhraseEnabled(index as c_int) != 0 }
-}
-
-fn disable_phrase(index: u32) {
-    unsafe { rust_DisablePhrase(index as c_int) };
-}
-
-fn response(phrase: u32, callback: extern "C" fn(u32)) {
-    unsafe { DoResponsePhrase(phrase, Some(callback), std::ptr::null()) };
-}
-
-fn set_segue(segue: Segue) {
-    crate::comm::state::COMM_STATE.write().set_segue(segue);
-}
-
-fn get_segue() -> Segue {
-    crate::comm::state::COMM_STATE.read().get_segue()
-}
-
-fn get_current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-fn lobyte(val: u16) -> u8 {
-    (val & 0xFF) as u8
-}
-
-// ---------------------------------------------------------------------------
-// Resource keys (from resinst.h)
-// ---------------------------------------------------------------------------
-
-const RACE_PMAP_ANIM: &[u8] = b"comm.pkunk.graphics\0";
-const RACE_FONT: &[u8] = b"comm.pkunk.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.pkunk.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.pkunk.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.pkunk.dialogue\0";
-
-/// Pkunk race dialogue implementation.
-pub struct PkunkDialogue;
-
-impl super::RaceDialogue for PkunkDialogue {
-    fn init(&self) -> CommData {
-        CommData {
-            alien_frame_res: RACE_PMAP_ANIM.as_ptr() as *const _,
-            alien_font_res: RACE_FONT.as_ptr() as *const _,
-            alien_colormap_res: RACE_COLOR_MAP.as_ptr() as *const _,
-            alien_song_res: RACE_MUSIC.as_ptr() as *const _,
-            alien_alt_song_res: std::ptr::null(),
-            conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr() as *const _,
-            alien_text_align: TextAlign::Center,
-            alien_text_valign: TextValign::Top,
-            alien_text_fcolor: 0x00FFFFFF,
-            alien_text_bcolor: 0x00000000,
-            ..CommData::default()
+mod api;
+use api::PkunkApi;
+impl<A: PkunkApi> Dialogue<'_, A> {
+    fn handle(&mut self, h: Handler, r: u16) {
+        match h {
+            Handler::ExitConversation => self.exit_conversation(r),
+            Handler::PkunkAngry => self.pkunk_angry(r),
+            Handler::DiscussConquer => self.discuss_conquer(r),
+            Handler::OfferAlliance => self.offer_alliance(r),
+            Handler::AboutPkunk => self.about_pkunk(r),
+            Handler::AboutIlwrath => self.about_ilwrath(r),
+            Handler::PkunkHome => self.pkunk_home(r),
+            Handler::PkunkFriendlySpace => self.pkunk_friendly_space(r),
+            Handler::PkunkNeutralSpace => self.pkunk_neutral_space(r),
+            Handler::PkunkMigrate => self.pkunk_migrate(r),
         }
     }
-
+    fn ships_ready(&mut self) -> bool {
+        let (year, month, day) = self.api.date();
+        self.api.get("PKUNK_MANNER") == 3
+            && (i32::from(year) - 2155, month, day)
+                >= (
+                    i32::from(self.api.get("PKUNK_SHIP_YEAR")),
+                    u16::from(self.api.get("PKUNK_SHIP_MONTH")),
+                    u16::from(self.api.get("PKUNK_SHIP_DAY")),
+                )
+    }
+    fn prepare_ship(&mut self) {
+        if self.api.gift_ships() != 0 {
+            let (year, month, day) = self.api.date();
+            self.api.set("PKUNK_SHIP_MONTH", month as u8);
+            self.api.set("PKUNK_SHIP_DAY", day.min(28) as u8);
+            self.api.set(
+                "PKUNK_SHIP_YEAR",
+                (year.wrapping_sub(2155) as u8).wrapping_add(1),
+            );
+        }
+    }
+    fn exit_conversation(&mut self, r: u16) {
+        self.api.segue(0_u32);
+        if r == FRIENDLY_BYE_SPACE {
+            self.api.npc(i32::from(FRIENDLY_GOODBYE_SPACE));
+        } else if r == NEUTRAL_BYE_SPACE {
+            self.api.npc(i32::from(NEUTRAL_GOODBYE_SPACE));
+        } else if r == BYE_ANGRY {
+            self.api.npc(i32::from(GOODBYE_ANGRY));
+        } else if r == BYE_FRIENDLY {
+            self.api.npc(i32::from(GOODBYE_FRIENDLY));
+        } else if (r == WE_HERE_TO_HELP) || (r == WE_NEED_HELP) {
+            if r == WE_HERE_TO_HELP {
+                self.api.npc(i32::from(NEED_HELP));
+            } else {
+                self.api.npc(i32::from(GIVE_HELP));
+            }
+            self.api.npc(i32::from(ALMOST_ALLIANCE));
+            self.api.set("PKUNK_MANNER", 3_u8);
+            self.api.set("PKUNK_VISITS", 0_u8);
+            self.api.set("PKUNK_HOME_VISITS", 0_u8);
+            self.api.set("PKUNK_INFO", 0_u8);
+            self.api.event(1, 6_u16, 0_u16, 0_u16, 4_u8);
+            if i32::from(
+                self.api
+                    .escort_feasibility((crate::comm::dispatch::ship::PKUNK_SHIP) as u16),
+            ) == 0
+            {
+                self.api.npc(i32::from(INIT_NO_ROOM));
+            } else {
+                self.api.npc(i32::from(INIT_SHIP_GIFT));
+                self.api.talk_segue(!0_u16);
+                self.prepare_ship();
+            }
+        } else if r == TRY_TO_BE_NICER {
+            self.api.npc(i32::from(CANT_ASK_FOR_MORE));
+            self.api.npc(i32::from(VISIT_OUR_HOMEWORLD));
+            self.api.set("PKUNK_MANNER", 3_u8);
+            self.api.set("PKUNK_VISITS", 0_u8);
+            self.api.set("PKUNK_HOME_VISITS", 0_u8);
+            self.api.set("PKUNK_INFO", 0_u8);
+        } else if (r == MUST_CONQUER) || (r == OBEY) {
+            if r == OBEY {
+                self.api.npc(i32::from(NO_OBEY));
+            } else {
+                self.api.npc(i32::from(BAD_IDEA));
+                self.api.set("PKUNK_MANNER", 2_u8);
+            }
+            self.api.segue(1_u32);
+        } else if r == DIE_IDIOT_FOOLS {
+            self.api.npc(i32::from(VERY_WELL));
+            self.api.segue(1_u32);
+        } else if r == SUIT_YOURSELF {
+            self.api.npc(i32::from(GOODBYE_MIGRATION));
+        } else {
+            let mut reason_mask: u8;
+            reason_mask = self.api.get("PKUNK_REASONS");
+            if r == GOOD_REASON_1 {
+                self.api.npc(i32::from(WE_GO_HOME_1));
+                reason_mask |= (1 << 0) as u8;
+                self.api.event(1, 0_u16, 0_u16, 0_u16, 4_u8);
+            } else if r == GOOD_REASON_2 {
+                self.api.npc(i32::from(WE_GO_HOME_2));
+                reason_mask |= (1 << 1) as u8;
+                self.api.event(1, 0_u16, 0_u16, 0_u16, 4_u8);
+            } else if r == BAD_REASON_1 {
+                self.api.npc(i32::from(NO_GO_HOME_1));
+                reason_mask |= (1 << 2) as u8;
+            } else if r == BAD_REASON_2 {
+                self.api.npc(i32::from(NO_GO_HOME_2));
+                reason_mask |= (1 << 3) as u8;
+            }
+            self.api.set("PKUNK_REASONS", reason_mask);
+        }
+    }
+    fn pkunk_angry(&mut self, r: u16) {
+        if r == WHY_INSULTS {
+            self.api.npc(i32::from(RELEASE_TENSION));
+            self.api.disable(WHY_INSULTS);
+        } else if r == WHAT_ABOUT_YOU {
+            self.api.npc(i32::from(ABOUT_US));
+            self.api.disable(WHAT_ABOUT_YOU);
+        } else if r == SHOULD_BE_FRIENDS {
+            self.api.npc(i32::from(YES_FRIENDS));
+            self.api.disable(SHOULD_BE_FRIENDS);
+        }
+        if self.api.enabled(SHOULD_BE_FRIENDS) {
+            self.api
+                .response(SHOULD_BE_FRIENDS, Handler::PkunkAngry, &[]);
+        } else {
+            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+                self.api.response(TRY_TO_BE_NICER, Handler::PkunkHome, &[]);
+            } else {
+                self.api
+                    .response(TRY_TO_BE_NICER, Handler::ExitConversation, &[]);
+            }
+        }
+        self.api
+            .response(DIE_IDIOT_FOOLS, Handler::ExitConversation, &[]);
+        if self.api.enabled(WHY_INSULTS) {
+            self.api.response(WHY_INSULTS, Handler::PkunkAngry, &[]);
+        }
+        if self.api.enabled(WHAT_ABOUT_YOU) {
+            self.api.response(WHAT_ABOUT_YOU, Handler::PkunkAngry, &[]);
+        }
+        self.api.response(BYE_ANGRY, Handler::ExitConversation, &[]);
+    }
+    fn discuss_conquer(&mut self, r: u16) {
+        if r == WE_CONQUER {
+            self.api.npc(i32::from(WHY_CONQUER));
+            self.api.disable(WE_CONQUER);
+        } else if r == CONQUER_BECAUSE_1 {
+            self.api.npc(i32::from(NOT_CONQUER_1));
+            self.api.disable(CONQUER_BECAUSE_1);
+        } else if r == CONQUER_BECAUSE_2 {
+            self.api.npc(i32::from(NOT_CONQUER_2));
+            self.api.disable(CONQUER_BECAUSE_2);
+        }
+        if self.api.enabled(CONQUER_BECAUSE_1) {
+            self.api
+                .response(CONQUER_BECAUSE_1, Handler::DiscussConquer, &[]);
+        }
+        if self.api.enabled(CONQUER_BECAUSE_2) {
+            self.api
+                .response(CONQUER_BECAUSE_2, Handler::DiscussConquer, &[]);
+        }
+        self.api
+            .response(MUST_CONQUER, Handler::ExitConversation, &[]);
+        self.api.response(NO_CONQUEST, Handler::PkunkHome, &[]);
+    }
+    fn offer_alliance(&mut self, r: u16) {
+        if r == WE_ARE_VINDICATOR0 {
+            self.api.npc(i32::from(WHY_YOU_HERE));
+        } else if r == EXPLORING_UNIVERSE {
+            self.api.npc(i32::from(SENSE_DEEPER_CONFLICT));
+            self.api.disable(EXPLORING_UNIVERSE);
+        } else if r == FUN_CRUISE {
+            self.api.npc(i32::from(REPRESS));
+            self.api.disable(FUN_CRUISE);
+        }
+        self.api
+            .response(WE_HERE_TO_HELP, Handler::ExitConversation, &[]);
+        self.api
+            .response(WE_NEED_HELP, Handler::ExitConversation, &[]);
+        if self.api.enabled(EXPLORING_UNIVERSE) {
+            self.api
+                .response(EXPLORING_UNIVERSE, Handler::OfferAlliance, &[]);
+        }
+        if self.api.enabled(FUN_CRUISE) {
+            self.api.response(FUN_CRUISE, Handler::OfferAlliance, &[]);
+        }
+    }
+    fn about_pkunk(&mut self, r: u16) {
+        let mut info_left: u8;
+        info_left = u8::from(false);
+        if r == WHAT_ABOUT_YOU {
+            self.api.npc(i32::from(ABOUT_US));
+        } else if r == WHAT_ABOUT_HISTORY {
+            self.api.npc(i32::from(ABOUT_HISTORY));
+            self.api.disable(WHAT_ABOUT_HISTORY);
+        } else if r == WHAT_ABOUT_YEHAT {
+            self.api.npc(i32::from(ABOUT_YEHAT));
+            self.api.disable(WHAT_ABOUT_YEHAT);
+        } else if r == WHAT_ABOUT_CULTURE {
+            self.api.npc(i32::from(ABOUT_CULTURE));
+            self.api.disable(WHAT_ABOUT_CULTURE);
+        } else if r == ELABORATE_CULTURE {
+            self.api.npc(i32::from(OK_ELABORATE_CULTURE));
+            self.api.disable(ELABORATE_CULTURE);
+        } else if r == WHAT_ABOUT_FUTURE {
+            self.api.npc(i32::from(ABOUT_FUTURE));
+            self.api.disable(WHAT_ABOUT_FUTURE);
+        }
+        if self.api.enabled(WHAT_ABOUT_HISTORY) {
+            self.api
+                .response(WHAT_ABOUT_HISTORY, Handler::AboutPkunk, &[]);
+            info_left = u8::from(true);
+        } else if self.api.enabled(WHAT_ABOUT_YEHAT) {
+            self.api
+                .response(WHAT_ABOUT_YEHAT, Handler::AboutPkunk, &[]);
+            info_left = u8::from(true);
+        }
+        if self.api.enabled(WHAT_ABOUT_CULTURE) {
+            self.api
+                .response(WHAT_ABOUT_CULTURE, Handler::AboutPkunk, &[]);
+            info_left = u8::from(true);
+        } else if self.api.enabled(ELABORATE_CULTURE) {
+            self.api
+                .response(ELABORATE_CULTURE, Handler::AboutPkunk, &[]);
+            info_left = u8::from(true);
+        }
+        if self.api.enabled(WHAT_ABOUT_FUTURE) {
+            self.api
+                .response(WHAT_ABOUT_FUTURE, Handler::AboutPkunk, &[]);
+            info_left = u8::from(true);
+        }
+        self.api.response(ENOUGH_ABOUT_YOU, Handler::PkunkHome, &[]);
+        if !(info_left != 0) {
+            self.api.disable(WHAT_ABOUT_YOU);
+        }
+    }
+    fn about_ilwrath(&mut self, r: u16) {
+        let mut info_left: u8;
+        info_left = u8::from(false);
+        if r == WHAT_ABOUT_ILWRATH {
+            self.api.npc(i32::from(ABOUT_ILWRATH));
+        } else if r == WHY_ILWRATH_FIGHT {
+            self.api.npc(i32::from(ILWRATH_FIGHT_BECAUSE));
+            self.api.disable(WHY_ILWRATH_FIGHT);
+        } else if r == WHEN_FIGHT_START {
+            self.api.npc(i32::from(FIGHT_START_WHEN));
+            self.api.disable(WHEN_FIGHT_START);
+        } else if r == HOW_GOES_FIGHT {
+            self.api.npc(i32::from(FIGHT_GOES));
+            self.api.disable(HOW_GOES_FIGHT);
+        } else if r == HOW_STOP_FIGHT {
+            self.api.npc(i32::from(STOP_FIGHT_LIKE_SO));
+            self.api.disable(HOW_STOP_FIGHT);
+        }
+        if self.api.enabled(WHY_ILWRATH_FIGHT) {
+            self.api
+                .response(WHY_ILWRATH_FIGHT, Handler::AboutIlwrath, &[]);
+            info_left = u8::from(true);
+        }
+        if self.api.enabled(WHEN_FIGHT_START) {
+            self.api
+                .response(WHEN_FIGHT_START, Handler::AboutIlwrath, &[]);
+            info_left = u8::from(true);
+        }
+        if self.api.enabled(HOW_GOES_FIGHT) {
+            self.api
+                .response(HOW_GOES_FIGHT, Handler::AboutIlwrath, &[]);
+            info_left = u8::from(true);
+        }
+        if self.api.enabled(HOW_STOP_FIGHT) {
+            self.api
+                .response(HOW_STOP_FIGHT, Handler::AboutIlwrath, &[]);
+            info_left = u8::from(true);
+        }
+        self.api.response(ENOUGH_ILWRATH, Handler::PkunkHome, &[]);
+        if !(info_left != 0) {
+            self.api.disable(WHAT_ABOUT_ILWRATH);
+        }
+    }
+    fn pkunk_home(&mut self, r: u16) {
+        let fragments: Vec<i32>;
+        let mut num_visits: u8;
+        if r == NO_CONQUEST {
+            self.api.npc(i32::from(GOOD_IDEA));
+        } else if r == ENOUGH_ILWRATH {
+            self.api.npc(i32::from(OK_ENOUGH_ILWRATH));
+        } else if r == ENOUGH_ABOUT_YOU {
+            self.api.npc(i32::from(OK_ENOUGH_ABOUT_US));
+        } else if ((r == WHERE_FLEET_1) || (r == WHERE_FLEET_2)) || (r == WHERE_FLEET_3) {
+            self.api.set("PKUNK_SWITCH", 1_u8);
+            if !((i32::from(self.api.get("PKUNK_MISSION")) & 1) != 0) {
+                num_visits = self.api.get("PKUNK_RETURN");
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(RETURNING_FROM_YEHAT_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(RETURNING_FROM_YEHAT_2));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.api.set("PKUNK_RETURN", num_visits);
+            } else {
+                num_visits = self.api.get("PKUNK_MIGRATE");
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(MIGRATING_HOMEWORLD_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(MIGRATING_HOMEWORLD_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(MIGRATING_HOMEWORLD_3));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.api.set("PKUNK_MIGRATE", num_visits);
+            }
+            num_visits = (i32::from(self.api.get("PKUNK_FLEET")) + 1) as u8;
+            self.api.set("PKUNK_FLEET", num_visits);
+            self.api.disable(WHERE_FLEET_1);
+        } else if ((r == AM_WORRIED_1) || (r == AM_WORRIED_2)) || (r == AM_WORRIED_3) {
+            num_visits = self.api.get("PKUNK_WORRY");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(DONT_WORRY_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(DONT_WORRY_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(DONT_WORRY_3));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_WORRY", num_visits);
+            self.api.disable(AM_WORRIED_1);
+        } else if r == TRY_TO_BE_NICER {
+            self.api.npc(i32::from(CANT_ASK_FOR_MORE));
+            if !(self.api.get("CLEAR_SPINDLE") != 0) {
+                self.api.npc(i32::from(GIVE_SPINDLE));
+                self.api.set("CLEAR_SPINDLE", 1_u8);
+                self.api.set("CLEAR_SPINDLE_ON_SHIP", 1_u8);
+            }
+            self.api.npc(i32::from(CAN_BE_FRIENDS));
+            self.api.set("PKUNK_MANNER", 3_u8);
+            self.api.set("PKUNK_VISITS", 0_u8);
+            self.api.set("PKUNK_HOME_VISITS", 0_u8);
+        } else if r == WHAT_ABOUT_ILWRATH {
+            self.api.npc(i32::from(ABOUT_ILWRATH));
+            self.api.disable(WHAT_ABOUT_ILWRATH);
+        }
+        if self.api.enabled(WE_CONQUER) && (i32::from(self.api.get("PKUNK_MANNER")) == 0) {
+            self.api.response(WE_CONQUER, Handler::DiscussConquer, &[]);
+        }
+        if self.api.get("PKUNK_ON_THE_MOVE") != 0 {
+            if self.api.enabled(WHERE_FLEET_1) && !(self.api.get("PKUNK_SWITCH") != 0) {
+                match self.api.get("PKUNK_FLEET") {
+                    0 => {
+                        self.api.response(WHERE_FLEET_1, Handler::PkunkHome, &[]);
+                    }
+                    1 => {
+                        self.api.response(WHERE_FLEET_2, Handler::PkunkHome, &[]);
+                    }
+                    2 => {
+                        self.api.response(WHERE_FLEET_3, Handler::PkunkHome, &[]);
+                    }
+                    _ => {}
+                }
+            } else if (!self.api.enabled(WHERE_FLEET_1) && self.api.enabled(AM_WORRIED_1))
+                && ((i32::from(self.api.get("PKUNK_MISSION")) & 1) != 0)
+            {
+                match self.api.get("PKUNK_WORRY") {
+                    0 => {
+                        self.api.response(AM_WORRIED_1, Handler::PkunkHome, &[]);
+                    }
+                    1 => {
+                        self.api.response(AM_WORRIED_2, Handler::PkunkHome, &[]);
+                    }
+                    2 => {
+                        self.api.response(AM_WORRIED_3, Handler::PkunkHome, &[]);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if !(self.api.get("PKUNK_SHIP_MONTH") != 0) {
+            fragments = vec![
+                i32::from(WE_ARE_VINDICATOR0),
+                GLOBAL_PLAYER_NAME,
+                i32::from(WE_ARE_VINDICATOR1),
+                GLOBAL_SHIP_NAME,
+                i32::from(WE_ARE_VINDICATOR2),
+            ];
+            self.api
+                .response(WE_ARE_VINDICATOR0, Handler::OfferAlliance, &fragments);
+        }
+        if self.api.enabled(WHAT_ABOUT_YOU) {
+            self.api.response(WHAT_ABOUT_YOU, Handler::AboutPkunk, &[]);
+        }
+        if self.api.enabled(WHAT_ABOUT_ILWRATH) {
+            if !(self.api.get("ILWRATH_DECEIVED") != 0) {
+                self.api
+                    .response(WHAT_ABOUT_ILWRATH, Handler::AboutIlwrath, &[]);
+            } else {
+                self.api
+                    .response(WHAT_ABOUT_ILWRATH, Handler::PkunkHome, &[]);
+            }
+        }
+        self.api
+            .response(BYE_FRIENDLY, Handler::ExitConversation, &[]);
+    }
+    fn pkunk_friendly_space(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == WHATS_UP_SPACE {
+            if self.ships_ready() {
+                self.api.npc(i32::from(SHIPS_AT_HOME));
+            } else {
+                num_visits = self.api.get("PKUNK_INFO");
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_4));
+                    }
+                    4 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_5));
+                    }
+                    5 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_6));
+                    }
+                    6 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_7));
+                    }
+                    7 => {
+                        self.api.npc(i32::from(GENERAL_INFO_SPACE_8));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.api.set("PKUNK_INFO", num_visits);
+            }
+            self.api.disable(WHATS_UP_SPACE);
+        } else if r == HOW_GOES_WAR {
+            num_visits = self.api.get("PKUNK_WAR");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(WAR_GOES_1));
+                    self.api.set("KNOW_URQUAN_STORY", 1_u8);
+                    self.api.set("KNOW_KOHR_AH_STORY", 1_u8);
+                }
+                1 => {
+                    self.api.npc(i32::from(WAR_GOES_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(WAR_GOES_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(WAR_GOES_4));
+                    self.api.set("PKUNK_DONE_WAR", 1_u8);
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_WAR", num_visits);
+            self.api.disable(HOW_GOES_WAR);
+        } else if r == TELL_MY_FORTUNE {
+            num_visits = self.api.get("PKUNK_FORTUNE");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(FORTUNE_IS_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(FORTUNE_IS_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(FORTUNE_IS_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(FORTUNE_IS_4));
+                }
+                4 => {
+                    self.api.npc(i32::from(FORTUNE_IS_5));
+                }
+                5 => {
+                    self.api.npc(i32::from(FORTUNE_IS_6));
+                }
+                6 => {
+                    self.api.npc(i32::from(FORTUNE_IS_7));
+                }
+                7 => {
+                    self.api.npc(i32::from(FORTUNE_IS_8));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_FORTUNE", num_visits);
+            self.api.disable(TELL_MY_FORTUNE);
+        }
+        if self.api.enabled(WHATS_UP_SPACE) {
+            self.api
+                .response(WHATS_UP_SPACE, Handler::PkunkFriendlySpace, &[]);
+        }
+        if !(self.api.get("PKUNK_DONE_WAR") != 0) && self.api.enabled(HOW_GOES_WAR) {
+            self.api
+                .response(HOW_GOES_WAR, Handler::PkunkFriendlySpace, &[]);
+        }
+        if self.api.enabled(TELL_MY_FORTUNE) {
+            self.api
+                .response(TELL_MY_FORTUNE, Handler::PkunkFriendlySpace, &[]);
+        }
+        self.api
+            .response(FRIENDLY_BYE_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn pkunk_neutral_space(&mut self, r: u16) {
+        let mut num_visits: u8;
+        if r == FORM_ALLIANCE {
+            self.api.npc(i32::from(GO_TO_HOMEWORLD));
+            self.api.disable(FORM_ALLIANCE);
+        } else if r == CAN_YOU_HELP {
+            self.api.npc(i32::from(GO_TO_HOMEWORLD_AGAIN));
+            self.api.disable(CAN_YOU_HELP);
+        } else if r == HOSTILE_GREETING {
+            self.api.npc(i32::from(DONT_BE_HOSTILE));
+            self.api.disable(HOSTILE_GREETING);
+        } else if r == WHATS_UP_NEUTRAL {
+            num_visits = self.api.get("PKUNK_INFO");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_6));
+                }
+                3 => {
+                    self.api.npc(i32::from(GENERAL_INFO_SPACE_7));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_INFO", num_visits);
+            self.api.disable(WHATS_UP_NEUTRAL);
+        }
+        if self.api.enabled(FORM_ALLIANCE) {
+            self.api
+                .response(FORM_ALLIANCE, Handler::PkunkNeutralSpace, &[]);
+        } else if self.api.enabled(CAN_YOU_HELP) {
+            self.api
+                .response(CAN_YOU_HELP, Handler::PkunkNeutralSpace, &[]);
+        }
+        if self.api.enabled(HOSTILE_GREETING) {
+            self.api
+                .response(HOSTILE_GREETING, Handler::PkunkNeutralSpace, &[]);
+        } else {
+            self.api.response(OBEY, Handler::ExitConversation, &[]);
+        }
+        if self.api.enabled(WHATS_UP_NEUTRAL) {
+            self.api
+                .response(WHATS_UP_NEUTRAL, Handler::PkunkNeutralSpace, &[]);
+        }
+        self.api
+            .response(NEUTRAL_BYE_SPACE, Handler::ExitConversation, &[]);
+    }
+    fn pkunk_migrate(&mut self, _r: u16) {
+        let reason_mask: u8 = self.api.get("PKUNK_REASONS");
+        if !((i32::from(reason_mask) & (1 << 0)) != 0) {
+            self.api
+                .response(GOOD_REASON_1, Handler::ExitConversation, &[]);
+        }
+        if !((i32::from(reason_mask) & (1 << 2)) != 0) {
+            self.api
+                .response(BAD_REASON_1, Handler::ExitConversation, &[]);
+        }
+        if !((i32::from(reason_mask) & (1 << 1)) != 0) {
+            self.api
+                .response(GOOD_REASON_2, Handler::ExitConversation, &[]);
+        }
+        if !((i32::from(reason_mask) & (1 << 3)) != 0) {
+            self.api
+                .response(BAD_REASON_2, Handler::ExitConversation, &[]);
+        }
+        self.api
+            .response(SUIT_YOURSELF, Handler::ExitConversation, &[]);
+    }
+    fn intro(&mut self) {
+        let mut num_visits: u8;
+        if i32::from((self.api.activity()) as u8) == 5 {
+            self.api.npc(i32::from(OUT_TAKES));
+            self.api.segue(0_u32);
+            return;
+        }
+        let manner: u8 = self.api.get("PKUNK_MANNER");
+        if i32::from(manner) == 2 {
+            num_visits = self.api.get("PKUNK_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(HATE_YOU_FOREVER_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(HATE_YOU_FOREVER_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(HATE_YOU_FOREVER_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(HATE_YOU_FOREVER_4));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_VISITS", num_visits);
+            self.api.segue(1_u32);
+        } else if i32::from(manner) == 1 {
+            num_visits = self.api.get("PKUNK_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(SPIRITUAL_PROBLEMS_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(SPIRITUAL_PROBLEMS_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(SPIRITUAL_PROBLEMS_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(SPIRITUAL_PROBLEMS_4));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_VISITS", num_visits);
+            self.pkunk_angry(0_u16);
+        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+            if !(self.api.get("CLEAR_SPINDLE") != 0) {
+                self.api.npc(i32::from(GIVE_SPINDLE));
+                self.api.set("CLEAR_SPINDLE", 1_u8);
+                self.api.set("CLEAR_SPINDLE_ON_SHIP", 1_u8);
+            } else if (!(self.api.get("PKUNK_SENSE_VICTOR") != 0)
+                && (i32::from(self.api.date().0) > 2155))
+                && !(self.api.get("KOHR_AH_FRENZY") != 0)
+            {
+                self.api.npc(i32::from(SENSE_KOHRAH_VICTORY));
+                self.api.set("PKUNK_SENSE_VICTOR", 1_u8);
+            }
+            num_visits = self.api.get("PKUNK_HOME_VISITS");
+            if i32::from(manner) == 0 {
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(NEUTRAL_HOMEWORLD_HELLO_4));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+            } else {
+                if (num_visits != 0) && self.ships_ready() {
+                    if i32::from(
+                        self.api
+                            .escort_feasibility((crate::comm::dispatch::ship::PKUNK_SHIP) as u16),
+                    ) == 0
+                    {
+                        self.api.npc(i32::from(NO_ROOM));
+                    } else {
+                        self.api.npc(i32::from(SHIP_GIFT));
+                        self.prepare_ship();
+                    }
+                } else {
+                    let res = {
+                        let old = num_visits;
+                        num_visits = num_visits.wrapping_add(1);
+                        old
+                    };
+                    match res {
+                        0 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_1));
+                        }
+                        1 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_2));
+                        }
+                        2 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_3));
+                        }
+                        3 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_4));
+                        }
+                        4 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_5));
+                        }
+                        5 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_6));
+                        }
+                        6 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_7));
+                        }
+                        7 => {
+                            self.api.npc(i32::from(FRIENDLY_HOMEWORLD_HELLO_8));
+                            {
+                                num_visits = num_visits.wrapping_sub(1);
+                                num_visits
+                            };
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            self.api.set("PKUNK_HOME_VISITS", num_visits);
+            self.pkunk_home(0_u16);
+        } else if (i32::from({
+            num_visits = self.api.get("PKUNK_MISSION");
+            num_visits
+        }) == 0)
+            || !((i32::from(num_visits) & 1) != 0)
+        {
+            num_visits = self.api.get("PKUNK_VISITS");
+            if i32::from(manner) == 3 {
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_4));
+                    }
+                    4 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_5));
+                    }
+                    5 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_6));
+                    }
+                    6 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_7));
+                    }
+                    7 => {
+                        self.api.npc(i32::from(FRIENDLY_SPACE_HELLO_8));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.pkunk_friendly_space(0_u16);
+            } else {
+                let res = {
+                    let old = num_visits;
+                    num_visits = num_visits.wrapping_add(1);
+                    old
+                };
+                match res {
+                    0 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_1));
+                    }
+                    1 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_2));
+                    }
+                    2 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_3));
+                    }
+                    3 => {
+                        self.api.npc(i32::from(NEUTRAL_SPACE_HELLO_4));
+                        {
+                            num_visits = num_visits.wrapping_sub(1);
+                            num_visits
+                        };
+                    }
+                    _ => {}
+                }
+                self.pkunk_neutral_space(0_u16);
+            }
+            self.api.set("PKUNK_VISITS", num_visits);
+        } else {
+            num_visits = self.api.get("PKUNK_MIGRATE_VISITS");
+            let res = {
+                let old = num_visits;
+                num_visits = num_visits.wrapping_add(1);
+                old
+            };
+            match res {
+                0 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_1));
+                }
+                1 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_2));
+                }
+                2 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_3));
+                }
+                3 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_4));
+                }
+                4 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_5));
+                }
+                5 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_6));
+                }
+                6 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_7));
+                }
+                7 => {
+                    self.api.npc(i32::from(MIGRATING_SPACE_8));
+                    {
+                        num_visits = num_visits.wrapping_sub(1);
+                        num_visits
+                    };
+                }
+                _ => {}
+            }
+            self.api.set("PKUNK_MIGRATE_VISITS", num_visits);
+            self.pkunk_migrate(0_u16);
+        }
+    }
+    fn post_pkunk_enc(&mut self) {
+        let manner: u8;
+        if ((self.api.get_segue()) as i32 == 1)
+            && (i32::from({
+                manner = self.api.get("PKUNK_MANNER");
+                manner
+            }) != 2)
+        {
+            self.api.set("PKUNK_MANNER", 1_u8);
+            if i32::from(manner) != 1 {
+                self.api.set("PKUNK_VISITS", 0_u8);
+                self.api.set("PKUNK_HOME_VISITS", 0_u8);
+            }
+        }
+    }
+    fn initialize(&mut self) {
+        if (i32::from(self.api.get("PKUNK_MANNER")) == 3)
+            || (i32::from((self.api.activity()) as u8) == 5)
+        {
+            self.api.segue(0_u32);
+        } else {
+            self.api.segue(1_u32);
+        }
+    }
+}
+fn descriptor() -> CLocData {
+    let mut d = CLocData {
+        alien_frame_res: c"comm.pkunk.graphics".as_ptr(),
+        alien_font_res: c"comm.pkunk.font".as_ptr(),
+        alien_colormap_res: c"comm.pkunk.colortable".as_ptr(),
+        alien_song_res: c"comm.pkunk.music".as_ptr(),
+        conversation_phrases_res: c"comm.pkunk.dialogue".as_ptr(),
+        alien_text_fcolor: CColor {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        },
+        alien_text_bcolor: CColor {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        },
+        alien_text_baseline: CPoint { x: 121, y: 0 },
+        alien_text_width: 224,
+        alien_text_align: 1,
+        alien_text_valign: 0,
+        num_animations: 3,
+        ..CLocData::default()
+    };
+    d.alien_ambient_array[0] = animation(3, 4, 10, (28, 0), (840, 2520));
+    d.alien_ambient_array[1] = {
+        let mut a = animation(7, 4, 12, (84, 0), (840, 2520));
+        a.block_mask = 4;
+        a
+    };
+    d.alien_ambient_array[2] = {
+        let mut a = animation(11, 3, 12, (28, 0), (840, 2520));
+        a.block_mask = 2;
+        a
+    };
+    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
+    d.alien_talk_desc = animation(1, 2, 0, (56, 140), (70, 420));
+    #[cfg(not(test))]
+    {
+        d.init_encounter_func = live::intro as *const () as *const _;
+        d.post_encounter_func = live::post as *const () as *const _;
+        d.uninit_encounter_func = live::uninit as *const () as *const _;
+    }
+    d
+}
+#[cfg(not(test))]
+mod live {
+    use super::*;
+    use crate::comm::races::script::live::LiveScript;
+    fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {
+        let mut api = LiveScript { callback };
+        f(&mut Dialogue { api: &mut api });
+    }
+    extern "C" fn exit_conversation(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::ExitConversation,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn pkunk_angry(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::PkunkAngry,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn discuss_conquer(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::DiscussConquer,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn offer_alliance(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::OfferAlliance,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn about_pkunk(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::AboutPkunk,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn about_ilwrath(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::AboutIlwrath,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn pkunk_home(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::PkunkHome,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn pkunk_friendly_space(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::PkunkFriendlySpace,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn pkunk_neutral_space(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::PkunkNeutralSpace,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    extern "C" fn pkunk_migrate(r: u32) {
+        run(|s| {
+            s.handle(
+                Handler::PkunkMigrate,
+                u16::try_from(r).expect("response exceeds COUNT"),
+            )
+        });
+    }
+    fn callback(h: Handler) -> extern "C" fn(u32) {
+        match h {
+            Handler::ExitConversation => exit_conversation,
+            Handler::PkunkAngry => pkunk_angry,
+            Handler::DiscussConquer => discuss_conquer,
+            Handler::OfferAlliance => offer_alliance,
+            Handler::AboutPkunk => about_pkunk,
+            Handler::AboutIlwrath => about_ilwrath,
+            Handler::PkunkHome => pkunk_home,
+            Handler::PkunkFriendlySpace => pkunk_friendly_space,
+            Handler::PkunkNeutralSpace => pkunk_neutral_space,
+            Handler::PkunkMigrate => pkunk_migrate,
+        }
+    }
+    pub(super) extern "C" fn intro() {
+        run(|s| s.intro());
+    }
+    pub(super) extern "C" fn post() {
+        run(|s| s.post_pkunk_enc());
+    }
+    pub(super) extern "C" fn uninit() -> u16 {
+        0
+    }
+    /// Initialize this encounter on the game thread.
+    ///
+    /// # Safety
+    /// The caller must copy the descriptor before another encounter initializes.
+    #[no_mangle]
+    pub unsafe extern "C" fn init_pkunk_comm() -> *mut CLocData {
+        static mut DESC: Option<CLocData> = None;
+        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+        run(|s| s.initialize());
+        desc
+    }
+}
+pub struct PkunkDialogue;
+impl super::RaceDialogue for PkunkDialogue {
+    fn init(&self) -> CommData {
+        #[cfg(not(test))]
+        {
+            unsafe { as_comm_data(&*live::init_pkunk_comm()) }
+        }
+        #[cfg(test)]
+        {
+            as_comm_data(&descriptor())
+        }
+    }
     fn intro(&self) {
-        // TODO: Port intro state machine from C
+        #[cfg(not(test))]
+        live::intro();
     }
-
     fn post_encounter(&self) {
-        // TODO: Port post_encounter from C
+        #[cfg(not(test))]
+        live::post();
     }
-
     fn uninit(&self) -> u32 {
         0
     }
 }
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
-    }
-
-    #[test]
-    fn test_game_state_keys_exist() {
-        assert!(
-            bit_range("CLEAR_SPINDLE").is_some(),
-            "missing game state key: CLEAR_SPINDLE"
-        );
-        assert!(
-            bit_range("CLEAR_SPINDLE_ON_SHIP").is_some(),
-            "missing game state key: CLEAR_SPINDLE_ON_SHIP"
-        );
-        assert!(
-            bit_range("GLOBAL_FLAGS_AND_DATA").is_some(),
-            "missing game state key: GLOBAL_FLAGS_AND_DATA"
-        );
-        assert!(
-            bit_range("ILWRATH_DECEIVED").is_some(),
-            "missing game state key: ILWRATH_DECEIVED"
-        );
-        assert!(
-            bit_range("KNOW_KOHR_AH_STORY").is_some(),
-            "missing game state key: KNOW_KOHR_AH_STORY"
-        );
-    }
-}
+mod tests;
