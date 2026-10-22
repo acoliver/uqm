@@ -36,3 +36,4 @@ pub use opengl::OpenGlDriver;
 pub use sdl2::SdlDriver;
 
 pub mod palette;
+pub mod sdluio;
