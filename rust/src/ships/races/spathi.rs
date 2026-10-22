@@ -1,6 +1,9 @@
 // Spathi Eluder - Forward torpedo + rear-seeking BUTT missile
 // @plan PLAN-20260314-SHIPS.P11
 
+#[path = "spathi_native.rs"]
+mod native;
+
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
