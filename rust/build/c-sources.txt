@@ -51,12 +51,7 @@ sc2/src/libs/network/socket/socket.c
 sc2/src/libs/network/socket/socket_bsd.c
 sc2/src/libs/resource/direct.c
 sc2/src/libs/resource/stringbank.c
-sc2/src/libs/sound/audiocore_rust.c
 sc2/src/libs/sound/decoders/decoder.c
-sc2/src/libs/sound/music.c
-sc2/src/libs/sound/resinst.c
-sc2/src/libs/sound/sfx.c
-sc2/src/libs/sound/sound.c
 sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/libs/video/legacyplayer.c
 sc2/src/libs/video/vfileins.c

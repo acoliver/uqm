@@ -33,10 +33,13 @@ pub mod mod_ffi;
 mod mod_vtable_tests;
 pub mod null;
 pub mod ogg;
+pub mod resource_types;
 pub mod rodio_audio;
 pub mod rodio_backend;
 mod tracker;
 // @plan PLAN-20260225-AUDIO-HEART.P06
+#[cfg(feature = "audio_heart")]
+pub mod audio_init;
 pub mod control;
 pub mod fileinst;
 #[cfg(feature = "audio_heart")]
@@ -50,6 +53,7 @@ pub mod trackplayer;
 // @plan PLAN-20260225-AUDIO-HEART.P03
 // @requirement REQ-CROSS-GENERAL-07
 pub mod types;
+pub mod volume_globals;
 pub mod wav;
 pub mod wav_ffi;
 

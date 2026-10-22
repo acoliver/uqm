@@ -5,17 +5,4 @@ else
 	uqm_SUBDIRS="decoders"
 fi
 
-# Use Rust audio backend when USE_RUST_AUDIO is defined
-if [ -n "$USE_RUST_AUDIO" ]; then
-	uqm_CFILES="audiocore_rust.c resinst.c sound.c sfx.c music.c "
-else
-	uqm_CFILES="audiocore.c resinst.c sound.c sfx.c music.c "
-fi
-
-# When USE_RUST_AUDIO_HEART is enabled, the C files are still compiled
-# but their conflicting functions are wrapped in #ifndef USE_RUST_AUDIO_HEART
-# guards. The Rust static library provides the high-level sound API.
-# The C files keep globals (soundSource, musicVolume, etc.) and
-# resource loaders (_GetMusicData, _GetSoundBankData, etc.).
-
-uqm_HFILES="audiocore.h sndintrn.h sound.h stream.h trackplayer.h"
+uqm_HFILES="audiocore.h sound.h stream.h trackplayer.h"
