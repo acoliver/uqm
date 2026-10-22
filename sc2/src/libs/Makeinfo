@@ -1,5 +1,5 @@
 uqm_SUBDIRS="callback decomp file graphics heap input list math memory
-		resource sound strings task threads time uio video log"
+		resource sound strings task threads uio video log"
 if [ -n "$uqm_NETPLAY" ]; then
 	uqm_SUBDIRS="$uqm_SUBDIRS network"
 fi

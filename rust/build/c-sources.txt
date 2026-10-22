@@ -66,8 +66,6 @@ sc2/src/libs/strings/strings.c
 sc2/src/libs/strings/unicode.c
 sc2/src/libs/task/tasklib.c
 sc2/src/libs/threads/rust_thrcommon.c
-sc2/src/libs/time/sdl/sdltime.c
-sc2/src/libs/time/timecommon.c
 sc2/src/libs/video/legacyplayer.c
 sc2/src/libs/video/vfileins.c
 sc2/src/libs/video/video.c
