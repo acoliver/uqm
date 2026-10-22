@@ -6,6 +6,7 @@
 pub mod dirs;
 pub mod ffi;
 pub mod files;
+pub mod legacy_dirs;
 pub mod temp;
 pub mod uio_bridge;
 pub mod zip_reader; // @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
