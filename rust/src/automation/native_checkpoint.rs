@@ -28,6 +28,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertCommunicationResponses(_)
         | Action::AssertBattleFrames(_)
         | Action::AssertHyperspaceDisplacement(_)
+        | Action::AssertHyperspaceStationary(_)
         | Action::AssertHyperspacePositionRestored(_)
         | Action::AssertShipResources(_)
         | Action::AssertState(_)

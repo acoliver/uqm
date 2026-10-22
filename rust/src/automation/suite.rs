@@ -201,6 +201,10 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("battle-v1", &[Domain::BattleOutcomes]),
     row("super-melee-v1", &[Domain::BattleOutcomes]),
+    row(
+        "out-of-fuel-v1",
+        &[Domain::Starbase, Domain::NavigationOrbitScan],
+    ),
     row("load-save-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",

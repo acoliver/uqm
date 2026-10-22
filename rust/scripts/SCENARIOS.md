@@ -1137,3 +1137,22 @@ from a passing run of the chain; each has a provenance file beside it. Only the
 final save, `allied-starbase.sav`, records the chain's last ship-resource
 assertion, because fuel and resource units change between checkpoints. None of
 the from-checkpoint scripts has run live.
+
+## Out of fuel
+
+`out-of-fuel-v1` starts from `saves/allied-starbase.sav` (896 raw fuel, 2500 RU),
+docks at the Starbase and sells fuel through Outfit: opening Outfit rounds to 900,
+eight presses of Down sell 100 raw each for 20 RU, and `assert_ship_resources`
+requires exactly 100 raw fuel and 2660 RU. It departs, `navigate_to_hyperspace`,
+asserts hyperspace activity and starmap mode, holds thrust and
+`wait_for_state` `sis:fuel eq 0`. With thrust still held and no fuel the flagship
+decelerates (`sis_ship.c`), so after 400 settle ticks the script runs
+`record_hyperspace_position`, waits 300 more ticks and requires
+`assert_hyperspace_stationary` with `maximum_logical_units` 0 (the new inverse of
+`assert_hyperspace_displacement`: it fails if the ship moved more than the
+maximum). It then requires fuel 0 and 2660 RU, hyperspace activity and starmap
+mode. The run fails if the tank never empties within 3000 ticks or the ship
+keeps moving. No state is written and no save is edited.
+
+Live run: fuel 896, 900, 100, 0; the ship stopped at hyperspace 26671,165445 and
+moved 0 units over the 300 tick sample with thrust held.

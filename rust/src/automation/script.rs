@@ -709,6 +709,15 @@ pub struct HyperspaceDisplacementAssertion {
     pub minimum_logical_units: u32,
 }
 
+/// Assert the hyperspace ship moved at most `maximum_logical_units` since the
+/// last `record_hyperspace_position`, measured on `GLOBAL_SIS(log_x/log_y)`.
+/// Zero requires the ship not to have moved at all.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HyperspaceStationaryAssertion {
+    pub maximum_logical_units: u32,
+}
+
 /// The no-payload step that keeps the hyperspace ship's position for a later
 /// `assert_hyperspace_position_restored`. It is separate from
 /// `record_hyperspace_position` so a displacement leg between a save and its
@@ -879,6 +888,7 @@ pub enum Action {
     AssertBattleFrames(BattleFramesAssertion),
     RecordHyperspacePosition(RecordHyperspacePositionStep),
     AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
+    AssertHyperspaceStationary(HyperspaceStationaryAssertion),
     RecordSavedHyperspacePosition(RecordSavedHyperspacePositionStep),
     AssertHyperspacePositionRestored(HyperspacePositionRestoredAssertion),
     AssertShipResources(ShipResourcesAssertion),

@@ -115,6 +115,15 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             ) && number(label, "minimum=") == Some(u64::from(value.minimum_logical_units))
                 && at_least(label, "moved=", u64::from(value.minimum_logical_units))
         }
+        Action::AssertHyperspaceStationary(value) => {
+            shape(
+                label,
+                "hyperspace_stationary_verified",
+                &["from=", "to=", "moved=", "maximum="],
+            ) && number(label, "maximum=") == Some(u64::from(value.maximum_logical_units))
+                && number(label, "moved=")
+                    .is_some_and(|moved| moved <= u64::from(value.maximum_logical_units))
+        }
         Action::AssertHyperspacePositionRestored(_) => {
             shape(
                 label,

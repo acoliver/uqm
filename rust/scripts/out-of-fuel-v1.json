@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "name": "out-of-fuel-v1",
+  "start_save": {
+    "path": "saves/allied-starbase.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 45
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 50
+    },
+    {
+      "action": "capture",
+      "label": "loaded-allied-start-save"
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 896,
+      "res_units": 2500
+    },
+    {
+      "action": "navigate_to_moon",
+      "planet": 2,
+      "moon": 0,
+      "max_ticks": 2000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "assert_mode",
+      "mode": "starbase"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 60
+    },
+    {
+      "action": "assert_mode",
+      "mode": "starbase"
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 900,
+      "res_units": 2500
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 6
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 100,
+      "res_units": 2660
+    },
+    {
+      "action": "capture",
+      "label": "outfit-fuel-sold-down-to-one-unit"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 2,
+      "settle": 40
+    },
+    {
+      "action": "assert_mode",
+      "mode": "starbase"
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 100,
+      "res_units": 2660
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 60
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 60
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 100,
+      "res_units": 2660
+    },
+    {
+      "action": "navigate_to_hyperspace",
+      "max_ticks": 1800
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 3
+    },
+    {
+      "action": "assert_mode",
+      "mode": "starmap"
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "sis:fuel",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "hyperspace-with-one-unit-of-fuel"
+    },
+    {
+      "action": "set_player_key",
+      "key": "thrust",
+      "value": 1
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "sis:fuel",
+            "op": "eq",
+            "value": 0
+          }
+        ]
+      },
+      "max_ticks": 3000
+    },
+    {
+      "action": "capture",
+      "label": "hyperspace-fuel-exhausted"
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 400
+    },
+    {
+      "action": "record_hyperspace_position"
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 300
+    },
+    {
+      "action": "assert_hyperspace_stationary",
+      "maximum_logical_units": 0
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 0,
+      "res_units": 2660
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 3
+    },
+    {
+      "action": "assert_mode",
+      "mode": "starmap"
+    },
+    {
+      "action": "capture",
+      "label": "hyperspace-stranded-thrust-held"
+    },
+    {
+      "action": "set_player_key",
+      "key": "thrust",
+      "value": 0
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
