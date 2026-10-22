@@ -37,3 +37,5 @@ pub use sdl2::SdlDriver;
 
 pub mod palette;
 pub mod sdluio;
+
+pub mod png2sdl;
