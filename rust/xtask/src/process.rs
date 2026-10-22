@@ -133,8 +133,10 @@ pub fn run(command: &mut Command, timeout: Option<Duration>) -> Captured {
         }
     };
 
+    // A timeout already killed the whole group; probing it again would only see
+    // members that have been killed but not yet reaped.
     // SAFETY: probing and killing the process group created above.
-    let survivors = unsafe { libc::kill(-group, 0) } == 0;
+    let survivors = !timed_out && unsafe { libc::kill(-group, 0) } == 0;
     if survivors {
         unsafe { libc::kill(-group, libc::SIGKILL) };
     }
