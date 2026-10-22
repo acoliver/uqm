@@ -12,6 +12,12 @@
 )]
 pub mod abi {
     include!(concat!(env!("OUT_DIR"), "/ship_abi.rs"));
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use crate::battle::sounds::ProcessSound;
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use crate::battle::weapon_native::{
+        initialize_laser, initialize_missile, weapon_collision, ModifySilhouette, TrackShip,
+    };
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
