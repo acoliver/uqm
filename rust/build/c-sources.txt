@@ -53,7 +53,6 @@ sc2/src/uqm/comm/shofixt/shofixt.c
 sc2/src/uqm/comm/slyhome/slyhome.c
 sc2/src/uqm/comm/slyland/slyland.c
 sc2/src/uqm/comm/spahome/spahome.c
-sc2/src/uqm/comm/umgah/umgahc.c
 sc2/src/uqm/comm/urquan/urquanc.c
 sc2/src/uqm/comm/vux/vuxc.c
 sc2/src/uqm/comm/yehat/yehatc.c
