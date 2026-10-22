@@ -642,6 +642,7 @@ fn parse_game_state_entry(line: &str) -> Option<(String, usize)> {
 
 fn generate_netplay_abi_bindings() -> Result<(), String> {
     let bindings = bindgen::Builder::default()
+        .header("../sc2/src/uqmversion.h")
         .header("../sc2/src/uqm/supermelee/netplay/packethandlers.h")
         .header("../sc2/src/uqm/supermelee/netplay/netmelee.h")
         .header("../sc2/src/uqm/supermelee/netplay/netmisc.h")
