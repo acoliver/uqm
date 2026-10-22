@@ -879,6 +879,8 @@ pub enum Action {
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
     FlyToStar(crate::automation::star_flight::FlyToStarStep),
+    UseDevice(crate::automation::story_actions::UseDeviceStep),
+    CollectEnergyNode(crate::automation::story_actions::CollectEnergyNodeStep),
     TurnFlagship(TurnFlagshipStep),
     CollectPlanetMinerals(CollectPlanetMineralsStep),
     FightBattle(FightBattleStep),
@@ -2087,6 +2089,26 @@ fn validate_navigation_step(
                 )));
             }
             navigation.max_ticks
+        }
+        Action::UseDevice(step) => {
+            if step.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "use_device requires positive max_ticks",
+                )));
+            }
+            step.max_ticks
+        }
+        Action::CollectEnergyNode(step) => {
+            if step.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "collect_energy_node requires positive max_ticks",
+                )));
+            }
+            step.max_ticks
         }
         Action::FlyToStar(flight) => {
             if flight.max_ticks == 0 {
@@ -4291,6 +4313,27 @@ mod tests {
         ] {
             assert!(validated(step).is_err(), "{step}");
         }
+    }
+
+    #[test]
+    fn story_actions_validate_names_bounds_and_closed_shapes() {
+        for step in [
+            r#"{"action":"use_device","device":"clear_spindle","max_ticks":2}"#,
+            r#"{"action":"collect_energy_node","max_ticks":2}"#,
+        ] {
+            assert!(validated(step).is_ok(), "{step}");
+        }
+        for step in [
+            r#"{"action":"use_device","device":"utwig_bomb","max_ticks":2}"#,
+            r#"{"action":"use_device","device":"clear_spindle","max_ticks":0}"#,
+            r#"{"action":"use_device","device":"fake","max_ticks":2}"#,
+            r#"{"action":"collect_energy_node","max_ticks":0}"#,
+            r#"{"action":"collect_energy_node","max_ticks":10,"grant":true}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
+        let tight = r#"{"version":1,"name":"story","budgets":{"max_input_ticks":10,"max_presentations":100,"max_wallclock_seconds":1},"steps":[{"action":"collect_energy_node","max_ticks":100},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
     }
 
     #[test]

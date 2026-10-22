@@ -48,6 +48,8 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
+        | Action::UseDevice(_)
+        | Action::CollectEnergyNode(_)
         | Action::FlyToStar(_)
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)

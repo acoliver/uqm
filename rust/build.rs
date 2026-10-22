@@ -465,7 +465,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
-             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup\
+             |SAMATRA_DEFINED|CHMMR_DEFINED|ILWRATH_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup\
              |ScreenWidth|ScreenHeight)",
         )
         .generate_comments(false)

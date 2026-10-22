@@ -20,3 +20,6 @@ pub mod universe_units;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod starmap_cursor;
+
+#[cfg(not(test))]
+pub mod devices;

@@ -35,6 +35,10 @@ pub enum StateKey {
     SisCrew,
     /// `GLOBAL_SIS(NumLanders)`.
     SisLanders,
+    SisDrive(u8),
+    SisJet(u8),
+    SisModule(u8),
+    SisMineralMass,
     DateDay,
     DateMonth,
     DateYear,
@@ -64,6 +68,20 @@ impl StateKey {
                 .map(|(known, _, _)| Self::Story(known))
                 .ok_or_else(|| format!("unknown story bit '{name}'"));
         }
+        for (prefix, slots, make) in [
+            ("sis:drive:", 11, Self::SisDrive as fn(u8) -> Self),
+            ("sis:jet:", 8, Self::SisJet as fn(u8) -> Self),
+            ("sis:module:", 16, Self::SisModule as fn(u8) -> Self),
+        ] {
+            if let Some(slot) = text.strip_prefix(prefix) {
+                return slot
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|slot| *slot < slots)
+                    .map(make)
+                    .ok_or_else(|| format!("invalid fitting slot '{text}'"));
+            }
+        }
         match text {
             "activity" => Ok(Self::Activity),
             "star:current" => Ok(Self::StarCurrent),
@@ -75,6 +93,7 @@ impl StateKey {
             "sis:ru" => Ok(Self::SisRu),
             "sis:crew" => Ok(Self::SisCrew),
             "sis:landers" => Ok(Self::SisLanders),
+            "sis:mineral_mass" => Ok(Self::SisMineralMass),
             "date:day" => Ok(Self::DateDay),
             "date:month" => Ok(Self::DateMonth),
             "date:year" => Ok(Self::DateYear),
@@ -95,9 +114,16 @@ impl StateKey {
             Self::StarCurrent => (crate::savegame::runtime::star::NUM_SOLAR_SYSTEMS - 1) as u32,
             Self::HyperX | Self::HyperY => i32::MAX as u32,
             Self::StarmapCursorX | Self::StarmapCursorY => 9999,
-            Self::Activity | Self::SisCrew | Self::DateYear => u32::from(u16::MAX),
+            Self::Activity | Self::SisCrew | Self::DateYear | Self::SisMineralMass => {
+                u32::from(u16::MAX)
+            }
             Self::SisFuel | Self::SisRu => u32::MAX,
-            Self::SisLanders | Self::DateDay | Self::DateMonth => u32::from(u8::MAX),
+            Self::SisLanders
+            | Self::DateDay
+            | Self::DateMonth
+            | Self::SisDrive(_)
+            | Self::SisJet(_)
+            | Self::SisModule(_) => u32::from(u8::MAX),
             Self::FlagshipDestroyed => 1,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
             Self::Story(name) => {
@@ -313,6 +339,16 @@ impl StateSource for LiveCampaign {
             }
             StateKey::Story(name) => crate::state::ffi::named_state_value(name).map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
+            StateKey::SisDrive(slot) => input_ffi::sis_fittings()
+                .map(|(drives, _, _, _)| u32::from(drives[usize::from(slot)])),
+            StateKey::SisJet(slot) => {
+                input_ffi::sis_fittings().map(|(_, jets, _, _)| u32::from(jets[usize::from(slot)]))
+            }
+            StateKey::SisModule(slot) => input_ffi::sis_fittings()
+                .map(|(_, _, modules, _)| u32::from(modules[usize::from(slot)])),
+            StateKey::SisMineralMass => {
+                input_ffi::sis_fittings().map(|(_, _, _, mass)| u32::from(mass))
+            }
             StateKey::SisFuel => input_ffi::ship_resources().map(|(fuel, _)| fuel),
             StateKey::SisRu => input_ffi::ship_resources().map(|(_, ru)| ru),
             StateKey::SisCrew => input_ffi::sis_crew_and_landers().map(|(crew, _)| u32::from(crew)),
@@ -336,6 +372,36 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
+    #[test]
+    fn equipment_keys_validate_slot_bounds_and_byte_values() {
+        for (key, expected) in [
+            ("sis:drive:10", StateKey::SisDrive(10)),
+            ("sis:jet:7", StateKey::SisJet(7)),
+            ("sis:module:15", StateKey::SisModule(15)),
+        ] {
+            assert_eq!(StateKey::parse(key), Ok(expected));
+            assert_eq!(expected.max_value(), 255);
+        }
+        for key in [
+            "sis:drive:11",
+            "sis:jet:8",
+            "sis:module:16",
+            "sis:module:-1",
+            "sis:drive:x",
+        ] {
+            assert!(StateKey::parse(key).is_err(), "{key}");
+        }
+        assert!(StatePredicate {
+            all: vec![StateCondition {
+                key: "sis:drive:0".into(),
+                op: StateOp::Eq,
+                value: 256
+            }]
+        }
+        .validate()
+        .is_err());
+    }
+
     struct Fake(HashMap<&'static str, u32>);
 
     impl StateSource for Fake {
@@ -350,6 +416,10 @@ mod tests {
                 StateKey::SisFuel => "sis:fuel",
                 StateKey::SisRu => "sis:ru",
                 StateKey::SisCrew => "sis:crew",
+                StateKey::SisDrive(_)
+                | StateKey::SisJet(_)
+                | StateKey::SisModule(_)
+                | StateKey::SisMineralMass => "test:fittings",
                 StateKey::SisLanders => "sis:landers",
                 StateKey::DateDay => "date:day",
                 StateKey::DateMonth => "date:month",

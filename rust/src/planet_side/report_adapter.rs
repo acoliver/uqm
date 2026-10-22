@@ -1,6 +1,13 @@
 //! Discovery-report ownership at the PlanetSide runtime boundary.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static REPORT_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub fn report_active() -> bool {
+    REPORT_ACTIVE.load(Ordering::Acquire)
+}
 
 use super::runtime::AdapterError;
 
@@ -60,7 +67,9 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // holds an ambient batch across a callback. Releasing and
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
+            REPORT_ACTIVE.store(true, Ordering::Release);
             DoDiscoveryReport(MenuSounds);
+            REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {
                 ReportDisposition::Once => destroy_and_clear(self.discovery_string, string),

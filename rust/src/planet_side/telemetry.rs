@@ -39,6 +39,24 @@ pub struct MineralDeposit {
     pub category: u8,
 }
 
+static ENERGY_NODES: Mutex<Vec<(u8, i32, i32)>> = Mutex::new(Vec::new());
+static ENERGY_RETRIEVED: AtomicU32 = AtomicU32::new(0);
+
+pub fn publish_energy(nodes: Vec<(u8, i32, i32)>) {
+    *ENERGY_NODES.lock().unwrap() = nodes;
+}
+
+pub fn energy_snapshot() -> (Vec<(u8, i32, i32)>, u32) {
+    (
+        ENERGY_NODES.lock().unwrap().clone(),
+        ENERGY_RETRIEVED.load(Ordering::Acquire),
+    )
+}
+
+pub fn energy_retrieved(node: u8) {
+    ENERGY_RETRIEVED.fetch_or(1 << node, Ordering::AcqRel);
+}
+
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static FRAMES: AtomicU64 = AtomicU64::new(0);
@@ -104,6 +122,8 @@ pub struct PlanetSideObservation {
 }
 
 pub fn begin(session: &PlanetSideSession) {
+    ENERGY_NODES.lock().unwrap().clear();
+    ENERGY_RETRIEVED.store(0, Ordering::Release);
     GENERATION.fetch_add(1, Ordering::AcqRel);
     PHASE.store(phase_code(session.phase), Ordering::Release);
     BATCH_DEPTH_CORRECTIONS.store(0, Ordering::Relaxed);

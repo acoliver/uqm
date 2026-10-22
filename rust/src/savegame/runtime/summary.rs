@@ -163,10 +163,10 @@ pub(super) fn state_value(state: &GameState, key: &str) -> u8 {
 }
 
 /// `InventoryDevices (list, MAX_EXCLUSIVE_DEVICES)`.
-fn inventory_devices(state: &GameState) -> Vec<u8> {
+pub(crate) fn inventory_devices(state: &GameState, limit: usize) -> Vec<u8> {
     let mut devices = Vec::new();
     for (id, on_board) in DEVICES.iter().enumerate() {
-        if devices.len() == MAX_EXCLUSIVE_DEVICES {
+        if devices.len() == limit {
             break;
         }
         let aboard = match *on_board {
@@ -270,7 +270,7 @@ pub fn capture_summary(
         *slot = unsafe { (*link).race_id };
     }
 
-    let devices = inventory_devices(&state);
+    let devices = inventory_devices(&state, MAX_EXCLUSIVE_DEVICES);
     let mut device_list = [0u8; MAX_EXCLUSIVE_DEVICES];
     device_list[..devices.len()].copy_from_slice(&devices);
 

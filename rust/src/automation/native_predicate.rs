@@ -232,6 +232,32 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             label == format!("navigation_reached:planet={}", value.planet)
         }
         Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
+        Action::UseDevice(step) => {
+            shape(
+                label,
+                "device_used",
+                &["device=", "generation=", "verified=", "state="],
+            ) && label.contains(&format!(":device={}:generation=", step.device.name()))
+                && at_least(label, "generation=", 1)
+                && number(label, "verified=") == Some(1)
+                && label.split_once(":state=").is_some_and(|(_, state)| {
+                    super::story_actions::device_evidence_holds(step.device, state)
+                })
+        }
+        Action::CollectEnergyNode(_) => {
+            shape(
+                label,
+                "energy_node_collected",
+                &["generation=", "node=", "retrieved=", "flag=", "value="],
+            ) && at_least(label, "generation=", 1)
+                && number(label, "node=")
+                    .zip(number(label, "retrieved="))
+                    .is_some_and(|(node, retrieved)| node < 32 && retrieved & (1 << node) != 0)
+                && crate::automation::story_actions::ARTIFACT_FLAGS
+                    .iter()
+                    .any(|flag| label.contains(&format!(":flag={flag}:")))
+                && number(label, "value=") == Some(1)
+        }
         Action::FlyToStar(flight) => super::star_flight::arrival_satisfies(label, flight.target),
         Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
         Action::TurnFlagship(value) => {
@@ -804,6 +830,54 @@ mod tests {
             4,
             "flagship_turn_overshot:direction=right:facings=4:turned=5"
         ));
+    }
+
+    #[test]
+    fn story_actions_require_identity_retrieval_and_verified_effects() {
+        use super::super::story_actions::{CollectEnergyNodeStep, Device, UseDeviceStep};
+        let device = Action::UseDevice(UseDeviceStep {
+            device: Device::ClearSpindle,
+            max_ticks: 50,
+        });
+        let state = super::super::story_actions::DEVICE_STORY_KEYS
+            .iter()
+            .copied()
+            .chain(["fuel", "activity"])
+            .map(|key| {
+                let (before, after) = match key {
+                    "ULTRON_CONDITION" => (1, 2),
+                    "CLEAR_SPINDLE_ON_SHIP" => (1, 0),
+                    _ => (0, 0),
+                };
+                format!("before_{key}={before},after_{key}={after}")
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let good =
+            format!("device_used:device=clear_spindle:generation=2:verified=1:state={state}");
+        assert!(semantic_satisfied(&device, &good));
+        assert!(!semantic_satisfied(
+            &device,
+            &good.replace("after_ULTRON_CONDITION=2", "after_ULTRON_CONDITION=1")
+        ));
+        for bad in [
+            good.replace("verified=1", "verified=0"),
+            good.replace("clear_spindle", "aqua_helix"),
+            good.replace("generation=2", "generation=0"),
+        ] {
+            assert!(!semantic_satisfied(&device, &bad));
+        }
+        let node = Action::CollectEnergyNode(CollectEnergyNodeStep { max_ticks: 50 });
+        let good =
+            "energy_node_collected:generation=3:node=1:retrieved=2:flag=MOONBASE_ON_SHIP:value=1";
+        assert!(semantic_satisfied(&node, good));
+        for bad in [
+            good.replace("retrieved=2", "retrieved=1"),
+            good.replace("MOONBASE_ON_SHIP", "STARBASE_AVAILABLE"),
+            good.replace("value=1", "value=0"),
+        ] {
+            assert!(!semantic_satisfied(&node, &bad));
+        }
     }
 
     #[test]

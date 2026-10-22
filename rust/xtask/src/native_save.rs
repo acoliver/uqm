@@ -377,6 +377,19 @@ fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<Strin
         ),
         ("date:year".into(), u32::from(save.global.clock.year_index)),
     ]);
+    state.insert(
+        "sis:mineral_mass".into(),
+        u32::from(save.summary.sis.total_element_mass),
+    );
+    for (kind, slots) in [
+        ("drive", save.summary.sis.drive_slots.as_slice()),
+        ("jet", save.summary.sis.jet_slots.as_slice()),
+        ("module", save.summary.sis.module_slots.as_slice()),
+    ] {
+        for (slot, value) in slots.iter().enumerate() {
+            state.insert(format!("sis:{kind}:{slot}"), u32::from(*value));
+        }
+    }
     if let LoadedStar::Catalog(index) = star {
         state.insert("star:current".into(), index as u32);
     }

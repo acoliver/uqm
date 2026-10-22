@@ -95,7 +95,6 @@ sc2/src/uqm/misc.c
 sc2/src/uqm/oscill.c
 sc2/src/uqm/outfit.c
 sc2/src/uqm/planets/cargo.c
-sc2/src/uqm/planets/devices.c
 sc2/src/uqm/planets/pl_stuff.c
 sc2/src/uqm/planets/planets.c
 sc2/src/uqm/planets/plangen.c

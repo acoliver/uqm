@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "collect-moon-energy-v1",
+  "start_save": {
+    "path": "saves/alliance-after-mercury.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 65000,
+    "max_presentations": 140000,
+    "max_wallclock_seconds": 900
+  },
+  "seed": 1437213463,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "capture", "label": "loaded-allied-start-save"},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 1, "max_ticks": 6000},
+    {"action": "select_planet_menu", "phase": "orbit", "max_ticks": 500},
+    {"action": "select_planet_menu", "phase": "auto_scan", "max_ticks": 500},
+    {"action": "select_planet_menu", "phase": "dispatch", "max_ticks": 500},
+    {"action": "select_planet_menu", "phase": "landing_site", "max_ticks": 500},
+    {"action": "wait_for_planet_side_start", "max_ticks": 5000},
+    {"action": "capture", "label": "moon-lander-before-artifact"},
+    {"action": "collect_energy_node", "max_ticks": 6000},
+    {"action": "wait_for_planet_side_end", "outcome": "returned", "max_ticks": 6000},
+    {"action": "assert_state", "all": [{"key": "story:MOONBASE_ON_SHIP", "op": "eq", "value": 1}, {"key": "story:MOONBASE_DESTROYED", "op": "eq", "value": 1}]},
+    {"action": "capture", "label": "moon-artifact-collision"},
+    {"action": "finish"}
+  ]
+}

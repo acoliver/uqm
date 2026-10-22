@@ -1212,3 +1212,30 @@ The producer commit comes from the retained linked-build receipt, so extracting
 from another checkout does not change its attribution. A byte-identical rewrite
 of the installed parent slot is refused because retained bytes alone cannot
 prove that it was written again; save to a different slot in that case.
+
+### Story devices and energy artifacts
+
+`use_device {"device":"clear_spindle","max_ticks":200}` opens Devices with
+menu keys, reads the live inventory, and selects the requested identity rather
+than a fixed list index. Names are `clear_spindle`, `aqua_helix`, `rosy_sphere`,
+`sun_device`, `talking_pet`, `umgah_caster`, `burvixese_caster`, and
+`portal_spawner`. Start in ordinary flight, or in the initial orbit menu with
+Scan highlighted. The unmodified bomb is deliberately excluded. Completion
+requires a fresh invocation and its actual effect: consumed Ultron part and
+condition increment, caster/encounter activation, Chmmr emergence, or the
+Spawner's fuel debit and portal flag. A successful menu sound without the
+required effect does not pass.
+
+`collect_energy_node {"max_ticks":6000}` starts after lander deployment. It
+steers toward a live energy node, dismisses its discovery report through normal
+Cancel inputs, and requires both the node's collision-driven retrieval bit and
+a newly acquired artifact flag in the same lander generation. Landing near the
+node, an already-owned artifact, or a flag without retrieval cannot pass.
+`collect-moon-energy-v1` exercises this from the unmodified Mercury checkpoint.
+
+`campaign-s01-funded-sol` loads `allied-starbase.sav`, mines 19 radioactive units
+on Mercury, sells all 38 carried radioactive units to Hayes for 304 RU, buys a
+500-RU fusion thruster in drive slot 0, and saves flight state to slot 1 through
+the Game menu. Its ledger requires 2500 -> 2804 -> 2304 RU, empty sold cargo,
+800 raw fuel and positive crew. Slot 0 is retained as the predecessor.
+The corresponding `load-funded-sol-v1` scenario verifies the extracted checkpoint.

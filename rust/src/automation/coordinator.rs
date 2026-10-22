@@ -292,6 +292,8 @@ struct CoordInner {
     /// Ticks and starting ship counts of the current `fight_battle` step.
     battle_fight: BattleFightTracker,
     star_flight: crate::automation::star_flight::StarFlight,
+    device: crate::automation::story_actions::DeviceTracker,
+    energy: crate::automation::story_actions::EnergyTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -458,6 +460,8 @@ impl Coordinator {
                 planet_minerals: PlanetMineralsTracker::default(),
                 battle_fight: BattleFightTracker::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
+                device: Default::default(),
+                energy: Default::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -1253,6 +1257,111 @@ impl Coordinator {
         scheduler_event
     }
 
+    fn service_device(
+        &self,
+        inner: &mut CoordInner,
+        step: crate::automation::story_actions::UseDeviceStep,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::story_actions::{DeviceProgress, DeviceTracker};
+        if inner.sched_state.phase == ActionPhase::WaitingForInput {
+            inner.device = DeviceTracker::default();
+        }
+        #[cfg(not(test))]
+        let observation = crate::planets::devices::observation();
+        #[cfg(test)]
+        let observation = Default::default();
+        let progress = inner.device.observe(step, observation);
+        let input = if let DeviceProgress::Input(key) = &progress {
+            *key
+        } else {
+            None
+        };
+        if !Self::set_navigation_controls(Default::default()) {
+            self.reject_input(inner, "use_device", -1, -1);
+            return event;
+        }
+        for key in crate::automation::script::MenuKey::ALL {
+            if !inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
+                self.reject_input(inner, "use_device", -1, -1);
+                return event;
+            }
+        }
+        match progress {
+            DeviceProgress::Input(_) => event,
+            DeviceProgress::Complete(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                SchedulerEvent::NavigationReached
+            }
+            DeviceProgress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+        }
+    }
+
+    fn service_energy(
+        &self,
+        inner: &mut CoordInner,
+        step: crate::automation::story_actions::CollectEnergyNodeStep,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::story_actions::{
+            EnergyObservation, EnergyProgress, EnergyTracker, ARTIFACT_FLAGS,
+        };
+        if inner.sched_state.phase == ActionPhase::WaitingForInput {
+            inner.energy = EnergyTracker::default();
+        }
+        let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
+        let flags = ARTIFACT_FLAGS
+            .iter()
+            .map(|key| crate::state::ffi::named_state_value(key).map(u32::from))
+            .collect::<Option<Vec<_>>>();
+        let Some(flags) = flags else {
+            self.set_terminal(inner, TerminalClass::SemanticMismatch);
+            return event;
+        };
+        let observation = EnergyObservation {
+            report_active: crate::planet_side::report_adapter::report_active(),
+            lander: planet_minerals::PlanetSnapshot::live(),
+            nodes,
+            retrieved,
+            flags,
+        };
+        let progress = inner.energy.observe(step, &observation);
+        let control = if let EnergyProgress::Steering(control) = &progress {
+            *control
+        } else {
+            Default::default()
+        };
+        if !Self::set_navigation_controls(control) {
+            self.reject_input(inner, "collect_energy_node", -1, -1);
+            return event;
+        }
+        match progress {
+            EnergyProgress::DismissReport(pressed) => {
+                if !inject_menu_key(
+                    i32::from(crate::automation::script::MenuKey::Cancel.index()),
+                    i32::from(pressed),
+                ) {
+                    self.reject_input(inner, "collect_energy_node", -1, -1);
+                }
+                event
+            }
+            EnergyProgress::Steering(_) => event,
+            EnergyProgress::Complete(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                SchedulerEvent::NavigationReached
+            }
+            EnergyProgress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+        }
+    }
+
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
@@ -1408,6 +1517,13 @@ impl Coordinator {
                 self.reject_input(inner, "navigation", -1, -1);
                 return scheduler_event;
             }
+        } else if let Some(Action::UseDevice(step)) = self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_device(inner, *step, scheduler_event);
+        } else if let Some(Action::CollectEnergyNode(step)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_energy(inner, *step, scheduler_event);
         } else if let Some(Action::FlyToStar(flight)) =
             self.actions.get(inner.sched_state.step_index)
         {
