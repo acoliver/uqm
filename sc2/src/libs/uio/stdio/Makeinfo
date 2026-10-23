@@ -1,7 +1,0 @@
-if [ "$uqm_USE_RUST_UIO" = "1" ]; then
-    uqm_CFILES=""
-    uqm_HFILES=""
-else
-    uqm_CFILES="stdio.c"
-    uqm_HFILES="stdio.h"
-fi

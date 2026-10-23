@@ -1,2 +1,0 @@
-uqm_CFILES=""
-uqm_HFILES="dukvid.h videodec.h video.h vidintrn.h vidplayer.h rust_video.h rust_dukvid.h"
