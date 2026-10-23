@@ -111,6 +111,17 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("load-portal-staging-v1", &[Domain::SaveLoad]),
     row("load-portal-sol-v1", &[Domain::SaveLoad]),
     row("load-starbase-armed-v1", &[Domain::SaveLoad]),
+    row("load-connected-taalo-v1", &[Domain::SaveLoad]),
+    row(
+        "campaign-s07h-connected-taalo",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::BattleOutcomes,
+            Domain::CommunicationChoices,
+            Domain::PlanetSideResults,
+        ],
+    ),
     row(
         "campaign-s07g-starbase-armed",
         &[

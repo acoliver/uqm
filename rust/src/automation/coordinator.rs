@@ -1576,7 +1576,7 @@ impl Coordinator {
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
-        flight: crate::automation::star_flight::FlyToStarStep,
+        flight: &crate::automation::star_flight::FlyToStarStep,
         event: SchedulerEvent,
     ) -> SchedulerEvent {
         use crate::automation::script::{MenuKey, PlayerKey};
@@ -1584,6 +1584,12 @@ impl Coordinator {
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.star_flight = StarFlight::default();
             inner.star_encounter_active = false;
+        }
+        if let Some(phrase) = flight.encounter_response.as_deref() {
+            if self.service_patrol_contact(inner, phrase) {
+                inner.star_flight.resume_after_encounter();
+                return event;
+            }
         }
         if crate::automation::ui_observation::encounter_menu_active()
             && !flight.target.is_arilou_home()
@@ -1958,7 +1964,7 @@ impl Coordinator {
         } else if let Some(Action::FlyToStar(flight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_star_flight(inner, *flight, scheduler_event);
+            scheduler_event = self.service_star_flight(inner, flight, scheduler_event);
         } else if let Some(Action::NavigateToHyperspace(_)) =
             self.actions.get(inner.sched_state.step_index)
         {

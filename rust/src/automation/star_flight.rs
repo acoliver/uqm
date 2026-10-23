@@ -129,11 +129,13 @@ impl<'de> Deserialize<'de> for StarTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct FlyToStarStep {
     #[serde(default)]
     pub retreat_encounters: bool,
+    #[serde(default)]
+    pub encounter_response: Option<String>,
     pub target: StarTarget,
     pub max_ticks: u64,
 }
@@ -185,7 +187,7 @@ impl StarFlight {
         self.phase = Phase::Open;
     }
 
-    pub fn observe(&mut self, step: FlyToStarStep, obs: Observation) -> Progress {
+    pub fn observe(&mut self, step: &FlyToStarStep, obs: Observation) -> Progress {
         let ticks = self.ticks;
         self.ticks += 1;
         if ticks == 0 {
@@ -396,6 +398,7 @@ mod tests {
             );
             let step = FlyToStarStep {
                 retreat_encounters: false,
+                encounter_response: None,
                 target,
                 max_ticks: 200,
             };
@@ -410,7 +413,7 @@ mod tests {
                 conversation_active: true,
                 ..hyper()
             };
-            let Progress::Arrived(label) = flight.observe(step, obs) else {
+            let Progress::Arrived(label) = flight.observe(&step, obs) else {
                 panic!("real portal/home transition")
             };
             assert!(arrival_satisfies(&label, target));
@@ -424,7 +427,7 @@ mod tests {
                 initial_fuel: Some(9000),
             };
             assert!(matches!(
-                not_arrived.observe(step, hyper()),
+                not_arrived.observe(&step, hyper()),
                 Progress::Input(_)
             ));
         }
@@ -447,6 +450,7 @@ mod tests {
             };
             let step = FlyToStarStep {
                 retreat_encounters: false,
+                encounter_response: None,
                 target,
                 max_ticks: 200,
             };
@@ -454,7 +458,7 @@ mod tests {
                 space_side: side,
                 ..hyper()
             };
-            match flight.observe(step, observation) {
+            match flight.observe(&step, observation) {
                 Progress::Arrived(label) if side == 0 => {
                     assert!(arrival_satisfies(&label, target));
                     assert!(!arrival_satisfies(
@@ -492,6 +496,7 @@ mod tests {
     fn step() -> FlyToStarStep {
         FlyToStarStep {
             retreat_encounters: false,
+            encounter_response: None,
             target: StarTarget::resolve("Alpha Centauri").unwrap(),
             max_ticks: 200,
         }
@@ -508,22 +513,22 @@ mod tests {
         let step = step();
         let mut flight = StarFlight::default();
         assert_eq!(
-            flight.observe(step, hyper()),
+            flight.observe(&step, hyper()),
             Progress::Input(Some(MenuKey::Cancel))
         );
         let map = Observation {
             cursor: Some(step.target.coordinates()),
             ..hyper()
         };
-        flight.observe(step, map);
-        flight.observe(step, map);
+        flight.observe(&step, map);
+        flight.observe(&step, map);
         let selected = Observation {
             autopilot: map.cursor,
             ..map
         };
-        flight.observe(step, selected);
-        flight.observe(step, hyper());
-        assert_eq!(flight.observe(step, hyper()), Progress::Input(None));
+        flight.observe(&step, selected);
+        flight.observe(&step, hyper());
+        assert_eq!(flight.observe(&step, hyper()), Progress::Input(None));
         let arrived = Observation {
             activity: 4,
             solar_active: true,
@@ -531,7 +536,7 @@ mod tests {
             fuel: Some(400),
             ..hyper()
         };
-        let Progress::Arrived(label) = flight.observe(step, arrived) else {
+        let Progress::Arrived(label) = flight.observe(&step, arrived) else {
             panic!("arrival")
         };
         assert!(arrival_satisfies(&label, step.target));
@@ -547,11 +552,11 @@ mod tests {
             ticks: 1,
             initial_fuel: Some(896),
         };
-        assert_eq!(flight.observe(step(), hyper()), Progress::Input(None));
+        assert_eq!(flight.observe(&step(), hyper()), Progress::Input(None));
         let mut short = step();
         short.max_ticks = 3;
         let Progress::Failed(label) = flight.observe(
-            short,
+            &short,
             Observation {
                 fuel: Some(0),
                 position: Some((200, 300)),
@@ -572,7 +577,7 @@ mod tests {
         };
         assert!(matches!(
             flight.observe(
-                step(),
+                &step(),
                 Observation {
                     activity: 4,
                     solar_active: true,
@@ -584,7 +589,7 @@ mod tests {
         ));
         assert!(matches!(
             StarFlight::default().observe(
-                step(),
+                &step(),
                 Observation {
                     instant_move: true,
                     ..hyper()
