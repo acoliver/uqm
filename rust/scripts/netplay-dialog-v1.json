@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "netplay-dialog-v1",
+  "budgets": {
+    "max_input_ticks": 500,
+    "max_presentations": 500,
+    "max_wallclock_seconds": 120
+  },
+  "steps": [
+    {"action":"wait_for_main_menu_ready"},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"assert_main_menu_transition","from":"NewGame","to":"LoadGame"},
+    {"action":"assert_main_menu_transition","from":"LoadGame","to":"SuperMelee"},
+    {"action":"tap_menu_key","key":"select","value":1,"hold":1,"settle":5},
+    {"action":"tap_menu_key","key":"up","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"up","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"up","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"up","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"select","value":1,"hold":1,"settle":5},
+    {"action":"capture","label":"netplay-connection-widgets"},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"right","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"down","value":1,"hold":1,"settle":2},
+    {"action":"tap_menu_key","key":"select","value":1,"hold":1,"settle":5},
+    {"action":"assert_activity","mask":255,"equals":0},
+    {"action":"capture","label":"melee-after-dialog-cancel"},
+    {"action":"finish"}
+  ]
+}

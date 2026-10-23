@@ -122,6 +122,8 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::CommunicationChoices,
         ],
     ),
+    row("setup-menu-v1", &[Domain::BootMenu]),
+    row("netplay-dialog-v1", &[Domain::BootMenu]),
     row("load-burvixese-caster-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s04b-burvixese-caster",
