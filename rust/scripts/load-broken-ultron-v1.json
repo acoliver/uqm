@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "load-broken-ultron-v1",
+  "start_save": {
+    "path": "saves/broken-ultron.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 120
+  },
+  "seed": 1437213464,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "activity", "op": "eq", "value": 4}, {"key": "star:current", "op": "eq", "value": 467}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "sis:fuel", "op": "eq", "value": 10434}, {"key": "sis:ru", "op": "eq", "value": 115}, {"key": "escorts:count", "op": "eq", "value": 4}, {"key": "escorts:species:4", "op": "eq", "value": 3}, {"key": "story:ULTRON_CONDITION", "op": "eq", "value": 1}, {"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}]},
+    {"action": "capture", "label": "reloaded-broken-ultron"},
+    {"action": "finish"}
+  ]
+}
