@@ -279,7 +279,18 @@ pub fn extract_save(
             sha256: retained.sha256.clone(), byte_length: retained.byte_length,
         })
     }).transpose()?;
-    let campaign_state = saved_campaign_state(&save_bytes)?;
+    let story_keys: Vec<&str> = script
+        .steps()
+        .iter()
+        .filter_map(|action| match action {
+            uqm_rust::automation::Action::AssertState(predicate) => Some(predicate),
+            uqm_rust::automation::Action::WaitForState(wait) => Some(&wait.predicate),
+            _ => None,
+        })
+        .flat_map(|predicate| &predicate.all)
+        .filter_map(|condition| condition.key.strip_prefix("story:"))
+        .collect();
+    let campaign_state = saved_campaign_state(&save_bytes, &story_keys)?;
     let commit = producing_commit(&run)?;
     let relative_out = out
         .strip_prefix(root)
@@ -337,7 +348,10 @@ fn recorded_file<'a>(
     Ok(retained)
 }
 
-fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<String, u32>, String> {
+fn saved_campaign_state(
+    bytes: &[u8],
+    story_keys: &[&str],
+) -> Result<std::collections::BTreeMap<String, u32>, String> {
     use uqm_rust::savegame::{
         decode_save,
         runtime::star::{resolve_star, LoadedStar, CATALOG_LEN},
@@ -410,7 +424,10 @@ fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<Strin
         "MOONBASE_DESTROYED",
         "STARBASE_AVAILABLE",
         "PROBE_ILWRATH_ENCOUNTER",
-    ] {
+    ]
+    .into_iter()
+    .chain(story_keys.iter().copied())
+    {
         state.insert(format!("story:{name}"), story(name));
     }
     Ok(state)
@@ -870,7 +887,7 @@ mod tests {
                 896,
             ),
         ] {
-            let state = saved_campaign_state(bytes).unwrap();
+            let state = saved_campaign_state(bytes, &[]).unwrap();
             assert_eq!(state["star:current"], 82);
             assert_eq!(state["sis:fuel"], fuel);
         }
@@ -884,7 +901,7 @@ mod tests {
         let bytes = std::fs::read(save).unwrap();
         assert_eq!(
             provenance.campaign_state,
-            saved_campaign_state(&bytes).unwrap()
+            saved_campaign_state(&bytes, &[]).unwrap()
         );
         let path = root.join("rust/scripts/load-alpha-centauri-v1.json");
         let document = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
@@ -915,6 +932,59 @@ mod tests {
     }
 
     #[test]
+    fn northern_checkpoint_reload_matches_the_extracted_snapshot() {
+        let root = repository_root();
+        for (checkpoint, parent) in [("north-ready", "spindle-pkunk")] {
+            let save = root.join(format!("rust/scripts/saves/{checkpoint}.sav"));
+            let provenance: Provenance =
+                read_json(&provenance_path(&save), MANIFEST_LIMIT).unwrap();
+            let keys: Vec<&str> = provenance
+                .campaign_state
+                .keys()
+                .filter_map(|key| key.strip_prefix("story:"))
+                .collect();
+            let actual = saved_campaign_state(&std::fs::read(save).unwrap(), &keys).unwrap();
+            assert_eq!(provenance.campaign_state, actual);
+            assert_eq!(
+                provenance.parent_save.unwrap().path,
+                format!("saves/{parent}.sav")
+            );
+            let path = root.join(format!("rust/scripts/load-{checkpoint}-v1.json"));
+            let document = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
+            let predicates: Vec<_> = document
+                .steps
+                .iter()
+                .filter_map(|step| match step {
+                    uqm_rust::automation::Action::AssertState(predicate) => Some(predicate),
+                    _ => None,
+                })
+                .collect();
+            assert!(!predicates.is_empty());
+            for predicate in predicates {
+                for condition in &predicate.all {
+                    assert_eq!(
+                        condition.op,
+                        uqm_rust::automation::campaign_state::StateOp::Eq
+                    );
+                    assert_eq!(condition.value, actual[&condition.key], "{}", condition.key);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn producer_story_keys_are_decoded_even_when_the_saved_value_is_zero() {
+        let bytes =
+            std::fs::read(repository_root().join("rust/scripts/saves/spindle-pkunk.sav")).unwrap();
+        let state =
+            saved_campaign_state(&bytes, &["ULTRON_CONDITION", "BURV_BROADCASTERS_ON_SHIP"])
+                .unwrap();
+        assert_eq!(state["story:ULTRON_CONDITION"], 0);
+        assert_eq!(state["story:BURV_BROADCASTERS_ON_SHIP"], 0);
+        assert_eq!(state["story:CLEAR_SPINDLE_ON_SHIP"], 1);
+    }
+
+    #[test]
     fn spindle_reload_assertions_match_the_saved_artifact_and_fleet() {
         let root = repository_root();
         let save = root.join("rust/scripts/saves/spindle-pkunk.sav");
@@ -922,7 +992,7 @@ mod tests {
         let bytes = std::fs::read(save).unwrap();
         assert_eq!(
             provenance.campaign_state,
-            saved_campaign_state(&bytes).unwrap()
+            saved_campaign_state(&bytes, &[]).unwrap()
         );
         assert_eq!(
             provenance.parent_save.as_ref().unwrap().path,
