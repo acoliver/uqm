@@ -73,7 +73,6 @@ sc2/src/uqm/shipyard.c
 sc2/src/uqm/sis.c
 sc2/src/uqm/starbase.c
 sc2/src/uqm/starcon.c
-sc2/src/uqm/starmap.c
 sc2/src/uqm/status.c
 sc2/src/uqm/supermelee/buildpick.c
 sc2/src/uqm/supermelee/loadmele.c
