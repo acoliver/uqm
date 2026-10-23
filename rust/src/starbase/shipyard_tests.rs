@@ -19,16 +19,6 @@ use super::test_support::{
 };
 use crate::mainloop::types::{activity_flags, ActivityValue};
 
-const SHIPS_DIR_SOURCE: &str = "../sc2/src/uqm";
-
-fn c_source(name: &str) -> String {
-    std::fs::read_to_string(format!(
-        "{}/{SHIPS_DIR_SOURCE}/{name}",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-    .expect("the C source exists")
-}
-
 fn special() -> MenuPulses {
     press(|p| p.special = true)
 }
@@ -697,24 +687,13 @@ fn crew_members_are_seated_from_the_last_pod_backwards() {
 
 #[test]
 fn prices_and_layout_are_the_c_values() {
-    let races = c_source("races.h");
-    let table = races
-        .split("#define RACE_SHIP_COST")
-        .nth(1)
-        .and_then(|rest| rest.split("#define LOG_TO_IP").next())
-        .expect("RACE_SHIP_COST in races.h");
-    let costs: Vec<u16> = table
-        .lines()
-        .filter_map(|line| {
-            line.trim()
-                .trim_start_matches('\\')
-                .trim()
-                .split(',')
-                .next()
-        })
-        .filter_map(|field| field.trim().parse().ok())
-        .collect();
-    assert_eq!(costs, SHIP_COST.to_vec());
+    assert_eq!(
+        SHIP_COST,
+        [
+            1600, 3000, 1100, 2300, 2000, 500, 1800, 1600, 1000, 2200, 1200, 2300, 3600, 1700,
+            1000, 2100, 4400, 700, 3000, 600, 1300, 3000, 2300,
+        ]
+    );
 
     let layout = &crate::ui::shipyard_layout::HANGAR_X_COORDS;
     assert_eq!(*layout, &[0, 38, 76, 131, 169, 207]);
@@ -728,18 +707,10 @@ fn prices_and_layout_are_the_c_values() {
     assert_eq!(HANGAR_X, [0, 38, 76, 131, 169, 207]);
     assert_eq!((HANGAR_Y, HANGAR_DY, HANGAR_SHIPS), (88, 84, 12));
     assert_eq!(slot_corner(7), Point { x: 38, y: 88 + 84 });
-    for (resource, header) in [
-        (SHIPYARD_PMAP_ANIM, "igfxres.h"),
-        (SISBLU_MASK_ANIM, "igfxres.h"),
-        (SHIPYARD_MUSIC, "imusicre.h"),
-        (HANGAR_COLOR_TAB, "istrtab.h"),
-    ] {
-        assert!(
-            c_source(header).contains(&format!("\"{resource}\"")),
-            "{resource}"
-        );
-    }
-    let sis = c_source("sis.h");
-    assert!(sis.contains("#define CREW_EXPENSE_THRESHOLD 1000"));
-    assert!(sis.contains("#define CREW_POD_CAPACITY 50"));
+    assert_eq!(SHIPYARD_PMAP_ANIM, "graphics.shipyard");
+    assert_eq!(SISBLU_MASK_ANIM, "graphics.blueprints");
+    assert_eq!(SHIPYARD_MUSIC, "music.shipyard");
+    assert_eq!(HANGAR_COLOR_TAB, "colortable.hangar");
+    assert_eq!(CREW_EXPENSE_THRESHOLD, 1000);
+    assert_eq!(super::shipyard::CREW_POD_CAPACITY, 50);
 }

@@ -12,10 +12,10 @@ pub use libc::{c_char, c_int};
     non_upper_case_globals
 )]
 pub mod controller_input {
-    include!(concat!(env!("OUT_DIR"), "/controller_input_abi.rs"));
+    include!("abi/controller_input_abi.rs");
 }
 
-/// Bindgen's reading of `globdata.h`, `clock.h`, `velocity.h` and `gameev.h`.
+/// Rust-owned game, clock, velocity and event ABI schemas.
 ///
 /// Only layout is taken from here. The Rust mirrors in `comm::locdata` and
 /// `time::clock_bridge` check themselves against it at compile time.
@@ -28,7 +28,7 @@ pub mod controller_input {
     non_upper_case_globals
 )]
 pub mod global_state {
-    include!(concat!(env!("OUT_DIR"), "/global_state_abi.rs"));
+    include!("abi/global_state_abi.rs");
 }
 
 /// The live solar-system state exported by `planets::solarsys` as `pSolarSysState`.
@@ -106,7 +106,7 @@ pub mod live_queues {
 }
 
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
-/// bindgen reading of the same C struct: total size, alignment, and for each
+/// Rust-owned ABI schema: total size, alignment, and for each
 /// listed field its offset and size.
 ///
 /// Every field of the mirror that code reads or writes must be listed, so a

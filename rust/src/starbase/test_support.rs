@@ -134,19 +134,7 @@ pub struct RecordingPlatform {
     message_mode: Cell<StatusMessageMode>,
 }
 
-/// The value of the `#define NAME value` line of a source file.
-fn source_define(path: &str, name: &str) -> String {
-    let source = std::fs::read_to_string(path).expect("the source file exists");
-    let prefix = format!("#define {name} ");
-    let line = source
-        .lines()
-        .find(|line| line.starts_with(&prefix))
-        .expect("the source file defines the macro");
-    line[prefix.len()..].trim().to_owned()
-}
-
-/// Starting crew from ported descriptors or the remaining C race sources.
-/// A few C ships spell it `MAX_CREW_SIZE`, which `element.h` defines.
+/// Starting crew from the ported race descriptors.
 fn source_max_crew(ship_dir: &str) -> u16 {
     use crate::ships::{races::*, traits::ShipBehavior};
     let ported = match ship_dir {
@@ -178,14 +166,7 @@ fn source_max_crew(ship_dir: &str) -> u16 {
     if let Some(desc) = ported {
         return desc.ship_info.crew_level;
     }
-    let uqm = format!("{}/../sc2/src/uqm", env!("CARGO_MANIFEST_DIR"));
-    let value = source_define(&format!("{uqm}/ships/{ship_dir}/{ship_dir}.c"), "MAX_CREW");
-    let number = if value == "MAX_CREW_SIZE" {
-        source_define(&format!("{uqm}/element.h"), "MAX_CREW_SIZE")
-    } else {
-        value
-    };
-    number.parse().expect("MAX_CREW is a number")
+    panic!("unknown ship descriptor {ship_dir}")
 }
 
 /// Directories of the ship sources, in `avail_race_q` order.

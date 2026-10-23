@@ -10,7 +10,7 @@
     reason = "generated ABI declarations share engine pointer types with other bridges"
 )]
 mod abi {
-    include!(concat!(env!("OUT_DIR"), "/netplay_abi.rs"));
+    include!("../../abi/netplay_abi.rs");
 }
 mod checkbuf;
 mod checksum;

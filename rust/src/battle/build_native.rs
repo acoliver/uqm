@@ -420,20 +420,13 @@ mod tests {
     }
 
     #[test]
-    fn worth_table_is_the_entire_races_header_macro_in_ru() {
-        let header = include_str!("../../../sc2/src/uqm/races.h");
-        let body = header
-            .split("#define RACE_SHIP_COST")
-            .nth(1)
-            .unwrap()
-            .split("#define LOG_TO_IP")
-            .next()
-            .unwrap();
-        let costs: Vec<COUNT> = body
-            .lines()
-            .filter_map(|line| line.trim().split(',').next()?.parse().ok())
-            .collect();
-        assert_eq!(SHIP_COSTS.as_slice(), costs.as_slice());
-        assert_eq!(SHIP_COSTS[22], 2300);
+    fn worth_table_preserves_every_races_ship_cost_in_ru() {
+        assert_eq!(
+            SHIP_COSTS,
+            [
+                1600, 3000, 1100, 2300, 2000, 500, 1800, 1600, 1000, 2200, 1200, 2300, 3600, 1700,
+                1000, 2100, 4400, 700, 3000, 600, 1300, 3000, 2300,
+            ]
+        );
     }
 }

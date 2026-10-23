@@ -705,7 +705,7 @@ mod tests {
         assert_eq!(SlotKind::Module.empty_piece(), 22);
         assert_eq!(SlotKind::Module.empty_piece(), EMPTY_MODULE_SLOT);
         assert_eq!(SlotKind::Lander.empty_piece(), 23);
-        let pieces = PieceNumbers::from_sis_h();
+        let pieces = PieceNumbers::from_schema();
         assert_eq!(
             u32::from(SlotKind::Drive.empty_piece()),
             pieces.get("NUM_MODULES")
@@ -738,7 +738,7 @@ mod tests {
         // outfit.c:392-398: CurState += EMPTY_SLOT - 1; below EMPTY_SLOT it
         // becomes EMPTY_SLOT + 3, above EMPTY_SLOT + 2 it becomes
         // EMPTY_SLOT + 2.
-        let purchasable = PieceNumbers::from_sis_h().get("NUM_PURCHASE_MODULES");
+        let purchasable = PieceNumbers::from_schema().get("NUM_PURCHASE_MODULES");
         for raw in 0..purchasable as u8 {
             let mut state = raw + EMPTY_SLOT - 1;
             if state < EMPTY_SLOT {

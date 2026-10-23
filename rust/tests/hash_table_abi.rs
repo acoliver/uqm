@@ -5,7 +5,7 @@ use memoffset::offset_of;
 use uqm_rust::collections::hash_table::{HashEntry, HashIterator, HashTable};
 
 mod retained_headers {
-    include!(concat!(env!("OUT_DIR"), "/hash_table_abi.rs"));
+    include!("../src/abi/hash_table_abi.rs");
 }
 
 #[test]

@@ -3,7 +3,11 @@
 
 use std::fmt;
 
-include!(concat!(env!("OUT_DIR"), "/state_generated.rs"));
+#[path = "schema.rs"]
+mod schema;
+pub use schema::{
+    lookup_game_state_bits, GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
+};
 
 fn assert_raw_bit_range(state_len: usize, start_bit: usize, end_bit: usize) {
     assert!(end_bit >= start_bit);
