@@ -583,9 +583,8 @@ mod runtime {
         };
         DrawStamp(&mut stamp);
         FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
-        CommWndRect.corner.x = ((screen_rect.extent.width as c_int
-            - CommWndRect.extent.width as c_int)
-            / 2) as COORD;
+        CommWndRect.corner.x =
+            ((screen_rect.extent.width as c_int - CommWndRect.extent.width as c_int) / 2) as COORD;
         CommWndRect.corner.y = 5;
         init_credits();
         SetInputCallback(Some(on_input_frame));
