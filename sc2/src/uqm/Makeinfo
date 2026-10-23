@@ -10,13 +10,7 @@ uqm_CFILES="battle.c border.c build.c cleanup.c
 		ship.c shipstat.c shipyard.c sis.c starbase.c starcon.c
 		starmap.c state.c status.c tactrans.c uqmdebug.c util.c"
 
-# Exclude clock.c when USE_RUST_CLOCK is enabled
-# The Rust implementation provides these functions via clock_rust.c
-if [ "$uqm_USE_RUST_CLOCK" = "1" ]; then
-	uqm_CFILES="$uqm_CFILES clock_rust.c"
-else
-	uqm_CFILES="$uqm_CFILES clock.c"
-fi
+# The clock API is provided by Rust.
 
 # Include Rust bridge helpers when Rust subsystems are enabled
 if [ "$uqm_USE_RUST_SHIPS" = "1" ]; then

@@ -3,6 +3,7 @@
 //! This module implements the game clock and date arithmetic, handling
 //! time-based events and game progression.
 
+pub mod clock_abi;
 pub mod clock_bridge;
 pub mod counter_abi;
 

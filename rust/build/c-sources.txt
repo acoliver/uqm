@@ -27,7 +27,6 @@ sc2/src/uqm/battle.c
 sc2/src/uqm/border.c
 sc2/src/uqm/build.c
 sc2/src/uqm/cleanup.c
-sc2/src/uqm/clock_rust.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/confirm.c
