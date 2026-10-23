@@ -9,6 +9,8 @@ pub(crate) mod flash_math;
 pub mod settings;
 
 pub mod confirm;
+pub mod getchar;
+pub mod menu;
+pub mod menu_state;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 mod palette;
-pub mod getchar;
