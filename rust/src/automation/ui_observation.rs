@@ -15,6 +15,16 @@ static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
 static SHIP_PICKER_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SHIP_PICKER_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+static SHIP_ESCAPE_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+pub fn record_ship_escape() {
+    SHIP_ESCAPE_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
+pub fn ship_escape_generation() -> u64 {
+    SHIP_ESCAPE_GENERATION.load(Ordering::SeqCst)
+}
+
 /// Production planet-menu phases exposed to semantic automation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]

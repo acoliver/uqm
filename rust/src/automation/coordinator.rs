@@ -292,6 +292,7 @@ struct CoordInner {
     /// Ticks and starting ship counts of the current `fight_battle` step.
     battle_fight: BattleFightTracker,
     fleet_fight: crate::automation::fleet_fight::FleetFight,
+    fleet_retreat: crate::automation::fleet_fight::FleetRetreat,
     star_flight: crate::automation::star_flight::StarFlight,
     star_encounter_active: bool,
     patrol_response_pending: bool,
@@ -463,6 +464,7 @@ impl Coordinator {
                 planet_minerals: PlanetMineralsTracker::default(),
                 battle_fight: BattleFightTracker::default(),
                 fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
+                fleet_retreat: crate::automation::fleet_fight::FleetRetreat::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
                 star_encounter_active: false,
                 patrol_response_pending: false,
@@ -1423,6 +1425,64 @@ impl Coordinator {
         event
     }
 
+    fn service_fleet_retreat(
+        &self,
+        inner: &mut CoordInner,
+        max_ticks: u64,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::fleet_fight::RetreatProgress;
+        let progress = inner
+            .fleet_retreat
+            .observe(max_ticks, input_ffi::fleet_fight_observation());
+        let (talking, _) = crate::automation::ui_observation::communication_lifecycle();
+        if talking && matches!(progress, RetreatProgress::Input { .. }) {
+            for phrase in ["like_to_leave", "bye"] {
+                if crate::comm::ffi::offered_response_index(phrase).is_ok() {
+                    self.service_patrol_contact(inner, phrase);
+                    return event;
+                }
+            }
+            let _ = crate::sound::trackplayer::jump_track(0);
+            return event;
+        }
+        let (key, escape) = match &progress {
+            RetreatProgress::Input { menu, escape } => (*menu, *escape),
+            _ => (None, false),
+        };
+        for menu in crate::automation::script::MenuKey::ALL {
+            if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
+                self.reject_input(inner, "retreat_encounter", -1, -1);
+                return event;
+            }
+        }
+        for index in 0..7 {
+            if !inject_player_key(
+                index,
+                i32::from(
+                    escape
+                        && index == i32::from(crate::automation::script::PlayerKey::Escape.index()),
+                ),
+            ) {
+                self.reject_input(inner, "retreat_encounter", index, 0);
+                return event;
+            }
+        }
+        match progress {
+            RetreatProgress::Escaped(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                inner.fleet_retreat = Default::default();
+                SchedulerEvent::NavigationReached
+            }
+            RetreatProgress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+            RetreatProgress::Input { .. } => event,
+        }
+    }
+
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
@@ -1435,11 +1495,17 @@ impl Coordinator {
             inner.star_flight = StarFlight::default();
             inner.star_encounter_active = false;
         }
-        if crate::automation::ui_observation::encounter_menu_active() {
+        if crate::automation::ui_observation::encounter_menu_active()
+            && !flight.target.is_arilou_home()
+        {
             inner.star_encounter_active = true;
         }
         if inner.star_encounter_active {
-            let result = self.service_fleet_fight(inner, flight.max_ticks, event);
+            let result = if flight.retreat_encounters {
+                self.service_fleet_retreat(inner, flight.max_ticks, event)
+            } else {
+                self.service_fleet_fight(inner, flight.max_ticks, event)
+            };
             if result == SchedulerEvent::NavigationReached {
                 inner.star_encounter_active = false;
                 inner.star_flight.resume_after_encounter();
@@ -1558,6 +1624,33 @@ impl Coordinator {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
+        let transit_budget = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
+                Some(step.max_ticks)
+            }
+            Some(Action::NavigateToMoon(step))
+                if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(0) =>
+            {
+                Some(step.max_ticks)
+            }
+            _ => None,
+        };
+        if let Some(max_ticks) = transit_budget {
+            if inner.sched_state.phase == ActionPhase::WaitingForInput {
+                inner.star_encounter_active = false;
+            }
+            if crate::automation::ui_observation::encounter_menu_active() {
+                inner.star_encounter_active = true;
+            }
+            if inner.star_encounter_active {
+                if self.service_fleet_fight(inner, max_ticks, scheduler_event)
+                    == SchedulerEvent::NavigationReached
+                {
+                    inner.star_encounter_active = false;
+                }
+                return scheduler_event;
+            }
+        }
         let patrol_phrase = match self.actions.get(inner.sched_state.step_index) {
             Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
             Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
