@@ -1561,6 +1561,7 @@ impl Coordinator {
         let patrol_phrase = match self.actions.get(inner.sched_state.step_index) {
             Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
             Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToHyperspace(step)) => step.encounter_response.as_deref(),
             _ => None,
         };
         if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(inner, phrase)) {

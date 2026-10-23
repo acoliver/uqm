@@ -493,10 +493,13 @@ pub struct NavigateToOrbitStep {
 
 /// A `navigate_to_hyperspace` step flies the real flagship out of the current
 /// solar system with player controls until production enters hyperspace.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToHyperspaceStep {
     pub max_ticks: u64,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    #[serde(default)]
+    pub encounter_response: Option<String>,
 }
 
 /// Which way the flagship turns.
@@ -2484,6 +2487,15 @@ mod tests {
         ] {
             assert!(validated_steps(bad).is_err());
         }
+    }
+
+    #[test]
+    fn departure_can_dismiss_patrols_with_an_explicit_offered_phrase() {
+        let script = validated_steps(
+            r#"{"action":"navigate_to_hyperspace","max_ticks":100,"encounter_response":"bye_before_space"}"#,
+        ).unwrap();
+        let encoded = serde_json::to_value(&script.steps()[0]).unwrap();
+        assert_eq!(encoded["encounter_response"], "bye_before_space");
     }
 
     #[test]

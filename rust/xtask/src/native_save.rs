@@ -946,6 +946,7 @@ mod tests {
             ("south-refueled", "caster-diversion"),
             ("repaired-ultron", "south-refueled"),
             ("utwig-alliance", "repaired-ultron"),
+            ("bomb-preguard", "utwig-alliance"),
         ] {
             let save = root.join(format!("rust/scripts/saves/{checkpoint}.sav"));
             let provenance: Provenance =

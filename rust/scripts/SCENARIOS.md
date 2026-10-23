@@ -126,6 +126,14 @@ The save round-trip tests also check that the Utwig and Supox fleets are allied,
 travelling to their mission destinations, and retain the Utwig arrival callback.
 This checkpoint precedes the Druuge guard battle and does not claim the bomb.
 
+`campaign-s06b-bomb-approach` takes `utwig-alliance.sav` directly to Zeta
+Hyades and saves before approaching the guard moon. Its extracted
+`bomb-preguard.sav` retains the alliance and mission while requiring
+`BOMB_UNPROTECTED=0` and `UTWIG_BOMB_ON_SHIP=0`. The separate
+`load-bomb-preguard-v1` reloads the same state. Departure navigation now accepts
+an optional `encounter_response`, using the existing input-only patrol hailing
+and response selection used by planet navigation.
+
 ### Transit refit and autopilot recovery
 
 `campaign-s08a-refitted` loads `dev-taalo-protected.sav`, visits Sol through
