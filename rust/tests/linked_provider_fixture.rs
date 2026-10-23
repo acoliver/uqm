@@ -20,10 +20,8 @@ unsafe extern "C" {
     fn InitGlobData();
 }
 
-unsafe extern "C" {
-    fn rust_get_game_state(key: *const std::os::raw::c_char) -> u8;
-    fn rust_set_game_state(key: *const std::os::raw::c_char, value: u8);
-}
+use uqm_rust::state::ffi::rust_get_game_state;
+use uqm_rust::state::ffi::rust_set_game_state;
 
 /// Starting another game must not inherit the previous game's story flags.
 ///

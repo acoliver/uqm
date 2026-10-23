@@ -1,6 +1,7 @@
 //! UTF-8 incremental star search and text-entry callbacks from pstarmap.c.
 
 use super::*;
+use crate::memory::{rust_hfree, rust_hmalloc};
 
 extern "C" {
     pub(super) fn strcmp(a: *const c_char, b: *const c_char) -> i32;
@@ -17,8 +18,7 @@ extern "C" {
         size: usize,
         compare: unsafe extern "C" fn(*const c_void, *const c_void) -> i32,
     );
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hfree(memory: *mut c_void);
+
     fn DoTextEntry(entry: *mut TextEntryState) -> u32;
 }
 

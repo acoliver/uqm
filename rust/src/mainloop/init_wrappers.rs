@@ -1,8 +1,6 @@
 //! Init-sequence wrappers for the UQM startup.
 //!
-//! Provides Rust-side equivalents of the C init functions called from
-//! `uqm_c_do_init()`. Each is exported as `#[no_mangle] extern "C"` for
-//! C to call when `RUST_OWNS_MAIN`.
+//! SDL startup and tracing initialization for the Rust entry point.
 
 use libc::c_int;
 
@@ -28,7 +26,7 @@ const SDL_INIT_VIDEO: u32 = 0x00000020;
 ///
 /// Equivalent to C `TFB_PreInit()`: calls `SDL_Init(SDL_INIT_VIDEO)` and
 /// logs the SDL version. SDL is cleaned up at process exit by the OS.
-pub extern "C" fn rust_tfb_preinit() -> c_int {
+pub fn rust_tfb_preinit() -> c_int {
     tracing::info!("Initializing base SDL functionality.");
 
     let result = unsafe { SDL_Init(SDL_INIT_VIDEO) };
@@ -65,101 +63,7 @@ pub extern "C" fn rust_tfb_preinit() -> c_int {
 /// The C version creates a Mutex for the logging system. With tracing,
 /// logging is already thread-safe, so this is a no-op that just ensures
 /// compatibility with C code that checks the lock.
-pub extern "C" fn rust_log_init_threads() {
+pub fn rust_log_init_threads() {
     // tracing::subscriber is already thread-safe; no mutex needed.
     tracing::debug!("log_initThreads: tracing handles thread safety natively");
 }
-
-// #6 InitColorMaps — delegate to existing Rust colormap system
-// ===========================================================================
-
-extern "C" {
-    fn rust_cmap_init() -> c_int;
-}
-
-/// Initialize the colormap system via the existing Rust implementation.
-///
-/// Equivalent to C `InitColorMaps()` but delegates to `rust_cmap_init()`
-/// from `graphics::cmap_ffi`.
-pub extern "C" fn rust_init_color_maps() -> c_int {
-    let result = unsafe { rust_cmap_init() };
-    if result == 0 {
-        tracing::debug!("ColorMap system initialized (Rust)");
-    } else {
-        tracing::error!("ColorMap system init failed (code {})", result);
-    }
-    result
-}
-
-// ===========================================================================
-// #5 TFB_InitGraphics — delegate to C (Rust driver is configured by C)
-// ===========================================================================
-
-extern "C" {
-    fn TFB_InitGraphics(
-        driver: c_int,
-        flags: c_int,
-        backend: *const libc::c_char,
-        width: c_int,
-        height: c_int,
-    ) -> c_int;
-}
-
-/// Initialize the graphics subsystem.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-///
-/// Currently delegates to C `TFB_InitGraphics()` which configures the SDL
-/// driver. The Rust graphics driver is selected via build config.
-pub unsafe extern "C" fn rust_tfb_init_graphics(
-    driver: c_int,
-    flags: c_int,
-    backend: *const libc::c_char,
-    width: c_int,
-    height: c_int,
-) -> c_int {
-    TFB_InitGraphics(driver, flags, backend, width, height)
-}
-
-// ===========================================================================
-// #7 init_communication — Rust-owned communication state
-// ===========================================================================
-
-/// Initialize the communication system through its Rust implementation.
-pub extern "C" fn rust_init_communication() {
-    let initialized = unsafe { crate::comm::ffi::rust_InitCommunication() };
-    if initialized == 0 {
-        tracing::error!("Communication system initialization failed");
-        std::process::abort();
-    }
-    tracing::debug!("Communication system initialized");
-}
-
-// ===========================================================================
-// #8 TFB_InitInput — delegate to C
-// ===========================================================================
-
-extern "C" {
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn TFB_InitInput(driver: c_int, flags: c_int);
-}
-
-/// Initialize the input subsystem.
-///
-/// Delegates to C `TFB_InitInput()` which configures the SDL input driver.
-pub extern "C" fn rust_tfb_init_input(driver: c_int, flags: c_int) {
-    unsafe { TFB_InitInput(driver, flags) };
-    tracing::debug!(
-        "Input system initialized (driver={}, flags={})",
-        driver,
-        flags
-    );
-}
-
-// ===========================================================================
-// Tests
-// ===========================================================================

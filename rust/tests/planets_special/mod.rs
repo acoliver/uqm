@@ -29,12 +29,13 @@ use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
 use uqm_rust::state::game_state_keys::set_game_state;
 
-unsafe extern "C" {
+use uqm_rust::state::ffi::rust_init_game_state;
+extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;
     static mut CurStarDescPtr: *mut c_void;
     static mut ScreenWidth: i32;
-    fn rust_init_game_state();
+
     static generateYehatFunctions: GenerateFunctions;
     static generateIlwrathFunctions: GenerateFunctions;
     static generateChmmrFunctions: GenerateFunctions;

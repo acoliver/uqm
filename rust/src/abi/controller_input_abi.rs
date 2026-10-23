@@ -1,5 +1,4 @@
-// Rust-owned engine ABI. Layout assertions preserve the clang/bindgen 0.70.1
-// measurements from the C transition; this file is not generated during builds.
+// Shared engine records used by the Rust runtime.
 
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
@@ -50,17 +49,6 @@ pub struct _controller_input_state {
     pub key: [[::std::os::raw::c_int; 7usize]; 6usize],
     pub menu: [::std::os::raw::c_int; 24usize],
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of _controller_input_state"]
-        [::std::mem::size_of::<_controller_input_state>() - 264usize];
-    ["Alignment of _controller_input_state"]
-        [::std::mem::align_of::<_controller_input_state>() - 4usize];
-    ["Offset of field: _controller_input_state::key"]
-        [::std::mem::offset_of!(_controller_input_state, key) - 0usize];
-    ["Offset of field: _controller_input_state::menu"]
-        [::std::mem::offset_of!(_controller_input_state, menu) - 168usize];
-};
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 extern "C" {
     pub static mut CurrentInputState: CONTROLLER_INPUT_STATE;

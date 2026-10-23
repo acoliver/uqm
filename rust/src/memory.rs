@@ -1,5 +1,4 @@
 use crate::logging::{log_add, LogLevel};
-use libc::c_char;
 use std::ffi::c_void;
 
 /// Allocate memory using the system malloc
@@ -10,8 +9,7 @@ use std::ffi::c_void;
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-ALLOC-001, REQ-MEM-ALLOC-002, REQ-MEM-ALLOC-003, REQ-MEM-ZERO-001,
 /// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-ALLOC-008
-#[no_mangle]
-pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
+pub unsafe fn rust_hmalloc(size: usize) -> *mut c_void {
     if size == 0 {
         // Return a non-null pointer for zero-size allocation
         let ptr = libc::malloc(1);
@@ -37,8 +35,7 @@ pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
 ///
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-ALLOC-006, REQ-MEM-ALLOC-007, REQ-MEM-OWN-003
-#[no_mangle]
-pub unsafe extern "C" fn rust_hfree(ptr: *mut c_void) {
+pub unsafe fn rust_hfree(ptr: *mut c_void) {
     if !ptr.is_null() {
         libc::free(ptr);
     }
@@ -52,8 +49,7 @@ pub unsafe extern "C" fn rust_hfree(ptr: *mut c_void) {
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-ALLOC-004, REQ-MEM-ALLOC-009, REQ-MEM-ZERO-001, REQ-MEM-ZERO-002,
 /// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-ALLOC-008
-#[no_mangle]
-pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
+pub unsafe fn rust_hcalloc(size: usize) -> *mut c_void {
     if size == 0 {
         // Return a non-null pointer for zero-size allocation
         let ptr = libc::malloc(1);
@@ -83,8 +79,7 @@ pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
 /// @requirement REQ-MEM-ALLOC-005, REQ-MEM-ALLOC-007, REQ-MEM-ALLOC-010, REQ-MEM-ZERO-003,
 /// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-OWN-004, REQ-MEM-OWN-005,
 /// REQ-MEM-ALLOC-008
-#[no_mangle]
-pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+pub unsafe fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     if size == 0 {
         // If new size is 0, free the pointer and return a minimal allocation
         if !ptr.is_null() {
@@ -109,12 +104,11 @@ pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_
 /// Initialize the memory management system
 ///
 /// # Safety
-/// This function is meant to be called from C code
+/// Called during the game lifecycle.
 ///
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-LIFE-001, REQ-MEM-LIFE-003, REQ-MEM-LIFE-005, REQ-MEM-LIFE-006
-#[no_mangle]
-pub unsafe extern "C" fn rust_mem_init() -> bool {
+pub unsafe fn rust_mem_init() -> bool {
     // In later phases, this might initialize custom allocators
     log_add(LogLevel::Info, "Rust memory management initialized.");
     true
@@ -123,50 +117,14 @@ pub unsafe extern "C" fn rust_mem_init() -> bool {
 /// Deinitialize the memory management system
 ///
 /// # Safety
-/// This function is meant to be called from C code
+/// Called during the game lifecycle.
 ///
 /// @plan PLAN-20260314-MEMORY.P05
 /// @requirement REQ-MEM-LIFE-002, REQ-MEM-LIFE-004, REQ-MEM-LIFE-005
-#[no_mangle]
-pub unsafe extern "C" fn rust_mem_uninit() -> bool {
+pub unsafe fn rust_mem_uninit() -> bool {
     // In later phases, this might deinitialize custom allocators
     log_add(LogLevel::Info, "Rust memory management deinitialized.");
     true
-}
-
-/// Helper function to allocate memory for a C-compatible array of strings.
-///
-/// Returns a tuple of (array_ptr, string_ptrs):
-/// - `array_ptr`: The null-terminated array of pointers. Must be freed via `rust_hfree`.
-/// - `string_ptrs`: The individual C string pointers. Each must be reclaimed via
-///   `CString::from_raw()`, NOT via `libc::free()` or `rust_hfree`, because they were
-///   created by `CString::into_raw()` and are owned by the Rust allocator.
-///
-/// # Safety
-/// The caller must ensure proper cleanup using the correct deallocator for each component.
-#[allow(dead_code)]
-pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut c_char, Vec<*mut c_char>) {
-    use std::ffi::CString;
-    use std::ptr;
-
-    // Convert each Rust string to a C string
-    let mut c_strings: Vec<*mut c_char> = Vec::with_capacity(argv.len());
-    for arg in argv {
-        let c_string = CString::new(arg.as_str()).expect("Failed to convert argument to C string");
-        c_strings.push(c_string.into_raw());
-    }
-
-    // Allocate an array of pointers
-    let array_ptr =
-        rust_hmalloc(std::mem::size_of::<*mut c_char>() * (argv.len() + 1)) as *mut *mut c_char;
-    // Copy the pointers to the array
-    for (i, ptr) in c_strings.iter().enumerate() {
-        ptr::write(array_ptr.add(i), *ptr);
-    }
-    // Null-terminate the array
-    ptr::write(array_ptr.add(argv.len()), ptr::null_mut());
-
-    (array_ptr, c_strings)
 }
 
 #[cfg(test)]
@@ -290,54 +248,6 @@ mod tests {
             }
 
             rust_hfree(ptr);
-        }
-    }
-
-    #[test]
-    fn test_copy_argv_to_c() {
-        use std::ffi::CStr;
-        use std::ffi::CString;
-
-        unsafe {
-            let argv = vec![
-                "program".to_string(),
-                "arg1".to_string(),
-                "arg2".to_string(),
-            ];
-
-            let (array_ptr, _) = copy_argv_to_c(&argv);
-
-            // Verify the array
-            let first: *mut c_char = *array_ptr.add(0);
-            let second: *mut c_char = *array_ptr.add(1);
-            let third: *mut c_char = *array_ptr.add(2);
-            let fourth: *mut c_char = *array_ptr.add(3);
-
-            assert!(!first.is_null());
-            assert!(!second.is_null());
-            assert!(!third.is_null());
-            assert!(fourth.is_null());
-
-            // Verify the strings
-            let first_str = CStr::from_ptr(first).to_str().unwrap();
-            let second_str = CStr::from_ptr(second).to_str().unwrap();
-            let third_str = CStr::from_ptr(third).to_str().unwrap();
-
-            assert_eq!(first_str, "program");
-            assert_eq!(second_str, "arg1");
-            assert_eq!(third_str, "arg2");
-
-            // Clean up
-            let mut i = 0;
-            loop {
-                let ptr = *array_ptr.add(i);
-                if ptr.is_null() {
-                    break;
-                }
-                drop(CString::from_raw(ptr));
-                i += 1;
-            }
-            rust_hfree(array_ptr as *mut c_void);
         }
     }
 }

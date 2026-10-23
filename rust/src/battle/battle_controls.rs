@@ -5,6 +5,7 @@
 // (intel.c, battle.c, tactrans.c, pickmele.c) and are referenced via
 // extern C function pointers.
 
+use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::{c_int, c_void};
 
 /// COUNT = u16
@@ -170,8 +171,7 @@ pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
     [std::ptr::null_mut(), std::ptr::null_mut()];
 
 extern "C" {
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hfree(ptr: *mut c_void);
+
     fn networkBattleInput(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
     fn selectShipNetwork(context: *mut c_void, gms: *mut c_void) -> Boolean;
     fn battleEndReadyNetwork(context: *mut c_void) -> bool;
