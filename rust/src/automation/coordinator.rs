@@ -294,6 +294,7 @@ struct CoordInner {
     fleet_fight: crate::automation::fleet_fight::FleetFight,
     star_flight: crate::automation::star_flight::StarFlight,
     star_encounter_active: bool,
+    retreat: crate::automation::retreat::Retreat,
     patrol_response_pending: bool,
     device: crate::automation::story_actions::DeviceTracker,
     energy: crate::automation::story_actions::EnergyTracker,
@@ -465,6 +466,7 @@ impl Coordinator {
                 fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
                 star_encounter_active: false,
+                retreat: crate::automation::retreat::Retreat::default(),
                 patrol_response_pending: false,
                 device: Default::default(),
                 energy: Default::default(),
@@ -1423,6 +1425,51 @@ impl Coordinator {
         event
     }
 
+    fn service_retreat(
+        &self,
+        inner: &mut CoordInner,
+        max_ticks: u64,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::retreat::{Progress, Retreat};
+        use crate::automation::script::{MenuKey, PlayerKey};
+        let progress = inner
+            .retreat
+            .observe(max_ticks, input_ffi::fleet_fight_observation());
+        let (menu, escape) = match &progress {
+            Progress::Input { menu, escape } => (*menu, *escape),
+            _ => (None, false),
+        };
+        for key in MenuKey::ALL {
+            if !inject_menu_key(i32::from(key.index()), i32::from(menu == Some(key))) {
+                self.reject_input(inner, "retreat", -1, -1);
+                return event;
+            }
+        }
+        for index in 0..7 {
+            if !inject_player_key(
+                index,
+                i32::from(escape && index == i32::from(PlayerKey::Escape.index())),
+            ) {
+                self.reject_input(inner, "retreat", index, 0);
+                return event;
+            }
+        }
+        match progress {
+            Progress::Input { .. } => event,
+            Progress::Escaped(label) | Progress::Won(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                inner.retreat = Retreat::default();
+                SchedulerEvent::NavigationReached
+            }
+            Progress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+        }
+    }
+
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
@@ -1439,7 +1486,11 @@ impl Coordinator {
             inner.star_encounter_active = true;
         }
         if inner.star_encounter_active {
-            let result = self.service_fleet_fight(inner, flight.max_ticks, event);
+            let result = if flight.retreat {
+                self.service_retreat(inner, flight.max_ticks, event)
+            } else {
+                self.service_fleet_fight(inner, flight.max_ticks, event)
+            };
             if result == SchedulerEvent::NavigationReached {
                 inner.star_encounter_active = false;
                 inner.star_flight.resume_after_encounter();

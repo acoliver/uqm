@@ -82,6 +82,9 @@ impl<'de> Deserialize<'de> for StarTarget {
 pub struct FlyToStarStep {
     pub target: StarTarget,
     pub max_ticks: u64,
+    /// Retreat from interrupting encounters instead of fighting their fleet.
+    #[serde(default)]
+    pub retreat: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -296,6 +299,7 @@ mod tests {
         FlyToStarStep {
             target: StarTarget::resolve("Alpha Centauri").unwrap(),
             max_ticks: 200,
+            retreat: false,
         }
     }
     fn hyper() -> Observation {

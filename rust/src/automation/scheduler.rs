@@ -3558,6 +3558,7 @@ mod budgeted_wait_tests {
                 target: crate::automation::star_flight::StarTarget::resolve("Alpha Centauri")
                     .unwrap(),
                 max_ticks,
+                retreat: false,
             }),
             Action::TurnFlagship(TurnFlagshipStep {
                 direction: TurnDirection::Right,

@@ -156,3 +156,16 @@ a surface collision. Native run `pt-p6-17` passed and saved slot 1 with
 `BOMB_UNPROTECTED=1`, `UTWIG_BOMB=1` and `UTWIG_BOMB_ON_SHIP=1`. The earned
 `utwig-bomb.sav` retains the returned Ultron, 32 crew and 6192 fuel, with no
 escorts remaining. `load-utwig-bomb-v1` independently reloads that checkpoint.
+
+`campaign-s07a-bomb-refueled` earns Gamma Aquarii's rainbow-world location
+with the Precursor bomb aboard, sells it to the Melnorme at Alpha Eridani and
+buys fuel through dialogue. Native `pt-p6-22` passed and wrote slot 1 with
+21000 fuel, 32 crew, 1175 RU and the bomb still aboard. The independent
+`load-bomb-refueled-v1` passed as `pt-p6-23`. This is a transit checkpoint,
+not a Taalo Protector completion.
+
+An optional `retreat:true` on `fly_to_star` selects the flagship during
+interrupting encounters and holds its ordinary Escape input. The controller
+requires a living flagship and a return to hyperspace, recording retreat and
+natural Cyborg victory as separate outcomes. The five-guard bomb scenario
+continues to require the full fleet victory action instead.
