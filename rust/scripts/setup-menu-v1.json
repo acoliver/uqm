@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "name": "setup-menu-v1",
+  "budgets": {
+    "max_input_ticks": 1000,
+    "max_presentations": 1500,
+    "max_wallclock_seconds": 120
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "NewGame",
+      "to": "LoadGame"
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "LoadGame",
+      "to": "SuperMelee"
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "SuperMelee",
+      "to": "Setup"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "capture",
+      "label": "setup-menu"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "capture",
+      "label": "setup-audio"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "capture",
+      "label": "main-menu-after-setup"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "Setup",
+      "to": "SuperMelee"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

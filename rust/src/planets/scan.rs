@@ -45,7 +45,7 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_INFO, SOLARSYS_STATE};
 
 #[no_mangle]
-unsafe extern "C" fn callGenerateForScanType(
+pub(crate) unsafe extern "C" fn callGenerateForScanType(
     system: *const SOLARSYS_STATE,
     world: *const PLANET_DESC,
     node: u16,
