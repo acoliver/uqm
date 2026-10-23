@@ -1459,3 +1459,6 @@ pub unsafe extern "C" fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
 pub unsafe extern "C" fn rust_task_switch() {
     task_switch();
 }
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod legacy_abi;
