@@ -1279,3 +1279,14 @@ specified response is not offered. Homeworld contact is not dismissed.
 `stop_at_encounter` on `navigate_to_orbit` can yield at a preview, recorded as
 `contact_reached`, distinct from `orbit_reached`. A communication-response wait
 uses Select to Hail a preview rather than waiting forever outside dialogue.
+
+The committed `spindle-pkunk.sav` is the slot-1 output of the passing
+`campaign-s02-spindle-pkunk` native producer `pt-p4-17`. It resumes in local
+flight at Gamma Krueger, with Clear Spindle aboard, Pkunk manner 3, four living
+Furies and the original Earthling Cruiser, crew 46, raw fuel 3457 and RU 1464.
+The producer buys 42 fuel units for 840 RU before departure and preserves its
+funded-Sol predecessor in slot 0. `load-spindle-pkunk-v1` checks these values
+against the extracted save through the ordinary Load menu. The adjacent
+provenance records the parent, producing script, seed, output slot and decoded
+snapshot. Native screen checks retain an intermediate hyperspace capture so
+Sol and Gamma Krueger solar views are not mistaken for a missing transition.
