@@ -1,6 +1,6 @@
 uqm_CFILES="sdl2_pure.c
 		sdl_common.c sdl2_common.c
-		canvas.c"
+		"
 uqm_HFILES="opengl.h palette.h
 		primitives.h pure.h rotozoom.h
 		scalers.h sdl_common.h sdluio.h"
