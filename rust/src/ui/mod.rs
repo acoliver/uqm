@@ -11,3 +11,4 @@ pub mod settings;
 pub mod confirm;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 mod palette;
+pub mod getchar;
