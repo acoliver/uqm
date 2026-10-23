@@ -204,19 +204,22 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
-    with_game_clock(|clock| {
-        // Decrement tick count
+    let changed_day = with_game_clock(|clock| {
         if clock.tick_count > 0 {
             clock.tick_count -= 1;
         }
-
-        // Check if we've reached a new day
-        if clock.tick_count == 0 && clock.day_in_ticks > 0 {
+        if clock.tick_count <= 0 && clock.day_in_ticks > 0 {
             clock.tick_count = clock.day_in_ticks;
             next_clock_day_internal(clock);
-            // Note: processClockDayEvents is handled by C code
+            true
+        } else {
+            false
         }
     });
+    if changed_day {
+        #[cfg(not(test))]
+        crate::time::clock_abi::live::finish_clock_day();
+    }
 }
 
 // Move game clock forward by specific number of days
@@ -226,13 +229,12 @@ pub unsafe extern "C" fn rust_clock_tick() {
 pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
     log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
 
-    with_game_clock(|clock| {
-        for _ in 0..days {
-            next_clock_day_internal(clock);
-            // Note: processClockDayEvents is handled by C code
-        }
-        clock.tick_count = clock.day_in_ticks;
-    });
+    for _ in 0..days {
+        with_game_clock(next_clock_day_internal);
+        #[cfg(not(test))]
+        crate::time::clock_abi::live::finish_clock_day();
+    }
+    with_game_clock(|clock| clock.tick_count = clock.day_in_ticks);
 }
 
 // Lock the game clock (for debugging)
