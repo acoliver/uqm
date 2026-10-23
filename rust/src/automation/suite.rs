@@ -96,6 +96,7 @@ pub struct ScenarioRow {
 /// Adding a scenario file without adding a row here fails
 /// [`tests::every_scenario_on_disk_is_classified`], which is the point.
 pub const MATRIX: &[ScenarioRow] = &[
+    row("load-utwig-alliance-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s09c-syreen-vault",
         &[
@@ -128,24 +129,6 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::NavigationOrbitScan,
             Domain::CommunicationChoices,
             Domain::PlanetSideResults,
-        ],
-    ),
-    row(
-        "campaign-s06c-utwig-bomb",
-        &[
-            Domain::SaveLoad,
-            Domain::NavigationOrbitScan,
-            Domain::CommunicationChoices,
-            Domain::BattleOutcomes,
-            Domain::PlanetSideResults,
-        ],
-    ),
-    row(
-        "campaign-s06b-bomb-approach",
-        &[
-            Domain::SaveLoad,
-            Domain::NavigationOrbitScan,
-            Domain::CommunicationChoices,
         ],
     ),
     row(
