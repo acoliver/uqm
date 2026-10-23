@@ -5,6 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "build/navigation.rs"]
+mod navigation;
+
 /// One C source per line, relative to the repository root. Deleting a ported
 /// C file means deleting it and its line here.
 const C_SOURCE_LIST: &str = "build/c-sources.txt";
@@ -86,6 +89,7 @@ fn run() -> Result<(), String> {
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
     generate_global_state_abi_bindings()?;
+    navigation::generate()?;
     generate_ship_abi_bindings()?;
     generate_netplay_abi_bindings()?;
     generate_graphics_abi_bindings()?;

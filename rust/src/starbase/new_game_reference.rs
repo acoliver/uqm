@@ -1,18 +1,8 @@
-//! The flagship a new game starts with, read from the C reference source.
-//!
-//! The Outfit tests need a hull that matches what `InitGameStructures`
-//! builds (`globdata.c:386-424`), not one typed in from memory. This module
-//! reads the piece numbers from `sis.h` and the assignments from
-//! `globdata.c`, both embedded at build time, so a change to either file
-//! changes the fixture.
+//! Starting flagship fixture from the live Rust equipment and price initializer.
 
 use super::platform::SisView;
 
 const SIS_H: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../sc2/src/uqm/sis.h"));
-const GLOBDATA_C: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../sc2/src/uqm/globdata.c"
-));
 const MODULES_MENU_ANI: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../sc2/content/base/ui/modulesmenu.ani"
@@ -80,28 +70,11 @@ impl PieceNumbers {
     }
 }
 
-/// `#define NAME value` of `sis.h`, for a plain number.
-/// `GLOBAL (CrewCost) = N;` of `InitGameStructures` (`globdata.c`).
 pub fn new_game_crew_cost() -> u8 {
-    let start = GLOBDATA_C
-        .find("GLOBAL (CrewCost) =")
-        .expect("the crew price in globdata.c");
-    let tail = &GLOBDATA_C[start + "GLOBAL (CrewCost) =".len()..];
-    tail[..tail.find(';').expect("an assignment ends in a semicolon")]
-        .trim()
-        .parse()
-        .expect("the crew price is a number")
-}
-
-pub fn sis_h_define(name: &str) -> u32 {
-    let line = SIS_H
-        .lines()
-        .find(|line| line.split_whitespace().take(2).eq(["#define", name]))
-        .unwrap_or_else(|| panic!("sis.h defines {name}"));
-    line.split_whitespace()
-        .nth(2)
-        .and_then(|value| value.parse().ok())
-        .unwrap_or_else(|| panic!("{name} is not a plain number"))
+    let mut sis = unsafe { std::mem::zeroed() };
+    let mut state = unsafe { std::mem::zeroed() };
+    crate::navigation::initial_state::prices(&mut sis, &mut state);
+    state.CrewCost
 }
 
 /// Frames in an `.ani` file: one line per frame.
@@ -131,131 +104,22 @@ pub struct NewGameFlagship {
     pub fuel_cost: u8,
 }
 
-/// The `GLOBAL` and `GLOBAL_SIS` fields the Outfit screens read.
-const TRACKED_FIELDS: [&str; 9] = [
-    "DriveSlots",
-    "JetSlots",
-    "ModuleSlots",
-    "ModuleCost",
-    "NumLanders",
-    "CrewEnlisted",
-    "FuelOnBoard",
-    "ResUnits",
-    "FuelCost",
-];
-
-enum Target {
-    Whole,
-    At(usize),
-}
-
-/// The `Field[index]` or `(Field)` an assignment's left side names.
-fn assigned(left: &str, pieces: &PieceNumbers) -> Option<(String, Target)> {
-    let open = left.rfind('(')?;
-    let tail = &left[open + 1..];
-    if let Some(bracket) = tail.find('[') {
-        let field = tail[..bracket].trim().to_owned();
-        let index = tail[bracket + 1..tail.find(']')?].trim();
-        let target = match index {
-            "i" => Target::Whole,
-            _ => Target::At(
-                index
-                    .parse::<usize>()
-                    .unwrap_or_else(|_| pieces.get(index) as usize),
-            ),
-        };
-        Some((field, target))
-    } else {
-        let close = tail.find(')')?;
-        Some((tail[..close].trim().to_owned(), Target::Whole))
-    }
-}
-
-fn value_of(right: &str, pieces: &PieceNumbers, cost_scale: u32) -> u32 {
-    let right = right.trim();
-    if let Some((base, add)) = right.split_once('+') {
-        return value_of(base, pieces, cost_scale) + value_of(add, pieces, cost_scale);
-    }
-    if let Some((dividend, divisor)) = right.split_once('/') {
-        assert_eq!(divisor.trim(), "MODULE_COST_SCALE");
-        return value_of(dividend, pieces, cost_scale) / cost_scale;
-    }
-    if right == "EMPTY_SLOT" {
-        return pieces.get("NUM_MODULES");
-    }
-    if right.contains("FUEL_TANK_SCALE") {
-        let (times, _) = right.split_once('*').expect("a product");
-        return times.trim().parse::<u32>().expect("a count") * sis_h_define("FUEL_TANK_SCALE");
-    }
-    right.parse().unwrap_or_else(|_| match right {
-        "CREW_POD_CAPACITY" => sis_h_define("CREW_POD_CAPACITY"),
-        _ => pieces.get(right),
-    })
-}
-
 impl NewGameFlagship {
-    pub fn from_c_source() -> Self {
-        let pieces = PieceNumbers::from_sis_h();
-        let cost_scale = sis_h_define("MODULE_COST_SCALE");
-        let start = GLOBDATA_C
-            .find("for (i = 0; i < NUM_DRIVE_SLOTS; ++i)")
-            .expect("slot initialisation in globdata.c");
-        let end = start
-            + GLOBDATA_C[start..]
-                .find("GLOBAL_SIS (NumLanders) = 1;")
-                .expect("lander count in globdata.c")
-            + "GLOBAL_SIS (NumLanders) = 1;".len();
-        let mut flagship = Self {
-            drive_slots: [0; 11],
-            jet_slots: [0; 8],
-            module_slots: [0; 16],
-            module_cost: [0; 20],
-            num_landers: 0,
-            crew_enlisted: 0,
-            fuel_on_board: 0,
-            res_units: 0,
-            fuel_cost: 0,
-        };
-
-        for statement in GLOBDATA_C[start..end].split(';') {
-            if !statement.contains('=') || !statement.contains("GLOBAL") {
-                continue;
-            }
-            let mut parts: Vec<&str> = statement.split('=').collect();
-            let right = parts.pop().expect("an assignment has a right side");
-            for left in parts {
-                let Some((field, target)) = assigned(left, &pieces) else {
-                    continue;
-                };
-                if !TRACKED_FIELDS.contains(&field.as_str()) {
-                    continue;
-                }
-                let value = value_of(right, &pieces, cost_scale);
-                flagship.assign(&field, &target, value);
-            }
-        }
-        flagship
-    }
-
-    fn assign(&mut self, field: &str, target: &Target, value: u32) {
-        fn fill<const N: usize>(slots: &mut [u8; N], target: &Target, value: u32) {
-            let value = u8::try_from(value).expect("a slot byte");
-            match target {
-                Target::Whole => slots.fill(value),
-                Target::At(index) => slots[*index] = value,
-            }
-        }
-        match field {
-            "DriveSlots" => fill(&mut self.drive_slots, target, value),
-            "JetSlots" => fill(&mut self.jet_slots, target, value),
-            "ModuleSlots" => fill(&mut self.module_slots, target, value),
-            "ModuleCost" => fill(&mut self.module_cost, target, value),
-            "NumLanders" => self.num_landers = u8::try_from(value).expect("a lander count"),
-            "CrewEnlisted" => self.crew_enlisted = u16::try_from(value).expect("a crew count"),
-            "FuelOnBoard" => self.fuel_on_board = value,
-            "ResUnits" => self.res_units = value,
-            "FuelCost" => self.fuel_cost = u8::try_from(value).expect("a fuel cost"),
-            other => unreachable!("{other} is not a tracked field"),
+    pub fn from_initializer() -> Self {
+        let mut sis = unsafe { std::mem::zeroed() };
+        let mut state = unsafe { std::mem::zeroed() };
+        crate::navigation::initial_state::equipment(&mut sis);
+        crate::navigation::initial_state::prices(&mut sis, &mut state);
+        Self {
+            drive_slots: sis.DriveSlots,
+            jet_slots: sis.JetSlots,
+            module_slots: sis.ModuleSlots,
+            module_cost: state.ModuleCost,
+            num_landers: sis.NumLanders,
+            crew_enlisted: sis.CrewEnlisted,
+            fuel_on_board: sis.FuelOnBoard,
+            res_units: sis.ResUnits,
+            fuel_cost: state.FuelCost,
         }
     }
 
@@ -299,8 +163,8 @@ mod tests {
     }
 
     #[test]
-    fn the_new_game_hull_comes_from_the_c_initializer() {
-        let flagship = NewGameFlagship::from_c_source();
+    fn the_new_game_hull_comes_from_the_live_initializer() {
+        let flagship = NewGameFlagship::from_initializer();
         // Drive slots 5 and 6 hold FUSION_THRUSTER, the rest EMPTY_SLOT + 0.
         let mut drives = [20; 11];
         drives[5] = 1;
@@ -327,8 +191,8 @@ mod tests {
     }
 
     #[test]
-    fn the_new_game_prices_are_the_c_costs_in_module_cost_units() {
-        let flagship = NewGameFlagship::from_c_source();
+    fn the_new_game_prices_preserve_the_original_costs_in_module_cost_units() {
+        let flagship = NewGameFlagship::from_initializer();
         let mut costs = [0; 20];
         costs[ModuleType::PlanetLander as usize] = 10;
         costs[ModuleType::FusionThruster as usize] = 10;
@@ -343,7 +207,7 @@ mod tests {
 
     #[test]
     fn the_new_game_hull_is_valid_for_the_module_slots_model() {
-        let flagship = NewGameFlagship::from_c_source();
+        let flagship = NewGameFlagship::from_initializer();
         ModuleSlots::from_raw(&flagship.module_slots).expect("native hull validates");
     }
 
