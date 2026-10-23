@@ -2,7 +2,7 @@
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 mod engine {
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
-    use std::{ffi::c_void, mem, ptr};
+    use std::{mem, ptr};
 
     const MAX_CREW: u16 = 6;
     const MAX_ENERGY: u8 = 4;
@@ -14,7 +14,7 @@ mod engine {
     const DESTRUCT_SWITCH: u16 = 12 * 3 - 3;
     const PLAY_VICTORY_DITTY: u16 = 1 << 9;
 
-    use crate::sound::types::CSoundPosition as SoundPosition;
+    use crate::battle::sounds::{CalcSoundPosition, PlaySound};
 
     unsafe extern "C" {
         fn getGameState(state: *const BYTE, start: i32, end: i32) -> BYTE;
@@ -24,8 +24,6 @@ mod engine {
         fn FindAliveStarShip(dead_ship: *mut ELEMENT) -> *mut STARSHIP;
         fn SetWinnerStarShip(winner: *mut STARSHIP);
         fn RecordShipDeath(dead_ship: *mut ELEMENT);
-        fn CalcSoundPosition(ship: *mut ELEMENT) -> SoundPosition;
-        fn PlaySound(sound: *mut c_void, pos: SoundPosition, source: *mut c_void, priority: BYTE);
         fn intruder_preprocess(marine: *mut ELEMENT);
         fn marine_collision(a: *mut ELEMENT, pa: *mut POINT, b: *mut ELEMENT, pb: *mut POINT);
     }

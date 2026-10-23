@@ -121,7 +121,7 @@ extern "C" {
     pub fn RemoveSoundsForObject(element: *mut Element);
 
     /// Play music track
-    pub fn PlayMusic(music: MusicRef, looping: c_int);
+    pub fn PlayMusic(music: MusicRef, looping: u32, priority: u8);
 
     /// Stop currently playing music
     pub fn StopMusic();
@@ -149,10 +149,10 @@ extern "C" {
     // --- Input Integration ---
 
     /// Convert current input state to battle input flags
-    pub fn CurrentInputToBattleInput(player_nr: c_int) -> c_int;
+    pub fn CurrentInputToBattleInput(player_nr: u16) -> u8;
 
     /// Process input events
-    pub fn DoInput(input_state: *mut c_void, exclusive: c_int) -> c_int;
+    pub fn DoInput(input_state: *mut c_void, exclusive: u32);
 
     // --- Resource Integration ---
 
@@ -201,7 +201,7 @@ extern "C" {
     // --- Space/Galaxy ---
 
     /// Move the SIS ship in hyperspace
-    pub fn MoveSIS(dx: *mut c_int, dy: *mut c_int);
+    pub fn MoveSIS(dx: *mut i16, dy: *mut i16);
 
     /// Move galaxy background for parallax
     pub fn MoveGalaxy(view_state: c_int, dx: c_int, dy: c_int);

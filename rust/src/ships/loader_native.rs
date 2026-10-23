@@ -27,7 +27,7 @@ mod engine {
         fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
         fn DestroyMusic(music: *mut c_void);
         fn LoadSoundInstance(res: *const c_char) -> *mut c_void;
-        fn DestroySound(sound: *mut c_void) -> c_int;
+        fn DestroySound(sound: *mut c_void);
         fn load_animation(
             frames: *mut c_void,
             big: *const c_char,

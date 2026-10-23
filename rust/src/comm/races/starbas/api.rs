@@ -53,7 +53,7 @@ mod live {
         fn DrawCargoStrings(old: u8, new: u8);
         fn ShowRemainingCapacity();
         fn ClearSISRect(flags: u16);
-        fn AnyButtonPress(detect_special: u8) -> u8;
+        fn AnyButtonPress(detect_special: u32) -> u32;
         fn TaskSwitch();
         fn SleepThread(ticks: i32);
         fn SleepThreadUntil(time: u32);

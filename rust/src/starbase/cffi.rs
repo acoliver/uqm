@@ -83,7 +83,7 @@ extern "C" {
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn GetStringAddress(entry: *mut c_void) -> *const c_char;
     fn SetContextClipRect(rect: *mut CRect);
-    fn AnyButtonPress(detect_special: u8) -> u8;
+    fn AnyButtonPress(detect_special: u32) -> u32;
     fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn ReleaseStringTable(entry: *mut c_void) -> *mut c_void;

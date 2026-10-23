@@ -358,7 +358,9 @@ mod engine {
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-pub use engine::*;
+pub use engine::{
+    crew_collision, crew_preprocess, do_damage, spawn_asteroid, spawn_planet, AbandonShip,
+};
 
 #[cfg(test)]
 mod tests {

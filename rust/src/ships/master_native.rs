@@ -152,7 +152,10 @@ mod engine {
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-pub use engine::*;
+pub use engine::{
+    master_q, FindMasterShip, FindMasterShipIndex, FreeMasterShipList, GetShipCostFromIndex,
+    GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,
+};
 
 #[cfg(test)]
 mod tests {

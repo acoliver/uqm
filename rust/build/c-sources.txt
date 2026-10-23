@@ -19,7 +19,6 @@ sc2/src/port.c
 sc2/src/uqm.c
 sc2/src/uqm/battle.c
 sc2/src/uqm/border.c
-sc2/src/uqm/build.c
 sc2/src/uqm/cleanup.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
@@ -56,13 +55,11 @@ sc2/src/uqm/save.c
 sc2/src/uqm/settings.c
 sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
-sc2/src/uqm/ship.c
 sc2/src/uqm/shipstat.c
 sc2/src/uqm/shipyard.c
 sc2/src/uqm/sis.c
 sc2/src/uqm/starbase.c
 sc2/src/uqm/starcon.c
-sc2/src/uqm/status.c
 sc2/src/uqm/supermelee/buildpick.c
 sc2/src/uqm/supermelee/loadmele.c
 sc2/src/uqm/supermelee/melee.c

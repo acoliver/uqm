@@ -66,7 +66,7 @@ mod live {
         fn DevicesMenu() -> i32;
         fn CargoMenu();
         fn RosterMenu() -> i32;
-        fn GameOptions() -> i32;
+        fn GameOptions() -> u32;
         fn StarMap() -> i32;
         fn RepairSISBorder();
         fn DoMenuChooser(menu: *mut MENU_STATE, first: u8) -> u32;
