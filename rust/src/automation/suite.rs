@@ -99,6 +99,24 @@ pub struct ScenarioRow {
 /// [`tests::every_scenario_on_disk_is_classified`], which is the point.
 pub const MATRIX: &[ScenarioRow] = &[
     row(
+        "campaign-s09f-funded-shuttle",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::PlanetSideResults,
+        ],
+    ),
+    row(
+        "campaign-s09g-funded-vault",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::PlanetSideResults,
+        ],
+    ),
+    row(
         "campaign-s08b-crew-ready",
         &[
             Domain::SaveLoad,
