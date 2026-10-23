@@ -1,6 +1,6 @@
 use super::descriptor::*;
 use super::*;
-use crate::callback::ffi::{AlarmHandle, Alarm_addRelativeMs, Alarm_remove};
+use crate::callback::ffi::{AlarmId, Alarm_addRelativeMs, Alarm_remove};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -36,7 +36,7 @@ pub struct ConnectState {
     info_ptr: *mut libc::addrinfo,
     resolve_state: *mut ResolveState,
     pub(super) nd: *mut NetDescriptor,
-    alarm: *mut AlarmHandle,
+    alarm: Option<AlarmId>,
 }
 
 /// # Safety
@@ -54,7 +54,7 @@ pub unsafe extern "C" fn ConnectState_decRef(state: *mut ConnectState) -> bool {
     assert!((*state).ref_count > 0);
     (*state).ref_count -= 1;
     if (*state).ref_count == 0 {
-        assert!((*state).nd.is_null() && (*state).alarm.is_null());
+        assert!((*state).nd.is_null() && (*state).alarm.is_none());
         assert!((*state).info.is_null() && (*state).info_ptr.is_null());
         drop(Box::from_raw(state));
         true
@@ -71,9 +71,9 @@ pub unsafe extern "C" fn ConnectState_close(state: *mut ConnectState) {
         resolve_close((*state).resolve_state);
         (*state).resolve_state = ptr::null_mut();
     }
-    if !(*state).alarm.is_null() {
+    if (*state).alarm.is_some() {
         Alarm_remove((*state).alarm);
-        (*state).alarm = ptr::null_mut();
+        (*state).alarm = None;
     }
     if !(*state).nd.is_null() {
         NetDescriptor_close((*state).nd);
@@ -104,9 +104,9 @@ unsafe fn report_error(state: *mut ConnectState, error: &ConnectError) {
 
 unsafe extern "C" fn connect_callback(nd: *mut NetDescriptor) {
     let state = NetDescriptor_getExtra(nd).cast::<ConnectState>();
-    if !(*state).alarm.is_null() {
+    if (*state).alarm.is_some() {
         Alarm_remove((*state).alarm);
-        (*state).alarm = ptr::null_mut();
+        (*state).alarm = None;
     }
     if (*state).state == 0 {
         ConnectState_decRef(state);
@@ -137,10 +137,10 @@ unsafe extern "C" fn connect_callback(nd: *mut NetDescriptor) {
     assert!(released, "connect callback must close its state");
 }
 
-extern "C" fn timeout_callback(arg: *mut c_void) {
+fn timeout_callback(arg: usize) {
     unsafe {
-        let state = arg.cast::<ConnectState>();
-        (*state).alarm = ptr::null_mut();
+        let state = arg as *mut ConnectState;
+        (*state).alarm = None;
         NetDescriptor_close((*state).nd);
         (*state).nd = ptr::null_mut();
         (*state).info_ptr = (*(*state).info_ptr).ai_next;
@@ -148,10 +148,10 @@ extern "C" fn timeout_callback(arg: *mut c_void) {
     }
 }
 
-extern "C" fn retry_callback(arg: *mut c_void) {
+fn retry_callback(arg: usize) {
     unsafe {
-        let state = arg.cast::<ConnectState>();
-        (*state).alarm = ptr::null_mut();
+        let state = arg as *mut ConnectState;
+        (*state).alarm = None;
         (*state).info_ptr = (*state).info;
         connect_next(state);
     }
@@ -204,11 +204,11 @@ unsafe fn connect_next(state: *mut ConnectState) {
                 return;
             }
             NetDescriptor_setWriteCallback((*state).nd, Some(connect_callback));
-            assert!((*state).alarm.is_null());
+            assert!((*state).alarm.is_none());
             (*state).alarm = Alarm_addRelativeMs(
                 (*state).flags.timeout as u32,
                 timeout_callback,
-                state.cast(),
+                state as usize,
             );
             return;
         }
@@ -228,11 +228,11 @@ unsafe fn connect_next(state: *mut ConnectState) {
             },
         );
     } else {
-        assert!((*state).alarm.is_null());
+        assert!((*state).alarm.is_none());
         (*state).alarm = Alarm_addRelativeMs(
             (*state).flags.retry_delay_ms as u32,
             retry_callback,
-            state.cast(),
+            state as usize,
         );
     }
 }
@@ -309,7 +309,7 @@ pub unsafe extern "C" fn connectHostByName(
         info_ptr: ptr::null_mut(),
         resolve_state: ptr::null_mut(),
         nd: ptr::null_mut(),
-        alarm: ptr::null_mut(),
+        alarm: None,
     }));
     let mut resolve_flags = ResolveFlags { dummy: 0 };
     (*state).resolve_state = getaddrinfo_async(

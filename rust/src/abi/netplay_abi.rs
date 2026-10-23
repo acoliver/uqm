@@ -676,27 +676,12 @@ pub const ConnectStateState_Connect_closed: ConnectStateState = 0;
 pub const ConnectStateState_Connect_resolving: ConnectStateState = 1;
 pub const ConnectStateState_Connect_connecting: ConnectStateState = 2;
 pub type ConnectStateState = ::std::os::raw::c_uint;
-pub type CallbackID = *mut ::std::os::raw::c_void;
-pub type CallbackArg = *mut ::std::os::raw::c_void;
-pub type CallbackFunction = ::std::option::Option<unsafe extern "C" fn(arg: CallbackArg)>;
-extern "C" {
-    pub fn Callback_init();
-}
-extern "C" {
-    pub fn Callback_uninit();
-}
-extern "C" {
-    pub fn Callback_add(callback: CallbackFunction, arg: CallbackArg) -> CallbackID;
-}
-extern "C" {
-    pub fn Callback_remove(id: CallbackID) -> bool;
-}
-extern "C" {
-    pub fn Callback_process();
-}
-extern "C" {
-    pub fn Callback_haveMore() -> bool;
-}
+pub use crate::callback::ffi::Callback_init;
+pub use crate::callback::ffi::Callback_uninit;
+pub use crate::callback::ffi::Callback_add;
+pub use crate::callback::ffi::Callback_remove;
+pub use crate::callback::ffi::Callback_process;
+pub use crate::callback::ffi::Callback_haveMore;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ResolveError {
@@ -1883,55 +1868,15 @@ extern "C" {
 extern "C" {
     pub fn Netplay_NotifyAll_battleInput(input: BATTLE_INPUT_STATE);
 }
-extern "C" {
-    pub fn Async_process();
-}
-extern "C" {
-    pub fn Async_timeBeforeNextMs() -> uint32;
-}
-pub type AlarmTime = uint32;
-pub type AlarmCallbackArg = *mut ::std::os::raw::c_void;
-pub type AlarmCallback = ::std::option::Option<unsafe extern "C" fn(arg: AlarmCallbackArg)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Alarm {
-    pub index: usize,
-    pub time: AlarmTime,
-    pub callback: AlarmCallback,
-    pub arg: AlarmCallbackArg,
-}
-extern "C" {
-    pub fn Alarm_init();
-}
-extern "C" {
-    pub fn Alarm_uninit();
-}
-extern "C" {
-    pub fn Alarm_addAbsoluteMs(
-        ms: uint32,
-        callback: AlarmCallback,
-        arg: AlarmCallbackArg,
-    ) -> *mut Alarm;
-}
-extern "C" {
-    pub fn Alarm_addRelativeMs(
-        ms: uint32,
-        callback: AlarmCallback,
-        arg: AlarmCallbackArg,
-    ) -> *mut Alarm;
-}
-extern "C" {
-    pub fn Alarm_remove(alarm: *mut Alarm);
-}
-extern "C" {
-    pub fn Alarm_processOne() -> bool;
-}
-extern "C" {
-    pub fn Alarm_processAll();
-}
-extern "C" {
-    pub fn Alarm_timeBeforeNextMs() -> uint32;
-}
+pub use crate::callback::ffi::Async_process;
+pub use crate::callback::ffi::Async_timeBeforeNextMs;
+pub use crate::callback::ffi::Alarm_init;
+pub use crate::callback::ffi::Alarm_uninit;
+pub use crate::callback::ffi::Alarm_addAbsoluteMs;
+pub use crate::callback::ffi::Alarm_addRelativeMs;
+pub use crate::callback::ffi::Alarm_remove;
+pub use crate::callback::ffi::Alarm_processOne;
+pub use crate::callback::ffi::Alarm_timeBeforeNextMs;
 extern "C" {
     pub fn Netplay_localReady(
         conn: *mut NetConnection,

@@ -1,8 +1,4 @@
-//! Heap + Callback + Alarm + Async — ported from C `libs/heap`, `libs/callback`.
-//!
-//! This module replaces four C files (heap.c, callback.c, alarm.c, async.c)
-//! with idiomatic Rust. The C headers remain for type declarations; the
-//! function symbols are resolved from here via `#[no_mangle] extern "C"`.
+//! Game-thread callback and timed-alarm dispatch with Rust-owned closures.
 //!
 //! ## Architecture
 //!

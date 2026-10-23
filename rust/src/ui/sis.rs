@@ -1,10 +1,10 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
-use crate::callback::ffi::{AlarmHandle, Alarm_addAbsoluteMs, Alarm_remove};
+use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
-use std::{ffi::c_void, mem, ptr};
+use std::{mem, ptr};
 
 mod capacity;
 use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
@@ -15,7 +15,7 @@ static mut NEXT_PILOT_TIME: TimeCount = 0;
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
 static mut FLASH_CONTEXT: *mut FlashContext = ptr::null_mut();
 static mut FLASH_RECT: RECT = unsafe { mem::zeroed() };
-static mut FLASH_ALARM: *mut AlarmHandle = ptr::null_mut();
+static mut FLASH_ALARM: Option<AlarmId> = None;
 static mut FLASH_PAUSED: BOOLEAN = 0;
 pub static mut UPDATE_FLASH_RECT_RECURSION: COUNT = 0;
 
@@ -1056,7 +1056,7 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     }
 }
 
-extern "C" fn update_flash_rect(_arg: *mut c_void) {
+fn update_flash_rect(_arg: ()) {
     unsafe {
         if FLASH_CONTEXT.is_null() {
             return;
@@ -1070,7 +1070,7 @@ unsafe fn schedule_flash_alarm() {
     let ms = (next / ONE_SECOND)
         .wrapping_mul(1000)
         .wrapping_add((next % ONE_SECOND) * 1000 / ONE_SECOND);
-    FLASH_ALARM = Alarm_addAbsoluteMs(ms, update_flash_rect, ptr::null_mut());
+    FLASH_ALARM = Alarm_addAbsoluteMs(ms, update_flash_rect, ());
 }
 /// # Safety
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
@@ -1109,7 +1109,7 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
         }
     } else if !FLASH_CONTEXT.is_null() {
         Alarm_remove(FLASH_ALARM);
-        FLASH_ALARM = ptr::null_mut();
+        FLASH_ALARM = None;
         Flash_terminate(FLASH_CONTEXT);
         FLASH_CONTEXT = ptr::null_mut();
     }
@@ -1117,7 +1117,8 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
 pub unsafe fn PreUpdateFlashRect() {
-    if !FLASH_ALARM.is_null() {
+    let alarm = FLASH_ALARM;
+    if alarm.is_some() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_add(1);
         if UPDATE_FLASH_RECT_RECURSION > 1 {
             return;
@@ -1128,7 +1129,8 @@ pub unsafe fn PreUpdateFlashRect() {
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
 pub unsafe fn PostUpdateFlashRect() {
-    if !FLASH_ALARM.is_null() {
+    let alarm = FLASH_ALARM;
+    if alarm.is_some() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_sub(1);
         if UPDATE_FLASH_RECT_RECURSION > 0 {
             return;
@@ -1141,7 +1143,7 @@ pub unsafe fn PostUpdateFlashRect() {
 pub unsafe fn PauseFlash() {
     if !FLASH_CONTEXT.is_null() {
         Alarm_remove(FLASH_ALARM);
-        FLASH_ALARM = ptr::null_mut();
+        FLASH_ALARM = None;
         FLASH_PAUSED = 1;
     }
 }

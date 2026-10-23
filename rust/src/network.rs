@@ -45,7 +45,7 @@ pub struct ResolveError {
 pub type ResolveCallback = Option<unsafe extern "C" fn(*mut ResolveState, *mut libc::addrinfo)>;
 pub type ResolveErrorCallback =
     Option<unsafe extern "C" fn(*mut ResolveState, *const ResolveError)>;
-type CallbackFunction = Option<unsafe extern "C" fn(*mut c_void)>;
+use crate::callback::ffi::{CallbackId, Callback_add, Callback_remove};
 
 #[repr(C)]
 pub struct ResolveState {
@@ -55,17 +55,12 @@ pub struct ResolveState {
     callback: ResolveCallback,
     error_callback: ResolveErrorCallback,
     extra: *mut c_void,
-    callback_id: *mut c_void,
+    callback_id: Option<CallbackId>,
     error: ResolveError,
     result: *mut libc::addrinfo,
 }
 
-extern "C" {
-    fn Callback_add(callback: CallbackFunction, arg: *mut c_void) -> *mut c_void;
-    fn Callback_remove(id: *mut c_void) -> bool;
-}
-
-const CALLBACK_ID_INVALID: *mut c_void = ptr::null_mut();
+const CALLBACK_ID_INVALID: Option<CallbackId> = None;
 const RESOLVE_CLOSED: c_int = 0;
 const RESOLVE_RESOLVING: c_int = 1;
 
@@ -341,7 +336,7 @@ pub unsafe extern "C" fn resolve_state_get_extra(state: *mut ResolveState) -> *m
     (*state).extra
 }
 
-unsafe extern "C" fn resolve_callback(arg: *mut c_void) {
+unsafe fn resolve_callback(arg: *mut c_void) {
     let state = arg.cast::<ResolveState>();
     (*state).callback_id = CALLBACK_ID_INVALID;
     if (*state).error.gai_res == 0 {
@@ -386,7 +381,10 @@ pub unsafe extern "C" fn getaddrinfo_async(
     state.error.gai_res = libc::getaddrinfo(node, service, hints, &mut state.result);
     state.error.err = last_errno();
     let raw = Box::into_raw(state);
-    (*raw).callback_id = Callback_add(Some(resolve_callback), raw.cast());
+    (*raw).callback_id = Callback_add(
+        |arg| unsafe { resolve_callback(arg as *mut c_void) },
+        raw as usize,
+    );
     raw
 }
 
@@ -394,7 +392,7 @@ pub unsafe extern "C" fn getaddrinfo_async(
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
 pub unsafe extern "C" fn resolve_close(state: *mut ResolveState) {
     if (*state).callback_id != CALLBACK_ID_INVALID {
-        Callback_remove((*state).callback_id);
+        Callback_remove((*state).callback_id.unwrap());
         (*state).callback_id = CALLBACK_ID_INVALID;
     }
     (*state).state = RESOLVE_CLOSED;

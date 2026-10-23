@@ -5741,24 +5741,12 @@ pub type ENCOUNTER = encounter;
 pub type CallbackID = *mut ::std::os::raw::c_void;
 pub type CallbackArg = *mut ::std::os::raw::c_void;
 pub type CallbackFunction = ::std::option::Option<unsafe extern "C" fn(arg: CallbackArg)>;
-extern "C" {
-    pub fn Callback_init();
-}
-extern "C" {
-    pub fn Callback_uninit();
-}
-extern "C" {
-    pub fn Callback_add(callback: CallbackFunction, arg: CallbackArg) -> CallbackID;
-}
-extern "C" {
-    pub fn Callback_remove(id: CallbackID) -> bool;
-}
-extern "C" {
-    pub fn Callback_process();
-}
-extern "C" {
-    pub fn Callback_haveMore() -> bool;
-}
+pub use crate::callback::ffi::Callback_init;
+pub use crate::callback::ffi::Callback_uninit;
+pub use crate::callback::ffi::Callback_add;
+pub use crate::callback::ffi::Callback_remove;
+pub use crate::callback::ffi::Callback_process;
+pub use crate::callback::ffi::Callback_haveMore;
 extern "C" {
     pub fn PlayTrack();
 }
