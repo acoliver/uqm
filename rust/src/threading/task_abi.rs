@@ -34,7 +34,7 @@ extern "C" {
     fn LockMutex(mutex: *mut c_void);
     fn UnlockMutex(mutex: *mut c_void);
     fn TaskSwitch();
-    fn log_add(level: c_int, fmt: *const c_char, ...);
+
 }
 
 /// Mirror of `struct taskstruct`.
@@ -148,9 +148,9 @@ pub unsafe extern "C" fn AssignTask(
             return task_ptr;
         }
     }
-    log_add(
+    crate::log_abi::log_message(
         LOG_ERROR,
-        c"Task error!  Task array exhausted.  Check for thread leaks.".as_ptr(),
+        "Task error!  Task array exhausted.  Check for thread leaks.",
     );
     ptr::null_mut()
 }
@@ -161,10 +161,12 @@ pub unsafe extern "C" fn AssignTask(
 pub unsafe extern "C" fn FinishTask(task: *mut TaskStruct) {
     (*task).thread.store(ptr::null_mut(), Ordering::Release);
     if Task_ClearState(task, TASK_INUSE) == 0 {
-        log_add(
+        crate::log_abi::log_message(
             LOG_DEBUG,
-            c"Task error!  Attempted to FinishTask '%s'... but it was already done!".as_ptr(),
-            (*task).name.load(Ordering::Relaxed),
+            &format!(
+                "Task error!  Attempted to FinishTask '{}'... but it was already done!",
+                std::ffi::CStr::from_ptr((*task).name.load(Ordering::Relaxed)).to_string_lossy()
+            ),
         );
     }
 }

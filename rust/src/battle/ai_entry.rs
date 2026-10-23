@@ -69,13 +69,7 @@ pub unsafe extern "C" fn computer_intelligence(
             1 << 3
         }
         Route::Unexpected => {
-            extern "C" {
-                fn log_add(level: i32, format: *const std::ffi::c_char, ...);
-            }
-            log_add(
-                3,
-                c"Warning: Unexpected state in computer_intelligence().".as_ptr(),
-            );
+            crate::log_abi::log_message(3, "Warning: Unexpected state in computer_intelligence().");
             0
         }
     }

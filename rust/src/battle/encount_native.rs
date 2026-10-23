@@ -48,7 +48,7 @@ pub const fn combat_speed(flags: u8) -> u8 {
 mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, game_state, log_add, nth_frame, player_input, race_queue, rgb15, set_activity,
+        activity, game_state, nth_frame, player_input, race_queue, rgb15, set_activity,
         set_game_state, set_player_control, set_player_input, sis_height, sis_width,
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
@@ -650,7 +650,7 @@ mod engine {
             saved = player_input(0);
             set_player_input(0, ptr::null_mut());
             if !SetPlayerInput(0) {
-                log_add(1, c"Could not set cyborg player input.".as_ptr());
+                crate::log_abi::log_message(1, "Could not set cyborg player input.");
                 // misc.h explode(): abort in DEBUG, exit(EXIT_FAILURE) otherwise.
                 if cfg!(feature = "debug-process") {
                     std::process::abort();

@@ -10647,12 +10647,6 @@ pub const log_Level_log_Info: log_Level = 4;
 pub const log_Level_log_Debug: log_Level = 5;
 pub const log_Level_log_All: log_Level = 6;
 pub type log_Level = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn log_add(arg1: log_Level, fmt: *const ::std::os::raw::c_char, ...);
-}
-extern "C" {
-    pub fn log_add_nothread(arg1: log_Level, fmt: *const ::std::os::raw::c_char, ...);
-}
 pub const WIDGET_EVENT_UP: _bindgen_ty_30 = 0;
 pub const WIDGET_EVENT_DOWN: _bindgen_ty_30 = 1;
 pub const WIDGET_EVENT_LEFT: _bindgen_ty_30 = 2;

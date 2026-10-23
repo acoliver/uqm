@@ -79,11 +79,7 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
             if lower_len < (*pTES).JoyRegLength {
                 (*pTES).JoyRegLength = lower_len;
             }
-            log_add(
-                log_Level_log_Warning,
-                c"Warning: Joystick upper-lower registers size mismatch; using the smallest subset (%d)".as_ptr(),
-                (*pTES).JoyRegLength,
-            );
+            crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*pTES).JoyRegLength));
         }
         (*pTES).CacheStr =
             HMalloc(((*pTES).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
