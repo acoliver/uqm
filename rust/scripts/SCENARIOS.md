@@ -7,11 +7,17 @@ window. Hosted CI builds and tests the game but does not run these windows.
 From the repository root:
 
 ```sh
-cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run \
+cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run \
   --scenario starbase-visit-v1 --artifacts tmp/starbase --content sc2/content/packages
-cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run \
+cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run \
   --scenario super-melee-v1 --artifacts tmp/melee --content sc2/content/packages
 ```
+
+Native runs use an optimized controller; a development-profile invocation of
+`native run` or `native smoke` re-executes it in release mode. Presentation and
+input records accumulate in bounded memory between proof boundaries. Checkpoints,
+assertions, completed wait predicates and captures flush the trace before the
+state/acknowledgement handshake; finalization retains the durability sync.
 
 Keep each run's output inside the checkout. Inspect the terminal result, semantic
 assertions and OS screenshots; internal surface captures alone cannot establish
@@ -65,7 +71,7 @@ Campaign producer scripts save through the Game menu. Extract a checkpoint only
 from a passing producer run, naming the scenario and slot explicitly:
 
 ```sh
-cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native save-extract \
+cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native save-extract \
   --scenario real-sol-starbase-alliance --artifacts tmp/alliance --slot 0 \
   --output rust/scripts/saves/allied-starbase.sav
 ```

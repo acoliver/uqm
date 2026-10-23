@@ -273,6 +273,9 @@ struct CoordInner {
     last_progress: Instant,
     sched_state: SchedulerState,
     checkpoint_step: usize,
+    native_publication_pending: bool,
+    #[cfg(feature = "debug-process")]
+    native_playable_published: bool,
     input_seen: u64,
     present_seen: u64,
     last_observed: Instant,
@@ -351,6 +354,8 @@ pub struct Coordinator {
     /// The validated script actions.
     actions: Vec<Action>,
     native_checkpoint_identity: Option<String>,
+    #[cfg(feature = "debug-process")]
+    native_linked_floors: bool,
     native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
     /// The typed main-menu transition assertions from the script.
     transitions: Vec<crate::automation::script::MainMenuTransition>,
@@ -441,6 +446,8 @@ impl Coordinator {
             seed: script.seed(),
             actions,
             native_checkpoint_identity,
+            #[cfg(feature = "debug-process")]
+            native_linked_floors: script.name() == "linked-playable-v1",
             native_trace: native_trace.ok().flatten(),
             transitions,
             watchdog_limits,
@@ -450,6 +457,9 @@ impl Coordinator {
             inner: Mutex::new(CoordInner {
                 sched_state: SchedulerState::initial(),
                 checkpoint_step: 0,
+                native_publication_pending: false,
+                #[cfg(feature = "debug-process")]
+                native_playable_published: false,
                 ready: false,
                 last_progress: now,
                 input_seen: 0,
@@ -2706,6 +2716,34 @@ impl Coordinator {
         Ok(())
     }
 
+    fn stage_native_trace(&self) -> std::io::Result<()> {
+        if let Some(journal) = &self.native_trace {
+            journal.lock().stage(&self.runtime.commit)?;
+        }
+        Ok(())
+    }
+
+    fn native_publication_boundary(&self, presentation: u64, stopping: bool) -> bool {
+        let mut inner = self.inner.lock();
+        let checkpoint = std::mem::take(&mut inner.native_publication_pending);
+        let boundary = presentation == 1 || checkpoint || stopping;
+        #[cfg(feature = "debug-process")]
+        if self.native_linked_floors {
+            if let Some(config) = super::native_window::active_native_window_config() {
+                let policy = config.acceptance_policy;
+                let post_visible = presentation - 1;
+                let stable = post_visible == policy.stable_presentation_floor;
+                let playable = !inner.native_playable_published
+                    && post_visible >= policy.playable_presentation_floor
+                    && inner.accepted_player_inputs > 0
+                    && inner.verified_battle_frames >= policy.battle_frame_floor;
+                inner.native_playable_published |= playable;
+                return boundary || stable || playable;
+            }
+        }
+        boundary
+    }
+
     fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
         self.native_checkpoint_identity.is_some()
             && self.actions[inner.checkpoint_step..inner.sched_state.step_index]
@@ -2740,7 +2778,10 @@ impl Coordinator {
             record.presentation = Some(frame.presentation_evidence());
             record.checkpoint = Some(super::trace::CheckpointEvidence { id });
             match record.to_jsonl() {
-                Ok(line) => reservation.commit_record(line),
+                Ok(line) => {
+                    reservation.commit_record(line);
+                    inner.native_publication_pending = true;
+                }
                 Err(error) => {
                     reservation.cancel();
                     self.capture_failure(inner, error);
@@ -2758,10 +2799,16 @@ impl Coordinator {
         let Some(coord) = Self::get() else {
             return false;
         };
-        #[cfg(feature = "debug-process")]
         let committed_presentation = frame.as_ref().map(|frame| frame.count);
         let stop = coord.process_present_inner(frame);
-        if let Err(error) = coord.flush_native_trace() {
+        let boundary = committed_presentation
+            .is_some_and(|presentation| coord.native_publication_boundary(presentation, stop));
+        let publication = if boundary || stop {
+            coord.flush_native_trace()
+        } else {
+            coord.stage_native_trace()
+        };
+        if let Err(error) = publication {
             Self::external_trace_failure(format!(
                 "native trace prefix publication failed: {error}"
             ));
@@ -2769,8 +2816,9 @@ impl Coordinator {
         }
         #[cfg(feature = "debug-process")]
         if let Some(committed_presentation) = committed_presentation {
-            if let Err(error) = crate::automation::native_window::publish_native_window_presentation(
+            if let Err(error) = crate::automation::native_window::record_native_window_presentation(
                 committed_presentation,
+                boundary,
             ) {
                 Self::external_trace_failure(format!(
                     "native-window state publication failed: {error}"
@@ -3071,6 +3119,8 @@ impl Coordinator {
         if self.native_trace.is_some() {
             self.flush_native_trace()
                 .map_err(|error| format!("cannot finalize native trace: {error}"))?;
+            #[cfg(feature = "debug-process")]
+            super::native_window::publish_final_native_window_presentation()?;
         } else {
             let mut trace = Vec::new();
             self.runtime
@@ -4095,6 +4145,79 @@ mod tests {
         }
         assert!(!coord.inner.lock().pending_main_menu_ready);
         assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+    }
+    #[test]
+    fn native_trace_keeps_ordinary_presentations_in_memory_until_a_boundary() {
+        const CHILD: &str = "UQM_NATIVE_BATCHED_TRACE_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::native_trace_keeps_ordinary_presentations_in_memory_until_a_boundary", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"batch-test","budgets":{"max_input_ticks":200,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_input_ticks","count":10},{"action":"capture","label":"end"},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
+        let coord = Coordinator::get().unwrap();
+        let frame = |count, generation| super::super::capture::PresentedFrame {
+            count,
+            generation,
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        assert!(!coord.process_input_inner());
+        assert!(!Coordinator::process_present(Some(frame(1, 0))));
+        let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
+        for count in 2..=8 {
+            assert!(!coord.process_input_inner());
+            assert!(!Coordinator::process_present(Some(frame(count, 0))));
+            assert_eq!(
+                std::fs::read(temp.path().join("trace.jsonl")).unwrap(),
+                first
+            );
+        }
+        while coord.inner.lock().armed_capture_label.is_none() {
+            assert!(!coord.process_input_inner());
+        }
+        assert!(!Coordinator::process_present(Some(frame(9, 1))));
+        let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
+        assert!(boundary.starts_with(&first));
+        let records: Vec<_> = std::str::from_utf8(&boundary)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .collect();
+        let presentations: Vec<_> = records
+            .iter()
+            .filter(|record| record.kind == RecordKind::Presentation)
+            .map(|record| record.presentation.as_ref().unwrap().count)
+            .collect();
+        assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
+        assert!(coord.process_input_inner());
+        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
+        assert!(finished.starts_with(&boundary));
+        let records: Vec<_> = std::str::from_utf8(&finished)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .collect();
+        assert_eq!(records.last().unwrap().kind, RecordKind::RunEnd);
+        assert!(records
+            .windows(2)
+            .all(|records| records[1].sequence == records[0].sequence + 1));
     }
 
     #[test]

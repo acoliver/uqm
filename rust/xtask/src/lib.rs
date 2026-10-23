@@ -1,7 +1,7 @@
 //! Developer tasks for the UQM Rust port: building the linked game and
 //! running the native-window scenarios against it.
 //!
-//! Usage: `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- <command>`
+//! Usage: `cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- <command>`
 //! with `debug`, `release`, `test` or `native`.
 
 use std::collections::BTreeSet;
@@ -72,6 +72,24 @@ fn run() -> Result<(), String> {
     }
     let root = repository_root()?;
     let extra: Vec<_> = args.collect();
+    #[cfg(debug_assertions)]
+    if command == "native" && matches!(extra.first().map(String::as_str), Some("run" | "smoke")) {
+        return run_command(
+            Command::new(cargo_program())
+                .current_dir(&root)
+                .args([
+                    "run",
+                    "--release",
+                    "--locked",
+                    "--manifest-path",
+                    "rust/xtask/Cargo.toml",
+                    "--",
+                    "native",
+                ])
+                .args(&extra),
+            "release native controller",
+        );
+    }
     match command.as_str() {
         "native" => native_cli::run(&root, &extra),
         _ if !extra.is_empty() => Err(format!(
@@ -86,7 +104,7 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native>".into()
+    "usage: cargo run --release --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native>".into()
 }
 
 fn repository_root() -> Result<PathBuf, String> {

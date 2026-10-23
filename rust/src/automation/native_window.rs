@@ -443,6 +443,7 @@ const TIMER_IDENT: libc::uintptr_t = libc::uintptr_t::MAX;
 /// deadlines.
 #[derive(Debug)]
 pub struct DirectoryChangeWake {
+    changed: std::sync::atomic::AtomicBool,
     #[cfg(target_os = "macos")]
     queue: std::os::fd::OwnedFd,
     #[cfg(target_os = "macos")]
@@ -460,7 +461,9 @@ impl BoundOutputDirectory {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            Ok(DirectoryChangeWake {})
+            Ok(DirectoryChangeWake {
+                changed: std::sync::atomic::AtomicBool::new(true),
+            })
         }
     }
 
@@ -512,6 +515,7 @@ impl BoundOutputDirectory {
             return Err(std::io::Error::last_os_error());
         }
         Ok(DirectoryChangeWake {
+            changed: std::sync::atomic::AtomicBool::new(true),
             queue,
             _directory: directory,
         })
@@ -519,6 +523,20 @@ impl BoundOutputDirectory {
 }
 
 impl DirectoryChangeWake {
+    /// Consume a directory notification without rereading unchanged state on
+    /// supervisor timer ticks. The initial state must always be inspected.
+    pub fn take_changed(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            self.changed
+                .swap(false, std::sync::atomic::Ordering::AcqRel)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.changed.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+
     /// Return when the directory changed or after `timeout`, whichever is
     /// first. An interrupted wait counts as a wake.
     pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
@@ -537,7 +555,12 @@ impl DirectoryChangeWake {
             // directory is re-armed by the next wait; if it fires first it
             // can only end a later wait early, and callers re-read and
             // re-validate after every wake.
-            wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, timeout)])
+            let event = wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, timeout)])?;
+            if event == Some(libc::EVFILT_VNODE) {
+                self.changed
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
+            Ok(())
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -548,6 +571,10 @@ impl DirectoryChangeWake {
 }
 
 impl super::child_session::ChangeWait for DirectoryChangeWake {
+    fn poll_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(100)
+    }
+
     fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
         DirectoryChangeWake::wait(self, timeout)
     }
@@ -1911,8 +1938,13 @@ pub fn active_native_window_config() -> Option<&'static ActiveNativeWindowConfig
 }
 
 #[cfg(feature = "debug-process")]
-pub(crate) fn publish_native_window_presentation(
+static PENDING_NATIVE_PRESENTATION: parking_lot::Mutex<Option<NativeWindowChildState>> =
+    parking_lot::Mutex::new(None);
+
+#[cfg(feature = "debug-process")]
+pub(crate) fn record_native_window_presentation(
     committed_presentation: u64,
+    boundary: bool,
 ) -> Result<(), String> {
     let Some(config) = active_native_window_config() else {
         return Ok(());
@@ -1938,7 +1970,7 @@ pub(crate) fn publish_native_window_presentation(
     let (trace_record_count, accepted_player_inputs, verified_battle_frames) =
         crate::automation::Coordinator::native_window_semantic_snapshot()
             .ok_or_else(|| "native-window semantic snapshot is unavailable".to_string())?;
-    publish_native_window_state(&NativeWindowChildState {
+    let state = NativeWindowChildState {
         schema: NATIVE_WINDOW_STATE_SCHEMA.to_string(),
         nonce: config.nonce.clone(),
         pid: std::process::id(),
@@ -1952,7 +1984,24 @@ pub(crate) fn publish_native_window_presentation(
             accepted_player_inputs,
             verified_battle_frames,
         },
-    })
+    };
+    if boundary {
+        publish_native_window_state(&state)?;
+        *PENDING_NATIVE_PRESENTATION.lock() = None;
+    } else {
+        *PENDING_NATIVE_PRESENTATION.lock() = Some(state);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "debug-process")]
+pub(crate) fn publish_final_native_window_presentation() -> Result<(), String> {
+    // Graphics teardown has already happened. Publish the exact last recorded
+    // frame, rather than querying a destroyed window or inventing a new frame.
+    if let Some(state) = PENDING_NATIVE_PRESENTATION.lock().take() {
+        publish_native_window_state(&state)?;
+    }
+    Ok(())
 }
 
 pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(), String> {
@@ -3349,8 +3398,7 @@ fn child_terminal_publications(
             return Err(NativeWindowProofError::Receipt);
         }
         if let Some(previous) = previous_publication {
-            if previous.state.committed_presentation.checked_add(1)
-                != Some(state.committed_presentation)
+            if state.committed_presentation <= previous.state.committed_presentation
                 || state.semantic.trace_record_count < previous.state.semantic.trace_record_count
                 || state.semantic.accepted_player_inputs
                     < previous.state.semantic.accepted_player_inputs
@@ -5000,10 +5048,42 @@ mod tests {
     }
 
     #[test]
+    fn sparse_publications_retain_every_observation_and_capture_obligation() {
+        let (root, _receipt, mut manifest) = playable_acceptance_fixture();
+        let required: std::collections::BTreeSet<_> = manifest
+            .window
+            .screenshots
+            .iter()
+            .map(|shot| shot.committed_presentation)
+            .chain([
+                manifest.window.first_visible_presentation,
+                manifest.window.final_committed_presentation,
+            ])
+            .collect();
+        manifest
+            .window
+            .observations
+            .retain(|observation| required.contains(&observation.committed_presentation));
+        manifest
+            .publications
+            .retain(|publication| required.contains(&publication.state.committed_presentation));
+        assert!(manifest.publications.len() < 10);
+        validate_native_acceptance_bundle(root.path(), &manifest).unwrap();
+        let mut missing_capture = manifest.clone();
+        missing_capture.publications.retain(|publication| {
+            publication.state.committed_presentation != policy().stable_presentation_floor
+        });
+        assert!(validate_native_acceptance_bundle(root.path(), &missing_capture).is_err());
+        let mut reordered = manifest.clone();
+        reordered.publications.swap(0, 1);
+        assert!(validate_native_acceptance_bundle(root.path(), &reordered).is_err());
+    }
+
+    #[test]
     fn forged_publications_are_rejected() {
         let (root, _receipt, manifest) = playable_acceptance_fixture();
         let mut missing_publication = manifest.clone();
-        missing_publication.publications.remove(121);
+        missing_publication.publications.remove(120);
         assert_eq!(
             validate_native_acceptance_bundle(root.path(), &missing_publication),
             Err(NativeWindowProofError::Receipt)
@@ -5875,6 +5955,21 @@ mod tests {
             let started = Instant::now();
             wake.wait(Duration::from_millis(20)).unwrap();
             assert!(started.elapsed() >= Duration::from_millis(20));
+        }
+
+        #[test]
+        fn timer_ticks_do_not_request_state_reads_but_publications_do() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            assert!(wake.take_changed());
+            assert!(!wake.take_changed());
+            wake.wait(Duration::from_millis(20)).unwrap();
+            assert!(!wake.take_changed());
+            publish(&bound);
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(wake.take_changed());
+            assert!(!wake.take_changed());
         }
 
         #[test]

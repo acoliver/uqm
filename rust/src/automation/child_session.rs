@@ -44,6 +44,11 @@ pub const NESTED_GROUP_TOKEN_WRITE_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_WRI
 /// poll again. Callers keep their own deadlines and always pass a bounded
 /// timeout, so a lost wake-up degrades to plain polling.
 pub trait ChangeWait {
+    /// Maximum interval for lifecycle checks when no peer notification arrives.
+    fn poll_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(1)
+    }
+
     fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()>;
 }
 
@@ -1208,13 +1213,9 @@ mod os {
     const OWNED_PROCESS_RECORD_NAME: &str = ".uqm-run-child.json";
     const RUN_LOCK_GUARD_NAME: &str = ".uqm-run-owner.guard";
     const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
-    /// The game blocks on the observer's acknowledgement for every
-    /// presentation, so the gap between observer polls is added to each frame.
-    pub(super) const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
-
     /// How long one wake may sleep: a poll interval, never past the deadline.
-    pub(super) fn poll_timeout(deadline: Instant, now: Instant) -> Duration {
-        OBSERVER_POLL_INTERVAL.min(deadline.saturating_duration_since(now))
+    pub(super) fn poll_timeout(deadline: Instant, now: Instant, interval: Duration) -> Duration {
+        interval.min(deadline.saturating_duration_since(now))
     }
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -2851,7 +2852,7 @@ mod os {
                         if now >= deadline {
                             return Ok(SupervisorEvent::Deadline);
                         }
-                        match wake.wait(poll_timeout(deadline, now)) {
+                        match wake.wait(poll_timeout(deadline, now, wake.poll_interval())) {
                             Ok(()) => {}
                             Err(error) if error.kind() == ErrorKind::Interrupted => {}
                             Err(error) => return Err(ChildSessionError::Observer(error)),
@@ -4512,10 +4513,13 @@ mod os_tests {
         assert_eq!(reads.get(), offsets.len());
         let deadline = base + micros(50_000);
         let timeouts = wake.calls();
-        assert_eq!(timeouts, vec![os::OBSERVER_POLL_INTERVAL, micros(500)]);
+        assert_eq!(timeouts, vec![SleepWait.poll_interval(), micros(500)]);
         for (offset, timeout) in [micros(0), micros(49_500)].into_iter().zip(&timeouts) {
             let now = base + offset;
-            assert_eq!(*timeout, os::poll_timeout(deadline, now));
+            assert_eq!(
+                *timeout,
+                os::poll_timeout(deadline, now, wake.poll_interval())
+            );
             assert!(now + *timeout <= deadline);
         }
     }
@@ -4524,14 +4528,28 @@ mod os_tests {
     fn poll_timeout_is_one_poll_clamped_to_the_time_left() {
         let base = std::time::Instant::now();
         let deadline = base + Duration::from_millis(10);
-        assert_eq!(os::poll_timeout(deadline, base), os::OBSERVER_POLL_INTERVAL);
         assert_eq!(
-            os::poll_timeout(deadline, deadline - Duration::from_micros(300)),
+            os::poll_timeout(deadline, base, SleepWait.poll_interval()),
+            SleepWait.poll_interval()
+        );
+        assert_eq!(
+            os::poll_timeout(
+                deadline,
+                deadline - Duration::from_micros(300),
+                SleepWait.poll_interval()
+            ),
             Duration::from_micros(300)
         );
-        assert_eq!(os::poll_timeout(deadline, deadline), Duration::ZERO);
         assert_eq!(
-            os::poll_timeout(deadline, deadline + Duration::from_millis(5)),
+            os::poll_timeout(deadline, deadline, SleepWait.poll_interval()),
+            Duration::ZERO
+        );
+        assert_eq!(
+            os::poll_timeout(
+                deadline,
+                deadline + Duration::from_millis(5),
+                SleepWait.poll_interval()
+            ),
             Duration::ZERO
         );
     }
