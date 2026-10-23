@@ -52,6 +52,34 @@ unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -
     new
 }
 
+unsafe fn process_day_events(
+    queue: *mut Queue,
+    today: (u16, u16, u16),
+    mut dispatch: impl FnMut(u8),
+) {
+    loop {
+        let head = (*queue).head;
+        if head.is_null() {
+            break;
+        }
+        let event = head.cast::<CEvent>();
+        let date = (
+            (*event).year_index,
+            u16::from((*event).month_index),
+            u16::from((*event).day_index),
+        );
+        // Saves produced by the missing dispatch implementation can contain
+        // overdue events. Execute those callbacks instead of stranding the queue.
+        if date > today {
+            break;
+        }
+        let selector = (*event).func_index;
+        crate::collections::queue::RemoveQueue(queue, head);
+        dispatch(selector);
+        crate::collections::queue::FreeLink(queue, head);
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::super::clock_bridge::*;
@@ -73,6 +101,19 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
         ptr::addr_of_mut!(GlobData.game_state.game_clock)
+    }
+
+    pub(crate) unsafe fn finish_clock_day() {
+        let clock = GetGameClock();
+        crate::ui::sis::DrawStatusMessage(ptr::null());
+        let today = (
+            (*clock).year_index,
+            u16::from((*clock).month_index),
+            u16::from((*clock).day_index),
+        );
+        process_day_events(ptr::addr_of_mut!((*clock).event_q), today, |selector| {
+            EventHandler(selector)
+        });
     }
 
     /// # Safety
@@ -185,6 +226,36 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daily_events_are_removed_before_callbacks_and_preserve_order() {
+        let mut queue: Queue = unsafe { std::mem::zeroed() };
+        assert!(InitQueue(
+            &mut queue,
+            8,
+            std::mem::size_of::<CEvent>() as u16
+        ));
+        let queue = &mut queue as *mut Queue;
+        unsafe {
+            insert_event(queue, (2155, 3, 17), 0);
+            insert_event(queue, (2156, 3, 17), 1);
+            insert_event(queue, (2156, 3, 17), 2);
+            insert_event(queue, (2156, 3, 18), 3);
+            let mut seen = Vec::new();
+            process_day_events(queue, (2156, 3, 17), |selector| {
+                seen.push(selector);
+                if selector == 1 {
+                    insert_event(queue, (2156, 3, 17), 4);
+                }
+            });
+            assert_eq!(seen, [0, 1, 2, 4]);
+            assert_eq!((*(*queue).head.cast::<CEvent>()).func_index, 3);
+            process_day_events(queue, (2156, 3, 18), |selector| seen.push(selector));
+            assert_eq!(seen, [0, 1, 2, 4, 3]);
+            assert!((*queue).head.is_null());
+        }
+        UninitQueue(queue);
+    }
 
     #[test]
     fn relative_date_carries_months_days_and_leap_years() {
