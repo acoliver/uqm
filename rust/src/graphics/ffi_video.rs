@@ -18,9 +18,15 @@ pub(super) fn sync_native_display_geometry() -> Result<(), String> {
     let state = get_gfx_state().ok_or("native graphics not initialized")?;
     let display = state.canvas.window().display_index()?;
     let bounds = state.video.display_bounds(display)?;
-    if display_geometry_changed(&mut state.native_display_bounds, bounds) {
-        // Cocoa preserves bottom-left window coordinates across desktop-height
-        // changes. Native proof owns a fixed top-left client rectangle instead.
+    let display_changed = display_geometry_changed(&mut state.native_display_bounds, bounds);
+    let position = state.canvas.window().position();
+    if display_changed || position != (config.client_bounds.x, config.client_bounds.y) {
+        // Cocoa may deliver its work-area adjustment after the display change.
+        // Keep the actual proof window at the owned position before publishing.
+        rust_bridge_log_msg(&format!(
+            "NATIVE_PLACEMENT: display={bounds:?} changed={display_changed} client={position:?} requested=({}, {})",
+            config.client_bounds.x, config.client_bounds.y
+        ));
         state.canvas.window_mut().set_position(
             sdl2::video::WindowPos::Positioned(config.client_bounds.x),
             sdl2::video::WindowPos::Positioned(config.client_bounds.y),
