@@ -109,6 +109,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("load-southeast-staging-v1", &[Domain::SaveLoad]),
     row("load-portal-staging-v1", &[Domain::SaveLoad]),
+    row("load-portal-sol-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07e-portal-staging",
         &[
