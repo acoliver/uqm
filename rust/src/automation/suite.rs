@@ -96,6 +96,15 @@ pub struct ScenarioRow {
 /// Adding a scenario file without adding a row here fails
 /// [`tests::every_scenario_on_disk_is_classified`], which is the point.
 pub const MATRIX: &[ScenarioRow] = &[
+    row(
+        "campaign-s07-taalo-protected",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::PlanetSideResults,
+        ],
+    ),
     row("load-repaired-ultron-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s05b-repaired-ultron",
