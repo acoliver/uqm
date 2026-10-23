@@ -28,6 +28,8 @@ mod live {
     #[no_mangle]
     static mut PlanetContext: *mut c_void = std::ptr::null_mut();
 
+    use crate::ui::border::DrawSISFrame;
+    use crate::ui::sis::RepairSISBorder;
     extern "C" {
         static GlobData: CGlobData;
         static LastActivity: u16;
@@ -45,7 +47,7 @@ mod live {
         fn GetScanContext(owner: *mut i32) -> *mut c_void;
         fn DestroyScanContext();
         fn DrawStarBackGround();
-        fn DrawSISFrame();
+
         fn DrawSISMessage(message: *const c_char);
         fn DrawSISTitle(title: *const c_char);
         fn LoadIntoExtraScreen(rect: *mut CRect);
@@ -68,7 +70,7 @@ mod live {
         fn RosterMenu() -> i32;
         fn GameOptions() -> u32;
         fn StarMap() -> i32;
-        fn RepairSISBorder();
+
         fn DoMenuChooser(menu: *mut MENU_STATE, first: u8) -> u32;
         fn DrawMenuStateStrings(first: u8, state: i16);
         fn SetInputCallback(

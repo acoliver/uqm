@@ -17,15 +17,6 @@ unsafe extern "C" fn frame(_entry: *mut TEXTENTRY_STATE) -> u32 {
 unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
-#[no_mangle]
-pub unsafe extern "C" fn GetShipValue(ship: u32) -> u16 {
-    let cost = crate::supermelee::setup::ffi::rust_supermelee_ship_cost(ship as u8);
-    if cost == 0 && ship != 255 {
-        u16::MAX
-    } else {
-        cost
-    }
-}
 pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     let time = GetTimeCounter();
     GamePaused = 0;

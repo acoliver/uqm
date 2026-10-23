@@ -45,8 +45,7 @@ unsafe extern "C" fn background_init_kernel(timeout: u32) {
 
 /// # Safety
 /// Called by the game loop on the SDL owner thread during kernel initialization.
-#[no_mangle]
-pub unsafe extern "C" fn uqm_splash_with_bg_init_kernel() {
+pub unsafe fn uqm_splash_with_bg_init_kernel() {
     extern "C" fn initialize(timeout: u32) {
         unsafe {
             background_init_kernel(timeout);
@@ -57,8 +56,7 @@ pub unsafe extern "C" fn uqm_splash_with_bg_init_kernel() {
 
 /// # Safety
 /// The game kernel and battle state must be initialized on the SDL owner thread.
-#[no_mangle]
-pub unsafe extern "C" fn uqm_battle_with_frame_callback() {
+pub unsafe fn uqm_battle_with_frame_callback() {
     Battle(Some(on_battle_frame));
 }
 

@@ -25,13 +25,6 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn TFB_DrawCanvas_Initialize() {}
 
-/// # Safety
-/// SDL must be linked; the returned string belongs to SDL.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DrawCanvas_GetError() -> *const c_char {
-    SDL_GetError()
-}
-
 unsafe fn create_like(fmt: &SDL_PixelFormat, w: i32, h: i32, amask: u32) -> *mut SDL_Surface {
     SDL_CreateRGBSurface(
         SDL_SWSURFACE,

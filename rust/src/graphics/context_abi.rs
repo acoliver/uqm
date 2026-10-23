@@ -159,16 +159,6 @@ pub unsafe extern "C" fn SetContextBackGroundColor(color: Color) -> Color {
 /// # Safety
 /// Called on the serialized graphics thread.
 #[no_mangle]
-pub unsafe extern "C" fn GetContextBackGroundColor() -> Color {
-    if _GraphicsStatusFlags & 4 == 0 {
-        BACK
-    } else {
-        (*_pCurContext).BackGroundColor
-    }
-}
-/// # Safety
-/// Called on the serialized graphics thread.
-#[no_mangle]
 pub unsafe extern "C" fn SetContextDrawMode(mode: DrawMode) -> DrawMode {
     if _GraphicsStatusFlags & 4 == 0 {
         return MODE;

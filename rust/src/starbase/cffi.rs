@@ -40,6 +40,24 @@ const SFR_MENU_ANY: usize = usize::MAX - 1;
 /// `UNDEFINED_DELTA` (`sis.h`).
 const UNDEFINED_DELTA: i16 = 0x7FFF;
 
+#[cfg(not(test))]
+use crate::ui::border::DrawSISFrame;
+#[cfg(test)]
+extern "C" {
+    fn DrawSISFrame();
+}
+#[cfg(not(test))]
+use crate::ui::sis::PostUpdateFlashRect;
+#[cfg(test)]
+extern "C" {
+    fn PostUpdateFlashRect();
+}
+#[cfg(not(test))]
+use crate::ui::sis::PreUpdateFlashRect;
+#[cfg(test)]
+extern "C" {
+    fn PreUpdateFlashRect();
+}
 extern "C" {
     static mut ScreenWidth: c_int;
     static mut ScreenHeight: c_int;
@@ -72,10 +90,9 @@ extern "C" {
     fn GetFrameCount(frame: *mut c_void) -> u16;
     fn GetFrameIndex(frame: *mut c_void) -> u16;
     fn SetFlashRect(rect: *const c_void);
-    fn PreUpdateFlashRect();
-    fn PostUpdateFlashRect();
+
     fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
-    fn DrawSISFrame();
+
     fn DrawSISMessage(message: *const c_char);
     fn DrawSISTitle(title: *const c_char);
     fn FlushInput();

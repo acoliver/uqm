@@ -264,8 +264,7 @@ pub(super) unsafe fn sis_element() -> HELEMENT {
 }
 /// # Safety
 /// Game-thread access to the live flagship queue and world state.
-#[no_mangle]
-pub unsafe extern "C" fn SaveSisHyperState() {
+pub unsafe fn SaveSisHyperState() {
     let element = sis_element().cast::<ELEMENT>();
     if element.is_null() {
         return;

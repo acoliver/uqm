@@ -69,10 +69,3 @@ pub unsafe extern "C" fn Netplay_remoteReady(conn: *mut NetConnection) -> bool {
 pub unsafe extern "C" fn Netplay_isLocalReady(conn: *const NetConnection) -> bool {
     (*conn).stateFlags.ready.localReady()
 }
-
-/// # Safety
-/// `conn` points to a live connection.
-#[no_mangle]
-pub unsafe extern "C" fn Netplay_isRemoteReady(conn: *const NetConnection) -> bool {
-    (*conn).stateFlags.ready.remoteReady()
-}

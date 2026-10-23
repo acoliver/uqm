@@ -48,8 +48,7 @@ pub unsafe extern "C" fn UninitVideoPlayer() {
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
-pub unsafe extern "C" fn VidStop() {
+pub unsafe fn VidStop() {
     if !CURRENT_SPEECH.is_null() {
         snd_StopSpeech();
     }

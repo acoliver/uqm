@@ -2362,7 +2362,10 @@ pub struct MASTER_SHIP_INFO {
 unsafe extern "C" {
     pub static mut master_q: QUEUE;
 }
-unsafe extern "C" {
+#[cfg(not(test))]
+pub use crate::ui::settings::StopMusic;
+#[cfg(test)]
+extern "C" {
     pub fn StopMusic();
 }
 unsafe extern "C" {
@@ -2384,7 +2387,7 @@ pub type _bindgen_ty_6 = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub fn SleepThreadUntil(wakeTime: TimeCount);
 }
-unsafe extern "C" {
+extern "C" {
     pub fn TaskSwitch();
 }
 #[repr(C)]
@@ -2592,10 +2595,16 @@ pub struct SIS_STATE {
     pub CommanderName: [UNICODE; 16usize],
     pub PlanetName: [UNICODE; 16usize],
 }
-unsafe extern "C" {
+#[cfg(not(test))]
+pub use crate::ui::border::InitSISContexts;
+#[cfg(test)]
+extern "C" {
     pub fn InitSISContexts();
 }
-unsafe extern "C" {
+#[cfg(not(test))]
+pub use crate::ui::border::DrawSISFrame;
+#[cfg(test)]
+extern "C" {
     pub fn DrawSISFrame();
 }
 unsafe extern "C" {
@@ -3812,7 +3821,10 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN;
 }
-unsafe extern "C" {
+#[cfg(not(test))]
+pub use crate::navigation::hyper_menu::HyperspaceMenu;
+#[cfg(test)]
+extern "C" {
     pub fn HyperspaceMenu();
 }
 unsafe extern "C" {

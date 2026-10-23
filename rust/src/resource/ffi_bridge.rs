@@ -28,6 +28,8 @@ use crate::io::ffi::{uio_DirHandle, uio_Stream};
 // =============================================================================
 
 #[cfg(not(test))]
+use crate::video::legacy::InstallVideoResType;
+#[cfg(not(test))]
 extern "C" {
     #[link_name = "uio_fopen"]
     fn uio_fopen_raw(
@@ -54,7 +56,7 @@ extern "C" {
     // C subsystem type registration functions — called from InitResourceSystem
     fn InstallGraphicResTypes() -> c_int;
     fn InstallStringTableResType() -> c_int;
-    fn InstallVideoResType() -> c_int;
+
     fn InstallCodeResType() -> c_int;
 }
 

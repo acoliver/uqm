@@ -56,8 +56,7 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
 
 /// # Safety
 /// Hyperspace resources, contexts and queues must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn SeedUniverse() {
+pub unsafe fn SeedUniverse() {
     static mut PORTAL_POINT: POINT = POINT { x: 0, y: 0 };
     let mut universe = POINT {
         x: universe_x(GlobData.SIS_state.log_x),

@@ -343,11 +343,3 @@ pub unsafe extern "C" fn NetConnection_getChecksumBuffer(
 ) -> *mut ChecksumBuffer {
     &raw mut (*conn).checksumBuffer
 }
-/// # Safety
-/// `conn` is a live exclusively owned connection.
-#[no_mangle]
-pub unsafe extern "C" fn NetConnection_getStatistics(
-    conn: *mut NetConnection,
-) -> *mut NetStatistics {
-    &raw mut (*conn).statistics
-}

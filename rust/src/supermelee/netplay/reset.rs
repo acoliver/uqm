@@ -77,10 +77,3 @@ pub unsafe extern "C" fn Netplay_remoteReset(conn: *mut NetConnection, reason: N
 pub unsafe extern "C" fn Netplay_isLocalReset(conn: *const NetConnection) -> bool {
     (*conn).stateFlags.reset.localReset()
 }
-
-/// # Safety
-/// `conn` points to a live connection.
-#[no_mangle]
-pub unsafe extern "C" fn Netplay_isRemoteReset(conn: *const NetConnection) -> bool {
-    (*conn).stateFlags.reset.remoteReset()
-}

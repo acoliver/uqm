@@ -87,13 +87,6 @@ pub unsafe extern "C" fn ListenState_close(state: *mut ListenState) {
 /// # Safety
 /// `state` must hold a live reference.
 #[no_mangle]
-pub unsafe extern "C" fn ListenState_setExtra(state: *mut ListenState, extra: *mut c_void) {
-    (*state).extra = extra;
-}
-
-/// # Safety
-/// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ListenState_getExtra(state: *mut ListenState) -> *mut c_void {
     (*state).extra
 }

@@ -41,12 +41,6 @@ pub extern "C" fn log_exit(code: c_int) -> c_int {
     code
 }
 
-/// Sets the new output stream and returns the previous one.
-#[no_mangle]
-pub extern "C" fn log_setOutput(out: *mut FILE) -> *mut FILE {
-    STREAM_OUT.swap(out, Ordering::Relaxed)
-}
-
 #[no_mangle]
 pub extern "C" fn log_showBox(show: bool, err: bool) {
     SHOW_BOX.store(show, Ordering::Relaxed);

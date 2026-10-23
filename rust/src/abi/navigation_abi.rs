@@ -975,9 +975,15 @@ extern "C" {
 extern "C" {
     pub fn GetTimeCounter() -> TimeCount;
 }
+#[cfg(not(test))]
+pub use crate::threading::legacy_abi::InitThreadSystem;
+#[cfg(test)]
 extern "C" {
     pub fn InitThreadSystem();
 }
+#[cfg(not(test))]
+pub use crate::threading::legacy_abi::UnInitThreadSystem;
+#[cfg(test)]
 extern "C" {
     pub fn UnInitThreadSystem();
 }
@@ -1007,14 +1013,6 @@ extern "C" {
         stackSize: SDWORD,
         name: *const ::std::os::raw::c_char,
     ) -> Thread;
-}
-extern "C" {
-    pub fn StartThread_Core(
-        func: ThreadFunction,
-        data: *mut ::std::os::raw::c_void,
-        stackSize: SDWORD,
-        name: *const ::std::os::raw::c_char,
-    );
 }
 extern "C" {
     pub fn CreateSemaphore_Core(
@@ -1048,9 +1046,6 @@ extern "C" {
     pub fn HibernateThread(timePeriod: TimePeriod);
 }
 extern "C" {
-    pub fn HibernateThreadUntil(wakeTime: TimeCount);
-}
-extern "C" {
     pub fn SleepThread(timePeriod: TimePeriod);
 }
 extern "C" {
@@ -1068,6 +1063,9 @@ extern "C" {
 extern "C" {
     pub fn FinishThread(arg1: Thread);
 }
+#[cfg(not(test))]
+pub use crate::threading::legacy_abi::ProcessThreadLifecycles;
+#[cfg(test)]
 extern "C" {
     pub fn ProcessThreadLifecycles();
 }
@@ -1129,38 +1127,22 @@ extern "C" {
     pub fn CleanupTaskSystem();
 }
 extern "C" {
-    pub fn AssignTask(
-        task_func: ThreadFunction,
-        Stacksize: SDWORD,
-        name: *const ::std::os::raw::c_char,
-    ) -> Task;
-}
-extern "C" {
     pub fn Task_SetState(task: Task, state_mask: DWORD) -> DWORD;
 }
 extern "C" {
     pub fn Task_ClearState(task: Task, state_mask: DWORD) -> DWORD;
 }
 extern "C" {
-    pub fn Task_ToggleState(task: Task, state_mask: DWORD) -> DWORD;
-}
-extern "C" {
-    pub fn Task_ReadState(task: Task, state_mask: DWORD) -> DWORD;
-}
-extern "C" {
     pub fn FinishTask(task: Task);
-}
-extern "C" {
-    pub fn ConcludeTask(task: Task);
 }
 pub type timespec = libc::timespec;
 extern "C" {
     pub fn strupr(str_: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
 pub type stat = libc::stat;
-pub use crate::memory::rust_hmalloc;
-pub use crate::memory::rust_hfree;
 pub use crate::memory::rust_hcalloc;
+pub use crate::memory::rust_hfree;
+pub use crate::memory::rust_hmalloc;
 pub use crate::memory::rust_hrealloc;
 pub use crate::memory::rust_mem_init;
 pub use crate::memory::rust_mem_uninit;
@@ -1503,9 +1485,7 @@ pub struct uio_DirList {
     pub names: *mut *const ::std::os::raw::c_char,
     pub numNames: ::std::os::raw::c_int,
 }
-extern "C" {
-    pub fn uio_init();
-}
+pub use crate::io::uio_bridge::uio_init;
 extern "C" {
     pub fn uio_unInit();
 }
@@ -1868,14 +1848,6 @@ extern "C" {
     ) -> usize;
 }
 extern "C" {
-    pub fn getUniCharFromStringN(
-        wstr: *mut UniChar,
-        maxcount: usize,
-        start: *const ::std::os::raw::c_char,
-        end: *const ::std::os::raw::c_char,
-    ) -> usize;
-}
-extern "C" {
     pub fn getStringFromChar(
         ptr: *mut ::std::os::raw::c_char,
         size: usize,
@@ -1977,12 +1949,6 @@ extern "C" {
 }
 extern "C" {
     pub fn GetStringTimeStamp(String: STRING) -> STRINGPTR;
-}
-extern "C" {
-    pub fn GetStringByName(
-        StringTable: STRING_TABLE,
-        index: *const ::std::os::raw::c_char,
-    ) -> STRING;
 }
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
@@ -2151,9 +2117,6 @@ pub struct INTERSECT_CONTROL {
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
 extern "C" {
-    pub fn MAKE_HOT_SPOT(arg1: COORD, arg2: COORD) -> HOT_SPOT;
-}
-extern "C" {
     pub fn BoxIntersect(pr1: *mut RECT, pr2: *mut RECT, printer: *mut RECT) -> INTERSECT_CODE;
 }
 extern "C" {
@@ -2188,9 +2151,6 @@ extern "C" {
 }
 extern "C" {
     pub fn SetContextBackGroundColor(Color: Color) -> Color;
-}
-extern "C" {
-    pub fn GetContextBackGroundColor() -> Color;
 }
 extern "C" {
     pub fn SetContextFGFrame(Frame: FRAME) -> FRAME;
@@ -2759,12 +2719,21 @@ pub struct SIS_STATE {
     pub CommanderName: [UNICODE; 16usize],
     pub PlanetName: [UNICODE; 16usize],
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::RepairSISBorder;
+#[cfg(test)]
 extern "C" {
     pub fn RepairSISBorder();
 }
+#[cfg(not(test))]
+pub use crate::ui::border::InitSISContexts;
+#[cfg(test)]
 extern "C" {
     pub fn InitSISContexts();
 }
+#[cfg(not(test))]
+pub use crate::ui::border::DrawSISFrame;
+#[cfg(test)]
 extern "C" {
     pub fn DrawSISFrame();
 }
@@ -2774,15 +2743,27 @@ extern "C" {
 extern "C" {
     pub fn SetFlashRect(pRect: *const RECT);
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::PreUpdateFlashRect;
+#[cfg(test)]
 extern "C" {
     pub fn PreUpdateFlashRect();
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::PostUpdateFlashRect;
+#[cfg(test)]
 extern "C" {
     pub fn PostUpdateFlashRect();
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::PauseFlash;
+#[cfg(test)]
 extern "C" {
     pub fn PauseFlash();
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::ContinueFlash;
+#[cfg(test)]
 extern "C" {
     pub fn ContinueFlash();
 }
@@ -2827,6 +2808,9 @@ pub type StatMsgMode = ::std::os::raw::c_uint;
 extern "C" {
     pub fn SetStatusMessageMode(arg1: StatMsgMode) -> StatMsgMode;
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawLanders;
+#[cfg(test)]
 extern "C" {
     pub fn DrawLanders();
 }
@@ -2836,6 +2820,9 @@ extern "C" {
 extern "C" {
     pub fn GetGaugeRect(pRect: *mut RECT, IsCrewRect: BOOLEAN);
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawFlagshipStats;
+#[cfg(test)]
 extern "C" {
     pub fn DrawFlagshipStats();
 }
@@ -2881,6 +2868,9 @@ extern "C" {
 extern "C" {
     pub fn DrawFlagshipName(InStatusArea: BOOLEAN);
 }
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawCaptainsName;
+#[cfg(test)]
 extern "C" {
     pub fn DrawCaptainsName();
 }
@@ -4010,31 +4000,22 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn copyGameState(dest: *mut BYTE, target: DWORD, src: *mut BYTE, begin: DWORD, end: DWORD);
-}
-extern "C" {
-    pub fn getGameState32(state: *mut BYTE, startBit: ::std::os::raw::c_int) -> DWORD;
-}
-extern "C" {
-    pub fn setGameState32(state: *mut BYTE, startBit: ::std::os::raw::c_int, val: DWORD);
-}
-extern "C" {
     pub static mut RadarContext: CONTEXT;
 }
+#[cfg(not(test))]
+pub use crate::navigation::globals::FreeSC2Data;
+#[cfg(test)]
 extern "C" {
     pub fn FreeSC2Data();
 }
 extern "C" {
     pub fn LoadSC2Data() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::navigation::globals::InitGlobData;
+#[cfg(test)]
 extern "C" {
     pub fn InitGlobData();
-}
-extern "C" {
-    pub fn inFullGame() -> BOOLEAN;
-}
-extern "C" {
-    pub fn inSuperMelee() -> BOOLEAN;
 }
 extern "C" {
     pub fn inHQSpace() -> BOOLEAN;
@@ -4048,6 +4029,9 @@ extern "C" {
 extern "C" {
     pub fn InitGameStructures() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::navigation::globals::UninitGameStructures;
+#[cfg(test)]
 extern "C" {
     pub fn UninitGameStructures();
 }
@@ -4499,14 +4483,6 @@ extern "C" {
     pub fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext;
 }
 extern "C" {
-    pub fn Flash_createTransition(
-        gfxContext: CONTEXT,
-        origin: *const POINT,
-        first: FRAME,
-        final_: FRAME,
-    ) -> *mut FlashContext;
-}
-extern "C" {
     pub fn Flash_createOverlay(
         gfxContext: CONTEXT,
         origin: *const POINT,
@@ -4562,9 +4538,6 @@ extern "C" {
     pub fn Flash_setRect(context: *mut FlashContext, rect: *const RECT);
 }
 extern "C" {
-    pub fn Flash_getRect(context: *mut FlashContext, rect: *mut RECT);
-}
-extern "C" {
     pub fn Flash_setOverlay(context: *mut FlashContext, origin: *const POINT, overlay: FRAME);
 }
 extern "C" {
@@ -4572,12 +4545,6 @@ extern "C" {
 }
 extern "C" {
     pub fn Flash_postUpdate(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_setCacheSize(context: *mut FlashContext, size: COUNT);
-}
-extern "C" {
-    pub fn Flash_getCacheSize(context: *const FlashContext) -> COUNT;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5099,9 +5066,6 @@ extern "C" {
 }
 extern "C" {
     pub fn GetNamedPlanetaryBody() -> *mut UNICODE;
-}
-extern "C" {
-    pub fn GetPlanetOrMoonName(buf: *mut UNICODE, bufsize: COUNT);
 }
 extern "C" {
     pub fn PlanetOrbitMenu();
@@ -6631,13 +6595,6 @@ pub type _bindgen_ty_22 = ::std::os::raw::c_int;
 pub type RESPONSE_REF = COUNT;
 pub type RESPONSE_FUNC = ::std::option::Option<unsafe extern "C" fn(R: RESPONSE_REF)>;
 extern "C" {
-    pub fn DoResponsePhrase(
-        R: RESPONSE_REF,
-        response_func: RESPONSE_FUNC,
-        ContstructStr: *mut UNICODE,
-    );
-}
-extern "C" {
     pub fn DoNPCPhrase(pStr: *mut UNICODE);
 }
 extern "C" {
@@ -6914,12 +6871,18 @@ extern "C" {
 extern "C" {
     pub fn InitContexts() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::UninitPlayerInput;
+#[cfg(test)]
 extern "C" {
     pub fn UninitPlayerInput();
 }
 extern "C" {
     pub fn InitGameKernel() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::game_init::cleanup::UninitGameKernel;
+#[cfg(test)]
 extern "C" {
     pub fn UninitGameKernel();
 }
@@ -6929,12 +6892,18 @@ extern "C" {
         argv: *mut *mut ::std::os::raw::c_char,
     ) -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::game_init::cleanup::FreeKernel;
+#[cfg(test)]
 extern "C" {
     pub fn FreeKernel();
 }
 extern "C" {
     pub fn initIO() -> ::std::os::raw::c_int;
 }
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::uninitIO;
+#[cfg(test)]
 extern "C" {
     pub fn uninitIO();
 }
@@ -6947,6 +6916,9 @@ extern "C" {
 extern "C" {
     pub fn ClearPlayerInput(playerI: COUNT);
 }
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
+#[cfg(test)]
 extern "C" {
     pub fn ClearPlayerInputAll();
 }
@@ -6956,12 +6928,18 @@ extern "C" {
 extern "C" {
     pub fn FreeHyperspace() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::navigation::hyper_radar::SeedUniverse;
+#[cfg(test)]
 extern "C" {
     pub fn SeedUniverse();
 }
 extern "C" {
     pub fn MoveSIS(pdx: *mut SIZE, pdy: *mut SIZE);
 }
+#[cfg(not(test))]
+pub use crate::navigation::hyper_data::FreeHyperData;
+#[cfg(test)]
 extern "C" {
     pub fn FreeHyperData();
 }
@@ -6971,9 +6949,15 @@ extern "C" {
 extern "C" {
     pub fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub use crate::navigation::hyper_menu::HyperspaceMenu;
+#[cfg(test)]
 extern "C" {
     pub fn HyperspaceMenu();
 }
+#[cfg(not(test))]
+pub use crate::navigation::hyper_transition::SaveSisHyperState;
+#[cfg(test)]
 extern "C" {
     pub fn SaveSisHyperState();
 }
@@ -7499,27 +7483,11 @@ extern "C" {
     pub static mut input_templates: [INPUT_TEMPLATE; 6usize];
 }
 extern "C" {
-    pub fn prepareContentDir(
-        contentDirName: *const ::std::os::raw::c_char,
-        addonDirName: *const ::std::os::raw::c_char,
-        execFile: *const ::std::os::raw::c_char,
-    );
-}
-extern "C" {
-    pub fn prepareConfigDir(configDirName: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn prepareMeleeDir();
-}
-extern "C" {
-    pub fn prepareSaveDir();
-}
-extern "C" {
     pub fn prepareAddons(addons: *mut *const ::std::os::raw::c_char);
 }
-extern "C" {
-    pub fn prepareShadowAddons(addons: *mut *const ::std::os::raw::c_char);
-}
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::unprepareAllDirs;
+#[cfg(test)]
 extern "C" {
     pub fn unprepareAllDirs();
 }
@@ -7529,6 +7497,9 @@ extern "C" {
 extern "C" {
     pub fn loadIndices(baseDir: *mut uio_DirHandle) -> ::std::os::raw::c_int;
 }
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::setGammaCorrection;
+#[cfg(test)]
 extern "C" {
     pub fn setGammaCorrection(gamma: f32) -> bool;
 }
@@ -7744,9 +7715,6 @@ extern "C" {
 }
 extern "C" {
     pub fn NetConnection_getChecksumInterval(conn: *const NetConnection) -> usize;
-}
-extern "C" {
-    pub fn NetConnection_getStatistics(conn: *mut NetConnection) -> *mut NetStatistics;
 }
 extern "C" {
     pub fn NetConnection_setReadyCallback(
@@ -8123,9 +8091,6 @@ extern "C" {
     pub fn Melee_flashSelection(pMS: *mut MELEE_STATE);
 }
 extern "C" {
-    pub fn GetShipValue(StarShip: MeleeShip) -> COUNT;
-}
-extern "C" {
     pub fn updateRandomSeed(pMS: *mut MELEE_STATE, side: COUNT, seed: DWORD);
 }
 extern "C" {
@@ -8200,9 +8165,6 @@ extern "C" {
 }
 extern "C" {
     pub fn MeleeTeam_init(team: *mut MeleeTeam);
-}
-extern "C" {
-    pub fn MeleeTeam_uninit(team: *mut MeleeTeam);
 }
 extern "C" {
     pub fn MeleeTeam_new() -> *mut MeleeTeam;
@@ -8591,9 +8553,15 @@ pub const SHIPYARD: _bindgen_ty_29 = 2;
 pub const DEPART_BASE: _bindgen_ty_29 = 3;
 pub type _bindgen_ty_29 = ::std::os::raw::c_uint;
 pub type STARBASE_STATE = BYTE;
+#[cfg(not(test))]
+pub use crate::ui::starbase::InstallBombAtEarth;
+#[cfg(test)]
 extern "C" {
     pub fn InstallBombAtEarth();
 }
+#[cfg(not(test))]
+pub use crate::ui::starbase::VisitStarBase;
+#[cfg(test)]
 extern "C" {
     pub fn VisitStarBase();
 }
@@ -8613,14 +8581,6 @@ extern "C" {
         which_slot: COUNT,
         DrawBluePrint: BOOLEAN,
     );
-}
-extern "C" {
-    pub fn WrapText(
-        pStr: *const UNICODE,
-        len: COUNT,
-        tarray: *mut TEXT,
-        field_width: SIZE,
-    ) -> COUNT;
 }
 extern "C" {
     pub static mut status_y_offsets: [COORD; 0usize];
@@ -8743,18 +8703,33 @@ extern "C" {
 extern "C" {
     pub fn SaveContextFrame(saveRect: *const RECT) -> STAMP;
 }
+#[cfg(not(test))]
+pub use crate::ui::settings::ToggleMusic;
+#[cfg(test)]
 extern "C" {
     pub fn ToggleMusic();
 }
+#[cfg(not(test))]
+pub use crate::ui::settings::StopMusic;
+#[cfg(test)]
 extern "C" {
     pub fn StopMusic();
 }
+#[cfg(not(test))]
+pub use crate::ui::settings::ResumeMusic;
+#[cfg(test)]
 extern "C" {
     pub fn ResumeMusic();
 }
+#[cfg(not(test))]
+pub use crate::ui::settings::PauseMusic;
+#[cfg(test)]
 extern "C" {
     pub fn PauseMusic();
 }
+#[cfg(not(test))]
+pub use crate::ui::settings::ToggleSoundEffect;
+#[cfg(test)]
 extern "C" {
     pub fn ToggleSoundEffect();
 }
@@ -8781,9 +8756,6 @@ extern "C" {
 }
 extern "C" {
     pub fn log_exit(code: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn log_setOutput(out: *mut FILE) -> *mut FILE;
 }
 extern "C" {
     pub fn log_showBox(show: bool, err: bool);
@@ -9285,9 +9257,6 @@ pub const TFB_REDRAW_YES: _bindgen_ty_32 = 3;
 pub type _bindgen_ty_32 = ::std::os::raw::c_uint;
 extern "C" {
     pub static mut GfxFlags: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_PreInit();
 }
 extern "C" {
     pub fn TFB_InitGraphics(
@@ -9945,9 +9914,6 @@ extern "C" {
     ) -> BOOLEAN;
 }
 extern "C" {
-    pub fn TFB_DrawCanvas_GetError() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
     pub fn TFB_GetScreenCanvas(screen: SCREEN) -> TFB_Canvas;
 }
 #[repr(C)]
@@ -10323,20 +10289,6 @@ pub struct TFB_RegSoundDecoder {
     _unused: [u8; 0],
 }
 extern "C" {
-    pub fn SoundDecoder_Register(
-        fileext: *const ::std::os::raw::c_char,
-        decvtbl: *mut TFB_SoundDecoderFuncs,
-    ) -> *mut TFB_RegSoundDecoder;
-}
-extern "C" {
-    pub fn SoundDecoder_Unregister(regdec: *mut TFB_RegSoundDecoder);
-}
-extern "C" {
-    pub fn SoundDecoder_Lookup(
-        fileext: *const ::std::os::raw::c_char,
-    ) -> *const TFB_SoundDecoderFuncs;
-}
-extern "C" {
     pub fn SoundDecoder_SwapWords(data: *mut uint16, size: uint32);
 }
 extern "C" {
@@ -10349,37 +10301,10 @@ extern "C" {
     pub fn SoundDecoder_Uninit();
 }
 extern "C" {
-    pub fn SoundDecoder_Load(
-        dir: *mut uio_DirHandle,
-        filename: *mut ::std::os::raw::c_char,
-        buffer_size: uint32,
-        startTime: uint32,
-        runTime: sint32,
-    ) -> *mut TFB_SoundDecoder;
-}
-extern "C" {
-    pub fn SoundDecoder_Decode(decoder: *mut TFB_SoundDecoder) -> uint32;
-}
-extern "C" {
-    pub fn SoundDecoder_DecodeAll(decoder: *mut TFB_SoundDecoder) -> uint32;
-}
-extern "C" {
-    pub fn SoundDecoder_GetTime(decoder: *mut TFB_SoundDecoder) -> f32;
-}
-extern "C" {
-    pub fn SoundDecoder_GetFrame(decoder: *mut TFB_SoundDecoder) -> uint32;
-}
-extern "C" {
     pub fn SoundDecoder_Seek(decoder: *mut TFB_SoundDecoder, msecs: uint32);
 }
 extern "C" {
     pub fn SoundDecoder_Rewind(decoder: *mut TFB_SoundDecoder);
-}
-extern "C" {
-    pub fn SoundDecoder_Free(decoder: *mut TFB_SoundDecoder);
-}
-extern "C" {
-    pub fn SoundDecoder_GetName(decoder: *mut TFB_SoundDecoder) -> *const ::std::os::raw::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

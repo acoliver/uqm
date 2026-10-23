@@ -21,6 +21,8 @@ pub(super) mod c_bridge {
         pub static mut CommData: CLocData;
     }
 
+    pub use crate::ui::border::DrawSISFrame;
+    pub use crate::ui::settings::StopMusic;
     extern "C" {
         // Resource loading — accepts RESOURCE (const char *) as *const c_char
         pub fn LoadGraphicInstance(res: *const c_char) -> *mut std::ffi::c_void;
@@ -75,7 +77,7 @@ pub(super) mod c_bridge {
         pub fn SetTransitionSource(src: *mut std::ffi::c_void);
 
         // SIS drawing
-        pub fn DrawSISFrame();
+
         pub fn DrawSISMessage(msg: *const c_char);
         pub fn DrawSISTitle(title: *const c_char);
         // Encounter loop — related externs (DoInput imported from c_extern)
@@ -83,7 +85,7 @@ pub(super) mod c_bridge {
         pub fn c_SetCurInputState(state: *mut std::ffi::c_void);
 
         // Audio teardown
-        pub fn StopMusic();
+
         pub fn StopSound();
         pub fn StopTrack();
         pub fn FadeMusic(vol: u8, duration: i16) -> c_uint;

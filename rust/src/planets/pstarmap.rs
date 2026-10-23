@@ -699,8 +699,7 @@ unsafe fn erase_cursor(x: i16, y: i16) {
 
 /// # Safety
 /// Game-thread only, with the star-map UI active.
-#[no_mangle]
-pub unsafe extern "C" fn ZoomStarMap(direction: i16) {
+pub unsafe fn ZoomStarMap(direction: i16) {
     if direction > 0 && zoomLevel < MAX_ZOOM_SHIFT {
         zoomLevel += 1;
         mapOrigin = cursorLoc;
@@ -838,8 +837,7 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
 
 /// # Safety
 /// Game-thread only, with the star-map status UI active.
-#[no_mangle]
-pub unsafe extern "C" fn UpdateFuelRequirement() {
+pub unsafe fn UpdateFuelRequirement() {
     let fuel = fuel_requirement(current_location(), cursorLoc, which_space(), |f| {
         square_root(f)
     });

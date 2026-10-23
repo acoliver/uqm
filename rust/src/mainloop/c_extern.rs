@@ -37,13 +37,13 @@ use super::types::CBoolean;
 // Activity accessors (from P02b: rust_bridge_mainloop.c)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::get_current_activity;
+#[cfg(test)]
 extern "C" {
-    /// Read `GLOBAL(CurrentActivity)` — the current activity value.
-    ///
-    /// C: `UWORD get_current_activity(void)` (defined in rust_bridge_macros.c).
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    /// @requirement REQ-ML-003
     pub fn get_current_activity() -> u16;
+}
+extern "C" {
 
     /// Write `GLOBAL(CurrentActivity)`.
     ///
@@ -225,6 +225,18 @@ pub unsafe fn uqm_get_crew_enlisted() -> u16 {
 // Macro / global wrappers
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::mainloop::lifecycle_abi::uqm_battle_with_frame_callback;
+#[cfg(test)]
+extern "C" {
+    pub fn uqm_battle_with_frame_callback();
+}
+#[cfg(not(test))]
+pub use crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel;
+#[cfg(test)]
+extern "C" {
+    pub fn uqm_splash_with_bg_init_kernel();
+}
 extern "C" {
     /// Sets the `MainExited` global.
     ///
@@ -233,17 +245,6 @@ extern "C" {
     #[cfg(test)]
     pub fn set_main_exited(b: CBoolean);
 
-    /// Calls `SplashScreen(BackgroundInitKernel)`.
-    ///
-    /// C: `void uqm_splash_with_bg_init_kernel(void)` (defined in starcon.c).
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn uqm_splash_with_bg_init_kernel();
-
-    /// Calls `Battle(&on_battle_frame)`.
-    ///
-    /// C: `void uqm_battle_with_frame_callback(void)` (defined in starcon.c).
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn uqm_battle_with_frame_callback();
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
@@ -265,14 +266,19 @@ pub unsafe fn set_main_exited(b: CBoolean) {
 // @requirement REQ-ML-004
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::ui::starbase::InstallBombAtEarth;
+#[cfg(test)]
 extern "C" {
-    /// `extern void VisitStarBase(void)` — starbase encounter.
-    ///
-    /// Defined in `sc2/src/uqm/starbase.c` (declared in `starbase.h:39`).
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P05
-    /// @requirement REQ-ML-004
+    pub fn InstallBombAtEarth();
+}
+#[cfg(not(test))]
+pub use crate::ui::starbase::VisitStarBase;
+#[cfg(test)]
+extern "C" {
     pub fn VisitStarBase();
+}
+extern "C" {
 
     /// `extern void ExploreSolarSys(void)` — interplanetary exploration.
     ///
@@ -281,14 +287,6 @@ extern "C" {
     /// @plan PLAN-20260707-MAINLOOP.P05
     /// @requirement REQ-ML-004
     pub fn ExploreSolarSys();
-
-    /// `extern void InstallBombAtEarth(void)` — BGD (bomb) mode.
-    ///
-    /// Defined in `sc2/src/uqm/starbase.c` (declared in `starbase.h:38`).
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P05
-    /// @requirement REQ-ML-004
-    pub fn InstallBombAtEarth();
 
     /// `extern void RaceCommunication(void)` — alien conversation.
     ///
@@ -336,6 +334,30 @@ extern "C" {
 // @requirement REQ-ML-001
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::game_init::cleanup::FreeKernel;
+#[cfg(test)]
+extern "C" {
+    pub fn FreeKernel();
+}
+#[cfg(not(test))]
+pub use crate::game_init::cleanup::UninitGameKernel;
+#[cfg(test)]
+extern "C" {
+    pub fn UninitGameKernel();
+}
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
+#[cfg(test)]
+extern "C" {
+    pub fn ClearPlayerInputAll();
+}
+#[cfg(not(test))]
+pub use crate::navigation::globals::UninitGameStructures;
+#[cfg(test)]
+extern "C" {
+    pub fn UninitGameStructures();
+}
 extern "C" {
     /// `BOOLEAN StartGame(void)` — outer-loop controller.
     ///
@@ -377,28 +399,10 @@ extern "C" {
     /// @plan PLAN-20260707-MAINLOOP.P06
     pub fn UninitGameClock();
 
-    /// `void UninitGameStructures(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn UninitGameStructures();
-
-    /// `void ClearPlayerInputAll(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn ClearPlayerInputAll();
-
-    /// `void UninitGameKernel(void)` — game-kernel cleanup.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    /// @requirement REQ-ML-008
-    pub fn UninitGameKernel();
-
     /// `void FreeMasterShipList(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P06
     /// @requirement REQ-ML-008
     pub fn FreeMasterShipList();
-
-    /// `void FreeKernel(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    /// @requirement REQ-ML-008
-    pub fn FreeKernel();
 
     /// `void log_showBox(BOOLEAN b, BOOLEAN c)`.
     /// @plan PLAN-20260707-MAINLOOP.P06

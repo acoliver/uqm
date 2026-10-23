@@ -314,8 +314,14 @@ pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_v
 //  C wrappers from rust_bridge_mainloop.c (reused)
 // ===========================================================================
 
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::get_current_activity;
+#[cfg(test)]
 extern "C" {
     pub fn get_current_activity() -> u16;
+}
+extern "C" {
+
     #[cfg(test)]
     pub fn set_current_activity(v: u16);
     #[cfg(test)]
@@ -375,6 +381,18 @@ pub unsafe fn set_main_exited(b: c_int) {
 //  Directly linkable C functions (no wrapper needed)
 // ===========================================================================
 
+#[cfg(not(test))]
+pub use crate::game_init::cleanup::FreeGameData;
+#[cfg(test)]
+extern "C" {
+    pub fn FreeGameData();
+}
+#[cfg(not(test))]
+pub use crate::ui::settings::StopMusic;
+#[cfg(test)]
+extern "C" {
+    pub fn StopMusic();
+}
 extern "C" {
     // --- Graphics ---
     /// The whole-screen drawing context created during graphics startup.
@@ -433,7 +451,7 @@ extern "C" {
     pub fn SetTransitionSource(src: *mut c_void);
 
     // --- Music ---
-    pub fn StopMusic();
+
     /// `BOOLEAN DestroyMusic(MUSIC_REF)` — returns c_int.
     #[allow(
         clashing_extern_declarations,
@@ -466,7 +484,7 @@ extern "C" {
     // --- Lifecycle ---
     pub fn Melee();
     pub fn SetupMenu();
-    pub fn FreeGameData();
+
     pub fn Credits(victory: c_int);
     pub fn Victory();
     /// `void SplashScreen(void (*DoProcessing)(DWORD TimeOut))` — function pointer.

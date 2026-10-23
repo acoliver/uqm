@@ -51,9 +51,13 @@ const FLIGHT_NAMES: &[&str] = &["up", "down", "left", "right", "weapon", "specia
 
 #[cfg(not(test))]
 extern "C" {
+    fn TaskSwitch();
+}
+#[cfg(not(test))]
+extern "C" {
     #[link_name = "input_templates"]
     static mut INPUT_TEMPLATES: [[c_char; 30]; 6];
-    fn TaskSwitch();
+
 }
 
 #[cfg(test)]

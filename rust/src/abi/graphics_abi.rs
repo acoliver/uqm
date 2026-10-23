@@ -323,9 +323,6 @@ pub const SCREEN_TFB_SCREEN_TRANSITION: SCREEN = 2;
 pub const SCREEN_TFB_GFX_NUMSCREENS: SCREEN = 3;
 pub type SCREEN = ::std::os::raw::c_uint;
 extern "C" {
-    pub fn TFB_PreInit();
-}
-extern "C" {
     pub fn TFB_InitGraphics(
         driver: ::std::os::raw::c_int,
         flags: ::std::os::raw::c_int,
@@ -884,9 +881,6 @@ extern "C" {
     ) -> BOOLEAN;
 }
 extern "C" {
-    pub fn TFB_DrawCanvas_GetError() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
     pub fn TFB_GetScreenCanvas(screen: SCREEN) -> TFB_Canvas;
 }
 pub type FBK_FLAGS = UWORD;
@@ -1235,9 +1229,6 @@ extern "C" {
 }
 extern "C" {
     pub fn TFB_DrawCommandQueue_Pop(Command: *mut TFB_DrawCommand) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_DrawCommandQueue_Clear();
 }
 extern "C" {
     pub fn TFB_EnqueueDrawCommand(DrawCommand: *mut TFB_DrawCommand);

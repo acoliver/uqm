@@ -5,16 +5,21 @@ use crate::graphics::{context_abi::DestroyContext, font_abi::DestroyFont};
 use crate::ships::native::abi::*;
 use std::ptr;
 
+#[cfg(not(test))]
+use crate::game_init::kernel_abi::UninitPlayerInput;
+#[cfg(test)]
 extern "C" {
     fn UninitPlayerInput();
+}
+extern "C" {
+
     fn UninitSpace();
     fn FreeIPData();
 }
 
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
-#[no_mangle]
-pub unsafe extern "C" fn FreeKernel() {
+pub unsafe fn FreeKernel() {
     UninitPlayerInput();
     crate::resource::ffi_bridge::UninitResourceSystem();
     DestroyDrawable(ReleaseDrawable(Screen));
@@ -49,8 +54,7 @@ unsafe fn uninit_kernel() {
 
 /// # Safety
 /// Game thread only; all game resource owners must still be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn FreeGameData() {
+pub unsafe fn FreeGameData() {
     crate::navigation::globals::FreeSC2Data();
     crate::planet_side::orbit_music::free_lander_data();
     FreeIPData();
@@ -59,8 +63,7 @@ pub unsafe extern "C" fn FreeGameData() {
 
 /// # Safety
 /// Game thread only, after the active game has stopped using its resources.
-#[no_mangle]
-pub unsafe extern "C" fn UninitGameKernel() {
+pub unsafe fn UninitGameKernel() {
     if !ActivityFrame.is_null() {
         FreeGameData();
         uninit_kernel();

@@ -20,8 +20,7 @@ pub(super) fn color(r: u8, g: u8, b: u8) -> Color {
 
 /// # Safety
 /// Game-thread access, after hyperspace users release their frames and maps.
-#[no_mangle]
-pub unsafe extern "C" fn FreeHyperData() {
+pub unsafe fn FreeHyperData() {
     let frames = ptr::addr_of_mut!(HYPERSTARS).cast::<FRAME>();
     for i in 0..3 {
         DestroyDrawable(ReleaseDrawable(*frames.add(i)));

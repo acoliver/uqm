@@ -215,8 +215,7 @@ pub unsafe extern "C" fn InitGameKernel() -> u32 {
     1
 }
 
-#[no_mangle]
-pub extern "C" fn UninitPlayerInput() {}
+pub fn UninitPlayerInput() {}
 
 /// # Safety
 /// Player index is below NUM_PLAYERS and its input context is not already installed.
@@ -267,8 +266,7 @@ pub unsafe extern "C" fn ClearPlayerInput(player: u16) {
 
 /// # Safety
 /// Called on the game thread when the contexts are no longer in use.
-#[no_mangle]
-pub unsafe extern "C" fn ClearPlayerInputAll() {
+pub unsafe fn ClearPlayerInputAll() {
     for player in 0..2 {
         ClearPlayerInput(player);
     }
@@ -291,8 +289,7 @@ pub unsafe extern "C" fn initIO() -> i32 {
 
 /// # Safety
 /// No directory users remain; root and repository are live.
-#[no_mangle]
-pub unsafe extern "C" fn uninitIO() {
+pub unsafe fn uninitIO() {
     uio::uio_closeDir(rootDir);
     uio::uio_closeRepository(repository);
     uio::uio_unInit();

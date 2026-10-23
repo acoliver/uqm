@@ -7,8 +7,6 @@ use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::mainloop::dir_prep::{contentDir, repository};
 use uqm_rust::memory::rust_hfree;
 
-extern "C" {}
-
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     {

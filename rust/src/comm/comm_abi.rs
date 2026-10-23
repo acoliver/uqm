@@ -269,27 +269,6 @@ pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
     super::ffi::rust_AlienTalkSegue(track.into());
 }
 /// # Safety
-/// Constructed text, when non-null, must be NUL-terminated; callback must be live.
-#[no_mangle]
-pub unsafe extern "C" fn DoResponsePhrase(
-    reference: u16,
-    callback: Option<extern "C" fn(u32)>,
-    constructed: *const c_char,
-) {
-    extern "C" {
-        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-        fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-    }
-    let mut text = constructed;
-    if text.is_null() && !COMM_DATA.conversation_phrases.is_null() {
-        text = GetStringAddress(SetAbsStringTableIndex(
-            COMM_DATA.conversation_phrases,
-            reference.wrapping_sub(1),
-        ));
-    }
-    super::ffi::rust_DoResponsePhrase(reference.into(), text, callback);
-}
-/// # Safety
 /// CommData must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {

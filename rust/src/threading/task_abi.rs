@@ -12,28 +12,17 @@ use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 const TASK_MAX: usize = 64;
 
 const TASK_INUSE: u32 = 1;
-const TASK_EXIT: u32 = 2;
 
 const SYNC_CLASS_TOPLEVEL: u32 = 1 << 0;
 const SYNC_CLASS_RESOURCE: u32 = 1 << 3;
 
-const LOG_ERROR: c_int = 2;
 const LOG_DEBUG: c_int = 5;
 
-type ThreadFunction = extern "C" fn(*mut c_void) -> c_int;
-
 extern "C" {
-    fn CreateThread_Core(
-        func: ThreadFunction,
-        data: *mut c_void,
-        stack_size: i32,
-        name: *const c_char,
-    ) -> *mut c_void;
     fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> *mut c_void;
     fn DestroyMutex(mutex: *mut c_void);
     fn LockMutex(mutex: *mut c_void);
     fn UnlockMutex(mutex: *mut c_void);
-    fn TaskSwitch();
 
 }
 
@@ -117,45 +106,6 @@ pub unsafe extern "C" fn Task_ClearState(task: *mut TaskStruct, state_mask: u32)
 }
 
 /// # Safety
-/// `task` must point to a slot of the task array.
-#[no_mangle]
-pub unsafe extern "C" fn Task_ToggleState(task: *mut TaskStruct, state_mask: u32) -> u32 {
-    (*task).update_state(state_mask, |state| state ^ state_mask)
-}
-
-/// # Safety
-/// `task` must point to a slot of the task array.
-#[no_mangle]
-pub unsafe extern "C" fn Task_ReadState(task: *mut TaskStruct, state_mask: u32) -> u32 {
-    (*task).state.load(Ordering::Acquire) & state_mask
-}
-
-/// # Safety
-/// `name` must be a NUL-terminated string that outlives the task.
-#[no_mangle]
-pub unsafe extern "C" fn AssignTask(
-    task_func: ThreadFunction,
-    stack_size: i32,
-    name: *const c_char,
-) -> *mut TaskStruct {
-    for task in &TASKS.0 {
-        let task_ptr = task as *const TaskStruct as *mut TaskStruct;
-        if Task_SetState(task_ptr, TASK_INUSE) == 0 {
-            Task_ClearState(task_ptr, !TASK_INUSE);
-            task.name.store(name as *mut c_char, Ordering::Relaxed);
-            let thread = CreateThread_Core(task_func, task_ptr.cast(), stack_size, name);
-            task.thread.store(thread, Ordering::Release);
-            return task_ptr;
-        }
-    }
-    crate::log_abi::log_message(
-        LOG_ERROR,
-        "Task error!  Task array exhausted.  Check for thread leaks.",
-    );
-    ptr::null_mut()
-}
-
-/// # Safety
 /// `task` must be a task returned by [`AssignTask`].
 #[no_mangle]
 pub unsafe extern "C" fn FinishTask(task: *mut TaskStruct) {
@@ -168,18 +118,5 @@ pub unsafe extern "C" fn FinishTask(task: *mut TaskStruct) {
                 std::ffi::CStr::from_ptr((*task).name.load(Ordering::Relaxed)).to_string_lossy()
             ),
         );
-    }
-}
-
-/// # Safety
-/// `task` must be a task returned by [`AssignTask`].
-#[no_mangle]
-pub unsafe extern "C" fn ConcludeTask(task: *mut TaskStruct) {
-    let old = (*task).thread.load(Ordering::Acquire);
-    if !old.is_null() {
-        Task_SetState(task, TASK_EXIT);
-        while (*task).thread.load(Ordering::Acquire) == old {
-            TaskSwitch();
-        }
     }
 }
