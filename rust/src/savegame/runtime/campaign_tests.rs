@@ -5,6 +5,42 @@ use crate::state::game_state_keys::STATE_KEYS;
 use serial_test::serial;
 
 #[test]
+fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
+    use crate::state::game_state::get_state_bits_raw;
+    use crate::state::game_state_keys::bit_range;
+
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves/utwig-alliance.sav");
+    let saved = decode_save(&std::fs::read(path).unwrap()).unwrap();
+    for name in ["UTWIG_HAVE_ULTRON", "UTWIG_SUPOX_MISSION"] {
+        let (start, end) = bit_range(name).unwrap();
+        assert_eq!(
+            get_state_bits_raw(&saved.game_state, start as usize, end as usize),
+            1,
+            "{name}"
+        );
+    }
+    for race in [7, 9] {
+        let fleet = saved
+            .race_queue
+            .iter()
+            .find(|fleet| fleet.index == race)
+            .unwrap();
+        assert_eq!(fleet.allied_state, 1, "fleet {race} must be allied");
+        assert!(fleet.days_left > 0, "fleet {race} must be travelling");
+        let destination = if race == 9 {
+            (7208, 7000)
+        } else {
+            (6479, 7541)
+        };
+        assert_eq!((fleet.dest_loc.x, fleet.dest_loc.y), destination);
+        if race == 9 {
+            assert_eq!(fleet.func_index, 9);
+        }
+    }
+}
+
+#[test]
 #[serial]
 fn every_committed_campaign_save_restores_and_round_trips_its_state() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
@@ -89,6 +125,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-syreen-shuttle" => (22, 5, 2156, 31, 7036, 115, 4),
             "dev-vault-open" => (7, 6, 2156, 29, 5141, 115, 4),
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
+            "utwig-alliance" => (26, 5, 2156, 32, 6934, 115, 4),
             "repaired-ultron" => (4, 4, 2156, 32, 12880, 115, 4),
             "north-refueled" => (6, 9, 2155, 43, 21000, 115, 4),
             "north-ready" => (20, 4, 2155, 46, 20000, 115, 4),

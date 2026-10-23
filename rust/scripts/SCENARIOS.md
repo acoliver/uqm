@@ -114,3 +114,14 @@ remains on the surface: completion requires a fresh vault unlock and shuttle
 consumption on the same trip. Native `pmid-20` passed and saved slot 1;
 `dev-vault-open.sav` is its development output. This subsegment stops before
 returning to Talana and does not prove `MYCON_AMBUSH`.
+
+### Utwig alliance checkpoint
+
+`campaign-s06a-utwig-alliance` loads `repaired-ultron.sav`, flies to Beta
+Aquarii and returns the completed Ultron through `got_ultron`. It saves local
+flight to slot 1 with `UTWIG_HAVE_ULTRON=1`, `ULTRON_CONDITION=5` and
+`UTWIG_SUPOX_MISSION=1`. The campaign retains 32 crew, 6934 fuel, 115 RU and
+four escorts. `load-utwig-alliance-v1` independently reloads the extracted save.
+The save round-trip tests also check that the Utwig and Supox fleets are allied,
+travelling to their mission destinations, and retain the Utwig arrival callback.
+This checkpoint precedes the Druuge guard battle and does not claim the bomb.
