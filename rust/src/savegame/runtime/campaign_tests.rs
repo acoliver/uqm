@@ -82,6 +82,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "broken-ultron" => (7, 7, 2155, 46, 10434, 115, 4),
             "funded-sol" => (14, 3, 2155, 46, 800, 2304, 1),
             "north-ready" => (20, 4, 2155, 46, 20000, 115, 4),
+            "north-artifacts" => (19, 8, 2155, 43, 4896, 115, 4),
             "spindle-pkunk" => (2, 4, 2155, 46, 3457, 1464, 5),
             "thraddash-diverted" => (13, 8, 2155, 46, 5494, 115, 4),
             other => panic!("missing expected state for {other}"),
