@@ -213,7 +213,7 @@ fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
         &output,
         member_limit,
     )?;
-    let rust_archive = stage_file("rust-archive.a", &paths.rust_archive)?;
+    let rust_archive = stage_file("rust-archive.rlib", &paths.rust_archive)?;
     let executable_bytes = read_regular_file_bounded(&paths.executable, member_limit)?;
     let cargo_manifest = stage_file("Cargo.toml", &root.join("rust/Cargo.toml"))?;
     let cargo_lock = stage_file("Cargo.lock", &root.join("rust/Cargo.lock"))?;
@@ -546,7 +546,7 @@ fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<
         [
             "linked-build-receipt.json",
             "cargo-messages.jsonl",
-            "rust-archive.a",
+            "rust-archive.rlib",
             "Cargo.toml",
             "Cargo.lock",
         ]
@@ -744,7 +744,7 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
             }
             Some("compiler-artifact")
                 if message["target"]["name"] == "uqm_rust"
-                    && cargo_message_has_target_kind(message, "staticlib")
+                    && cargo_message_has_target_kind(message, "rlib")
                     && message_source_is(message, &expected_lib) =>
             {
                 for path in message["filenames"].as_array().into_iter().flatten() {
@@ -753,7 +753,7 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
                         .file_name()
                         .and_then(|name| name.to_str())
                         .unwrap_or_default();
-                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".a") {
+                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".rlib") {
                         rust_archives.insert(PathBuf::from(path));
                     }
                 }
@@ -853,6 +853,49 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rust_library_artifacts_use_rlib_instead_of_staticlib() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("rust/src");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("main.rs"), "fn main() {}\n").unwrap();
+        fs::write(source.join("lib.rs"), "").unwrap();
+        let main = fs::canonicalize(source.join("main.rs")).unwrap();
+        let lib = fs::canonicalize(source.join("lib.rs")).unwrap();
+        let capture = |kind: &str, archive: &str| {
+            [
+                serde_json::json!({
+                    "reason": "compiler-artifact", "package_id": "uqm-package",
+                    "target": {"name": "uqm", "kind": ["bin"], "src_path": main},
+                    "executable": "/target/release/uqm"
+                }),
+                serde_json::json!({
+                    "reason": "compiler-artifact", "package_id": "uqm-package",
+                    "target": {"name": "uqm_rust", "kind": [kind], "src_path": lib},
+                    "filenames": [archive]
+                }),
+                serde_json::json!({
+                    "reason": "build-script-executed", "package_id": "uqm-package",
+                    "out_dir": "/target/release/build/uqm/out"
+                }),
+            ]
+            .into_iter()
+            .map(|message| format!("{message}\n"))
+            .collect::<String>()
+        };
+        let messages = capture("rlib", "/target/release/deps/libuqm_rust-test.rlib");
+        let paths = parse_production_paths(root.path(), messages.as_bytes()).unwrap();
+        assert_eq!(paths.executable, Path::new("/target/release/uqm"));
+        assert_eq!(
+            paths.rust_archive,
+            Path::new("/target/release/deps/libuqm_rust-test.rlib")
+        );
+        let legacy = capture("staticlib", "/target/release/deps/libuqm_rust-test.a");
+        assert!(parse_production_paths(root.path(), legacy.as_bytes()).is_err());
+        let mismatched = capture("rlib", "/target/release/deps/libuqm_rust-test.a");
+        assert!(parse_production_paths(root.path(), mismatched.as_bytes()).is_err());
+    }
 
     #[test]
     fn native_suite_total_is_checked_against_the_native_inventory_limit() {
