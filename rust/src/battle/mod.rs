@@ -20,6 +20,7 @@ mod integration_tests_p14;
 pub mod lifecycle;
 pub mod netplay;
 pub mod process_loop;
+pub mod process_native;
 pub mod ship_native;
 pub mod ship_runtime;
 pub mod sounds;
