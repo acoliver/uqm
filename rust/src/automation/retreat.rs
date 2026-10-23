@@ -28,7 +28,10 @@ impl Retreat {
             .flagship_crew
             .filter(|crew| *crew > 0 && *crew != u16::MAX)
         else {
-            return Progress::Failed("retreat_flagship_lost".into());
+            return Progress::Failed(format!(
+                "retreat_flagship_lost:crew={:?}:activity={}",
+                obs.flagship_crew, obs.activity
+            ));
         };
         if obs.activity & (0x1000 | 0x2000 | 0x4000) != 0 {
             return Progress::Failed("retreat_aborted_or_loaded".into());
@@ -47,7 +50,7 @@ impl Retreat {
                 escape: false,
             };
         }
-        let battle = obs.activity & 0x0200 != 0;
+        let battle = obs.activity & 0x0200 != 0 && obs.activity & 0xff == 2;
         if !self.started {
             if !battle || obs.activity & 0xff != 2 || obs.counters[1] == 0 {
                 return Progress::Failed("retreat_requires_ordinary_encounter".into());
@@ -156,7 +159,7 @@ mod tests {
                 escape: false
             }
         );
-        let Progress::Escaped(label) = retreat.observe(100, observation(3, 29, 0)) else {
+        let Progress::Escaped(label) = retreat.observe(100, observation(0x0203, 29, 0)) else {
             panic!("a surviving retreat must complete");
         };
         assert!(label.contains("enemy_left=5:flagship_crew=29"));
