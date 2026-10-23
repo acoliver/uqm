@@ -6,14 +6,120 @@
     non_snake_case,
     non_upper_case_globals,
     dead_code,
-    clippy::all,
-    clashing_extern_declarations,
-    reason = "generated C pointer types share ABI with existing opaque-pointer imports"
+    clippy::all
 )]
 pub mod abi {
     include!(concat!(env!("OUT_DIR"), "/ship_abi.rs"));
+
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub use crate::battle::sounds::ProcessSound;
+    pub use super::engine::{
+        abs_frame_index as SetAbsFrameIndex, abs_string_index as SetAbsStringTableIndex,
+        calculate_gravity as CalculateGravity, capture_drawable as CaptureDrawable,
+        current_battle_input as CurrentInputToBattleInput, dec_frame_index as DecFrameIndex,
+        destroy_drawable as DestroyDrawable, destroy_music as DestroyMusic,
+        destroy_sound as DestroySound, destroy_string_table as DestroyStringTable,
+        do_input as DoInput, draw_filled_rectangle as DrawFilledRectangle,
+        draw_filled_stamp as DrawFilledStamp, draw_sis_title as DrawSISTitle,
+        draw_stamp as DrawStamp, draw_text as font_DrawText,
+        drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
+        frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as inHQSpace,
+        in_hyper_space as inHyperSpace, inc_frame_index as IncFrameIndex,
+        insert_queue as InsertQueue, music_playing as PLRPlaying, play_music as PlayMusic,
+        release_drawable as ReleaseDrawable, release_string_table as ReleaseStringTable,
+        screen_transition as ScreenTransition, set_context as SetContext,
+        set_context_font as SetContextFont, set_flash_rect as SetFlashRect,
+        set_mipmap as TFB_DrawScreen_SetMipmap, set_status_mode as SetStatusMessageMode,
+        set_transition_source as SetTransitionSource, set_velocity_vector as SetVelocityVector,
+        string_address as GetStringAddress, utf8_string_copy as utf8StringCopy,
+    };
+
+    // Bindgen does not translate these cast-expression macros from controls.h
+    // and intel.h. Keep their C operand widths at the shared ABI boundary.
+    pub const BATTLE_LEFT: BATTLE_INPUT_STATE = 1 << 0;
+    pub const BATTLE_RIGHT: BATTLE_INPUT_STATE = 1 << 1;
+    pub const BATTLE_THRUST: BATTLE_INPUT_STATE = 1 << 2;
+    pub const BATTLE_WEAPON: BATTLE_INPUT_STATE = 1 << 3;
+    pub const BATTLE_SPECIAL: BATTLE_INPUT_STATE = 1 << 4;
+    pub const STANDARD_RATING: BYTE = 1 << 4;
+    pub const GOOD_RATING: BYTE = 1 << 5;
+    pub const AWESOME_RATING: BYTE = 1 << 6;
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use super::engine::sleep_thread as SleepThread;
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use super::engine::{
+        alloc_link as AllocLink, draw_batch as DrawBatch, draw_rectangle as DrawRectangle,
+        frame_count as GetFrameCount, frame_index as GetFrameIndex, put_queue as PutQueue,
+        rel_frame_index as SetRelFrameIndex,
+    };
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn frameInputHuman(
+        context: *mut HumanInputContext,
+        ship: *mut STARSHIP,
+    ) -> BATTLE_INPUT_STATE {
+        extern "C" {
+            #[link_name = "frameInputHuman"]
+            fn legacy(context: *mut std::ffi::c_void, ship: *mut std::ffi::c_void) -> u32;
+        }
+        legacy(context.cast(), ship.cast()) as BATTLE_INPUT_STATE
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
+        extern "C" {
+            #[link_name = "FleetIsInfinite"]
+            fn legacy(player: u16) -> i32;
+        }
+        legacy(player) as BOOLEAN
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use crate::battle::galaxy::MoveGalaxy;
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn AllocElement() -> HELEMENT {
+        extern "C" {
+            #[link_name = "AllocElement"]
+            fn legacy() -> usize;
+        }
+        legacy() as HELEMENT
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn FreeElement(handle: HELEMENT) {
+        extern "C" {
+            #[link_name = "FreeElement"]
+            fn legacy(handle: usize);
+        }
+        legacy(handle as usize)
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use crate::battle::sounds::{
+        CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
+    };
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn battleEndReadyComputer(context: *mut ComputerInputContext) -> bool {
+        extern "C" {
+            #[link_name = "battleEndReadyComputer"]
+            fn legacy(context: *mut std::ffi::c_void) -> bool;
+        }
+        legacy(context.cast())
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn battleEndReadyHuman(context: *mut HumanInputContext) -> bool {
+        extern "C" {
+            #[link_name = "battleEndReadyHuman"]
+            fn legacy(context: *mut std::ffi::c_void) -> bool;
+        }
+        legacy(context.cast())
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
+        extern "C" {
+            #[link_name = "battleEndReadyNetwork"]
+            fn legacy(context: *mut std::ffi::c_void) -> bool;
+        }
+        legacy(context.cast())
+    }
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub use crate::battle::world_elements::do_damage;
+    pub use crate::math::TFB_SeedRandom;
+
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::weapon_native::{
         initialize_laser, initialize_missile, weapon_collision, ModifySilhouette, TrackShip,
@@ -29,34 +135,330 @@ mod engine {
 
     // Keep opaque-pointer declarations identical to existing engine imports.
     extern "C" {
-        fn PutQueue(queue: *mut c_void, handle: *mut c_void);
-        fn GetFrameIndex(frame: *mut c_void) -> u16;
-        fn GetFrameCount(frame: *mut c_void) -> u16;
-        fn SetRelFrameIndex(frame: *mut c_void, offset: i16) -> *mut c_void;
+        fn DrawStamp(stamp: *mut crate::comm::locdata::CStamp);
+        fn DrawFilledStamp(stamp: *mut crate::comm::locdata::CStamp);
+        fn DrawFilledRectangle(rect: *mut crate::comm::locdata::CRect);
+        fn font_DrawText(text: *mut crate::comm::sis_graphics::CText);
+        fn SetContextFont(font: *mut c_void) -> *mut c_void;
+        fn DestroySound(sound: *mut c_void);
+        fn inHyperSpace() -> i32;
+        fn SetFlashRect(rect: *const c_void);
+        fn DrawSISTitle(title: *const std::ffi::c_char);
+        fn SetStatusMessageMode(mode: i32) -> i32;
+        fn SetTransitionSource(rect: *mut c_void);
+        fn DrawRectangle(rect: *mut crate::comm::locdata::CRect);
         fn rust_bridge_OBJECT_CLOAKED(element: *mut c_void) -> c_int;
+    }
+
+    /// # Safety
+    /// `queue` must be live; both handles must belong to its pool and `handle` must be unlinked.
+    pub unsafe fn insert_queue(queue: *mut abi::QUEUE, handle: abi::HLINK, before: abi::HLINK) {
+        crate::collections::queue::InsertQueue(queue.cast(), handle, before);
+    }
+
+    /// # Safety
+    /// `dst` must hold `size` bytes and `src` must be NUL-terminated.
+    pub unsafe fn utf8_string_copy(
+        dst: *mut std::ffi::c_char,
+        size: usize,
+        src: *const std::ffi::c_char,
+    ) -> *mut u8 {
+        crate::strings::unicode::utf8StringCopy(dst.cast(), size, src.cast())
+    }
+
+    /// # Safety
+    /// `table` must be null or a live table no longer in use.
+    pub unsafe fn destroy_string_table(table: abi::STRING_TABLE) -> abi::BOOLEAN {
+        crate::strings::string_table::DestroyStringTable(table.cast()) as abi::BOOLEAN
+    }
+
+    /// # Safety
+    /// `entry` must be null or a live string-table entry.
+    pub unsafe fn release_string_table(entry: abi::STRING) -> abi::STRING_TABLE {
+        crate::strings::string_table::ReleaseStringTable(entry.cast()).cast()
+    }
+
+    /// # Safety
+    /// `entry` must be null or a live string-table entry.
+    pub unsafe fn abs_string_index(entry: abi::STRING, index: abi::COUNT) -> abi::STRING {
+        crate::strings::string_table::SetAbsStringTableIndex(entry.cast(), index).cast()
+    }
+
+    /// # Safety
+    /// `entry` must be null or a live string-table entry; returned storage must not outlive its table.
+    pub unsafe fn string_address(entry: abi::STRING) -> *mut std::ffi::c_char {
+        crate::strings::string_table::GetStringAddress(entry.cast()).cast()
+    }
+
+    /// # Safety
+    /// `context` must be null or a live context owned by the game thread.
+    pub unsafe fn set_context(context: abi::CONTEXT) -> abi::CONTEXT {
+        crate::battle::c_bridge::SetContext(context.cast()).cast()
+    }
+
+    /// # Safety
+    /// Both controls and their frames must be live and owned by the game thread.
+    pub unsafe fn drawables_intersect(
+        a: *mut abi::INTERSECT_CONTROL,
+        b: *mut abi::INTERSECT_CONTROL,
+        max_time: abi::TIME_VALUE,
+    ) -> abi::TIME_VALUE {
+        crate::graphics::geometry_ffi::DrawablesIntersect(a.cast(), b.cast(), max_time)
+    }
+
+    /// # Safety
+    /// `drawable` must be null or a live drawable no longer in use.
+    pub unsafe fn destroy_drawable(drawable: abi::DRAWABLE) -> abi::BOOLEAN {
+        crate::battle::c_bridge::DestroyDrawable(drawable.cast())
+    }
+
+    /// # Safety
+    /// `frame` must be live and `rect` must be writable on the game thread.
+    pub unsafe fn frame_rect(frame: abi::FRAME, rect: *mut abi::RECT) {
+        crate::battle::c_bridge::GetFrameRect(frame.cast(), rect.cast());
+    }
+
+    /// # Safety
+    /// `frame` must be a live drawable frame.
+    pub unsafe fn frame_hot(frame: abi::FRAME) -> abi::HOT_SPOT {
+        let point = crate::battle::c_bridge::GetFrameHot(frame.cast());
+        abi::HOT_SPOT {
+            x: point.x,
+            y: point.y,
+        }
+    }
+
+    /// # Safety
+    /// `velocity` must point to a live engine velocity record.
+    pub unsafe fn set_velocity_vector(
+        velocity: *mut abi::VELOCITY_DESC,
+        magnitude: abi::SIZE,
+        facing: abi::COUNT,
+    ) {
+        crate::battle::velocity::SetVelocityVector(velocity.cast(), magnitude, facing);
+    }
+
+    /// # Safety
+    /// `element` and the display queue must be live on the game thread.
+    pub unsafe fn calculate_gravity(element: *mut abi::ELEMENT) -> abi::BOOLEAN {
+        crate::battle::gravity::CalculateGravity(element.cast()) as abi::BOOLEAN
+    }
+
+    /// # Safety
+    /// `player` must be a valid side with initialized input state.
+    pub unsafe fn current_battle_input(player: abi::COUNT) -> abi::BATTLE_INPUT_STATE {
+        crate::battle::c_bridge::CurrentInputToBattleInput(player)
+    }
+
+    /// # Safety
+    /// `state` must have a valid input callback and remain live for the input loop.
+    pub unsafe fn do_input(state: *mut c_void, reset: abi::BOOLEAN) {
+        crate::battle::c_bridge::DoInput(state, reset);
+    }
+
+    /// # Safety
+    /// `music` must be null or a live music handle no longer playing.
+    pub unsafe fn destroy_music(music: abi::MUSIC_REF) {
+        crate::battle::c_bridge::DestroyMusic(music.cast());
+    }
+
+    /// # Safety
+    /// `music` must be a live music handle or the engine wildcard handle.
+    pub unsafe fn music_playing(music: abi::MUSIC_REF) -> abi::BOOLEAN {
+        crate::battle::c_bridge::PLRPlaying(music.cast()) as abi::BOOLEAN
+    }
+
+    /// # Safety
+    /// `music` must be live and audio state must be owned by the game thread.
+    pub unsafe fn play_music(music: abi::MUSIC_REF, continuous: abi::BOOLEAN, priority: abi::BYTE) {
+        crate::battle::c_bridge::PlayMusic(music.cast(), continuous, priority);
+    }
+
+    /// # Safety
+    /// `rect` must be null or live; the game thread must own drawing state.
+    pub unsafe fn screen_transition(transition: i32, rect: *const abi::RECT) {
+        crate::battle::c_bridge::ScreenTransition(transition, rect.cast());
+    }
+
+    /// # Safety
+    /// Images must be live and owned by the graphics thread.
+    pub unsafe fn set_mipmap(
+        image: *mut abi::TFB_Image,
+        mipmap: *mut abi::TFB_Image,
+        hot_x: i32,
+        hot_y: i32,
+    ) {
+        crate::battle::c_bridge::TFB_DrawScreen_SetMipmap(
+            image.cast(),
+            mipmap.cast(),
+            hot_x,
+            hot_y,
+        );
+    }
+
+    /// # Safety
+    /// Activity state must be initialized and accessed only on the game thread.
+    pub unsafe fn in_hq_space() -> abi::BOOLEAN {
+        crate::battle::c_bridge::inHQSpace() as abi::BOOLEAN
+    }
+
+    /// # Safety
+    /// The argument and current graphics context must be live on the game thread.
+    pub unsafe fn draw_stamp(stamp: *mut abi::STAMP) {
+        DrawStamp(stamp.cast());
+    }
+
+    /// # Safety
+    /// The argument and current graphics context must be live on the game thread.
+    pub unsafe fn draw_filled_stamp(stamp: *mut abi::STAMP) {
+        DrawFilledStamp(stamp.cast());
+    }
+
+    /// # Safety
+    /// The argument and current graphics context must be live on the game thread.
+    pub unsafe fn draw_filled_rectangle(rect: *mut abi::RECT) {
+        DrawFilledRectangle(rect.cast());
+    }
+
+    /// # Safety
+    /// The argument and current graphics context must be live on the game thread.
+    pub unsafe fn draw_text(text: *mut abi::TEXT) {
+        font_DrawText(text.cast());
+    }
+
+    /// # Safety
+    /// `font` must be null or a live engine font on the game thread.
+    pub unsafe fn set_context_font(font: abi::FONT) -> abi::FONT {
+        SetContextFont(font.cast()).cast()
+    }
+
+    /// # Safety
+    /// `sound` must be null or a live sound bank no longer in use.
+    pub unsafe fn destroy_sound(sound: abi::SOUND_REF) {
+        DestroySound(sound.cast());
+    }
+
+    /// # Safety
+    /// Activity state must be initialized and accessed only on the game thread.
+    pub unsafe fn in_hyper_space() -> abi::BOOLEAN {
+        inHyperSpace() as abi::BOOLEAN
+    }
+
+    /// # Safety
+    /// `rect` must be live, null, or an engine flash sentinel on the game thread.
+    pub unsafe fn set_flash_rect(rect: *const abi::RECT) {
+        SetFlashRect(rect.cast());
+    }
+
+    /// # Safety
+    /// `title` must be null or a NUL-terminated string valid through the draw call.
+    pub unsafe fn draw_sis_title(title: *mut std::ffi::c_char) {
+        DrawSISTitle(title);
+    }
+
+    /// # Safety
+    /// The game thread must own initialized status-message state.
+    pub unsafe fn set_status_mode(mode: abi::StatMsgMode) -> abi::StatMsgMode {
+        SetStatusMessageMode(mode as i32) as abi::StatMsgMode
+    }
+
+    /// # Safety
+    /// `rect` must be null or a live rectangle on the game thread.
+    pub unsafe fn set_transition_source(rect: *const abi::RECT) {
+        SetTransitionSource(rect.cast_mut().cast());
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn capture_drawable(drawable: abi::DRAWABLE) -> abi::FRAME {
+        crate::graphics::pixmap_abi::CaptureDrawable(drawable.cast()).cast()
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn release_drawable(frame: abi::FRAME) -> abi::DRAWABLE {
+        crate::graphics::pixmap_abi::ReleaseDrawable(frame.cast()).cast()
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn abs_frame_index(frame: abi::FRAME, index: abi::COUNT) -> abi::FRAME {
+        crate::graphics::pixmap_abi::SetAbsFrameIndex(frame.cast(), index).cast()
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn equ_frame_index(dst: abi::FRAME, src: abi::FRAME) -> abi::FRAME {
+        crate::graphics::pixmap_abi::SetEquFrameIndex(dst.cast(), src.cast()).cast()
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn inc_frame_index(frame: abi::FRAME) -> abi::FRAME {
+        crate::graphics::pixmap_abi::IncFrameIndex(frame.cast()).cast()
+    }
+
+    /// # Safety
+    /// Pointers must be null or live frames or drawables owned by the game thread.
+    pub unsafe fn dec_frame_index(frame: abi::FRAME) -> abi::FRAME {
+        crate::graphics::pixmap_abi::DecFrameIndex(frame.cast()).cast()
+    }
+
+    /// # Safety
+    /// The game thread must own initialized pacing and display state.
+    pub unsafe fn sleep_thread(ticks: u32) {
+        crate::battle::c_bridge::SleepThread(ticks as i32);
+    }
+
+    /// # Safety
+    /// `queue` must be an initialized engine queue owned by the game thread.
+    pub unsafe fn alloc_link(queue: *mut abi::QUEUE) -> abi::HLINK {
+        crate::collections::queue::AllocLink(queue.cast())
+    }
+
+    /// # Safety
+    /// `handle` must be an unlinked live element allocated from `queue`.
+    pub unsafe fn put_queue(queue: *mut abi::QUEUE, handle: abi::HLINK) {
+        crate::collections::queue::PutQueue(queue.cast(), handle);
+    }
+
+    /// # Safety
+    /// `rect` must be live and drawing state must be owned by the game thread.
+    pub unsafe fn draw_rectangle(rect: *mut abi::RECT) {
+        DrawRectangle(rect.cast());
+    }
+
+    /// # Safety
+    /// `primitives` and its linked list must be valid for the current drawing context.
+    pub unsafe fn draw_batch(
+        primitives: *mut abi::PRIMITIVE,
+        links: abi::PRIM_LINKS,
+        flags: abi::BATCH_FLAGS,
+    ) {
+        crate::c_bindings::global_state::DrawBatch(primitives.cast(), links, flags);
     }
 
     /// # Safety
     /// `handle` must be an allocated element not currently linked in `disp_q`.
     pub unsafe fn put_element(handle: abi::HELEMENT) {
-        PutQueue((&raw mut abi::disp_q).cast(), handle);
+        put_queue(&raw mut abi::disp_q, handle);
     }
 
     /// # Safety
     /// `frame` must be null or a live engine frame.
     pub unsafe fn frame_index(frame: abi::FRAME) -> u16 {
-        GetFrameIndex(frame.cast())
+        crate::graphics::pixmap_abi::GetFrameIndex(frame.cast())
     }
     /// # Safety
     /// `frame` must be a live engine frame.
     pub unsafe fn frame_count(frame: abi::FRAME) -> u16 {
-        GetFrameCount(frame.cast())
+        crate::graphics::pixmap_abi::GetFrameCount(frame.cast())
     }
 
     /// # Safety
     /// `frame` must be null or a live engine frame.
     pub unsafe fn rel_frame_index(frame: abi::FRAME, offset: i16) -> abi::FRAME {
-        SetRelFrameIndex(frame.cast(), offset).cast()
+        crate::graphics::pixmap_abi::SetRelFrameIndex(frame.cast(), offset).cast()
     }
 
     /// # Safety

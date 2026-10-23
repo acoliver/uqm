@@ -58,7 +58,7 @@ extern "C" {
     fn LoadSound(res_id: *const c_void) -> *mut c_void;
     fn CaptureSound(sound: *mut c_void) -> *mut c_void;
     fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
-    fn DestroySound(sound: *mut c_void) -> i32;
+    fn DestroySound(sound: *mut c_void);
 
     fn LoadStringTable(res_id: *const c_void) -> *mut c_void;
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;

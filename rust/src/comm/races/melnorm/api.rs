@@ -27,7 +27,7 @@ mod live {
         fn DrawStatusMessage(message: *const c_char);
         fn DrawCargoStrings(old: u8, new: u8);
         fn SleepThread(ticks: i32);
-        fn AnyButtonPress(special: u8) -> u8;
+        fn AnyButtonPress(special: u32) -> u32;
         fn ClearSISRect(flags: u16);
     }
     impl MelnormApi for LiveScript<Handler> {
