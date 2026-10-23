@@ -112,7 +112,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("load-portal-sol-v1", &[Domain::SaveLoad]),
     row("load-starbase-armed-v1", &[Domain::SaveLoad]),
     row(
-        "campaign-s08g-connected-arilou",
+        "campaign-s08g-funded-fleet",
         &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,
