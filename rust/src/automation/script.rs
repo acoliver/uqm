@@ -2171,6 +2171,13 @@ fn validate_navigation_step(
             step.max_ticks
         }
         Action::FlyToStar(flight) => {
+            if flight.retreat_encounters && flight.encounter_response.is_some() {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "flight retreat and encounter_response are mutually exclusive",
+                )));
+            }
             if flight.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
                     path,
@@ -4492,6 +4499,12 @@ mod tests {
         ] {
             assert!(validated(step).is_err(), "{step}");
         }
+    }
+
+    #[test]
+    fn star_flight_accepts_a_patrol_response_but_not_a_retreat_with_it() {
+        assert!(validated(r#"{"action":"fly_to_star","target":"Delta Vulpeculae","max_ticks":2,"encounter_response":"bye_ally"}"#).is_ok());
+        assert!(validated(r#"{"action":"fly_to_star","target":"Delta Vulpeculae","max_ticks":2,"encounter_response":"bye_ally","retreat_encounters":true}"#).is_err());
     }
 
     #[test]
