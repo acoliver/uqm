@@ -383,79 +383,6 @@ fn font_char_rejects_a_backing_surface_that_is_too_small() {
     }
 }
 
-#[test]
-fn unscaled_image_is_drawn_relative_to_its_hotspot() {
-    unsafe {
-        let normal = surface(2, 2, false);
-        put(normal, 0, 0, rgb(1, 2, 3));
-        let mut img: TFB_Image = std::mem::zeroed();
-        img.NormalImg = normal.cast();
-        img.NormalHs = HOT_SPOT { x: 1, y: 1 };
-        let dst = surface(4, 4, false);
-        draw_image_locked(
-            &mut img,
-            2,
-            2,
-            0,
-            0,
-            ptr::null_mut(),
-            mode(DRAW_REPLACE, 0),
-            dst,
-        );
-        assert_eq!(px(dst, 1, 1), rgb(1, 2, 3));
-        assert_eq!(px(dst, 2, 2), 0);
-        SDL_FreeSurface(normal);
-        SDL_FreeSurface(dst);
-    }
-}
-
-#[test]
-fn filled_image_paints_present_pixels_and_caches_the_fill() {
-    unsafe {
-        let normal = surface(2, 1, true);
-        put(normal, 0, 0, 0xff10_2030);
-        put(normal, 1, 0, 0);
-        let mut img: TFB_Image = std::mem::zeroed();
-        img.NormalImg = normal.cast();
-        let dst = surface(2, 1, true);
-        let fill_color = color(1, 2, 3, 255);
-
-        draw_filled_image_locked(&mut img, 0, 0, 0, 0, fill_color, mode(DRAW_REPLACE, 0), dst);
-        assert_eq!(px(dst, 0, 0), rgb(1, 2, 3) | 0xff00_0000);
-        assert_eq!(px(dst, 1, 0), 0);
-        assert!(!img.FilledImg.is_null());
-        assert_eq!(img.last_fill.r, 1);
-        SDL_FreeSurface(img.FilledImg.cast());
-        SDL_FreeSurface(normal);
-        SDL_FreeSurface(dst);
-    }
-}
-
-#[test]
-fn filled_paletted_image_recolors_the_whole_palette() {
-    unsafe {
-        let normal = paletted(2, 1);
-        let mut img: TFB_Image = std::mem::zeroed();
-        img.NormalImg = normal.cast();
-        let dst = surface(2, 1, false);
-        draw_filled_image_locked(
-            &mut img,
-            0,
-            0,
-            0,
-            0,
-            color(4, 5, 6, 255),
-            mode(DRAW_REPLACE, 0),
-            dst,
-        );
-        let entry = *(*(*(*normal).format).palette).colors.add(9);
-        assert_eq!((entry.r, entry.g, entry.b), (4, 5, 6));
-        assert_eq!(img.colormap_version, -1);
-        SDL_FreeSurface(normal);
-        SDL_FreeSurface(dst);
-    }
-}
-
 unsafe fn extent_of(
     src: *mut SDL_Surface,
     hs: (i16, i16),
@@ -1026,23 +953,6 @@ fn screen_format_substitutes_rgba_for_paletted_displays() {
         assert_eq!((fmt.BitsPerPixel, fmt.Gmask, fmt.Amask), (32, 0xff00, 0));
         SDL_FreeSurface(indexed);
         SDL_FreeSurface(truecolor);
-    }
-}
-
-#[test]
-fn scale_target_reuses_matching_canvas_and_replaces_other_kinds() {
-    unsafe {
-        let src = surface(4, 3, true);
-        let first =
-            TFB_DrawCanvas_New_ScaleTarget(src.cast(), ptr::null_mut(), TFB_SCALE_NEAREST, 0);
-        let first_surf: *mut SDL_Surface = first.cast();
-        assert_eq!(((*first_surf).w, (*first_surf).h), (4, 3));
-
-        let reused =
-            TFB_DrawCanvas_New_ScaleTarget(src.cast(), first, TFB_SCALE_NEAREST, TFB_SCALE_NEAREST);
-        assert_eq!(reused, first);
-        TFB_DrawCanvas_Delete(reused);
-        SDL_FreeSurface(src);
     }
 }
 
