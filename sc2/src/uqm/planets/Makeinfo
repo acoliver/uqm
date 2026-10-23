@@ -1,6 +1,4 @@
-uqm_CFILES="
-		pl_stuff.c planets.c plangen.c pstarmap.c 
-		 scan.c solarsys.c"
+uqm_CFILES="planets.c plangen.c pstarmap.c scan.c solarsys.c"
 uqm_HFILES="elemdata.h generate.h lander.h lifeform.h plandata.h planets.h
 		scan.h solarsys.h sundata.h"
 
