@@ -1335,3 +1335,27 @@ flight to slot 1: Ultron condition 1, Helix aboard, Helix unprotected, mission 1
 Clear Spindle aboard, fuel 4896, RU 115 and flagship crew 43. The separate
 `load-north-artifacts-v1` asserts those extracted values and catalog star 441.
 The caster diversion and Ultron repair remain subsequent segments.
+
+### Contacting a trader during the northern campaign
+
+`navigate_to_contact {"race":12,"max_ticks":24000}` pursues a live
+interplanetary ship group. Race IDs use the same zero-based numbering as
+`escorts:species:N`; Melnorme is 12. The controller reads the group's current
+inner/outer-system location, follows its planet when it is in another view,
+then drives velocity toward the moving ship using normal thrust and turn
+inputs. It stops only at an encounter preview or direct greeting with the requested
+race in the actual encounter fleet. A wrong-race collision fails, and an absent group
+cannot satisfy the bounded wait. The following communication wait hails the
+ship through the normal menu. Entering a planet's orbit does not prove contact.
+
+`campaign-s04a-north-refueled` loads `north-artifacts.sav`, orbits Epsilon
+Draconis I to discover its rainbow-world location (`RAINBOW_WORLD0=32`), and
+contacts the Melnorme at Alpha Apodis using the live-group controller. Selling
+the newly discovered location earns 500 credits. Filling the four installed
+tanks from 3383 to 21000 raw fuel costs 177 credits, leaving 323 (credit bytes
+67 and 1). Crew remains 43, RU remains 115, and the Ultron, Spindle and Helix
+remain aboard. The producer saves in local flight to slot 1; the corresponding
+`load-north-refueled-v1` checks the extracted snapshot through ordinary Load.
+The explicit discovery capture is taken after departure. Orbit-state assertion
+checkpoints still retain OS images; paired rotating-planet captures have a
+separately reported synchronization problem in issue #395.

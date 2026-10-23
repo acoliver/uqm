@@ -1558,6 +1558,64 @@ impl Coordinator {
         if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(inner, phrase)) {
             return scheduler_event;
         }
+        if let Some(Action::NavigateToContact(step)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let preview = crate::automation::ui_observation::encounter_menu_active();
+            let conversation = crate::automation::ui_observation::conversation_snapshot().active;
+            let contact = preview || conversation;
+            let snapshot = crate::automation::input_ffi::contact_snapshot(step.race);
+            let control = if contact {
+                Default::default()
+            } else if let Some((snapshot, same_view)) = snapshot {
+                let steer = if same_view {
+                    crate::automation::navigation::steer_moon_navigation
+                } else {
+                    crate::automation::navigation::steer_toward_target
+                };
+                steer(crate::automation::navigation::NavigationObservation {
+                    active: snapshot.active != 0,
+                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
+                    in_orbit: snapshot.in_orbit != 0,
+                    ship_x: snapshot.ship_x,
+                    ship_y: snapshot.ship_y,
+                    ship_facing: snapshot.ship_facing as u8,
+                    target_x: snapshot.target_x,
+                    target_y: snapshot.target_y,
+                    velocity_x: snapshot.velocity_x,
+                    velocity_y: snapshot.velocity_y,
+                    view_center_x: snapshot.view_center_x,
+                    view_center_y: snapshot.view_center_y,
+                    target_guard_active: false,
+                })
+            } else {
+                Default::default()
+            };
+            if !Self::set_navigation_controls(control) {
+                self.reject_input(inner, "navigate_to_contact", -1, -1);
+            } else if contact {
+                let race = crate::automation::input_ffi::contact_race();
+                let reached = crate::automation::navigation::contact_reached(
+                    step.race,
+                    race,
+                    preview,
+                    conversation,
+                );
+                let label = if reached {
+                    format!("contact_reached:race={}", step.race)
+                } else {
+                    format!("contact_wrong_race:want={}:actual={race:?}", step.race)
+                };
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                scheduler_event = if reached {
+                    SchedulerEvent::NavigationReached
+                } else {
+                    inner.sched_state.terminal = Some(TerminalOutcome::SemanticMismatch);
+                    scheduler_event
+                };
+            }
+            return scheduler_event;
+        }
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {

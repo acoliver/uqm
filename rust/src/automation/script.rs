@@ -460,6 +460,14 @@ pub struct NavigateToPlanetStep {
     pub encounter_response: Option<String>,
 }
 
+/// Pursue a live interplanetary group using ordinary flight controls.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToContactStep {
+    pub race: u8,
+    pub max_ticks: u64,
+}
+
 /// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -884,6 +892,7 @@ pub enum Action {
     SetPlayerKey(SetPlayerKeyStep),
     TapPlayerKey(TapPlayerKeyStep),
     NavigateToPlanet(NavigateToPlanetStep),
+    NavigateToContact(NavigateToContactStep),
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
     NavigateToHyperspace(NavigateToHyperspaceStep),
@@ -2092,6 +2101,16 @@ fn validate_navigation_step(
             }
             navigation.max_ticks
         }
+        Action::NavigateToContact(step) => {
+            if step.race >= 25 || step.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_contact requires race 0..24 and positive max_ticks",
+                )));
+            }
+            step.max_ticks
+        }
         Action::NavigateToOrbit(navigation) => {
             if navigation.planet > 8 || navigation.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
@@ -2452,6 +2471,20 @@ mod tests {
     }
 
     // --- REQ-SCRIPT-001: strict UTF-8/root parse ---
+
+    #[test]
+    fn contact_navigation_requires_a_real_species_and_positive_budget() {
+        let script =
+            validated_steps(r#"{"action":"navigate_to_contact","race":12,"max_ticks":100}"#)
+                .unwrap();
+        assert!(matches!(&script.steps()[0], Action::NavigateToContact(step) if step.race == 12));
+        for bad in [
+            r#"{"action":"navigate_to_contact","race":25,"max_ticks":100}"#,
+            r#"{"action":"navigate_to_contact","race":12,"max_ticks":0}"#,
+        ] {
+            assert!(validated_steps(bad).is_err());
+        }
+    }
 
     #[test]
     fn navigation_patrol_phrases_are_explicit_and_opt_in() {
