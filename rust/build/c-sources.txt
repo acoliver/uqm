@@ -1,3 +1,2 @@
 sc2/src/libs/log/uqmlog.c
 sc2/src/uqm/comm_variadic.c
-sc2/src/uqm/rust_bridge_ships.c

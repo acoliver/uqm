@@ -107,7 +107,15 @@ mod engine {
         fn SetStatusMessageMode(mode: i32) -> i32;
         fn SetTransitionSource(rect: *mut c_void);
         fn DrawRectangle(rect: *mut crate::comm::locdata::CRect);
-        fn rust_bridge_OBJECT_CLOAKED(element: *mut c_void) -> c_int;
+        #[cfg(all(test, not(feature = "linked_c_archive")))]
+        #[link_name = "rust_bridge_OBJECT_CLOAKED"]
+        fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int;
+    }
+    /// # Safety
+    /// Called on the game thread with the live resources required by the Rust provider.
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    unsafe fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int {
+        (crate::ships::native_adapters::rust_bridge_OBJECT_CLOAKED(element as _)) as _
     }
 
     /// # Safety
@@ -424,7 +432,7 @@ mod engine {
     /// # Safety
     /// `element` must be live, with a valid display primitive.
     pub unsafe fn object_cloaked(element: *mut abi::ELEMENT) -> bool {
-        rust_bridge_OBJECT_CLOAKED(element.cast()) != 0
+        rust_bridge_object_cloaked(element.cast()) != 0
     }
 }
 

@@ -20,3 +20,5 @@ pub mod types;
 pub mod writeback;
 
 pub mod ffi;
+
+pub mod native_adapters;

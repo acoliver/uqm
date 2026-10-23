@@ -40,10 +40,36 @@ mod production {
         fn InitDisplayList();
         fn AllocElement() -> usize;
         fn FreeElement(element: usize);
-        fn rust_bridge_LockElement(element: usize, pointer: *mut *mut c_void);
-        fn rust_bridge_UnlockElement(element: usize);
-        fn rust_bridge_PutElement(element: usize);
+        #[cfg(all(test, not(feature = "linked_c_archive")))]
+        #[link_name = "rust_bridge_LockElement"]
+        fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void);
+        #[cfg(all(test, not(feature = "linked_c_archive")))]
+        #[link_name = "rust_bridge_UnlockElement"]
+        fn rust_bridge_unlock_element(element: usize);
+        #[cfg(all(test, not(feature = "linked_c_archive")))]
+        #[link_name = "rust_bridge_PutElement"]
+        fn rust_bridge_put_element(element: usize);
         fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
+    }
+    /// # Safety
+    /// Called on the game thread with the live resources required by the Rust provider.
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    unsafe fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void) {
+        crate::ships::native_adapters::rust_bridge_LockElement(element as _, pointer as _);
+    }
+
+    /// # Safety
+    /// Called on the game thread with the live resources required by the Rust provider.
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    unsafe fn rust_bridge_unlock_element(element: usize) {
+        crate::ships::native_adapters::rust_bridge_UnlockElement(element as _);
+    }
+
+    /// # Safety
+    /// Called on the game thread with the live resources required by the Rust provider.
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    unsafe fn rust_bridge_put_element(element: usize) {
+        crate::ships::native_adapters::rust_bridge_PutElement(element as _);
     }
 
     pub unsafe fn generate() {
@@ -82,19 +108,19 @@ mod production {
                     continue;
                 }
                 let mut element = std::ptr::null_mut::<c_void>();
-                rust_bridge_LockElement(handle, &mut element);
+                rust_bridge_lock_element(handle, &mut element);
                 if element.is_null() {
                     FreeElement(handle);
                     continue;
                 }
                 let initialized =
                     initialize_element(element.cast::<Element>(), solar, scan, raw_node, generated);
-                rust_bridge_UnlockElement(handle);
+                rust_bridge_unlock_element(handle);
                 if initialized.is_err() {
                     FreeElement(handle);
                     continue;
                 }
-                rust_bridge_PutElement(handle);
+                rust_bridge_put_element(handle);
             }
         }
     }

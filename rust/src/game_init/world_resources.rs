@@ -165,3 +165,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub use live::free_gravity_well;

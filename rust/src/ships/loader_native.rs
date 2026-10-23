@@ -189,3 +189,6 @@ mod engine {
         c_free_ship(d, icons, battle);
     }
 }
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub(crate) use engine::free_ship;
