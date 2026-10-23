@@ -1,4 +1,5 @@
 //! Front-end presentations.
+pub mod cnctdlg;
 pub mod credits;
 pub mod fmv;
 pub mod gameopt;
