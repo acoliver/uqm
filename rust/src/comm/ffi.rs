@@ -990,11 +990,13 @@ fn run_alien_talk_unlocked(
 /// Returns 1 if playback ended naturally, 0 if aborted.
 pub unsafe extern "C" fn rust_talk_segue(wait: c_int) -> c_int {
     let wait_track = if wait <= 0 { 0 } else { wait as u32 };
-    let mut state = COMM_STATE.write();
-    if super::talk_segue::talk_segue(&mut state, wait_track) {
-        1
-    } else {
-        0
+    #[cfg(not(test))]
+    {
+        super::talk_segue::dinput::run_talk_segue_dinput(wait_track) as c_int
+    }
+    #[cfg(test)]
+    {
+        super::talk_segue::talk_segue(&mut COMM_STATE.write(), wait_track) as c_int
     }
 }
 

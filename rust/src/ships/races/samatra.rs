@@ -1,5 +1,11 @@
 #[path = "samatra_native.rs"]
 mod native;
+#[path = "samatra_state.rs"]
+pub mod observation;
+
+pub fn snapshot() -> Option<observation::Snapshot> {
+    native::snapshot()
+}
 // Sa-Matra (Last Battle) - Boss ship: yellow comets + green sentinels + shield generators
 // @plan PLAN-20260314-SHIPS.P13
 

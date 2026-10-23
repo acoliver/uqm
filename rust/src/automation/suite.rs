@@ -70,6 +70,8 @@ impl Domain {
 /// Why a scenario carries no gameplay assertion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixtureKind {
+    /// Uses granted development setup and cannot prove campaign ancestry.
+    DevelopmentSetup,
     /// Deliberately hangs, to prove a watchdog fires.
     HangFixture,
     /// Deliberately idles, to prove the idle path is exercised.
@@ -249,6 +251,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("setup-menu-v1", &[Domain::BootMenu]),
     row("netplay-dialog-v1", &[Domain::BootMenu]),
+    fixture("samatra-dev-fixture-v1", FixtureKind::DevelopmentSetup),
     row("load-burvixese-caster-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s04b-burvixese-caster",

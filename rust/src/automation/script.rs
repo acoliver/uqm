@@ -908,6 +908,7 @@ pub enum Action {
     /// Finish an ordinary whole-fleet encounter using normal-speed Cyborg,
     /// confirming replacement escort choices through the real ship picker.
     FightEncounter(FightBattleStep),
+    FightSamatra(crate::automation::samatra::FightSamatraStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -2183,6 +2184,16 @@ fn validate_navigation_step(
                 )));
             }
             collect.max_ticks
+        }
+        Action::FightSamatra(fight) => {
+            if fight.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "fight_samatra requires positive max_ticks",
+                )));
+            }
+            fight.max_ticks
         }
         Action::FightBattle(fight) | Action::FightEncounter(fight) => {
             if fight.max_ticks == 0 {
@@ -4538,6 +4549,26 @@ mod tests {
     fn collect_planet_minerals_counts_against_the_input_budget() {
         let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn samatra_contract_rejects_missing_bound_unknown_phase_and_gameplay_writes() {
+        for step in [
+            r#"{"action":"fight_samatra","max_ticks":100,"until":"ready"}"#,
+            r#"{"action":"fight_samatra","max_ticks":100,"until":"gate_open"}"#,
+            r#"{"action":"fight_samatra","max_ticks":100}"#,
+        ] {
+            assert!(validated_steps(step).is_ok(), "{step}");
+        }
+        for step in [
+            r#"{"action":"fight_samatra"}"#,
+            r#"{"action":"fight_samatra","max_ticks":100,"until":"win"}"#,
+            r#"{"action":"fight_samatra","max_ticks":100,"generators":0}"#,
+        ] {
+            let text = turn_script(step);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{step}");
+        }
+        assert!(validated_steps(r#"{"action":"fight_samatra","max_ticks":0}"#).is_err());
     }
 
     #[test]

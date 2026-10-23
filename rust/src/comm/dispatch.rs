@@ -646,6 +646,7 @@ pub unsafe extern "C" fn rust_race_communication() {
                 crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
                     WON_LAST_BATTLE,
                 ));
+                crate::automation::ending::won();
             }
         }
         return;
@@ -1024,6 +1025,29 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
     if probe.is_null() || get_head_link(npc_q).is_null() {
         return Err("failed to clone the Ur-Quan probe into the NPC queue");
     }
+    Ok(())
+}
+
+/// Development-only fleet setup, before the normal final encounter dispatch.
+/// This grants fixture equipment and escorts, so it cannot establish campaign progress.
+///
+/// # Safety
+/// Initialized fleets and SIS must be exclusively owned by the game thread.
+#[cfg(not(test))]
+pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
+    let queue = built_ship_queue();
+    ReinitQueue(queue);
+    if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
+        return Err("boss fixture could not allocate Pkunk escorts");
+    }
+    let sis = &mut (*std::ptr::addr_of_mut!(ffi::GLOB_DATA)).sis_state;
+    sis.crew_enlisted = 50;
+    sis.fuel_on_board = 1000;
+    sis.drive_slots.fill(1);
+    sis.jet_slots.fill(2);
+    // Bomb conversion removes the flagship weapons; this is a steering ship.
+    sis.module_slots.fill(0xff);
+    ffi::GLOB_DATA.game_state.glob_flags &= !(1 << 5);
     Ok(())
 }
 
