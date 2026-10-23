@@ -57,6 +57,11 @@ pub fn generate() -> Result<(), String> {
     }
     for header in [
         "options.h",
+        "port.h",
+        "libs/memlib.h",
+        "libs/log.h",
+        "libs/graphics/widgets.h",
+        "libs/resource/stringbank.h",
         "libs/mathlib.h",
         "libs/inplib.h",
         "libs/sound/trackplayer.h",
