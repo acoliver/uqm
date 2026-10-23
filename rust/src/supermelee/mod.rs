@@ -7,3 +7,5 @@ pub mod setup;
 pub mod types;
 
 pub mod netplay;
+
+pub mod native;
