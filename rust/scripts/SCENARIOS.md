@@ -1325,3 +1325,13 @@ has mission 1, Ultron condition 1, the Clear Spindle, 5494 raw fuel, 115 RU
 and 46 crew. `load-thraddash-diverted-v1` verifies the extracted state. The
 Thraddash descriptor uses the shipped `comm.thraddash.*` assets; using the
 source module abbreviation `comm.thradd.*` leaves contact without responses.
+
+`campaign-s03d-north-artifacts` leaves the saved Thraddash contact with a
+short left turn and thrust before the outward-flight controller. This avoids
+re-entering the defended homeworld. It flies to Zeta Draconis, checks mission
+1..3, lands on planet 0 and collects the Aqua Helix by an energy-node collision.
+The lander returns with nine of its twelve crew. The producer saves local
+flight to slot 1: Ultron condition 1, Helix aboard, Helix unprotected, mission 1,
+Clear Spindle aboard, fuel 4896, RU 115 and flagship crew 43. The separate
+`load-north-artifacts-v1` asserts those extracted values and catalog star 441.
+The caster diversion and Ultron repair remain subsequent segments.
