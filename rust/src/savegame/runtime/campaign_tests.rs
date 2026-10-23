@@ -149,6 +149,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-funded-fleet" => (22, 4, 2157, 41, 11000, 307, 2),
             "connected-taalo" => (25, 3, 2157, 50, 7494, 158, 1),
             "starbase-armed" => (1, 3, 2157, 50, 9900, 158, 1),
             "portal-sol" => (27, 2, 2157, 8, 16230, 1175, 0),
