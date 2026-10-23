@@ -4,6 +4,10 @@
 //! We use REAL SDL_Surface objects created via SDL2 C API for compatibility.
 //! C code gets real SDL_Surface pointers for drawing operations.
 
+#[path = "ffi_video.rs"]
+mod video;
+pub(crate) use video::reconfigure_video;
+
 use std::cell::UnsafeCell;
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
@@ -368,6 +372,13 @@ pub unsafe extern "C" fn rust_gfx_init(
     }
 
     set_gfx_state(Some(state));
+    if fullscreen {
+        if let Err(error) = reconfigure_video(flags, width, height) {
+            rust_bridge_log_msg(&format!("RUST_GFX_INIT: fullscreen failed: {error}"));
+            rust_gfx_uninit();
+            return -1;
+        }
+    }
 
     rust_bridge_log_msg("RUST_GFX_INIT: Success");
     0
@@ -531,16 +542,19 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
+        if state.flags & (1 << 2) != 0 {
+            if let Err(error) = video::scanlines(&mut state.canvas) {
+                rust_bridge_log_msg(&format!("RUST_GFX_POSTPROCESS: scanlines failed: {error}"));
+                std::process::exit(1);
+            }
+        }
         state.presentation_count = state.presentation_count.saturating_add(1);
 
         if crate::automation::Coordinator::is_active() {
             let generation = crate::automation::input_ffi::get_runtime()
                 .map(|runtime| runtime.mirror.capture_generation());
-            match state
-                .canvas
-                .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)
-            {
-                Ok(mut rgba) => {
+            match video::readback(&state.canvas) {
+                Ok((width, height, mut rgba)) => {
                     for pixel in rgba.as_chunks_mut::<4>().0 {
                         pixel[3] = u8::MAX;
                     }
@@ -548,8 +562,8 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
                         generation.map(|generation| crate::automation::capture::PresentedFrame {
                             count: state.presentation_count,
                             generation,
-                            width: state.width,
-                            height: state.height,
+                            width,
+                            height,
                             rgba,
                         });
                 }
@@ -942,11 +956,17 @@ fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
 /// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
-    if let Some(state) = get_gfx_state() {
-        state.fullscreen = !state.fullscreen;
-        return if state.fullscreen { 1 } else { 0 };
+    let Some(state) = get_gfx_state() else {
+        return -1;
+    };
+    let (flags, width, height) = (state.flags ^ 1, state.width as c_int, state.height as c_int);
+    match reconfigure_video(flags, width, height) {
+        Ok(()) => flags & 1,
+        Err(error) => {
+            rust_bridge_log_msg(&format!("RUST_GFX: fullscreen toggle failed: {error}"));
+            -1
+        }
     }
-    -1
 }
 
 /// Check if fullscreen

@@ -43,3 +43,7 @@ pub mod png2sdl;
 pub mod rotozoom;
 #[cfg(test)]
 mod surface_fixture_tests;
+
+pub mod lifecycle_abi;
+pub mod platform_abi;
+pub mod pure_abi;

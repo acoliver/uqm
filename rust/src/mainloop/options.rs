@@ -15,9 +15,9 @@ use clap::{Arg, ArgAction, Command};
 // ===========================================================================
 
 // TFB_GFXFLAGS_SCALE_* (gfx_common.h)
-const TFB_GFXFLAGS_SCALE_XBRZ3: c_int = 3;
-const TFB_GFXFLAGS_SCALE_XBRZ4: c_int = 4;
-const TFB_GFXFLAGS_SCALE_HQXX: c_int = 2;
+const TFB_GFXFLAGS_SCALE_XBRZ3: c_int = 1 << 8;
+const TFB_GFXFLAGS_SCALE_XBRZ4: c_int = 1 << 9;
+const TFB_GFXFLAGS_SCALE_HQXX: c_int = 1 << 7;
 // audio_DRIVER_* (sound.h)
 const AUDIO_DRIVER_MIXSDL: c_int = 1;
 const AUDIO_DRIVER_NOSOUND: c_int = 2;
@@ -1079,6 +1079,25 @@ mod tests {
     fn test_nogl() {
         let opts = parse(&["uqm", "-x"]);
         assert!(!opts.opengl);
+    }
+
+    #[test]
+    fn scaler_options_use_graphics_flag_bits_without_enabling_fullscreen() {
+        for (name, expected) in [
+            ("xbrz3", 1 << 8),
+            ("xbrz4", 1 << 9),
+            ("hq", 1 << 7),
+            ("none", 0),
+        ] {
+            let opts = parse(&["uqm", "--scale", name]);
+            assert_eq!(opts.scaler, expected, "{name}");
+            assert_eq!(
+                opts.scaler & 7,
+                0,
+                "scaler must not enable fullscreen, FPS or scanlines"
+            );
+        }
+        assert_eq!(ParsedOptions::default().scaler, 1 << 8);
     }
 
     #[test]
