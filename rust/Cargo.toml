@@ -142,3 +142,8 @@ required-features = ["linked_c_archive"]
 name = "canvas_native"
 path = "tests/canvas_native.rs"
 required-features = ["linked_c_archive"]
+
+[[test]]
+name = "queue_native"
+path = "tests/queue_native.rs"
+required-features = ["linked_c_archive"]
