@@ -126,6 +126,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-refitted" => (28, 3, 2156, 32, 15400, 665, 2),
             "dev-vault-open" => (7, 6, 2156, 29, 5141, 115, 4),
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
+            "utwig-bomb" => (5, 6, 2156, 32, 6192, 1175, 0),
             "bomb-preguard" => (3, 6, 2156, 32, 6244, 115, 4),
             "utwig-alliance" => (26, 5, 2156, 32, 6934, 115, 4),
             "repaired-ultron" => (4, 4, 2156, 32, 12880, 115, 4),
