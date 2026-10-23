@@ -13,7 +13,6 @@ sc2/src/libs/video/vresins.c
 sc2/src/options.c
 sc2/src/port.c
 sc2/src/uqm.c
-sc2/src/uqm/border.c
 sc2/src/uqm/cleanup.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
@@ -52,4 +51,3 @@ sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/meleesetup.c
 sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/uqmdebug.c
-sc2/src/uqm/util.c

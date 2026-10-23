@@ -50,3 +50,5 @@ pub use sound::rust_ova_DecoderVtbl;
 pub use sound::rust_wav_DecoderVtbl;
 
 pub mod navigation;
+
+pub mod ui;

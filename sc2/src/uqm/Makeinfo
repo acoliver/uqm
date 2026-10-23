@@ -1,5 +1,5 @@
 uqm_SUBDIRS="comm planets ships supermelee"
-uqm_CFILES=" border.c  cleanup.c
+uqm_CFILES="   cleanup.c
 		cnctdlg.c comm_variadic.c confirm.c credits.c
 		  flash.c fmv.c
 		gameinp.c gameopt.c getchar.c
@@ -8,7 +8,7 @@ uqm_CFILES=" border.c  cleanup.c
 		menu.c outfit.c
 		 restart.c save.c settings.c setup.c setupmenu.c
 		 shipstat.c shipyard.c sis.c starbase.c starcon.c
-		  uqmdebug.c util.c"
+		  uqmdebug.c "
 
 # The clock API is provided by Rust.
 

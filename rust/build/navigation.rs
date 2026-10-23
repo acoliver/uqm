@@ -34,6 +34,8 @@ pub fn generate() -> Result<(), String> {
         "controls.h",
         "gameopt.h",
         "shipcont.h",
+        "util.h",
+        "settings.h",
         "planets/solarsys.h",
     ];
     let mut builder = bindgen::Builder::default()
@@ -54,6 +56,8 @@ pub fn generate() -> Result<(), String> {
     for header in [
         "options.h",
         "libs/mathlib.h",
+        "libs/inplib.h",
+        "libs/sound/trackplayer.h",
         "libs/threadlib.h",
         "libs/graphics/gfx_common.h",
     ] {
