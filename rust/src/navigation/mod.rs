@@ -17,6 +17,7 @@ pub mod abi {
 pub mod events;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod globals;
+pub mod groups;
 pub mod initial_state;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]

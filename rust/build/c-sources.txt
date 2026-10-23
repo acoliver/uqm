@@ -32,7 +32,6 @@ sc2/src/uqm/fmv.c
 sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
 sc2/src/uqm/getchar.c
-sc2/src/uqm/grpinfo.c
 sc2/src/uqm/hyper.c
 sc2/src/uqm/init.c
 sc2/src/uqm/intro.c
