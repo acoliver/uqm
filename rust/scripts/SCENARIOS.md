@@ -241,3 +241,10 @@ where the production clock seed previously replaced the script's seed.
 The trace records each application, encounter entry, and retreat result.
 An accepted Escape starts a vulnerable flee animation; it is not sufficient
 for a surviving retreat assertion.
+
+`campaign-s07b-west-refueled` continues from that save to Alpha Apodis,
+reselects autopilot after a surviving retreat, and buys a full tank with the
+remaining earned Melnorme credits. Native `pt-p7-6` saved the connected
+`west-bomb-refueled` checkpoint with 20 crew, 21000 raw fuel, 1175 RU and
+no escorts. The combat losses are retained. `load-west-bomb-refueled-v1`
+independently checks its date, resources and inherited story state.
