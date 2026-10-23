@@ -1919,10 +1919,6 @@ pub(crate) fn publish_native_window_presentation(
     };
     let window = crate::graphics::ffi::with_gfx_state(|canvas, _, _| {
         if committed_presentation == 1 {
-            canvas.window_mut().set_position(
-                sdl2::video::WindowPos::Positioned(config.client_bounds.x),
-                sdl2::video::WindowPos::Positioned(config.client_bounds.y),
-            );
             canvas.window_mut().show();
             canvas.window_mut().raise();
         }
