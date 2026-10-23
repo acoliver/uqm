@@ -6,7 +6,6 @@ use std::{
 };
 use uqm_rust::graphics::{
     dcqueue_abi::*,
-    native_abi::*,
     tfb_draw_abi::{TFB_DrawScreen_Callback, TFB_DrawScreen_WaitForSignal},
 };
 #[cfg_attr(
