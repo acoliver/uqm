@@ -873,24 +873,6 @@ pub const ROM_DRAWABLE: u32 = 0;
 pub const RAM_DRAWABLE: u32 = 1;
 pub const SCREEN_DRAWABLE: u32 = 2;
 unsafe extern "C" {
-    pub static mut optarg: *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    pub static mut optind: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut opterr: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optopt: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut suboptarg: *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    pub static mut optreset: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
     pub fn strupr(str_: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
 }
 pub type uint8 = ::std::os::raw::c_uchar;
@@ -950,9 +932,6 @@ pub struct resource_index_desc {
 pub type RESOURCE_INDEX_DESC = resource_index_desc;
 pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-unsafe extern "C" {
-    pub static mut _cur_resfile_name: *const ::std::os::raw::c_char;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct string_table_entry {
@@ -1190,9 +1169,6 @@ pub type NetState = ::std::os::raw::c_uint;
 pub struct NetStateData {
     pub name: *const ::std::os::raw::c_char,
 }
-unsafe extern "C" {
-    pub static mut netStateData: [NetStateData; 0usize];
-}
 pub type NetConnectionStateData_ReleaseFunction =
     ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
 #[repr(C)]
@@ -1284,9 +1260,6 @@ pub struct _input_template {
     pub name: [::std::os::raw::c_char; 30usize],
 }
 pub type INPUT_TEMPLATE = _input_template;
-unsafe extern "C" {
-    pub static mut input_templates: [INPUT_TEMPLATE; 6usize];
-}
 pub type BattleFrameCounter = DWORD;
 pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 #[repr(C)]
@@ -1557,9 +1530,6 @@ pub struct PacketTypeData {
     pub handler: PacketHandler,
     pub name: *const ::std::os::raw::c_char,
 }
-unsafe extern "C" {
-    pub static mut packetTypeData: [PacketTypeData; 0usize];
-}
 pub type MELEE_STATE = melee_state;
 unsafe extern "C" {
     pub static mut PickMeleeFrame: FRAME;
@@ -1606,9 +1576,6 @@ pub struct MeleeSetup {
     pub fleetValue: [COUNT; 2usize],
     pub sentTeams: [MeleeTeam; 2usize],
     pub haveSentTeamName: [bool; 2usize],
-}
-unsafe extern "C" {
-    pub static MeleeTeam_serialSize: usize;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -3679,9 +3646,6 @@ pub const DEFGRP_SAMATRA: _bindgen_ty_14 = 14;
 pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 unsafe extern "C" {
-    pub static mut RadarContext: CONTEXT;
-}
-unsafe extern "C" {
     pub fn inQuasiSpace() -> BOOLEAN;
 }
 unsafe extern "C" {
@@ -3733,9 +3697,6 @@ unsafe extern "C" {
     pub static mut TinyFont: FONT;
 }
 unsafe extern "C" {
-    pub static mut RenderingCond: CondVar;
-}
-unsafe extern "C" {
     pub static mut race_q: [QUEUE; 0usize];
 }
 unsafe extern "C" {
@@ -3783,25 +3744,10 @@ unsafe extern "C" {
     pub fn SetGraphicScaleMode(mode: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
 unsafe extern "C" {
-    pub static mut TransitionAmount: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut TransitionClipRect: RECT;
-}
-unsafe extern "C" {
-    pub static mut FrameRate: f32;
-}
-unsafe extern "C" {
-    pub static mut FrameRateTickBase: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
     pub static mut ScreenWidthActual: ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub static mut ScreenHeightActual: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut ScreenColorDepth: ::std::os::raw::c_int;
 }
 unsafe extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
@@ -3861,15 +3807,6 @@ unsafe extern "C" {
     pub fn StartShipExplosion(ShipPtr: *mut ELEMENT, playSound: bool);
 }
 
-unsafe extern "C" {
-    pub static mut shared_phrase_buf: [UNICODE; 2048usize];
-}
-unsafe extern "C" {
-    pub static mut sliderDisabled: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut oscillDisabled: BOOLEAN;
-}
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_17 = -999999;
 pub const GLOBAL_ALLIANCE_NAME: _bindgen_ty_17 = -999998;
@@ -4196,9 +4133,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_25 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_25 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_25 = 5;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub static mut PlanData: *const PlanetFrame;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SYSTEM_INFO {
@@ -4268,41 +4202,14 @@ pub struct solarsys_state {
     pub Orbit: PLANET_ORBIT,
     pub InOrbit: BOOLEAN,
 }
-unsafe extern "C" {
-    pub static mut pSolarSysState: *mut SOLARSYS_STATE;
-}
-unsafe extern "C" {
-    pub static mut SpaceMusic: MUSIC_REF;
-}
-unsafe extern "C" {
-    pub static mut PlanetContext: CONTEXT;
-}
-unsafe extern "C" {
-    pub static mut SysGenRNG: *mut RandomContext;
-}
 pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn EncounterBattle();
-}
-unsafe extern "C" {
-    pub fn BuildBattle(which_player: COUNT);
-}
-unsafe extern "C" {
-    pub fn InitEncounter() -> COUNT;
-}
-unsafe extern "C" {
-    pub fn UninitEncounter() -> COUNT;
-}
 unsafe extern "C" {
     pub fn UpdateShipFragCrew(arg1: *mut STARSHIP);
 }
 unsafe extern "C" {
     pub static mut EncounterRace: SIZE;
-}
-unsafe extern "C" {
-    pub static mut EncounterGroup: BYTE;
 }
 pub const STAR_STRING_BASE: _bindgen_ty_27 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_27 = 133;
@@ -4466,9 +4373,6 @@ pub struct drawable_desc {
     pub MaxIndex: UWORD,
     pub Frame: *mut FRAME_DESC,
 }
-unsafe extern "C" {
-    pub static mut _CurFramePtr: FRAME;
-}
 pub const TFB_DRAWCOMMANDTYPE_LINE: _bindgen_ty_28 = 0;
 pub const TFB_DRAWCOMMANDTYPE_RECTANGLE: _bindgen_ty_28 = 1;
 pub const TFB_DRAWCOMMANDTYPE_IMAGE: _bindgen_ty_28 = 2;
@@ -4496,10 +4400,4 @@ pub struct tfb_drawcommandqueue {
     pub Size: ::std::os::raw::c_int,
 }
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
-unsafe extern "C" {
-    pub static mut DrawCommandQueue: TFB_DrawCommandQueue;
-}
 pub use crate::callback::ffi::Async_process;
-unsafe extern "C" {
-    pub static mut TFB_DEBUG_HALT: ::std::os::raw::c_int;
-}
