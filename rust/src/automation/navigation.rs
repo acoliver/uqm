@@ -75,13 +75,15 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
         return NavigationControl::default();
     }
 
-    // Thrust whenever roughly aimed at the target. `navigate_to_planet` ends
-    // on a real collision, and the display-space distance covered per frame
-    // depends on the zoom radius, which this observation does not carry.
-    // Cutting thrust on proximity alone therefore lets the flagship's inertia
-    // carry it past an orbiting planet, after which it circles indefinitely
-    // without ever intersecting.
-    pursue_heading(dx, dy, observation.ship_facing)
+    if observation.inner_planet.is_some() {
+        return pursue_heading(dx, dy, observation.ship_facing);
+    }
+    let distance = distance_squared.sqrt();
+    steer_to_velocity(
+        dx * MOON_APPROACH_SPEED / distance,
+        dy * MOON_APPROACH_SPEED / distance,
+        observation,
+    )
 }
 
 /// Recover the target's inner system before applying inertial orbital steering.
@@ -346,6 +348,18 @@ mod tests {
     }
 
     #[test]
+    fn outer_approach_cancels_lateral_drift_before_accelerating_toward_planet() {
+        let mut obs = observation(100, 100, 0, 100, 20);
+        obs.velocity_x = 120;
+        let control = steer_toward_target(obs);
+        assert!(
+            control.left,
+            "a north-facing ship drifting east must brake west, not thrust north"
+        );
+        assert!(!control.thrust);
+    }
+
+    #[test]
     fn orbit_reapproaches_from_outer_flight_after_an_encounter() {
         let mut outer = observation(120, 160, 0, 100, 100);
         outer.velocity_x = 30;
@@ -427,17 +441,15 @@ mod tests {
     }
 
     #[test]
-    /// `navigate_to_planet` ends on a real collision, so approach momentum
-    /// must never suppress thrust. Coasting on proximity lets the flagship's
-    /// inertia carry it past an orbiting planet, after which it circles
-    /// forever without intersecting.
-    fn generic_navigation_keeps_thrusting_while_closing_on_the_target() {
+    /// A fast closing ship must turn toward its braking vector before
+    /// thrusting, rather than add forward speed and miss the planet.
+    fn generic_navigation_brakes_instead_of_accelerating_past_the_target() {
         let mut state = observation(100, 100, 4, 120, 100);
         state.velocity_x = 200;
         let control = steer_toward_target(state);
-        assert!(control.thrust);
+        assert!(!control.thrust);
         assert!(!control.left);
-        assert!(!control.right);
+        assert!(control.right);
     }
 
     #[test]
