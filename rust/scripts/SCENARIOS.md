@@ -1393,3 +1393,18 @@ Ilwrath diversion and broken Ultron. `load-south-refueled-v1` verifies the
 extracted save independently. Returning Melnorme business dialogue plays its
 intermediate speech through the unlocked Rust input loop, allowing communication
 callbacks to access state without recursively locking the global write guard.
+
+### Rosy Sphere barter and repaired Ultron
+
+`campaign-s05b-repaired-ultron` flies the southern refuel checkpoint to Zeta
+Persei, contacts the Druuge homeworld and chooses `want_to_sell`, `sell_caster`,
+`way`, `done_selling`, `bye`. The transaction requires caster removal, Sphere
+ownership and crew remaining 32. It does not select the 100-crew Sphere purchase.
+
+Devices consumes `clear_spindle`, `aqua_helix` and `rosy_sphere` in order, with
+separate condition assertions 2, 3 and 4. Each invocation returns through the
+PC Manifest menu to ordinary flight before the next invocation. The final save
+is April 4, 2156, Zeta Persei/star 174, activity 4, fuel 12880, crew 32 and RU 115.
+It retains `ROSY_SPHERE=1`, `ULTRON_CONDITION=4` and `ILWRATH_DECEIVED=1`; caster
+and all three repair-piece inventory flags are zero. `load-repaired-ultron-v1`
+reloads the extracted file and asserts this snapshot before an Utwig handover.
