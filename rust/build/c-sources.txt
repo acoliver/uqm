@@ -35,7 +35,6 @@ sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
 sc2/src/uqm/menu.c
 sc2/src/uqm/outfit.c
-sc2/src/uqm/planets/pstarmap.c
 sc2/src/uqm/restart.c
 sc2/src/uqm/rust_bridge_macros.c
 sc2/src/uqm/rust_bridge_main2.c
