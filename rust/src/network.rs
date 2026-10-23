@@ -220,20 +220,6 @@ pub unsafe extern "C" fn Socket_send(
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
 #[no_mangle]
-pub unsafe extern "C" fn Socket_sendto(
-    sock: *mut Socket,
-    buf: *const c_void,
-    len: size_t,
-    flags: c_int,
-    addr: *const libc::sockaddr,
-    addr_len: socklen_t,
-) -> ssize_t {
-    libc::sendto(socket_ref(sock).fd, buf, len, flags, addr, addr_len)
-}
-
-/// # Safety
-/// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
 pub unsafe extern "C" fn Socket_recv(
     sock: *mut Socket,
     buf: *mut c_void,
@@ -241,20 +227,6 @@ pub unsafe extern "C" fn Socket_recv(
     flags: c_int,
 ) -> ssize_t {
     libc::recv(socket_ref(sock).fd, buf, len, flags)
-}
-
-/// # Safety
-/// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_recvfrom(
-    sock: *mut Socket,
-    buf: *mut c_void,
-    len: size_t,
-    flags: c_int,
-    from: *mut libc::sockaddr,
-    from_len: *mut socklen_t,
-) -> ssize_t {
-    libc::recvfrom(socket_ref(sock).fd, buf, len, flags, from, from_len)
 }
 
 /// # Safety

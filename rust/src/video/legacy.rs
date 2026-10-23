@@ -23,6 +23,12 @@ pub struct LegacyVideoRef {
     pub speech: *mut c_void,
 }
 
+#[cfg(not(test))]
+use crate::video::control::VidStop;
+#[cfg(test)]
+extern "C" {
+    fn VidStop();
+}
 extern "C" {
     fn _init_video_file(path: *const c_char) -> *mut TFB_VideoClip;
     fn LoadMusicFile(path: *const c_char) -> *mut c_void;
@@ -34,7 +40,7 @@ extern "C" {
         speech: *mut c_void,
         loop_frame: u32,
     ) -> c_int;
-    fn VidStop();
+
 }
 
 /// # Safety
@@ -150,8 +156,7 @@ unsafe extern "C" fn get_legacy_data(path: *const c_char, data: *mut ResourceDat
 
 /// # Safety
 /// Called during resource registration.
-#[no_mangle]
-pub unsafe extern "C" fn InstallVideoResType() -> c_int {
+pub unsafe fn InstallVideoResType() -> c_int {
     InstallResTypeVectors(
         c"3DOVID".as_ptr(),
         Some(get_legacy_data),

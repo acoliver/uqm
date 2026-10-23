@@ -18,7 +18,6 @@ use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
 use crate::state::game_state_keys::{get_game_state, set_game_state};
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-use crate::strings::unicode::utf8StringCopy;
 use std::ffi::c_char;
 use std::mem::MaybeUninit;
 
@@ -69,6 +68,9 @@ static mut NEXT_TIME: u32 = 0;
 mod ffi {
     use super::*;
 
+    pub(super) use crate::ui::border::DrawSISFrame;
+    pub(super) use crate::ui::settings::StopMusic;
+    pub(super) use crate::ui::sis::RepairSISBorder;
     extern "C" {
         pub(super) static mut GlobData: CGlobData;
         pub(super) static mut CurStarDescPtr: *mut c::STAR_DESC;
@@ -91,13 +93,13 @@ mod ffi {
         pub(super) fn FadeScreen(kind: u32, interval: c::SIZE) -> c::DWORD;
         pub(super) fn SetFlashRect(rect: *const c_void);
         pub(super) fn DrawMenuStateStrings(base: c::BYTE, state: c::SWORD);
-        pub(super) fn DrawSISFrame();
+
         pub(super) fn DrawSISMessage(text: *const c_char);
         pub(super) fn DrawStatusMessage(text: *const c_char);
-        pub(super) fn RepairSISBorder();
+
         pub(super) fn InitDisplayList();
         pub(super) fn DoMissions();
-        pub(super) fn StopMusic();
+
         pub(super) fn GetPlanetInfo();
         pub(super) fn PutPlanetInfo();
         pub(super) fn PlanetOrbitMenu();
@@ -554,39 +556,6 @@ pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
         _ => {}
     }
     ptr::null_mut()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn GetPlanetOrMoonName(mut buf: *mut c::UNICODE, mut bufsize: c::COUNT) {
-    let named = GetNamedPlanetaryBody();
-    if !named.is_null() {
-        utf8StringCopy(buf.cast(), usize::from(bufsize), named.cast());
-        return;
-    }
-    utf8StringCopy(
-        buf.cast(),
-        usize::from(bufsize),
-        ptr::addr_of!((*glob()).sis_state.planet_name).cast(),
-    );
-    if !playerInSolarSystem()
-        || !playerInInnerSystem()
-        || worldIsPlanet(system(), (*system()).pOrbitalDesc)
-    {
-        return;
-    }
-    let i = libc::strlen(buf) as i32;
-    buf = buf.add(i as usize);
-    bufsize = (i32::from(bufsize) - i) as c::COUNT;
-    let moon = moonIndex(system(), (*system()).pOrbitalDesc);
-    if bufsize >= 3 {
-        libc::snprintf(
-            buf,
-            usize::from(bufsize),
-            c"-%c".as_ptr(),
-            i32::from(b'A') + i32::from(moon),
-        );
-        *buf.add(usize::from(bufsize) - 1) = 0;
-    }
 }
 
 #[no_mangle]

@@ -15,10 +15,7 @@ fn debug_c_consumer_observes_the_canonical_rust_creature_catalog() {
     }
 }
 
-unsafe extern "C" {
-    /// The real per-game initialiser the game runs when starting a new game.
-    fn InitGlobData();
-}
+use uqm_rust::navigation::globals::InitGlobData;
 
 use uqm_rust::state::ffi::rust_get_game_state;
 use uqm_rust::state::ffi::rust_set_game_state;

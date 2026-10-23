@@ -33,10 +33,6 @@ pub struct StringTable {
     pub name_index: *mut c_void,
 }
 
-extern "C" {
-    fn StringHashTable_find(table: *mut c_void, key: *const c_char) -> *mut c_void;
-}
-
 /// Number of entry arrays of `size` entries a table with `flags` holds.
 fn array_count(flags: u16) -> usize {
     1 + usize::from(flags & HAS_NAMEINDEX != 0)
@@ -282,16 +278,6 @@ pub unsafe extern "C" fn GetStringAddress(string: *mut StringTableEntry) -> *mut
     } else {
         (*string).data
     }
-}
-
-/// # Safety
-/// `table` must be live with a name index; `index` NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn GetStringByName(
-    table: *mut StringTable,
-    index: *const c_char,
-) -> *mut StringTableEntry {
-    StringHashTable_find((*table).name_index, index).cast()
 }
 
 #[cfg(test)]

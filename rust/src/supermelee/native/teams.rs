@@ -54,10 +54,6 @@ pub unsafe extern "C" fn MeleeTeam_init(team: *mut MeleeTeam) {
 /// # Safety
 /// Pointers must be valid for the indicated records or streams on the game thread.
 #[no_mangle]
-pub unsafe extern "C" fn MeleeTeam_uninit(_team: *mut MeleeTeam) {}
-/// # Safety
-/// Pointers must be valid for the indicated records or streams on the game thread.
-#[no_mangle]
 pub unsafe extern "C" fn MeleeTeam_new() -> *mut MeleeTeam {
     let team = rust_hmalloc(mem::size_of::<MeleeTeam>()).cast::<MeleeTeam>();
     team.write(mem::zeroed());

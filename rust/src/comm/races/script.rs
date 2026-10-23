@@ -65,6 +65,7 @@ pub(super) mod live {
     use crate::comm::locdata::{CGlobData, COMM_DATA};
     use std::ffi::{c_char, c_void, CStr};
 
+    use crate::ui::sis::DrawLanders;
     extern "C" {
         static mut GlobData: CGlobData;
         static mut shared_phrase_buf: [c_char; 2048];
@@ -72,7 +73,7 @@ pub(super) mod live {
         fn GetStringAddress(entry: *mut c_void) -> *const c_char;
         fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
         fn XFormColorMap(map: *mut c_void, duration: i16) -> u32;
-        fn DrawLanders();
+
         fn DeltaSISGauges(crew: i16, fuel: i16, units: i32);
         fn AlienTalkSegue(track: u16);
     }

@@ -2911,8 +2911,7 @@ fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_init() {
+pub unsafe fn uio_init() {
     ffi_guard!((), {
         log_marker("uio_init called");
 

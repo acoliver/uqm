@@ -8,20 +8,6 @@ extern "C" {
     static ScreenWidthActual: c_int;
     static ScreenHeightActual: c_int;
 }
-extern "C" fn pre_quit() {
-    unsafe {
-        sys::SDL_Quit();
-    }
-}
-/// # Safety
-/// Called on the SDL main thread before graphics initialization.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_PreInit() {
-    if crate::mainloop::init_wrappers::rust_tfb_preinit() != 0 {
-        std::process::exit(1);
-    }
-    libc::atexit(pre_quit);
-}
 /// # Safety
 /// Called on the SDL main thread with graphics initialized.
 #[no_mangle]

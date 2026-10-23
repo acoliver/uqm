@@ -12,8 +12,7 @@ fn color(r: u8, g: u8, b: u8) -> Color {
 }
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn InitSISContexts() {
+pub unsafe fn InitSISContexts() {
     let mut r: RECT = std::mem::zeroed();
 
     SetContext(StatusContext);
@@ -30,8 +29,7 @@ pub unsafe extern "C" fn InitSISContexts() {
 
 /// # Safety
 /// Initialized graphics and SIS contexts must be accessed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn DrawSISFrame() {
+pub unsafe fn DrawSISFrame() {
     let mut r: RECT = std::mem::zeroed();
 
     SetContext(ScreenContext);

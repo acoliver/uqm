@@ -13,13 +13,6 @@ pub unsafe extern "C" fn sendInit(conn: *mut NetConnection) {
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
-pub unsafe extern "C" fn sendPing(conn: *mut NetConnection, id: u32) {
-    queue_packet(conn, Packet_Ping_create(id).cast());
-}
-
-/// # Safety
-/// `conn` must be connected with an initialized outgoing packet queue.
-#[no_mangle]
 pub unsafe extern "C" fn sendAck(conn: *mut NetConnection, id: u32) {
     queue_packet(conn, Packet_Ack_create(id).cast());
 }

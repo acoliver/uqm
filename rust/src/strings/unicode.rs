@@ -231,21 +231,6 @@ pub unsafe extern "C" fn skipUTF8Chars(ptr: *const u8, num: usize) -> *mut u8 {
     p as *mut u8
 }
 
-/// Decodes `start..end` into `wstr` (at most `maxcount - 1` characters plus a
-/// 0 terminator). Returns the number of characters stored.
-///
-/// # Safety
-/// `wstr` must hold `maxcount` entries and `start..end` be readable.
-#[no_mangle]
-pub unsafe extern "C" fn getUniCharFromStringN(
-    wstr: *mut UniChar,
-    maxcount: usize,
-    start: *const u8,
-    end: *const u8,
-) -> usize {
-    decode_into(wstr, maxcount, start, |p| getCharFromStringN(p, end))
-}
-
 /// As [`getUniCharFromStringN`] for a NUL-terminated source.
 ///
 /// # Safety

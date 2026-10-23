@@ -25,36 +25,6 @@ pub unsafe extern "C" fn getGameState(_shadow: *mut u8, start: i32, end: i32) ->
 pub unsafe extern "C" fn setGameState(_shadow: *mut u8, start: i32, end: i32, value: u8) {
     ffi::rust_set_game_state_bits(start, end, value);
 }
-/// # Safety
-/// Game-thread access to the initialized state singleton.
-#[no_mangle]
-pub unsafe extern "C" fn getGameState32(_shadow: *mut u8, start: i32) -> u32 {
-    ffi::rust_get_game_state_32(start)
-}
-/// # Safety
-/// Game-thread access to the initialized state singleton.
-#[no_mangle]
-pub unsafe extern "C" fn setGameState32(_shadow: *mut u8, start: i32, value: u32) {
-    ffi::rust_set_game_state_32(start, value);
-}
-/// # Safety
-/// Both byte arrays must contain the requested bit ranges.
-#[no_mangle]
-pub unsafe extern "C" fn copyGameState(
-    dest: *mut u8,
-    target: u32,
-    src: *mut u8,
-    begin: u32,
-    end: u32,
-) {
-    ffi::rust_copy_game_state_bits_between_bytes(
-        dest,
-        target as i32,
-        src,
-        begin as i32,
-        end as i32,
-    );
-}
 
 unsafe fn create_radar() {
     if RadarContext.is_null() {
@@ -227,8 +197,7 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
 
 /// # Safety
 /// No renderer may be using these contexts or resources.
-#[no_mangle]
-pub unsafe extern "C" fn FreeSC2Data() {
+pub unsafe fn FreeSC2Data() {
     DestroyContext(RadarContext);
     RadarContext = ptr::null_mut();
     DestroyDrawable(ReleaseDrawable(FontGradFrame));
@@ -241,8 +210,7 @@ pub unsafe extern "C" fn FreeSC2Data() {
 
 /// # Safety
 /// The initialized game structures must no longer be in use.
-#[no_mangle]
-pub unsafe extern "C" fn UninitGameStructures() {
+pub unsafe fn UninitGameStructures() {
     let state = ptr::addr_of_mut!(GlobData.Game_state);
     UninitQueue(ptr::addr_of_mut!((*state).encounter_q));
     UninitQueue(ptr::addr_of_mut!((*state).ip_group_q));
@@ -263,8 +231,7 @@ pub unsafe extern "C" fn UninitGameStructures() {
 
 /// # Safety
 /// Existing world resources must have been released before resetting their owner.
-#[no_mangle]
-pub unsafe extern "C" fn InitGlobData() {
+pub unsafe fn InitGlobData() {
     let flags = GlobData.Game_state.glob_flags;
     ptr::write_bytes(ptr::addr_of_mut!(GlobData), 0, 1);
     GlobData.Game_state.glob_flags = flags;
@@ -272,28 +239,6 @@ pub unsafe extern "C" fn InitGlobData() {
     GlobData.Game_state.DisplayArray = ptr::addr_of_mut!(DisplayArray).cast();
 }
 
-/// # Safety
-/// Game-thread access to the live activity.
-#[no_mangle]
-pub unsafe extern "C" fn inFullGame() -> BOOLEAN {
-    let activity = GlobData.Game_state.CurrentActivity as u8 as u32;
-    u32::from(
-        [
-            IN_LAST_BATTLE,
-            IN_ENCOUNTER,
-            IN_HYPERSPACE,
-            IN_INTERPLANETARY,
-            WON_LAST_BATTLE,
-        ]
-        .contains(&activity),
-    )
-}
-/// # Safety
-/// Game-thread access to the live activity.
-#[no_mangle]
-pub unsafe extern "C" fn inSuperMelee() -> BOOLEAN {
-    u32::from(GlobData.Game_state.CurrentActivity as u8 as u32 == SUPER_MELEE)
-}
 /// # Safety
 /// Game-thread access to the live activity.
 #[no_mangle]

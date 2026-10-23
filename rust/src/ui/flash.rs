@@ -243,23 +243,6 @@ pub unsafe extern "C" fn Flash_createHighlight(
 /// # Safety
 /// Game-thread access only; the context and all supplied graphics resources must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn Flash_createTransition(
-    gfx: CONTEXT,
-    origin: *const POINT,
-    first: FRAME,
-    final_frame: FRAME,
-) -> *mut FlashContext {
-    let c = create(gfx);
-    (*c).type_ = TRANSITION;
-    (*c).u.transition.first = first;
-    (*c).u.transition.final_ = final_frame;
-    GetFrameRect(final_frame, &mut (*c).rect);
-    (*c).rect.corner = *origin;
-    c
-}
-/// # Safety
-/// Game-thread access only; the context and all supplied graphics resources must be valid.
-#[no_mangle]
 pub unsafe extern "C" fn Flash_createOverlay(
     gfx: CONTEXT,
     origin: *const POINT,
@@ -444,13 +427,6 @@ pub unsafe extern "C" fn Flash_setRect(c: *mut FlashContext, rect: *const RECT) 
 /// # Safety
 /// Game-thread access only; the context and all supplied graphics resources must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn Flash_getRect(c: *mut FlashContext, rect: *mut RECT) {
-    assert_ne!((*c).type_, HIGHLIGHT);
-    *rect = (*c).rect;
-}
-/// # Safety
-/// Game-thread access only; the context and all supplied graphics resources must be valid.
-#[no_mangle]
 pub unsafe extern "C" fn Flash_setOverlay(
     c: *mut FlashContext,
     origin: *const POINT,
@@ -487,25 +463,4 @@ pub unsafe extern "C" fn Flash_postUpdate(c: *mut FlashContext) {
         grab_original(&mut *c);
         draw_current(&mut *c);
     }
-}
-/// # Safety
-/// Game-thread access only; the context and all supplied graphics resources must be valid.
-#[no_mangle]
-pub unsafe extern "C" fn Flash_setCacheSize(c: *mut FlashContext, size: u16) {
-    assert!(size == 0 || size >= 2);
-    if !(*c).cache.is_null() {
-        clear_cache(&mut *c);
-        HFree((*c).cache.cast());
-        (*c).cache = ptr::null_mut();
-    }
-    (*c).cacheSize = size;
-    if size != 0 {
-        init_cache(&mut *c);
-    }
-}
-/// # Safety
-/// Game-thread access only; the context and all supplied graphics resources must be valid.
-#[no_mangle]
-pub unsafe extern "C" fn Flash_getCacheSize(c: *const FlashContext) -> u16 {
-    (*c).cacheSize
 }

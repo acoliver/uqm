@@ -31,13 +31,6 @@ pub unsafe extern "C" fn GetElementStarShip(e: *const ELEMENT, ship: *mut *mut S
     *ship = (*e).pParent.cast();
 }
 
-/// # Safety
-/// The element must be live and exclusively borrowed; ship is its parent.
-#[no_mangle]
-pub unsafe extern "C" fn SetElementStarShip(e: *mut ELEMENT, ship: *mut STARSHIP) {
-    (*e).pParent = ship.cast();
-}
-
 #[no_mangle]
 pub extern "C" fn rust_bridge_LockLink(_queue: *const QUEUE, link: *mut c_void) -> *mut c_void {
     link
@@ -97,8 +90,7 @@ pub unsafe extern "C" fn ReleaseSound(sound: *mut StringTableEntry) -> *mut Stri
 
 /// # Safety
 /// Called on the game thread while the live game state is initialized.
-#[no_mangle]
-pub unsafe extern "C" fn get_current_activity() -> u16 {
+pub unsafe fn get_current_activity() -> u16 {
     crate::navigation::globals::GlobData
         .Game_state
         .CurrentActivity

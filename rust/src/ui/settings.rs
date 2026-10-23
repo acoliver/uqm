@@ -10,8 +10,7 @@ static mut LAST_PRIORITY: BYTE = 0;
 
 /// # Safety
 /// The game settings and music player must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn ToggleMusic() {
+pub unsafe fn ToggleMusic() {
     GlobData.Game_state.glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
         if GlobData.Game_state.glob_flags & (MUSIC_DISABLED as u8) != 0 {
@@ -36,30 +35,26 @@ pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, pr
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn StopMusic() {
+pub unsafe fn StopMusic() {
     PLRStop(LAST_MUSIC_REF);
     LAST_MUSIC_REF = std::ptr::null_mut();
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn ResumeMusic() {
+pub unsafe fn ResumeMusic() {
     PLRResume(LAST_MUSIC_REF);
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn PauseMusic() {
+pub unsafe fn PauseMusic() {
     PLRPause(LAST_MUSIC_REF);
 }
 
 /// # Safety
 /// Game settings must be accessed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn ToggleSoundEffect() {
+pub unsafe fn ToggleSoundEffect() {
     GlobData.Game_state.glob_flags ^= SOUND_DISABLED as u8;
 }
 

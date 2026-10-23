@@ -544,31 +544,11 @@ extern "C" {
     ) -> isize;
 }
 extern "C" {
-    pub fn Socket_sendto(
-        sock: *mut Socket,
-        buf: *const ::std::os::raw::c_void,
-        len: usize,
-        flags: ::std::os::raw::c_int,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ) -> isize;
-}
-extern "C" {
     pub fn Socket_recv(
         sock: *mut Socket,
         buf: *mut ::std::os::raw::c_void,
         len: usize,
         flags: ::std::os::raw::c_int,
-    ) -> isize;
-}
-extern "C" {
-    pub fn Socket_recvfrom(
-        sock: *mut Socket,
-        buf: *mut ::std::os::raw::c_void,
-        len: usize,
-        flags: ::std::os::raw::c_int,
-        from: *mut sockaddr,
-        fromLen: *mut socklen_t,
     ) -> isize;
 }
 extern "C" {
@@ -765,12 +745,6 @@ extern "C" {
     pub fn ConnectState_close(connectState: *mut ConnectState);
 }
 extern "C" {
-    pub fn ConnectState_setExtra(
-        connectState: *mut ConnectState,
-        extra: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
     pub fn ConnectState_getExtra(connectState: *mut ConnectState) -> *mut ::std::os::raw::c_void;
 }
 pub const ListenStateState_Listen_closed: ListenStateState = 0;
@@ -826,9 +800,6 @@ extern "C" {
 }
 extern "C" {
     pub fn ListenState_decRef(listenState: *mut ListenState) -> bool;
-}
-extern "C" {
-    pub fn ListenState_setExtra(listenState: *mut ListenState, extra: *mut ::std::os::raw::c_void);
 }
 extern "C" {
     pub fn ListenState_getExtra(listenState: *mut ListenState) -> *mut ::std::os::raw::c_void;
@@ -1124,9 +1095,6 @@ extern "C" {
 }
 extern "C" {
     pub fn NetConnection_getChecksumInterval(conn: *const NetConnection) -> usize;
-}
-extern "C" {
-    pub fn NetConnection_getStatistics(conn: *mut NetConnection) -> *mut NetStatistics;
 }
 extern "C" {
     pub fn NetConnection_setReadyCallback(
@@ -1578,9 +1546,6 @@ extern "C" {
     pub fn sendInit(conn: *mut NetConnection);
 }
 extern "C" {
-    pub fn sendPing(conn: *mut NetConnection, id: uint32);
-}
-extern "C" {
     pub fn sendAck(conn: *mut NetConnection, id: uint32);
 }
 extern "C" {
@@ -1984,9 +1949,6 @@ extern "C" {
     pub fn Netplay_isLocalReady(conn: *const NetConnection) -> bool;
 }
 extern "C" {
-    pub fn Netplay_isRemoteReady(conn: *const NetConnection) -> bool;
-}
-extern "C" {
     pub fn Netplay_setResetCallback(
         conn: *mut NetConnection,
         callback: NetConnection_ResetCallback,
@@ -2001,9 +1963,6 @@ extern "C" {
 }
 extern "C" {
     pub fn Netplay_isLocalReset(conn: *const NetConnection) -> bool;
-}
-extern "C" {
-    pub fn Netplay_isRemoteReset(conn: *const NetConnection) -> bool;
 }
 extern "C" {
     pub fn Netplay_confirm(conn: *mut NetConnection) -> ::std::os::raw::c_int;

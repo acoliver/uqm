@@ -7,11 +7,6 @@ pub(super) unsafe fn graphics_active() -> bool {
     _GraphicsStatusFlags & 12 == 12
 }
 
-#[no_mangle]
-pub extern "C" fn MAKE_HOT_SPOT(x: i16, y: i16) -> HOT_SPOT {
-    HOT_SPOT { x, y }
-}
-
 /// # Safety
 /// Called on the graphics thread with an active context and foreground frame.
 /// Non-null outputs must point to writable records.

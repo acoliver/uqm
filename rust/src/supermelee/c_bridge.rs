@@ -16,8 +16,14 @@ pub const SUPER_MELEE: u8 = 1;
 // Sound / Music (from libs/sound/sound.h, sounds.h)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::ui::settings::StopMusic;
+#[cfg(test)]
 extern "C" {
     pub fn StopMusic();
+}
+extern "C" {
+
     pub fn StopSound();
 }
 

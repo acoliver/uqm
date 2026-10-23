@@ -143,8 +143,7 @@ unsafe fn set_color(color: Color) {
 
 /// # Safety
 /// The graphics system and screen contexts must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn RepairSISBorder() {
+pub unsafe fn RepairSISBorder() {
     let old = SetContext(ScreenContext);
     BatchGraphics();
     let mut r: RECT = mem::zeroed();
@@ -477,8 +476,7 @@ pub unsafe extern "C" fn SetStatusMessageMode(new_mode: StatMsgMode) -> StatMsgM
 
 /// # Safety
 /// Status graphics and SIS state must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawCaptainsName() {
+pub unsafe fn DrawCaptainsName() {
     let old = SetContext(StatusContext);
     let old_font = SetContextFont(TinyFont);
     let old_color = SetContextForeGroundColor(rgb15(0, 0, 0x14));
@@ -570,8 +568,7 @@ pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
 
 /// # Safety
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawFlagshipStats() {
+pub unsafe fn DrawFlagshipStats() {
     let s = sis();
     let mut energy_regen: u8 = 1;
     let mut energy_wait: u8 = 10;
@@ -709,8 +706,7 @@ unsafe fn weapon_name(module: BYTE, out: *mut u8) {
 
 /// # Safety
 /// Status graphics and flagship frame must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawLanders() {
+pub unsafe fn DrawLanders() {
     let old = SetContext(StatusContext);
     let mut stamp: STAMP = mem::zeroed();
     stamp.frame = IncFrameIndex(FlagStatFrame);
@@ -1120,8 +1116,7 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn PreUpdateFlashRect() {
+pub unsafe fn PreUpdateFlashRect() {
     if !FLASH_ALARM.is_null() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_add(1);
         if UPDATE_FLASH_RECT_RECURSION > 1 {
@@ -1132,8 +1127,7 @@ pub unsafe extern "C" fn PreUpdateFlashRect() {
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn PostUpdateFlashRect() {
+pub unsafe fn PostUpdateFlashRect() {
     if !FLASH_ALARM.is_null() {
         UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_sub(1);
         if UPDATE_FLASH_RECT_RECURSION > 0 {
@@ -1144,8 +1138,7 @@ pub unsafe extern "C" fn PostUpdateFlashRect() {
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn PauseFlash() {
+pub unsafe fn PauseFlash() {
     if !FLASH_CONTEXT.is_null() {
         Alarm_remove(FLASH_ALARM);
         FLASH_ALARM = ptr::null_mut();
@@ -1154,8 +1147,7 @@ pub unsafe extern "C" fn PauseFlash() {
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn ContinueFlash() {
+pub unsafe fn ContinueFlash() {
     if FLASH_PAUSED != 0 {
         schedule_flash_alarm();
         FLASH_PAUSED = 0;

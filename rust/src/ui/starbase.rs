@@ -397,8 +397,7 @@ unsafe fn CleanupAfterStarBase() {
 /// # Safety
 /// World queues, game clock, communication, input, graphics and audio must be
 /// initialized and exclusively accessed by the calling game thread.
-#[no_mangle]
-pub unsafe extern "C" fn VisitStarBase() {
+pub unsafe fn VisitStarBase() {
     if get_game_state("CHMMR_BOMB_STATE") == 2 {
         CurStarDescPtr = ptr::null_mut();
         set_game_state("GLOBAL_FLAGS_AND_DATA", BYTE::MAX as u32);
@@ -466,8 +465,7 @@ pub unsafe extern "C" fn VisitStarBase() {
 /// # Safety
 /// The game clock, live world and graphics must be exclusively accessed on
 /// the initialized game thread.
-#[no_mangle]
-pub unsafe extern "C" fn InstallBombAtEarth() {
+pub unsafe fn InstallBombAtEarth() {
     DoTimePassage();
     SetContext(ScreenContext);
     SetTransitionSource(ptr::null());
@@ -478,66 +476,4 @@ pub unsafe extern "C" fn InstallBombAtEarth() {
     GlobData.Game_state.CurrentActivity = CHECK_LOAD as u16;
     NextActivity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
     CurStarDescPtr = ptr::null_mut();
-}
-
-/// Wrap text with the original word scanning and oversized-word splitting.
-///
-/// # Safety
-/// `text` must point to readable UNICODE storage with at least `len + 1` code
-/// units, because the original scanner reads the next unit before checking the
-/// remaining length. `records` must have space for every output line. The
-/// active font must be initialized; `field_width` must fit at least one glyph.
-#[no_mangle]
-pub unsafe extern "C" fn WrapText(
-    mut text: *const UNICODE,
-    mut len: COUNT,
-    mut records: *mut TEXT,
-    field_width: SIZE,
-) -> COUNT {
-    let mut lines: COUNT = 0;
-    loop {
-        let mut rect: RECT = mem::zeroed();
-        (*records).align = TEXT_ALIGN_ALIGN_LEFT;
-        (*records).pStr = text;
-        (*records).CharCount = 1;
-        lines = lines.wrapping_add(1);
-        let mut old_count;
-        loop {
-            old_count = (*records).CharCount;
-            loop {
-                text = text.add(1);
-                if *text == b' ' as UNICODE || (text.offset_from((*records).pStr) as COUNT) >= len {
-                    break;
-                }
-            }
-            (*records).CharCount = text.offset_from((*records).pStr) as COUNT;
-            TextRect(records, &mut rect, ptr::null_mut());
-            if !((*records).CharCount < len && rect.extent.width < field_width) {
-                break;
-            }
-        }
-        if rect.extent.width >= field_width {
-            (*records).CharCount = old_count;
-            if (*records).CharCount == 1 {
-                loop {
-                    (*records).CharCount = (*records).CharCount.wrapping_add(1);
-                    TextRect(records, &mut rect, ptr::null_mut());
-                    if rect.extent.width >= field_width {
-                        break;
-                    }
-                }
-                (*records).CharCount = (*records).CharCount.wrapping_sub(1);
-            }
-        }
-        text = (*records).pStr.add((*records).CharCount as usize);
-        len = len.wrapping_sub((*records).CharCount);
-        records = records.add(1);
-        if len != 0 && (rect.extent.width < field_width || old_count > 1) {
-            text = text.add(1);
-            len -= 1;
-        }
-        if len == 0 {
-            return lines;
-        }
-    }
 }

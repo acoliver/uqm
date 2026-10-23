@@ -32,6 +32,12 @@ pub fn observation() -> DeviceObservation {
     observed
 }
 
+#[cfg(not(test))]
+use crate::navigation::hyper_transition::SaveSisHyperState;
+#[cfg(test)]
+extern "C" {
+    fn SaveSisHyperState();
+}
 #[allow(non_snake_case)]
 extern "C" {
     static mut GlobData: CGlobData;
@@ -63,7 +69,7 @@ extern "C" {
     fn StartSphereTracking(race: u16) -> u16;
     fn PutGroupInfo(offset: u32, group: u8) -> u32;
     fn SaveSolarSysLocation();
-    fn SaveSisHyperState();
+
     fn inHQSpace() -> i32;
     fn inHyperSpace() -> i32;
 }

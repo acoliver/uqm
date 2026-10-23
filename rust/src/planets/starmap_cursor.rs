@@ -17,6 +17,18 @@ pub struct MenuHeader {
     initialized: i16,
 }
 
+#[cfg(not(test))]
+use crate::planets::pstarmap::UpdateFuelRequirement;
+#[cfg(test)]
+extern "C" {
+    fn UpdateFuelRequirement();
+}
+#[cfg(not(test))]
+use crate::planets::pstarmap::ZoomStarMap;
+#[cfg(test)]
+extern "C" {
+    fn ZoomStarMap(direction: i16);
+}
 #[allow(non_snake_case)]
 extern "C" {
     static ScreenWidth: i32;
@@ -25,10 +37,10 @@ extern "C" {
     static CurStarDescPtr: *const crate::savegame::runtime::star::CStarDesc;
     fn flashCurrentLocation(point: *const CPoint);
     fn UpdateCursorInfo(previous: *mut u8);
-    fn UpdateFuelRequirement();
+
     fn UpdateCursorLocation(x: i32, y: i32, point: *const CPoint);
     fn DrawStarMap(race: u16, rect: *mut crate::comm::locdata::CRect);
-    fn ZoomStarMap(direction: i16);
+
     fn DoStarSearch(menu: *mut MenuHeader) -> i32;
     fn SetMenuRepeatDelay(min: u32, max: u32, step: u32, gestalt: i32);
     fn SetMenuSounds(move_sound: u16, select_sound: u16);

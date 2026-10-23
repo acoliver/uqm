@@ -21,65 +21,6 @@ global!(
     baseContentPath: [c_char; libc::PATH_MAX as usize], input_templates: [[c_char; 30]; 6],
 );
 
-fn fatal(result: Result<(), super::dir_prep::DirPrepError>) {
-    if let Err(error) = result {
-        log::error!("Directory preparation failed: {error:?}");
-        std::process::exit(1);
-    }
-}
-unsafe fn optional<'a>(value: *const c_char) -> Option<&'a str> {
-    if value.is_null() {
-        None
-    } else {
-        Some(
-            CStr::from_ptr(value)
-                .to_str()
-                .expect("directory path is UTF-8"),
-        )
-    }
-}
-unsafe fn addon_list(mut values: *const *const c_char) -> Vec<String> {
-    let mut result = vec![];
-    while !(*values).is_null() {
-        result.push(
-            CStr::from_ptr(*values)
-                .to_str()
-                .expect("addon name is UTF-8")
-                .to_owned(),
-        );
-        values = values.add(1);
-    }
-    result
-}
-
-/// # Safety
-/// String pointers are null or NUL-terminated paths; IO is initialized.
-#[no_mangle]
-pub unsafe extern "C" fn prepareContentDir(
-    content: *const c_char,
-    addon: *const c_char,
-    _executable: *const c_char,
-) {
-    fatal(super::dir_prep::prepare_content_dir(
-        optional(content),
-        optional(addon),
-    ));
-}
-/// # Safety
-/// Path is null or NUL-terminated; IO is initialized.
-#[no_mangle]
-pub unsafe extern "C" fn prepareConfigDir(path: *const c_char) {
-    fatal(super::dir_prep::prepare_config_dir(optional(path)));
-}
-#[no_mangle]
-pub extern "C" fn prepareSaveDir() {
-    fatal(super::dir_prep::prepare_save_dir());
-}
-#[no_mangle]
-pub extern "C" fn prepareMeleeDir() {
-    fatal(super::dir_prep::prepare_melee_dir());
-}
-
 /// # Safety
 /// Directory is a live UIO handle on the IO owner thread.
 #[no_mangle]
@@ -132,15 +73,6 @@ pub unsafe extern "C" fn loadAddon(addon: *const c_char) -> u32 {
 }
 
 /// # Safety
-/// Addons is a NUL-terminated array of NUL-terminated names; directories are initialized.
-#[no_mangle]
-pub unsafe extern "C" fn prepareShadowAddons(addons: *const *const c_char) {
-    if let Err(error) = super::dir_prep::prepare_shadow_addons(&addon_list(addons)) {
-        log::warn!("Could not mount shadow content: {error:?}");
-    }
-}
-
-/// # Safety
 /// Addons is a NUL-terminated array of NUL-terminated names; resources are initialized.
 #[no_mangle]
 pub unsafe extern "C" fn prepareAddons(mut addons: *const *const c_char) {
@@ -158,8 +90,7 @@ pub unsafe extern "C" fn prepareAddons(mut addons: *const *const c_char) {
 
 /// # Safety
 /// No directory users remain. Handles are null or owned by this subsystem.
-#[no_mangle]
-pub unsafe extern "C" fn unprepareAllDirs() {
+pub unsafe fn unprepareAllDirs() {
     for slot in [
         ptr::addr_of_mut!(saveDir),
         ptr::addr_of_mut!(meleeDir),
@@ -173,8 +104,7 @@ pub unsafe extern "C" fn unprepareAllDirs() {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn setGammaCorrection(gamma: f32) -> bool {
+pub fn setGammaCorrection(gamma: f32) -> bool {
     let set = crate::graphics::sdl::platform_abi::TFB_SetGamma(gamma);
     if set {
         log::info!("Gamma correction set to {gamma:.4}.");

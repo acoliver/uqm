@@ -91,13 +91,6 @@ pub unsafe extern "C" fn ConnectState_close(state: *mut ConnectState) {
 /// # Safety
 /// `state` must hold a live reference.
 #[no_mangle]
-pub unsafe extern "C" fn ConnectState_setExtra(state: *mut ConnectState, extra: *mut c_void) {
-    (*state).extra = extra;
-}
-
-/// # Safety
-/// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ConnectState_getExtra(state: *mut ConnectState) -> *mut c_void {
     (*state).extra
 }

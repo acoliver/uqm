@@ -45,6 +45,7 @@ mod live {
     use crate::comm::locdata::CGlobData;
     use crate::comm::races::script::live::LiveScript;
 
+    use crate::threading::legacy_abi::TaskSwitch;
     extern "C" {
         static mut GlobData: CGlobData;
         static usingSpeech: u8;
@@ -54,7 +55,7 @@ mod live {
         fn ShowRemainingCapacity();
         fn ClearSISRect(flags: u16);
         fn AnyButtonPress(detect_special: u32) -> u32;
-        fn TaskSwitch();
+
         fn SleepThread(ticks: i32);
         fn SleepThreadUntil(time: u32);
     }

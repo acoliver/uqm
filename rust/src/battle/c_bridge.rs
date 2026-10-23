@@ -45,6 +45,21 @@ pub type PrimLinks = u32;
 // Extern "C" declarations — C functions Rust will call
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::get_current_activity;
+#[cfg(test)]
+extern "C" {
+    pub fn get_current_activity() -> u16;
+}
+extern "C" {
+    pub fn TaskSwitch();
+}
+#[cfg(not(test))]
+pub use crate::ui::settings::StopMusic;
+#[cfg(test)]
+extern "C" {
+    pub fn StopMusic();
+}
 extern "C" {
     // --- Graphics Integration ---
 
@@ -123,9 +138,6 @@ extern "C" {
     /// Play music track
     pub fn PlayMusic(music: MusicRef, looping: u32, priority: u8);
 
-    /// Stop currently playing music
-    pub fn StopMusic();
-
     /// Check if music is playing
     pub fn PLRPlaying(music: MusicRef) -> c_int;
 
@@ -142,9 +154,6 @@ extern "C" {
 
     /// Suspend current thread until a specific time
     pub fn SleepThreadUntil(wake_time: u32);
-
-    /// Yield to other threads
-    pub fn TaskSwitch();
 
     // --- Input Integration ---
 
@@ -176,13 +185,7 @@ extern "C" {
     /// Get the starship associated with an element
     pub fn GetElementStarShip(element: *const Element, starship: *mut StarShipPtr);
 
-    /// Set the starship associated with an element
-    pub fn SetElementStarShip(element: *mut Element, starship: StarShipPtr);
-
     // --- Global State Integration ---
-
-    /// Get current activity flags
-    pub fn get_current_activity() -> u16;
 
     /// Check if in HyperSpace/QuasiSpace
     pub fn inHQSpace() -> c_int;

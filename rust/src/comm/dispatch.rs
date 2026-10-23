@@ -403,6 +403,18 @@ mod ffi {
     use super::*;
     use std::os::raw::{c_char, c_void};
 
+    #[cfg(not(test))]
+    pub use crate::ui::border::DrawSISFrame;
+    #[cfg(test)]
+    extern "C" {
+        pub fn DrawSISFrame();
+    }
+    #[cfg(not(test))]
+    pub use crate::ui::sis::RepairSISBorder;
+    #[cfg(test)]
+    extern "C" {
+        pub fn RepairSISBorder();
+    }
     extern "C" {
         // init_race dispatch (commglue.c) — returns LOCDATA* or NULL
         pub fn init_race(comm_id: u32) -> *mut c_void;
@@ -414,9 +426,9 @@ mod ffi {
         pub fn EncounterBattle();
 
         // SIS rendering (comm.c / sis_ship.c)
-        pub fn DrawSISFrame();
+
         pub fn ClearSISRect(flags: u16);
-        pub fn RepairSISBorder();
+
         pub fn DrawSISMessage(msg: *const c_char);
         pub fn DrawHyperCoords(origin: CPoint);
         pub fn DrawSISTitle(title: *const c_char);

@@ -58,8 +58,7 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
 }
 /// # Safety
 /// Input, graphics and world state must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn HyperspaceMenu() {
+pub unsafe fn HyperspaceMenu() {
     UnbatchGraphics();
     let old_context = SetContext(SpaceContext);
     let old_color = SetContextBackGroundColor(super::hyper_data::color(0, 0, 0));

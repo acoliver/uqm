@@ -20,6 +20,9 @@ static mut LAST_TRANSITION: i32 = 255;
 static mut LAST_TIME: u32 = 0;
 static mut FPS_COUNTER: u32 = 0;
 extern "C" {
+    fn TaskSwitch();
+}
+extern "C" {
     fn CreateRecursiveMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
     fn DestroyRecursiveMutex(mutex: *mut c_void);
     fn LockRecursiveMutex(mutex: *mut c_void);
@@ -31,7 +34,7 @@ extern "C" {
     fn LockMutex(mutex: *mut c_void);
     fn UnlockMutex(mutex: *mut c_void);
     fn ClearSemaphore(sem: *mut c_void);
-    fn TaskSwitch();
+
     fn GetTimeCounter() -> u32;
     static ScreenWidth: i32;
     static ScreenHeight: i32;
@@ -181,14 +184,6 @@ pub unsafe extern "C" fn TFB_DrawCommandQueue_Pop(target: *mut TFB_DrawCommand) 
     DrawCommandQueue.FullSize -= 1;
     UnlockRecursiveMutex(DCQ_MUTEX);
     1
-}
-/// # Safety
-/// Queue must be initialized; caller owns the disposition of discarded resources.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DrawCommandQueue_Clear() {
-    LockRecursiveMutex(DCQ_MUTEX);
-    DrawCommandQueue = std::mem::zeroed();
-    UnlockRecursiveMutex(DCQ_MUTEX);
 }
 fn equal_rect(a: RECT, b: RECT) -> bool {
     (a.corner.x, a.corner.y, a.extent.width, a.extent.height)

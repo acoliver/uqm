@@ -29,8 +29,7 @@ unsafe extern "C" fn thread_helper(opaque: *mut c_void) -> c_int {
 
 /// # Safety
 /// Initialize once on the game thread before spawning workers.
-#[no_mangle]
-pub unsafe extern "C" fn InitThreadSystem() {
+pub unsafe fn InitThreadSystem() {
     rust_init_thread_system();
     *PENDING_DEATH.lock().unwrap() = [0; 8];
     *MAIN_THREAD.lock().unwrap() = Some(thread::current().id());
@@ -40,8 +39,7 @@ pub unsafe extern "C" fn InitThreadSystem() {
 
 /// # Safety
 /// All workers must have stopped before final subsystem teardown.
-#[no_mangle]
-pub unsafe extern "C" fn UnInitThreadSystem() {
+pub unsafe fn UnInitThreadSystem() {
     ProcessThreadLifecycles();
     LIFECYCLE_ACTIVE.store(false, Ordering::Release);
     rust_uninit_thread_system();
@@ -68,18 +66,6 @@ pub unsafe extern "C" fn CreateThread_Core(
     } else {
         thread
     }
-}
-
-/// # Safety
-/// The callback and data must remain valid until the thread exits.
-#[no_mangle]
-pub unsafe extern "C" fn StartThread_Core(
-    func: unsafe extern "C" fn(*mut c_void) -> c_int,
-    data: *mut c_void,
-    stack_size: i32,
-    name: *const c_char,
-) {
-    CreateThread_Core(func, data, stack_size, name);
 }
 
 /// # Safety
@@ -117,8 +103,7 @@ pub unsafe extern "C" fn FinishThread(thread: *mut LegacyThread) {
 
 /// # Safety
 /// Called by the lifecycle owner, not by a worker pending retirement.
-#[no_mangle]
-pub unsafe extern "C" fn ProcessThreadLifecycles() {
+pub unsafe fn ProcessThreadLifecycles() {
     if !LIFECYCLE_ACTIVE.load(Ordering::Acquire) {
         return;
     }
@@ -167,16 +152,6 @@ pub unsafe extern "C" fn HibernateThread(period: u32) {
     let ms = period.wrapping_mul(1000) / 840;
     pump(true);
     rust_hibernate_thread(ms);
-}
-
-/// # Safety
-/// Thread system and monotonic game clock are initialized.
-#[no_mangle]
-pub unsafe extern "C" fn HibernateThreadUntil(wake: u32) {
-    let now = crate::time::counter_abi::GetTimeCounter();
-    if wake > now {
-        HibernateThread(wake - now);
-    }
 }
 
 macro_rules! forward {

@@ -26,6 +26,12 @@ use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::savegame::runtime::star::CStarDesc;
 use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
 
+#[cfg(not(test))]
+use crate::ui::sis::RepairSISBorder;
+#[cfg(test)]
+extern "C" {
+    fn RepairSISBorder();
+}
 extern "C" {
     pub fn log_init(max_lines: i32);
     /// Existing DEBUG universe traversal seam; not a resource/surface emulator.
@@ -88,7 +94,7 @@ extern "C" {
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn StartSphereTracking(race: u16) -> u16;
     fn NotifyOthers(which_race: u16, target_loc: u8);
-    fn RepairSISBorder();
+
     fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
     fn DrawSISMessage(message: *const std::ffi::c_char);
     fn DrawHyperCoords(origin: CPoint);
