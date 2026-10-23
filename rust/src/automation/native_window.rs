@@ -4418,7 +4418,7 @@ mod tests {
         };
         let linked_root = root.path().join("inputs/linked-build");
         fs::create_dir_all(&linked_root).unwrap();
-        let linked_members: [(&str, &[u8]); 5] = [
+        let linked_members: [(&str, &[u8]); 4] = [
             (
                 "cargo-messages.jsonl",
                 concat!(
