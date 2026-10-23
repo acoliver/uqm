@@ -304,3 +304,20 @@ ambush flags and saved `dev-mycon-lure`. Repeated retreats cost fuel and
 crew: the save has 70 crew, two Furies and zero fuel. It is a stranded
 but genuinely earned development checkpoint, not a finished Sun Device
 route or a connected campaign milestone. No resource loss is hidden.
+
+`campaign-s10a-lure-refuel` instead branches before the stranded lure:
+`dev-driven-ambush` to the trader at Alpha Vulpeculae (catalog153), contact,
+then `buy`, `buy_fuel`, `fill_me_up`, and normal departure/save. Native
+`pmid-86` passed and produced `dev-lure-refueled`: 116 crew, 21000 raw
+fuel, 315 RU and two Furies. The fuel was paid from prior earned trader
+credits. This route leaves the ambush arranged but not yet delivered.
+
+`campaign-s10c-fueled-lure` repeats the homeworld lure from that refueled
+ancestor. Native `pmid-87` completed with twelve crew after thirteen
+patrol escapes. Its same-seed/source replay `pmid-88`, with distance-bounded
+approach speed, completed with 92 crew after three escapes and 16835 raw
+fuel remaining. The controller now cruises between bodies and reduces
+requested speed near the target, while continuing to correct actual
+velocity error. This changes only real thrust/turn inputs, not simulation
+speed, ship capacity, fuel consumption or encounter rules. `pmid-88`
+passed full native acceptance and produced `dev-fueled-mycon-lure`.

@@ -79,11 +79,14 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
         return pursue_heading(dx, dy, observation.ship_facing);
     }
     let distance = distance_squared.sqrt();
-    steer_to_velocity(
-        dx * MOON_APPROACH_SPEED / distance,
-        dy * MOON_APPROACH_SPEED / distance,
-        observation,
-    )
+    let speed = approach_speed(distance);
+    steer_to_velocity(dx * speed / distance, dy * speed / distance, observation)
+}
+
+// Cruise between bodies, then reduce the requested velocity near the collision
+// target. The velocity-error controller still brakes actual lateral momentum.
+fn approach_speed(distance: f64) -> f64 {
+    distance.clamp(MOON_APPROACH_SPEED, 64.0)
 }
 
 /// Recover the target's inner system before applying inertial orbital steering.
@@ -226,11 +229,8 @@ pub fn steer_moon_navigation(observation: NavigationObservation) -> NavigationCo
         return NavigationControl::default();
     }
 
-    steer_to_velocity(
-        dx * MOON_APPROACH_SPEED / distance,
-        dy * MOON_APPROACH_SPEED / distance,
-        observation,
-    )
+    let speed = approach_speed(distance);
+    steer_to_velocity(dx * speed / distance, dy * speed / distance, observation)
 }
 
 /// Route toward a moon of `target_planet`, wherever the ship currently is.
@@ -344,6 +344,21 @@ mod tests {
             view_center_x: 121,
             view_center_y: 113,
             target_guard_active: false,
+        }
+    }
+
+    #[test]
+    fn distant_approaches_do_not_brake_at_landing_speed() {
+        for steer in [steer_toward_target, steer_moon_navigation] {
+            let mut obs = observation(10, 100, 4, 210, 100);
+            obs.velocity_x = 32;
+            let far = steer(obs);
+            assert!(far.thrust);
+            assert!(!far.left && !far.right);
+            obs.target_x = 25;
+            let near = steer(obs);
+            assert!(!near.thrust);
+            assert!(near.right);
         }
     }
 
@@ -739,7 +754,7 @@ mod tests {
         // Already moving toward the target at exactly the approach speed:
         // the velocity error is zero, so no thrust is required.
         let mut state = observation(100, 200, 0, 100, 100);
-        state.velocity_y = -(MOON_APPROACH_SPEED as i32);
+        state.velocity_y = -64;
         assert!(!steer_moon_navigation(state).thrust);
     }
 
@@ -749,7 +764,7 @@ mod tests {
         // The correction vector points backward, so the controller must turn
         // around to shed speed rather than keep accelerating.
         let mut state = observation(100, 200, 0, 100, 100);
-        state.velocity_y = -4 * MOON_APPROACH_SPEED as i32;
+        state.velocity_y = -128;
         let control = steer_moon_navigation(state);
         assert!(!control.thrust);
         assert!(control.left ^ control.right);
