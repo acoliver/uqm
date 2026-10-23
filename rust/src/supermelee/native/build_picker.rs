@@ -30,7 +30,7 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod live {
+pub(super) mod live {
     use super::navigate;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
     use crate::ships::native::abi::*;
