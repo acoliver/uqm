@@ -2,8 +2,7 @@ if [ "$uqm_GFXMODULE" = "sdl" ]; then
 	uqm_SUBDIRS="sdl"
 fi
 
-uqm_CFILES="
-		widgets.c"
+uqm_CFILES=""
 
 uqm_HFILES="bbox.h cmap.h context.h dcqueue.h drawable.h drawcmd.h font.h
 		gfx_common.h gfxintrn.h prim.h tfb_draw.h tfb_prim.h widgets.h"
