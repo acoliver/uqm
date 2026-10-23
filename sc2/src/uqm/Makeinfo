@@ -6,7 +6,7 @@ uqm_CFILES="
 		init.c intro.c
 		 
 		 restart.c  setup.c setupmenu.c
-		    starbase.c starcon.c
+		     starcon.c
 		  uqmdebug.c "
 
 # The clock API is provided by Rust.

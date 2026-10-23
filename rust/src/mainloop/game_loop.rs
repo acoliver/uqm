@@ -375,8 +375,8 @@ mod cffi {
         }
 
         fn visit_starbase(&self) -> Result<(), MainLoopError> {
-            // P16: Ported to Rust — dispatch logic in comm::dispatch
-            unsafe { crate::comm::dispatch::rust_visit_starbase() }.map_err(MainLoopError::from)
+            unsafe { crate::ui::starbase::VisitStarBase() };
+            Ok(())
         }
 
         fn race_communication(&self) {

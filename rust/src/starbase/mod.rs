@@ -6,18 +6,14 @@
 //! every function here is pure, takes plain data and returns typed results
 //! or typed commands for a caller to carry out.
 //!
-//! # Scope of this slice
+//! # Runtime integration
 //!
-//! Nothing in this module is wired to the running game. No Rust frame loop
-//! drives these models yet, no menu draws from them, and the game still
-//! skips the Starbase menu (see `rust_visit_starbase` in `comm/dispatch.rs`).
-//! The models are the tested logic that a Rust Starbase and Outfit screen
-//! will consume. They are not evidence that a fuel purchase works in a game.
-//!
-//! Save/Load (`OutfitStep::OpenSaveLoad`, the Shipyard menu entry) and the
-//! Shipyard ship spin presentation are expressed only as typed failures. The
-//! Rust side has no `GameOptions` or `ShowPresentation`, so the screens end
-//! with [`StarbaseError::Unported`] rather than pretending they completed.
+//! The game-facing C-ABI providers live in `crate::ui::{outfit,shipyard,starbase}`.
+//! They preserve the engine menu callbacks, graphics and encounter lifecycle.
+//! The SIS provider shares this module's tested fuel-capacity rule. The pure
+//! screen models below remain separate from those runtime event loops; their
+//! Save/Load and ShipSpin routes still return typed `Unported` errors rather
+//! than driving the engine presentation and save interfaces.
 //!
 //! # Input
 //!
