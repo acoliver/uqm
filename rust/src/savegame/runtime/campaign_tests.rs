@@ -79,6 +79,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "alliance-after-mercury" => (21, 2, 2155, 50, 926, 0, 1),
             "allied-starbase" => (10, 3, 2155, 46, 896, 2500, 1),
             "at-alpha-centauri" => (18, 3, 2155, 46, 401, 2500, 1),
+            "burvixese-caster" => (1, 11, 2155, 32, 13382, 115, 4),
             "broken-ultron" => (7, 7, 2155, 46, 10434, 115, 4),
             "funded-sol" => (14, 3, 2155, 46, 800, 2304, 1),
             "north-refueled" => (6, 9, 2155, 43, 21000, 115, 4),

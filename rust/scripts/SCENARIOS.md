@@ -1359,3 +1359,12 @@ remain aboard. The producer saves in local flight to slot 1; the corresponding
 The explicit discovery capture is taken after departure. Orbit-state assertion
 checkpoints still retain OS images; paired rotating-planet captures have a
 separately reported synchronization problem in issue #395.
+
+`campaign-s04b-burvixese-caster` loads the refueled northern checkpoint and
+flies to Arcturus. It approaches the first moon of planet 0, scans, dispatches
+the lander and retrieves energy node 0 through a real collision. Both
+`BURVIXESE_BROADCASTERS` and `BURV_BROADCASTERS_ON_SHIP` must become 1 before
+saving. The retained checkpoint has 13382 raw fuel and 32 crew; natural surface
+hazards cost 11 crew during this producing run. The Ultron remains at condition
+1, with the Spindle and Helix still aboard. `load-burvixese-caster-v1` verifies
+these exact saved values before the Ilwrath diversion.
