@@ -6,3 +6,4 @@ pub mod util;
 
 pub mod flash;
 pub(crate) mod flash_math;
+pub mod settings;

@@ -36,7 +36,6 @@ sc2/src/uqm/rust_bridge_mainloop.c
 sc2/src/uqm/rust_bridge_restart.c
 sc2/src/uqm/rust_bridge_ships.c
 sc2/src/uqm/save.c
-sc2/src/uqm/settings.c
 sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
 sc2/src/uqm/shipstat.c
