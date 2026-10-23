@@ -6,6 +6,6 @@
     dead_code,
     clippy::all,
     clashing_extern_declarations,
-    reason = "bindgen-generated C ABI declarations"
+    reason = "Rust-owned engine ABI declarations"
 )]
-include!(concat!(env!("OUT_DIR"), "/graphics_abi.rs"));
+include!("../abi/graphics_abi.rs");

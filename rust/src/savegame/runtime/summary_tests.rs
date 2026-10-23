@@ -61,25 +61,11 @@ fn set_bits(bytes: &mut StateBytes, start: usize, width: usize, value: u8) {
     }
 }
 
-/// Start bit and width of a game-state key, summed up from the
-/// `ADD_GAME_STATE (name, bits)` lines of `globdata.h` the way the C enum does.
+/// Start bit and width in the Rust-owned serialized story-state schema.
 fn key(name: &str) -> (usize, usize) {
-    let header = include_str!("../../../../sc2/src/uqm/globdata.h");
-    let list = &header[header.find("\nSTART_GAME_STATE\n").unwrap()..];
-    let list = &list[..list.find("\nEND_GAME_STATE").unwrap()];
-    let mut next = 0usize;
-    for line in list.lines() {
-        let Some(args) = line.trim().strip_prefix("ADD_GAME_STATE (") else {
-            continue;
-        };
-        let (key_name, rest) = args.split_once(',').unwrap();
-        let width: usize = rest.split(')').next().unwrap().trim().parse().unwrap();
-        if key_name.trim() == name {
-            return (next, width);
-        }
-        next += width;
-    }
-    panic!("{name} is not in globdata.h");
+    let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
+        .unwrap_or_else(|| panic!("unknown game-state key {name}"));
+    (start, end - start + 1)
 }
 
 fn set_key(bytes: &mut StateBytes, name: &str, value: u8) {
@@ -487,34 +473,22 @@ fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
 }
 
 #[test]
-fn the_device_ids_are_the_enum_of_globdata_h() {
-    let header = include_str!("../../../../sc2/src/uqm/globdata.h");
-    let start = header
-        .find("PORTAL_SPAWNER_DEVICE = 0")
-        .expect("device enum");
-    let names: Vec<&str> = header[start..]
-        .lines()
-        .map(|line| line.trim().trim_end_matches(','))
-        .take_while(|line| *line != "NUM_DEVICES")
-        .filter(|line| !line.is_empty())
-        .map(|line| line.split(" = ").next().unwrap())
-        .collect();
-    assert_eq!(names.len(), NUM_DEVICES);
-    let id = |name: &str| names.iter().position(|n| *n == name).unwrap() as u8;
-    let expected = [
-        ("PORTAL_SPAWNER_DEVICE", 0),
-        ("TALKING_PET_DEVICE", 1),
-        ("ROSY_SPHERE_DEVICE", 4),
-        ("ULTRON_0_DEVICE", 7),
-        ("MAIDENS_DEVICE", 11),
-        ("DATA_PLATE_1_DEVICE", 14),
-        ("TAALO_PROTECTOR_DEVICE", 17),
-        ("DESTRUCT_CODE_DEVICE", 23),
-        ("URQUAN_WARP_DEVICE", 24),
-        ("LUNAR_BASE_DEVICE", 27),
-    ];
-    for (name, value) in expected {
-        assert_eq!(id(name), value, "{name}");
+fn device_ids_preserve_the_save_format_values() {
+    use crate::navigation::abi;
+    assert_eq!(abi::NUM_DEVICES as usize, NUM_DEVICES);
+    for (actual, expected) in [
+        (abi::PORTAL_SPAWNER_DEVICE, 0),
+        (abi::TALKING_PET_DEVICE, 1),
+        (abi::ROSY_SPHERE_DEVICE, 4),
+        (abi::ULTRON_0_DEVICE, 7),
+        (abi::MAIDENS_DEVICE, 11),
+        (abi::DATA_PLATE_1_DEVICE, 14),
+        (abi::TAALO_PROTECTOR_DEVICE, 17),
+        (abi::DESTRUCT_CODE_DEVICE, 23),
+        (abi::URQUAN_WARP_DEVICE, 24),
+        (abi::LUNAR_BASE_DEVICE, 27),
+    ] {
+        assert_eq!(actual, expected);
     }
 }
 

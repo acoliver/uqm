@@ -839,7 +839,7 @@ fn every_frame_the_chooser_draws_exists_in_the_art() {
     }
 
     // What the chooser offers are the purchasable pieces of the C enum.
-    let purchasable = PieceNumbers::from_sis_h().get("NUM_PURCHASE_MODULES") as usize;
+    let purchasable = PieceNumbers::from_schema().get("NUM_PURCHASE_MODULES") as usize;
     assert!(shown_modules(&platform)
         .iter()
         .all(|piece| *piece < purchasable));

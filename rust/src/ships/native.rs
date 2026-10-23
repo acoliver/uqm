@@ -9,7 +9,7 @@
     clippy::all
 )]
 pub mod abi {
-    include!(concat!(env!("OUT_DIR"), "/ship_abi.rs"));
+    include!("../abi/ship_abi.rs");
 
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use super::engine::{

@@ -12,7 +12,7 @@ extern crate uqm_rust;
     reason = "generated engine ABI shared with the production netplay bridge"
 )]
 mod abi {
-    include!(concat!(env!("OUT_DIR"), "/netplay_abi.rs"));
+    include!("../src/abi/netplay_abi.rs");
 }
 use abi::*;
 

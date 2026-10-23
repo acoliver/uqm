@@ -2,7 +2,6 @@
 
 use super::platform::SisView;
 
-const SIS_H: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../sc2/src/uqm/sis.h"));
 const MODULES_MENU_ANI: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../sc2/content/base/ui/modulesmenu.ani"
@@ -12,61 +11,41 @@ const OUTFIT_MODULES_ANI: &str = include_str!(concat!(
     "/../sc2/content/base/ui/outfitmodules.ani"
 ));
 
-/// The piece enumerators of `sis.h` with their numbers.
-pub struct PieceNumbers(Vec<(String, u32)>);
-
-fn strip_block_comments(text: &str) -> String {
-    let mut out = String::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("/*") {
-        out.push_str(&rest[..start]);
-        let end = rest[start..].find("*/").expect("comment closes") + start + 2;
-        rest = &rest[end..];
-    }
-    out.push_str(rest);
-    out
-}
+/// Equipment numbers shared by the native initializer and Outfit tests.
+pub struct PieceNumbers;
 
 impl PieceNumbers {
-    pub fn from_sis_h() -> Self {
-        let start = SIS_H
-            .find("PLANET_LANDER = 0")
-            .expect("piece enum in sis.h");
-        let end = start
-            + SIS_H[start..]
-                .find("NUM_MODULES /* must be last entry */")
-                .expect("enum ends with NUM_MODULES");
-        let body = strip_block_comments(&SIS_H[start..end]);
-        let mut numbers: Vec<(String, u32)> = Vec::new();
-        let mut next = 0;
-        for token in body.split(',').map(str::trim).filter(|t| !t.is_empty()) {
-            let (name, value) = match token.split_once('=') {
-                Some((name, value)) => {
-                    let value = value.trim();
-                    let number = value.parse().unwrap_or_else(|_| {
-                        numbers
-                            .iter()
-                            .find(|(known, _)| known == value)
-                            .unwrap_or_else(|| panic!("unknown enumerator {value}"))
-                            .1
-                    });
-                    (name.trim(), number)
-                }
-                None => (token, next),
-            };
-            numbers.push((name.to_owned(), value));
-            next = value + 1;
-        }
-        numbers.push(("NUM_MODULES".to_owned(), next));
-        Self(numbers)
+    pub fn from_schema() -> Self {
+        Self
     }
 
     pub fn get(&self, name: &str) -> u32 {
-        self.0
-            .iter()
-            .find(|(known, _)| known == name)
-            .unwrap_or_else(|| panic!("sis.h has no {name}"))
-            .1
+        use crate::navigation::abi;
+        match name {
+            "PLANET_LANDER" => abi::PLANET_LANDER,
+            "FUSION_THRUSTER" => abi::FUSION_THRUSTER,
+            "TURNING_JETS" => abi::TURNING_JETS,
+            "CREW_POD" => abi::CREW_POD,
+            "STORAGE_BAY" => abi::STORAGE_BAY,
+            "FUEL_TANK" => abi::FUEL_TANK,
+            "HIGHEFF_FUELSYS" => abi::HIGHEFF_FUELSYS,
+            "DYNAMO_UNIT" => abi::DYNAMO_UNIT,
+            "SHIVA_FURNACE" => abi::SHIVA_FURNACE,
+            "GUN_WEAPON" => abi::GUN_WEAPON,
+            "BLASTER_WEAPON" => abi::BLASTER_WEAPON,
+            "CANNON_WEAPON" => abi::CANNON_WEAPON,
+            "TRACKING_SYSTEM" => abi::TRACKING_SYSTEM,
+            "ANTIMISSILE_DEFENSE" => abi::ANTIMISSILE_DEFENSE,
+            "NUM_PURCHASE_MODULES" => abi::NUM_PURCHASE_MODULES,
+            "BOMB_MODULE_0" => abi::BOMB_MODULE_0,
+            "BOMB_MODULE_1" => abi::BOMB_MODULE_1,
+            "BOMB_MODULE_2" => abi::BOMB_MODULE_2,
+            "BOMB_MODULE_3" => abi::BOMB_MODULE_3,
+            "BOMB_MODULE_4" => abi::BOMB_MODULE_4,
+            "BOMB_MODULE_5" => abi::BOMB_MODULE_5,
+            "NUM_MODULES" => abi::NUM_MODULES,
+            _ => panic!("unknown equipment piece {name}"),
+        }
     }
 }
 
@@ -147,8 +126,8 @@ mod tests {
     use crate::starbase::sis_modules::{ModuleSlots, ModuleType};
 
     #[test]
-    fn piece_numbers_follow_the_sis_h_enum() {
-        let pieces = PieceNumbers::from_sis_h();
+    fn piece_numbers_preserve_the_equipment_enum() {
+        let pieces = PieceNumbers::from_schema();
         assert_eq!(pieces.get("PLANET_LANDER"), 0);
         assert_eq!(pieces.get("CREW_POD"), ModuleType::CrewPod as u32);
         assert_eq!(pieces.get("FUEL_TANK"), ModuleType::FuelTank as u32);
@@ -213,7 +192,7 @@ mod tests {
 
     #[test]
     fn module_art_has_a_frame_for_every_purchasable_module() {
-        let pieces = PieceNumbers::from_sis_h();
+        let pieces = PieceNumbers::from_schema();
         let purchasable = pieces.get("NUM_PURCHASE_MODULES") as usize;
         assert!(
             modules_menu_frames() >= purchasable,
