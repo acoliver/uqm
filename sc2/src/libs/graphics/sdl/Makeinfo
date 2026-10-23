@@ -1,4 +1,0 @@
-uqm_CFILES=""
-uqm_HFILES="opengl.h palette.h
-		primitives.h pure.h rotozoom.h
-		scalers.h sdl_common.h sdluio.h"
