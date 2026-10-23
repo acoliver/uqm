@@ -3,7 +3,6 @@ sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/options.c
 sc2/src/port.c
 sc2/src/uqm.c
-sc2/src/uqm/cleanup.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/credits.c
