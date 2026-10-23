@@ -16,7 +16,6 @@ sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/confirm.c
 sc2/src/uqm/cons_res.c
 sc2/src/uqm/credits.c
-sc2/src/uqm/flash.c
 sc2/src/uqm/fmv.c
 sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
@@ -34,7 +33,6 @@ sc2/src/uqm/rust_bridge_mainloop.c
 sc2/src/uqm/rust_bridge_restart.c
 sc2/src/uqm/rust_bridge_ships.c
 sc2/src/uqm/save.c
-sc2/src/uqm/settings.c
 sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
 sc2/src/uqm/shipstat.c

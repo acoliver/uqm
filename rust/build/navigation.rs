@@ -35,10 +35,12 @@ pub fn generate() -> Result<(), String> {
         "gameopt.h",
         "shipcont.h",
         "util.h",
+        "flash.h",
         "settings.h",
         "planets/solarsys.h",
     ];
     let mut builder = bindgen::Builder::default()
+        .clang_arg("-DFLASH_INTERNAL")
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_file(".*/sc2/src/.*")

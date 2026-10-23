@@ -3,3 +3,7 @@
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod border;
 pub mod util;
+
+pub mod flash;
+pub(crate) mod flash_math;
+pub mod settings;
