@@ -125,3 +125,18 @@ four escorts. `load-utwig-alliance-v1` independently reloads the extracted save.
 The save round-trip tests also check that the Utwig and Supox fleets are allied,
 travelling to their mission destinations, and retain the Utwig arrival callback.
 This checkpoint precedes the Druuge guard battle and does not claim the bomb.
+
+### Transit refit and autopilot recovery
+
+`campaign-s08a-refitted` loads `dev-taalo-protected.sav`, visits Sol through
+ordinary flight, sells fuel and buys four thrusters in Outfit, then purchases
+100 fuel units from the Melnorme at Alpha Centauri. Native run `pmid-23` passed
+and saved `dev-refitted.sav` with crew 32, fuel 15400 and two escorts. This is a
+development branch, not a connected campaign milestone. The later Arilou and
+Talking Pet segments are not proved by this refit.
+
+An interrupting encounter clears production autopilot. After a verified fleet
+win, `fly_to_star` reopens the real map and selects the original destination;
+it preserves the action's tick count and original fuel baseline. The refit run
+proved a fleet win followed by destination reselection and arrival. This fixes
+#429 without writing the autopilot target or position.

@@ -124,6 +124,10 @@ pub enum Progress {
 }
 
 impl StarFlight {
+    pub fn resume_after_encounter(&mut self) {
+        self.phase = Phase::Open;
+    }
+
     pub fn observe(&mut self, step: FlyToStarStep, obs: Observation) -> Progress {
         let ticks = self.ticks;
         self.ticks += 1;
@@ -254,6 +258,19 @@ pub fn arrival_satisfies(label: &str, target: StarTarget) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn encounter_resume_reopens_map_without_resetting_fuel_or_budget() {
+        let mut flight = StarFlight {
+            phase: Phase::Fly,
+            ticks: 120,
+            initial_fuel: Some(9000),
+        };
+        flight.resume_after_encounter();
+        assert_eq!(flight.phase, Phase::Open);
+        assert_eq!(flight.ticks, 120);
+        assert_eq!(flight.initial_fuel, Some(9000));
+    }
+
     #[test]
     fn names_and_indexes_resolve_the_same_shipped_catalog_entry() {
         let alpha = StarTarget::resolve("Alpha Centauri").unwrap();

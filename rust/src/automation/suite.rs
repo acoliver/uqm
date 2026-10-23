@@ -98,6 +98,14 @@ pub struct ScenarioRow {
 pub const MATRIX: &[ScenarioRow] = &[
     row("load-utwig-alliance-v1", &[Domain::SaveLoad]),
     row(
+        "campaign-s08a-refitted",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+        ],
+    ),
+    row(
         "campaign-s09c-syreen-vault",
         &[
             Domain::SaveLoad,
