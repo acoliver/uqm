@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "load-bomb-preguard-v1",
+  "start_save": {
+    "path": "saves/bomb-preguard.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 120
+  },
+  "seed": 1437213464,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "activity", "op": "eq", "value": 4}, {"key": "escorts:count", "op": "eq", "value": 4}, {"key": "sis:crew", "op": "eq", "value": 32}, {"key": "sis:fuel", "op": "eq", "value": 6244}, {"key": "sis:ru", "op": "eq", "value": 115}, {"key": "star:current", "op": "eq", "value": 474}, {"key": "story:AQUA_HELIX_ON_SHIP", "op": "eq", "value": 0}, {"key": "story:BOMB_UNPROTECTED", "op": "eq", "value": 0}, {"key": "story:BURV_BROADCASTERS_ON_SHIP", "op": "eq", "value": 0}, {"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 0}, {"key": "story:ILWRATH_DECEIVED", "op": "eq", "value": 1}, {"key": "story:MOONBASE_DESTROYED", "op": "eq", "value": 1}, {"key": "story:PKUNK_MANNER", "op": "eq", "value": 3}, {"key": "story:PROBE_ILWRATH_ENCOUNTER", "op": "eq", "value": 0}, {"key": "story:RADIOACTIVES_PROVIDED", "op": "eq", "value": 1}, {"key": "story:ROSY_SPHERE", "op": "eq", "value": 1}, {"key": "story:ROSY_SPHERE_ON_SHIP", "op": "eq", "value": 0}, {"key": "story:STARBASE_AVAILABLE", "op": "eq", "value": 1}, {"key": "story:ULTRON_CONDITION", "op": "eq", "value": 5}, {"key": "story:UTWIG_BOMB_ON_SHIP", "op": "eq", "value": 0}, {"key": "story:UTWIG_HAVE_ULTRON", "op": "eq", "value": 1}, {"key": "story:UTWIG_SUPOX_MISSION", "op": "eq", "value": 1}, {"key": "story:UTWIG_WAR_NEWS", "op": "eq", "value": 0}]},
+    {"action": "capture", "label": "reloaded-before-druuge-bomb-guards"},
+    {"action": "finish"}
+  ]
+}

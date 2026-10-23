@@ -1910,7 +1910,10 @@ mod tests {
     #[test]
     fn hyperspace_departure_counts_down_and_fails_when_exhausted() {
         let actions = [
-            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks: 2 }),
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep {
+                max_ticks: 2,
+                encounter_response: None,
+            }),
             Action::Finish,
         ];
         let config = cfg(&actions);
@@ -3547,7 +3550,10 @@ mod budgeted_wait_tests {
                 stop_at_encounter: false,
                 encounter_response: None,
             }),
-            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep {
+                max_ticks,
+                encounter_response: None,
+            }),
             Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
                 target: crate::automation::star_flight::StarTarget::resolve("Alpha Centauri")
                     .unwrap(),
