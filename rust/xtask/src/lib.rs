@@ -134,6 +134,8 @@ fn test_linked(root: &Path) -> Result<(), String> {
             "planets_parity",
             "--test",
             "canvas_native",
+            "--test",
+            "queue_native",
         ]),
         "Cargo test linked fixtures",
     )

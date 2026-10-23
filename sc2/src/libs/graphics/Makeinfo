@@ -3,7 +3,6 @@ if [ "$uqm_GFXMODULE" = "sdl" ]; then
 fi
 
 uqm_CFILES="
-		dcqueue.c
 		gfx_common.c
 		widgets.c"
 
