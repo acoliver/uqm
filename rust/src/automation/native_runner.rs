@@ -5669,6 +5669,96 @@ mod tests {
     }
 
     #[test]
+    fn startup_binding_holds_the_first_frame_until_os_bounds_match_and_stays_strict() {
+        let root = tempfile::tempdir().unwrap();
+        let scratch = tempfile::tempdir().unwrap();
+        let bounds = NativeWindowBounds {
+            x: 80,
+            y: 48,
+            width: 1280,
+            height: 960,
+        };
+        let nonce = "a".repeat(64);
+        let prior = child_state(&nonce, 123, bounds, 0, 0, 0);
+        let state = child_state(&nonce, 123, bounds, 1, 0, 0);
+        let (mut session, mut identity) = final_publication_session(root.path(), &state, &prior);
+        identity.start_time = "1234".to_string();
+        session.proof = NativeWindowProof::new(
+            native_identity(&identity, &nonce),
+            bounds,
+            acceptance_policy(),
+        );
+        let response = root.path().join("observer-response.json");
+        let helper = root.path().join("observer.sh");
+        fs::write(&helper, format!("cat '{}' > \"$5\"\n", response.display())).unwrap();
+        let mut observer =
+            observer_for_capture_helper_test(scratch.path(), helper, runtime_contract());
+        let mut observed = ObservedNativeWindow {
+            window_id: 44_504,
+            os_bounds: bounds,
+            visible: true,
+            minimized: false,
+        };
+        let write_response = |observed| {
+            fs::write(
+                &response,
+                serde_json::to_vec(&NativeObserverHelperResponse {
+                    schema: NATIVE_OBSERVER_HELPER_SCHEMA.to_string(),
+                    result: NativeObserverHelperResult::Observed(Ok(observed)),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        };
+        let ack = root.path().join("automation/native-window-ack.json");
+        for os_bounds in [
+            NativeWindowBounds {
+                x: 82,
+                y: 50,
+                width: 1276,
+                height: 956,
+            },
+            NativeWindowBounds {
+                x: 79,
+                y: 47,
+                width: 1282,
+                height: 962,
+            },
+        ] {
+            observed.os_bounds = os_bounds;
+            write_response(observed);
+            session.observe(&identity, &mut observer).unwrap();
+            assert_eq!(session.provisional_window_id, Some(observed.window_id));
+            assert_eq!(session.proof.bound_window_id(), None);
+            assert_eq!(session.first_visible_presentation, None);
+            assert_eq!(session.last_presentation, 0);
+            assert!(!ack.exists());
+        }
+        observed.os_bounds = bounds;
+        write_response(observed);
+        session.observe(&identity, &mut observer).unwrap();
+        assert_eq!(session.proof.bound_window_id(), Some(observed.window_id));
+        assert_eq!(session.first_visible_presentation, Some(1));
+        assert_eq!(session.last_presentation, 1);
+        let acknowledged_bytes = fs::read(&ack).unwrap();
+        let acknowledgement: NativeWindowAck = serde_json::from_slice(&acknowledged_bytes).unwrap();
+        assert_eq!(acknowledgement.committed_presentation, 1);
+
+        let next = child_state(&nonce, 123, bounds, 121, 0, 0);
+        fs::write(
+            root.path().join("automation/native-window-state.json"),
+            serde_json::to_vec(&next).unwrap(),
+        )
+        .unwrap();
+        observed.os_bounds.width += 1;
+        write_response(observed);
+        let error = session.observe(&identity, &mut observer).unwrap_err();
+        assert!(error.to_string().contains("BindingChanged"), "{error}");
+        assert_eq!(session.last_presentation, 1);
+        assert_eq!(fs::read(&ack).unwrap(), acknowledged_bytes);
+    }
+
+    #[test]
     fn provisional_window_identity_survives_geometry_convergence() {
         let client_bounds = NativeWindowBounds {
             x: 80,
