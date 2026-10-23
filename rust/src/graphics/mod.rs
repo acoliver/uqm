@@ -84,3 +84,5 @@ pub mod cmap_abi;
 pub mod gfxload;
 
 pub mod filegfx;
+
+pub mod resgfx;
