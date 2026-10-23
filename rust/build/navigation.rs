@@ -5,6 +5,12 @@ use std::fs;
 pub fn generate() -> Result<(), String> {
     let headers = [
         "globdata.h",
+        "fmv.h",
+        "credits.h",
+        "setupmenu.h",
+        "uqmdebug.h",
+        "cnctdlg.h",
+        "save.h",
         "coderes.h",
         "encount.h",
         "starmap.h",
@@ -44,6 +50,7 @@ pub fn generate() -> Result<(), String> {
         .clang_arg("-DFLASH_INTERNAL")
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
+        .clang_arg("-DNETPLAY=NETPLAY_FULL")
         .allowlist_file(".*/sc2/src/.*")
         .generate_comments(false)
         .layout_tests(true)
@@ -62,7 +69,10 @@ pub fn generate() -> Result<(), String> {
         "libs/memlib.h",
         "libs/log.h",
         "libs/graphics/widgets.h",
+        "libs/graphics/drawable.h",
+        "libs/graphics/tfb_draw.h",
         "libs/resource/stringbank.h",
+        "libs/sound/sound.h",
         "libs/mathlib.h",
         "libs/inplib.h",
         "libs/sound/trackplayer.h",

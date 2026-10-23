@@ -16,6 +16,7 @@ pub mod cli;
 pub mod collections;
 pub mod comm;
 pub mod config;
+pub mod front_end;
 pub mod game_init;
 pub mod graphics;
 pub mod input;
