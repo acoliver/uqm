@@ -949,14 +949,52 @@ pub unsafe extern "C" fn rust_GetBattleSegue() -> c_uint {
 /// Returns 1 if talking finished (reached end), 0 otherwise.
 #[no_mangle]
 pub unsafe extern "C" fn rust_AlienTalkSegue(wait: c_uint) -> c_int {
-    let mut state = COMM_STATE.write();
-    let was_finished = state.is_talking_finished();
-    super::talk_segue::alien_talk_segue(&mut state, wait);
-    if !was_finished && state.is_talking_finished() {
-        1
-    } else {
-        0
+    #[cfg(not(test))]
+    {
+        run_alien_talk_unlocked(
+            wait,
+            || super::talk_segue::alien_talk_first_call_init(),
+            super::talk_segue::dinput::run_talk_segue_dinput,
+            || super::talk_segue::fade_music_to_foreground_bridge(),
+        )
     }
+    #[cfg(test)]
+    {
+        let mut state = COMM_STATE.write();
+        let was_finished = state.is_talking_finished();
+        super::talk_segue::alien_talk_segue(&mut state, wait);
+        if !was_finished && state.is_talking_finished() {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+fn run_alien_talk_unlocked(
+    wait: u32,
+    initialize: impl FnOnce(),
+    playback: impl FnOnce(u32) -> bool,
+    fade: impl FnOnce(),
+) -> c_int {
+    let initialize_needed = {
+        let mut state = COMM_STATE.write();
+        if super::talk_segue::check_abort_external() || state.is_talking_finished() {
+            return 0;
+        }
+        let needed = !state.first_talk_call;
+        state.first_talk_call = true;
+        needed
+    };
+    if initialize_needed {
+        initialize();
+    }
+    let finished = playback(wait);
+    COMM_STATE.write().set_talking_finished(finished);
+    if finished {
+        fade();
+    }
+    i32::from(finished)
 }
 
 /// Run the full talk segue loop for the given wait-track.
@@ -1937,4 +1975,23 @@ mod tests {
             rust_UninitCommunication();
         }
     }
+}
+
+#[cfg(test)]
+#[test]
+#[serial_test::serial]
+fn alien_talk_callbacks_run_without_the_global_state_lock() {
+    COMM_STATE.write().reset_for_encounter();
+    let finished = run_alien_talk_unlocked(
+        1,
+        || assert!(COMM_STATE.try_write().is_some()),
+        |wait| {
+            assert_eq!(wait, 1);
+            assert!(COMM_STATE.try_write().is_some());
+            true
+        },
+        || assert!(COMM_STATE.try_write().is_some()),
+    );
+    assert_eq!(finished, 1);
+    assert!(COMM_STATE.read().is_talking_finished());
 }

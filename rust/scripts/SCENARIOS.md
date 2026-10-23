@@ -1384,3 +1384,12 @@ Devices; 3DO menus have a direct Devices entry. `device-menu-probe` exercises a
 real Clear Spindle invocation from the earned caster checkpoint and requires
 its consumption and Ultron condition 1 -> 2. This independent probe does not
 replace or mutate the campaign checkpoint.
+
+`campaign-s05a-south-refueled` flies from the earned Ilwrath diversion to
+Alpha Centauri, contacts the Melnorme and spends previously earned rainbow
+credits on fuel. The real flight leaves 732 fuel before `buy`, `buy_fuel`,
+`fill_me_up`; the final checkpoint retains 21000 fuel, 32 crew, the caster,
+Ilwrath diversion and broken Ultron. `load-south-refueled-v1` verifies the
+extracted save independently. Returning Melnorme business dialogue plays its
+intermediate speech through the unlocked Rust input loop, allowing communication
+callbacks to access state without recursively locking the global write guard.
