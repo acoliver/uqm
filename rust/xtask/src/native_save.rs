@@ -943,6 +943,7 @@ mod tests {
             ("burvixese-caster", "north-refueled"),
             ("ilwrath-approach", "burvixese-caster"),
             ("caster-diversion", "ilwrath-approach"),
+            ("south-refueled", "caster-diversion"),
         ] {
             let save = root.join(format!("rust/scripts/saves/{checkpoint}.sav"));
             let provenance: Provenance =

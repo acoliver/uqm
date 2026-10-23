@@ -84,6 +84,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "funded-sol" => (14, 3, 2155, 46, 800, 2304, 1),
             "ilwrath-approach" => (8, 1, 2156, 32, 3722, 115, 4),
             "caster-diversion" => (8, 1, 2156, 32, 3722, 115, 4),
+            "south-refueled" => (4, 2, 2156, 32, 21000, 115, 4),
             "north-refueled" => (6, 9, 2155, 43, 21000, 115, 4),
             "north-ready" => (20, 4, 2155, 46, 20000, 115, 4),
             "north-artifacts" => (19, 8, 2155, 43, 4896, 115, 4),
