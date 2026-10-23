@@ -88,11 +88,12 @@ jobs:
           workspaces: rust
       # native run builds the instrumented game and checks the real OS window.
       - name: Run scenario
-        run: >-
-          cargo run --release --locked --manifest-path rust/xtask/Cargo.toml --
-          native run --scenario ${{ matrix.scenario }}
-          --artifacts tmp/failure-scenarios/${{ matrix.scenario }}
-          --content sc2/content/packages
+        run: |
+          mkdir -p tmp/failure-scenarios
+          cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- \
+            native run --scenario ${{ matrix.scenario }} \
+            --artifacts tmp/failure-scenarios/${{ matrix.scenario }} \
+            --content sc2/content/packages
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
