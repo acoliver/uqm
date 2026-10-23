@@ -66,3 +66,37 @@ jobs:
         with:
           workspaces: rust
       - run: cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm
+
+  failure-scenarios:
+    name: Failure scenario (${{ matrix.scenario }})
+    runs-on: macos-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - lander-destroyed-v1
+          - out-of-fuel-v1
+          - lost-battle-v1
+          - super-melee-v1
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install pkg-config sdl2
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      # native run builds the instrumented game and checks the real OS window.
+      - name: Run scenario
+        run: |
+          mkdir -p tmp/failure-scenarios
+          cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- \
+            native run --scenario ${{ matrix.scenario }} \
+            --artifacts "$GITHUB_WORKSPACE/tmp/failure-scenarios/${{ matrix.scenario }}" \
+            --content "$GITHUB_WORKSPACE/sc2/content/packages"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-${{ matrix.scenario }}
+          path: tmp/failure-scenarios/${{ matrix.scenario }}
+          retention-days: 3
