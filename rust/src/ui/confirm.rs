@@ -151,9 +151,9 @@ unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
 pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     let bank = StringBank_Create();
     if bank.is_null() {
-        log_add(
-            log_Level_log_Fatal,
-            c"FATAL: Memory exhaustion when preparing popup window".as_ptr(),
+        crate::log_abi::log_message(
+            log_Level_log_Fatal as i32,
+            "FATAL: Memory exhaustion when preparing popup window",
         );
         std::process::exit(1);
     }

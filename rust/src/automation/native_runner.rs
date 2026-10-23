@@ -3123,7 +3123,6 @@ fn validate_shared_linked_build(
     for expected in [
         &receipt.cargo_messages,
         &receipt.rust_archive,
-        &receipt.c_archive,
         &receipt.cargo_manifest,
         &receipt.cargo_lock,
     ] {
@@ -3154,7 +3153,6 @@ fn retain_linked_build_proof(
     let members = [
         ("cargo-messages.jsonl", &receipt.cargo_messages),
         ("rust-archive.a", &receipt.rust_archive),
-        ("c-archive.a", &receipt.c_archive),
         ("Cargo.toml", &receipt.cargo_manifest),
         ("Cargo.lock", &receipt.cargo_lock),
     ];
@@ -3253,7 +3251,6 @@ fn validate_linked_build_receipt(
             &receipt.cargo_messages,
         ),
         ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
-        ("inputs/linked-build/c-archive.a", &receipt.c_archive),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
     ];
@@ -4215,7 +4212,6 @@ mod tests {
             executable: input("inputs/uqm"),
             cargo_messages: input("inputs/linked-build/cargo-messages.jsonl"),
             rust_archive: input("inputs/linked-build/rust-archive.a"),
-            c_archive: input("inputs/linked-build/c-archive.a"),
             cargo_manifest: input("inputs/linked-build/Cargo.toml"),
             cargo_lock: input("inputs/linked-build/Cargo.lock"),
         }

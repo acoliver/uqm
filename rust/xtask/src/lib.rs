@@ -41,7 +41,6 @@ const NATIVE_ACCEPTANCE_COMMAND: &str = "native-acceptance";
 struct ProductionPaths {
     executable: PathBuf,
     rust_archive: PathBuf,
-    c_archive: PathBuf,
     out_dir: PathBuf,
 }
 
@@ -215,7 +214,6 @@ fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
         member_limit,
     )?;
     let rust_archive = stage_file("rust-archive.a", &paths.rust_archive)?;
-    let c_archive = stage_file("c-archive.a", &paths.c_archive)?;
     let executable_bytes = read_regular_file_bounded(&paths.executable, member_limit)?;
     let cargo_manifest = stage_file("Cargo.toml", &root.join("rust/Cargo.toml"))?;
     let cargo_lock = stage_file("Cargo.lock", &root.join("rust/Cargo.lock"))?;
@@ -230,7 +228,6 @@ fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
         executable: retained_identity("inputs/uqm", &executable_bytes),
         cargo_messages: messages,
         rust_archive,
-        c_archive,
         cargo_manifest,
         cargo_lock,
     };
@@ -550,7 +547,6 @@ fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<
             "linked-build-receipt.json",
             "cargo-messages.jsonl",
             "rust-archive.a",
-            "c-archive.a",
             "Cargo.toml",
             "Cargo.lock",
         ]
@@ -769,7 +765,6 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
     Ok(ProductionPaths {
         executable: exactly_one(executables, "uqm executable")?,
         rust_archive: exactly_one(rust_archives, "uqm Rust archive")?,
-        c_archive: out_dir.join("libuqm_c.a"),
         out_dir,
     })
 }

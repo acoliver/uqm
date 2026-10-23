@@ -838,7 +838,6 @@ pub struct NativeLinkedBuildReceipt {
     pub executable: NativeRetainedInput,
     pub cargo_messages: NativeRetainedInput,
     pub rust_archive: NativeRetainedInput,
-    pub c_archive: NativeRetainedInput,
     pub cargo_manifest: NativeRetainedInput,
     pub cargo_lock: NativeRetainedInput,
 }
@@ -3709,7 +3708,6 @@ fn validate_linked_build_receipt_bundle(
             &receipt.cargo_messages,
         ),
         ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
-        ("inputs/linked-build/c-archive.a", &receipt.c_archive),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
     ];
@@ -3725,11 +3723,7 @@ fn validate_linked_build_receipt_bundle(
         }
     }
     let cargo_messages = validate_retained_input(root, &receipt.cargo_messages, limit)?;
-    for input in [
-        &receipt.executable,
-        &receipt.rust_archive,
-        &receipt.c_archive,
-    ] {
+    for input in [&receipt.executable, &receipt.rust_archive] {
         validate_retained_input(root, input, limit)?;
     }
     validate_linked_cargo_messages(&receipt, &cargo_messages)?;
@@ -4424,7 +4418,7 @@ mod tests {
         };
         let linked_root = root.path().join("inputs/linked-build");
         fs::create_dir_all(&linked_root).unwrap();
-        let linked_members: [(&str, &[u8]); 5] = [
+        let linked_members: [(&str, &[u8]); 4] = [
             (
                 "cargo-messages.jsonl",
                 concat!(
@@ -4436,7 +4430,6 @@ mod tests {
                 .as_bytes(),
             ),
             ("rust-archive.a", b"rust archive"),
-            ("c-archive.a", b"c archive"),
             ("Cargo.toml", b"[package]\nname = \"uqm\"\n"),
             ("Cargo.lock", b"# lock\n"),
         ];
@@ -4478,7 +4471,6 @@ mod tests {
             executable: executable_input.clone(),
             cargo_messages: linked_input("cargo-messages.jsonl"),
             rust_archive: linked_input("rust-archive.a"),
-            c_archive: linked_input("c-archive.a"),
             cargo_manifest: linked_input("Cargo.toml"),
             cargo_lock: linked_input("Cargo.lock"),
         };
@@ -4940,7 +4932,6 @@ mod tests {
             "executable",
             "cargo_messages",
             "rust_archive",
-            "c_archive",
             "cargo_manifest",
             "cargo_lock",
         ] {
@@ -4969,7 +4960,6 @@ mod tests {
             "inputs/uqm",
             "inputs/linked-build/cargo-messages.jsonl",
             "inputs/linked-build/rust-archive.a",
-            "inputs/linked-build/c-archive.a",
             "inputs/linked-build/Cargo.toml",
             "inputs/linked-build/Cargo.lock",
         ] {

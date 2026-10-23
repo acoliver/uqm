@@ -340,7 +340,14 @@ extern "C" {
     /// Query C-side RACE_DESC field offsets for layout verification.
     /// C: `void rust_bridge_get_race_desc_layout(RACE_DESC_LAYOUT *out);`
     /// Prototype: `rust_bridge_ships.h`
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout);
+}
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout) {
+    crate::ships::native_adapters::rust_bridge_get_race_desc_layout(out as _);
 }
 
 // ===========================================================================
@@ -399,6 +406,7 @@ extern "C" {
     /// C: SIZE rust_bridge_init_battle_arena(void);
     /// Returns num_ships (NUM_SIDES for battle, 1 for hyperspace). <= 0 on failure.
     /// Prototype: rust_bridge_ships.h
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn rust_bridge_init_battle_arena() -> CSize;
 
     /// Creates a battle ELEMENT for a spawned ship.
@@ -408,6 +416,7 @@ extern "C" {
     /// Handles both fresh allocation (hShip==0) and element reuse (hShip!=0).
     /// Reads StarShipPtr->hShip to decide the branch. Sets preprocess/postprocess/death
     /// callbacks, position, facing, mass, and all other element fields.
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn rust_bridge_spawn_element(
         starship: *mut CStarship,
         race_desc: *mut c_void,
@@ -423,7 +432,38 @@ extern "C" {
     /// Iterates the display list, distributes floating crew to survivor,
     /// writes back crew levels, calls free_ship() (→ rust_ships_free) for each
     /// spawned ship, clears IN_BATTLE from CurrentActivity, and reinits queues.
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn rust_bridge_uninit_ships();
+}
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn rust_bridge_init_battle_arena() -> CSize {
+    (crate::ships::native_adapters::rust_bridge_init_battle_arena()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn rust_bridge_spawn_element(
+    starship: *mut CStarship,
+    race_desc: *mut c_void,
+    ship_mass: CByte,
+    activity: CByte,
+) -> CBoolean {
+    (crate::ships::native_adapters::rust_bridge_spawn_element(
+        starship as _,
+        race_desc as _,
+        ship_mass as _,
+        activity as _,
+    )) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn rust_bridge_uninit_ships() {
+    crate::ships::native_adapters::rust_bridge_uninit_ships();
 }
 
 // ===========================================================================

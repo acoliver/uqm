@@ -251,7 +251,6 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
 mod engine {
     use super::*;
     use crate::ships::native::{cosine, frame_index, sine};
-    use std::ffi::c_char;
     use std::{mem, ptr};
 
     #[no_mangle]
@@ -268,7 +267,7 @@ mod engine {
 
     extern "C" {
         static mut SpaceOrg: POINT;
-        fn log_add(level: i32, format: *const c_char, ...);
+
     }
 
     unsafe fn width() -> i32 {
@@ -827,7 +826,7 @@ mod engine {
             ptr::write_bytes(e, 0, 1);
             (*e).PrimIndex = DisplayFreeList;
             if (*e).PrimIndex == END {
-                log_add(2, c"AllocElement: Out of display prims!".as_ptr());
+                crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
                 libc::exit(libc::EXIT_FAILURE);
             }
             (*e).PrimIndex =

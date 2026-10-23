@@ -166,6 +166,11 @@ fn build_c_archive(target_os: &str, packages: &NativePackages) -> Result<(), Str
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .collect();
 
+    if sources.is_empty() {
+        emit_package_links(packages);
+        return Ok(());
+    }
+
     let out_dir = output_directory()?;
     let object_dir = out_dir.join("native");
     fs::create_dir_all(&object_dir)
