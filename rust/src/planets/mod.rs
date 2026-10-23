@@ -39,3 +39,5 @@ pub mod sphere;
 pub(crate) mod solar_coords;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod solarsys;
+
+pub mod pstarmap;
