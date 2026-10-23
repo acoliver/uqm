@@ -293,6 +293,7 @@ struct CoordInner {
     battle_fight: BattleFightTracker,
     fleet_fight: crate::automation::fleet_fight::FleetFight,
     fleet_retreat: crate::automation::fleet_fight::FleetRetreat,
+    samatra: crate::automation::samatra::Controller,
     star_flight: crate::automation::star_flight::StarFlight,
     star_encounter_active: bool,
     patrol_response_pending: bool,
@@ -465,6 +466,7 @@ impl Coordinator {
                 battle_fight: BattleFightTracker::default(),
                 fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
                 fleet_retreat: crate::automation::fleet_fight::FleetRetreat::default(),
+                samatra: crate::automation::samatra::Controller::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
                 star_encounter_active: false,
                 patrol_response_pending: false,
@@ -1383,6 +1385,84 @@ impl Coordinator {
         }
     }
 
+    fn service_samatra(
+        &self,
+        inner: &mut CoordInner,
+        step: crate::automation::samatra::FightSamatraStep,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::samatra::{Controls, Progress};
+        use crate::automation::script::{MenuKey, PlayerKey};
+        let events = crate::ships::races::samatra::observation::events();
+        let snapshot = crate::ships::races::samatra::snapshot();
+        let observation = crate::automation::input_ffi::fleet_fight_observation();
+        if inner.input_seen % 60 == 1 || inner.sched_state.phase == ActionPhase::WaitingForInput {
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!("samatra_state:events={events:?}:snapshot={snapshot:?}:selection={observation:?}"),
+            );
+        }
+        let progress = inner.samatra.observe(
+            step.max_ticks,
+            step.until,
+            observation.activity,
+            events,
+            snapshot.as_ref(),
+            observation.picker.as_ref(),
+        );
+        let empty = Controls::default();
+        let controls = if let Progress::Running(controls) = &progress {
+            controls
+        } else {
+            &empty
+        };
+        for key in MenuKey::ALL {
+            if !inject_menu_key(
+                i32::from(key.index()),
+                i32::from(controls.menu == Some(key)),
+            ) {
+                self.reject_input(inner, "fight_samatra", -1, -1);
+                return event;
+            }
+        }
+        for key in [
+            PlayerKey::Thrust,
+            PlayerKey::Down,
+            PlayerKey::Left,
+            PlayerKey::Right,
+            PlayerKey::Weapon,
+            PlayerKey::Special,
+            PlayerKey::Escape,
+        ] {
+            let pressed = match key {
+                PlayerKey::Thrust => controls.flight.thrust,
+                PlayerKey::Left => controls.flight.left,
+                PlayerKey::Right => controls.flight.right,
+                PlayerKey::Weapon => controls.flight.weapon,
+                PlayerKey::Special => controls.special,
+                PlayerKey::Escape => controls.escape,
+                _ => false,
+            };
+            if !inject_player_key(i32::from(key.index()), i32::from(pressed)) {
+                self.reject_input(inner, "fight_samatra", -1, -1);
+                return event;
+            }
+        }
+        match progress {
+            Progress::Running(_) => event,
+            Progress::Complete(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                SchedulerEvent::NavigationReached
+            }
+            Progress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label.to_string());
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                event
+            }
+        }
+    }
+
     fn service_fleet_fight(
         &self,
         inner: &mut CoordInner,
@@ -1845,6 +1925,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_planet_minerals(inner, *collect, scheduler_event);
+        } else if let Some(Action::FightSamatra(fight)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_samatra(inner, *fight, scheduler_event);
         } else if let Some(Action::FightEncounter(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {

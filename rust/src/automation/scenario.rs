@@ -15,6 +15,8 @@ use std::sync::OnceLock;
 pub enum AutomationScene {
     /// Start the opening Sol encounter with the Ur-Quan probe.
     SolProbeEncounter,
+    /// Development-only boss fixture, never campaign ancestry.
+    SamatraDevFixture,
     /// Start the first real Starbase commander communication.
     StarbaseCommander,
 }
@@ -24,6 +26,7 @@ impl AutomationScene {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::SamatraDevFixture => "samatra_dev_fixture",
             Self::SolProbeEncounter => "sol_probe_encounter",
             Self::StarbaseCommander => "starbase_commander",
         }
@@ -125,6 +128,28 @@ pub fn scene_plan(
     }
 
     match scene {
+        AutomationScene::SamatraDevFixture => {
+            if !cfg!(any(debug_assertions, feature = "debug-process")) {
+                return Err(SceneError::SetupFailed(
+                    "Sa-Matra fixture requires a debug or debug-process build",
+                ));
+            }
+            Ok(ScenePlan {
+                scene,
+                encounter_ship: crate::comm::dispatch::ship::SAMATRA_SHIP,
+                expected_encounter_conversation: crate::comm::dispatch::conv::TALKING_PET,
+                expected_dialogue_conversation: crate::comm::dispatch::conv::TALKING_PET,
+                current_activity: crate::comm::dispatch::IN_LAST_BATTLE
+                    | crate::comm::dispatch::START_ENCOUNTER,
+                star_location: (6200, 5935),
+                game_state: &[
+                    ("CHMMR_BOMB_STATE", 3),
+                    ("UTWIG_BOMB_ON_SHIP", 1),
+                    ("STARBASE_AVAILABLE", 1),
+                    ("BOMB_CARRIER", 0),
+                ],
+            })
+        }
         AutomationScene::SolProbeEncounter => Ok(ScenePlan {
             scene,
             encounter_ship: crate::comm::dispatch::ship::URQUAN_DRONE_SHIP,
@@ -352,6 +377,10 @@ pub fn activate(
 
     #[cfg(not(test))]
     unsafe {
+        if scene == AutomationScene::SamatraDevFixture {
+            crate::comm::dispatch::prepare_samatra_dev_fixture()
+                .map_err(SceneError::SetupFailed)?;
+        }
         if scene == AutomationScene::SolProbeEncounter {
             if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter() {
                 *observation().lock() = SceneObservation::default();

@@ -349,6 +349,8 @@ mod runtime {
         CREDITS_EXTENT.height as c_int - max_pos
     }
 
+    static mut VICTORY_CREDITS_ACTIVE: bool = false;
+
     unsafe fn process_frame() {
         let now = GetTimeCounter();
         if now < NEXT_TIME {
@@ -375,6 +377,9 @@ mod runtime {
                 CREDITS_RATE -= CREDITS_RATE / 10 + 1;
             }
             CREDITS_RUNNING = (CREDITS_RATE != 0) as BOOLEAN;
+            if CREDITS_RUNNING == 0 && VICTORY_CREDITS_ACTIVE {
+                crate::automation::ending::credits_completed();
+            }
         } else if CREDITS_RUNNING == 0 {
             CREDITS_RUNNING = 1;
         }
@@ -583,10 +588,14 @@ mod runtime {
         };
         DrawStamp(&mut stamp);
         FadeScreen(ScreenFadeType_FadeAllToColor, (ONE_SECOND / 2) as SIZE);
+        if with_outtakes != 0 {
+            crate::automation::ending::credits_started();
+        }
         CommWndRect.corner.x =
             ((screen_rect.extent.width as c_int - CommWndRect.extent.width as c_int) / 2) as COORD;
         CommWndRect.corner.y = 5;
         init_credits();
+        VICTORY_CREDITS_ACTIVE = with_outtakes != 0;
         SetInputCallback(Some(on_input_frame));
         if with_outtakes != 0 {
             OUT_TAKES_RUNNING = 1;
@@ -622,6 +631,7 @@ mod runtime {
         }
         FadeMusic(NORMAL_VOLUME as BYTE, 0);
         free_credits();
+        VICTORY_CREDITS_ACTIVE = false;
     }
 }
 

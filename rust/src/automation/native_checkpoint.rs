@@ -56,6 +56,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::TurnFlagship(_)
         | Action::CollectPlanetMinerals(_)
         | Action::FightBattle(_)
+        | Action::FightSamatra(_)
         | Action::FightEncounter(_)
         | Action::SelectPlanetMenu(_)
         | Action::PickBattleShip(_)

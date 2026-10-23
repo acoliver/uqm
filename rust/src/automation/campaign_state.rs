@@ -22,6 +22,13 @@ use crate::state::game_state_keys::{bit_range, STATE_KEYS};
 pub enum StateKey {
     /// `GLOBAL(CurrentActivity)`, the whole word.
     Activity,
+    Ending(u8),
+    BossRemaining,
+    BossDestroyed,
+    BossGateOpen,
+    BossGateEntered,
+    BossBombCarrier,
+    BossSelectedSpecies,
     StarCurrent,
     HyperX,
     HyperY,
@@ -96,6 +103,17 @@ impl StateKey {
                 .ok_or_else(|| format!("invalid escort race '{text}'"));
         }
         match text {
+            "ending:won" => Ok(Self::Ending(0)),
+            "ending:presentation_started" => Ok(Self::Ending(1)),
+            "ending:presentation_completed" => Ok(Self::Ending(2)),
+            "ending:credits_started" => Ok(Self::Ending(3)),
+            "ending:credits_completed" => Ok(Self::Ending(4)),
+            "samatra:remaining" => Ok(Self::BossRemaining),
+            "samatra:destroyed" => Ok(Self::BossDestroyed),
+            "samatra:gate_open" => Ok(Self::BossGateOpen),
+            "samatra:gate_entered" => Ok(Self::BossGateEntered),
+            "samatra:bomb_carrier" => Ok(Self::BossBombCarrier),
+            "samatra:selected_species" => Ok(Self::BossSelectedSpecies),
             "activity" => Ok(Self::Activity),
             "star:current" => Ok(Self::StarCurrent),
             "hyper:x" => Ok(Self::HyperX),
@@ -128,6 +146,12 @@ impl StateKey {
     #[must_use]
     pub fn max_value(self) -> u32 {
         match self {
+            Self::Ending(_)
+            | Self::BossGateOpen
+            | Self::BossGateEntered
+            | Self::BossBombCarrier => 1,
+            Self::BossRemaining | Self::BossDestroyed => 8,
+            Self::BossSelectedSpecies => 26,
             Self::StarCurrent => (crate::savegame::runtime::star::NUM_SOLAR_SYSTEMS - 1) as u32,
             Self::HyperX | Self::HyperY => i32::MAX as u32,
             Self::StarmapCursorX | Self::StarmapCursorY => 9999,
@@ -335,6 +359,38 @@ impl StateSource for LiveCampaign {
     fn read(&self, key: StateKey) -> Option<u32> {
         use crate::automation::input_ffi;
         match key {
+            StateKey::Ending(index) => {
+                let e = super::ending::snapshot();
+                Some(u32::from(
+                    [
+                        e.won,
+                        e.presentation_started,
+                        e.presentation_completed,
+                        e.credits_started,
+                        e.credits_completed,
+                    ][usize::from(index)],
+                ))
+            }
+            StateKey::BossDestroyed => Some(
+                crate::ships::races::samatra::observation::events()
+                    .destroyed
+                    .count_ones(),
+            ),
+            StateKey::BossGateEntered => Some(u32::from(
+                crate::ships::races::samatra::observation::events().gate_entered,
+            )),
+            StateKey::BossRemaining
+            | StateKey::BossGateOpen
+            | StateKey::BossBombCarrier
+            | StateKey::BossSelectedSpecies => {
+                crate::ships::races::samatra::snapshot().and_then(|s| match key {
+                    StateKey::BossRemaining => Some(u32::from(s.remaining)),
+                    StateKey::BossGateOpen => Some(u32::from(s.gate_open)),
+                    StateKey::BossBombCarrier => Some(u32::from(s.bomb_carrier)),
+                    StateKey::BossSelectedSpecies => s.selected_species,
+                    _ => unreachable!(),
+                })
+            }
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
                 let target =
                     super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
@@ -408,6 +464,38 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn boss_and_ending_keys_validate_widths_and_keep_unavailable_distinct_from_zero() {
+        for (key, maximum) in [
+            ("ending:won", 1),
+            ("ending:presentation_started", 1),
+            ("ending:presentation_completed", 1),
+            ("ending:credits_started", 1),
+            ("ending:credits_completed", 1),
+            ("samatra:remaining", 8),
+            ("samatra:destroyed", 8),
+            ("samatra:gate_open", 1),
+            ("samatra:gate_entered", 1),
+            ("samatra:bomb_carrier", 1),
+            ("samatra:selected_species", 26),
+        ] {
+            assert_eq!(StateKey::parse(key).unwrap().max_value(), maximum);
+            let mut wanted = StatePredicate {
+                all: vec![StateCondition {
+                    key: key.into(),
+                    op: StateOp::Eq,
+                    value: 0,
+                }],
+            };
+            assert!(wanted.validate().is_ok());
+            assert!(!evaluate(&wanted, &fake(&[])).held);
+            wanted.all[0].value = maximum + 1;
+            assert!(wanted.validate().is_err());
+        }
+        assert!(StateKey::parse("ending:win").is_err());
+        assert!(StateKey::parse("samatra:generators").is_err());
+    }
+
+    #[test]
     fn escort_and_combat_keys_validate_and_never_invent_an_unavailable_roster() {
         assert_eq!(
             StateKey::parse("escorts:species:4"),
@@ -473,6 +561,13 @@ mod tests {
     impl StateSource for Fake {
         fn read(&self, key: StateKey) -> Option<u32> {
             let name = match key {
+                StateKey::Ending(_) => "ending:test",
+                StateKey::BossRemaining
+                | StateKey::BossDestroyed
+                | StateKey::BossGateOpen
+                | StateKey::BossGateEntered
+                | StateKey::BossBombCarrier
+                | StateKey::BossSelectedSpecies => "samatra:test",
                 StateKey::Activity => "activity",
                 StateKey::StarCurrent => "star:current",
                 StateKey::HyperX => "hyper:x",

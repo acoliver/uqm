@@ -83,6 +83,7 @@ mod runtime {
         SisFrame: FRAME,
         RotatedFrame: FRAME,
         LastDrawKind: c_int,
+        Ending: bool,
         LastAngle: c_int,
         OperIndex: COUNT,
         TextFadeColor: Color,
@@ -223,7 +224,7 @@ mod runtime {
 
     unsafe fn show_file(name: *const c_char) -> BOOLEAN {
         let table = CaptureStringTable(LoadStringTableFile(contentDir, name));
-        let result = show_slides(table);
+        let result = show_slides(table, false);
         DestroyStringTable(ReleaseStringTable(table));
         result
     }
@@ -231,6 +232,7 @@ mod runtime {
     unsafe extern "C" fn do_presentation(raw: *mut c_void) -> BOOLEAN {
         let state = &mut *raw.cast::<PresentationState>();
         if menu(KEY_MENU_CANCEL) || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
+            crate::automation::ending::presentation_cancelled();
             return 0;
         }
         if state.TimeOut != 0 {
@@ -655,14 +657,22 @@ mod runtime {
                 _ => (),
             }
         }
+        if state.Ending {
+            crate::automation::ending::presentation_completed();
+        }
         0
     }
 
-    unsafe fn show_slides(table: STRING) -> BOOLEAN {
+    unsafe fn show_slides(table: STRING, ending: bool) -> BOOLEAN {
         let mut state: PresentationState = std::mem::zeroed();
         state.SlideShow = table;
         if state.SlideShow.is_null() {
+            crate::automation::ending::presentation_cancelled();
             return 0;
+        }
+        state.Ending = ending;
+        if ending {
+            crate::automation::ending::presentation_started();
         }
         state.SlideShow = SetAbsStringTableIndex(state.SlideShow, 0);
         state.OperIndex = 0;
@@ -766,7 +776,9 @@ mod runtime {
         match CStr::from_ptr(kind).to_bytes() {
             b"STRTAB" => {
                 let table = CaptureStringTable(LoadStringTableInstance(presentation));
-                let result = show_slides(table);
+                let ending = CStr::from_ptr(presentation).to_bytes()
+                    == &FINALPRES_STRTAB[..FINALPRES_STRTAB.len() - 1];
+                let result = show_slides(table, ending);
                 DestroyStringTable(ReleaseStringTable(table));
                 result
             }

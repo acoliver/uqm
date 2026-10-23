@@ -313,6 +313,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::TurnFlagship(_)
         | Action::CollectPlanetMinerals(_)
         | Action::FightBattle(_)
+        | Action::FightSamatra(_)
         | Action::FightEncounter(_) => {
             matches!(
                 phase,
@@ -419,6 +420,7 @@ pub fn scheduler_reduce(
                     | Action::TurnFlagship(_)
                     | Action::CollectPlanetMinerals(_)
                     | Action::FightBattle(_)
+                    | Action::FightSamatra(_)
                     | Action::FightEncounter(_)
             ) {
                 match state.phase {
@@ -883,6 +885,7 @@ fn reduce_navigation(
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::FightSamatra(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightEncounter(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
@@ -904,6 +907,7 @@ fn reduce_navigation(
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining })
+        | (Action::FightSamatra(_), ActionPhase::Navigating { remaining })
         | (Action::FightEncounter(_), ActionPhase::Navigating { remaining })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
             new_state: SchedulerState {
@@ -949,6 +953,16 @@ fn reduce_navigation(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::FightSamatra(fight), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: fight.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (
             Action::FightBattle(fight) | Action::FightEncounter(fight),
             ActionPhase::WaitingForInput,
@@ -3639,6 +3653,7 @@ mod budgeted_wait_tests {
                 | Action::TurnFlagship(_)
                 | Action::CollectPlanetMinerals(_)
                 | Action::FightBattle(_)
+                | Action::FightSamatra(_)
                 | Action::FightEncounter(_)
         ) {
             ActionPhase::Navigating { remaining }

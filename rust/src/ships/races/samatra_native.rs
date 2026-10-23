@@ -10,6 +10,7 @@ mod engine {
     extern "C" {
         fn InsertQueue(q: *mut c_void, h: *mut c_void, before: *mut c_void);
     }
+    use super::super::observation;
     const COMET_SPEED: SIZE = 12 << ONE_SHIFT;
     const SENTINEL_SPEED: SIZE = 8 << ONE_SHIFT;
     const RECOIL: i32 = (10 << ONE_SHIFT) << VELOCITY_SHIFT;
@@ -195,6 +196,7 @@ mod engine {
                     && (*primitive(e)).Type == gfx_object_STAMPFILL_PRIM as u8
                     && get_game_state("BOMB_CARRIER") != 0
                 {
+                    observation::gate_entered();
                     GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
                 }
             } else {
@@ -239,6 +241,7 @@ mod engine {
     }
     unsafe extern "C" fn generator_death(e: *mut ELEMENT) {
         if (*e).state_flags & FINITE_LIFE as u16 == 0 {
+            observation::generator_destroyed(observation::generator_id(e as usize));
             let ss = starship(e);
             (*(*ss).RaceDescPtr).characteristics.max_thrust = (*(*ss).RaceDescPtr)
                 .characteristics
@@ -549,16 +552,8 @@ mod engine {
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait.wrapping_add(1);
             (*e).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait.wrapping_add(1);
         } else {
-            let offsets = [
-                (-136, -35),
-                (-47, -70),
-                (35, -67),
-                (118, -42),
-                (115, 46),
-                (64, 79),
-                (-96, 76),
-                (-145, 47),
-            ];
+            observation::begin();
+            let offsets = observation::OFFSETS;
             let center_x = ((ScreenWidth - 64) << (ONE_SHIFT + 3)) >> 1;
             let center_y = (ScreenHeight << (ONE_SHIFT + 3)) >> 1;
             (*d).characteristics.max_thrust = 0;
@@ -566,6 +561,7 @@ mod engine {
                 let h = AllocElement();
                 if !h.is_null() {
                     let g = element(h);
+                    observation::register_generator(g as usize);
                     (*g).__bindgen_anon_2.hit_points = 15;
                     (*g).__bindgen_anon_3.mass_points = SHIP_MASS;
                     (*g).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
@@ -632,4 +628,85 @@ mod engine {
             (*ss).special_counter = 36;
         }
     }
+    pub fn snapshot() -> Option<observation::Snapshot> {
+        use crate::automation::battle_fight::ShipState;
+        // The input service runs synchronously on the owning game thread.
+        unsafe {
+            if GlobData.Game_state.CurrentActivity & (0xff | IN_BATTLE as u16)
+                != IN_LAST_BATTLE as u16 | IN_BATTLE as u16
+            {
+                return None;
+            }
+            let arena = (
+                (ScreenWidth - 64) << (ONE_SHIFT + 3),
+                ScreenHeight << (ONE_SHIFT + 3),
+            );
+            let mut result = observation::Snapshot {
+                remaining: 8,
+                generators: Vec::new(),
+                gate_open: false,
+                gate: (arena.0 / 2, arena.1 / 2),
+                bomb_carrier: false,
+                selected_species: None,
+                player: None,
+                arena,
+            };
+            let mut boss = false;
+            let mut h = disp_q.head;
+            while !h.is_null() {
+                let e = element(h);
+                if (*e).state_flags & PLAYER_SHIP as u16 != 0 && !(*e).pParent.is_null() {
+                    let owner = starship(e);
+                    if (*e).playerNr == RPG_PLAYER_NUM as SIZE {
+                        result.selected_species = Some((*owner).SpeciesID);
+                        result.bomb_carrier = (*owner).SpeciesID == SPECIES_ID_SIS_SHIP_ID
+                            && get_game_state("BOMB_CARRIER") != 0;
+                        result.player = Some(ShipState {
+                            x: i32::from((*e).current.location.x),
+                            y: i32::from((*e).current.location.y),
+                            facing: ((*owner).ShipFacing % 16) as u8,
+                            crew: (*e).__bindgen_anon_2.crew_level,
+                        });
+                    } else if (*(*owner).RaceDescPtr).preprocess_func.map(|f| f as usize)
+                        == Some(samatra_preprocess as *const () as usize)
+                    {
+                        boss = true;
+                        result.remaining = (*(*owner).RaceDescPtr).characteristics.max_thrust as u8;
+                    }
+                }
+                if (*e).death_func.map(|f| f as usize)
+                    == Some(generator_death as *const () as usize)
+                    && (*e).state_flags & FINITE_LIFE as u16 == 0
+                {
+                    let x = i32::from((*e).current.location.x);
+                    let y = i32::from((*e).current.location.y);
+                    result.generators.push(observation::Generator {
+                        id: observation::generator_id(e as usize) as u8,
+                        x,
+                        y,
+                        hit_points: (*e).__bindgen_anon_2.hit_points,
+                    });
+                }
+                if (*e).collision_func.map(|f| f as usize)
+                    == Some(gate_collision as *const () as usize)
+                {
+                    result.gate_open = (*primitive(e)).Type == gfx_object_STAMPFILL_PRIM as u8;
+                    result.gate = (
+                        i32::from((*e).current.location.x),
+                        i32::from((*e).current.location.y),
+                    );
+                }
+                h = (*e).succ;
+            }
+            (boss && observation::events().generation != 0).then_some(result)
+        }
+    }
+}
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub(super) use engine::snapshot;
+
+#[cfg(all(test, not(feature = "linked_c_archive")))]
+pub(super) fn snapshot() -> Option<super::observation::Snapshot> {
+    None
 }

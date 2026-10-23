@@ -301,6 +301,40 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "minimum=") == Some(u64::from(value.minimum_units))
                 && at_least(label, "units=", u64::from(value.minimum_units))
         }
+        Action::FightSamatra(value) if value.until == super::samatra::Until::Ready => {
+            shape(label, "samatra_ready", &["generators=", "generation="])
+                && number(label, "generators=") == Some(8)
+                && at_least(label, "generation=", 1)
+        }
+        Action::FightSamatra(value) if value.until == super::samatra::Until::GateOpen => {
+            shape(
+                label,
+                "samatra_gate_open",
+                &["generators_destroyed=", "gate_open=", "generation="],
+            ) && number(label, "generators_destroyed=") == Some(8)
+                && number(label, "gate_open=") == Some(1)
+                && at_least(label, "generation=", 1)
+        }
+        Action::FightSamatra(value) => {
+            shape(
+                label,
+                "samatra_won",
+                &[
+                    "generators_destroyed=",
+                    "gate_entered=",
+                    "escort=",
+                    "bomb=",
+                    "generation=",
+                    "ticks=",
+                ],
+            ) && number(label, "generators_destroyed=") == Some(8)
+                && number(label, "gate_entered=") == Some(1)
+                && number(label, "escort=") == Some(1)
+                && number(label, "bomb=") == Some(1)
+                && at_least(label, "generation=", 1)
+                && number(label, "ticks=")
+                    .is_some_and(|ticks| ticks > 0 && ticks <= value.max_ticks)
+        }
         Action::FightEncounter(value) => {
             shape(
                 label,
@@ -973,6 +1007,46 @@ mod tests {
         ] {
             assert!(!semantic_satisfied(&node, &bad));
         }
+    }
+
+    #[test]
+    fn boss_checkpoints_require_their_own_milestone_and_complete_terminal_proof() {
+        use super::super::samatra::{FightSamatraStep, Until};
+        let action = |until| {
+            Action::FightSamatra(FightSamatraStep {
+                max_ticks: 900,
+                until,
+            })
+        };
+        let won = "samatra_won:generators_destroyed=8:gate_entered=1:escort=1:bomb=1:generation=1:ticks=800";
+        assert!(wait_or_navigation_satisfied(
+            &action(Until::GateEntered),
+            won
+        ));
+        for bad in [
+            won.replace("destroyed=8", "destroyed=7"),
+            won.replace("bomb=1", "bomb=0"),
+            won.replace("ticks=800", "ticks=901"),
+            won.replace("generation=1", "generation=0"),
+        ] {
+            assert!(!wait_or_navigation_satisfied(
+                &action(Until::GateEntered),
+                &bad
+            ));
+        }
+        assert!(!wait_or_navigation_satisfied(&action(Until::Ready), won));
+        assert!(wait_or_navigation_satisfied(
+            &action(Until::Ready),
+            "samatra_ready:generators=8:generation=1"
+        ));
+        assert!(wait_or_navigation_satisfied(
+            &action(Until::GateOpen),
+            "samatra_gate_open:generators_destroyed=8:gate_open=1:generation=1"
+        ));
+        assert!(!wait_or_navigation_satisfied(
+            &action(Until::GateEntered),
+            "samatra_gate_open:generators_destroyed=8:gate_open=1:generation=1"
+        ));
     }
 
     #[test]

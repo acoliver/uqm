@@ -1,0 +1,158 @@
+{
+  "version": 2,
+  "name": "samatra-dev-fixture-v1",
+  "seed": 42,
+  "fixture": "DEV-ONLY-NOT-CAMPAIGN-samatra",
+  "start_scene": "samatra_dev_fixture",
+  "budgets": {
+    "max_input_ticks": 97000,
+    "max_presentations": 194000,
+    "max_wallclock_seconds": 840
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 30
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 20
+    },
+    {
+      "action": "wait_for_communication_end",
+      "minimum_completions": 1,
+      "max_ticks": 9000
+    },
+    {
+      "action": "capture",
+      "label": "DEV-FIXTURE-not-campaign-before-boss"
+    },
+    {
+      "action": "fight_samatra",
+      "max_ticks": 1500,
+      "until": "ready"
+    },
+    {
+      "action": "capture",
+      "label": "DEV-FIXTURE-eight-live-generators"
+    },
+    {
+      "action": "fight_samatra",
+      "max_ticks": 10000,
+      "until": "gate_open"
+    },
+    {
+      "action": "capture",
+      "label": "DEV-FIXTURE-open-gate"
+    },
+    {
+      "action": "fight_samatra",
+      "max_ticks": 12000,
+      "until": "gate_entered"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "ending:won",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "ending-won"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "ending:presentation_started",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "ending-presentation_started"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "ending:presentation_completed",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "ending-presentation_completed"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "ending:credits_started",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "ending-credits_started"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "ending:credits_completed",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 12000
+    },
+    {
+      "action": "capture",
+      "label": "DEV-FIXTURE-ending-credits_completed"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
