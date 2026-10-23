@@ -69,7 +69,6 @@ pub mod navigation;
 pub mod outcome;
 pub mod planet_minerals;
 pub mod proof;
-pub mod retreat;
 pub mod runtime;
 pub mod scenario;
 pub mod scheduler;

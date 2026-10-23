@@ -4390,15 +4390,6 @@ mod tests {
     }
 
     #[test]
-    fn transit_encounters_can_explicitly_retreat() {
-        let script = validated(
-            r#"{"action":"fly_to_star","target":"Alpha Eridani","max_ticks":2,"retreat":true}"#,
-        )
-        .unwrap();
-        assert!(matches!(&script.steps()[0], Action::FlyToStar(step) if step.retreat));
-    }
-
-    #[test]
     fn fly_to_star_parses_and_rejects_unknown_or_unbounded_targets() {
         let script =
             validated(r#"{"action":"fly_to_star","target":"Alpha Centauri","max_ticks":2}"#)

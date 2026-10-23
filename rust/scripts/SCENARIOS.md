@@ -157,15 +157,31 @@ a surface collision. Native run `pt-p6-17` passed and saved slot 1 with
 `utwig-bomb.sav` retains the returned Ultron, 32 crew and 6192 fuel, with no
 escorts remaining. `load-utwig-bomb-v1` independently reloads that checkpoint.
 
+
+### Parallel transit resupply
+
+The development route `campaign-s08b-crew-ready` starts from `dev-refitted`,
+sells fuel at Sol, installs a second crew pod and hires 100 crew through
+Shipyard. `campaign-s08c-pkunk-resupply` returns to Gamma Krueger, handles
+migrating patrols peacefully and makes a second home visit after the
+Kohr-Ah warning so the annual gift can be delivered. The resulting six
+Furies and 100 crew are saved in `dev-pkunk-resupply`.
+
+`campaign-s08d-fueled-crew` returns to Sol, scraps three Furies through
+Shipyard, installs a third crew pod, fills the fuel tanks through Outfit
+and hires crew to 150. Native run pmid-44 saved `dev-fueled-crew` with
+21000 raw fuel, 150 crew, 534 RU and three Furies. These are development
+checkpoints, not the connected campaign's S08 milestone. No Arilou visit
+or Talking Pet acquisition is implied by the resupply scripts.
+
+All three scenarios accept a different earned ancestor through
+`prepare_mid_segment.py --start-save`; their initial inventory and resource
+assertions still apply. Shipyard sales and purchases use the ordinary menus.
+
 `campaign-s07a-bomb-refueled` earns Gamma Aquarii's rainbow-world location
 with the Precursor bomb aboard, sells it to the Melnorme at Alpha Eridani and
 buys fuel through dialogue. Native `pt-p6-22` passed and wrote slot 1 with
 21000 fuel, 32 crew, 1175 RU and the bomb still aboard. The independent
 `load-bomb-refueled-v1` passed as `pt-p6-23`. This is a transit checkpoint,
-not a Taalo Protector completion.
-
-An optional `retreat:true` on `fly_to_star` selects the flagship during
-interrupting encounters and holds its ordinary Escape input. The controller
-requires a living flagship and a return to hyperspace, recording retreat and
-natural Cyborg victory as separate outcomes. The five-guard bomb scenario
-continues to require the full fleet victory action instead.
+not a Taalo Protector completion. Interrupted flights reuse the retreat
+controller from the mid-campaign lane.
