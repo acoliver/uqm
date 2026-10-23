@@ -207,13 +207,6 @@ mod runtime {
     extern "C" {
         static mut starmap_array: [STAR_DESC; NUM_SOLAR_SYSTEMS as usize];
         static planet_array: [PlanetFrame; NUMBER_OF_PLANET_TYPES as usize];
-        fn callGenerateForScanType(
-            system: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
-            node: COUNT,
-            scan_type: BYTE,
-            info: *mut NODE_INFO,
-        ) -> COUNT;
         #[cfg(target_os = "macos")]
         #[link_name = "__stderrp"]
         static mut error_stream: *mut FILE;
@@ -226,6 +219,22 @@ mod runtime {
         #[cfg(not(target_os = "macos"))]
         #[link_name = "stdout"]
         static mut output_stream: *mut FILE;
+    }
+
+    unsafe fn callGenerateForScanType(
+        system: *const SOLARSYS_STATE,
+        world: *const PLANET_DESC,
+        node: COUNT,
+        scan_type: BYTE,
+        info: *mut NODE_INFO,
+    ) -> COUNT {
+        crate::planets::scan::callGenerateForScanType(
+            system.cast(),
+            world.cast(),
+            node,
+            scan_type,
+            info.cast(),
+        )
     }
 
     const INFINITE_RADIUS: COUNT = COUNT::MAX;
