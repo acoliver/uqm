@@ -49,12 +49,13 @@ impl PlanetSideInput for CffiPlanetSideInput {
 }
 
 #[cfg(not(test))]
+use crate::time::counter_abi::GetTimeCounter;
+#[cfg(not(test))]
 use crate::ui::sis::DrawLanders;
 #[cfg(not(test))]
 extern "C" {
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
-    fn GetTimeCounter() -> u32;
     fn SleepThreadUntil(wake_time: u32);
     fn UpdateInputState();
     fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
@@ -97,7 +98,7 @@ pub struct CffiPlanetSideClock;
 impl PlanetSideClock for CffiPlanetSideClock {
     fn now(&self) -> Tick {
         #[cfg(not(test))]
-        unsafe {
+        {
             Tick(GetTimeCounter())
         }
         #[cfg(test)]

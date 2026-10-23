@@ -34,6 +34,7 @@ static mut zoomLevel: i32 = 0;
 static mut StarMapFrame: FRAME = ptr::null_mut();
 static mut transition_pending: bool = false;
 
+use crate::time::counter_abi::GetTimeCounter;
 extern "C" {
     static mut cursorLoc: POINT;
     static mut star_array: *mut CStarDesc;
@@ -62,7 +63,6 @@ extern "C" {
     fn BatchGraphics();
     fn UnbatchGraphics();
     fn SleepThread(ticks: i32);
-    fn GetTimeCounter() -> u32;
     fn SetTransitionSource(rect: *mut c_void);
     fn ScreenTransition(kind: i32, rect: *const c_void);
     fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);

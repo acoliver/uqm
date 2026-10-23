@@ -173,8 +173,8 @@ pub(crate) mod linked {
     #[cfg(target_os = "macos")]
     static SLEEP_TIMER: OnceLock<CriticalTimer> = OnceLock::new();
 
+    use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
-        fn GetTimeCounter() -> u32;
         fn TFB_ProcessEvents();
         fn TFB_FlushGraphics();
     }
@@ -207,8 +207,7 @@ pub(crate) mod linked {
         }
 
         fn now_ticks(&self) -> u32 {
-            // SAFETY: plain read of the SDL tick counter.
-            unsafe { GetTimeCounter() }
+            GetTimeCounter()
         }
 
         fn async_wait_ms(&self) -> u32 {

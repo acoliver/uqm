@@ -307,8 +307,7 @@ impl RestartMenuOps for CffiOps {
     }
 
     fn get_time_counter(&self) -> u32 {
-        // SAFETY: Reads a global time counter.
-        unsafe { c_extern::uqm_get_time_counter() }
+        c_extern::uqm_get_time_counter()
     }
 
     fn get_utwig_bomb_on_ship(&self) -> u8 {

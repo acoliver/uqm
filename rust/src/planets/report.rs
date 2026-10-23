@@ -35,6 +35,7 @@ mod live {
     };
     use std::ffi::{c_void, CString};
 
+    use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
         static SpaceJunkFrame: *mut c_void;
         static optWhichFonts: i32;
@@ -53,7 +54,6 @@ mod live {
         fn GetStringLength(string: *mut c_void) -> u16;
         fn font_DrawText(text: *mut CText);
         fn FlushInput();
-        fn GetTimeCounter() -> u32;
         fn WaitForAnyButtonUntil(new_button: u32, timeout: u32, reset: u32) -> u32;
         fn WaitForAnyButton(new_button: u32, duration: u32, reset: u32) -> u32;
         fn WaitForNoInput(duration: u32, reset: u32) -> u32;
