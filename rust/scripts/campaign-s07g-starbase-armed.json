@@ -1534,13 +1534,6 @@
     },
     {
       "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 2,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
       "key": "up",
       "value": 1,
       "hold": 2,
