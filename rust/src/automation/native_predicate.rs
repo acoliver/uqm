@@ -228,6 +228,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "minerals=").is_some()
                 && label.contains(&format!(":outcome={:?}:", value.outcome))
         }
+        Action::NavigateToContact(value) => label == format!("contact_reached:race={}", value.race),
         Action::NavigateToPlanet(value) => {
             label == format!("navigation_reached:planet={}", value.planet)
         }
@@ -1026,5 +1027,29 @@ mod tests {
         ] {
             assert!(!semantic_satisfied(&action, label), "{label}");
         }
+    }
+}
+
+#[cfg(test)]
+mod contact_navigation_tests {
+    #[test]
+    fn contact_proof_requires_the_requested_race_not_a_planet_or_wrong_ship() {
+        let action =
+            super::Action::NavigateToContact(crate::automation::script::NavigateToContactStep {
+                race: 12,
+                max_ticks: 100,
+            });
+        assert!(super::semantic_satisfied(
+            &action,
+            "contact_reached:race=12"
+        ));
+        assert!(!super::semantic_satisfied(
+            &action,
+            "contact_reached:race=8"
+        ));
+        assert!(!super::semantic_satisfied(
+            &action,
+            "orbit_reached:planet=0"
+        ));
     }
 }

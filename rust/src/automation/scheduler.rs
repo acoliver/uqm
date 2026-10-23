@@ -303,6 +303,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
                 | ActionPhase::TapSettling { .. }
         ),
         Action::NavigateToPlanet(_)
+        | Action::NavigateToContact(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
         | Action::UseDevice(_)
@@ -408,6 +409,7 @@ pub fn scheduler_reduce(
             if matches!(
                 current_action,
                 Action::NavigateToPlanet(_)
+                    | Action::NavigateToContact(_)
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
                     | Action::UseDevice(_)
@@ -847,6 +849,18 @@ fn reduce_navigation(
     sv: u64,
 ) -> Option<SchedulerTransition> {
     Some(match (action, state.phase) {
+        (Action::NavigateToContact(navigation), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::NavigateToPlanet(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -860,6 +874,7 @@ fn reduce_navigation(
             }
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToContact(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::UseDevice(_), ActionPhase::Navigating { remaining: 0 })
@@ -880,6 +895,7 @@ fn reduce_navigation(
             }
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToContact(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
         | (Action::UseDevice(_), ActionPhase::Navigating { remaining })
@@ -3507,6 +3523,10 @@ mod budgeted_wait_tests {
 
     fn navigation_actions(max_ticks: u64) -> Vec<Action> {
         vec![
+            Action::NavigateToContact(crate::automation::script::NavigateToContactStep {
+                race: 12,
+                max_ticks,
+            }),
             Action::NavigateToPlanet(NavigateToPlanetStep {
                 planet: 1,
                 max_ticks,
@@ -3592,6 +3612,7 @@ mod budgeted_wait_tests {
         if matches!(
             action,
             Action::NavigateToPlanet(_)
+                | Action::NavigateToContact(_)
                 | Action::NavigateToMoon(_)
                 | Action::NavigateToOrbit(_)
                 | Action::UseDevice(_)

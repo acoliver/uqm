@@ -45,7 +45,8 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
-        Action::NavigateToPlanet(_)
+        Action::NavigateToContact(_)
+        | Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
         | Action::UseDevice(_)

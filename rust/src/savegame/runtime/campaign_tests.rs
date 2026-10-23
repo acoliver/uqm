@@ -81,6 +81,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "at-alpha-centauri" => (18, 3, 2155, 46, 401, 2500, 1),
             "broken-ultron" => (7, 7, 2155, 46, 10434, 115, 4),
             "funded-sol" => (14, 3, 2155, 46, 800, 2304, 1),
+            "north-refueled" => (6, 9, 2155, 43, 21000, 115, 4),
             "north-ready" => (20, 4, 2155, 46, 20000, 115, 4),
             "north-artifacts" => (19, 8, 2155, 43, 4896, 115, 4),
             "spindle-pkunk" => (2, 4, 2155, 46, 3457, 1464, 5),

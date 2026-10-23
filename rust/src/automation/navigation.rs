@@ -876,3 +876,22 @@ mod tests {
         }
     }
 }
+
+/// A real encounter preview or direct greeting must name the requested ship.
+#[must_use]
+pub fn contact_reached(wanted: u8, actual: Option<u8>, preview: bool, conversation: bool) -> bool {
+    (preview || conversation) && actual == Some(wanted)
+}
+
+#[cfg(test)]
+mod contact_tests {
+    #[test]
+    fn only_a_live_matching_preview_or_direct_greeting_completes_contact() {
+        use super::contact_reached;
+        assert!(contact_reached(12, Some(12), true, false));
+        assert!(contact_reached(12, Some(12), false, true));
+        assert!(!contact_reached(12, Some(12), false, false));
+        assert!(!contact_reached(12, Some(8), false, true));
+        assert!(!contact_reached(12, None, true, false));
+    }
+}

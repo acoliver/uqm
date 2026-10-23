@@ -384,6 +384,72 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     navigation_snapshot(0, None)
 }
 
+/// Copy a live group's target geometry without moving it or invoking contact.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
+    use crate::c_bindings::global_state::POINT;
+    use crate::savegame::runtime::groups::CIpGroup;
+    use crate::savegame::runtime::queues::{walk, QueueKind};
+    extern "C" {
+        fn locationToDisplay(location: POINT, radius: i16) -> POINT;
+    }
+    unsafe {
+        let solar = crate::c_bindings::solar_system::current().as_ref()?;
+        let queue = &*std::ptr::addr_of!(GLOB_DATA.game_state.ip_group_q);
+        let group = walk::<CIpGroup>(queue, QueueKind::IpGroups)
+            .expect("live IP group queue")
+            .into_iter()
+            .find(|group| (**group).race_id == race && (**group).in_system != 0)?;
+        let system = (*group).sys_loc;
+        let mut snapshot = if system == 0 {
+            departure_snapshot()
+        } else {
+            navigation_snapshot(i32::from(system) - 1, None)
+        };
+        let same_view = (snapshot.inner_planet + 1) as u8 == system;
+        if same_view {
+            let radius = if system == 0 {
+                solar.SunDesc[0].radius
+            } else {
+                128 << 6
+            };
+            let point = locationToDisplay(
+                POINT {
+                    x: (*group).loc.x,
+                    y: (*group).loc.y,
+                },
+                radius,
+            );
+            snapshot.target_x = i32::from(point.x);
+            snapshot.target_y = i32::from(point.y);
+            // The contact controller pursues a ship in this view, not its planet.
+            snapshot.inner_planet = -1;
+        }
+        Some((snapshot, same_view))
+    }
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn contact_snapshot(_race: u8) -> Option<(NavigationSnapshot, bool)> {
+    None
+}
+
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn contact_race() -> Option<u8> {
+    unsafe {
+        std::ptr::addr_of!(GLOB_DATA.game_state.npc_built_ship_q.head)
+            .read()
+            .cast::<crate::comm::dispatch::CShipFragment>()
+            .as_ref()
+            .map(|ship| ship.race_id)
+    }
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn contact_race() -> Option<u8> {
+    None
+}
+
 /// Where a planet is on the display right now.
 ///
 /// In the outer system `PLANET_DESC::image.origin` is the planet's display
