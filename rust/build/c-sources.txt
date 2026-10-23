@@ -3,8 +3,6 @@ sc2/src/options.c
 sc2/src/uqm.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
-sc2/src/uqm/credits.c
-sc2/src/uqm/fmv.c
 sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
 sc2/src/uqm/restart.c
