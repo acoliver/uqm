@@ -105,3 +105,5 @@ pub mod tfb_draw_abi;
 pub mod tfb_prim_abi;
 
 pub mod dcqueue_abi;
+
+pub mod gfx_common_abi;
