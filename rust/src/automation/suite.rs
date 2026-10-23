@@ -121,6 +121,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row("load-connected-taalo-v1", &[Domain::SaveLoad]),
+    row("load-connected-funded-fleet-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07h-connected-taalo",
         &[
