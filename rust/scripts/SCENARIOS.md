@@ -191,3 +191,14 @@ the vault planet before navigating its moon, lands, unlocks the vault with the
 shuttle, returns the lander, and saves `dev-funded-vault`. Native run `pmid-56`
 proved `SHIP_VAULT_UNLOCKED=1` and `SYREEN_SHUTTLE_ON_SHIP=0`, with 145 crew,
 4915 raw fuel, and three Furies. Neither save is a connected campaign milestone.
+
+`campaign-s09d-syreen-ambush` returns the recovered ships to Talana from
+`dev-funded-vault`. Native `pmid-61` accepted her post-vault conversation and
+proved `MYCON_AMBUSH=1`, then saved `dev-syreen-ambush`. This development save
+has only 2086 raw fuel; the lure leg needs resupply first.
+
+`campaign-s09h-rainbow-refuel` branches earlier, from `dev-funded-shuttle`,
+visits the unreported rainbow world at catalog 187, then trades its location
+for credits at catalog 153. Native `pmid-62` bought a full tank through the
+Melnorme dialogue and saved `dev-rainbow-refueled` with 21000 raw fuel,
+70 crew and three Furies. Travel casualties are retained, not replaced.
