@@ -19,9 +19,7 @@ use crate::state::ffi::{
 use crate::state::game_state::{get_state_32_raw, set_state_32_raw};
 use crate::state::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
 
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
 /// `SHOFIXTI_GRPOFFS0` and the 32-bit stride, from `globdata.h`.
 const FIRST_OFFSET_BIT: usize = 790;

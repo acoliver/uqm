@@ -21,9 +21,8 @@ use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use crate::time::clock_bridge::NUM_EVENTS;
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
-pub(super) const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+pub(super) const C_WRITTEN_SAVE: &[u8] =
+    include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
 /// `NUM_AVAILABLE_RACES` (races.h): the fleets `InitGameStructures` queues.
 pub(super) const RACES: usize = 24;
