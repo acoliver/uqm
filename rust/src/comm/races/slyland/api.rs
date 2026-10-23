@@ -44,7 +44,7 @@ mod live {
         }
         fn splice(&mut self, phrase: u32) {
             unsafe {
-                crate::comm::ffi::rust_NPCPhrase_splice(phrase as i32);
+                crate::comm::ffi::rust_npc_phrase_splice(phrase as i32);
             }
         }
         fn number(&mut self, number: i32, padded: bool) {

@@ -881,7 +881,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         }
     }
     if status == HAIL {
-        crate::comm::ffi::rust_HailAlien();
+        crate::comm::ffi::rust_hail_alien();
     } else if !descriptor.is_null() {
         if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0 {
             if let Some(callback) = ffi::CommData.post_encounter_func {

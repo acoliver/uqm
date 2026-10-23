@@ -160,7 +160,7 @@ mod live {
             1.0
         };
         crate::graphics::cmap_abi::InitColorMaps();
-        if crate::comm::ffi::rust_InitCommunication() == 0 {
+        if crate::comm::ffi::rust_init_communication() == 0 {
             return 1;
         }
         let immediate = ptr::addr_of_mut!(abi::ImmediateInputState);

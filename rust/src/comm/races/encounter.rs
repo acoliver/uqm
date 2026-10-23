@@ -30,10 +30,10 @@ mod live {
     impl<H> EncounterApi<H> for LiveScript<H> {
         fn segue(&mut self, segue: u32) {
             self.set("BATTLE_SEGUE", u8::from(segue == 1));
-            unsafe { crate::comm::ffi::rust_SetSegue(segue) }
+            crate::comm::ffi::rust_set_segue(segue)
         }
         fn get_segue(&self) -> u32 {
-            unsafe { crate::comm::ffi::rust_GetSegue() }
+            crate::comm::ffi::rust_get_segue()
         }
         fn activity(&self) -> u16 {
             crate::mainloop::ffi::get_current_activity().0

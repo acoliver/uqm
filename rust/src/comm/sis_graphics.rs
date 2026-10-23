@@ -141,6 +141,7 @@ const KEY_MENU_RIGHT: usize = 8;
 #[cfg(not(test))]
 mod c_bridge {
     use super::*;
+    pub use crate::comm::ffi::rust_get_response_text;
 
     #[allow(clashing_extern_declarations)]
     extern "C" {
@@ -202,13 +203,6 @@ mod c_bridge {
         // Colors — computed from #define macros in colors.h/gfxlib.h
         // MAKE_RGB15(r,g,b) = { CC5TO8(r), CC5TO8(g), CC5TO8(b), 0xFF }
         // BUILD_COLOR(col, idx) = col (palette index ignored)
-
-        // Rust response text accessor
-        pub fn rust_GetResponseText(
-            index: std::ffi::c_int,
-            buf: *mut std::ffi::c_char,
-            buf_len: usize,
-        ) -> std::ffi::c_int;
 
         // Trackplayer subtitle functions (trackplayer.c)
         pub fn GetFirstTrackSubtitle() -> *mut std::ffi::c_void;
@@ -715,10 +709,12 @@ impl CommWindowGfx for CommWindow {
     fn response_text(&mut self, index: u8, buf: &mut [u8]) -> bool {
         // SAFETY: `buf` is valid for `buf.len()` bytes.
         unsafe {
-            c_bridge::rust_GetResponseText(
+            c_bridge::rust_get_response_text(
                 std::ffi::c_int::from(index),
                 buf.as_mut_ptr() as *mut std::ffi::c_char,
-                buf.len(),
+                buf.len()
+                    .try_into()
+                    .expect("response buffer length fits i32"),
             ) != 0
         }
     }
@@ -777,10 +773,13 @@ pub unsafe fn select_conversation_summary() {
     let mut text_buf = [0u8; 1024];
 
     if LAST_NUM_RESPONSES > 0
-        && c_bridge::rust_GetResponseText(
+        && c_bridge::rust_get_response_text(
             LAST_CUR_RESPONSE as std::ffi::c_int,
             text_buf.as_mut_ptr() as *mut std::ffi::c_char,
-            text_buf.len(),
+            text_buf
+                .len()
+                .try_into()
+                .expect("response buffer length fits i32"),
         ) != 0
     {
         feedback_player_phrase(text_buf.as_ptr() as *const std::ffi::c_char);

@@ -623,7 +623,7 @@ mod live {
         configure(desc, api().get("RADIOACTIVES_PROVIDED") != 0);
         // setSegue(peace) also updates the legacy battle bit used by dispatch.
         api().set("BATTLE_SEGUE", 0);
-        crate::comm::ffi::rust_SetSegue(0);
+        crate::comm::ffi::rust_set_segue(0);
         desc
     }
 }

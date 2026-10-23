@@ -202,7 +202,7 @@ pub unsafe extern "C" fn comm_RedrawSubtitles() {
 /// Called from the game thread, outside a COMM_STATE lock.
 #[no_mangle]
 pub unsafe extern "C" fn c_SetTalkingFinished(finished: i32) {
-    super::ffi::rust_SetTalkingFinished(finished);
+    super::ffi::rust_set_talking_finished(finished);
 }
 /// # Safety
 /// CommData must be initialized on the game thread.
@@ -266,7 +266,7 @@ pub unsafe extern "C" fn c_ResetClearSubtitles() {
 /// Called from the game thread with an initialized communication system.
 #[no_mangle]
 pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
-    super::ffi::rust_AlienTalkSegue(track.into());
+    super::ffi::rust_alien_talk_segue(track.into());
 }
 /// # Safety
 /// CommData must be initialized on the game thread.
