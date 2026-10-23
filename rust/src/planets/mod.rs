@@ -29,3 +29,7 @@ pub mod cargo;
 pub mod report;
 
 pub mod roster;
+
+pub mod orbit;
+pub mod scan;
+pub mod sphere;

@@ -61,7 +61,7 @@ extern "C" {
     pub fn ClearDrawable();
 
     /// Set the graphics scale factor (0 = reset)
-    pub fn SetGraphicScale(scale: c_int);
+    pub fn SetGraphicScale(scale: c_int) -> c_int;
 
     /// Perform screen transition effect
     pub fn ScreenTransition(which: c_int, rect: *const c_void);
