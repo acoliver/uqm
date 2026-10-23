@@ -55,12 +55,15 @@ pub enum SeedDomain {
     /// outside Super Melee replays: two runs of the same script at the same
     /// commit produce different planet surfaces.
     NewGame,
+    /// Campaign combat and hyperspace reseed at each Battle entry.
+    CampaignBattle,
 }
 
 impl SeedDomain {
     pub const SUPER_MELEE_MENU_ID: u32 = 1;
     pub const SUPER_MELEE_BATTLE_ID: u32 = 2;
     pub const NEW_GAME_ID: u32 = 3;
+    pub const CAMPAIGN_BATTLE_ID: u32 = 4;
 
     #[must_use]
     pub fn from_ffi(value: u32) -> Option<Self> {
@@ -68,6 +71,7 @@ impl SeedDomain {
             Self::SUPER_MELEE_MENU_ID => Some(Self::SuperMeleeMenu),
             Self::SUPER_MELEE_BATTLE_ID => Some(Self::SuperMeleeBattle),
             Self::NEW_GAME_ID => Some(Self::NewGame),
+            Self::CAMPAIGN_BATTLE_ID => Some(Self::CampaignBattle),
             _ => None,
         }
     }
@@ -626,7 +630,8 @@ mod tests {
         // because a mistyped domain would otherwise seed nothing and leave the
         // run reproducible only by luck.
         assert_eq!(SeedDomain::from_ffi(0), None);
-        assert_eq!(SeedDomain::from_ffi(4), None);
+        assert_eq!(SeedDomain::from_ffi(4), Some(SeedDomain::CampaignBattle));
+        assert_eq!(SeedDomain::from_ffi(5), None);
         assert_eq!(SeedDomain::from_ffi(u32::MAX), None);
 
         let first = SeedApplication {

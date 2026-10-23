@@ -1578,6 +1578,19 @@ impl Coordinator {
         if crate::automation::ui_observation::encounter_menu_active()
             && !flight.target.is_arilou_home()
         {
+            if !inner.star_encounter_active {
+                let observation = input_ffi::fleet_fight_observation();
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "flight_encounter_started:crew={:?}:activity={}:escape_generation={}",
+                        observation.flagship_crew,
+                        observation.activity,
+                        observation.escape_generation
+                    ),
+                );
+            }
             inner.star_encounter_active = true;
         }
         if inner.star_encounter_active {
@@ -4176,16 +4189,16 @@ mod tests {
         let mut doc = crate::automation::script::parse_script(bytes, "seed-test.json").unwrap();
         doc.seed = Some(u64::from(seed));
         let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
-        assert_eq!(
-            rust_automation_seed_value(SeedDomain::NEW_GAME_ID, 999),
-            999
-        );
+        for domain in [SeedDomain::NEW_GAME_ID, SeedDomain::CAMPAIGN_BATTLE_ID] {
+            assert_eq!(rust_automation_seed_value(domain, 999), 999);
+        }
         Coordinator::init(script, temp.path().to_path_buf());
         let mut expected = Vec::new();
         for domain in [
             SeedDomain::SUPER_MELEE_MENU_ID,
             SeedDomain::SUPER_MELEE_BATTLE_ID,
             SeedDomain::NEW_GAME_ID,
+            SeedDomain::CAMPAIGN_BATTLE_ID,
         ] {
             assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
             expected.push(SeedApplication {

@@ -301,7 +301,10 @@ impl FleetRetreat {
             .is_none_or(|crew| crew == 0 || crew == u16::MAX)
             || obs.activity & (0x1000 | 0x2000 | 0x4000) != 0
         {
-            return Failed("fleet_retreat_flagship_lost_or_aborted".into());
+            return Failed(format!(
+                "fleet_retreat_flagship_lost_or_aborted:crew={:?}:activity={}:ticks={}:escape_baseline={baseline}:escape_generation={}",
+                obs.flagship_crew, obs.activity, self.ticks, obs.escape_generation
+            ));
         }
         if self.ticks >= max_ticks {
             return Failed("fleet_retreat_timeout".into());
@@ -425,6 +428,27 @@ mod retreat_tests {
             retreat.observe(100, returned),
             RetreatProgress::Escaped(_)
         ));
+    }
+
+    #[test]
+    fn death_during_the_escape_animation_is_not_a_completed_retreat() {
+        let mut retreat = FleetRetreat::default();
+        retreat.observe(1000, obs(0x202));
+        let mut fleeing = obs(0x202);
+        fleeing.counters = [0, 1];
+        fleeing.escape_generation = 1;
+        assert!(matches!(
+            retreat.observe(1000, fleeing),
+            RetreatProgress::Input { escape: true, .. }
+        ));
+        let mut dead = obs(0);
+        dead.flagship_crew = Some(u16::MAX);
+        dead.escape_generation = 1;
+        let RetreatProgress::Failed(label) = retreat.observe(1000, dead) else {
+            panic!("a requested escape must not hide flagship destruction");
+        };
+        assert!(label.contains("crew=Some(65535):activity=0"));
+        assert!(label.contains("escape_baseline=0:escape_generation=1"));
     }
 
     #[test]
