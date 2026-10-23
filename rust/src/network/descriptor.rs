@@ -66,7 +66,7 @@ pub unsafe extern "C" fn NetDescriptor_decRef(nd: *mut NetDescriptor) -> bool {
     }
 }
 
-unsafe extern "C" fn close_callback(arg: *mut c_void) {
+unsafe fn close_callback(arg: *mut c_void) {
     let nd = arg.cast::<NetDescriptor>();
     if let Some(callback) = (*nd).close_callback {
         callback(nd);
@@ -85,7 +85,10 @@ pub unsafe extern "C" fn NetDescriptor_close(nd: *mut NetDescriptor) {
     (*nd).closed = true;
     if (*nd).close_callback.is_some() {
         // The existing owner reference moves to the deferred callback.
-        Callback_add(Some(close_callback), nd.cast());
+        Callback_add(
+            |arg| unsafe { close_callback(arg as *mut c_void) },
+            nd as usize,
+        );
     } else {
         NetDescriptor_decRef(nd);
     }

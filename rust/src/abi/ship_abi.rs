@@ -4501,9 +4501,7 @@ pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
 unsafe extern "C" {
     pub static mut DrawCommandQueue: TFB_DrawCommandQueue;
 }
-unsafe extern "C" {
-    pub fn Async_process();
-}
+pub use crate::callback::ffi::Async_process;
 unsafe extern "C" {
     pub static mut TFB_DEBUG_HALT: ::std::os::raw::c_int;
 }

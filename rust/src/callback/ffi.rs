@@ -1,98 +1,71 @@
-//! FFI shims for the C-callable Alarm/Callback/Async API.
-//!
-//! Exports `#[no_mangle] extern "C"` functions matching the signatures
-//! declared in `alarm.h`, `callback.h`, and `async.h`. C code calls these
-//! directly; the linker resolves them from the Rust archive.
+//! Game callback, alarm and asynchronous dispatch queues.
 
-use std::collections::{BinaryHeap, HashSet};
-use std::ffi::c_void;
+#![allow(non_snake_case)]
+
+use std::collections::{BinaryHeap, HashSet, VecDeque};
 use std::sync::OnceLock;
 
 use parking_lot::Mutex;
 
-// ===========================================================================
-// SDL timing — same time base as C (`SDL_GetTicks`)
-// ===========================================================================
-
-extern "C" {
-    fn SDL_GetTicks() -> u32;
-}
+type Callback = Box<dyn FnOnce() + Send>;
 
 fn now_ms() -> u32 {
-    unsafe { SDL_GetTicks() }
+    // Alarms share the SDL clock used by input and network pacing.
+    unsafe { sdl2_sys::SDL_GetTicks() }
 }
 
-// ===========================================================================
-// Callback — FIFO queue with snapshot semantics
-// ===========================================================================
+/// Identity of a queued callback, valid until it runs or is cancelled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CallbackId(u64);
 
-/// A single queued callback. Stored in a `Box` so the raw pointer is stable
-/// and can serve as the `CallbackID` (matching C's linked-list-node approach).
 struct CallbackLink {
-    func: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
+    id: CallbackId,
+    func: Callback,
     cancelled: bool,
 }
 
-// SAFETY: The callback queue is accessed from the main game thread and
-// network threads. The raw pointer `arg` is opaque C state.
-unsafe impl Send for CallbackLink {}
-
 struct CallbackState {
-    /// Pending callbacks, front = next to process.
-    queue: std::collections::VecDeque<Box<CallbackLink>>,
-    /// Snapshot of `queue.len()` at the start of `Callback_process`.
-    /// Entries added during processing have index >= process_end and
-    /// are deferred to the next call (matching C `callbacksProcessEnd`).
-    process_end: usize,
+    queue: VecDeque<CallbackLink>,
+    next_id: u64,
 }
 
 static CALLBACKS: OnceLock<Mutex<CallbackState>> = OnceLock::new();
 
-#[no_mangle]
-pub extern "C" fn Callback_init() {
+pub fn Callback_init() {
     let _ = CALLBACKS.set(Mutex::new(CallbackState {
-        queue: std::collections::VecDeque::new(),
-        process_end: 0,
+        queue: VecDeque::new(),
+        next_id: 1,
     }));
 }
 
-#[no_mangle]
-pub extern "C" fn Callback_uninit() {
+pub fn Callback_uninit() {
     if let Some(state) = CALLBACKS.get() {
-        let mut s = state.lock();
-        s.queue.clear();
-        s.process_end = 0;
+        state.lock().queue.clear();
     }
 }
 
-#[no_mangle]
-pub extern "C" fn Callback_add(func: extern "C" fn(*mut c_void), arg: *mut c_void) -> *mut c_void {
-    let state = match CALLBACKS.get() {
-        Some(s) => s,
-        None => return std::ptr::null_mut(),
-    };
-    let link = Box::new(CallbackLink {
-        func,
-        arg,
+pub fn Callback_add<T: Send + 'static>(
+    func: impl FnOnce(T) + Send + 'static,
+    arg: T,
+) -> Option<CallbackId> {
+    let mut state = CALLBACKS.get()?.lock();
+    let id = CallbackId(state.next_id);
+    state.next_id = state.next_id.checked_add(1).expect("callback ID exhausted");
+    state.queue.push_back(CallbackLink {
+        id,
+        func: Box::new(move || func(arg)),
         cancelled: false,
     });
-    let ptr = Box::as_ref(&link) as *const CallbackLink as *mut c_void;
-    state.lock().queue.push_back(link);
-    ptr
+    Some(id)
 }
 
-#[no_mangle]
-pub extern "C" fn Callback_remove(id: *mut c_void) -> bool {
-    let state = match CALLBACKS.get() {
-        Some(s) => s,
-        None => return false,
+pub fn Callback_remove(id: CallbackId) -> bool {
+    let Some(state) = CALLBACKS.get() else {
+        return false;
     };
-    let target = id as *const CallbackLink;
-    let mut s = state.lock();
-    // Find and mark as cancelled (lazy deletion — preserves indices).
-    for entry in s.queue.iter_mut() {
-        if std::ptr::eq(&**entry, target) {
+    let mut state = state.lock();
+    for entry in &mut state.queue {
+        if entry.id == id {
             entry.cancelled = true;
             return true;
         }
@@ -100,69 +73,41 @@ pub extern "C" fn Callback_remove(id: *mut c_void) -> bool {
     false
 }
 
-#[no_mangle]
-pub extern "C" fn Callback_process() {
-    let state = match CALLBACKS.get() {
-        Some(s) => s,
-        None => return,
+pub fn Callback_process() {
+    let Some(state) = CALLBACKS.get() else {
+        return;
     };
-
-    // Snapshot the current queue length — only process entries up to here.
-    // New callbacks added during processing are deferred (matching C
-    // `callbacksProcessEnd` semantics).
-    let process_end = {
-        let s = state.lock();
-        s.queue.len()
-    };
-
+    // Defer callbacks added during dispatch until the next snapshot.
+    let process_end = state.lock().queue.len();
     for _ in 0..process_end {
-        // Pop the front entry under the lock, then release before calling.
         let entry = state.lock().queue.pop_front();
         match entry {
-            Some(e) => {
-                if !e.cancelled {
-                    (e.func)(e.arg);
+            Some(entry) => {
+                if !entry.cancelled {
+                    (entry.func)();
                 }
-                // Box is dropped here, freeing the CallbackLink.
             }
             None => break,
         }
     }
-
-    // Clean up any cancelled entries that were added during processing
-    // (they would have been beyond process_end, so not popped above).
-    if let Some(s) = CALLBACKS.get() {
-        let mut s = s.lock();
-        s.queue.retain(|e| !e.cancelled);
-    }
+    state.lock().queue.retain(|entry| !entry.cancelled);
 }
 
-#[no_mangle]
-pub extern "C" fn Callback_haveMore() -> bool {
-    let state = match CALLBACKS.get() {
-        Some(s) => s,
-        None => return false,
-    };
-    let s = state.lock();
-    s.queue.iter().any(|e| !e.cancelled)
+pub fn Callback_haveMore() -> bool {
+    CALLBACKS
+        .get()
+        .is_some_and(|state| state.lock().queue.iter().any(|entry| !entry.cancelled))
 }
 
-// ===========================================================================
-// Alarm — min-heap of timed callbacks
-// ===========================================================================
+/// Identity of a timed alarm. Cancellation does not dereference caller storage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct AlarmId(u64);
 
-/// A timed alarm entry. When `deadline_ms` is reached, `callback(arg)` fires.
 struct AlarmEntry {
     deadline_ms: u32,
-    callback: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
-    /// Unique ID used for cancellation lookup.
-    id: u64,
+    callback: Callback,
+    id: AlarmId,
 }
-
-// SAFETY: Alarms are accessed from the main game thread.
-unsafe impl Send for AlarmEntry {}
-unsafe impl Sync for AlarmEntry {}
 
 impl PartialEq for AlarmEntry {
     fn eq(&self, other: &Self) -> bool {
@@ -171,7 +116,6 @@ impl PartialEq for AlarmEntry {
 }
 impl Eq for AlarmEntry {}
 impl PartialOrd for AlarmEntry {
-    // Reverse ordering → BinaryHeap acts as min-heap by deadline.
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
@@ -184,112 +128,62 @@ impl Ord for AlarmEntry {
 
 static ALARM_HEAP: OnceLock<Mutex<BinaryHeap<AlarmEntry>>> = OnceLock::new();
 static ALARM_NEXT_ID: OnceLock<Mutex<u64>> = OnceLock::new();
-static ALARM_CANCELLED: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+static ALARM_CANCELLED: OnceLock<Mutex<HashSet<AlarmId>>> = OnceLock::new();
 
-/// The opaque `Alarm*` handle returned to C. Contains the unique ID for
-/// cancellation lookup. Packed into a pointer-sized value so C can store
-/// it as `Alarm*`.
-#[repr(C)]
-pub struct AlarmHandle {
-    id: u64,
-}
-
-#[no_mangle]
-pub extern "C" fn Alarm_init() {
+pub fn Alarm_init() {
     let _ = ALARM_HEAP.set(Mutex::new(BinaryHeap::new()));
     let _ = ALARM_NEXT_ID.set(Mutex::new(1));
     let _ = ALARM_CANCELLED.set(Mutex::new(HashSet::new()));
 }
 
-#[no_mangle]
-pub extern "C" fn Alarm_uninit() {
+pub fn Alarm_uninit() {
     if let Some(heap) = ALARM_HEAP.get() {
         heap.lock().clear();
     }
 }
 
-fn alarm_add(
-    deadline_ms: u32,
-    callback: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
-) -> *mut AlarmHandle {
-    let heap = match ALARM_HEAP.get() {
-        Some(h) => h,
-        None => return std::ptr::null_mut(),
-    };
-    let next_id = match ALARM_NEXT_ID.get() {
-        Some(n) => {
-            let mut guard = n.lock();
-            let id = *guard;
-            *guard += 1;
-            id
-        }
-        None => return std::ptr::null_mut(),
-    };
-
+fn alarm_add(deadline_ms: u32, callback: Callback) -> Option<AlarmId> {
+    let heap = ALARM_HEAP.get()?;
+    let mut next_id = ALARM_NEXT_ID.get()?.lock();
+    let id = AlarmId(*next_id);
+    *next_id = next_id.checked_add(1).expect("alarm ID exhausted");
+    drop(next_id);
     heap.lock().push(AlarmEntry {
         deadline_ms,
         callback,
-        arg,
-        id: next_id,
+        id,
     });
-
-    // Return a heap-allocated handle that C can store and pass to Alarm_remove.
-    Box::into_raw(Box::new(AlarmHandle { id: next_id }))
+    Some(id)
 }
 
-#[no_mangle]
-pub extern "C" fn Alarm_addAbsoluteMs(
+pub fn Alarm_addAbsoluteMs<T: Send + 'static>(
     ms: u32,
-    callback: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
-) -> *mut AlarmHandle {
-    alarm_add(ms, callback, arg)
+    callback: impl FnOnce(T) + Send + 'static,
+    arg: T,
+) -> Option<AlarmId> {
+    alarm_add(ms, Box::new(move || callback(arg)))
 }
 
-#[no_mangle]
-pub extern "C" fn Alarm_addRelativeMs(
+pub fn Alarm_addRelativeMs<T: Send + 'static>(
     ms: u32,
-    callback: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
-) -> *mut AlarmHandle {
-    alarm_add(now_ms().wrapping_add(ms), callback, arg)
+    callback: impl FnOnce(T) + Send + 'static,
+    arg: T,
+) -> Option<AlarmId> {
+    Alarm_addAbsoluteMs(now_ms().wrapping_add(ms), callback, arg)
 }
 
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn Alarm_remove(alarm: *mut AlarmHandle) {
-    if alarm.is_null() {
-        return;
-    }
-    let handle = unsafe { &*alarm };
-    let id = handle.id;
-
-    // Free the handle.
-    unsafe {
-        drop(Box::from_raw(alarm));
-    }
-
-    // Mark the alarm as cancelled (lazy deletion — BinaryHeap doesn't
-    // support arbitrary removal, so we skip cancelled entries on pop).
-    if let Some(cancelled) = ALARM_CANCELLED.get() {
+pub fn Alarm_remove(alarm: Option<AlarmId>) {
+    if let (Some(id), Some(cancelled)) = (alarm, ALARM_CANCELLED.get()) {
         cancelled.lock().insert(id);
     }
 }
 
-#[no_mangle]
-pub extern "C" fn Alarm_processOne() -> bool {
-    let heap = match ALARM_HEAP.get() {
-        Some(h) => h,
-        None => return false,
+pub fn Alarm_processOne() -> bool {
+    let Some(heap) = ALARM_HEAP.get() else {
+        return false;
     };
     let cancelled = ALARM_CANCELLED.get();
     let now = now_ms();
-
-    // Pop entries until we find a non-cancelled one that's due, or stop.
     let mut guard = heap.lock();
     loop {
         match guard.peek() {
@@ -305,38 +199,24 @@ pub extern "C" fn Alarm_processOne() -> bool {
                 if now < top.deadline_ms {
                     return false;
                 }
-                // Due — pop and fire.
                 let alarm = guard.pop().unwrap();
-                let callback = alarm.callback;
-                let arg = alarm.arg;
-                drop(guard); // release lock before callback
-                (callback)(arg);
+                drop(guard);
+                (alarm.callback)();
                 return true;
             }
         }
     }
 }
 
-/// Milliseconds from now until the earliest live alarm is due.
-///
-/// The value is RELATIVE: 0 when an alarm is already overdue, `u32::MAX` when
-/// none is queued. The original C returned the alarm's absolute tick time
-/// here, which `netInputBlocking` then used as a timeout and `SleepThreadUntil`
-/// compared against the clock; callers in this port (`pacing::sleep_until`,
-/// `netInputBlocking`) all use it as a duration.
-#[no_mangle]
-pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
-    let heap = match ALARM_HEAP.get() {
-        Some(h) => h,
-        None => return u32::MAX,
+/// Milliseconds until the next live alarm, zero if overdue, or `u32::MAX`
+/// when no alarm is queued.
+pub fn Alarm_timeBeforeNextMs() -> u32 {
+    let Some(heap) = ALARM_HEAP.get() else {
+        return u32::MAX;
     };
     let cancelled = ALARM_CANCELLED.get();
     let now = now_ms();
-    let guard = heap.lock();
-
-    // Heap iteration order is storage order, not deadline order, so the
-    // earliest alarm that can still fire has to be found by comparing them.
-    guard
+    heap.lock()
         .iter()
         .filter(|entry| {
             !cancelled
@@ -348,16 +228,8 @@ pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
         .unwrap_or(u32::MAX)
 }
 
-// ===========================================================================
-// Async — combined callback + alarm processing
-// ===========================================================================
-
-#[no_mangle]
-pub extern "C" fn Async_process() {
-    // Call pending callbacks first.
+pub fn Async_process() {
     Callback_process();
-
-    // Then fire due alarms, processing callbacks after each alarm.
     loop {
         if !Alarm_processOne() {
             return;
@@ -366,18 +238,12 @@ pub extern "C" fn Async_process() {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn Async_timeBeforeNextMs() -> u32 {
+pub fn Async_timeBeforeNextMs() -> u32 {
     if Callback_haveMore() {
-        // Return 1 (not 0) so callers can use 0 as a special value.
         return 1;
     }
     Alarm_timeBeforeNextMs()
 }
-
-// ===========================================================================
-// Tests
-// ===========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -387,15 +253,15 @@ mod tests {
 
     static CALL_COUNT: AtomicU32 = AtomicU32::new(0);
 
-    extern "C" fn test_callback(_arg: *mut c_void) {
+    fn test_callback(_arg: ()) {
         CALL_COUNT.fetch_add(1, Ordering::SeqCst);
     }
 
     fn ensure_callbacks() -> &'static Mutex<CallbackState> {
         CALLBACKS.get_or_init(|| {
             Mutex::new(CallbackState {
-                queue: std::collections::VecDeque::new(),
-                process_end: 0,
+                queue: VecDeque::new(),
+                next_id: 1,
             })
         })
     }
@@ -405,12 +271,11 @@ mod tests {
     fn callback_add_process_remove() {
         let state = ensure_callbacks();
         state.lock().queue.clear();
-        state.lock().process_end = 0;
 
         CALL_COUNT.store(0, Ordering::SeqCst);
 
-        let _id1 = Callback_add(test_callback, std::ptr::null_mut());
-        let id2 = Callback_add(test_callback, std::ptr::null_mut());
+        let _id1 = Callback_add(test_callback, ());
+        let id2 = Callback_add(test_callback, ()).unwrap();
 
         assert!(Callback_haveMore());
 
@@ -428,17 +293,16 @@ mod tests {
     fn callback_process_snapshot() {
         let state = ensure_callbacks();
         state.lock().queue.clear();
-        state.lock().process_end = 0;
 
         CALL_COUNT.store(0, Ordering::SeqCst);
 
         // This callback adds another callback during processing.
-        extern "C" fn chained_callback(_arg: *mut c_void) {
+        fn chained_callback(_arg: ()) {
             CALL_COUNT.fetch_add(1, Ordering::SeqCst);
-            Callback_add(chained_callback, std::ptr::null_mut());
+            Callback_add(chained_callback, ());
         }
 
-        Callback_add(chained_callback, std::ptr::null_mut());
+        Callback_add(chained_callback, ());
 
         // First round: fires the chained callback (count=1), which adds
         // a new callback. The new one should NOT fire this round.
@@ -461,14 +325,14 @@ mod alarm_and_async_tests {
     /// Argument values of the callbacks that fired, in firing order.
     static FIRED: StdMutex<Vec<usize>> = StdMutex::new(Vec::new());
 
-    extern "C" fn record(arg: *mut c_void) {
-        FIRED.lock().unwrap().push(arg as usize);
+    fn record(arg: usize) {
+        FIRED.lock().unwrap().push(arg);
     }
 
     /// Queue another callback carrying `arg + 100`, from inside an alarm.
-    extern "C" fn record_and_queue_follow_up(arg: *mut c_void) {
-        FIRED.lock().unwrap().push(arg as usize);
-        Callback_add(record, (arg as usize + 100) as *mut c_void);
+    fn record_and_queue_follow_up(arg: usize) {
+        FIRED.lock().unwrap().push(arg);
+        Callback_add(record, arg + 100);
     }
 
     fn fired() -> Vec<usize> {
@@ -489,9 +353,48 @@ mod alarm_and_async_tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
     }
+    #[test]
+    #[serial]
+    fn owned_arguments_and_captures_are_dispatched_once() {
+        fresh();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        Callback_add(
+            move |text| sender.send(text).unwrap(),
+            String::from("callback"),
+        );
+        let (sender, alarm_receiver) = std::sync::mpsc::channel();
+        Alarm_addAbsoluteMs(
+            1,
+            move |text| sender.send(text).unwrap(),
+            String::from("alarm"),
+        );
 
-    fn id(n: usize) -> *mut c_void {
-        n as *mut c_void
+        Async_process();
+
+        assert_eq!(receiver.recv().unwrap(), "callback");
+        assert_eq!(alarm_receiver.recv().unwrap(), "alarm");
+        assert!(receiver.try_recv().is_err());
+        assert!(alarm_receiver.try_recv().is_err());
+        assert!(!Callback_haveMore());
+        assert!(!Alarm_processOne());
+    }
+
+    #[test]
+    #[serial]
+    fn stale_callback_ids_cannot_cancel_later_callbacks() {
+        fresh();
+        let stale = Callback_add(record, id(1)).unwrap();
+        Callback_process();
+        let current = Callback_add(record, id(2)).unwrap();
+
+        assert_ne!(stale, current);
+        assert!(!Callback_remove(stale));
+        Callback_process();
+        assert_eq!(fired(), [1, 2]);
+    }
+
+    fn id(n: usize) -> usize {
+        n
     }
 
     const FAR: u32 = 1_000_000;
@@ -545,7 +448,7 @@ mod alarm_and_async_tests {
         fresh();
         Alarm_addAbsoluteMs(1, record, id(1));
 
-        Alarm_remove(std::ptr::null_mut());
+        Alarm_remove(None);
 
         assert!(Alarm_processOne());
         assert_eq!(fired(), [1]);
@@ -577,7 +480,7 @@ mod alarm_and_async_tests {
     fn relative_alarms_are_due_that_many_milliseconds_from_now() {
         fresh();
         let handle = Alarm_addRelativeMs(FAR, record, id(5));
-        assert!(!handle.is_null());
+        assert!(handle.is_some());
 
         let wait = Alarm_timeBeforeNextMs();
         assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
@@ -659,8 +562,8 @@ mod alarm_and_async_tests {
         let a = Alarm_addAbsoluteMs(now_ms() + FAR, record, id(1));
         let b = Alarm_addAbsoluteMs(now_ms() + FAR, record, id(2));
 
-        assert!(!a.is_null() && !b.is_null() && a != b);
-        assert_ne!(unsafe { (*a).id }, unsafe { (*b).id });
+        assert!(a.is_some() && b.is_some() && a != b);
+        assert_ne!(a, b);
 
         Alarm_remove(a);
         Alarm_remove(b);
@@ -703,9 +606,9 @@ mod alarm_and_async_tests {
     #[serial]
     fn removing_an_unknown_callback_reports_failure() {
         fresh();
-        let queued = Callback_add(record, id(1));
+        let queued = Callback_add(record, id(1)).unwrap();
 
-        assert!(!Callback_remove(id(0x10)));
+        assert!(!Callback_remove(CallbackId(u64::MAX)));
         assert!(Callback_remove(queued));
 
         Callback_process();
@@ -731,13 +634,11 @@ mod alarm_and_async_tests {
     #[serial]
     fn a_callback_cancelled_while_processing_is_swept_afterwards() {
         fresh();
-        static LATE: StdMutex<usize> = StdMutex::new(0);
-        extern "C" fn queue_and_cancel(_arg: *mut c_void) {
-            let late = Callback_add(record, id(7));
-            *LATE.lock().unwrap() = late as usize;
+        fn queue_and_cancel(_arg: ()) {
+            let late = Callback_add(record, id(7)).unwrap();
             assert!(Callback_remove(late));
         }
-        Callback_add(queue_and_cancel, std::ptr::null_mut());
+        Callback_add(queue_and_cancel, ());
 
         Callback_process();
 
