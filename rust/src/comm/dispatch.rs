@@ -250,10 +250,10 @@ pub const IN_INTERPLANETARY: u16 = 4;
 pub const WON_LAST_BATTLE: u16 = 5;
 
 /// C: `CYBORG_ENABLED`
-pub const CYBORG_ENABLED: u8 = 1 << 0;
+pub const CYBORG_ENABLED: u8 = 1 << 5;
 
 /// C: `DRAW_SIS_DISPLAY`
-pub const DRAW_SIS_DISPLAY: u16 = 1;
+pub const DRAW_SIS_DISPLAY: u16 = 1 << 3;
 
 // ---------------------------------------------------------------------------
 // Conversation IDs (from commglue.h enum)
@@ -774,22 +774,45 @@ pub unsafe extern "C" fn rust_race_communication() {
 // InitCommunication — ported from comm.c:1359
 // ---------------------------------------------------------------------------
 
-/// Port of C `InitCommunication(which_comm)`. Maps conversation to ship type,
-/// initializes encounter, and calls HailAlien or battle segue.
-///
-/// Returns 0 (matching C's `status = 0` at the end).
+/// Resolve the two conversation exceptions before sphere tracking and race init.
+fn conversation_setup(conversation: u32) -> (u32, u16) {
+    if conversation == conv::URQUAN_DRONE {
+        (conv::URQUAN, u16::from(ship::URQUAN_DRONE_SHIP))
+    } else if conversation == conv::YEHAT_REBEL {
+        (conv::YEHAT, u16::from(ship::YEHAT_REBEL_SHIP))
+    } else {
+        let race = RACE_SHIP_FOR_COMM[conversation as usize];
+        (
+            conversation,
+            u16::from(if race >= ship::YEHAT_REBEL_SHIP {
+                ship::HUMAN_SHIP
+            } else {
+                race
+            }),
+        )
+    }
+}
+
+/// Map the conversation to a ship, run the dialogue or attack selection, and
+/// return whether combat was selected before EncounterBattle runs.
 ///
 /// # Safety
-/// Calls C FFI functions that access global state.
+/// Called on the game thread with initialized game state and resources.
 pub unsafe fn init_communication(which_comm: u32) -> u16 {
-    let mut status: u16;
+    #[cfg(all(not(test), feature = "debug-process"))]
+    {
+        extern "C" {
+            static disableInteractivity: i32;
+        }
+        if disableInteractivity != 0 {
+            return 0;
+        }
+    }
     let last_activity = crate::mainloop::ffi::get_last_activity().0;
-
-    if (last_activity & CHECK_LOAD) != 0 {
+    if last_activity & CHECK_LOAD != 0 {
         crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
             last_activity & !CHECK_LOAD,
         ));
-
         if which_comm != conv::COMMANDER {
             if lobyte(last_activity) == 0 {
                 ffi::DrawSISFrame();
@@ -798,65 +821,32 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
                 ffi::RepairSISBorder();
             }
             ffi::DrawSISMessage(std::ptr::null());
-
             if in_hq_space() {
-                // DrawHyperCoords needs ShipStamp.origin — we don't have direct
-                // access to this field yet. Use a zeroed point as placeholder.
-                // TODO: read ShipStamp.origin from Rust-owned game state
-                ffi::DrawHyperCoords(CPoint::default());
-            } else if get_game_state("IP_PLANET") == 0 {
-                // DrawHyperCoords with CurStarDescPtr->star_pt
-                // TODO: access CurStarDescPtr from Rust
-                ffi::DrawHyperCoords(CPoint::default());
+                let point = ffi::GLOB_DATA.game_state.ship_stamp.origin;
+                ffi::DrawHyperCoords(CPoint {
+                    x: point.x,
+                    y: point.y,
+                });
+            } else if ffi::GLOB_DATA.game_state.ip_planet == 0 {
+                let star =
+                    &*ffi::CurStarDescPtr.cast::<crate::savegame::runtime::star::CStarDesc>();
+                ffi::DrawHyperCoords(CPoint {
+                    x: star.star_pt.x,
+                    y: star.star_pt.y,
+                });
             } else {
-                // DrawSISTitle with PlanetName — we don't have SIS PlanetName
-                // directly accessible. Use null for now.
-                // TODO: read PlanetName from Rust-owned SIS state
-                ffi::DrawSISTitle(std::ptr::null());
+                ffi::DrawSISTitle(std::ptr::addr_of!(ffi::GLOB_DATA.sis_state.planet_name).cast());
             }
         }
     }
-
-    if which_comm == conv::URQUAN_DRONE {
-        status = ship::URQUAN_DRONE_SHIP as u16;
-        // C skips StartSphereTracking and BuildBattle for URQUAN_DRONE
-        let _ = init_communication_inner(conv::URQUAN, status);
-    } else if which_comm == conv::YEHAT_REBEL {
-        status = ship::YEHAT_REBEL_SHIP as u16;
-        let _ = init_communication_inner(conv::YEHAT, status);
-    } else {
-        let comm_idx = which_comm as usize;
-        if comm_idx < RACE_SHIP_FOR_COMM.len() {
-            status = RACE_SHIP_FOR_COMM[comm_idx] as u16;
-        } else {
-            status = ship::HUMAN_SHIP as u16;
-        }
-
-        if status >= ship::YEHAT_REBEL_SHIP as u16 {
-            status = ship::HUMAN_SHIP as u16;
-        }
-
-        init_communication_inner(which_comm, status);
-    }
-
-    0
+    let (conversation, ship_type) = conversation_setup(which_comm);
+    init_communication_inner(conversation, ship_type)
 }
 
-/// Inner part of InitCommunication after ship type is resolved.
-/// Handles StartSphereTracking, BuildBattle, init_race, encounter, and HailAlien.
-///
-/// `skip_sphere_tracking` should be true for URQUAN_DRONE encounters, which
-/// in C skip both StartSphereTracking and BuildBattle(NPC_PLAYER_NUM).
+/// Perform sphere tracking, battle setup, dialogue and teardown in C order.
 unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
-    // C calls StartSphereTracking and BuildBattle for all conversations
-    // EXCEPT URQUAN_DRONE (which skips the entire else branch in C).
-    // For URQUAN_DRONE, which_comm has already been remapped to URQUAN,
-    // so we detect it by checking ship_type == URQUAN_DRONE_SHIP.
-    let skip_sphere_tracking = ship_type == ship::URQUAN_DRONE_SHIP as u16;
-
-    if !skip_sphere_tracking {
+    if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
         start_sphere_tracking(ship_type as u8);
-
         if which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
                 && (get_game_state("TALKING_PET_ON_SHIP") == 0
@@ -866,93 +856,62 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
             ffi::BuildBattle(NPC_PLAYER_NUM);
         }
     }
-
-    // init_race — dispatch directly to the correct init_*_comm C function,
-    // bypassing the broken C init_race in commglue.c which returns
-    // init_arilou_comm() for all Rust dialogues.
-    let comm_id = if ship_type != ship::YEHAT_REBEL_SHIP as u16 {
+    let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
         which_comm
     } else {
         conv::YEHAT_REBEL
     };
-
-    let loc_data_ptr = rust_init_race_dispatch(comm_id);
-    if !loc_data_ptr.is_null() {
-        // Copy LOCDATA to C's global CommData (C code reads from CommData)
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                loc_data_ptr as *const u8,
-                std::ptr::addr_of_mut!(ffi::CommData) as *mut u8,
-                std::mem::size_of::<crate::comm::locdata::CLocData>(),
-            );
-        }
-        // Sync to Rust's CommData singleton
-        rust_sync_comm_data(loc_data_ptr);
+    let descriptor = rust_init_race_dispatch(comm_id);
+    if !descriptor.is_null() {
+        std::ptr::copy_nonoverlapping(
+            descriptor.cast::<crate::comm::locdata::CLocData>(),
+            &raw mut ffi::CommData,
+            1,
+        );
+        rust_sync_comm_data(descriptor);
     }
-
-    let mut status: u16;
+    let mut status;
     if get_game_state("BATTLE_SEGUE") == 0 {
         status = HAIL;
     } else {
         crate::automation::ui_observation::observe_encounter_menu(true);
         status = ffi::InitEncounter();
         crate::automation::ui_observation::observe_encounter_menu(false);
-        if status == HAIL && !loc_data_ptr.is_null() {
+        if status == HAIL && !descriptor.is_null() {
             set_game_state("BATTLE_SEGUE", 0);
         } else {
             status = ATTACK;
             set_game_state("BATTLE_SEGUE", 1);
         }
     }
-
     if status == HAIL {
         crate::comm::ffi::rust_HailAlien();
-    } else if !loc_data_ptr.is_null() {
-        let activity = crate::mainloop::ffi::get_current_activity().0;
-        if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
+    } else if !descriptor.is_null() {
+        if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0 {
             call_encounter_func(ffi::CommData.post_encounter_func);
         }
         call_encounter_func(ffi::CommData.uninit_encounter_func);
     }
-
+    status = 0;
     let activity = crate::mainloop::ffi::get_current_activity().0;
-    if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-        let glob_flags = crate::mainloop::ffi::get_global_flags_and_data();
-        if lobyte(activity) == IN_LAST_BATTLE && (glob_flags & CYBORG_ENABLED) != 0 {
-            let npc_q = npc_built_ship_queue();
-            ReinitQueue(npc_q);
+    if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        let npc = npc_built_ship_queue();
+        if lobyte(activity) == IN_LAST_BATTLE
+            && ffi::GLOB_DATA.game_state.glob_flags & CYBORG_ENABLED != 0
+        {
+            ReinitQueue(npc);
         }
-
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0);
-
-        let npc_q = npc_built_ship_queue();
-        let has_ships = !get_head_link(npc_q).is_null();
-        let battle_segue = get_game_state("BATTLE_SEGUE");
-
-        if battle_segue != 0 && has_ships {
+        status = u16::from(get_game_state("BATTLE_SEGUE") != 0 && !get_head_link(npc).is_null());
+        if status != 0 {
             ffi::BuildBattle(RPG_PLAYER_NUM);
             ffi::EncounterBattle();
         } else {
             set_game_state("BATTLE_SEGUE", 0);
         }
     }
-
     ffi::UninitEncounter();
-    // C returns status = (GET_GAME_STATE(BATTLE_SEGUE) && GetHeadLink(npc_q))
-    // after the above block which may have cleared BATTLE_SEGUE.
-    let final_status: u16 = if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-        let npc_q = npc_built_ship_queue();
-        let has_ships = !get_head_link(npc_q).is_null();
-        let battle_segue = get_game_state("BATTLE_SEGUE");
-        if battle_segue != 0 && has_ships {
-            1
-        } else {
-            0
-        }
-    } else {
-        0
-    };
-    final_status
+    status
 }
 
 // ---------------------------------------------------------------------------
@@ -1469,6 +1428,32 @@ mod tests {
         assert_eq!(CHECK_LOAD, 0x1000);
         assert_eq!(START_ENCOUNTER, 0x0400);
         assert_eq!(START_INTERPLANETARY, 0x0800);
+    }
+
+    #[test]
+    fn conversation_exceptions_keep_their_ship_identity() {
+        assert_eq!(
+            conversation_setup(conv::URQUAN_DRONE),
+            (conv::URQUAN, u16::from(ship::URQUAN_DRONE_SHIP))
+        );
+        assert_eq!(
+            conversation_setup(conv::YEHAT_REBEL),
+            (conv::YEHAT, u16::from(ship::YEHAT_REBEL_SHIP))
+        );
+        assert_eq!(
+            conversation_setup(conv::COMMANDER),
+            (conv::COMMANDER, u16::from(ship::HUMAN_SHIP))
+        );
+        assert_eq!(
+            conversation_setup(conv::SLYLANDRO_HOME),
+            (conv::SLYLANDRO_HOME, u16::from(ship::SLYLANDRO_SHIP))
+        );
+    }
+
+    #[test]
+    fn comm_display_and_cyborg_masks_match_headers() {
+        assert_eq!(DRAW_SIS_DISPLAY, 1 << 3);
+        assert_eq!(CYBORG_ENABLED, 1 << 5);
     }
 
     #[test]

@@ -18,6 +18,8 @@
 //! come from the audio thread. Shared state is protected by Mutex.
 
 pub mod animation;
+#[cfg(not(test))]
+pub(crate) mod comm_abi;
 mod commanim_abi;
 mod commglue_abi;
 pub mod dispatch;
@@ -45,6 +47,7 @@ pub mod subtitle;
 pub mod subtitle_display;
 pub mod summary;
 pub mod talk_segue;
+mod text_layout;
 pub mod track;
 pub mod types;
 
