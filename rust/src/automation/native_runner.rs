@@ -699,7 +699,9 @@ fn bind_provisional_window(
         Some(_) => {}
         None => *provisional_window_id = Some(observed.window_id),
     }
-    Ok(observed.os_bounds.contains(client_bounds))
+    // The native game creates a borderless window. A containing rectangle can
+    // still be the compositor's transient one-pixel launch outline.
+    Ok(observed.os_bounds == client_bounds)
 }
 
 struct NativeObservationSession {
@@ -797,18 +799,11 @@ impl NativeObservationSession {
         Ok(())
     }
 
-    fn acknowledge_unbound_publication(
-        &mut self,
-        state: &NativeWindowChildState,
-    ) -> io::Result<()> {
-        if self.pending_checkpoints(state)?.is_empty() {
-            self.acknowledge_publication(state)
-        } else {
-            // The compositor may not have caught up with the first client
-            // presentation. Keep the barrier closed within the existing child
-            // acknowledgement deadline rather than discarding its checkpoint.
-            Ok(())
-        }
+    fn hold_unbound_publication(&mut self, state: &NativeWindowChildState) -> io::Result<()> {
+        // The first publication is also the visibility boundary. Keep it held
+        // until the compositor binds it, so linked floors start at frame one.
+        self.pending_checkpoints(state)?;
+        Ok(())
     }
 
     fn observe_final_publication(&mut self, identity: &ProcessIdentity) -> io::Result<()> {
@@ -832,9 +827,9 @@ impl NativeObservationSession {
             }
             return Ok(());
         }
-        if self.last_presentation.checked_add(1) != Some(state.committed_presentation) {
+        if state.committed_presentation <= self.last_presentation {
             return Err(io::Error::other(format!(
-                "final native presentation sequence skipped from {} to {}",
+                "final native presentation regressed from {} to {}",
                 self.last_presentation, state.committed_presentation
             )));
         }
@@ -871,9 +866,9 @@ impl NativeObservationSession {
         if state.committed_presentation == self.last_presentation {
             return Ok(());
         }
-        if self.last_presentation.checked_add(1) != Some(state.committed_presentation) {
+        if state.committed_presentation <= self.last_presentation {
             return Err(io::Error::other(format!(
-                "native presentation sequence skipped from {} to {}",
+                "native presentation regressed from {} to {}",
                 self.last_presentation, state.committed_presentation
             )));
         }
@@ -915,7 +910,7 @@ impl NativeObservationSession {
                     "native window lost visibility after the first visible presentation",
                 ));
             }
-            return self.acknowledge_unbound_publication(&state);
+            return self.hold_unbound_publication(&state);
         }
         if self.first_visible_presentation.is_none()
             && !bind_provisional_window(
@@ -925,7 +920,7 @@ impl NativeObservationSession {
             )
             .map_err(io::Error::other)?
         {
-            return self.acknowledge_unbound_publication(&state);
+            return self.hold_unbound_publication(&state);
         }
         let binding = NativeWindowBinding {
             process: native_identity(identity, &self.nonce),
@@ -1797,7 +1792,12 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             publications: Vec::new(),
         };
         let session_result = session.finish_observing_with_wake(
-            |identity| observation.observe(identity, &mut observer),
+            |identity| {
+                if state_wake.take_changed() || observation.first_visible_presentation.is_none() {
+                    observation.observe(identity, &mut observer)?;
+                }
+                Ok(())
+            },
             &state_wake,
         );
 
@@ -4358,7 +4358,7 @@ mod tests {
         .for_script(plan);
         assert_eq!(session.pending_checkpoints(&state).unwrap(), vec![0]);
         assert!(session.acknowledge_publication(&state).is_err());
-        assert!(session.acknowledge_unbound_publication(&state).is_ok());
+        assert!(session.hold_unbound_publication(&state).is_ok());
         assert!(session.observe_final_publication(&identity).is_err());
         assert_eq!(session.last_presentation, 0);
         assert!(!root
@@ -4475,14 +4475,19 @@ mod tests {
     }
 
     #[test]
-    fn prebinding_acknowledgement_records_and_checks_semantic_counters() {
+    fn prebinding_hold_leaves_acknowledgement_for_the_visible_boundary() {
         let root = tempfile::tempdir().unwrap();
         let nonce = "a".repeat(64);
         let bounds = runtime_contract().expected_client_bounds;
         let prior = child_state(&nonce, 123, bounds, 9, 3, 301);
         let next = child_state(&nonce, 123, bounds, 10, 8, 309);
         let (mut session, identity) = final_publication_session(root.path(), &next, &prior);
-        session.acknowledge_unbound_publication(&next).unwrap();
+        session.hold_unbound_publication(&next).unwrap();
+        assert_eq!(session.last_presentation, 9);
+        assert!(!root
+            .path()
+            .join("automation/native-window-ack.json")
+            .exists());
         session.observe_final_publication(&identity).unwrap();
         assert_eq!(session.recorded_input_events, 8);
         assert_eq!(session.recorded_battle_frames, 309);
@@ -4514,7 +4519,7 @@ mod tests {
     }
 
     #[test]
-    fn final_publication_drain_rejects_skips_regressions_and_rewrites() {
+    fn final_publication_drain_accepts_gaps_but_rejects_regressions_and_rewrites() {
         let nonce = "a".repeat(64);
         let bounds = runtime_contract().expected_client_bounds;
         let prior = child_state(&nonce, 123, bounds, 9, 3, 301);
@@ -4522,7 +4527,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let skipped = child_state(&nonce, 123, bounds, 11, 8, 309);
         let (mut session, identity) = final_publication_session(root.path(), &skipped, &prior);
-        assert!(session.observe_final_publication(&identity).is_err());
+        session.observe_final_publication(&identity).unwrap();
 
         let root = tempfile::tempdir().unwrap();
         let regressed = child_state(&nonce, 123, bounds, 10, 2, 309);
@@ -5696,6 +5701,21 @@ mod tests {
             },
             visible: true,
             minimized: false,
+        };
+        assert!(!bind_provisional_window(&mut provisional, &converged, client_bounds).unwrap());
+        let outline = ObservedNativeWindow {
+            os_bounds: NativeWindowBounds {
+                x: 79,
+                y: 79,
+                width: 1282,
+                height: 962,
+            },
+            ..converged
+        };
+        assert!(!bind_provisional_window(&mut provisional, &outline, client_bounds).unwrap());
+        let converged = ObservedNativeWindow {
+            os_bounds: client_bounds,
+            ..converged
         };
         assert!(bind_provisional_window(&mut provisional, &converged, client_bounds).unwrap());
 

@@ -41,7 +41,7 @@ impl CriticalTimer {
         if duration.is_zero() {
             return Ok(());
         }
-        wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, duration)])
+        wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, duration)]).map(|_| ())
     }
 }
 
@@ -81,11 +81,11 @@ pub(crate) fn timer_change(ident: libc::uintptr_t, duration: Duration) -> libc::
 }
 
 /// Apply `changes` to `queue` and block, with no timeout, until one event is
-/// ready. An interrupted wait counts as a wake.
+/// ready. Returns its filter, or no filter after an interrupted wait.
 pub(crate) fn wait_for_event(
     queue: BorrowedFd<'_>,
     changes: &[libc::kevent],
-) -> std::io::Result<()> {
+) -> std::io::Result<Option<i16>> {
     let mut event = libc::kevent {
         ident: 0,
         filter: 0,
@@ -110,11 +110,12 @@ pub(crate) fn wait_for_event(
         1 if event.flags & libc::EV_ERROR != 0 => {
             Err(std::io::Error::from_raw_os_error(event.data as i32))
         }
-        0 | 1 => Ok(()),
+        1 => Ok(Some(event.filter)),
+        0 => Ok(None),
         _ => {
             let error = std::io::Error::last_os_error();
             if error.kind() == std::io::ErrorKind::Interrupted {
-                Ok(())
+                Ok(None)
             } else {
                 Err(error)
             }
