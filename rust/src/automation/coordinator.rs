@@ -1442,6 +1442,7 @@ impl Coordinator {
             let result = self.service_fleet_fight(inner, flight.max_ticks, event);
             if result == SchedulerEvent::NavigationReached {
                 inner.star_encounter_active = false;
+                inner.star_flight.resume_after_encounter();
             }
             // A fleet win resumes the interrupted flight, not the next action.
             return event;
