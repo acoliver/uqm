@@ -248,6 +248,12 @@ pub unsafe extern "C" fn rust_gfx_init(
         height as u32,
     );
     window_builder.position_centered();
+    #[cfg(feature = "debug-process")]
+    if let Some(config) = crate::automation::native_window::active_native_window_config() {
+        // Position before showing: moving during Cocoa's order-front animation
+        // races its completion and can leave a shifted client origin.
+        window_builder.position(config.client_bounds.x, config.client_bounds.y);
+    }
 
     let window = match window_builder.build() {
         Ok(w) => w,
