@@ -958,7 +958,7 @@
         {
           "key": "sis:fuel",
           "op": "eq",
-          "value": 9930
+          "value": 9900
         },
         {
           "key": "sis:ru",
@@ -2062,7 +2062,7 @@
         {
           "key": "sis:fuel",
           "op": "eq",
-          "value": 9930
+          "value": 9900
         }
       ]
     },
