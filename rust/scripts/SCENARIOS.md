@@ -279,3 +279,13 @@ comes from dismissing escort crew through the ordinary shipyard. This is
 an outfit-specific development route, not a general fleet-layout controller.
 Its ancestor must have the asserted empty slots and the retained Furies
 in hangar slots 3 through 5. Neither save is a connected campaign milestone.
+
+`campaign-s10a-driven-ambush` replays vault recovery and Talana's ambush
+conversation from `dev-ambush-drives`. Native `pmid-80` passed, saving
+`dev-driven-ambush` with 144 crew, 12021 raw fuel, two Furies and
+`MYCON_AMBUSH=1`. The vault consumed the shuttle and returned six of its
+twelve lander crew. Its predecessor probe circled Betelgeuse indefinitely:
+outer planet approaches now correct actual velocity rather than merely
+pointing the bow toward the target. Wrong-inner-system departure retains
+its outward steering. This save still does not prove the Mycon lure or
+Sun Device guard victory.

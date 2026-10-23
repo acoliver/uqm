@@ -133,6 +133,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-syreen-ambush" => (10, 8, 2156, 135, 2086, 534, 3),
             "dev-rainbow-refueled" => (13, 8, 2156, 70, 21000, 534, 3),
             "dev-ambush-drives" => (29, 8, 2156, 150, 18800, 315, 2),
+            "dev-driven-ambush" => (7, 10, 2156, 144, 12021, 315, 2),
             "dev-ambush-crew" => (28, 8, 2156, 150, 18779, 294, 3),
             "dev-refueled-ambush" => (11, 9, 2156, 64, 15935, 534, 3),
             "dev-talking-pet" => (14, 7, 2156, 150, 14251, 1404, 0),
