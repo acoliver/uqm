@@ -132,3 +132,8 @@ serial_test = "3.0"
 name = "netplay_packets"
 path = "tests/netplay_packets.rs"
 required-features = ["linked_c_archive"]
+
+[[test]]
+name = "graphics_loading"
+path = "tests/graphics_loading.rs"
+required-features = ["linked_c_archive"]

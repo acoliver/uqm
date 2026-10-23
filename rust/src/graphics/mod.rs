@@ -80,3 +80,9 @@ pub mod native_abi;
 pub mod pixmap_abi;
 
 pub mod cmap_abi;
+
+pub mod gfxload;
+
+pub mod filegfx;
+
+pub mod resgfx;
