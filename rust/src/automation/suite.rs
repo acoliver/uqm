@@ -100,6 +100,7 @@ pub struct ScenarioRow {
 pub const MATRIX: &[ScenarioRow] = &[
     row("load-war-cleared-v1", &[Domain::SaveLoad]),
     row("load-southeast-staging-v1", &[Domain::SaveLoad]),
+    row("load-portal-staging-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07e-portal-staging",
         &[
