@@ -1,6 +1,5 @@
 sc2/src/libs/graphics/dcqueue.c
 sc2/src/libs/graphics/gfx_common.c
-sc2/src/libs/graphics/sdl/canvas.c
 sc2/src/libs/graphics/sdl/sdl2_common.c
 sc2/src/libs/graphics/sdl/sdl2_pure.c
 sc2/src/libs/graphics/sdl/sdl_common.c

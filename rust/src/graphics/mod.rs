@@ -98,3 +98,5 @@ pub mod context_abi;
 pub mod drawable_abi;
 
 pub mod software_primitives;
+
+pub mod native_canvas;
