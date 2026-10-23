@@ -178,10 +178,7 @@ mod live {
         }
         #[cfg(feature = "debug-process")]
         if PulsedInputState.menu[KEY_DEBUG as usize] != 0 {
-            extern "C" {
-                fn debugKeyPressedSynchronous();
-            }
-            debugKeyPressedSynchronous();
+            crate::front_end::uqmdebug::debugKeyPressedSynchronous();
         }
     }
 

@@ -32,12 +32,10 @@ use crate::ui::sis::RepairSISBorder;
 extern "C" {
     fn RepairSISBorder();
 }
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 extern "C" {
     pub fn log_init(max_lines: i32);
-    /// Existing DEBUG universe traversal seam; not a resource/surface emulator.
-    #[cfg(feature = "debug-process")]
-    #[link_name = "disableInteractivity"]
-    pub static mut DISABLE_INTERACTIVITY: i32;
     #[link_name = "GlobData"]
     pub static mut GLOB_DATA: CGlobData;
     fn GetGroupInfo(offset: u32, which_group: u8) -> u32;

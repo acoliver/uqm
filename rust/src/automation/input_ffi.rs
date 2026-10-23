@@ -907,8 +907,6 @@ pub(crate) fn star_flight_observation(
         static CurStarDescPtr: *const CStarDesc;
         fn universeToDispx(x: std::ffi::c_long) -> i16;
         fn universeToDispy(y: std::ffi::c_long) -> i16;
-        #[cfg(feature = "debug-process")]
-        static instantMove: i32;
     }
     // SAFETY: the coordinator is called synchronously on the game thread.
     unsafe {
@@ -943,7 +941,7 @@ pub(crate) fn star_flight_observation(
             instant_move: {
                 #[cfg(feature = "debug-process")]
                 {
-                    instantMove != 0
+                    crate::front_end::uqmdebug::INSTANT_MOVE != 0
                 }
                 #[cfg(not(feature = "debug-process"))]
                 {

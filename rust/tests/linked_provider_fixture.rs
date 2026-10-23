@@ -1,16 +1,14 @@
-//! Strict linked-test fixture for DEBUG-only C consumers of Rust providers.
+//! Linked fixtures for debug consumers and game-state initialization.
 
-use std::os::raw::c_int;
-
-unsafe extern "C" {
-    fn uqm_debug_creature_bio_value(creature_type: u8) -> c_int;
-}
+#[cfg(feature = "debug-process")]
+use uqm_rust::front_end::uqmdebug::uqm_debug_creature_bio_value;
 
 #[test]
-fn debug_c_consumer_observes_the_canonical_rust_creature_catalog() {
+#[cfg(feature = "debug-process")]
+fn debug_consumer_observes_the_rust_creature_catalog() {
     for creature_type in 0..27 {
         let expected = uqm_rust::planet_side::creatures::rust_creature_bio_value(creature_type);
-        let observed = unsafe { uqm_debug_creature_bio_value(creature_type) };
+        let observed = uqm_debug_creature_bio_value(creature_type);
         assert_eq!(observed, expected, "creature type {creature_type}");
     }
 }
