@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 
 use crate::graphics::{native_abi::drawable_desc, resgfx::LoadGraphicInstance};
-use crate::ships::native::abi::{ELEMENT, QUEUE, STARSHIP};
+use crate::ships::native::abi::{ELEMENT, STARSHIP};
 use crate::strings::string_table::{
     CaptureStringTable, ReleaseStringTable, StringTable, StringTableEntry,
 };
@@ -29,21 +29,6 @@ pub unsafe extern "C" fn InitIntersectEndPoint(e: *mut ELEMENT) {
 #[no_mangle]
 pub unsafe extern "C" fn GetElementStarShip(e: *const ELEMENT, ship: *mut *mut STARSHIP) {
     *ship = (*e).pParent.cast();
-}
-
-#[no_mangle]
-pub extern "C" fn rust_bridge_LockLink(_queue: *const QUEUE, link: *mut c_void) -> *mut c_void {
-    link
-}
-
-#[no_mangle]
-pub extern "C" fn rust_bridge_UnlockLink(_queue: *const QUEUE, _link: *mut c_void) {}
-
-/// # Safety
-/// Queue must point to an initialized queue.
-#[no_mangle]
-pub unsafe extern "C" fn rust_bridge_GetLinkSize(queue: *const QUEUE) -> u16 {
-    (*queue).object_size
 }
 
 /// # Safety

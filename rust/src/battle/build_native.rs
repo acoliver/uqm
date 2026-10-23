@@ -42,7 +42,10 @@ mod engine {
     /// Queue must be initialized and use STARSHIP or SHIP_FRAGMENT links.
     #[no_mangle]
     pub unsafe extern "C" fn Build(queue: *mut QUEUE, species: SPECIES_ID) -> HLINK {
-        crate::ships::ffi::rust_ships_build(queue.cast(), species as i32)
+        if queue.is_null() {
+            return ptr::null_mut();
+        }
+        crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
     }
 
     /// # Safety

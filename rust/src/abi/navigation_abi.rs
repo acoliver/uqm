@@ -1193,15 +1193,7 @@ extern "C" {
 extern "C" {
     pub fn CountLinks(pq: *mut QUEUE) -> COUNT;
 }
-extern "C" {
-    pub fn ForAllLinks(
-        pq: *mut QUEUE,
-        callback: ::std::option::Option<
-            unsafe extern "C" fn(arg1: *mut LINK, arg2: *mut ::std::os::raw::c_void),
-        >,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CLOCK_STATE {

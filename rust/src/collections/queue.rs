@@ -282,23 +282,18 @@ pub extern "C" fn CountLinks(pq: *const Queue) -> u16 {
     }
 }
 
-/// C: `void ForAllLinks(QUEUE *pq, void (*callback)(LINK*, void*), void *arg)`
-pub type LinkCallback = extern "C" fn(*mut Link, *mut c_void);
-
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn ForAllLinks(pq: *mut Queue, callback: LinkCallback, arg: *mut c_void) {
-    unsafe {
-        let mut h = (*pq).head;
-        while !h.is_null() {
-            let lp = lock_link(pq, h);
-            let next = get_succ_link(lp);
-            callback(lp, arg);
-            h = next;
-        }
+/// Visit links in queue order, capturing the successor before each visit.
+///
+/// # Safety
+/// The queue and its linked records must be live and exclusively accessible.
+/// The callback must not invalidate any unvisited record.
+pub unsafe fn for_all_links(pq: *mut Queue, mut callback: impl FnMut(&mut Link)) {
+    let mut handle = (*pq).head;
+    while !handle.is_null() {
+        let link = lock_link(pq, handle);
+        let next = get_succ_link(link);
+        callback(&mut *link);
+        handle = next;
     }
 }
 
@@ -475,20 +470,31 @@ mod tests {
 
     #[test]
     fn test_for_all_links() {
-        extern "C" fn count_cb(_lp: *mut Link, arg: *mut c_void) {
-            unsafe {
-                let counter = arg as *mut u16;
-                *counter += 1;
-            }
-        }
-
         let (pq, elems) = setup_queue(4);
         PutQueue(pq, elems[0] as HLink);
         PutQueue(pq, elems[1] as HLink);
         PutQueue(pq, elems[2] as HLink);
         let mut counter: u16 = 0;
-        ForAllLinks(pq, count_cb, &mut counter as *mut u16 as *mut c_void);
+        unsafe { for_all_links(pq, |_| counter += 1) };
         assert_eq!(counter, 3);
+        teardown_queue(pq);
+    }
+
+    #[test]
+    fn visitor_caches_successor_before_callback_changes_the_link() {
+        let (pq, elems) = setup_queue(3);
+        unsafe {
+            for_all_links(pq, |_| panic!("an empty queue must not visit a link"));
+            for &element in &elems {
+                PutQueue(pq, element.cast());
+            }
+            let mut visited = Vec::new();
+            for_all_links(pq, |link| {
+                visited.push(std::ptr::from_mut(link).cast::<TestElement>());
+                link.succ = std::ptr::null_mut();
+            });
+            assert_eq!(visited, elems);
+        }
         teardown_queue(pq);
     }
 }
