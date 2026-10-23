@@ -34,15 +34,16 @@ unsafe fn uninit_contexts() {
 
 unsafe fn uninit_kernel() {
     UninitSpace();
-    DestroySound(ReleaseSound(MenuSounds));
+    DestroySound(crate::strings::string_table::ReleaseStringTable(MenuSounds.cast()).cast());
     DestroyFont(MicroFont.cast());
     DestroyStringTable(ReleaseStringTable(GameStrings));
     DestroyDrawable(ReleaseDrawable(StatusFrame));
     DestroyDrawable(ReleaseDrawable(ActivityFrame));
     DestroyFont(TinyFont.cast());
     DestroyFont(StarConFont.cast());
-    UninitQueue(ptr::addr_of_mut!(race_q[0]));
-    UninitQueue(ptr::addr_of_mut!(race_q[1]));
+    let races = ptr::addr_of_mut!(race_q).cast::<QUEUE>();
+    UninitQueue(races);
+    UninitQueue(races.add(1));
     ActivityFrame = ptr::null_mut();
 }
 

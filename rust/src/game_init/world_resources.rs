@@ -111,9 +111,10 @@ mod live {
     /// Called on the game thread while the graphics resource system is live.
     #[no_mangle]
     pub unsafe extern "C" fn free_gravity_well() {
-        for i in 0..3 {
-            DestroyDrawable(ReleaseDrawable(planet[i]));
-            planet[i] = ptr::null_mut();
+        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(planet).cast(), 3);
+        for frame in frames {
+            DestroyDrawable(ReleaseDrawable(*frame));
+            *frame = ptr::null_mut();
         }
     }
 
