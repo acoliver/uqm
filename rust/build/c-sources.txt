@@ -1,4 +1,3 @@
-sc2/src/libs/graphics/cmap.c
 sc2/src/libs/graphics/context.c
 sc2/src/libs/graphics/dcqueue.c
 sc2/src/libs/graphics/drawable.c
@@ -10,9 +9,7 @@ sc2/src/libs/graphics/gfxload.c
 sc2/src/libs/graphics/loaddisp.c
 sc2/src/libs/graphics/resgfx.c
 sc2/src/libs/graphics/sdl/canvas.c
-sc2/src/libs/graphics/sdl/png2sdl.c
 sc2/src/libs/graphics/sdl/primitives.c
-sc2/src/libs/graphics/sdl/rotozoom.c
 sc2/src/libs/graphics/sdl/sdl2_common.c
 sc2/src/libs/graphics/sdl/sdl2_pure.c
 sc2/src/libs/graphics/sdl/sdl_common.c

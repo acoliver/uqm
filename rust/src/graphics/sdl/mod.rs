@@ -37,3 +37,9 @@ pub use sdl2::SdlDriver;
 
 pub mod palette;
 pub mod sdluio;
+
+pub mod png2sdl;
+
+pub mod rotozoom;
+#[cfg(test)]
+mod surface_fixture_tests;
