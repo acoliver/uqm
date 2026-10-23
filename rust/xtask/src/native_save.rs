@@ -393,7 +393,19 @@ fn saved_campaign_state(bytes: &[u8]) -> Result<std::collections::BTreeMap<Strin
     if let LoadedStar::Catalog(index) = star {
         state.insert("star:current".into(), index as u32);
     }
+    state.insert("escorts:count".into(), save.ship_queue.len() as u32);
+    for race in 0..25u8 {
+        state.insert(
+            format!("escorts:species:{race}"),
+            save.ship_queue
+                .iter()
+                .filter(|ship| ship.race_id == race && ship.crew_level > 0)
+                .count() as u32,
+        );
+    }
     for name in [
+        "CLEAR_SPINDLE_ON_SHIP",
+        "PKUNK_MANNER",
         "RADIOACTIVES_PROVIDED",
         "MOONBASE_DESTROYED",
         "STARBASE_AVAILABLE",
@@ -900,6 +912,47 @@ mod tests {
             .all
             .iter()
             .any(|condition| condition.key == "sis:fuel"));
+    }
+
+    #[test]
+    fn spindle_reload_assertions_match_the_saved_artifact_and_fleet() {
+        let root = repository_root();
+        let save = root.join("rust/scripts/saves/spindle-pkunk.sav");
+        let provenance: Provenance = read_json(&provenance_path(&save), MANIFEST_LIMIT).unwrap();
+        let bytes = std::fs::read(save).unwrap();
+        assert_eq!(
+            provenance.campaign_state,
+            saved_campaign_state(&bytes).unwrap()
+        );
+        assert_eq!(
+            provenance.parent_save.as_ref().unwrap().path,
+            "saves/funded-sol.sav"
+        );
+        let path = root.join("rust/scripts/load-spindle-pkunk-v1.json");
+        let document = parse_script(&std::fs::read(&path).unwrap(), &path).unwrap();
+        let wanted = document
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                uqm_rust::automation::Action::AssertState(predicate) => Some(predicate),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(wanted.all.len(), 10);
+        for condition in &wanted.all {
+            assert_eq!(
+                condition.op,
+                uqm_rust::automation::campaign_state::StateOp::Eq
+            );
+            assert_eq!(condition.value, provenance.campaign_state[&condition.key]);
+        }
+        for (key, value) in [
+            ("story:CLEAR_SPINDLE_ON_SHIP", 1),
+            ("escorts:count", 5),
+            ("escorts:species:4", 4),
+        ] {
+            assert_eq!(provenance.campaign_state[key], value);
+        }
     }
 
     #[test]

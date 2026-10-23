@@ -450,11 +450,14 @@ pub struct ActivityAssertion {
 }
 
 /// A `navigate_to_planet` step drives the real flagship via player controls.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToPlanetStep {
     pub planet: u8,
     pub max_ticks: u64,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    #[serde(default)]
+    pub encounter_response: Option<String>,
 }
 
 /// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
@@ -467,11 +470,17 @@ pub struct NavigateToMoonStep {
 }
 
 /// A `navigate_to_orbit` step targets the planet itself from its inner system.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct NavigateToOrbitStep {
     pub planet: u8,
     pub max_ticks: u64,
+    /// Stop at a real Hail/Attack preview during approach, without claiming orbit.
+    #[serde(default)]
+    pub stop_at_encounter: bool,
+    /// Hail an interrupting patrol and leave using this offered phrase.
+    #[serde(default)]
+    pub encounter_response: Option<String>,
 }
 
 /// A `navigate_to_hyperspace` step flies the real flagship out of the current
@@ -884,6 +893,9 @@ pub enum Action {
     TurnFlagship(TurnFlagshipStep),
     CollectPlanetMinerals(CollectPlanetMineralsStep),
     FightBattle(FightBattleStep),
+    /// Finish an ordinary whole-fleet encounter using normal-speed Cyborg,
+    /// confirming replacement escort choices through the real ship picker.
+    FightEncounter(FightBattleStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -2150,12 +2162,12 @@ fn validate_navigation_step(
             }
             collect.max_ticks
         }
-        Action::FightBattle(fight) => {
+        Action::FightBattle(fight) | Action::FightEncounter(fight) => {
             if fight.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
                     path,
                     index,
-                    "fight_battle requires positive max_ticks",
+                    "fight actions require positive max_ticks",
                 )));
             }
             fight.max_ticks
@@ -2440,6 +2452,20 @@ mod tests {
     }
 
     // --- REQ-SCRIPT-001: strict UTF-8/root parse ---
+
+    #[test]
+    fn navigation_patrol_phrases_are_explicit_and_opt_in() {
+        let script = validated_steps(r#"{"action":"navigate_to_planet","planet":0,"max_ticks":100,"encounter_response":"neutral_bye_space"}"#).unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToPlanet(step) if step.encounter_response.as_deref() == Some("neutral_bye_space"))
+        );
+        let script =
+            validated_steps(r#"{"action":"navigate_to_orbit","planet":0,"max_ticks":100}"#)
+                .unwrap();
+        assert!(
+            matches!(&script.steps()[0], Action::NavigateToOrbit(step) if step.encounter_response.is_none() && !step.stop_at_encounter)
+        );
+    }
 
     #[test]
     fn rejects_non_utf8_bytes() {
@@ -2830,7 +2856,9 @@ mod tests {
                 }),
                 Action::NavigateToOrbit(NavigateToOrbitStep {
                     planet: 3,
-                    max_ticks: 10
+                    max_ticks: 10,
+                    stop_at_encounter: false,
+                    encounter_response: None,
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
                 Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),
@@ -4448,6 +4476,19 @@ mod tests {
     fn collect_planet_minerals_counts_against_the_input_budget() {
         let tight = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":100,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"collect_planet_minerals","category":"radioactive","minimum_units":1,"max_ticks":2400},{"action":"finish"}]}"#;
         assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+    }
+
+    #[test]
+    fn fight_encounter_validates_its_closed_input_contract() {
+        assert!(validated_steps(r#"{"action":"fight_encounter","max_ticks":3000}"#).is_ok());
+        assert!(validated_steps(r#"{"action":"fight_encounter","max_ticks":0}"#).is_err());
+        for bad in [
+            r#"{"action":"fight_encounter"}"#,
+            r#"{"action":"fight_encounter","max_ticks":10,"speed":3}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
     }
 
     #[test]

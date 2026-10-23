@@ -894,7 +894,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if get_game_state("BATTLE_SEGUE") == 0 {
         status = HAIL;
     } else {
+        crate::automation::ui_observation::observe_encounter_menu(true);
         status = ffi::InitEncounter();
+        crate::automation::ui_observation::observe_encounter_menu(false);
         if status == HAIL && !loc_data_ptr.is_null() {
             set_game_state("BATTLE_SEGUE", 0);
         } else {

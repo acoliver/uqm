@@ -311,7 +311,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::NavigateToHyperspace(_)
         | Action::TurnFlagship(_)
         | Action::CollectPlanetMinerals(_)
-        | Action::FightBattle(_) => {
+        | Action::FightBattle(_)
+        | Action::FightEncounter(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -416,6 +417,7 @@ pub fn scheduler_reduce(
                     | Action::TurnFlagship(_)
                     | Action::CollectPlanetMinerals(_)
                     | Action::FightBattle(_)
+                    | Action::FightEncounter(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -866,6 +868,7 @@ fn reduce_navigation(
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::FightEncounter(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -885,6 +888,7 @@ fn reduce_navigation(
         | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining })
         | (Action::TurnFlagship(_), ActionPhase::Navigating { remaining })
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining })
+        | (Action::FightEncounter(_), ActionPhase::Navigating { remaining })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::Navigating {
@@ -929,7 +933,10 @@ fn reduce_navigation(
                 effects: EffectPlan::none(),
             }
         }
-        (Action::FightBattle(fight), ActionPhase::WaitingForInput) => SchedulerTransition {
+        (
+            Action::FightBattle(fight) | Action::FightEncounter(fight),
+            ActionPhase::WaitingForInput,
+        ) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::Navigating {
                     remaining: fight.max_ticks.saturating_sub(1),
@@ -3503,6 +3510,7 @@ mod budgeted_wait_tests {
             Action::NavigateToPlanet(NavigateToPlanetStep {
                 planet: 1,
                 max_ticks,
+                encounter_response: None,
             }),
             Action::NavigateToMoon(NavigateToMoonStep {
                 planet: 1,
@@ -3512,6 +3520,8 @@ mod budgeted_wait_tests {
             Action::NavigateToOrbit(NavigateToOrbitStep {
                 planet: 1,
                 max_ticks,
+                stop_at_encounter: false,
+                encounter_response: None,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
             Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
@@ -3537,6 +3547,7 @@ mod budgeted_wait_tests {
                 max_ticks,
             }),
             Action::FightBattle(FightBattleStep { max_ticks }),
+            Action::FightEncounter(FightBattleStep { max_ticks }),
         ]
     }
 
@@ -3590,6 +3601,7 @@ mod budgeted_wait_tests {
                 | Action::TurnFlagship(_)
                 | Action::CollectPlanetMinerals(_)
                 | Action::FightBattle(_)
+                | Action::FightEncounter(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {

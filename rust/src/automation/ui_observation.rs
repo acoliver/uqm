@@ -76,6 +76,27 @@ pub extern "C" fn rust_automation_observe_game_options(active: i32) {
     GAME_OPTIONS_ACTIVE.store(active != 0, Ordering::Release);
 }
 
+static ENCOUNTER_MENU_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub fn observe_encounter_menu(active: bool) {
+    ENCOUNTER_MENU_ACTIVE.store(active, Ordering::Release);
+}
+
+pub fn encounter_menu_active() -> bool {
+    ENCOUNTER_MENU_ACTIVE.load(Ordering::Acquire)
+}
+
+static SHIP_PICKER_CURSOR: std::sync::Mutex<crate::pickship::Cursor> =
+    std::sync::Mutex::new(crate::pickship::Cursor::START);
+
+pub fn observe_ship_picker_cursor(cursor: crate::pickship::Cursor) {
+    *SHIP_PICKER_CURSOR.lock().expect("picker cursor lock") = cursor;
+}
+
+pub fn ship_picker_cursor() -> crate::pickship::Cursor {
+    *SHIP_PICKER_CURSOR.lock().expect("picker cursor lock")
+}
+
 /// Record entry to or exit from the production battle ship picker.
 ///
 /// Each entry starts a new generation so a pick consumed for one battle cannot

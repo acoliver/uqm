@@ -86,7 +86,6 @@ extern "C" {
     pub fn TFB_FlushGraphicsEx(skip_swap: u32);
     pub fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-    fn InitCommunication(which_comm: u32) -> u16;
     fn StartSphereTracking(race: u16) -> u16;
     fn NotifyOthers(which_race: u16, target_loc: u8);
     fn RepairSISBorder();
@@ -172,7 +171,7 @@ pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
 /// # Safety
 /// Game thread, inside a planet orbit.
 pub unsafe fn init_communication(which_comm: u32) {
-    InitCommunication(which_comm);
+    crate::comm::dispatch::init_communication(which_comm);
 }
 
 /// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).

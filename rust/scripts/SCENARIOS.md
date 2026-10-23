@@ -1239,3 +1239,54 @@ on Mercury, sells all 38 carried radioactive units to Hayes for 304 RU, buys a
 the Game menu. Its ledger requires 2500 -> 2804 -> 2304 RU, empty sold cargo,
 800 raw fuel and positive crew. Slot 0 is retained as the predecessor.
 The corresponding `load-funded-sol-v1` scenario verifies the extracted checkpoint.
+
+### Whole-fleet encounter combat and Pkunk campaign segment
+
+`fight_encounter {"max_ticks":16000}` uses the game's player-selectable Cyborg,
+configured through Game -> Settings -> Cyborg at normal rendered speed.
+`combat:cyborg == 1` and `combat:speed == 1` are required. The action can start
+at an ordinary encounter's Hail/Attack menu or in its battle. It chooses Attack
+through menu input, picks living escorts before the flagship, and handles a
+fresh picker after an escort loss. It never writes crew, damage, fleet counters,
+or control settings. Completion requires battle teardown, zero enemy ships,
+a surviving player fleet and a living flagship. A single enemy loss does not
+complete a larger encounter. Accelerated Cyborg and final-battle scenes are
+rejected. `cyborg-encounter-v1` exercises the opening Ilwrath encounter with the
+Earthling escort; tracker tests cover replacement picks and multi-ship results.
+`fly_to_star` uses the same controller if an encounter interrupts autopilot,
+then resumes its original destination instead of completing the flight action.
+
+`escorts:count` reads the actual campaign roster. `escorts:species:N` counts
+living escorts of race ID N (0 through 24); Pkunk Fury is 4 and Earthling Cruiser
+is 2. These values are also decoded from extracted saves into their provenance.
+`encounter:menu` reports the live encounter preview, not communication responses.
+
+`campaign-s02-spindle-pkunk` starts at `funded-sol.sav`, buys 42 fuel units for
+840 RU (800 -> 5000 raw fuel, 2304 -> 1464 RU), enables normal Cyborg, and uses
+the catalog destination Gamma Krueger. Peaceful homeworld dialogue offers the
+Clear Spindle and, after `we_are_vindicator0` / `we_need_help`, four Fury escorts.
+The required roster is those Furies plus the existing Earthling Cruiser.
+The living Pkunk homeworld grants the Spindle during contact and does not allow
+ordinary landing. `collect_energy_node` is its alternative abandoned-ruins
+pickup path; this segment does not remove the Pkunk to force that path.
+The producer saves through the Game menu to slot 1 and leaves slot 0 unchanged.
+`pkunk-refuel-v1` isolates its paid fuel and settings menu sequence.
+
+For planetary travel, `encounter_response` on `navigate_to_planet` and
+`navigate_to_orbit` explicitly names the patrol farewell to select after Hail.
+The controller resumes steering after communication closes and fails if the
+specified response is not offered. Homeworld contact is not dismissed.
+`stop_at_encounter` on `navigate_to_orbit` can yield at a preview, recorded as
+`contact_reached`, distinct from `orbit_reached`. A communication-response wait
+uses Select to Hail a preview rather than waiting forever outside dialogue.
+
+The committed `spindle-pkunk.sav` is the slot-1 output of the passing
+`campaign-s02-spindle-pkunk` native producer `pt-p4-17`. It resumes in local
+flight at Gamma Krueger, with Clear Spindle aboard, Pkunk manner 3, four living
+Furies and the original Earthling Cruiser, crew 46, raw fuel 3457 and RU 1464.
+The producer buys 42 fuel units for 840 RU before departure and preserves its
+funded-Sol predecessor in slot 0. `load-spindle-pkunk-v1` checks these values
+against the extracted save through the ordinary Load menu. The adjacent
+provenance records the parent, producing script, seed, output slot and decoded
+snapshot. Native screen checks retain an intermediate hyperspace capture so
+Sol and Gamma Krueger solar views are not mistaken for a missing transition.

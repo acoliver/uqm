@@ -291,7 +291,10 @@ struct CoordInner {
     planet_minerals: PlanetMineralsTracker,
     /// Ticks and starting ship counts of the current `fight_battle` step.
     battle_fight: BattleFightTracker,
+    fleet_fight: crate::automation::fleet_fight::FleetFight,
     star_flight: crate::automation::star_flight::StarFlight,
+    star_encounter_active: bool,
+    patrol_response_pending: bool,
     device: crate::automation::story_actions::DeviceTracker,
     energy: crate::automation::story_actions::EnergyTracker,
     finalized: bool,
@@ -459,7 +462,10 @@ impl Coordinator {
                 flagship_turn: FlagshipTurnTracker::default(),
                 planet_minerals: PlanetMineralsTracker::default(),
                 battle_fight: BattleFightTracker::default(),
+                fleet_fight: crate::automation::fleet_fight::FleetFight::default(),
                 star_flight: crate::automation::star_flight::StarFlight::default(),
+                star_encounter_active: false,
+                patrol_response_pending: false,
                 device: Default::default(),
                 energy: Default::default(),
                 finalized: false,
@@ -815,6 +821,15 @@ impl Coordinator {
         } else if let Some(Action::WaitForCommunicationResponses(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
+            // Hail through the encounter preview when waiting for dialogue.
+            // The first preview callback initializes its menu and ignores input.
+            let select = crate::automation::script::MenuKey::Select.index();
+            let hail = crate::automation::ui_observation::encounter_menu_active()
+                && inner.input_seen % 4 == 3;
+            if !inject_menu_key(i32::from(select), i32::from(hail)) {
+                self.reject_input(inner, "menu", i32::from(select), i32::from(hail));
+                return scheduler_event;
+            }
             let snapshot = crate::automation::ui_observation::conversation_snapshot();
             if snapshot.has_fresh_responses(
                 wait.minimum,
@@ -1362,6 +1377,48 @@ impl Coordinator {
         }
     }
 
+    fn service_fleet_fight(
+        &self,
+        inner: &mut CoordInner,
+        max_ticks: u64,
+        event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        use crate::automation::fleet_fight::Progress;
+        let progress = inner.fleet_fight.observe(
+            max_ticks,
+            crate::automation::input_ffi::fleet_fight_observation(),
+        );
+        let key = match &progress {
+            Progress::Input(key) => *key,
+            _ => None,
+        };
+        for menu in crate::automation::script::MenuKey::ALL {
+            if !inject_menu_key(i32::from(menu.index()), i32::from(key == Some(menu))) {
+                self.reject_input(inner, "fight_encounter", -1, -1);
+                return event;
+            }
+        }
+        for index in 0..7 {
+            if !inject_player_key(index, 0) {
+                self.reject_input(inner, "fight_encounter", index, 0);
+                return event;
+            }
+        }
+        match progress {
+            Progress::Input(_) => {}
+            Progress::Won(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                inner.fleet_fight = crate::automation::fleet_fight::FleetFight::default();
+                return SchedulerEvent::NavigationReached;
+            }
+            Progress::Failed(label) => {
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+            }
+        }
+        event
+    }
+
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
@@ -1372,6 +1429,18 @@ impl Coordinator {
         use crate::automation::star_flight::{Progress, StarFlight};
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.star_flight = StarFlight::default();
+            inner.star_encounter_active = false;
+        }
+        if crate::automation::ui_observation::encounter_menu_active() {
+            inner.star_encounter_active = true;
+        }
+        if inner.star_encounter_active {
+            let result = self.service_fleet_fight(inner, flight.max_ticks, event);
+            if result == SchedulerEvent::NavigationReached {
+                inner.star_encounter_active = false;
+            }
+            // A fleet win resumes the interrupted flight, not the next action.
+            return event;
         }
         let observation = input_ffi::star_flight_observation(flight.target);
         let progress = inner.star_flight.observe(flight, observation);
@@ -1417,6 +1486,63 @@ impl Coordinator {
         }
     }
 
+    fn service_patrol_contact(&self, inner: &mut CoordInner, phrase: &str) -> bool {
+        use crate::automation::script::MenuKey;
+        let (active, completions) = crate::automation::ui_observation::communication_lifecycle();
+        if inner.patrol_response_pending && !active {
+            inner.consumed_communication_completions = completions;
+            inner.patrol_response_pending = false;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!("patrol_communication_completed:count={completions}"),
+            );
+        }
+        // A homeworld is the destination, not a patrol to dismiss.
+        if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(128) {
+            return false;
+        }
+        let preview = crate::automation::ui_observation::encounter_menu_active();
+        if !preview && !active {
+            return false;
+        }
+        if !Self::set_navigation_controls(Default::default()) {
+            self.reject_input(inner, "patrol_navigation", -1, -1);
+            return true;
+        }
+        let (generation, count, ready) =
+            crate::automation::ui_observation::communication_responses();
+        let mut select = preview && inner.input_seen % 4 == 3;
+        if active && count > 0 && generation > inner.consumed_response_generation {
+            match crate::comm::ffi::offered_response_index(phrase) {
+                Ok(index) if ready => {
+                    assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
+                    select = true;
+                    inner.consumed_response_generation = generation;
+                    inner.patrol_response_pending = true;
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!("patrol_response_selected:generation={generation}:phrase={phrase}"),
+                    );
+                }
+                Ok(_) => {
+                    let _ = crate::sound::trackplayer::jump_track(0);
+                }
+                Err(error) => {
+                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                }
+            }
+        } else if active {
+            let _ = crate::sound::trackplayer::jump_track(0);
+        }
+        if !inject_menu_key(i32::from(MenuKey::Select.index()), i32::from(select)) {
+            self.reject_input(inner, "patrol_hail", -1, -1);
+        }
+        true
+    }
+
     /// Derive real player controls for whichever navigation the current step
     /// is running, and report arrival.
     fn service_navigation(
@@ -1424,6 +1550,14 @@ impl Coordinator {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
+        let patrol_phrase = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToPlanet(step)) => step.encounter_response.as_deref(),
+            Some(Action::NavigateToOrbit(step)) => step.encounter_response.as_deref(),
+            _ => None,
+        };
+        if patrol_phrase.is_some_and(|phrase| self.service_patrol_contact(inner, phrase)) {
+            return scheduler_event;
+        }
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1474,6 +1608,8 @@ impl Coordinator {
                 i32::from(navigation.planet),
                 None,
             );
+            let contact = navigation.stop_at_encounter
+                && crate::automation::ui_observation::encounter_menu_active();
             let reached = snapshot.active != 0
                 && snapshot.in_orbit != 0
                 && snapshot.inner_planet == i32::from(navigation.planet)
@@ -1499,19 +1635,27 @@ impl Coordinator {
                     target_guard_active: false,
                 },
             );
-            if reached {
+            if reached || contact {
                 if !Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
                 ) {
                     self.reject_input(inner, "navigation", -1, -1);
                     return scheduler_event;
                 }
-                inner.orbit_transition_pending = true;
+                inner.orbit_transition_pending = !contact;
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
-                    format!("orbit_reached:planet={}", navigation.planet),
+                    format!(
+                        "{}:planet={}",
+                        if contact {
+                            "contact_reached"
+                        } else {
+                            "orbit_reached"
+                        },
+                        navigation.planet
+                    ),
                 );
             } else if !Self::set_navigation_controls(control) {
                 self.reject_input(inner, "navigation", -1, -1);
@@ -1540,6 +1684,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_planet_minerals(inner, *collect, scheduler_event);
+        } else if let Some(Action::FightEncounter(fight)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_fleet_fight(inner, fight.max_ticks, scheduler_event);
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
