@@ -261,3 +261,21 @@ Orbital patrol handling excludes homeworld dialogue, so a
 `stop_at_encounter` homeworld approach still exposes its actual responses.
 If a patrol returns the ship to outer-system flight, orbital navigation
 reapproaches the target planet before applying inner-system steering.
+
+### Crew and maneuvering preparation for the Mycon route
+
+`campaign-s10a-crew-refill` returns from `dev-rainbow-refueled` to Sol and
+hires crew through the shipyard. Native `pmid-75` passed, retaining the
+shuttle and saving 150 crew, 18779 raw fuel, 294 RU and three Furies as
+`dev-ambush-crew`. Direct return attempts from the later low-crew ambush
+branch lost the flagship, so this preparation deliberately starts earlier.
+
+`campaign-s10a-full-drives` starts from that Sol save, sells the Fury in
+hangar slot 3, purchases the two missing drives (7 and 10), and installs
+turning jets in slots 1 and 2. Native `pmid-78` passed and saved
+`dev-ambush-drives`: all eleven drives installed, four turning jets,
+150 crew, 18800 raw fuel, 315 RU and two Furies. The small fuel/RU refund
+comes from dismissing escort crew through the ordinary shipyard. This is
+an outfit-specific development route, not a general fleet-layout controller.
+Its ancestor must have the asserted empty slots and the retained Furies
+in hangar slots 3 through 5. Neither save is a connected campaign milestone.
