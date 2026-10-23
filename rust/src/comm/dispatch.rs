@@ -1041,8 +1041,8 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
     );
     let queue = built_ship_queue();
     ReinitQueue(queue);
-    if crate::battle::build_native::AddEscortShips(1, 12) != 12 {
-        return Err("boss fixture could not allocate Chmmr escorts");
+    if crate::battle::build_native::AddEscortShips(4, 12) != 12 {
+        return Err("boss fixture could not allocate Pkunk escorts");
     }
     let sis = &mut (*std::ptr::addr_of_mut!(ffi::GLOB_DATA)).sis_state;
     sis.crew_enlisted = 50;

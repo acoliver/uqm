@@ -644,12 +644,14 @@ mod engine {
             let mut result = observation::Snapshot {
                 remaining: 8,
                 generators: Vec::new(),
+                hazards: Vec::new(),
                 gate_open: false,
                 gate: (arena.0 / 2, arena.1 / 2),
                 bomb_carrier: false,
                 selected_species: None,
                 player: None,
                 arena,
+                velocity: (0, 0),
             };
             let mut boss = false;
             let mut h = disp_q.head;
@@ -661,6 +663,10 @@ mod engine {
                         result.selected_species = Some((*owner).SpeciesID);
                         result.bomb_carrier = (*owner).SpeciesID == SPECIES_ID_SIS_SHIP_ID
                             && get_game_state("BOMB_CARRIER") != 0;
+                        let mut velocity = (*e).velocity;
+                        let (mut vx, mut vy) = (0, 0);
+                        GetNextVelocityComponents(&mut velocity, &mut vx, &mut vy, 1);
+                        result.velocity = (i32::from(vx), i32::from(vy));
                         result.player = Some(ShipState {
                             x: i32::from((*e).current.location.x),
                             y: i32::from((*e).current.location.y),
@@ -685,6 +691,22 @@ mod engine {
                         x,
                         y,
                         hit_points: (*e).__bindgen_anon_2.hit_points,
+                    });
+                }
+                if [
+                    comet_collision as *const () as usize,
+                    sentinel_collision as *const () as usize,
+                ]
+                .contains(&(*e).collision_func.map_or(0, |f| f as usize))
+                    && (*e).state_flags & DISAPPEARING as u16 == 0
+                {
+                    let mut velocity = (*e).velocity;
+                    let (mut vx, mut vy) = (0, 0);
+                    GetNextVelocityComponents(&mut velocity, &mut vx, &mut vy, 1);
+                    result.hazards.push(observation::Hazard {
+                        x: i32::from((*e).current.location.x),
+                        y: i32::from((*e).current.location.y),
+                        velocity: (i32::from(vx), i32::from(vy)),
                     });
                 }
                 if (*e).collision_func.map(|f| f as usize)

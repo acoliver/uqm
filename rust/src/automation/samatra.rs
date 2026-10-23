@@ -47,8 +47,10 @@ pub struct Controller {
     selected_generation: u64,
     saw_eight: bool,
     saw_open_gate: bool,
+    hazards_cleared: bool,
     used_escort: bool,
     used_bomb: bool,
+    target: Option<u8>,
 }
 
 impl Controller {
@@ -91,6 +93,9 @@ impl Controller {
                 Progress::Failed("samatra_gate_without_full_controller_proof")
             };
         }
+        if self.generation.is_some() && activity & 0xff != 1 {
+            return Progress::Failed("samatra_battle_ended_without_gate_entry");
+        }
         if self.ticks >= max_ticks {
             return Progress::Failed("samatra_timeout");
         }
@@ -98,6 +103,7 @@ impl Controller {
         if let Some(s) = snapshot {
             self.saw_eight |= s.remaining == 8 && s.generators.len() == 8;
             self.saw_open_gate |= s.remaining == 0 && s.gate_open;
+            self.hazards_cleared |= s.remaining == 0 && s.gate_open && s.hazards.is_empty();
         }
         if until == Until::Ready
             && self.saw_eight
@@ -123,16 +129,17 @@ impl Controller {
             if self.ticks % 4 != 1 || self.selected_generation == picker.generation {
                 return Progress::Running(Controls::default());
             }
-            let target = if self.saw_open_gate && events.destroyed == u8::MAX {
-                Cursor::START
-            } else if let Some(index) = picker.escorts.first() {
-                Cursor {
-                    x: (index % 6) as i16 + i16::from(index % 6 >= FLAGSHIP_COLUMN as u16),
-                    y: (index / 6) as i16,
-                }
-            } else {
-                return Progress::Failed("samatra_escorts_exhausted");
-            };
+            let target =
+                if self.saw_open_gate && self.hazards_cleared && events.destroyed == u8::MAX {
+                    Cursor::START
+                } else if let Some(index) = picker.escorts.first() {
+                    Cursor {
+                        x: (index % 6) as i16 + i16::from(index % 6 >= FLAGSHIP_COLUMN as u16),
+                        y: (index / 6) as i16,
+                    }
+                } else {
+                    return Progress::Failed("samatra_escorts_exhausted");
+                };
             let key = if picker.cursor.x < target.x {
                 MenuKey::Right
             } else if picker.cursor.x > target.x {
@@ -161,7 +168,7 @@ impl Controller {
             self.used_bomb = true;
         } else {
             self.used_escort = true;
-            if remaining == 0 {
+            if remaining == 0 && s.hazards.is_empty() {
                 // The ordinary escort retreat leaves the flagship available in
                 // the next picker. BOMB_CARRIER disables retreat for the SIS.
                 return Progress::Running(Controls {
@@ -179,18 +186,62 @@ impl Controller {
                 i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy),
             )
         };
-        let (dx, dy, squared) = if s.bomb_carrier {
-            distance(s.gate.0, s.gate.1)
-        } else if let Some(target) = s
-            .generators
-            .iter()
-            .filter(|g| g.hit_points > 0)
-            .min_by_key(|g| distance(g.x, g.y).2)
-        {
-            distance(target.x, target.y)
-        } else {
-            return Progress::Running(Controls::default());
-        };
+        if !s.bomb_carrier && remaining == 0 {
+            let hazard = s
+                .hazards
+                .iter()
+                .min_by_key(|h| distance(h.x, h.y).2)
+                .expect("remaining hazards before escort retreat");
+            let (dx, dy, squared) = distance(hazard.x, hazard.y);
+            let aim = if s.selected_species == Some(5) {
+                missile_aim(
+                    (dx, dy),
+                    (
+                        s.velocity.0 - hazard.velocity.0,
+                        s.velocity.1 - hazard.velocity.1,
+                    ),
+                )
+            } else {
+                bearing_facing(dx, dy)
+            }
+            .unwrap_or(player.facing);
+            let error = (i32::from(aim) - i32::from(player.facing)).rem_euclid(16);
+            return Progress::Running(Controls {
+                flight: FightControl {
+                    left: error > 8,
+                    right: (1..=8).contains(&error),
+                    thrust: (error <= 1 || error >= 15) && squared > 240 * 240,
+                    weapon: squared < 600 * 600
+                        && (error == 0
+                            || (s.selected_species == Some(5) && (error == 4 || error == 12))),
+                },
+                special: s.selected_species == Some(5),
+                ..Controls::default()
+            });
+        }
+        if !s.bomb_carrier {
+            if !s
+                .generators
+                .iter()
+                .any(|g| Some(g.id) == self.target && g.hit_points > 0)
+            {
+                self.target = s
+                    .generators
+                    .iter()
+                    .filter(|g| g.hit_points > 0)
+                    .min_by_key(|g| distance(g.x, g.y).2)
+                    .map(|g| g.id);
+            }
+            let Some(target) = s.generators.iter().find(|g| Some(g.id) == self.target) else {
+                return Progress::Running(Controls::default());
+            };
+            return Progress::Running(Controls {
+                flight: escort_approach(s, player, target),
+                special: s.selected_species == Some(5),
+                ..Controls::default()
+            });
+        }
+        let (dx, dy, _) = distance(s.gate.0, s.gate.1);
         let bearing = bearing_facing(dx, dy).unwrap_or(player.facing);
         let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(16);
         let aimed = error <= 1 || error >= 15;
@@ -198,14 +249,110 @@ impl Controller {
             flight: FightControl {
                 left: error > 8,
                 right: (1..=8).contains(&error),
-                thrust: aimed && (s.bomb_carrier || squared > 400 * 400),
-                weapon: !s.bomb_carrier && aimed && squared < 650 * 650,
+                thrust: aimed,
+                weapon: false,
             },
-            // Fury's normal special recharges its weapon energy.
-            special: s.selected_species == Some(5),
+            special: false,
             ..Controls::default()
         })
     }
+}
+
+fn escort_approach(
+    s: &Snapshot,
+    player: super::battle_fight::ShipState,
+    target: &crate::ships::races::samatra::observation::Generator,
+) -> FightControl {
+    let dx = shortest_path_delta(player.x, target.x, s.arena.0);
+    let dy = shortest_path_delta(player.y, target.y, s.arena.1);
+    let rx = f64::from(shortest_path_delta(s.gate.0, target.x, s.arena.0));
+    let ry = f64::from(shortest_path_delta(s.gate.1, target.y, s.arena.1));
+    let px = f64::from(shortest_path_delta(s.gate.0, player.x, s.arena.0));
+    let py = f64::from(shortest_path_delta(s.gate.1, player.y, s.arena.1));
+    let target_angle = ry.atan2(rx);
+    let player_angle = py.atan2(px);
+    let angle = (target_angle - player_angle + std::f64::consts::PI)
+        .rem_euclid(std::f64::consts::TAU)
+        - std::f64::consts::PI;
+    // Travel around the hull before closing on the outside of a generator.
+    let radius = rx.hypot(ry) + 240.0;
+    let route_angle = player_angle + angle.clamp(-0.7, 0.7);
+    let (wx, wy) = if angle.abs() > 0.9 {
+        (
+            radius * route_angle.cos() - px,
+            radius * route_angle.sin() - py,
+        )
+    } else {
+        let radial = rx.hypot(ry);
+        (rx + rx * 240.0 / radial - px, ry + ry * 240.0 / radial - py)
+    };
+    let distance = wx.hypot(wy);
+    let speed = if s.selected_species == Some(5) {
+        64.0
+    } else {
+        35.0
+    };
+    let desired_speed = (distance / 8.0).min(speed);
+    let (vx, vy) = if distance > 0.0 {
+        (wx * desired_speed / distance, wy * desired_speed / distance)
+    } else {
+        (0.0, 0.0)
+    };
+    let (ex, ey) = (vx - f64::from(s.velocity.0), vy - f64::from(s.velocity.1));
+    let correcting = ex.hypot(ey) > 8.0;
+    let in_range = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy) < 480 * 480;
+    // Fury missiles inherit the ship velocity. Aim against that drift rather
+    // than firing along the current bearing to a stationary generator.
+    let aim = if s.selected_species == Some(5) {
+        missile_aim((dx, dy), s.velocity)
+    } else {
+        bearing_facing(dx, dy)
+    }
+    .unwrap_or(player.facing);
+    let correction = bearing_facing(ex.round() as i32, ey.round() as i32).unwrap_or(player.facing);
+    let bearing = if in_range || !correcting {
+        aim
+    } else {
+        correction
+    };
+    let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(16);
+    let thrust_error = (i32::from(correction) - i32::from(player.facing)).rem_euclid(16);
+    let aim_error = (i32::from(aim) - i32::from(player.facing)).rem_euclid(16);
+    FightControl {
+        left: error > 8,
+        right: (1..=8).contains(&error),
+        thrust: correcting && (thrust_error <= 1 || thrust_error >= 15),
+        weapon: in_range && (aim_error == 0 || aim_error == 4 || aim_error == 12),
+    }
+}
+
+fn missile_aim(delta: (i32, i32), velocity: (i32, i32)) -> Option<u8> {
+    let (dx, dy) = (f64::from(delta.0), f64::from(delta.1));
+    let (vx, vy) = (f64::from(velocity.0), f64::from(velocity.1));
+    let a = vx * vx + vy * vy - 96.0 * 96.0;
+    let b = -2.0 * (dx * vx + dy * vy);
+    let c = dx * dx + dy * dy;
+    let discriminant = b * b - 4.0 * a * c;
+    let time = if a.abs() < f64::EPSILON {
+        if b == 0.0 {
+            return bearing_facing(delta.0, delta.1);
+        }
+        -c / b
+    } else if discriminant >= 0.0 {
+        [
+            (-b - discriminant.sqrt()) / (2.0 * a),
+            (-b + discriminant.sqrt()) / (2.0 * a),
+        ]
+        .into_iter()
+        .filter(|t| *t > 0.0)
+        .min_by(f64::total_cmp)?
+    } else {
+        return None;
+    };
+    bearing_facing(
+        (dx - vx * time).round() as i32,
+        (dy - vy * time).round() as i32,
+    )
 }
 
 #[cfg(test)]
@@ -225,6 +372,7 @@ mod tests {
                     hit_points: 15,
                 })
                 .collect(),
+            hazards: Vec::new(),
             gate_open: false,
             gate: (4096, 3840),
             bomb_carrier: false,
@@ -236,7 +384,96 @@ mod tests {
                 crew: 42,
             }),
             arena: (8192, 7680),
+            velocity: (0, 0),
         }
+    }
+
+    #[test]
+    fn open_gate_does_not_abandon_hazards_that_can_destroy_the_bomb() {
+        use crate::ships::races::samatra::observation::Hazard;
+        let mut controller = Controller::default();
+        let mut s = snapshot();
+        let mut e = Events {
+            generation: 1,
+            ..Events::default()
+        };
+        controller.observe(100, Until::GateEntered, 0x201, e, Some(&s), None);
+        s.remaining = 0;
+        s.generators.clear();
+        s.gate_open = true;
+        s.hazards.push(Hazard {
+            x: 4300,
+            y: 4000,
+            velocity: (0, 0),
+        });
+        e.destroyed = 255;
+        let Progress::Running(keys) =
+            controller.observe(100, Until::GateEntered, 0x201, e, Some(&s), None)
+        else {
+            panic!()
+        };
+        assert!(!keys.escape && keys.flight.weapon);
+        let picker = Picker {
+            generation: 3,
+            cursor: Cursor::START,
+            escorts: vec![0],
+        };
+        controller.ticks = 4;
+        let Progress::Running(keys) =
+            controller.observe(100, Until::GateEntered, 0x201, e, Some(&s), Some(&picker))
+        else {
+            panic!()
+        };
+        assert_eq!(
+            keys.menu,
+            Some(MenuKey::Left),
+            "a replacement escort must clear the surviving hazards"
+        );
+        s.hazards.clear();
+        let Progress::Running(keys) =
+            controller.observe(100, Until::GateEntered, 0x201, e, Some(&s), None)
+        else {
+            panic!()
+        };
+        assert!(keys.escape);
+        assert_eq!(
+            controller.observe(100, Until::GateEntered, 0, e, None, None),
+            Progress::Failed("samatra_battle_ended_without_gate_entry")
+        );
+    }
+
+    #[test]
+    fn fury_aim_offsets_inherited_lateral_velocity() {
+        assert_eq!(missile_aim((300, 0), (0, 0)), Some(4));
+        assert_eq!(missile_aim((300, 0), (0, 64)), Some(2));
+        assert_eq!(missile_aim((300, 0), (0, -64)), Some(6));
+    }
+
+    #[test]
+    fn escort_routes_outside_the_hull_and_brakes_before_firing() {
+        let mut s = snapshot();
+        s.gate = (4000, 4000);
+        let target = Generator {
+            id: 0,
+            x: 4600,
+            y: 4000,
+            hit_points: 15,
+        };
+        let mut player = s.player.unwrap();
+        player.x = 4840;
+        player.facing = 12;
+        assert!(escort_approach(&s, player, &target).weapon);
+        s.velocity = (30, 0);
+        assert!(
+            escort_approach(&s, player, &target).thrust,
+            "brake west against eastward drift"
+        );
+        player.x = 3000;
+        player.facing = 4;
+        assert!(
+            !escort_approach(&s, player, &target).weapon,
+            "hull blocks the far-side target"
+        );
     }
 
     #[test]
@@ -252,7 +489,7 @@ mod tests {
         else {
             panic!()
         };
-        assert!(keys.flight.thrust && keys.flight.weapon);
+        assert!(keys.flight.left || keys.flight.right || keys.flight.thrust);
         s.remaining = 1;
         s.generators.truncate(1);
         events.destroyed = 127;

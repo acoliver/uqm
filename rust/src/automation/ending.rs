@@ -9,6 +9,7 @@ pub struct Ending {
     pub presentation_completed: bool,
     pub credits_started: bool,
     pub credits_completed: bool,
+    pub credits_controls_ready: bool,
     presentation_cancelled: bool,
 }
 
@@ -37,6 +38,7 @@ static ENDING: Mutex<Ending> = Mutex::new(Ending {
     presentation_completed: false,
     credits_started: false,
     credits_completed: false,
+    credits_controls_ready: false,
     presentation_cancelled: false,
 });
 
@@ -67,6 +69,11 @@ pub(crate) fn credits_started() {
     ENDING.lock().start_credits();
 }
 
+pub(crate) fn credits_controls_ready() {
+    let mut ending = ENDING.lock();
+    ending.credits_controls_ready |= ending.credits_started;
+}
+
 pub(crate) fn credits_completed() {
     ENDING.lock().complete_credits();
 }
@@ -81,6 +88,8 @@ mod tests {
         presentation_started();
         presentation_completed();
         credits_started();
+        credits_controls_ready();
+        assert!(snapshot().credits_controls_ready);
         credits_completed();
         presentation_cancelled();
         assert!(snapshot().credits_completed);

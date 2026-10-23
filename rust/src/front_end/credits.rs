@@ -603,6 +603,9 @@ mod runtime {
             OUT_TAKES_RUNNING = 0;
         }
         if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0 {
+            if with_outtakes != 0 {
+                crate::automation::ending::credits_controls_ready();
+            }
             if !music.is_null() {
                 PlayMusic(music, 1, 1);
             }

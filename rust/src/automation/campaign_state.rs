@@ -108,6 +108,7 @@ impl StateKey {
             "ending:presentation_completed" => Ok(Self::Ending(2)),
             "ending:credits_started" => Ok(Self::Ending(3)),
             "ending:credits_completed" => Ok(Self::Ending(4)),
+            "ending:credits_controls_ready" => Ok(Self::Ending(5)),
             "samatra:remaining" => Ok(Self::BossRemaining),
             "samatra:destroyed" => Ok(Self::BossDestroyed),
             "samatra:gate_open" => Ok(Self::BossGateOpen),
@@ -368,6 +369,7 @@ impl StateSource for LiveCampaign {
                         e.presentation_completed,
                         e.credits_started,
                         e.credits_completed,
+                        e.credits_controls_ready,
                     ][usize::from(index)],
                 ))
             }
@@ -471,6 +473,7 @@ mod tests {
             ("ending:presentation_completed", 1),
             ("ending:credits_started", 1),
             ("ending:credits_completed", 1),
+            ("ending:credits_controls_ready", 1),
             ("samatra:remaining", 8),
             ("samatra:destroyed", 8),
             ("samatra:gate_open", 1),

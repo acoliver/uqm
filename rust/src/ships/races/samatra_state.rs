@@ -21,16 +21,25 @@ pub struct Generator {
     pub hit_points: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hazard {
+    pub x: i32,
+    pub y: i32,
+    pub velocity: (i32, i32),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
     pub remaining: u8,
     pub generators: Vec<Generator>,
+    pub hazards: Vec<Hazard>,
     pub gate_open: bool,
     pub gate: (i32, i32),
     pub bomb_carrier: bool,
     pub selected_species: Option<u32>,
     pub player: Option<crate::automation::battle_fight::ShipState>,
     pub arena: (i32, i32),
+    pub velocity: (i32, i32),
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
