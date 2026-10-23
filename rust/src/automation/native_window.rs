@@ -823,7 +823,7 @@ pub struct NativeRetainedInput {
     pub sha256: String,
 }
 
-pub const NATIVE_LINKED_BUILD_RECEIPT_SCHEMA: &str = "uqm-native-linked-build-v1";
+pub const NATIVE_LINKED_BUILD_RECEIPT_SCHEMA: &str = "uqm-native-linked-build-v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -3707,7 +3707,10 @@ fn validate_linked_build_receipt_bundle(
             "inputs/linked-build/cargo-messages.jsonl",
             &receipt.cargo_messages,
         ),
-        ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
+        (
+            "inputs/linked-build/rust-archive.rlib",
+            &receipt.rust_archive,
+        ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
     ];
@@ -3774,7 +3777,7 @@ fn validate_linked_cargo_messages(
             Some("compiler-artifact")
                 if message["package_id"].as_str() == Some(package_id.as_str())
                     && message["target"]["name"] == "uqm_rust"
-                    && cargo_target_has_kind(message, "staticlib") =>
+                    && cargo_target_has_kind(message, "rlib") =>
             {
                 for path in message["filenames"].as_array().into_iter().flatten() {
                     let Some(path) = path.as_str() else { continue };
@@ -3782,7 +3785,7 @@ fn validate_linked_cargo_messages(
                         .file_name()
                         .and_then(|name| name.to_str())
                         .unwrap_or_default();
-                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".a") {
+                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".rlib") {
                         rust_archives.insert(path.to_string());
                     }
                 }
@@ -4423,13 +4426,13 @@ mod tests {
                 "cargo-messages.jsonl",
                 concat!(
                     "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm\",\"kind\":[\"bin\"]},\"executable\":\"/tmp/uqm\",\"filenames\":[]}\n",
-                    "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm_rust\",\"kind\":[\"staticlib\"]},\"executable\":null,\"filenames\":[\"/tmp/libuqm_rust-a.a\"]}\n",
+                    "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm_rust\",\"kind\":[\"rlib\"]},\"executable\":null,\"filenames\":[\"/tmp/libuqm_rust-a.rlib\"]}\n",
                     "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"out_dir\":\"/tmp/out\"}\n",
                     "{\"reason\":\"build-finished\",\"success\":true}\n"
                 )
                 .as_bytes(),
             ),
-            ("rust-archive.a", b"rust archive"),
+            ("rust-archive.rlib", b"rust archive"),
             ("Cargo.toml", b"[package]\nname = \"uqm\"\n"),
             ("Cargo.lock", b"# lock\n"),
         ];
@@ -4466,11 +4469,11 @@ mod tests {
             ],
             feature: "audio_heart,debug-process".to_string(),
             cargo_executable_path: "/tmp/uqm".to_string(),
-            cargo_rust_archive_path: "/tmp/libuqm_rust-a.a".to_string(),
+            cargo_rust_archive_path: "/tmp/libuqm_rust-a.rlib".to_string(),
             cargo_out_dir: "/tmp/out".to_string(),
             executable: executable_input.clone(),
             cargo_messages: linked_input("cargo-messages.jsonl"),
-            rust_archive: linked_input("rust-archive.a"),
+            rust_archive: linked_input("rust-archive.rlib"),
             cargo_manifest: linked_input("Cargo.toml"),
             cargo_lock: linked_input("Cargo.lock"),
         };
@@ -4959,7 +4962,7 @@ mod tests {
         for member in [
             "inputs/uqm",
             "inputs/linked-build/cargo-messages.jsonl",
-            "inputs/linked-build/rust-archive.a",
+            "inputs/linked-build/rust-archive.rlib",
             "inputs/linked-build/Cargo.toml",
             "inputs/linked-build/Cargo.lock",
         ] {

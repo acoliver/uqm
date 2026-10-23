@@ -3152,7 +3152,7 @@ fn retain_linked_build_proof(
     validate_linked_build_cargo_messages(&receipt, &cargo_messages)?;
     let members = [
         ("cargo-messages.jsonl", &receipt.cargo_messages),
-        ("rust-archive.a", &receipt.rust_archive),
+        ("rust-archive.rlib", &receipt.rust_archive),
         ("Cargo.toml", &receipt.cargo_manifest),
         ("Cargo.lock", &receipt.cargo_lock),
     ];
@@ -3250,7 +3250,10 @@ fn validate_linked_build_receipt(
             "inputs/linked-build/cargo-messages.jsonl",
             &receipt.cargo_messages,
         ),
-        ("inputs/linked-build/rust-archive.a", &receipt.rust_archive),
+        (
+            "inputs/linked-build/rust-archive.rlib",
+            &receipt.rust_archive,
+        ),
         ("inputs/linked-build/Cargo.toml", &receipt.cargo_manifest),
         ("inputs/linked-build/Cargo.lock", &receipt.cargo_lock),
     ];
@@ -3316,7 +3319,7 @@ fn validate_linked_build_cargo_messages(
             Some("compiler-artifact")
                 if message["package_id"].as_str() == Some(package_id.as_str())
                     && message["target"]["name"] == "uqm_rust"
-                    && cargo_target_has_kind(message, "staticlib") =>
+                    && cargo_target_has_kind(message, "rlib") =>
             {
                 for path in message["filenames"].as_array().into_iter().flatten() {
                     let Some(path) = path.as_str() else { continue };
@@ -3324,7 +3327,7 @@ fn validate_linked_build_cargo_messages(
                         .file_name()
                         .and_then(|name| name.to_str())
                         .unwrap_or_default();
-                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".a") {
+                    if filename.starts_with("libuqm_rust-") && filename.ends_with(".rlib") {
                         rust_archives.insert(path.to_string());
                     }
                 }
@@ -4207,11 +4210,11 @@ mod tests {
             cargo_command: Vec::new(),
             feature: "audio_heart,debug-process".to_string(),
             cargo_executable_path: "/target/release/uqm".to_string(),
-            cargo_rust_archive_path: "/target/release/deps/libuqm_rust-test.a".to_string(),
+            cargo_rust_archive_path: "/target/release/deps/libuqm_rust-test.rlib".to_string(),
             cargo_out_dir: "/target/release/build/uqm-test/out".to_string(),
             executable: input("inputs/uqm"),
             cargo_messages: input("inputs/linked-build/cargo-messages.jsonl"),
-            rust_archive: input("inputs/linked-build/rust-archive.a"),
+            rust_archive: input("inputs/linked-build/rust-archive.rlib"),
             cargo_manifest: input("inputs/linked-build/Cargo.toml"),
             cargo_lock: input("inputs/linked-build/Cargo.lock"),
         }
@@ -4544,9 +4547,9 @@ mod tests {
             serde_json::json!({
                 "reason": "compiler-artifact",
                 "package_id": archive_package_id,
-                "target": {"name": "uqm_rust", "kind": ["staticlib"]},
+                "target": {"name": "uqm_rust", "kind": ["rlib"]},
                 "executable": null,
-                "filenames": ["/target/release/deps/libuqm_rust-test.a"]
+                "filenames": ["/target/release/deps/libuqm_rust-test.rlib"]
             }),
             serde_json::json!({
                 "reason": "build-script-executed",

@@ -45,7 +45,7 @@ edition = "2021"
 
 [lib]
 name = "uqm_rust"
-crate-type = ["staticlib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "uqm-gameplay-proof"
