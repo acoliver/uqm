@@ -22,12 +22,14 @@
 //! }
 //! ```
 
+pub mod control;
 pub mod decoder;
 pub mod ffi;
 #[cfg(test)]
 mod ffi_vtable_tests;
 pub mod legacy;
 pub mod player;
+pub mod registry;
 pub mod scaler;
 
 use std::fmt;
