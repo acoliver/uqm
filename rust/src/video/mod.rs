@@ -28,6 +28,7 @@ pub mod ffi;
 mod ffi_vtable_tests;
 pub mod legacy;
 pub mod player;
+pub mod registry;
 pub mod scaler;
 
 use std::fmt;
