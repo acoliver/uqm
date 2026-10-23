@@ -977,9 +977,7 @@ pub type PSWORDFUNC = ::std::option::Option<unsafe extern "C" fn() -> SWORD>;
 pub type PDWORDFUNC = ::std::option::Option<unsafe extern "C" fn() -> DWORD>;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
-extern "C" {
-    pub fn GetTimeCounter() -> TimeCount;
-}
+pub use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::InitThreadSystem;
 #[cfg(not(test))]

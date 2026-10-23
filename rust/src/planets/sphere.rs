@@ -47,6 +47,7 @@ mod live {
         throb: false,
     };
 
+    use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
         static PlanetContext: *mut c_void;
         static OffScreenContext: *mut c_void;
@@ -62,7 +63,6 @@ mod live {
         fn RenderPlanetSphere(frame: *mut c_void, point: i32, throb: u32);
         fn SetShieldThrobEffect(work: *mut c_void, point: i32, frame: *mut c_void);
 
-        fn GetTimeCounter() -> u32;
         fn RepairBackRect(rect: *mut CRect);
         fn SetGraphicScale(scale: i32) -> i32;
         fn SetGraphicScaleMode(mode: i32) -> i32;

@@ -199,9 +199,9 @@ mod runtime {
     use crate::comm::locdata::{CPoint, CStamp, COMM_DATA};
     use std::ffi::c_void;
 
+    use crate::time::counter_abi::GetTimeCounter;
     #[allow(clashing_extern_declarations)]
     extern "C" {
-        fn GetTimeCounter() -> u32;
         fn XFormColorMap_step() -> i32;
         fn XFormColorMap(map: *mut c_void, ticks: i16) -> u32;
         fn SetAbsStringTableIndex(map: *mut c_void, index: u16) -> *mut c_void;

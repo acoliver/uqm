@@ -1164,9 +1164,7 @@ unsafe extern "C" {
 }
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
-unsafe extern "C" {
-    pub fn GetTimeCounter() -> TimeCount;
-}
+pub use crate::time::counter_abi::GetTimeCounter;
 pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;

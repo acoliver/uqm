@@ -89,8 +89,6 @@ extern "C" {
     #[cfg(test)]
     pub fn uqm_get_mouse_button_down() -> c_int;
     #[cfg(test)]
-    pub fn uqm_get_time_counter() -> u32;
-    #[cfg(test)]
     pub fn uqm_sleep_thread_until(time: u32);
     #[cfg(test)]
     pub fn uqm_sleep_thread(duration: u32);
@@ -173,12 +171,7 @@ pub unsafe fn uqm_get_mouse_button_down() -> c_int {
     (crate::mainloop::restart_menu::menu_abi::uqm_get_mouse_button_down()) as _
 }
 
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_get_time_counter() -> u32 {
-    (crate::mainloop::restart_menu::menu_abi::uqm_get_time_counter()) as _
-}
+pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
