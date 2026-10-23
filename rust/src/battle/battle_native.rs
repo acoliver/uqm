@@ -401,11 +401,11 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
         if activity() as u8 != SUPER_MELEE as u8 {
-            TFB_SeedRandom(GetTimeCounter());
+            crate::math::seed_random(GetTimeCounter());
         } else {
             let seed = rust_automation_seed_value(2, 0);
             if seed != 0 {
-                TFB_SeedRandom(seed);
+                crate::math::seed_random(seed);
             }
         }
         BattleSong(0);

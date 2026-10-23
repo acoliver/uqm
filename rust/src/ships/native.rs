@@ -78,7 +78,7 @@ pub mod abi {
     };
     #[cfg(not(test))]
     pub use crate::battle::world_elements::do_damage;
-    pub use crate::math::TFB_SeedRandom;
+    pub use crate::math::seed_random as TFB_SeedRandom;
 
     #[cfg(not(test))]
     pub use crate::battle::weapon_native::{

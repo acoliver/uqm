@@ -11,6 +11,7 @@ mod live {
     use crate::graphics::resgfx::LoadGraphicInstance as LoadGraphic;
     use crate::io::uio_bridge;
     use crate::mainloop::restart_menu::c_extern::{DoPopupWindow, FadeMusic, SeedRandomNumbers};
+    use crate::math::{delete_context, new_context};
     use crate::navigation::abi::{InitSpace, MeleeConnectDialog, UninitSpace, TEXTENTRY_STATE};
     use crate::navigation::globals::InitGlobData;
     use crate::ships::native::abi::*;
@@ -216,11 +217,8 @@ mod live {
         P_MELEE_STATE = &mut state;
         state.InputFunc = Some(DoMelee);
         state.meleeSetup = MeleeSetup_new();
-        state.randomContext = RandomContext_New();
-        RandomContext_SeedRandom(
-            state.randomContext,
-            rust_automation_seed_value(1, GetTimeCounter()),
-        );
+        state.randomContext = new_context();
+        (*state.randomContext).reseed(rust_automation_seed_value(1, GetTimeCounter()));
         for player in [0usize, 1] {
             set_connection(player, ptr::null_mut());
         }
@@ -265,7 +263,7 @@ mod live {
         DestroySound(ReleaseSound(GameSounds).cast());
         GameSounds = ptr::null_mut();
         UninitMeleeLoadState(&mut state);
-        RandomContext_Delete(state.randomContext);
+        delete_context(state.randomContext);
         MeleeSetup_delete(state.meleeSetup);
         FlushInput();
     }

@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use uqm_rust::comm::locdata::{CPoint, CRect};
-use uqm_rust::math::{RandomContext, TFB_Random, TFB_SeedRandom};
+use uqm_rust::math::{random as TFB_Random, seed_random as TFB_SeedRandom, RandomContext};
 use uqm_rust::planets::render::topo_gen::{make_crater, make_gas_giant, make_storms, MAP_HEIGHT};
 
 #[derive(Deserialize, Debug)]

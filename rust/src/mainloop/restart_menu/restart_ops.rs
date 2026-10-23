@@ -35,7 +35,7 @@ pub fn seed_new_campaign(clock_seed: impl FnOnce()) {
         0,
     );
     if automation_seed != 0 {
-        crate::math::TFB_SeedRandom(automation_seed);
+        crate::math::seed_random(automation_seed);
     } else {
         clock_seed();
     }

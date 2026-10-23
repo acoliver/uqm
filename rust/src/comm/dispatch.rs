@@ -434,9 +434,6 @@ mod ffi {
         pub fn DrawHyperCoords(origin: CPoint);
         pub fn DrawSISTitle(title: *const c_char);
 
-        // TFB_Random for PickCaptainName (libs/misc.h)
-        pub fn TFB_Random() -> u32;
-
         // FindStar (starmap.c): the star within the bounds of a universe point
         pub fn FindStar(
             last_star: *mut c_void,
@@ -493,11 +490,11 @@ mod ffi {
 // Helper functions (porting C inline functions/macros)
 // ---------------------------------------------------------------------------
 
-/// C: `PickCaptainName()` = `((COUNT)TFB_Random() & (NUM_CAPTAINS_NAMES - 1)) + NAME_OFFSET`
+/// C: `PickCaptainName()` = `((COUNT)random() & (NUM_CAPTAINS_NAMES - 1)) + NAME_OFFSET`
 /// where NUM_CAPTAINS_NAMES=16, NAME_OFFSET=5. Ported to pure Rust.
 #[inline]
 unsafe fn pick_captain_name() -> u8 {
-    ((ffi::TFB_Random() & 0x0F) + 5) as u8
+    ((crate::math::random() & 0x0F) + 5) as u8
 }
 
 /// C: `LOBYTE(x)` — extract low byte of a u16.
@@ -943,7 +940,7 @@ pub(crate) unsafe fn clone_ship_fragment(
 
 /// `PickCaptainName ()` as the running game draws it.
 pub(crate) fn production_captain_name() -> u8 {
-    // SAFETY: `TFB_Random` takes no arguments and touches only the game's
+    // SAFETY: `random` takes no arguments and touches only the game's
     // random state.
     unsafe { pick_captain_name() }
 }

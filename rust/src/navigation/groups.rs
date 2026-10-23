@@ -472,7 +472,7 @@ mod live {
                 (*group).group_counter = 0;
                 if task == EXPLORE as u8 {
                     (*group).group_counter =
-                        ((TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT) as u16;
+                        (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
                 } else if task == ON_STATION as u8 {
                     let origin = planetOuterLocation(location as u16 - 1);
                     let angle = ((*group).orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);

@@ -10,7 +10,7 @@ use crate::collections::queue::ReinitQueue;
 use crate::comm::locdata::{CGlobData, CPoint};
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::{DoInput, PlayMusic};
-use crate::math::{RandomContext_Random, RandomContext_SeedRandom, ARCTAN};
+use crate::math::arctan;
 use crate::planet_side::orbit_music::load_lander_data;
 use crate::planets::devices::DevicesMenu;
 use crate::planets::ffi::do_planetary_analysis_c;
@@ -153,11 +153,11 @@ fn saved_point(point: c::POINT) -> CPoint {
 }
 
 pub(super) unsafe fn generate_moons(system: *mut c::SOLARSYS_STATE, planet: *mut c::PLANET_DESC) {
-    RandomContext_SeedRandom(SysGenRNG.cast(), (*planet).rand_seed);
+    (*SysGenRNG).reseed((*planet).rand_seed);
     ((*(*system).genFuncs).generateName.unwrap())(system, planet);
     ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
 
-    let angle = ARCTAN((*planet).location.x, (*planet).location.y);
+    let angle = arctan((*planet).location.x, (*planet).location.y);
     let _facing = (((u32::from(angle) + 2) >> 2) & 15) as c::COUNT;
     for i in 0..(*system).MoonDesc.len() {
         let moon = (*system).MoonDesc.as_mut_ptr().add(i);
@@ -197,7 +197,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     let state = system();
     let mut orbital = ptr::null_mut();
-    RandomContext_SeedRandom(SysGenRNG.cast(), GetRandomSeedForStar(ffi::CurStarDescPtr));
+    (*SysGenRNG).reseed(GetRandomSeedForStar(ffi::CurStarDescPtr));
     SUN_FRAME = SetAbsFrameIndex(
         SUN_FRAME.cast(),
         u16::from(((*ffi::CurStarDescPtr).Type & 0x18) >> 3),
@@ -206,7 +206,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     let sun = (*state).SunDesc.as_mut_ptr();
     (*sun).pPrevDesc = ptr::null_mut();
-    (*sun).rand_seed = RandomContext_Random(SysGenRNG.cast());
+    (*sun).rand_seed = (*SysGenRNG).next_random();
     (*sun).data_index = ((*ffi::CurStarDescPtr).Type & 0x18) >> 3;
     (*sun).location = c::POINT { x: 0, y: 0 };
     (*sun).image.origin = (*sun).location;

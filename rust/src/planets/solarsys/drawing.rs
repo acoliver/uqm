@@ -104,7 +104,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i3
         } else {
             (*(*planet).pPrevDesc).location
         };
-        let angle = crate::math::ARCTAN(origin.x, origin.y);
+        let angle = crate::math::arctan(origin.x, origin.y);
         (*planet).image.frame = set_frame_index(
             ORBITAL_FRAME,
             (size << FACING_SHIFT) + u32::from(((angle + 2) >> 2) & 15),
@@ -281,7 +281,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
         a: 255,
     });
     ClearDrawable();
-    crate::math::RandomContext_SeedRandom(SysGenRNG.cast(), GetRandomSeedForStar(CurStarDescPtr));
+    (*SysGenRNG).reseed(GetRandomSeedForStar(CurStarDescPtr));
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {
         origin: c::POINT { x: 0, y: 0 },
@@ -290,7 +290,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
     for pieces in [5, 30] {
         for _ in 0..8 {
             for _ in 0..pieces {
-                let random = crate::math::RandomContext_Random(SysGenRNG.cast());
+                let random = (*SysGenRNG).next_random();
                 stamp.origin.x = (random as u16 % width as u16) as _;
                 stamp.origin.y = ((random >> 16) as u16 % height as u16) as _;
                 draw_stamp(&mut stamp);

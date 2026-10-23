@@ -159,7 +159,7 @@ pub unsafe extern "C" fn Melee_RemoteChange_teamName(
 }
 #[no_mangle]
 pub unsafe extern "C" fn updateRandomSeed(_state: *mut MELEE_STATE, _side: u16, seed: u32) {
-    TFB_SeedRandom(seed);
+    crate::math::seed_random(seed);
 }
 #[no_mangle]
 pub unsafe extern "C" fn confirmationCancelled(state: *mut MELEE_STATE, side: u16) {

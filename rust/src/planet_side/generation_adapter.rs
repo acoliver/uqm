@@ -188,8 +188,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     // Legacy `generateBioNode` is only embedded in a real
                     // `generate_planet_side` lander population, never in the orbit
                     // scan render, so only that role draws a random 0..3 frame.
-                    let initial_frame =
-                        select_initial_frame(self.role, || crate::math::TFB_Random());
+                    let initial_frame = select_initial_frame(self.role, crate::math::random);
                     GeneratedNodeKind::Biological {
                         creature,
                         hit_points: CreatureCatalog::stats(creature).hit_points,

@@ -61,7 +61,7 @@ mod live {
         fn DestroyDrawable(drawable: *mut c_void) -> u32;
         fn RenderPlanetSphere(frame: *mut c_void, point: i32, throb: u32);
         fn SetShieldThrobEffect(work: *mut c_void, point: i32, frame: *mut c_void);
-        fn TFB_Random() -> u32;
+
         fn GetTimeCounter() -> u32;
         fn RepairBackRect(rect: *mut CRect);
         fn SetGraphicScale(scale: i32) -> i32;
@@ -161,7 +161,7 @@ mod live {
         let width = ScreenWidth - 78;
         let scan_height = ScreenHeight - 13 - 75 - 5;
         let frame_count = (840 * 6 / 5) / (840 / 24);
-        let corner = TFB_Random() as i32;
+        let corner = crate::math::random() as i32;
         let dx = 1 - (corner & 1) * 2;
         let dy = 1 - (corner & 2);
         let frame_rect = bounds(if !(*orbit).ObjectFrame.is_null() {

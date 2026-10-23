@@ -332,7 +332,7 @@ mod engine {
             }
             handle = next;
         }
-        *facing = turn_toward(*facing, best_facing, || TFB_Random());
+        *facing = turn_toward(*facing, best_facing, TFB_Random);
         best_facing
     }
 }

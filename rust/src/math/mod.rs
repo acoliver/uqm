@@ -1,8 +1,7 @@
 //! Math library — replaces C `libs/math/` (random.c, random2.c, sqrt.c).
 //!
 //! Park-Miller minimal standard RNG (CACM 1988) + integer square root.
-//! All functions are exported as `#[no_mangle]` with exact C signatures
-//! so the C `.o` files can be removed from the build.
+//! The game uses these providers directly through Rust imports.
 
 use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
@@ -35,12 +34,11 @@ fn park_miller(seed: u32) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// C FFI exports
+// Global random stream
 // ---------------------------------------------------------------------------
 
-/// C: `DWORD TFB_Random(void)`
-#[no_mangle]
-pub extern "C" fn TFB_Random() -> u32 {
+/// C: `DWORD random(void)`
+pub fn random() -> u32 {
     let old = SEED.load(std::sync::atomic::Ordering::Relaxed);
     let new = park_miller(old);
     SEED.store(new, std::sync::atomic::Ordering::Relaxed);
@@ -61,9 +59,8 @@ fn coerce_seed(new_seed: u32) -> u32 {
     }
 }
 
-/// C: `DWORD TFB_SeedRandom(DWORD new_seed)`
-#[no_mangle]
-pub extern "C" fn TFB_SeedRandom(new_seed: u32) -> u32 {
+/// C: `DWORD seed_random(DWORD new_seed)`
+pub fn seed_random(new_seed: u32) -> u32 {
     SEED.swap(coerce_seed(new_seed), std::sync::atomic::Ordering::Relaxed)
 }
 
@@ -71,15 +68,15 @@ pub extern "C" fn TFB_SeedRandom(new_seed: u32) -> u32 {
 // RandomContext — heap-allocated independent RNG streams
 // ---------------------------------------------------------------------------
 
-/// C: `struct RandomContext { DWORD seed; }`
-#[repr(C)]
+/// Independent Park-Miller random stream.
+#[repr(transparent)]
+#[derive(Debug, Clone)]
 pub struct RandomContext {
     seed: u32,
 }
 
-/// C: `RandomContext *RandomContext_New(void)`
-#[no_mangle]
-pub extern "C" fn RandomContext_New() -> *mut RandomContext {
+/// C: `RandomContext *new_context(void)`
+pub fn new_context() -> *mut RandomContext {
     unsafe {
         let ptr = rust_hmalloc(std::mem::size_of::<RandomContext>()) as *mut RandomContext;
         if !ptr.is_null() {
@@ -89,27 +86,14 @@ pub extern "C" fn RandomContext_New() -> *mut RandomContext {
     }
 }
 
-/// C: `void RandomContext_Delete(RandomContext *context)`
-#[no_mangle]
-pub extern "C" fn RandomContext_Delete(context: *mut RandomContext) {
+/// Release a stream allocated by `new_context`.
+///
+/// # Safety
+/// The pointer must be null or an allocation returned by `new_context`,
+/// and must not be used after this call.
+pub unsafe fn delete_context(context: *mut RandomContext) {
     if !context.is_null() {
         unsafe { rust_hfree(context as *mut c_void) };
-    }
-}
-
-/// C: `RandomContext *RandomContext_Copy(const RandomContext *source)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RandomContext_Copy(source: *const RandomContext) -> *mut RandomContext {
-    unsafe {
-        let ptr = rust_hmalloc(std::mem::size_of::<RandomContext>()) as *mut RandomContext;
-        if !ptr.is_null() {
-            (*ptr).seed = (*source).seed;
-        }
-        ptr
     }
 }
 
@@ -138,56 +122,12 @@ impl RandomContext {
     }
 }
 
-/// C: `DWORD RandomContext_Random(RandomContext *context)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RandomContext_Random(context: *mut RandomContext) -> u32 {
-    unsafe {
-        (*context).seed = park_miller((*context).seed);
-        (*context).seed
-    }
-}
-
-/// C: `DWORD RandomContext_SeedRandom(RandomContext *context, DWORD new_seed)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RandomContext_SeedRandom(context: *mut RandomContext, new_seed: u32) -> u32 {
-    unsafe {
-        let mut s = new_seed;
-        if s == 0 {
-            s = 1;
-        } else if s > M {
-            s -= M;
-        }
-        let old = (*context).seed;
-        (*context).seed = s;
-        old
-    }
-}
-
-/// C: `DWORD RandomContext_GetSeed(RandomContext *context)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RandomContext_GetSeed(context: *mut RandomContext) -> u32 {
-    unsafe { (*context).seed }
-}
-
 // ---------------------------------------------------------------------------
 // Integer square root — bit-manipulation algorithm from C sqrt.c
 // ---------------------------------------------------------------------------
 
 /// C: `COUNT square_root(DWORD value)` — returns u16
-#[no_mangle]
-pub extern "C" fn square_root(value: u32) -> u16 {
+pub fn square_root(value: u32) -> u16 {
     let sig_word = (value >> 16) as u16;
     if sig_word > 0 {
         let mut mask: u16;
@@ -268,15 +208,13 @@ pub extern "C" fn square_root(value: u32) -> u16 {
 }
 
 // ---------------------------------------------------------------------------
-// Sine table + ARCTAN — replaces C trans.c
+// Sine table + arctan — replaces C trans.c
 // ---------------------------------------------------------------------------
 
 /// C: `SIZE sinetab[]` — 64-entry sine lookup table.
 /// Each entry is sin(angle) * 16384 (fixed-point, SIN_SHIFT=14).
 /// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X).
-/// Exported as `#[no_mangle]` so C macros `SINVAL`, `COSVAL`, `SINE`, `COSINE`
-/// in units.h can index into it directly.
-#[no_mangle]
+/// Shared by the fixed-point trigonometry providers.
 #[allow(non_upper_case_globals)]
 pub static sinetab: [i16; 64] = [
     -16384, -16305, -16069, -15679, -15137, -14449, -13623, -12665, -11585, -10394, -9102, -7723,
@@ -291,12 +229,11 @@ const FULL_CIRCLE: u16 = 1 << CIRCLE_SHIFT; // 64
 const HALF_CIRCLE: u16 = FULL_CIRCLE >> 1; // 32
 const QUADRANT: u16 = FULL_CIRCLE >> 2; // 16
 
-/// C: `COUNT ARCTAN(SIZE delta_x, SIZE delta_y)`
+/// C: `COUNT arctan(SIZE delta_x, SIZE delta_y)`
 ///
 /// Integer arctangent returning angle in UQM's 64-position circle.
 /// Exact port of C trans.c algorithm.
-#[no_mangle]
-pub extern "C" fn ARCTAN(delta_x: i16, delta_y: i16) -> u16 {
+pub fn arctan(delta_x: i16, delta_y: i16) -> u16 {
     const ATANTAB: [u16; 33] = [
         0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7,
         8, 8, 8,
@@ -339,6 +276,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn context_methods_preserve_coercion_draw_order_and_copy_position() {
+        for seed in [0, 1, 12345, M, M + 1, u32::MAX] {
+            let mut context = RandomContext::with_seed(seed);
+            let mut expected = coerce_seed(seed);
+            assert_eq!(context.seed(), expected);
+            for _ in 0..100 {
+                expected = park_miller(expected);
+                assert_eq!(context.next_random(), expected);
+            }
+            let mut copy = context.clone();
+            assert_eq!(context.next_random(), copy.next_random());
+            let previous = context.seed();
+            assert_eq!(context.reseed(0), previous);
+            assert_eq!(context.seed(), 1);
+        }
+        let context = new_context();
+        unsafe {
+            assert_eq!((*context).seed(), 12345);
+            delete_context(context);
+            delete_context(std::ptr::null_mut());
+        }
+    }
+
+    #[test]
     fn test_park_miller_range_and_determinism() {
         let mut seed = 12345u32;
         for _ in 0..1000 {
@@ -360,7 +321,7 @@ mod tests {
 
     /// The seed tests assert on the coercion itself rather than on the global.
     ///
-    /// TFB_Random loads, advances and stores SEED, so any test running beside
+    /// random loads, advances and stores SEED, so any test running beside
     /// these could change it between the swap and a separate read, which made
     /// the old assertions fail at random under a full parallel run.
     #[test]
@@ -384,10 +345,10 @@ mod tests {
     fn seeding_returns_the_previous_seed_and_installs_the_new_one() {
         // Exercises the global path once, without asserting a value another
         // test could have changed: the swap's own return is authoritative.
-        let restore = TFB_SeedRandom(12345);
-        let previous = TFB_SeedRandom(999);
+        let restore = seed_random(12345);
+        let previous = seed_random(999);
         assert_eq!(previous, 12345, "swap returns exactly what it replaced");
-        TFB_SeedRandom(restore);
+        seed_random(restore);
     }
 
     #[test]

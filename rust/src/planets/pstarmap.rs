@@ -68,7 +68,7 @@ extern "C" {
     fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
     fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char);
     fn inHQSpace() -> i32;
-    fn square_root(value: u32) -> u16;
+
     fn FlushInput();
     fn AnyButtonPress(check_special: u32) -> u32;
     fn SetMenuSounds(move_sound: u16, select_sound: u16);
@@ -839,7 +839,7 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
 /// Game-thread only, with the star-map status UI active.
 pub unsafe fn UpdateFuelRequirement() {
     let fuel = fuel_requirement(current_location(), cursorLoc, which_space(), |f| {
-        square_root(f)
+        crate::math::square_root(f)
     });
     let mut buf = [0 as c_char; 80];
     sprintf(

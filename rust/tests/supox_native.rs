@@ -315,9 +315,7 @@ impl Chase {
 #[test]
 fn ai_lines_up_the_reverse_burst_with_the_c_conditions() {
     let _battle = Battlefield::new();
-    unsafe {
-        assert_eq!(ARCTAN(0, -1000), 0, "north is angle 0");
-    }
+    assert_eq!(ARCTAN(0, -1000), 0, "north is angle 0");
     let special = SPECIAL as u8;
     let burst = (SPECIAL | THRUST | WEAPON) as u8;
     // Head-on: the enemy is north, the Supox faces north and the enemy faces

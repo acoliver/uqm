@@ -29,7 +29,7 @@ pub struct CffiGameplayRandom;
 
 impl GameplayRandom for CffiGameplayRandom {
     fn next(&mut self) -> u32 {
-        crate::math::TFB_Random()
+        crate::math::random()
     }
 }
 

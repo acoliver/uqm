@@ -21,7 +21,7 @@ impl YehatApi for LiveScript<Handler> {
     }
 
     fn random_bit(&mut self) -> u8 {
-        (crate::math::TFB_Random() & 1) as u8
+        (crate::math::random() & 1) as u8
     }
 
     fn schedule_rebel_event(&mut self) {

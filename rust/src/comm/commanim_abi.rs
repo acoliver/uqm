@@ -201,7 +201,6 @@ mod runtime {
 
     #[allow(clashing_extern_declarations)]
     extern "C" {
-        fn TFB_Random() -> u32;
         fn GetTimeCounter() -> u32;
         fn XFormColorMap_step() -> i32;
         fn XFormColorMap(map: *mut c_void, ticks: i16) -> u32;
@@ -231,7 +230,7 @@ mod runtime {
     static mut TOTAL: u16 = 0;
 
     fn random() -> u32 {
-        unsafe { TFB_Random() }
+        crate::math::random()
     }
 
     /// # Safety

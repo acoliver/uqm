@@ -122,10 +122,7 @@ impl Ops for Harness {
             u32::from(case.destroyed)
         );
         // The count-only query above must leave the same post-call seed.
-        assert_eq!(
-            unsafe { uqm_rust::math::RandomContext_GetSeed(SysGenRNG) },
-            rng
-        );
+        assert_eq!(unsafe { (*SysGenRNG).seed() }, rng);
         (count, rng)
     }
 }

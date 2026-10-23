@@ -452,8 +452,8 @@ pub fn full_c_fixture_core_and_host_parity() {
     );
     let cases = cases();
     assert_eq!(cases.len(), 108);
-    let system_rng = unsafe { uqm_rust::math::RandomContext_GetSeed(super::SysGenRNG) };
-    uqm_rust::math::TFB_SeedRandom(90210);
+    let system_rng = unsafe { (*super::SysGenRNG).seed() };
+    uqm_rust::math::seed_random(90210);
     let mut independent = uqm_rust::math::RandomContext::with_seed(90210);
     for (index, case) in cases.iter().enumerate() {
         unsafe {
@@ -590,11 +590,8 @@ pub fn full_c_fixture_core_and_host_parity() {
             assert_eq!(depth, before);
             assert_eq!(colors, color_before);
             assert_eq!(translation, xlat_before);
-            assert_eq!(
-                uqm_rust::math::RandomContext_GetSeed(super::SysGenRNG),
-                system_rng
-            );
-            assert_eq!(uqm_rust::math::TFB_Random(), independent.next_random());
+            assert_eq!((*super::SysGenRNG).seed(), system_rng);
+            assert_eq!(uqm_rust::math::random(), independent.next_random());
         }
     }
     assert_eq!(offset, fixture.len());
