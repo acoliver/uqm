@@ -287,9 +287,7 @@ pub mod dinput {
         static mut usingSpeech: c_int;
     }
 
-    extern "C" {
-        fn rust_UpdateSpeechGraphics();
-    }
+    use crate::comm::ffi::rust_update_speech_graphics;
 
     // DoInput-compatible talking state struct (matches C C_TALKING_STATE)
     #[repr(C)]
@@ -403,7 +401,7 @@ pub mod dinput {
         }
 
         unsafe { super::do_update_animations(ts.seeking != 0) };
-        unsafe { rust_UpdateSpeechGraphics() };
+        rust_update_speech_graphics();
 
         let cur_track = c_bridge::PlayingTrack();
         ts.ended = (ts.seeking == 0 && cur_track == 0) as c_int;
@@ -933,10 +931,10 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
 pub unsafe fn alien_talk_first_call_init() {
     #[cfg(not(test))]
     {
-        rust_InitSpeechGraphics();
+        rust_init_speech_graphics();
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
-        unsafe { rust_UpdateSpeechGraphics() };
+        rust_update_speech_graphics();
         comm_intro_transition();
         c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
@@ -946,10 +944,7 @@ pub unsafe fn alien_talk_first_call_init() {
 }
 
 #[cfg(not(test))]
-extern "C" {
-    fn rust_InitSpeechGraphics();
-    fn rust_UpdateSpeechGraphics();
-}
+use crate::comm::ffi::{rust_init_speech_graphics, rust_update_speech_graphics};
 
 /// Fade music to foreground volume after talk segue finishes (no lock needed).
 /// # Safety
@@ -986,7 +981,7 @@ pub fn do_communication(state: &mut CommState) -> CommunicationResult {
 
 /// Response-only phase of do_communication (talking is already finished).
 ///
-/// Called from rust_DoCommunication when talking_finished is true.
+/// Called from rust_do_communication when talking_finished is true.
 /// Handles abort, last-replay, and player response input.
 pub fn do_communication_responses(state: &mut CommState) -> CommunicationResult {
     if check_abort(state) {
@@ -1171,7 +1166,7 @@ fn won_last_battle(state: &CommState) -> bool {
 }
 
 // ---------- lock-free input checks for ffi.rs response phase ---------------
-// These are called from rust_DoCommunication WITHOUT holding COMM_STATE lock,
+// These are called from rust_do_communication WITHOUT holding COMM_STATE lock,
 // avoiding the deadlock where C bridges re-enter Rust.
 
 #[cfg(not(test))]
@@ -1768,8 +1763,8 @@ fn comm_intro_transition() {
         use std::ffi::{c_uint, c_void};
 
         // Ported from c_CommIntroTransition in rust_comm.c
-        let mode = crate::comm::ffi::rust_GetCommIntroMode();
-        let fade_time = crate::comm::ffi::rust_GetCommFadeTime();
+        let mode = crate::comm::ffi::rust_get_comm_intro_mode();
+        let fade_time = crate::comm::ffi::rust_get_comm_fade_time();
 
         // CIM_DEFAULT from comm.h
         const CIM_DEFAULT: c_uint = 0;
@@ -1812,7 +1807,7 @@ fn comm_intro_transition() {
             }
         }
 
-        crate::comm::ffi::rust_SetCommIntroMode(CIM_DEFAULT);
+        crate::comm::ffi::rust_set_comm_intro_mode(CIM_DEFAULT);
     }
 }
 
@@ -2496,16 +2491,16 @@ mod tests {
 
     // ---- Test 8 ------------------------------------------------------------
 
-    /// Structural: rust_DoCommunication in ffi.rs must drop(state) before
+    /// Structural: rust_do_communication in ffi.rs must drop(state) before
     /// calling func(rref) in the Selected arm (lock discipline).
     ///
     /// PASSES against P09 stubs (P09 already has the correct structure).
     #[test]
     fn test_lock_dropped_before_callback_p10() {
         let source = include_str!("ffi.rs");
-        // Find the rust_DoCommunication function body.
-        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
-            .expect("rust_DoCommunication must be in ffi.rs");
+        // Find the rust_do_communication function body.
+        let fn_body = extract_fn_body(source, "fn rust_do_communication")
+            .expect("rust_do_communication must be in ffi.rs");
         // drop(state) must appear before func(rref).
         let drop_pos = fn_body.find("drop(state)").expect(
             "rust_DoCommunication must contain drop(state) to release lock before callback",
@@ -2523,13 +2518,13 @@ mod tests {
 
     /// Structural regression: the response callback runs inside the enclosing
     /// `DoInput` loop, which owns event pumping and the sole `UpdateInputState`
-    /// call. Polling input again in `rust_DoCommunication` erases the Select
+    /// call. Polling input again in `rust_do_communication` erases the Select
     /// pulse before response handling can consume it.
     #[test]
     fn test_response_phase_does_not_poll_input_twice() {
         let source = include_str!("ffi.rs");
-        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
-            .expect("rust_DoCommunication must be in ffi.rs");
+        let fn_body = extract_fn_body(source, "fn rust_do_communication")
+            .expect("rust_do_communication must be in ffi.rs");
         let response_phase = fn_body
             .split("// Phase 2: Response handling.")
             .nth(1)
@@ -2589,8 +2584,8 @@ mod tests {
     #[test]
     fn test_no_response_path_runs_production_last_replay() {
         let source = include_str!("ffi.rs");
-        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
-            .expect("rust_DoCommunication must be in ffi.rs");
+        let fn_body = extract_fn_body(source, "fn rust_do_communication")
+            .expect("rust_do_communication must be in ffi.rs");
         let no_response_branch = fn_body
             .split("if response_count == 0")
             .nth(1)

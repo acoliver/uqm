@@ -73,7 +73,7 @@ mod live {
     impl ZoqApi for LiveScript<Handler> {
         fn speak(&mut self, phrase: u16, speaker: Speaker) {
             unsafe {
-                crate::comm::ffi::rust_NPCPhrase_cb(
+                crate::comm::ffi::rust_npc_phrase_cb(
                     i32::from(phrase),
                     Some(match speaker {
                         Speaker::Zoq => zoq,

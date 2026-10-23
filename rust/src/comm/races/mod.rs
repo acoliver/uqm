@@ -7,11 +7,11 @@
 //! 4. Uses `setSegue`/`getSegue` to control encounter flow
 //!
 //! All of these primitives are now Rust-owned:
-//! - `NPCPhrase` → `rust_NPCPhrase_cb` (FFI to Rust comm system)
+//! - `NPCPhrase` → `rust_npc_phrase_cb` (FFI to Rust comm system)
 //! - `Response` → `rust_DoResponsePhrase` (FFI to Rust response system)
 //! - `GET_GAME_STATE`/`SET_GAME_STATE` → Rust game state singleton (P09)
 //! - `setSegue`/`getSegue` → Rust `comm::state::CommState`
-//! - `PHRASE_ENABLED`/`DISABLE_PHRASE` → `rust_PhraseEnabled`/`rust_DisablePhrase`
+//! - `PHRASE_ENABLED`/`DISABLE_PHRASE` → `rust_phrase_enabled`/`rust_disable_phrase`
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P12-P15
 

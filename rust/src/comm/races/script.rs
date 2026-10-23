@@ -97,7 +97,7 @@ pub(super) mod live {
         }
 
         fn npc(&mut self, phrase: i32) {
-            unsafe { crate::comm::ffi::rust_NPCPhrase_cb(phrase, None) }
+            unsafe { crate::comm::ffi::rust_npc_phrase_cb(phrase, None) }
         }
 
         fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
@@ -148,11 +148,11 @@ pub(super) mod live {
         }
 
         fn enabled(&self, phrase: u16) -> bool {
-            unsafe { crate::comm::ffi::rust_PhraseEnabled(i32::from(phrase)) != 0 }
+            crate::comm::ffi::rust_phrase_enabled(i32::from(phrase)) != 0
         }
 
         fn disable(&mut self, phrase: u16) {
-            unsafe { crate::comm::ffi::rust_DisablePhrase(i32::from(phrase)) }
+            crate::comm::ffi::rust_disable_phrase(i32::from(phrase))
         }
 
         fn supplies(&self) -> Supplies {

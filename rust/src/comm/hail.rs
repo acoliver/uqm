@@ -424,7 +424,7 @@ pub unsafe fn hail_alien() {
             callback();
         }
 
-        // Run the encounter loop: DoInput with rust_DoCommunication as InputFunc.
+        // Run the encounter loop: DoInput with rust_do_communication as InputFunc.
         // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
         // runs DoInput, then clears pCurInputState.
         {
@@ -435,7 +435,7 @@ pub unsafe fn hail_alien() {
             type EncounterStateDInput = crate::comm::comm_abi::EncounterState;
 
             unsafe extern "C" fn encounter_cb(_es: *mut EncounterStateDInput) -> std::ffi::c_int {
-                crate::comm::ffi::rust_DoCommunication()
+                crate::comm::ffi::rust_do_communication()
             }
 
             let mut es: EncounterStateDInput = std::mem::zeroed();
@@ -466,7 +466,7 @@ pub unsafe fn hail_alien() {
 
         // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
         FlushColorXForms();
-        super::ffi::rust_ClearSubtitles();
+        super::ffi::rust_clear_subtitles();
 
         // Stop audio, fade music (C lines 1133–1136)
         StopMusic();
