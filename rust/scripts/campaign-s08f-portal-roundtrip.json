@@ -46,7 +46,7 @@
         {
           "key": "activity",
           "op": "eq",
-          "value": 4
+          "value": 515
         },
         {
           "key": "story:TAALO_PROTECTOR_ON_SHIP",
