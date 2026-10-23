@@ -19,3 +19,6 @@ pub mod macro_abi;
 pub mod cleanup;
 
 pub mod space_resources;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod kernel_abi;
