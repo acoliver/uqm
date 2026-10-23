@@ -607,9 +607,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -932,7 +932,7 @@ mod live {
             });
         }
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -940,7 +940,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_rescue(r: u32) {
+    fn do_rescue(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoRescue,
@@ -948,7 +948,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_buy(r: u32) {
+    fn do_buy(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoBuy,
@@ -956,7 +956,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_sell(r: u32) {
+    fn do_sell(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoSell,
@@ -964,7 +964,7 @@ mod live {
             )
         });
     }
-    extern "C" fn nature_of_conversation(r: u32) {
+    fn nature_of_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NatureOfConversation,
@@ -972,7 +972,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_bluster(r: u32) {
+    fn do_bluster(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoBluster,
@@ -980,7 +980,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_first_meeting(r: u32) {
+    fn do_first_meeting(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoFirstMeeting,
@@ -988,7 +988,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_melnorme_miffed(r: u32) {
+    fn do_melnorme_miffed(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoMelnormeMiffed,
@@ -996,7 +996,7 @@ mod live {
             )
         });
     }
-    extern "C" fn do_melnorme_pissed(r: u32) {
+    fn do_melnorme_pissed(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DoMelnormePissed,
@@ -1005,7 +1005,7 @@ mod live {
         });
     }
 
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::DoRescue => do_rescue,
@@ -1018,13 +1018,13 @@ mod live {
             Handler::DoMelnormePissed => do_melnorme_pissed,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_melnorme_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

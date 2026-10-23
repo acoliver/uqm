@@ -604,9 +604,9 @@ fn descriptor() -> CLocData {
     desc.alien_talk_desc = animation(0, 0, 0, (0, 0), (0, 0));
     #[cfg(not(test))]
     {
-        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
-        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
-        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+        desc.init_encounter_func = Some(live::intro);
+        desc.post_encounter_func = Some(live::post);
+        desc.uninit_encounter_func = Some(live::uninit);
     }
     desc
 }
@@ -625,7 +625,7 @@ mod live {
             session,
         });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -633,7 +633,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_on_pluto(r: u32) {
+    fn spathi_on_pluto(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiOnPluto,
@@ -641,7 +641,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_must_grovel(r: u32) {
+    fn spathi_must_grovel(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiMustGrovel,
@@ -649,7 +649,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_allies(r: u32) {
+    fn spathi_allies(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiAllies,
@@ -657,7 +657,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_friendly(r: u32) {
+    fn spathi_friendly(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiFriendly,
@@ -665,7 +665,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_befriend(r: u32) {
+    fn spathi_befriend(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiBefriend,
@@ -673,7 +673,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_antagonize(r: u32) {
+    fn spathi_antagonize(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiAntagonize,
@@ -681,7 +681,7 @@ mod live {
             )
         });
     }
-    extern "C" fn spathi_neutral(r: u32) {
+    fn spathi_neutral(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SpathiNeutral,
@@ -689,7 +689,7 @@ mod live {
             )
         });
     }
-    fn callback(handler: Handler) -> extern "C" fn(u32) {
+    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
         match handler {
             Handler::ExitConversation => exit_conversation,
             Handler::SpathiOnPluto => spathi_on_pluto,
@@ -701,13 +701,13 @@ mod live {
             Handler::SpathiNeutral => spathi_neutral,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_spathi_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.

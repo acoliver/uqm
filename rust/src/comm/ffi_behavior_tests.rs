@@ -33,9 +33,9 @@ impl Drop for Comm {
     }
 }
 
-fn offer(text: &str, reference: u32, func: Option<extern "C" fn(u32)>) -> c_int {
+fn offer(text: &str, reference: u32, func: Option<crate::comm::response::ResponseFunc>) -> c_int {
     let text = CString::new(text).unwrap();
-    unsafe { rust_DoResponsePhrase(reference, text.as_ptr(), func) }
+    do_response_phrase(reference, Some(text.as_c_str()), func)
 }
 
 fn response_text(index: c_int, capacity: c_int) -> (c_int, String) {
@@ -51,7 +51,7 @@ fn response_text(index: c_int, capacity: c_int) -> (c_int, String) {
 
 static CHOSEN: AtomicU32 = AtomicU32::new(0);
 
-extern "C" fn remember_choice(reference: u32) {
+fn remember_choice(reference: u32) {
     CHOSEN.store(reference, Ordering::SeqCst);
 }
 
@@ -332,9 +332,9 @@ fn offering_a_response_needs_readable_text() {
     let _comm = Comm::new();
     let bad = [0xffu8, 0xfe, 0];
     unsafe {
-        assert_eq!(rust_DoResponsePhrase(1, ptr::null(), None), 0);
+        assert_eq!(do_response_phrase(1, None, None), 0);
         assert_eq!(
-            rust_DoResponsePhrase(1, bad.as_ptr() as *const c_char, None),
+            do_response_phrase(1, Some(CStr::from_bytes_with_nul(&bad).unwrap()), None),
             0
         );
         assert_eq!(rust_GetResponseCount(), 0);

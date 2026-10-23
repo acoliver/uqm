@@ -587,9 +587,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 4, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -601,7 +601,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn combat_is_inevitable(r: u32) {
+    fn combat_is_inevitable(r: u32) {
         run(|s| {
             s.handle(
                 Handler::CombatIsInevitable,
@@ -609,7 +609,7 @@ mod live {
             )
         });
     }
-    extern "C" fn zombies(r: u32) {
+    fn zombies(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Zombies,
@@ -617,7 +617,7 @@ mod live {
             )
         });
     }
-    extern "C" fn normal_umgah(r: u32) {
+    fn normal_umgah(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NormalUmgah,
@@ -625,7 +625,7 @@ mod live {
             )
         });
     }
-    extern "C" fn umgah_reward(r: u32) {
+    fn umgah_reward(r: u32) {
         run(|s| {
             s.handle(
                 Handler::UmgahReward,
@@ -633,7 +633,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::CombatIsInevitable => combat_is_inevitable,
             Handler::Zombies => zombies,
@@ -641,13 +641,13 @@ mod live {
             Handler::UmgahReward => umgah_reward,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_umgah_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

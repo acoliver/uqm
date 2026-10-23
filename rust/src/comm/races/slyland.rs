@@ -133,19 +133,19 @@ mod live {
         f(&mut Dialogue { api: &mut api });
     }
 
-    extern "C" fn combat(response: u32) {
+    fn combat(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
     }
 
-    fn callback(_: Handler) -> extern "C" fn(u32) {
+    fn callback(_: Handler) -> crate::comm::response::ResponseFunc {
         combat
     }
 
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|dialogue| dialogue.intro());
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
     #[no_mangle]

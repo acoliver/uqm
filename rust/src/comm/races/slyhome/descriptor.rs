@@ -52,9 +52,9 @@ pub(super) fn descriptor(screen_width: i32) -> CLocData {
     d.alien_ambient_array[12].block_mask = 3072;
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }

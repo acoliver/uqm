@@ -517,31 +517,31 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit(r: u32) {
+    fn exit(r: u32) {
         run(|s| s.handle(Handler::Exit, r as i32));
     }
-    extern "C" fn home(r: u32) {
+    fn home(r: u32) {
         run(|s| s.handle(Handler::Home, r as i32));
     }
-    extern "C" fn human(r: u32) {
+    fn human(r: u32) {
         run(|s| s.handle(Handler::Human, r as i32));
     }
-    extern "C" fn alien(r: u32) {
+    fn alien(r: u32) {
         run(|s| s.handle(Handler::Alien, r as i32));
     }
-    extern "C" fn probe(r: u32) {
+    fn probe(r: u32) {
         run(|s| s.handle(Handler::Probe, r as i32));
     }
-    extern "C" fn function(r: u32) {
+    fn function(r: u32) {
         run(|s| s.handle(Handler::Function, r as i32));
     }
-    extern "C" fn bug(r: u32) {
+    fn bug(r: u32) {
         run(|s| s.handle(Handler::Bug, r as i32));
     }
-    extern "C" fn fix(r: u32) {
+    fn fix(r: u32) {
         run(|s| s.handle(Handler::Fix, r as i32));
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::Exit => exit,
             Handler::Home => home,
@@ -553,11 +553,11 @@ mod live {
             Handler::Fix => fix,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
     #[no_mangle]

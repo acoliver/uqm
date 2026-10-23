@@ -2016,7 +2016,7 @@ mod tests {
         s.track_mut().splice_track(1, Some("Hi"), 0.0, 2.0);
         s.track_mut().start();
 
-        extern "C" fn noop(_: u32) {}
+        fn noop(_: u32) {}
         s.add_response(1, "Option A", Some(noop));
         s.add_response(2, "Option B", Some(noop));
         s.responses_mut().start_display();
@@ -2043,7 +2043,7 @@ mod tests {
     fn test_select_response_returns_callback() {
         use std::sync::atomic::{AtomicU32, Ordering};
         static CALLED_WITH: AtomicU32 = AtomicU32::new(0);
-        extern "C" fn marker(r: u32) {
+        fn marker(r: u32) {
             CALLED_WITH.store(r, Ordering::SeqCst);
         }
 
@@ -2397,7 +2397,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
     #[test]
     fn test_do_comm_response_continue_p10() {
-        extern "C" fn noop(_: u32) {}
+        fn noop(_: u32) {}
 
         let mut s = CommState::new();
         s.init().unwrap();
@@ -2424,7 +2424,7 @@ mod tests {
     fn test_do_comm_selected_p10() {
         use std::sync::atomic::{AtomicBool, Ordering};
         static CALLED: AtomicBool = AtomicBool::new(false);
-        extern "C" fn marker(_: u32) {
+        fn marker(_: u32) {
             CALLED.store(true, Ordering::SeqCst);
         }
 
@@ -2457,7 +2457,7 @@ mod tests {
     /// EXPECTED FAIL against P09 stubs (stub always returns None).
     #[test]
     fn test_select_response_returns_tuple_p10() {
-        extern "C" fn noop(_: u32) {}
+        fn noop(_: u32) {}
 
         let mut s = CommState::new();
         s.init().unwrap();

@@ -2,9 +2,8 @@
 //!
 //! Handles player response options during conversations.
 
-/// C-compatible response callback: receives the response_ref as argument.
-/// Matches C `RESPONSE_FUNC` which is `void (*)(RESPONSE_REF)`.
-pub type ResponseFunc = extern "C" fn(u32);
+/// Dialogue callback receiving the selected response reference.
+pub type ResponseFunc = fn(u32);
 
 /// A response option in a conversation
 #[derive(Clone)]
@@ -225,7 +224,7 @@ impl ResponseSystem {
 mod tests {
     use super::*;
 
-    extern "C" fn test_callback(_ref: u32) {}
+    fn test_callback(_ref: u32) {}
 
     #[test]
     fn test_response_entry_new() {
@@ -361,7 +360,7 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
     static CALLBACK_ARG: AtomicU32 = AtomicU32::new(0);
 
-    extern "C" fn recording_callback(response_ref: u32) {
+    fn recording_callback(response_ref: u32) {
         CALLBACK_ARG.store(response_ref, Ordering::SeqCst);
     }
 
@@ -404,7 +403,7 @@ mod tests {
 #[cfg(test)]
 mod phrase_selection_tests {
     use super::*;
-    extern "C" fn callback(_: u32) {}
+    fn callback(_: u32) {}
     fn name(reference: u32) -> Option<String> {
         match reference {
             55 => Some("we_will_transfer_now".into()),

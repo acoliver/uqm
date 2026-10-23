@@ -618,9 +618,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 6, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -632,7 +632,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -640,7 +640,7 @@ mod live {
             )
         });
     }
-    extern "C" fn mind_fuck_urquan(r: u32) {
+    fn mind_fuck_urquan(r: u32) {
         run(|s| {
             s.handle(
                 Handler::MindFuckUrquan,
@@ -648,7 +648,7 @@ mod live {
             )
         });
     }
-    extern "C" fn mind_control(r: u32) {
+    fn mind_control(r: u32) {
         run(|s| {
             s.handle(
                 Handler::MindControl,
@@ -656,7 +656,7 @@ mod live {
             )
         });
     }
-    extern "C" fn pet_info(r: u32) {
+    fn pet_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::PetInfo,
@@ -664,7 +664,7 @@ mod live {
             )
         });
     }
-    extern "C" fn pet_device(r: u32) {
+    fn pet_device(r: u32) {
         run(|s| {
             s.handle(
                 Handler::PetDevice,
@@ -672,7 +672,7 @@ mod live {
             )
         });
     }
-    extern "C" fn compel_player(r: u32) {
+    fn compel_player(r: u32) {
         run(|s| {
             s.handle(
                 Handler::CompelPlayer,
@@ -680,7 +680,7 @@ mod live {
             )
         });
     }
-    extern "C" fn kill_pet(r: u32) {
+    fn kill_pet(r: u32) {
         run(|s| {
             s.handle(
                 Handler::KillPet,
@@ -688,7 +688,7 @@ mod live {
             )
         });
     }
-    extern "C" fn pet_deal(r: u32) {
+    fn pet_deal(r: u32) {
         run(|s| {
             s.handle(
                 Handler::PetDeal,
@@ -696,7 +696,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::MindFuckUrquan => mind_fuck_urquan,
@@ -708,13 +708,13 @@ mod live {
             Handler::PetDeal => pet_deal,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_talkpet_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

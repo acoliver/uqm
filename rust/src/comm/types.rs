@@ -188,14 +188,14 @@ impl From<u32> for CommIntroMode {
 #[derive(Debug, Clone)]
 pub struct CommData {
     // -----------------------------------------------------------------------
-    // Lifecycle callbacks (addresses of C function pointers, or None)
+    // Dialogue lifecycle callbacks
     // -----------------------------------------------------------------------
     /// Called when entering communications (`init_encounter_func`).
-    pub init_encounter_func: Option<usize>,
+    pub init_encounter_func: Option<fn()>,
     /// Called when leaving communications normally (`post_encounter_func`).
-    pub post_encounter_func: Option<usize>,
+    pub post_encounter_func: Option<fn()>,
     /// Called for cleanup after the encounter ends (`uninit_encounter_func`).
-    pub uninit_encounter_func: Option<usize>,
+    pub uninit_encounter_func: Option<fn() -> u16>,
 
     // -----------------------------------------------------------------------
     // Resource IDs (C `RESOURCE` = `const char *`, stored as raw pointers)
@@ -317,18 +317,18 @@ impl CommData {
         Self::default()
     }
 
-    /// Set the initialization callback (as function pointer address).
-    pub fn set_init_func(&mut self, func: usize) {
+    /// Set the initialization callback.
+    pub fn set_init_func(&mut self, func: fn()) {
         self.init_encounter_func = Some(func);
     }
 
     /// Set the post-encounter callback.
-    pub fn set_post_func(&mut self, func: usize) {
+    pub fn set_post_func(&mut self, func: fn()) {
         self.post_encounter_func = Some(func);
     }
 
     /// Set the cleanup callback.
-    pub fn set_uninit_func(&mut self, func: usize) {
+    pub fn set_uninit_func(&mut self, func: fn() -> u16) {
         self.uninit_encounter_func = Some(func);
     }
 
@@ -431,13 +431,18 @@ mod tests {
     #[test]
     fn test_comm_data_set_callbacks() {
         let mut data = CommData::new();
-        data.set_init_func(0x1000);
-        data.set_post_func(0x2000);
-        data.set_uninit_func(0x3000);
+        fn init() {}
+        fn post() {}
+        fn uninit() -> u16 {
+            42
+        }
+        data.set_init_func(init);
+        data.set_post_func(post);
+        data.set_uninit_func(uninit);
 
-        assert_eq!(data.init_encounter_func, Some(0x1000));
-        assert_eq!(data.post_encounter_func, Some(0x2000));
-        assert_eq!(data.uninit_encounter_func, Some(0x3000));
+        data.init_encounter_func.unwrap()();
+        data.post_encounter_func.unwrap()();
+        assert_eq!(data.uninit_encounter_func.unwrap()(), 42);
     }
 
     #[test]

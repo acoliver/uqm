@@ -335,9 +335,9 @@ fn descriptor(screen_width: i32) -> CLocData {
     d.alien_talk_desc = animation(1, 4, 0, (42, 0), (56, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -349,25 +349,25 @@ mod live {
         let mut a = LiveScript { callback };
         f(&mut Dialogue { api: &mut a })
     }
-    extern "C" fn exit(r: u32) {
+    fn exit(r: u32) {
         run(|s| s.handle(Handler::Exit, r as i32))
     }
-    extern "C" fn maidens(r: u32) {
+    fn maidens(r: u32) {
         run(|s| s.handle(Handler::GiveMaidens, r as i32))
     }
-    extern "C" fn console(r: u32) {
+    fn console(r: u32) {
         run(|s| s.handle(Handler::Console, r as i32))
     }
-    extern "C" fn explain(r: u32) {
+    fn explain(r: u32) {
         run(|s| s.handle(Handler::Explain, r as i32))
     }
-    extern "C" fn realize(_: u32) {
+    fn realize(_: u32) {
         run(|s| s.handle(Handler::Realize, 0))
     }
-    extern "C" fn friendly(r: u32) {
+    fn friendly(r: u32) {
         run(|s| s.handle(Handler::Friendly, r as i32))
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::Exit => exit,
             Handler::GiveMaidens => maidens,
@@ -377,11 +377,11 @@ mod live {
             Handler::Friendly => friendly,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro())
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
     #[no_mangle]

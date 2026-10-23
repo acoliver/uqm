@@ -80,7 +80,7 @@ pub(super) mod live {
 
     // Callbacks and live globals belong to the game thread, as in the C scripts.
     pub(in crate::comm::races) struct LiveScript<H> {
-        pub callback: fn(H) -> extern "C" fn(u32),
+        pub callback: fn(H) -> crate::comm::response::ResponseFunc,
     }
 
     impl<H> ScriptApi<H> for LiveScript<H> {
@@ -139,9 +139,9 @@ pub(super) mod live {
                     buf.add(text.len()).write(0);
                     buf.cast()
                 };
-                crate::comm::ffi::rust_DoResponsePhrase(
+                crate::comm::ffi::do_response_phrase(
                     u32::from(phrase),
-                    text,
+                    Some(CStr::from_ptr(text)),
                     Some((self.callback)(handler)),
                 );
             }
@@ -200,6 +200,5 @@ pub(super) mod live {
 }
 
 pub(super) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
-    // SAFETY: the descriptor is a live, aligned CLocData for this call.
-    unsafe { crate::comm::locdata::read_locdata_from_c(std::ptr::from_ref(desc).cast()) }
+    crate::comm::locdata::read_locdata(desc)
 }

@@ -2664,9 +2664,9 @@ pub type LDAS_FLAGS = DWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LOCDATA {
-    pub init_encounter_func: ::std::option::Option<unsafe extern "C" fn()>,
-    pub post_encounter_func: ::std::option::Option<unsafe extern "C" fn()>,
-    pub uninit_encounter_func: ::std::option::Option<unsafe extern "C" fn() -> COUNT>,
+    pub init_encounter_func: ::std::option::Option<fn()>,
+    pub post_encounter_func: ::std::option::Option<fn()>,
+    pub uninit_encounter_func: ::std::option::Option<fn() -> COUNT>,
     pub AlienFrameRes: RESOURCE,
     pub AlienFontRes: RESOURCE,
     pub AlienTextFColor: Color,
@@ -3869,9 +3869,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn StartShipExplosion(ShipPtr: *mut ELEMENT, playSound: bool);
 }
-unsafe extern "C" {
-    pub static mut CommData: LOCDATA;
-}
+
 unsafe extern "C" {
     pub static mut shared_phrase_buf: [UNICODE; 2048usize];
 }

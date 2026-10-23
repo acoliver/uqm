@@ -1501,9 +1501,9 @@ fn descriptor() -> CLocData {
     desc.alien_talk_desc = animation(4, 6, 0, (84, 56), (98, 70));
     #[cfg(not(test))]
     {
-        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
-        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
-        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+        desc.init_encounter_func = Some(live::intro);
+        desc.post_encounter_func = Some(live::post);
+        desc.uninit_encounter_func = Some(live::uninit);
     }
     desc
 }
@@ -1522,7 +1522,7 @@ mod live {
             session,
         });
     }
-    extern "C" fn bye_bye(r: u32) {
+    fn bye_bye(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ByeBye,
@@ -1530,7 +1530,7 @@ mod live {
             )
         });
     }
-    extern "C" fn alliance_info(r: u32) {
+    fn alliance_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AllianceInfo,
@@ -1538,7 +1538,7 @@ mod live {
             )
         });
     }
-    extern "C" fn hierarchy_info(r: u32) {
+    fn hierarchy_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::HierarchyInfo,
@@ -1546,7 +1546,7 @@ mod live {
             )
         });
     }
-    extern "C" fn alien_races(r: u32) {
+    fn alien_races(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AlienRaces,
@@ -1554,7 +1554,7 @@ mod live {
             )
         });
     }
-    extern "C" fn war_info(r: u32) {
+    fn war_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::WarInfo,
@@ -1562,7 +1562,7 @@ mod live {
             )
         });
     }
-    extern "C" fn ancient_history(r: u32) {
+    fn ancient_history(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AncientHistory,
@@ -1570,7 +1570,7 @@ mod live {
             )
         });
     }
-    extern "C" fn tell_history(r: u32) {
+    fn tell_history(r: u32) {
         run(|s| {
             s.handle(
                 Handler::TellHistory,
@@ -1578,7 +1578,7 @@ mod live {
             )
         });
     }
-    extern "C" fn defeat_urquan(r: u32) {
+    fn defeat_urquan(r: u32) {
         run(|s| {
             s.handle(
                 Handler::DefeatUrquan,
@@ -1586,7 +1586,7 @@ mod live {
             )
         });
     }
-    extern "C" fn tell_mission(r: u32) {
+    fn tell_mission(r: u32) {
         run(|s| {
             s.handle(
                 Handler::TellMission,
@@ -1594,7 +1594,7 @@ mod live {
             )
         });
     }
-    extern "C" fn tell_star_base(r: u32) {
+    fn tell_star_base(r: u32) {
         run(|s| {
             s.handle(
                 Handler::TellStarBase,
@@ -1602,7 +1602,7 @@ mod live {
             )
         });
     }
-    extern "C" fn need_info(r: u32) {
+    fn need_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NeedInfo,
@@ -1610,7 +1610,7 @@ mod live {
             )
         });
     }
-    extern "C" fn normal_starbase(r: u32) {
+    fn normal_starbase(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NormalStarbase,
@@ -1618,7 +1618,7 @@ mod live {
             )
         });
     }
-    extern "C" fn sell_minerals(r: u32) {
+    fn sell_minerals(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SellMinerals,
@@ -1626,7 +1626,7 @@ mod live {
             )
         });
     }
-    fn callback(handler: Handler) -> extern "C" fn(u32) {
+    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
         match handler {
             Handler::ByeBye => bye_bye,
             Handler::AllianceInfo => alliance_info,
@@ -1643,13 +1643,13 @@ mod live {
             Handler::SellMinerals => sell_minerals,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_starbase_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.

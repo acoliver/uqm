@@ -309,32 +309,24 @@ pub unsafe extern "C" fn rust_AreSubtitlesEnabled() -> c_int {
 // Response System
 // ============================================================================
 
-/// Add a response option.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-/// `func` receives `response_ref` as its argument when selected (RS-REQ-011).
-#[no_mangle]
-pub unsafe extern "C" fn rust_DoResponsePhrase(
+/// Add a response option, rejecting absent or non-UTF-8 resource text.
+/// `func` receives `response_ref` when the response is selected.
+pub fn do_response_phrase(
     response_ref: c_uint,
-    text: *const c_char,
-    func: Option<extern "C" fn(u32)>,
+    text: Option<&CStr>,
+    func: Option<super::response::ResponseFunc>,
 ) -> c_int {
     eprintln!(
         "[DBG] rust_DoResponsePhrase: ref={} text_null={} func={}",
         response_ref,
-        text.is_null(),
+        text.is_none(),
         func.is_some()
     );
-    if text.is_null() {
+    let Some(text) = text else {
         return 0;
-    }
-
-    let text_str = unsafe {
-        match CStr::from_ptr(text).to_str() {
-            Ok(s) => s,
-            Err(_) => return 0,
-        }
+    };
+    let Ok(text_str) = text.to_str() else {
+        return 0;
     };
 
     let ok = COMM_STATE
@@ -1451,6 +1443,9 @@ pub unsafe extern "C" fn rust_HailAlien() {
 // @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 // ============================================================================
 
+#[cfg(not(test))]
+use super::locdata::COMM_DATA as CommData;
+
 // Special phrase-index constants matching commglue.h enum values.
 #[cfg(not(test))]
 const GLOBAL_PLAYER_NAME: c_int = -1_000_000;
@@ -1480,8 +1475,6 @@ extern "C" {
     );
     // C globals for direct access
     pub static mut GlobData: crate::comm::locdata::CGlobData;
-    // C global CommData (for ConversationPhrases access)
-    pub static mut CommData: crate::comm::locdata::CLocData;
 }
 
 // Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
@@ -1781,8 +1774,8 @@ mod tests {
             let text1 = CString::new("Option A").unwrap();
             let text2 = CString::new("Option B").unwrap();
 
-            assert_eq!(rust_DoResponsePhrase(1, text1.as_ptr(), None), 1);
-            assert_eq!(rust_DoResponsePhrase(2, text2.as_ptr(), None), 1);
+            assert_eq!(do_response_phrase(1, Some(text1.as_c_str()), None), 1);
+            assert_eq!(do_response_phrase(2, Some(text2.as_c_str()), None), 1);
 
             assert_eq!(rust_GetResponseCount(), 2);
 
@@ -1935,7 +1928,7 @@ mod tests {
             // Should handle null pointers gracefully
             rust_SpliceTrack(1, std::ptr::null(), 0.0, 1.0);
             rust_SpliceTrackText(std::ptr::null(), 0.0, 1.0);
-            assert_eq!(rust_DoResponsePhrase(1, std::ptr::null(), None), 0);
+            assert_eq!(do_response_phrase(1, None, None), 0);
             rust_AddOscilloscopeSamples(std::ptr::null(), 0);
 
             rust_UninitCommunication();

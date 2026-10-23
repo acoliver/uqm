@@ -434,9 +434,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 11, 0, (14, 0), (14, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -448,7 +448,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -456,7 +456,7 @@ mod live {
             )
         });
     }
-    extern "C" fn not_ready(r: u32) {
+    fn not_ready(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NotReady,
@@ -464,7 +464,7 @@ mod live {
             )
         });
     }
-    extern "C" fn improve_bomb(r: u32) {
+    fn improve_bomb(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ImproveBomb,
@@ -472,7 +472,7 @@ mod live {
             )
         });
     }
-    extern "C" fn chmmr_free(r: u32) {
+    fn chmmr_free(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ChmmrFree,
@@ -480,7 +480,7 @@ mod live {
             )
         });
     }
-    extern "C" fn chmmr_advice(r: u32) {
+    fn chmmr_advice(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ChmmrAdvice,
@@ -488,7 +488,7 @@ mod live {
             )
         });
     }
-    extern "C" fn chmmr_shielded(r: u32) {
+    fn chmmr_shielded(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ChmmrShielded,
@@ -496,7 +496,7 @@ mod live {
             )
         });
     }
-    extern "C" fn after_bomb(r: u32) {
+    fn after_bomb(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AfterBomb,
@@ -504,7 +504,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::NotReady => not_ready,
@@ -515,13 +515,13 @@ mod live {
             Handler::AfterBomb => after_bomb,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_chmmr_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

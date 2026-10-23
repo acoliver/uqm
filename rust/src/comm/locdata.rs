@@ -12,8 +12,6 @@ use crate::time::clock_bridge::ClockState;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
-#[cfg(not(test))]
-#[export_name = "CommData"]
 pub static mut COMM_DATA: CLocData = unsafe { std::mem::zeroed() };
 
 // ===========================================================================
@@ -239,9 +237,9 @@ pub struct CAnimationDesc {
 #[derive(Default)]
 pub struct CLocData {
     // Function pointers (3 × 8 bytes on 64-bit)
-    pub init_encounter_func: *const c_void,
-    pub post_encounter_func: *const c_void,
-    pub uninit_encounter_func: *const c_void,
+    pub init_encounter_func: Option<fn()>,
+    pub post_encounter_func: Option<fn()>,
+    pub uninit_encounter_func: Option<fn() -> u16>,
 
     // Resource IDs (const char* pointers)
     pub alien_frame_res: *const c_char,
@@ -387,21 +385,6 @@ pub fn has_comm_data() -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Direct C FFI: init_race (still a C global, not a bridge function)
-// ---------------------------------------------------------------------------
-
-extern "C" {
-    /// C's `init_race()` — dispatches to the correct race's `init_*_comm()`
-    /// and returns a static `LOCDATA*`.  This calls our Rust
-    /// `rust_init_race_dispatch()` first, falling back to the C switch.
-    // Direct C init_race (replaces c_init_race forwarder)
-    // Uses #[link_name] to call C's init_race directly without name collision.
-    #[link_name = "init_race"]
-    #[allow(clashing_extern_declarations)]
-    fn init_race_direct(comm_id: u32) -> *const CLocData;
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -413,101 +396,48 @@ extern "C" {
 /// Must be called from the game thread. The returned pointer is valid for
 /// the lifetime of the encounter.
 pub unsafe fn init_race(comm_id: i32) -> *const c_void {
-    unsafe { init_race_direct(comm_id as u32) as *const c_void }
+    unsafe { crate::comm::dispatch::rust_init_race_dispatch(comm_id as u32).cast_const() }
 }
 
-/// Read all fields from a C `LOCDATA*` into a Rust-owned `CommData`.
-///
-/// Uses direct `#[repr(C)]` struct access — no per-field C bridge functions.
-///
-/// # Safety
-/// `locdata_ptr` must be a valid, non-null pointer to a C `LOCDATA` struct.
-pub unsafe fn read_locdata_from_c(locdata_ptr: *const c_void) -> CommData {
-    let ld: &CLocData = unsafe { &*(locdata_ptr as *const CLocData) };
-
-    let mut data = CommData::default();
-
-    // Lifecycle callbacks — store as raw usize addresses
-    if !ld.init_encounter_func.is_null() {
-        data.init_encounter_func = Some(ld.init_encounter_func as usize);
+/// Copy a dialogue descriptor into the owned communication state.
+pub fn read_locdata(ld: &CLocData) -> CommData {
+    let mut alien_ambient_array = [AnimationDescData::default(); MAX_ANIMATIONS];
+    let count = usize::from(ld.num_animations).min(MAX_ANIMATIONS);
+    for (target, source) in alien_ambient_array[..count]
+        .iter_mut()
+        .zip(&ld.alien_ambient_array[..count])
+    {
+        *target = anim_desc_to_rust(source);
     }
-    if !ld.post_encounter_func.is_null() {
-        data.post_encounter_func = Some(ld.post_encounter_func as usize);
+    CommData {
+        init_encounter_func: ld.init_encounter_func,
+        post_encounter_func: ld.post_encounter_func,
+        uninit_encounter_func: ld.uninit_encounter_func,
+        alien_frame_res: ld.alien_frame_res,
+        alien_font_res: ld.alien_font_res,
+        alien_colormap_res: ld.alien_colormap_res,
+        alien_song_res: ld.alien_song_res,
+        alien_alt_song_res: ld.alien_alt_song_res,
+        conversation_phrases_res: ld.conversation_phrases_res,
+        alien_text_fcolor: color_to_u32(ld.alien_text_fcolor),
+        alien_text_bcolor: color_to_u32(ld.alien_text_bcolor),
+        alien_text_baseline_x: ld.alien_text_baseline.x,
+        alien_text_baseline_y: ld.alien_text_baseline.y,
+        alien_text_width: ld.alien_text_width,
+        alien_text_align: TextAlign::from(ld.alien_text_align),
+        alien_text_valign: TextValign::from(ld.alien_text_valign),
+        alien_song_flags: ld.alien_song_flags,
+        alien_transition_desc: anim_desc_to_rust(&ld.alien_transition_desc),
+        alien_talk_desc: anim_desc_to_rust(&ld.alien_talk_desc),
+        alien_number_speech: ld.alien_number_speech,
+        alien_frame: ld.alien_frame,
+        alien_font: ld.alien_font,
+        alien_color_map: ld.alien_colormap,
+        alien_song: ld.alien_song,
+        conversation_phrases: ld.conversation_phrases,
+        num_animations: u32::from(ld.num_animations),
+        alien_ambient_array,
     }
-    if !ld.uninit_encounter_func.is_null() {
-        data.uninit_encounter_func = Some(ld.uninit_encounter_func as usize);
-    }
-
-    // Resource IDs
-    data.alien_frame_res = ld.alien_frame_res;
-    data.alien_font_res = ld.alien_font_res;
-    data.alien_colormap_res = ld.alien_colormap_res;
-    data.alien_song_res = ld.alien_song_res;
-    data.alien_alt_song_res = ld.alien_alt_song_res;
-    data.conversation_phrases_res = ld.conversation_phrases_res;
-
-    // Text layout
-    data.alien_text_fcolor = color_to_u32(ld.alien_text_fcolor);
-    data.alien_text_bcolor = color_to_u32(ld.alien_text_bcolor);
-    data.alien_text_baseline_x = ld.alien_text_baseline.x;
-    data.alien_text_baseline_y = ld.alien_text_baseline.y;
-    data.alien_text_width = ld.alien_text_width;
-    data.alien_text_align = TextAlign::from(ld.alien_text_align);
-    data.alien_text_valign = TextValign::from(ld.alien_text_valign);
-
-    // Song flags
-    data.alien_song_flags = ld.alien_song_flags;
-
-    // Animation descriptors
-    data.num_animations = ld.num_animations as u32;
-    let n = std::cmp::min(data.num_animations as usize, MAX_ANIMATIONS);
-    for i in 0..n {
-        data.alien_ambient_array[i] = anim_desc_to_rust(&ld.alien_ambient_array[i]);
-    }
-    data.alien_transition_desc = anim_desc_to_rust(&ld.alien_transition_desc);
-    data.alien_talk_desc = anim_desc_to_rust(&ld.alien_talk_desc);
-
-    // Number speech (borrowed)
-    data.alien_number_speech = ld.alien_number_speech;
-
-    // Loaded handles
-    data.alien_frame = ld.alien_frame;
-    data.alien_font = ld.alien_font;
-    data.alien_color_map = ld.alien_colormap;
-    data.alien_song = ld.alien_song;
-    data.conversation_phrases = ld.conversation_phrases;
-
-    data
-}
-
-/// Sync C's LOCDATA into Rust's global CommData singleton.
-///
-/// Called from C's `InitCommunication` after `CommData = *LocDataPtr`.
-/// This makes Rust's CommData the authoritative copy for Rust-side reads.
-///
-/// # Safety
-/// `locdata_ptr` must be a valid, non-null pointer to a C `LOCDATA` struct,
-/// or null to clear the singleton.
-pub unsafe extern "C" fn rust_sync_comm_data(locdata_ptr: *const c_void) {
-    if locdata_ptr.is_null() {
-        clear_comm_data();
-        return;
-    }
-    let data = unsafe { read_locdata_from_c(locdata_ptr) };
-    set_comm_data(data);
-}
-
-/// Clear Rust's global CommData singleton.
-///
-/// Called from C when an encounter ends and CommData is no longer valid.
-///
-/// # Safety
-///
-/// This is an FFI function called from C. It accesses a global Mutex; the
-/// caller must ensure no other thread is simultaneously accessing the
-/// CommData singleton.
-pub unsafe extern "C" fn rust_clear_comm_data() {
-    clear_comm_data();
 }
 
 // ===========================================================================
@@ -517,6 +447,37 @@ pub unsafe extern "C" fn rust_clear_comm_data() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn descriptor_conversion_preserves_typed_lifecycle_callbacks() {
+        use std::sync::atomic::{AtomicU8, Ordering};
+        static CALLS: AtomicU8 = AtomicU8::new(0);
+        fn init() {
+            assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 0);
+        }
+        fn post() {
+            assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 1);
+        }
+        fn uninit() -> u16 {
+            assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 2);
+            17
+        }
+        let descriptor = CLocData {
+            init_encounter_func: Some(init),
+            post_encounter_func: Some(post),
+            uninit_encounter_func: Some(uninit),
+            ..CLocData::default()
+        };
+        let data = read_locdata(&descriptor);
+        data.init_encounter_func.unwrap()();
+        data.post_encounter_func.unwrap()();
+        assert_eq!(data.uninit_encounter_func.unwrap()(), 17);
+        assert_eq!(CALLS.load(Ordering::SeqCst), 3);
+        let empty = read_locdata(&CLocData::default());
+        assert!(empty.init_encounter_func.is_none());
+        assert!(empty.post_encounter_func.is_none());
+        assert!(empty.uninit_encounter_func.is_none());
+    }
 
     #[test]
     fn test_c_locdata_struct_layout() {

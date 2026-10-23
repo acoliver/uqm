@@ -501,9 +501,9 @@ fn descriptor() -> CLocData {
     desc.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
-        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
-        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+        desc.init_encounter_func = Some(live::intro);
+        desc.post_encounter_func = Some(live::post);
+        desc.uninit_encounter_func = Some(live::uninit);
     }
     desc
 }
@@ -515,7 +515,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn combat_is_inevitable(r: u32) {
+    fn combat_is_inevitable(r: u32) {
         run(|s| {
             s.handle(
                 Handler::CombatIsInevitable,
@@ -523,7 +523,7 @@ mod live {
             )
         });
     }
-    extern "C" fn ilwrath_gods(r: u32) {
+    fn ilwrath_gods(r: u32) {
         run(|s| {
             s.handle(
                 Handler::IlwrathGods,
@@ -531,7 +531,7 @@ mod live {
             )
         });
     }
-    extern "C" fn ilwrath_info(r: u32) {
+    fn ilwrath_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::IlwrathInfo,
@@ -539,7 +539,7 @@ mod live {
             )
         });
     }
-    extern "C" fn ilwrath_home(r: u32) {
+    fn ilwrath_home(r: u32) {
         run(|s| {
             s.handle(
                 Handler::IlwrathHome,
@@ -547,7 +547,7 @@ mod live {
             )
         });
     }
-    extern "C" fn gods_order(r: u32) {
+    fn gods_order(r: u32) {
         run(|s| {
             s.handle(
                 Handler::GodsOrder,
@@ -555,7 +555,7 @@ mod live {
             )
         });
     }
-    extern "C" fn gods_speak(r: u32) {
+    fn gods_speak(r: u32) {
         run(|s| {
             s.handle(
                 Handler::GodsSpeak,
@@ -563,7 +563,7 @@ mod live {
             )
         });
     }
-    fn callback(handler: Handler) -> extern "C" fn(u32) {
+    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
         match handler {
             Handler::CombatIsInevitable => combat_is_inevitable,
             Handler::IlwrathGods => ilwrath_gods,
@@ -573,13 +573,13 @@ mod live {
             Handler::GodsSpeak => gods_speak,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_ilwrath_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter descriptor and initial battle segue.
