@@ -1,10 +1,4 @@
-//! Rust-side ABI integration tests for the memory subsystem.
-//!
-//! These tests exercise the exported `extern "C"` functions through the library
-//! crate's public API, verifying ABI-surface behavior from outside the module.
-//!
-//! @plan PLAN-20260314-MEMORY.P05
-//! @requirement REQ-MEM-INT-009 (partial — Rust-side ABI surface only)
+//! Allocation, zero-fill, resize and cleanup behaviour through the Rust API.
 
 use uqm_rust::memory::*;
 

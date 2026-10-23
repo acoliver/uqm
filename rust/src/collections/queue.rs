@@ -2,6 +2,7 @@
 // Uses #[repr(C)] QUEUE/LINK structs matching the exact C memory layout.
 // QUEUE_TABLE mode: elements are allocated from a preallocated pool.
 
+use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
 
 /// HLINK — opaque handle to a link (actually a raw pointer to the LINK fields)
@@ -30,11 +31,6 @@ pub struct Queue {
 
 /// OBJ_SIZE type alias
 pub type ObjSize = u16;
-
-extern "C" {
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hfree(ptr: *mut c_void);
-}
 
 // ---------------------------------------------------------------------------
 // Internal helpers (replacing C macros)

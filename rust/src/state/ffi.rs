@@ -19,8 +19,7 @@ static GLOBAL_STATE_FILES: Mutex<Option<StateFileManager>> = Mutex::new(None);
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_init_game_state() {
+pub unsafe fn rust_init_game_state() {
     // Always start from zero. The sole caller, InitGlobData, memsets the C
     // shadow and calls this to match; Rust holds the authoritative copy. Only
     // creating the state when absent left a second New Game in the same process
@@ -40,8 +39,7 @@ pub unsafe extern "C" fn rust_init_game_state() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn rust_get_game_state(key: *const c_char) -> c_uchar {
+pub unsafe fn rust_get_game_state(key: *const c_char) -> c_uchar {
     let Some((start_bit, end_bit)) = decode_state_key(key) else {
         return 0;
     };
@@ -55,8 +53,7 @@ pub unsafe extern "C" fn rust_get_game_state(key: *const c_char) -> c_uchar {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn rust_set_game_state(key: *const c_char, value: c_uchar) {
+pub unsafe fn rust_set_game_state(key: *const c_char, value: c_uchar) {
     let Some((start_bit, end_bit)) = decode_state_key(key) else {
         return;
     };
@@ -70,7 +67,7 @@ pub unsafe extern "C" fn rust_set_game_state(key: *const c_char, value: c_uchar)
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uchar {
+pub unsafe fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uchar {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
         guard_convert_value(&GLOBAL_GAME_STATE, |state| {
             state.get_state(start_bit, end_bit)
@@ -84,11 +81,7 @@ pub unsafe extern "C" fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_i
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_set_game_state_bits(
-    start_bit: c_int,
-    end_bit: c_int,
-    value: c_uchar,
-) {
+pub unsafe fn rust_set_game_state_bits(start_bit: c_int, end_bit: c_int, value: c_uchar) {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
         guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
             state.set_state(start_bit, end_bit, value);
@@ -100,7 +93,7 @@ pub unsafe extern "C" fn rust_set_game_state_bits(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_game_state_32(start_bit: c_int) -> u32 {
+pub unsafe fn rust_get_game_state_32(start_bit: c_int) -> u32 {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return 0;
     };
@@ -112,7 +105,7 @@ pub unsafe extern "C" fn rust_get_game_state_32(start_bit: c_int) -> u32 {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
+pub unsafe fn rust_set_game_state_32(start_bit: c_int, value: u32) {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return;
     };
@@ -126,11 +119,7 @@ pub unsafe extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_copy_game_state(
-    dest_bit: c_int,
-    src_start_bit: c_int,
-    src_end_bit: c_int,
-) {
+pub unsafe fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, src_end_bit: c_int) {
     let Some((dest_bit, src_start_bit, src_end_bit)) =
         normalize_copy_bits(dest_bit, src_start_bit, src_end_bit)
     else {
@@ -152,7 +141,7 @@ pub unsafe extern "C" fn rust_copy_game_state(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_reset_game_state() {
+pub unsafe fn rust_reset_game_state() {
     guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
         state.reset();
     });
@@ -162,7 +151,7 @@ pub unsafe extern "C" fn rust_reset_game_state() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn rust_open_state_file(file_index: c_int, mode: *const c_char) -> c_int {
+pub unsafe fn rust_open_state_file(file_index: c_int, mode: *const c_char) -> c_int {
     if mode.is_null() {
         return 0;
     }
@@ -192,7 +181,7 @@ pub unsafe extern "C" fn rust_open_state_file(file_index: c_int, mode: *const c_
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_close_state_file(file_index: c_int) {
+pub unsafe fn rust_close_state_file(file_index: c_int) {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let _ = files.close(file_index as usize);
     });
@@ -202,7 +191,7 @@ pub unsafe extern "C" fn rust_close_state_file(file_index: c_int) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_delete_state_file(file_index: c_int) {
+pub unsafe fn rust_delete_state_file(file_index: c_int) {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let _ = files.delete(file_index as usize);
     });
@@ -212,7 +201,7 @@ pub unsafe extern "C" fn rust_delete_state_file(file_index: c_int) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_length_state_file(file_index: c_int) -> usize {
+pub unsafe fn rust_length_state_file(file_index: c_int) -> usize {
     guard_convert_state_value(&GLOBAL_STATE_FILES, |files| {
         files
             .get_file(file_index as usize)
@@ -225,7 +214,7 @@ pub unsafe extern "C" fn rust_length_state_file(file_index: c_int) -> usize {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_read_state_file(
+pub unsafe fn rust_read_state_file(
     file_index: c_int,
     buf: *mut u8,
     size: usize,
@@ -250,7 +239,7 @@ pub unsafe extern "C" fn rust_read_state_file(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_write_state_file(
+pub unsafe fn rust_write_state_file(
     file_index: c_int,
     buf: *const u8,
     size: usize,
@@ -278,11 +267,7 @@ pub unsafe extern "C" fn rust_write_state_file(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_seek_state_file(
-    file_index: c_int,
-    offset: i64,
-    whence: c_int,
-) -> c_int {
+pub unsafe fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c_int) -> c_int {
     use super::state_file::SeekWhence;
 
     let seek_whence = match whence {
@@ -307,7 +292,7 @@ pub unsafe extern "C" fn rust_seek_state_file(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn rust_get_game_state_bytes() -> *const u8 {
+pub unsafe fn rust_get_game_state_bytes() -> *const u8 {
     guard_convert_value(&GLOBAL_GAME_STATE, |state| state.as_bytes().as_ptr())
 }
 
@@ -315,7 +300,7 @@ pub unsafe extern "C" fn rust_get_game_state_bytes() -> *const u8 {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_game_state_size() -> usize {
+pub unsafe fn rust_get_game_state_size() -> usize {
     super::game_state::NUM_GAME_STATE_BYTES
 }
 
@@ -323,7 +308,7 @@ pub unsafe extern "C" fn rust_get_game_state_size() -> usize {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn rust_restore_game_state_from_bytes(bytes: *const u8, size: usize) {
+pub unsafe fn rust_restore_game_state_from_bytes(bytes: *const u8, size: usize) {
     if bytes.is_null() || size < NUM_GAME_STATE_BYTES {
         return;
     }
@@ -412,7 +397,7 @@ pub fn replace_game_state(bytes: &[u8; NUM_GAME_STATE_BYTES]) -> Result<(), Game
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_game_state_bits_from_bytes(
+pub unsafe fn rust_get_game_state_bits_from_bytes(
     bytes: *const u8,
     start_bit: c_int,
     end_bit: c_int,
@@ -431,7 +416,7 @@ pub unsafe extern "C" fn rust_get_game_state_bits_from_bytes(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_set_game_state_bits_in_bytes(
+pub unsafe fn rust_set_game_state_bits_in_bytes(
     bytes: *mut u8,
     start_bit: c_int,
     end_bit: c_int,
@@ -451,10 +436,7 @@ pub unsafe extern "C" fn rust_set_game_state_bits_in_bytes(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_game_state32_from_bytes(
-    bytes: *const u8,
-    start_bit: c_int,
-) -> u32 {
+pub unsafe fn rust_get_game_state32_from_bytes(bytes: *const u8, start_bit: c_int) -> u32 {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return 0;
     };
@@ -469,11 +451,7 @@ pub unsafe extern "C" fn rust_get_game_state32_from_bytes(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_set_game_state32_in_bytes(
-    bytes: *mut u8,
-    start_bit: c_int,
-    value: u32,
-) {
+pub unsafe fn rust_set_game_state32_in_bytes(bytes: *mut u8, start_bit: c_int, value: u32) {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return;
     };
@@ -488,7 +466,7 @@ pub unsafe extern "C" fn rust_set_game_state32_in_bytes(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_copy_game_state_bits_between_bytes(
+pub unsafe fn rust_copy_game_state_bits_between_bytes(
     dest: *mut u8,
     target: c_int,
     src: *const u8,
@@ -512,7 +490,7 @@ pub unsafe extern "C" fn rust_copy_game_state_bits_between_bytes(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_init_planet_info(num_stars: c_int) -> c_int {
+pub unsafe fn rust_init_planet_info(num_stars: c_int) -> c_int {
     if num_stars < 0 {
         return 0;
     }
@@ -530,7 +508,7 @@ pub unsafe extern "C" fn rust_init_planet_info(num_stars: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_uninit_planet_info() {
+pub unsafe fn rust_uninit_planet_info() {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let mut manager = PlanetInfoManager::new(files);
         let _ = manager.uninit_planet_info();
@@ -541,7 +519,7 @@ pub unsafe extern "C" fn rust_uninit_planet_info() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_get_planet_info(
+pub unsafe fn rust_get_planet_info(
     star_index: c_int,
     planet_index: c_int,
     moon_index: c_int,
@@ -584,7 +562,7 @@ pub unsafe extern "C" fn rust_get_planet_info(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_put_planet_info(
+pub unsafe fn rust_put_planet_info(
     star_index: c_int,
     planet_index: c_int,
     moon_index: c_int,

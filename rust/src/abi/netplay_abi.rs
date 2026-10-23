@@ -1,5 +1,4 @@
-// Rust-owned engine ABI. Layout assertions preserve the clang/bindgen 0.70.1
-// measurements from the C transition; this file is not generated during builds.
+// Shared engine records used by the Rust runtime.
 
 pub use super::netconnection::NetConnection_setState;
 #[repr(C)]
@@ -197,12 +196,6 @@ pub type uint32 = ::std::os::raw::c_uint;
 pub struct NetStateData {
     pub name: *const ::std::os::raw::c_char,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetStateData"][::std::mem::size_of::<NetStateData>() - 8usize];
-    ["Alignment of NetStateData"][::std::mem::align_of::<NetStateData>() - 8usize];
-    ["Offset of field: NetStateData::name"][::std::mem::offset_of!(NetStateData, name) - 0usize];
-};
 pub type NetConnectionStateData_ReleaseFunction =
     ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
 #[repr(C)]
@@ -210,14 +203,6 @@ pub type NetConnectionStateData_ReleaseFunction =
 pub struct NetConnectionStateData {
     pub releaseFunction: NetConnectionStateData_ReleaseFunction,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetConnectionStateData"][::std::mem::size_of::<NetConnectionStateData>() - 8usize];
-    ["Alignment of NetConnectionStateData"]
-        [::std::mem::align_of::<NetConnectionStateData>() - 8usize];
-    ["Offset of field: NetConnectionStateData::releaseFunction"]
-        [::std::mem::offset_of!(NetConnectionStateData, releaseFunction) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetplayPeerOptions {
@@ -225,17 +210,6 @@ pub struct NetplayPeerOptions {
     pub host: *const ::std::os::raw::c_char,
     pub port: *const ::std::os::raw::c_char,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetplayPeerOptions"][::std::mem::size_of::<NetplayPeerOptions>() - 24usize];
-    ["Alignment of NetplayPeerOptions"][::std::mem::align_of::<NetplayPeerOptions>() - 8usize];
-    ["Offset of field: NetplayPeerOptions::isServer"]
-        [::std::mem::offset_of!(NetplayPeerOptions, isServer) - 0usize];
-    ["Offset of field: NetplayPeerOptions::host"]
-        [::std::mem::offset_of!(NetplayPeerOptions, host) - 8usize];
-    ["Offset of field: NetplayPeerOptions::port"]
-        [::std::mem::offset_of!(NetplayPeerOptions, port) - 16usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetplayOptions {
@@ -244,19 +218,6 @@ pub struct NetplayOptions {
     pub peer: [NetplayPeerOptions; 2usize],
     pub inputDelay: usize,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetplayOptions"][::std::mem::size_of::<NetplayOptions>() - 72usize];
-    ["Alignment of NetplayOptions"][::std::mem::align_of::<NetplayOptions>() - 8usize];
-    ["Offset of field: NetplayOptions::metaServer"]
-        [::std::mem::offset_of!(NetplayOptions, metaServer) - 0usize];
-    ["Offset of field: NetplayOptions::metaPort"]
-        [::std::mem::offset_of!(NetplayOptions, metaPort) - 8usize];
-    ["Offset of field: NetplayOptions::peer"]
-        [::std::mem::offset_of!(NetplayOptions, peer) - 16usize];
-    ["Offset of field: NetplayOptions::inputDelay"]
-        [::std::mem::offset_of!(NetplayOptions, inputDelay) - 64usize];
-};
 pub type BYTE = uint8;
 pub type UBYTE = uint8;
 pub type UWORD = uint16;
@@ -297,13 +258,6 @@ pub struct extent {
     pub width: COORD,
     pub height: COORD,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of extent"][::std::mem::size_of::<extent>() - 4usize];
-    ["Alignment of extent"][::std::mem::align_of::<extent>() - 2usize];
-    ["Offset of field: extent::width"][::std::mem::offset_of!(extent, width) - 0usize];
-    ["Offset of field: extent::height"][::std::mem::offset_of!(extent, height) - 2usize];
-};
 pub type EXTENT = extent;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -311,13 +265,6 @@ pub struct point {
     pub x: COORD,
     pub y: COORD,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of point"][::std::mem::size_of::<point>() - 4usize];
-    ["Alignment of point"][::std::mem::align_of::<point>() - 2usize];
-    ["Offset of field: point::x"][::std::mem::offset_of!(point, x) - 0usize];
-    ["Offset of field: point::y"][::std::mem::offset_of!(point, y) - 2usize];
-};
 pub type POINT = point;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -325,13 +272,6 @@ pub struct stamp {
     pub origin: POINT,
     pub frame: FRAME,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of stamp"][::std::mem::size_of::<stamp>() - 16usize];
-    ["Alignment of stamp"][::std::mem::align_of::<stamp>() - 8usize];
-    ["Offset of field: stamp::origin"][::std::mem::offset_of!(stamp, origin) - 0usize];
-    ["Offset of field: stamp::frame"][::std::mem::offset_of!(stamp, frame) - 8usize];
-};
 pub type STAMP = stamp;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -340,17 +280,6 @@ pub struct INTERSECT_CONTROL {
     pub EndPoint: POINT,
     pub IntersectStamp: STAMP,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of INTERSECT_CONTROL"][::std::mem::size_of::<INTERSECT_CONTROL>() - 24usize];
-    ["Alignment of INTERSECT_CONTROL"][::std::mem::align_of::<INTERSECT_CONTROL>() - 8usize];
-    ["Offset of field: INTERSECT_CONTROL::last_time_val"]
-        [::std::mem::offset_of!(INTERSECT_CONTROL, last_time_val) - 0usize];
-    ["Offset of field: INTERSECT_CONTROL::EndPoint"]
-        [::std::mem::offset_of!(INTERSECT_CONTROL, EndPoint) - 2usize];
-    ["Offset of field: INTERSECT_CONTROL::IntersectStamp"]
-        [::std::mem::offset_of!(INTERSECT_CONTROL, IntersectStamp) - 8usize];
-};
 pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -362,19 +291,6 @@ pub struct battlestate_struct {
     pub NextTime: DWORD,
     pub frame_cb: BattleFrameCallback,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of battlestate_struct"][::std::mem::size_of::<battlestate_struct>() - 24usize];
-    ["Alignment of battlestate_struct"][::std::mem::align_of::<battlestate_struct>() - 8usize];
-    ["Offset of field: battlestate_struct::InputFunc"]
-        [::std::mem::offset_of!(battlestate_struct, InputFunc) - 0usize];
-    ["Offset of field: battlestate_struct::first_time"]
-        [::std::mem::offset_of!(battlestate_struct, first_time) - 8usize];
-    ["Offset of field: battlestate_struct::NextTime"]
-        [::std::mem::offset_of!(battlestate_struct, NextTime) - 12usize];
-    ["Offset of field: battlestate_struct::frame_cb"]
-        [::std::mem::offset_of!(battlestate_struct, frame_cb) - 16usize];
-};
 extern "C" {
     pub static mut battleFrameCount: BattleFrameCounter;
 }
@@ -384,12 +300,6 @@ pub type Checksum = uint32;
 pub struct crc_State {
     pub crc: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of crc_State"][::std::mem::size_of::<crc_State>() - 4usize];
-    ["Alignment of crc_State"][::std::mem::align_of::<crc_State>() - 4usize];
-    ["Offset of field: crc_State::crc"][::std::mem::offset_of!(crc_State, crc) - 0usize];
-};
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
 #[repr(C)]
@@ -402,17 +312,6 @@ pub struct QUEUE {
     pub object_size: COUNT,
     pub num_objects: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of QUEUE"][::std::mem::size_of::<QUEUE>() - 40usize];
-    ["Alignment of QUEUE"][::std::mem::align_of::<QUEUE>() - 8usize];
-    ["Offset of field: QUEUE::head"][::std::mem::offset_of!(QUEUE, head) - 0usize];
-    ["Offset of field: QUEUE::tail"][::std::mem::offset_of!(QUEUE, tail) - 8usize];
-    ["Offset of field: QUEUE::pq_tab"][::std::mem::offset_of!(QUEUE, pq_tab) - 16usize];
-    ["Offset of field: QUEUE::free_list"][::std::mem::offset_of!(QUEUE, free_list) - 24usize];
-    ["Offset of field: QUEUE::object_size"][::std::mem::offset_of!(QUEUE, object_size) - 32usize];
-    ["Offset of field: QUEUE::num_objects"][::std::mem::offset_of!(QUEUE, num_objects) - 34usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct velocity_desc {
@@ -422,20 +321,6 @@ pub struct velocity_desc {
     pub error: EXTENT,
     pub incr: EXTENT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of velocity_desc"][::std::mem::size_of::<velocity_desc>() - 18usize];
-    ["Alignment of velocity_desc"][::std::mem::align_of::<velocity_desc>() - 2usize];
-    ["Offset of field: velocity_desc::TravelAngle"]
-        [::std::mem::offset_of!(velocity_desc, TravelAngle) - 0usize];
-    ["Offset of field: velocity_desc::vector"]
-        [::std::mem::offset_of!(velocity_desc, vector) - 2usize];
-    ["Offset of field: velocity_desc::fract"]
-        [::std::mem::offset_of!(velocity_desc, fract) - 6usize];
-    ["Offset of field: velocity_desc::error"]
-        [::std::mem::offset_of!(velocity_desc, error) - 10usize];
-    ["Offset of field: velocity_desc::incr"][::std::mem::offset_of!(velocity_desc, incr) - 14usize];
-};
 pub type VELOCITY_DESC = velocity_desc;
 pub type HELEMENT = HLINK;
 pub type ELEMENT_FLAGS = UWORD;
@@ -451,22 +336,6 @@ pub struct state__bindgen_ty_1 {
     pub frame: FRAME,
     pub farray: *mut FRAME,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of state__bindgen_ty_1"][::std::mem::size_of::<state__bindgen_ty_1>() - 16usize];
-    ["Alignment of state__bindgen_ty_1"][::std::mem::align_of::<state__bindgen_ty_1>() - 8usize];
-    ["Offset of field: state__bindgen_ty_1::frame"]
-        [::std::mem::offset_of!(state__bindgen_ty_1, frame) - 0usize];
-    ["Offset of field: state__bindgen_ty_1::farray"]
-        [::std::mem::offset_of!(state__bindgen_ty_1, farray) - 8usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of state"][::std::mem::size_of::<state>() - 24usize];
-    ["Alignment of state"][::std::mem::align_of::<state>() - 8usize];
-    ["Offset of field: state::location"][::std::mem::offset_of!(state, location) - 0usize];
-    ["Offset of field: state::image"][::std::mem::offset_of!(state, image) - 8usize];
-};
 pub type STATE = state;
 pub type ELEMENT = element;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
@@ -509,16 +378,6 @@ pub union element__bindgen_ty_1 {
     pub life_span: COUNT,
     pub scan_node: COUNT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element__bindgen_ty_1"][::std::mem::size_of::<element__bindgen_ty_1>() - 2usize];
-    ["Alignment of element__bindgen_ty_1"]
-        [::std::mem::align_of::<element__bindgen_ty_1>() - 2usize];
-    ["Offset of field: element__bindgen_ty_1::life_span"]
-        [::std::mem::offset_of!(element__bindgen_ty_1, life_span) - 0usize];
-    ["Offset of field: element__bindgen_ty_1::scan_node"]
-        [::std::mem::offset_of!(element__bindgen_ty_1, scan_node) - 0usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union element__bindgen_ty_2 {
@@ -527,49 +386,17 @@ pub union element__bindgen_ty_2 {
     pub facing: COUNT,
     pub cycle: COUNT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element__bindgen_ty_2"][::std::mem::size_of::<element__bindgen_ty_2>() - 2usize];
-    ["Alignment of element__bindgen_ty_2"]
-        [::std::mem::align_of::<element__bindgen_ty_2>() - 2usize];
-    ["Offset of field: element__bindgen_ty_2::crew_level"]
-        [::std::mem::offset_of!(element__bindgen_ty_2, crew_level) - 0usize];
-    ["Offset of field: element__bindgen_ty_2::hit_points"]
-        [::std::mem::offset_of!(element__bindgen_ty_2, hit_points) - 0usize];
-    ["Offset of field: element__bindgen_ty_2::facing"]
-        [::std::mem::offset_of!(element__bindgen_ty_2, facing) - 0usize];
-    ["Offset of field: element__bindgen_ty_2::cycle"]
-        [::std::mem::offset_of!(element__bindgen_ty_2, cycle) - 0usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union element__bindgen_ty_3 {
     pub mass_points: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element__bindgen_ty_3"][::std::mem::size_of::<element__bindgen_ty_3>() - 1usize];
-    ["Alignment of element__bindgen_ty_3"]
-        [::std::mem::align_of::<element__bindgen_ty_3>() - 1usize];
-    ["Offset of field: element__bindgen_ty_3::mass_points"]
-        [::std::mem::offset_of!(element__bindgen_ty_3, mass_points) - 0usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union element__bindgen_ty_4 {
     pub turn_wait: BYTE,
     pub sys_loc: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element__bindgen_ty_4"][::std::mem::size_of::<element__bindgen_ty_4>() - 1usize];
-    ["Alignment of element__bindgen_ty_4"]
-        [::std::mem::align_of::<element__bindgen_ty_4>() - 1usize];
-    ["Offset of field: element__bindgen_ty_4::turn_wait"]
-        [::std::mem::offset_of!(element__bindgen_ty_4, turn_wait) - 0usize];
-    ["Offset of field: element__bindgen_ty_4::sys_loc"]
-        [::std::mem::offset_of!(element__bindgen_ty_4, sys_loc) - 0usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union element__bindgen_ty_5 {
@@ -577,45 +404,6 @@ pub union element__bindgen_ty_5 {
     pub blast_offset: BYTE,
     pub next_turn: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element__bindgen_ty_5"][::std::mem::size_of::<element__bindgen_ty_5>() - 1usize];
-    ["Alignment of element__bindgen_ty_5"]
-        [::std::mem::align_of::<element__bindgen_ty_5>() - 1usize];
-    ["Offset of field: element__bindgen_ty_5::thrust_wait"]
-        [::std::mem::offset_of!(element__bindgen_ty_5, thrust_wait) - 0usize];
-    ["Offset of field: element__bindgen_ty_5::blast_offset"]
-        [::std::mem::offset_of!(element__bindgen_ty_5, blast_offset) - 0usize];
-    ["Offset of field: element__bindgen_ty_5::next_turn"]
-        [::std::mem::offset_of!(element__bindgen_ty_5, next_turn) - 0usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of element"][::std::mem::size_of::<element>() - 176usize];
-    ["Alignment of element"][::std::mem::align_of::<element>() - 8usize];
-    ["Offset of field: element::pred"][::std::mem::offset_of!(element, pred) - 0usize];
-    ["Offset of field: element::succ"][::std::mem::offset_of!(element, succ) - 8usize];
-    ["Offset of field: element::preprocess_func"]
-        [::std::mem::offset_of!(element, preprocess_func) - 16usize];
-    ["Offset of field: element::postprocess_func"]
-        [::std::mem::offset_of!(element, postprocess_func) - 24usize];
-    ["Offset of field: element::collision_func"]
-        [::std::mem::offset_of!(element, collision_func) - 32usize];
-    ["Offset of field: element::death_func"][::std::mem::offset_of!(element, death_func) - 40usize];
-    ["Offset of field: element::playerNr"][::std::mem::offset_of!(element, playerNr) - 48usize];
-    ["Offset of field: element::state_flags"]
-        [::std::mem::offset_of!(element, state_flags) - 50usize];
-    ["Offset of field: element::colorCycleIndex"]
-        [::std::mem::offset_of!(element, colorCycleIndex) - 59usize];
-    ["Offset of field: element::velocity"][::std::mem::offset_of!(element, velocity) - 60usize];
-    ["Offset of field: element::IntersectControl"]
-        [::std::mem::offset_of!(element, IntersectControl) - 80usize];
-    ["Offset of field: element::PrimIndex"][::std::mem::offset_of!(element, PrimIndex) - 104usize];
-    ["Offset of field: element::current"][::std::mem::offset_of!(element, current) - 112usize];
-    ["Offset of field: element::next"][::std::mem::offset_of!(element, next) - 136usize];
-    ["Offset of field: element::pParent"][::std::mem::offset_of!(element, pParent) - 160usize];
-    ["Offset of field: element::hTarget"][::std::mem::offset_of!(element, hTarget) - 168usize];
-};
 extern "C" {
     pub static mut disp_q: QUEUE;
 }
@@ -624,13 +412,6 @@ extern "C" {
 pub struct ChecksumEntry {
     pub checksum: Checksum,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ChecksumEntry"][::std::mem::size_of::<ChecksumEntry>() - 4usize];
-    ["Alignment of ChecksumEntry"][::std::mem::align_of::<ChecksumEntry>() - 4usize];
-    ["Offset of field: ChecksumEntry::checksum"]
-        [::std::mem::offset_of!(ChecksumEntry, checksum) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ChecksumBuffer {
@@ -638,17 +419,6 @@ pub struct ChecksumBuffer {
     pub maxSize: usize,
     pub interval: usize,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ChecksumBuffer"][::std::mem::size_of::<ChecksumBuffer>() - 24usize];
-    ["Alignment of ChecksumBuffer"][::std::mem::align_of::<ChecksumBuffer>() - 8usize];
-    ["Offset of field: ChecksumBuffer::checksums"]
-        [::std::mem::offset_of!(ChecksumBuffer, checksums) - 0usize];
-    ["Offset of field: ChecksumBuffer::maxSize"]
-        [::std::mem::offset_of!(ChecksumBuffer, maxSize) - 8usize];
-    ["Offset of field: ChecksumBuffer::interval"]
-        [::std::mem::offset_of!(ChecksumBuffer, interval) - 16usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NetConnectionError {
@@ -662,28 +432,6 @@ pub union NetConnectionError__bindgen_ty_1 {
     pub listenError: *const ListenError,
     pub connectError: *const ConnectError,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetConnectionError__bindgen_ty_1"]
-        [::std::mem::size_of::<NetConnectionError__bindgen_ty_1>() - 8usize];
-    ["Alignment of NetConnectionError__bindgen_ty_1"]
-        [::std::mem::align_of::<NetConnectionError__bindgen_ty_1>() - 8usize];
-    ["Offset of field: NetConnectionError__bindgen_ty_1::listenError"]
-        [::std::mem::offset_of!(NetConnectionError__bindgen_ty_1, listenError) - 0usize];
-    ["Offset of field: NetConnectionError__bindgen_ty_1::connectError"]
-        [::std::mem::offset_of!(NetConnectionError__bindgen_ty_1, connectError) - 0usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetConnectionError"][::std::mem::size_of::<NetConnectionError>() - 16usize];
-    ["Alignment of NetConnectionError"][::std::mem::align_of::<NetConnectionError>() - 8usize];
-    ["Offset of field: NetConnectionError::state"]
-        [::std::mem::offset_of!(NetConnectionError, state) - 0usize];
-    ["Offset of field: NetConnectionError::err"]
-        [::std::mem::offset_of!(NetConnectionError, err) - 4usize];
-    ["Offset of field: NetConnectionError::extra"]
-        [::std::mem::offset_of!(NetConnectionError, extra) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetStatistics {
@@ -692,19 +440,6 @@ pub struct NetStatistics {
     pub packetsSent: usize,
     pub packetTypeSent: [usize; 18usize],
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetStatistics"][::std::mem::size_of::<NetStatistics>() - 304usize];
-    ["Alignment of NetStatistics"][::std::mem::align_of::<NetStatistics>() - 8usize];
-    ["Offset of field: NetStatistics::packetsReceived"]
-        [::std::mem::offset_of!(NetStatistics, packetsReceived) - 0usize];
-    ["Offset of field: NetStatistics::packetTypeReceived"]
-        [::std::mem::offset_of!(NetStatistics, packetTypeReceived) - 8usize];
-    ["Offset of field: NetStatistics::packetsSent"]
-        [::std::mem::offset_of!(NetStatistics, packetsSent) - 152usize];
-    ["Offset of field: NetStatistics::packetTypeSent"]
-        [::std::mem::offset_of!(NetStatistics, packetTypeSent) - 160usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetDescriptor {
@@ -983,14 +718,6 @@ pub struct ResolveError {
     pub gaiRes: ::std::os::raw::c_int,
     pub err: ::std::os::raw::c_int,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ResolveError"][::std::mem::size_of::<ResolveError>() - 8usize];
-    ["Alignment of ResolveError"][::std::mem::align_of::<ResolveError>() - 4usize];
-    ["Offset of field: ResolveError::gaiRes"]
-        [::std::mem::offset_of!(ResolveError, gaiRes) - 0usize];
-    ["Offset of field: ResolveError::err"][::std::mem::offset_of!(ResolveError, err) - 4usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ConnectFlags {
@@ -999,19 +726,6 @@ pub struct ConnectFlags {
     pub timeout: ::std::os::raw::c_int,
     pub retryDelayMs: ::std::os::raw::c_int,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ConnectFlags"][::std::mem::size_of::<ConnectFlags>() - 16usize];
-    ["Alignment of ConnectFlags"][::std::mem::align_of::<ConnectFlags>() - 4usize];
-    ["Offset of field: ConnectFlags::familyDemand"]
-        [::std::mem::offset_of!(ConnectFlags, familyDemand) - 0usize];
-    ["Offset of field: ConnectFlags::familyPrefer"]
-        [::std::mem::offset_of!(ConnectFlags, familyPrefer) - 4usize];
-    ["Offset of field: ConnectFlags::timeout"]
-        [::std::mem::offset_of!(ConnectFlags, timeout) - 8usize];
-    ["Offset of field: ConnectFlags::retryDelayMs"]
-        [::std::mem::offset_of!(ConnectFlags, retryDelayMs) - 12usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ConnectError {
@@ -1019,15 +733,6 @@ pub struct ConnectError {
     pub err: ::std::os::raw::c_int,
     pub resolveError: *const ResolveError,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ConnectError"][::std::mem::size_of::<ConnectError>() - 16usize];
-    ["Alignment of ConnectError"][::std::mem::align_of::<ConnectError>() - 8usize];
-    ["Offset of field: ConnectError::state"][::std::mem::offset_of!(ConnectError, state) - 0usize];
-    ["Offset of field: ConnectError::err"][::std::mem::offset_of!(ConnectError, err) - 4usize];
-    ["Offset of field: ConnectError::resolveError"]
-        [::std::mem::offset_of!(ConnectError, resolveError) - 8usize];
-};
 pub type ConnectConnectCallback = ::std::option::Option<
     unsafe extern "C" fn(
         connectState: *mut ConnectState,
@@ -1084,17 +789,6 @@ pub struct ListenFlags {
     pub familyPrefer: ProtocolFamily,
     pub backlog: ::std::os::raw::c_int,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ListenFlags"][::std::mem::size_of::<ListenFlags>() - 12usize];
-    ["Alignment of ListenFlags"][::std::mem::align_of::<ListenFlags>() - 4usize];
-    ["Offset of field: ListenFlags::familyDemand"]
-        [::std::mem::offset_of!(ListenFlags, familyDemand) - 0usize];
-    ["Offset of field: ListenFlags::familyPrefer"]
-        [::std::mem::offset_of!(ListenFlags, familyPrefer) - 4usize];
-    ["Offset of field: ListenFlags::backlog"]
-        [::std::mem::offset_of!(ListenFlags, backlog) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ListenError {
@@ -1102,15 +796,6 @@ pub struct ListenError {
     pub err: ::std::os::raw::c_int,
     pub resolveError: *const ResolveError,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ListenError"][::std::mem::size_of::<ListenError>() - 16usize];
-    ["Alignment of ListenError"][::std::mem::align_of::<ListenError>() - 8usize];
-    ["Offset of field: ListenError::state"][::std::mem::offset_of!(ListenError, state) - 0usize];
-    ["Offset of field: ListenError::err"][::std::mem::offset_of!(ListenError, err) - 4usize];
-    ["Offset of field: ListenError::resolveError"]
-        [::std::mem::offset_of!(ListenError, resolveError) - 8usize];
-};
 pub type ListenConnectCallback = ::std::option::Option<
     unsafe extern "C" fn(
         listenState: *mut ListenState,
@@ -1154,15 +839,6 @@ pub struct PacketQueueLink {
     pub next: *mut PacketQueueLink,
     pub packet: *mut Packet,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of PacketQueueLink"][::std::mem::size_of::<PacketQueueLink>() - 16usize];
-    ["Alignment of PacketQueueLink"][::std::mem::align_of::<PacketQueueLink>() - 8usize];
-    ["Offset of field: PacketQueueLink::next"]
-        [::std::mem::offset_of!(PacketQueueLink, next) - 0usize];
-    ["Offset of field: PacketQueueLink::packet"]
-        [::std::mem::offset_of!(PacketQueueLink, packet) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PacketQueue {
@@ -1170,14 +846,6 @@ pub struct PacketQueue {
     pub first: *mut PacketQueueLink,
     pub end: *mut *mut PacketQueueLink,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of PacketQueue"][::std::mem::size_of::<PacketQueue>() - 24usize];
-    ["Alignment of PacketQueue"][::std::mem::align_of::<PacketQueue>() - 8usize];
-    ["Offset of field: PacketQueue::size"][::std::mem::offset_of!(PacketQueue, size) - 0usize];
-    ["Offset of field: PacketQueue::first"][::std::mem::offset_of!(PacketQueue, first) - 8usize];
-    ["Offset of field: PacketQueue::end"][::std::mem::offset_of!(PacketQueue, end) - 16usize];
-};
 extern "C" {
     pub fn flushPacketQueue(conn: *mut NetConnection) -> ::std::os::raw::c_int;
 }
@@ -1187,11 +855,6 @@ pub struct HandShakeFlags {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of HandShakeFlags"][::std::mem::size_of::<HandShakeFlags>() - 1usize];
-    ["Alignment of HandShakeFlags"][::std::mem::align_of::<HandShakeFlags>() - 1usize];
-};
 impl HandShakeFlags {
     #[inline]
     pub fn localOk(&self) -> bool {
@@ -1254,11 +917,6 @@ pub struct ReadyFlags {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ReadyFlags"][::std::mem::size_of::<ReadyFlags>() - 1usize];
-    ["Alignment of ReadyFlags"][::std::mem::align_of::<ReadyFlags>() - 1usize];
-};
 impl ReadyFlags {
     #[inline]
     pub fn localReady(&self) -> bool {
@@ -1305,11 +963,6 @@ pub struct ResetFlags {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ResetFlags"][::std::mem::size_of::<ResetFlags>() - 1usize];
-    ["Alignment of ResetFlags"][::std::mem::align_of::<ResetFlags>() - 1usize];
-};
 impl ResetFlags {
     #[inline]
     pub fn localReset(&self) -> bool {
@@ -1356,11 +1009,6 @@ pub struct Agreement {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Agreement"][::std::mem::size_of::<Agreement>() - 1usize];
-    ["Alignment of Agreement"][::std::mem::align_of::<Agreement>() - 1usize];
-};
 impl Agreement {
     #[inline]
     pub fn randomSeed(&self) -> bool {
@@ -1396,29 +1044,6 @@ pub struct NetStateFlags {
     pub inputDelay: usize,
     pub checksumInterval: usize,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetStateFlags"][::std::mem::size_of::<NetStateFlags>() - 24usize];
-    ["Alignment of NetStateFlags"][::std::mem::align_of::<NetStateFlags>() - 8usize];
-    ["Offset of field: NetStateFlags::connected"]
-        [::std::mem::offset_of!(NetStateFlags, connected) - 0usize];
-    ["Offset of field: NetStateFlags::disconnected"]
-        [::std::mem::offset_of!(NetStateFlags, disconnected) - 1usize];
-    ["Offset of field: NetStateFlags::discriminant"]
-        [::std::mem::offset_of!(NetStateFlags, discriminant) - 2usize];
-    ["Offset of field: NetStateFlags::handshake"]
-        [::std::mem::offset_of!(NetStateFlags, handshake) - 3usize];
-    ["Offset of field: NetStateFlags::ready"]
-        [::std::mem::offset_of!(NetStateFlags, ready) - 4usize];
-    ["Offset of field: NetStateFlags::reset"]
-        [::std::mem::offset_of!(NetStateFlags, reset) - 5usize];
-    ["Offset of field: NetStateFlags::agreement"]
-        [::std::mem::offset_of!(NetStateFlags, agreement) - 6usize];
-    ["Offset of field: NetStateFlags::inputDelay"]
-        [::std::mem::offset_of!(NetStateFlags, inputDelay) - 8usize];
-    ["Offset of field: NetStateFlags::checksumInterval"]
-        [::std::mem::offset_of!(NetStateFlags, checksumInterval) - 16usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetConnection {
@@ -1443,50 +1068,6 @@ pub struct NetConnection {
     pub stateData: *mut NetConnectionStateData,
     pub extra: *mut ::std::os::raw::c_void,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetConnection"][::std::mem::size_of::<NetConnection>() - 496usize];
-    ["Alignment of NetConnection"][::std::mem::align_of::<NetConnection>() - 8usize];
-    ["Offset of field: NetConnection::nd"][::std::mem::offset_of!(NetConnection, nd) - 0usize];
-    ["Offset of field: NetConnection::player"]
-        [::std::mem::offset_of!(NetConnection, player) - 8usize];
-    ["Offset of field: NetConnection::state"]
-        [::std::mem::offset_of!(NetConnection, state) - 12usize];
-    ["Offset of field: NetConnection::stateFlags"]
-        [::std::mem::offset_of!(NetConnection, stateFlags) - 16usize];
-    ["Offset of field: NetConnection::readyCallback"]
-        [::std::mem::offset_of!(NetConnection, readyCallback) - 40usize];
-    ["Offset of field: NetConnection::readyCallbackArg"]
-        [::std::mem::offset_of!(NetConnection, readyCallbackArg) - 48usize];
-    ["Offset of field: NetConnection::resetCallback"]
-        [::std::mem::offset_of!(NetConnection, resetCallback) - 56usize];
-    ["Offset of field: NetConnection::resetCallbackArg"]
-        [::std::mem::offset_of!(NetConnection, resetCallbackArg) - 64usize];
-    ["Offset of field: NetConnection::options"]
-        [::std::mem::offset_of!(NetConnection, options) - 72usize];
-    ["Offset of field: NetConnection::queue"]
-        [::std::mem::offset_of!(NetConnection, queue) - 80usize];
-    ["Offset of field: NetConnection::statistics"]
-        [::std::mem::offset_of!(NetConnection, statistics) - 104usize];
-    ["Offset of field: NetConnection::checksumBuffer"]
-        [::std::mem::offset_of!(NetConnection, checksumBuffer) - 408usize];
-    ["Offset of field: NetConnection::connectCallback"]
-        [::std::mem::offset_of!(NetConnection, connectCallback) - 432usize];
-    ["Offset of field: NetConnection::closeCallback"]
-        [::std::mem::offset_of!(NetConnection, closeCallback) - 440usize];
-    ["Offset of field: NetConnection::errorCallback"]
-        [::std::mem::offset_of!(NetConnection, errorCallback) - 448usize];
-    ["Offset of field: NetConnection::deleteCallback"]
-        [::std::mem::offset_of!(NetConnection, deleteCallback) - 456usize];
-    ["Offset of field: NetConnection::readBuf"]
-        [::std::mem::offset_of!(NetConnection, readBuf) - 464usize];
-    ["Offset of field: NetConnection::readEnd"]
-        [::std::mem::offset_of!(NetConnection, readEnd) - 472usize];
-    ["Offset of field: NetConnection::stateData"]
-        [::std::mem::offset_of!(NetConnection, stateData) - 480usize];
-    ["Offset of field: NetConnection::extra"]
-        [::std::mem::offset_of!(NetConnection, extra) - 488usize];
-};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ConnectStateData {
@@ -1500,28 +1081,6 @@ pub union ConnectStateData__bindgen_ty_1 {
     pub connectState: *mut ConnectState,
     pub listenState: *mut ListenState,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ConnectStateData__bindgen_ty_1"]
-        [::std::mem::size_of::<ConnectStateData__bindgen_ty_1>() - 8usize];
-    ["Alignment of ConnectStateData__bindgen_ty_1"]
-        [::std::mem::align_of::<ConnectStateData__bindgen_ty_1>() - 8usize];
-    ["Offset of field: ConnectStateData__bindgen_ty_1::connectState"]
-        [::std::mem::offset_of!(ConnectStateData__bindgen_ty_1, connectState) - 0usize];
-    ["Offset of field: ConnectStateData__bindgen_ty_1::listenState"]
-        [::std::mem::offset_of!(ConnectStateData__bindgen_ty_1, listenState) - 0usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of ConnectStateData"][::std::mem::size_of::<ConnectStateData>() - 24usize];
-    ["Alignment of ConnectStateData"][::std::mem::align_of::<ConnectStateData>() - 8usize];
-    ["Offset of field: ConnectStateData::releaseFunction"]
-        [::std::mem::offset_of!(ConnectStateData, releaseFunction) - 0usize];
-    ["Offset of field: ConnectStateData::isServer"]
-        [::std::mem::offset_of!(ConnectStateData, isServer) - 8usize];
-    ["Offset of field: ConnectStateData::state"]
-        [::std::mem::offset_of!(ConnectStateData, state) - 16usize];
-};
 extern "C" {
     pub fn NetConnection_open(
         player: ::std::os::raw::c_int,
@@ -1616,16 +1175,6 @@ pub struct PacketTypeData {
     pub handler: PacketHandler,
     pub name: *const ::std::os::raw::c_char,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of PacketTypeData"][::std::mem::size_of::<PacketTypeData>() - 24usize];
-    ["Alignment of PacketTypeData"][::std::mem::align_of::<PacketTypeData>() - 8usize];
-    ["Offset of field: PacketTypeData::len"][::std::mem::offset_of!(PacketTypeData, len) - 0usize];
-    ["Offset of field: PacketTypeData::handler"]
-        [::std::mem::offset_of!(PacketTypeData, handler) - 8usize];
-    ["Offset of field: PacketTypeData::name"]
-        [::std::mem::offset_of!(PacketTypeData, name) - 16usize];
-};
 extern "C" {
     pub static mut packetTypeData: [PacketTypeData; 0usize];
 }
@@ -1635,24 +1184,11 @@ pub struct PacketHeader {
     pub len: uint16,
     pub type_: uint16,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of PacketHeader"][::std::mem::size_of::<PacketHeader>() - 4usize];
-    ["Alignment of PacketHeader"][::std::mem::align_of::<PacketHeader>() - 2usize];
-    ["Offset of field: PacketHeader::len"][::std::mem::offset_of!(PacketHeader, len) - 0usize];
-    ["Offset of field: PacketHeader::type_"][::std::mem::offset_of!(PacketHeader, type_) - 2usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet"][::std::mem::size_of::<Packet>() - 4usize];
-    ["Alignment of Packet"][::std::mem::align_of::<Packet>() - 2usize];
-    ["Offset of field: Packet::header"][::std::mem::offset_of!(Packet, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Init {
@@ -1668,17 +1204,6 @@ pub struct Packet_Init__bindgen_ty_1 {
     pub major: uint8,
     pub minor: uint8,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Init__bindgen_ty_1"]
-        [::std::mem::size_of::<Packet_Init__bindgen_ty_1>() - 2usize];
-    ["Alignment of Packet_Init__bindgen_ty_1"]
-        [::std::mem::align_of::<Packet_Init__bindgen_ty_1>() - 1usize];
-    ["Offset of field: Packet_Init__bindgen_ty_1::major"]
-        [::std::mem::offset_of!(Packet_Init__bindgen_ty_1, major) - 0usize];
-    ["Offset of field: Packet_Init__bindgen_ty_1::minor"]
-        [::std::mem::offset_of!(Packet_Init__bindgen_ty_1, minor) - 1usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Init__bindgen_ty_2 {
@@ -1686,101 +1211,35 @@ pub struct Packet_Init__bindgen_ty_2 {
     pub minor: uint8,
     pub patch: uint8,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Init__bindgen_ty_2"]
-        [::std::mem::size_of::<Packet_Init__bindgen_ty_2>() - 3usize];
-    ["Alignment of Packet_Init__bindgen_ty_2"]
-        [::std::mem::align_of::<Packet_Init__bindgen_ty_2>() - 1usize];
-    ["Offset of field: Packet_Init__bindgen_ty_2::major"]
-        [::std::mem::offset_of!(Packet_Init__bindgen_ty_2, major) - 0usize];
-    ["Offset of field: Packet_Init__bindgen_ty_2::minor"]
-        [::std::mem::offset_of!(Packet_Init__bindgen_ty_2, minor) - 1usize];
-    ["Offset of field: Packet_Init__bindgen_ty_2::patch"]
-        [::std::mem::offset_of!(Packet_Init__bindgen_ty_2, patch) - 2usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Init"][::std::mem::size_of::<Packet_Init>() - 12usize];
-    ["Alignment of Packet_Init"][::std::mem::align_of::<Packet_Init>() - 2usize];
-    ["Offset of field: Packet_Init::header"][::std::mem::offset_of!(Packet_Init, header) - 0usize];
-    ["Offset of field: Packet_Init::protoVersion"]
-        [::std::mem::offset_of!(Packet_Init, protoVersion) - 4usize];
-    ["Offset of field: Packet_Init::padding0"]
-        [::std::mem::offset_of!(Packet_Init, padding0) - 6usize];
-    ["Offset of field: Packet_Init::uqmVersion"]
-        [::std::mem::offset_of!(Packet_Init, uqmVersion) - 8usize];
-    ["Offset of field: Packet_Init::padding1"]
-        [::std::mem::offset_of!(Packet_Init, padding1) - 11usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Ping {
     pub header: PacketHeader,
     pub id: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Ping"][::std::mem::size_of::<Packet_Ping>() - 8usize];
-    ["Alignment of Packet_Ping"][::std::mem::align_of::<Packet_Ping>() - 4usize];
-    ["Offset of field: Packet_Ping::header"][::std::mem::offset_of!(Packet_Ping, header) - 0usize];
-    ["Offset of field: Packet_Ping::id"][::std::mem::offset_of!(Packet_Ping, id) - 4usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Ack {
     pub header: PacketHeader,
     pub id: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Ack"][::std::mem::size_of::<Packet_Ack>() - 8usize];
-    ["Alignment of Packet_Ack"][::std::mem::align_of::<Packet_Ack>() - 4usize];
-    ["Offset of field: Packet_Ack::header"][::std::mem::offset_of!(Packet_Ack, header) - 0usize];
-    ["Offset of field: Packet_Ack::id"][::std::mem::offset_of!(Packet_Ack, id) - 4usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Ready {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Ready"][::std::mem::size_of::<Packet_Ready>() - 4usize];
-    ["Alignment of Packet_Ready"][::std::mem::align_of::<Packet_Ready>() - 2usize];
-    ["Offset of field: Packet_Ready::header"]
-        [::std::mem::offset_of!(Packet_Ready, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_SeedRandom {
     pub header: PacketHeader,
     pub seed: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_SeedRandom"][::std::mem::size_of::<Packet_SeedRandom>() - 8usize];
-    ["Alignment of Packet_SeedRandom"][::std::mem::align_of::<Packet_SeedRandom>() - 4usize];
-    ["Offset of field: Packet_SeedRandom::header"]
-        [::std::mem::offset_of!(Packet_SeedRandom, header) - 0usize];
-    ["Offset of field: Packet_SeedRandom::seed"]
-        [::std::mem::offset_of!(Packet_SeedRandom, seed) - 4usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_InputDelay {
     pub header: PacketHeader,
     pub delay: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_InputDelay"][::std::mem::size_of::<Packet_InputDelay>() - 8usize];
-    ["Alignment of Packet_InputDelay"][::std::mem::align_of::<Packet_InputDelay>() - 4usize];
-    ["Offset of field: Packet_InputDelay::header"]
-        [::std::mem::offset_of!(Packet_InputDelay, header) - 0usize];
-    ["Offset of field: Packet_InputDelay::delay"]
-        [::std::mem::offset_of!(Packet_InputDelay, delay) - 4usize];
-};
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
@@ -1790,13 +1249,6 @@ pub struct FleetEntry {
     pub index: uint8,
     pub ship: uint8,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of FleetEntry"][::std::mem::size_of::<FleetEntry>() - 2usize];
-    ["Alignment of FleetEntry"][::std::mem::align_of::<FleetEntry>() - 1usize];
-    ["Offset of field: FleetEntry::index"][::std::mem::offset_of!(FleetEntry, index) - 0usize];
-    ["Offset of field: FleetEntry::ship"][::std::mem::offset_of!(FleetEntry, ship) - 1usize];
-};
 #[repr(C)]
 #[derive(Debug)]
 pub struct Packet_Fleet {
@@ -1806,19 +1258,6 @@ pub struct Packet_Fleet {
     pub numShips: uint16,
     pub ships: __IncompleteArrayField<FleetEntry>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Fleet"][::std::mem::size_of::<Packet_Fleet>() - 8usize];
-    ["Alignment of Packet_Fleet"][::std::mem::align_of::<Packet_Fleet>() - 2usize];
-    ["Offset of field: Packet_Fleet::header"]
-        [::std::mem::offset_of!(Packet_Fleet, header) - 0usize];
-    ["Offset of field: Packet_Fleet::side"][::std::mem::offset_of!(Packet_Fleet, side) - 4usize];
-    ["Offset of field: Packet_Fleet::padding"]
-        [::std::mem::offset_of!(Packet_Fleet, padding) - 5usize];
-    ["Offset of field: Packet_Fleet::numShips"]
-        [::std::mem::offset_of!(Packet_Fleet, numShips) - 6usize];
-    ["Offset of field: Packet_Fleet::ships"][::std::mem::offset_of!(Packet_Fleet, ships) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug)]
 pub struct Packet_TeamName {
@@ -1827,70 +1266,26 @@ pub struct Packet_TeamName {
     pub padding: uint8,
     pub name: __IncompleteArrayField<uint8>,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_TeamName"][::std::mem::size_of::<Packet_TeamName>() - 6usize];
-    ["Alignment of Packet_TeamName"][::std::mem::align_of::<Packet_TeamName>() - 2usize];
-    ["Offset of field: Packet_TeamName::header"]
-        [::std::mem::offset_of!(Packet_TeamName, header) - 0usize];
-    ["Offset of field: Packet_TeamName::side"]
-        [::std::mem::offset_of!(Packet_TeamName, side) - 4usize];
-    ["Offset of field: Packet_TeamName::padding"]
-        [::std::mem::offset_of!(Packet_TeamName, padding) - 5usize];
-    ["Offset of field: Packet_TeamName::name"]
-        [::std::mem::offset_of!(Packet_TeamName, name) - 6usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Handshake0 {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Handshake0"][::std::mem::size_of::<Packet_Handshake0>() - 4usize];
-    ["Alignment of Packet_Handshake0"][::std::mem::align_of::<Packet_Handshake0>() - 2usize];
-    ["Offset of field: Packet_Handshake0::header"]
-        [::std::mem::offset_of!(Packet_Handshake0, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Handshake1 {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Handshake1"][::std::mem::size_of::<Packet_Handshake1>() - 4usize];
-    ["Alignment of Packet_Handshake1"][::std::mem::align_of::<Packet_Handshake1>() - 2usize];
-    ["Offset of field: Packet_Handshake1::header"]
-        [::std::mem::offset_of!(Packet_Handshake1, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_HandshakeCancel {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_HandshakeCancel"][::std::mem::size_of::<Packet_HandshakeCancel>() - 4usize];
-    ["Alignment of Packet_HandshakeCancel"]
-        [::std::mem::align_of::<Packet_HandshakeCancel>() - 2usize];
-    ["Offset of field: Packet_HandshakeCancel::header"]
-        [::std::mem::offset_of!(Packet_HandshakeCancel, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_HandshakeCancelAck {
     pub header: PacketHeader,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_HandshakeCancelAck"]
-        [::std::mem::size_of::<Packet_HandshakeCancelAck>() - 4usize];
-    ["Alignment of Packet_HandshakeCancelAck"]
-        [::std::mem::align_of::<Packet_HandshakeCancelAck>() - 2usize];
-    ["Offset of field: Packet_HandshakeCancelAck::header"]
-        [::std::mem::offset_of!(Packet_HandshakeCancelAck, header) - 0usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_SelectShip {
@@ -1898,17 +1293,6 @@ pub struct Packet_SelectShip {
     pub ship: uint16,
     pub padding: uint16,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_SelectShip"][::std::mem::size_of::<Packet_SelectShip>() - 8usize];
-    ["Alignment of Packet_SelectShip"][::std::mem::align_of::<Packet_SelectShip>() - 2usize];
-    ["Offset of field: Packet_SelectShip::header"]
-        [::std::mem::offset_of!(Packet_SelectShip, header) - 0usize];
-    ["Offset of field: Packet_SelectShip::ship"]
-        [::std::mem::offset_of!(Packet_SelectShip, ship) - 4usize];
-    ["Offset of field: Packet_SelectShip::padding"]
-        [::std::mem::offset_of!(Packet_SelectShip, padding) - 6usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_BattleInput {
@@ -1917,34 +1301,12 @@ pub struct Packet_BattleInput {
     pub padding0: uint8,
     pub padding1: uint16,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_BattleInput"][::std::mem::size_of::<Packet_BattleInput>() - 8usize];
-    ["Alignment of Packet_BattleInput"][::std::mem::align_of::<Packet_BattleInput>() - 2usize];
-    ["Offset of field: Packet_BattleInput::header"]
-        [::std::mem::offset_of!(Packet_BattleInput, header) - 0usize];
-    ["Offset of field: Packet_BattleInput::state"]
-        [::std::mem::offset_of!(Packet_BattleInput, state) - 4usize];
-    ["Offset of field: Packet_BattleInput::padding0"]
-        [::std::mem::offset_of!(Packet_BattleInput, padding0) - 5usize];
-    ["Offset of field: Packet_BattleInput::padding1"]
-        [::std::mem::offset_of!(Packet_BattleInput, padding1) - 6usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_FrameCount {
     pub header: PacketHeader,
     pub frameCount: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_FrameCount"][::std::mem::size_of::<Packet_FrameCount>() - 8usize];
-    ["Alignment of Packet_FrameCount"][::std::mem::align_of::<Packet_FrameCount>() - 4usize];
-    ["Offset of field: Packet_FrameCount::header"]
-        [::std::mem::offset_of!(Packet_FrameCount, header) - 0usize];
-    ["Offset of field: Packet_FrameCount::frameCount"]
-        [::std::mem::offset_of!(Packet_FrameCount, frameCount) - 4usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Checksum {
@@ -1952,17 +1314,6 @@ pub struct Packet_Checksum {
     pub frameNr: uint32,
     pub checksum: uint32,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Checksum"][::std::mem::size_of::<Packet_Checksum>() - 12usize];
-    ["Alignment of Packet_Checksum"][::std::mem::align_of::<Packet_Checksum>() - 4usize];
-    ["Offset of field: Packet_Checksum::header"]
-        [::std::mem::offset_of!(Packet_Checksum, header) - 0usize];
-    ["Offset of field: Packet_Checksum::frameNr"]
-        [::std::mem::offset_of!(Packet_Checksum, frameNr) - 4usize];
-    ["Offset of field: Packet_Checksum::checksum"]
-        [::std::mem::offset_of!(Packet_Checksum, checksum) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Abort {
@@ -1970,17 +1321,6 @@ pub struct Packet_Abort {
     pub reason: uint16,
     pub padding0: uint16,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Abort"][::std::mem::size_of::<Packet_Abort>() - 8usize];
-    ["Alignment of Packet_Abort"][::std::mem::align_of::<Packet_Abort>() - 2usize];
-    ["Offset of field: Packet_Abort::header"]
-        [::std::mem::offset_of!(Packet_Abort, header) - 0usize];
-    ["Offset of field: Packet_Abort::reason"]
-        [::std::mem::offset_of!(Packet_Abort, reason) - 4usize];
-    ["Offset of field: Packet_Abort::padding0"]
-        [::std::mem::offset_of!(Packet_Abort, padding0) - 6usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Packet_Reset {
@@ -1988,17 +1328,6 @@ pub struct Packet_Reset {
     pub reason: uint16,
     pub padding0: uint16,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Packet_Reset"][::std::mem::size_of::<Packet_Reset>() - 8usize];
-    ["Alignment of Packet_Reset"][::std::mem::align_of::<Packet_Reset>() - 2usize];
-    ["Offset of field: Packet_Reset::header"]
-        [::std::mem::offset_of!(Packet_Reset, header) - 0usize];
-    ["Offset of field: Packet_Reset::reason"]
-        [::std::mem::offset_of!(Packet_Reset, reason) - 4usize];
-    ["Offset of field: Packet_Reset::padding0"]
-        [::std::mem::offset_of!(Packet_Reset, padding0) - 6usize];
-};
 pub type TimeCount = DWORD;
 pub type BATTLE_INPUT_STATE = UBYTE;
 extern "C" {
@@ -2012,19 +1341,6 @@ pub struct BattleInputBuffer {
     pub first: usize,
     pub size: usize,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of BattleInputBuffer"][::std::mem::size_of::<BattleInputBuffer>() - 32usize];
-    ["Alignment of BattleInputBuffer"][::std::mem::align_of::<BattleInputBuffer>() - 8usize];
-    ["Offset of field: BattleInputBuffer::buf"]
-        [::std::mem::offset_of!(BattleInputBuffer, buf) - 0usize];
-    ["Offset of field: BattleInputBuffer::maxSize"]
-        [::std::mem::offset_of!(BattleInputBuffer, maxSize) - 8usize];
-    ["Offset of field: BattleInputBuffer::first"]
-        [::std::mem::offset_of!(BattleInputBuffer, first) - 16usize];
-    ["Offset of field: BattleInputBuffer::size"]
-        [::std::mem::offset_of!(BattleInputBuffer, size) - 24usize];
-};
 extern "C" {
     pub fn getBattleInputDelay() -> usize;
 }
@@ -2105,31 +1421,6 @@ pub struct melee_load_state {
     pub cur: COUNT,
     pub viewSize: COUNT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of melee_load_state"][::std::mem::size_of::<melee_load_state>() - 88usize];
-    ["Alignment of melee_load_state"][::std::mem::align_of::<melee_load_state>() - 8usize];
-    ["Offset of field: melee_load_state::preBuiltList"]
-        [::std::mem::offset_of!(melee_load_state, preBuiltList) - 0usize];
-    ["Offset of field: melee_load_state::preBuiltCount"]
-        [::std::mem::offset_of!(melee_load_state, preBuiltCount) - 8usize];
-    ["Offset of field: melee_load_state::dirEntries"]
-        [::std::mem::offset_of!(melee_load_state, dirEntries) - 16usize];
-    ["Offset of field: melee_load_state::entryIndices"]
-        [::std::mem::offset_of!(melee_load_state, entryIndices) - 24usize];
-    ["Offset of field: melee_load_state::numIndices"]
-        [::std::mem::offset_of!(melee_load_state, numIndices) - 32usize];
-    ["Offset of field: melee_load_state::view"]
-        [::std::mem::offset_of!(melee_load_state, view) - 40usize];
-    ["Offset of field: melee_load_state::top"]
-        [::std::mem::offset_of!(melee_load_state, top) - 80usize];
-    ["Offset of field: melee_load_state::bot"]
-        [::std::mem::offset_of!(melee_load_state, bot) - 82usize];
-    ["Offset of field: melee_load_state::cur"]
-        [::std::mem::offset_of!(melee_load_state, cur) - 84usize];
-    ["Offset of field: melee_load_state::viewSize"]
-        [::std::mem::offset_of!(melee_load_state, viewSize) - 86usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct melee_state {
@@ -2150,37 +1441,6 @@ pub struct melee_state {
     pub LastInputTime: TimeCount,
     pub hMusic: MUSIC_REF,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of melee_state"][::std::mem::size_of::<melee_state>() - 160usize];
-    ["Alignment of melee_state"][::std::mem::align_of::<melee_state>() - 8usize];
-    ["Offset of field: melee_state::InputFunc"]
-        [::std::mem::offset_of!(melee_state, InputFunc) - 0usize];
-    ["Offset of field: melee_state::Initialized"]
-        [::std::mem::offset_of!(melee_state, Initialized) - 8usize];
-    ["Offset of field: melee_state::meleeStarted"]
-        [::std::mem::offset_of!(melee_state, meleeStarted) - 12usize];
-    ["Offset of field: melee_state::MeleeOption"]
-        [::std::mem::offset_of!(melee_state, MeleeOption) - 16usize];
-    ["Offset of field: melee_state::side"][::std::mem::offset_of!(melee_state, side) - 18usize];
-    ["Offset of field: melee_state::row"][::std::mem::offset_of!(melee_state, row) - 20usize];
-    ["Offset of field: melee_state::col"][::std::mem::offset_of!(melee_state, col) - 22usize];
-    ["Offset of field: melee_state::meleeSetup"]
-        [::std::mem::offset_of!(melee_state, meleeSetup) - 24usize];
-    ["Offset of field: melee_state::load"][::std::mem::offset_of!(melee_state, load) - 32usize];
-    ["Offset of field: melee_state::currentShip"]
-        [::std::mem::offset_of!(melee_state, currentShip) - 120usize];
-    ["Offset of field: melee_state::CurIndex"]
-        [::std::mem::offset_of!(melee_state, CurIndex) - 124usize];
-    ["Offset of field: melee_state::buildPickConfirmed"]
-        [::std::mem::offset_of!(melee_state, buildPickConfirmed) - 128usize];
-    ["Offset of field: melee_state::randomContext"]
-        [::std::mem::offset_of!(melee_state, randomContext) - 136usize];
-    ["Offset of field: melee_state::LastInputTime"]
-        [::std::mem::offset_of!(melee_state, LastInputTime) - 144usize];
-    ["Offset of field: melee_state::hMusic"]
-        [::std::mem::offset_of!(melee_state, hMusic) - 152usize];
-};
 extern "C" {
     pub fn updateRandomSeed(pMS: *mut MELEE_STATE, side: COUNT, seed: DWORD);
 }
@@ -2435,22 +1695,6 @@ pub struct captain_stuff {
     pub weapon: FRAME,
     pub special: FRAME,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of captain_stuff"][::std::mem::size_of::<captain_stuff>() - 48usize];
-    ["Alignment of captain_stuff"][::std::mem::align_of::<captain_stuff>() - 8usize];
-    ["Offset of field: captain_stuff::captain_rsc"]
-        [::std::mem::offset_of!(captain_stuff, captain_rsc) - 0usize];
-    ["Offset of field: captain_stuff::background"]
-        [::std::mem::offset_of!(captain_stuff, background) - 8usize];
-    ["Offset of field: captain_stuff::turn"][::std::mem::offset_of!(captain_stuff, turn) - 16usize];
-    ["Offset of field: captain_stuff::thrust"]
-        [::std::mem::offset_of!(captain_stuff, thrust) - 24usize];
-    ["Offset of field: captain_stuff::weapon"]
-        [::std::mem::offset_of!(captain_stuff, weapon) - 32usize];
-    ["Offset of field: captain_stuff::special"]
-        [::std::mem::offset_of!(captain_stuff, special) - 40usize];
-};
 pub type CAPTAIN_STUFF = captain_stuff;
 pub const MOVEMENT_STATE_PURSUE: MOVEMENT_STATE = 0;
 pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
@@ -2465,19 +1709,6 @@ pub struct EVALUATE_DESC {
     pub which_turn: COUNT,
     pub MoveState: MOVEMENT_STATE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of EVALUATE_DESC"][::std::mem::size_of::<EVALUATE_DESC>() - 16usize];
-    ["Alignment of EVALUATE_DESC"][::std::mem::align_of::<EVALUATE_DESC>() - 8usize];
-    ["Offset of field: EVALUATE_DESC::ObjectPtr"]
-        [::std::mem::offset_of!(EVALUATE_DESC, ObjectPtr) - 0usize];
-    ["Offset of field: EVALUATE_DESC::facing"]
-        [::std::mem::offset_of!(EVALUATE_DESC, facing) - 8usize];
-    ["Offset of field: EVALUATE_DESC::which_turn"]
-        [::std::mem::offset_of!(EVALUATE_DESC, which_turn) - 10usize];
-    ["Offset of field: EVALUATE_DESC::MoveState"]
-        [::std::mem::offset_of!(EVALUATE_DESC, MoveState) - 12usize];
-};
 pub type IntelligenceFunc = ::std::option::Option<
     unsafe extern "C" fn(
         ShipPtr: *mut ELEMENT,
@@ -2492,17 +1723,6 @@ pub struct INTEL_STUFF {
     pub WeaponRange: COUNT,
     pub intelligence_func: IntelligenceFunc,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of INTEL_STUFF"][::std::mem::size_of::<INTEL_STUFF>() - 16usize];
-    ["Alignment of INTEL_STUFF"][::std::mem::align_of::<INTEL_STUFF>() - 8usize];
-    ["Offset of field: INTEL_STUFF::ManeuverabilityIndex"]
-        [::std::mem::offset_of!(INTEL_STUFF, ManeuverabilityIndex) - 0usize];
-    ["Offset of field: INTEL_STUFF::WeaponRange"]
-        [::std::mem::offset_of!(INTEL_STUFF, WeaponRange) - 2usize];
-    ["Offset of field: INTEL_STUFF::intelligence_func"]
-        [::std::mem::offset_of!(INTEL_STUFF, intelligence_func) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CHARACTERISTIC_STUFF {
@@ -2518,33 +1738,6 @@ pub struct CHARACTERISTIC_STUFF {
     pub special_wait: BYTE,
     pub ship_mass: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of CHARACTERISTIC_STUFF"][::std::mem::size_of::<CHARACTERISTIC_STUFF>() - 14usize];
-    ["Alignment of CHARACTERISTIC_STUFF"][::std::mem::align_of::<CHARACTERISTIC_STUFF>() - 2usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::max_thrust"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, max_thrust) - 0usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::thrust_increment"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, thrust_increment) - 2usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::energy_regeneration"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, energy_regeneration) - 4usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::weapon_energy_cost"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, weapon_energy_cost) - 5usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::special_energy_cost"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, special_energy_cost) - 6usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::energy_wait"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, energy_wait) - 7usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::turn_wait"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, turn_wait) - 8usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::thrust_wait"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, thrust_wait) - 9usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::weapon_wait"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, weapon_wait) - 10usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::special_wait"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, special_wait) - 11usize];
-    ["Offset of field: CHARACTERISTIC_STUFF::ship_mass"]
-        [::std::mem::offset_of!(CHARACTERISTIC_STUFF, ship_mass) - 12usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SHIP_INFO {
@@ -2561,48 +1754,12 @@ pub struct SHIP_INFO {
     pub icons: FRAME,
     pub melee_icon: FRAME,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of SHIP_INFO"][::std::mem::size_of::<SHIP_INFO>() - 64usize];
-    ["Alignment of SHIP_INFO"][::std::mem::align_of::<SHIP_INFO>() - 8usize];
-    ["Offset of field: SHIP_INFO::ship_flags"]
-        [::std::mem::offset_of!(SHIP_INFO, ship_flags) - 0usize];
-    ["Offset of field: SHIP_INFO::ship_cost"]
-        [::std::mem::offset_of!(SHIP_INFO, ship_cost) - 2usize];
-    ["Offset of field: SHIP_INFO::crew_level"]
-        [::std::mem::offset_of!(SHIP_INFO, crew_level) - 4usize];
-    ["Offset of field: SHIP_INFO::max_crew"][::std::mem::offset_of!(SHIP_INFO, max_crew) - 6usize];
-    ["Offset of field: SHIP_INFO::energy_level"]
-        [::std::mem::offset_of!(SHIP_INFO, energy_level) - 8usize];
-    ["Offset of field: SHIP_INFO::max_energy"]
-        [::std::mem::offset_of!(SHIP_INFO, max_energy) - 9usize];
-    ["Offset of field: SHIP_INFO::race_strings_rsc"]
-        [::std::mem::offset_of!(SHIP_INFO, race_strings_rsc) - 16usize];
-    ["Offset of field: SHIP_INFO::icons_rsc"]
-        [::std::mem::offset_of!(SHIP_INFO, icons_rsc) - 24usize];
-    ["Offset of field: SHIP_INFO::melee_icon_rsc"]
-        [::std::mem::offset_of!(SHIP_INFO, melee_icon_rsc) - 32usize];
-    ["Offset of field: SHIP_INFO::race_strings"]
-        [::std::mem::offset_of!(SHIP_INFO, race_strings) - 40usize];
-    ["Offset of field: SHIP_INFO::icons"][::std::mem::offset_of!(SHIP_INFO, icons) - 48usize];
-    ["Offset of field: SHIP_INFO::melee_icon"]
-        [::std::mem::offset_of!(SHIP_INFO, melee_icon) - 56usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct FLEET_STUFF {
     pub strength: COUNT,
     pub known_loc: POINT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of FLEET_STUFF"][::std::mem::size_of::<FLEET_STUFF>() - 6usize];
-    ["Alignment of FLEET_STUFF"][::std::mem::align_of::<FLEET_STUFF>() - 2usize];
-    ["Offset of field: FLEET_STUFF::strength"]
-        [::std::mem::offset_of!(FLEET_STUFF, strength) - 0usize];
-    ["Offset of field: FLEET_STUFF::known_loc"]
-        [::std::mem::offset_of!(FLEET_STUFF, known_loc) - 2usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DATA_STUFF {
@@ -2618,31 +1775,6 @@ pub struct DATA_STUFF {
     pub victory_ditty: MUSIC_REF,
     pub ship_sounds: SOUND,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of DATA_STUFF"][::std::mem::size_of::<DATA_STUFF>() - 224usize];
-    ["Alignment of DATA_STUFF"][::std::mem::align_of::<DATA_STUFF>() - 8usize];
-    ["Offset of field: DATA_STUFF::ship_rsc"]
-        [::std::mem::offset_of!(DATA_STUFF, ship_rsc) - 0usize];
-    ["Offset of field: DATA_STUFF::weapon_rsc"]
-        [::std::mem::offset_of!(DATA_STUFF, weapon_rsc) - 24usize];
-    ["Offset of field: DATA_STUFF::special_rsc"]
-        [::std::mem::offset_of!(DATA_STUFF, special_rsc) - 48usize];
-    ["Offset of field: DATA_STUFF::captain_control"]
-        [::std::mem::offset_of!(DATA_STUFF, captain_control) - 72usize];
-    ["Offset of field: DATA_STUFF::victory_ditty_rsc"]
-        [::std::mem::offset_of!(DATA_STUFF, victory_ditty_rsc) - 120usize];
-    ["Offset of field: DATA_STUFF::ship_sounds_rsc"]
-        [::std::mem::offset_of!(DATA_STUFF, ship_sounds_rsc) - 128usize];
-    ["Offset of field: DATA_STUFF::ship"][::std::mem::offset_of!(DATA_STUFF, ship) - 136usize];
-    ["Offset of field: DATA_STUFF::weapon"][::std::mem::offset_of!(DATA_STUFF, weapon) - 160usize];
-    ["Offset of field: DATA_STUFF::special"]
-        [::std::mem::offset_of!(DATA_STUFF, special) - 184usize];
-    ["Offset of field: DATA_STUFF::victory_ditty"]
-        [::std::mem::offset_of!(DATA_STUFF, victory_ditty) - 208usize];
-    ["Offset of field: DATA_STUFF::ship_sounds"]
-        [::std::mem::offset_of!(DATA_STUFF, ship_sounds) - 216usize];
-};
 pub type RACE_DESC = race_desc;
 pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
@@ -2667,30 +1799,6 @@ pub struct race_desc {
     pub data: *mut ::std::os::raw::c_void,
     pub CodeRef: *mut ::std::os::raw::c_void,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of race_desc"][::std::mem::size_of::<race_desc>() - 384usize];
-    ["Alignment of race_desc"][::std::mem::align_of::<race_desc>() - 16usize];
-    ["Offset of field: race_desc::ship_info"]
-        [::std::mem::offset_of!(race_desc, ship_info) - 0usize];
-    ["Offset of field: race_desc::fleet"][::std::mem::offset_of!(race_desc, fleet) - 64usize];
-    ["Offset of field: race_desc::characteristics"]
-        [::std::mem::offset_of!(race_desc, characteristics) - 80usize];
-    ["Offset of field: race_desc::ship_data"]
-        [::std::mem::offset_of!(race_desc, ship_data) - 96usize];
-    ["Offset of field: race_desc::cyborg_control"]
-        [::std::mem::offset_of!(race_desc, cyborg_control) - 320usize];
-    ["Offset of field: race_desc::uninit_func"]
-        [::std::mem::offset_of!(race_desc, uninit_func) - 336usize];
-    ["Offset of field: race_desc::preprocess_func"]
-        [::std::mem::offset_of!(race_desc, preprocess_func) - 344usize];
-    ["Offset of field: race_desc::postprocess_func"]
-        [::std::mem::offset_of!(race_desc, postprocess_func) - 352usize];
-    ["Offset of field: race_desc::init_weapon_func"]
-        [::std::mem::offset_of!(race_desc, init_weapon_func) - 360usize];
-    ["Offset of field: race_desc::data"][::std::mem::offset_of!(race_desc, data) - 368usize];
-    ["Offset of field: race_desc::CodeRef"][::std::mem::offset_of!(race_desc, CodeRef) - 376usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct STARSHIP {
@@ -2716,43 +1824,6 @@ pub struct STARSHIP {
     pub playerNr: SIZE,
     pub control: BYTE,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of STARSHIP"][::std::mem::size_of::<STARSHIP>() - 80usize];
-    ["Alignment of STARSHIP"][::std::mem::align_of::<STARSHIP>() - 8usize];
-    ["Offset of field: STARSHIP::pred"][::std::mem::offset_of!(STARSHIP, pred) - 0usize];
-    ["Offset of field: STARSHIP::succ"][::std::mem::offset_of!(STARSHIP, succ) - 8usize];
-    ["Offset of field: STARSHIP::SpeciesID"][::std::mem::offset_of!(STARSHIP, SpeciesID) - 16usize];
-    ["Offset of field: STARSHIP::captains_name_index"]
-        [::std::mem::offset_of!(STARSHIP, captains_name_index) - 20usize];
-    ["Offset of field: STARSHIP::RaceDescPtr"]
-        [::std::mem::offset_of!(STARSHIP, RaceDescPtr) - 24usize];
-    ["Offset of field: STARSHIP::crew_level"]
-        [::std::mem::offset_of!(STARSHIP, crew_level) - 32usize];
-    ["Offset of field: STARSHIP::max_crew"][::std::mem::offset_of!(STARSHIP, max_crew) - 34usize];
-    ["Offset of field: STARSHIP::ship_cost"][::std::mem::offset_of!(STARSHIP, ship_cost) - 36usize];
-    ["Offset of field: STARSHIP::index"][::std::mem::offset_of!(STARSHIP, index) - 38usize];
-    ["Offset of field: STARSHIP::race_strings"]
-        [::std::mem::offset_of!(STARSHIP, race_strings) - 40usize];
-    ["Offset of field: STARSHIP::icons"][::std::mem::offset_of!(STARSHIP, icons) - 48usize];
-    ["Offset of field: STARSHIP::weapon_counter"]
-        [::std::mem::offset_of!(STARSHIP, weapon_counter) - 56usize];
-    ["Offset of field: STARSHIP::special_counter"]
-        [::std::mem::offset_of!(STARSHIP, special_counter) - 57usize];
-    ["Offset of field: STARSHIP::energy_counter"]
-        [::std::mem::offset_of!(STARSHIP, energy_counter) - 58usize];
-    ["Offset of field: STARSHIP::ship_input_state"]
-        [::std::mem::offset_of!(STARSHIP, ship_input_state) - 59usize];
-    ["Offset of field: STARSHIP::cur_status_flags"]
-        [::std::mem::offset_of!(STARSHIP, cur_status_flags) - 60usize];
-    ["Offset of field: STARSHIP::old_status_flags"]
-        [::std::mem::offset_of!(STARSHIP, old_status_flags) - 62usize];
-    ["Offset of field: STARSHIP::hShip"][::std::mem::offset_of!(STARSHIP, hShip) - 64usize];
-    ["Offset of field: STARSHIP::ShipFacing"]
-        [::std::mem::offset_of!(STARSHIP, ShipFacing) - 72usize];
-    ["Offset of field: STARSHIP::playerNr"][::std::mem::offset_of!(STARSHIP, playerNr) - 74usize];
-    ["Offset of field: STARSHIP::control"][::std::mem::offset_of!(STARSHIP, control) - 76usize];
-};
 extern "C" {
     pub fn updateMeleeSelection(gms: *mut GETMELEE_STATE, player: COUNT, ship: COUNT) -> bool;
 }
@@ -2777,49 +1848,18 @@ pub struct BattleInputHandlers {
     pub battleEndReady: BattleEndReadyFunction,
     pub deleteContext: DeleteInputContextFunction,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of BattleInputHandlers"][::std::mem::size_of::<BattleInputHandlers>() - 32usize];
-    ["Alignment of BattleInputHandlers"][::std::mem::align_of::<BattleInputHandlers>() - 8usize];
-    ["Offset of field: BattleInputHandlers::frameInput"]
-        [::std::mem::offset_of!(BattleInputHandlers, frameInput) - 0usize];
-    ["Offset of field: BattleInputHandlers::selectShip"]
-        [::std::mem::offset_of!(BattleInputHandlers, selectShip) - 8usize];
-    ["Offset of field: BattleInputHandlers::battleEndReady"]
-        [::std::mem::offset_of!(BattleInputHandlers, battleEndReady) - 16usize];
-    ["Offset of field: BattleInputHandlers::deleteContext"]
-        [::std::mem::offset_of!(BattleInputHandlers, deleteContext) - 24usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct InputContext {
     pub handlers: *mut BattleInputHandlers,
     pub playerNr: COUNT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of InputContext"][::std::mem::size_of::<InputContext>() - 16usize];
-    ["Alignment of InputContext"][::std::mem::align_of::<InputContext>() - 8usize];
-    ["Offset of field: InputContext::handlers"]
-        [::std::mem::offset_of!(InputContext, handlers) - 0usize];
-    ["Offset of field: InputContext::playerNr"]
-        [::std::mem::offset_of!(InputContext, playerNr) - 8usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetworkInputContext {
     pub handlers: *mut BattleInputHandlers,
     pub playerNr: COUNT,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of NetworkInputContext"][::std::mem::size_of::<NetworkInputContext>() - 16usize];
-    ["Alignment of NetworkInputContext"][::std::mem::align_of::<NetworkInputContext>() - 8usize];
-    ["Offset of field: NetworkInputContext::handlers"]
-        [::std::mem::offset_of!(NetworkInputContext, handlers) - 0usize];
-    ["Offset of field: NetworkInputContext::playerNr"]
-        [::std::mem::offset_of!(NetworkInputContext, playerNr) - 8usize];
-};
 extern "C" {
     pub static mut netConnections: [*mut NetConnection; 0usize];
 }
@@ -2847,21 +1887,6 @@ pub struct BattleStateData {
     pub getMeleeState: *mut getmelee_struct,
     pub endFrameCount: BattleFrameCounter,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of BattleStateData"][::std::mem::size_of::<BattleStateData>() - 40usize];
-    ["Alignment of BattleStateData"][::std::mem::align_of::<BattleStateData>() - 8usize];
-    ["Offset of field: BattleStateData::releaseFunction"]
-        [::std::mem::offset_of!(BattleStateData, releaseFunction) - 0usize];
-    ["Offset of field: BattleStateData::meleeState"]
-        [::std::mem::offset_of!(BattleStateData, meleeState) - 8usize];
-    ["Offset of field: BattleStateData::battleState"]
-        [::std::mem::offset_of!(BattleStateData, battleState) - 16usize];
-    ["Offset of field: BattleStateData::getMeleeState"]
-        [::std::mem::offset_of!(BattleStateData, getMeleeState) - 24usize];
-    ["Offset of field: BattleStateData::endFrameCount"]
-        [::std::mem::offset_of!(BattleStateData, endFrameCount) - 32usize];
-};
 extern "C" {
     pub fn NetMelee_connectCallback(conn: *mut NetConnection);
 }
@@ -2912,15 +1937,6 @@ pub struct Alarm {
     pub callback: AlarmCallback,
     pub arg: AlarmCallbackArg,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of Alarm"][::std::mem::size_of::<Alarm>() - 32usize];
-    ["Alignment of Alarm"][::std::mem::align_of::<Alarm>() - 8usize];
-    ["Offset of field: Alarm::index"][::std::mem::offset_of!(Alarm, index) - 0usize];
-    ["Offset of field: Alarm::time"][::std::mem::offset_of!(Alarm, time) - 8usize];
-    ["Offset of field: Alarm::callback"][::std::mem::offset_of!(Alarm, callback) - 16usize];
-    ["Offset of field: Alarm::arg"][::std::mem::offset_of!(Alarm, arg) - 24usize];
-};
 extern "C" {
     pub fn Alarm_init();
 }

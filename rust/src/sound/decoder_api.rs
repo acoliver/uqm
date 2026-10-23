@@ -3,6 +3,7 @@
     clippy::missing_safety_doc,
     reason = "The exported pointer contracts mirror the existing decoder.h C API"
 )]
+use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc, rust_hrealloc};
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
 use std::sync::{Mutex, OnceLock};
@@ -53,10 +54,6 @@ fn registry() -> &'static Mutex<Registry> {
 
 extern "C" {
     fn fileExists2(dir: *mut uio_DirHandle, filename: *const c_char) -> bool;
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hcalloc(size: usize) -> *mut c_void;
-    fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void;
-    fn rust_hfree(ptr: *mut c_void);
     static rust_wav_DecoderVtbl: TFB_SoundDecoderFuncs;
     static rust_mod_DecoderVtbl: TFB_SoundDecoderFuncs;
     static rust_ova_DecoderVtbl: TFB_SoundDecoderFuncs;

@@ -1,10 +1,5 @@
-//! Rust bridge logging channel
-//!
-//! This module provides C-ABI functions for logging from the C codebase into Rust.
-//! It establishes the baseline infrastructure for Rust integration.
+//! File-based runtime diagnostics.
 
-use libc::c_char;
-use std::ffi::CStr;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -16,13 +11,9 @@ static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 const LOG_PATH: &str = "rust-bridge.log";
 
 /// Initialize the Rust bridge logging system.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-///
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.
-pub unsafe extern "C" fn rust_bridge_init() -> libc::c_int {
+pub fn rust_bridge_init() -> libc::c_int {
     // Use absolute path to ensure log file is created in project root
     let log_path = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -70,39 +61,5 @@ pub fn rust_bridge_log_msg(message: &str) {
     if let Some(ref mut file) = *guard {
         let _ = writeln!(file, "{}", message);
         let _ = file.flush();
-    }
-}
-
-/// Log a message to the Rust bridge log file.
-///
-/// # Safety
-/// The message pointer must be a valid null-terminated C string.
-///
-/// Returns 0 on success, -1 on failure.
-pub unsafe extern "C" fn rust_bridge_log(message: *const c_char) -> libc::c_int {
-    if message.is_null() {
-        return -1;
-    }
-
-    // Convert C string to Rust string
-    let c_str = unsafe { CStr::from_ptr(message) };
-    let message_str = match c_str.to_str() {
-        Ok(s) => s,
-        Err(_) => return -1,
-    };
-
-    // Get the log file handle from the global mutex
-    let mut guard = LOG_FILE.lock().unwrap();
-    if let Some(ref mut file) = *guard {
-        if writeln!(file, "{}", message_str).is_err() {
-            return -1;
-        }
-        // Flush immediately to ensure logs are written
-        if file.flush().is_err() {
-            return -1;
-        }
-        0
-    } else {
-        -1
     }
 }

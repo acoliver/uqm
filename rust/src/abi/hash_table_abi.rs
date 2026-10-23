@@ -1,5 +1,4 @@
-// Rust-owned engine ABI. Layout assertions preserve the clang/bindgen 0.70.1
-// measurements from the C transition; this file is not generated during builds.
+// Shared engine records used by the Rust runtime.
 
 pub type CharHashTableKey = ::std::os::raw::c_char;
 pub type CharHashTableValue = ::std::os::raw::c_void;

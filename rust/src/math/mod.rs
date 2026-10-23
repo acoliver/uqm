@@ -4,6 +4,7 @@
 //! All functions are exported as `#[no_mangle]` with exact C signatures
 //! so the C `.o` files can be removed from the build.
 
+use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
 
 // ---------------------------------------------------------------------------
@@ -74,11 +75,6 @@ pub extern "C" fn TFB_SeedRandom(new_seed: u32) -> u32 {
 #[repr(C)]
 pub struct RandomContext {
     seed: u32,
-}
-
-extern "C" {
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hfree(ptr: *mut c_void);
 }
 
 /// C: `RandomContext *RandomContext_New(void)`

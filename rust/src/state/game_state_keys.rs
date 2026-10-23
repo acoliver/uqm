@@ -476,15 +476,12 @@ pub fn bit_range(name: &str) -> Option<(u32, u32)> {
 #[must_use]
 pub fn get_game_state(name: &str) -> u32 {
     use std::ffi::CString;
-    use std::os::raw::c_char;
 
     let Ok(c_key) = CString::new(name) else {
         return 0;
     };
 
-    extern "C" {
-        fn rust_get_game_state(key: *const c_char) -> u8;
-    }
+    use crate::state::ffi::rust_get_game_state;
 
     // SAFETY: rust_get_game_state reads from a global Mutex<Option<GameState>>
     // and handles uninitialized state gracefully (returns 0).
@@ -497,15 +494,12 @@ pub fn get_game_state(name: &str) -> u32 {
 /// It goes through the FFI to access the global singleton.
 pub fn set_game_state(name: &str, value: u32) {
     use std::ffi::CString;
-    use std::os::raw::c_char;
 
     let Ok(c_key) = CString::new(name) else {
         return;
     };
 
-    extern "C" {
-        fn rust_set_game_state(key: *const c_char, value: u8);
-    }
+    use crate::state::ffi::rust_set_game_state;
 
     // SAFETY: rust_set_game_state writes to a global Mutex<Option<GameState>>
     // and handles uninitialized state gracefully (no-op).
