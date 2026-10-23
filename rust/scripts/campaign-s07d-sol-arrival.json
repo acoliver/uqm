@@ -150,6 +150,20 @@
       "max_ticks": 18000
     },
     {
+      "action": "record_hyperspace_position"
+    },
+    {
+      "action": "tap_player_key",
+      "key": "thrust",
+      "value": 1,
+      "hold": 240,
+      "settle": 1
+    },
+    {
+      "action": "assert_hyperspace_displacement",
+      "minimum_logical_units": 1000
+    },
+    {
       "action": "fly_to_star",
       "target": "Alpha Draconis",
       "max_ticks": 90000,
