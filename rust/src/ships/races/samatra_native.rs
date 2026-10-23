@@ -1,5 +1,5 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,

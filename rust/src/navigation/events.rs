@@ -38,7 +38,7 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
     None
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod live {
     use super::*;

@@ -1,7 +1,7 @@
 //! Shared input domain and record format for the planet-physics parity tests.
 //!
 //! The same cases run against the Rust port directly and through the exported
-//! C symbols (the `linked_c_archive` build). Each case becomes one text line,
+//! engine ABI entry points. Each case becomes one text line,
 //! so a mismatch names the exact input and field.
 
 use std::fmt::Write as _;

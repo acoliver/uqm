@@ -106,7 +106,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i3
         };
         let angle = crate::math::ARCTAN(origin.x, origin.y);
         (*planet).image.frame = set_frame_index(
-            OrbitalFrame,
+            ORBITAL_FRAME,
             (size << FACING_SHIFT) + u32::from(((angle + 2) >> 2) & 15),
         );
     } else if (*planet).data_index == HIERARCHY_STARBASE {
@@ -247,7 +247,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
             if current == (*s).SunDesc.as_mut_ptr() {
                 let star_color = ((*CurStarDescPtr).Type & 0xe0) >> 5;
                 SetColorMap(GetColorMapAddress(set_color_map_index(
-                    SunCMap,
+                    SUN_CMAP,
                     u32::from(star_color),
                 )));
             } else {
@@ -350,7 +350,7 @@ unsafe fn set_planet_color_map(planet: *mut c::PLANET_DESC) {
     assert!(index < NUMBER_OF_PLANET_TYPES);
     let color = crate::planets::ffi::plan_data()[index].Type >> 4;
     SetColorMap(GetColorMapAddress(set_color_map_index(
-        OrbitalCMap,
+        ORBITAL_CMAP,
         u32::from(color),
     )));
 }
@@ -369,7 +369,7 @@ unsafe fn calc_sun_size(sun: *mut c::PLANET_DESC, radius: c::SIZE) {
         y: (height >> 1) as i16,
     };
     (*sun).image.frame =
-        crate::graphics::pixmap_abi::SetRelFrameIndex(SunFrame.cast(), index).cast();
+        crate::graphics::pixmap_abi::SetRelFrameIndex(SUN_FRAME.cast(), index).cast();
 }
 
 unsafe fn draw_inner_planets(planet: *mut c::PLANET_DESC) {

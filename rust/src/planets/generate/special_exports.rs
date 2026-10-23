@@ -103,7 +103,7 @@ impl LanderScene {
     }
 
     fn takeoff() {
-        crate::planet_side::special_effects::SetLanderTakeoff();
+        crate::planet_side::special_effects::set_lander_takeoff();
     }
 }
 

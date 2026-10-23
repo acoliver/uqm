@@ -183,8 +183,8 @@ impl InputState {
                     break;
                 }
                 let mut gesture = empty_gesture();
-                VControl_ParseGesture(&mut gesture, res_GetString(key.as_ptr()));
-                VControl_AddGestureBinding(&mut gesture, (self.menu as *mut c_int).add(index));
+                vcontrol_parse_gesture(&mut gesture, res_GetString(key.as_ptr()));
+                vcontrol_add_gesture_binding(&mut gesture, (self.menu as *mut c_int).add(index));
                 alternate += 1;
             }
         }
@@ -210,9 +210,9 @@ impl InputState {
                         self.controls[index].gesture_type = VCONTROL_NONE;
                         continue;
                     }
-                    VControl_ParseGesture(&mut self.controls[index], res_GetString(key.as_ptr()));
+                    vcontrol_parse_gesture(&mut self.controls[index], res_GetString(key.as_ptr()));
                     let target = self.target(template, control);
-                    VControl_AddGestureBinding(&mut self.controls[index], target);
+                    vcontrol_add_gesture_binding(&mut self.controls[index], target);
                 }
             }
         }
@@ -244,8 +244,7 @@ fn fatal(message: &str) -> ! {
 
 /// # Safety
 /// The vectors must hold the stated element counts and outlive all bindings.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetInputVectors(
+pub unsafe extern "C" fn tfb_set_input_vectors(
     menu: *mut c_int,
     num_menu: c_int,
     flight: *mut c_int,
@@ -293,7 +292,7 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
     }
     let mut state = INPUT.lock();
     state.character_mode = false;
-    ffi::rust_VControl_Init();
+    ffi::rust_v_control_init();
     if state.menu == 0 || state.flight == 0 {
         fatal("initKeyConfig(): invalid input vectors");
     }
@@ -307,7 +306,7 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
         LoadResourceIndex(CONTENT_DIR, c"uqm.key".as_ptr(), c"keys.".as_ptr());
     }
     state.register_flight();
-    ffi::rust_VControl_ResetInput();
+    ffi::rust_vcontrol_reset_input();
     state.initialized = true;
     0
 }
@@ -315,7 +314,7 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
 #[no_mangle]
 pub extern "C" fn TFB_UninitInput() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_VControl_Uninit() };
+    unsafe { ffi::rust_v_control_uninit() };
     state.controls = Vec::new();
 }
 
@@ -324,13 +323,13 @@ pub extern "C" fn EnterCharacterMode() {
     let mut state = INPUT.lock();
     state.characters.clear();
     state.character_mode = true;
-    unsafe { ffi::rust_VControl_ResetInput() };
+    unsafe { ffi::rust_vcontrol_reset_input() };
 }
 
 #[no_mangle]
 pub extern "C" fn ExitCharacterMode() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_VControl_ResetInput() };
+    unsafe { ffi::rust_vcontrol_reset_input() };
     state.character_mode = false;
     state.characters.clear();
 }
@@ -358,8 +357,7 @@ unsafe fn is_numpad_character(event: &sys::SDL_Event, character_mode: bool) -> b
 
 /// # Safety
 /// `event` must point to a valid SDL2 event, with valid SDL text input bytes.
-#[no_mangle]
-pub unsafe extern "C" fn ProcessInputEvent(event: *const sys::SDL_Event) {
+pub unsafe extern "C" fn process_input_event(event: *const sys::SDL_Event) {
     let mut state = INPUT.lock();
     if !state.initialized {
         return;
@@ -379,7 +377,7 @@ pub unsafe extern "C" fn ProcessInputEvent(event: *const sys::SDL_Event) {
         sys::SDL_StopTextInput();
     }
     if !is_numpad_character(event, state.character_mode) {
-        VControl_HandleEvent((event as *const sys::SDL_Event).cast());
+        vcontrol_handle_event((event as *const sys::SDL_Event).cast());
     }
     if event.type_ == 0x303 {
         let text = &event.text.text;
@@ -391,7 +389,7 @@ pub unsafe extern "C" fn ProcessInputEvent(event: *const sys::SDL_Event) {
 #[no_mangle]
 pub extern "C" fn TFB_ResetControls() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_VControl_ResetInput() };
+    unsafe { ffi::rust_vcontrol_reset_input() };
     state.characters.clear();
 }
 
@@ -450,7 +448,7 @@ pub extern "C" fn RemoveInputState(template: c_int, control: c_int, alternate: c
     };
     let target = state.target(template as usize, control as usize);
     unsafe {
-        VControl_RemoveGestureBinding(&mut state.controls[index], target);
+        vcontrol_remove_gesture_binding(&mut state.controls[index], target);
         state.controls[index].gesture_type = VCONTROL_NONE;
         let key = flight_key(
             template as usize,
@@ -469,9 +467,9 @@ pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c
     };
     RemoveInputState(template, control, alternate);
     unsafe {
-        ffi::rust_VControl_ClearGesture();
+        ffi::rust_vcontrol_clear_gesture();
         let mut gesture = empty_gesture();
-        while VControl_GetLastGesture(&mut gesture) == 0 {
+        while vcontrol_get_last_gesture(&mut gesture) == 0 {
             // TaskSwitch pumps SDL events in the single-threaded game runtime.
             #[cfg(not(test))]
             TaskSwitch();
@@ -479,7 +477,7 @@ pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c
             crate::threading::task_switch();
         }
         let mut state = INPUT.lock();
-        VControl_AddGestureBinding(
+        vcontrol_add_gesture_binding(
             &mut gesture,
             state.target(template as usize, control as usize),
         );
@@ -490,7 +488,7 @@ pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c
             alternate as usize,
         );
         let mut value = [0 as c_char; 40];
-        VControl_DumpGesture(value.as_mut_ptr(), 39, &mut state.controls[index]);
+        vcontrol_dump_gesture(value.as_mut_ptr(), 39, &mut state.controls[index]);
         res_PutString(key.as_ptr(), value.as_ptr());
     }
 }
@@ -504,7 +502,7 @@ pub unsafe extern "C" fn SaveKeyConfiguration(path: *mut c_void, filename: *cons
 
 #[no_mangle]
 pub extern "C" fn BeginInputFrame() {
-    unsafe { ffi::rust_VControl_BeginFrame() };
+    unsafe { ffi::rust_vcontrol_begin_frame() };
 }
 
 #[cfg(test)]

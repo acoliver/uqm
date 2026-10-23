@@ -2,7 +2,7 @@
 use super::surface::FALSE;
 use super::transparency::{TFB_DrawCanvas_GetTransparentColor, TFB_DrawCanvas_SetTransparentColor};
 use crate::graphics::native_abi::{Color, TFB_Canvas, EXTENT};
-use crate::graphics::sdl::rotozoom::{rotateSurface, rotozoomSurfaceSize};
+use crate::graphics::sdl::rotozoom::{rotate_surface, rotozoom_surface_size};
 use sdl2_sys::{SDL_FillRect, SDL_MapRGBA, SDL_Surface};
 use std::ptr;
 
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_Rotate(
         );
     }
 
-    let ret = rotateSurface(src, dst, f64::from(angle), 0);
+    let ret = rotate_surface(src, dst, f64::from(angle), 0);
     if ret != 0 {
         log::warn!("TFB_DrawCanvas_Rotate: WARNING: actual rotation func returned failure");
     }
@@ -61,7 +61,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_GetRotatedExtent(
 ) {
     let src: *mut SDL_Surface = src_canvas.cast();
     let (mut dstw, mut dsth) = (0i32, 0i32);
-    rotozoomSurfaceSize(
+    rotozoom_surface_size(
         (*src).w,
         (*src).h,
         f64::from(angle),

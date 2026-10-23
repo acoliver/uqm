@@ -3,7 +3,7 @@
 use crate::ships::native::abi::{Color, POINT};
 
 #[repr(C)]
-pub struct StarBlock {
+pub struct STAR_BLOCK {
     min_star_index: u16,
     num_stars: u16,
     star_array: *mut POINT,
@@ -11,7 +11,7 @@ pub struct StarBlock {
     plast_star: *mut POINT,
 }
 
-impl StarBlock {
+impl STAR_BLOCK {
     unsafe fn sort(&mut self) {
         for i in 0..self.num_stars as usize {
             for j in (i + 1..self.num_stars as usize).rev() {
@@ -177,7 +177,7 @@ const fn color(r: u8, g: u8, b: u8) -> Color {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -189,23 +189,22 @@ mod engine {
     static mut LOG_STARS: [POINT; 180] = [ZERO; 180];
     #[no_mangle]
     pub static mut SpaceOrg: POINT = ZERO;
-    #[no_mangle]
-    pub static mut StarBlock: [super::StarBlock; 3] = [
-        super::StarBlock {
+    pub static mut STAR_BLOCK: [super::STAR_BLOCK; 3] = [
+        super::STAR_BLOCK {
             min_star_index: 0,
             num_stars: 30,
             star_array: (&raw mut LOG_STARS).cast::<POINT>(),
             pmin_star: ptr::null_mut(),
             plast_star: ptr::null_mut(),
         },
-        super::StarBlock {
+        super::STAR_BLOCK {
             min_star_index: 0,
             num_stars: 60,
             star_array: unsafe { (&raw mut LOG_STARS).cast::<POINT>().add(30) },
             pmin_star: ptr::null_mut(),
             plast_star: ptr::null_mut(),
         },
-        super::StarBlock {
+        super::STAR_BLOCK {
             min_star_index: 0,
             num_stars: 90,
             star_array: unsafe { (&raw mut LOG_STARS).cast::<POINT>().add(90) },
@@ -225,8 +224,8 @@ mod engine {
     unsafe fn stars(index: usize) -> *mut POINT {
         (&raw mut LOG_STARS).cast::<POINT>().add(index)
     }
-    unsafe fn blocks(index: usize) -> *mut super::StarBlock {
-        (&raw mut StarBlock).cast::<super::StarBlock>().add(index)
+    unsafe fn blocks(index: usize) -> *mut super::STAR_BLOCK {
+        (&raw mut STAR_BLOCK).cast::<super::STAR_BLOCK>().add(index)
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
@@ -384,7 +383,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{InitGalaxy, MoveGalaxy, SpaceOrg};
 
 #[cfg(test)]
@@ -392,8 +391,8 @@ mod tests {
     use super::*;
     use std::ptr;
 
-    fn block(points: &mut [POINT]) -> StarBlock {
-        StarBlock {
+    fn block(points: &mut [POINT]) -> STAR_BLOCK {
+        STAR_BLOCK {
             min_star_index: 0,
             num_stars: points.len() as u16,
             star_array: points.as_mut_ptr(),

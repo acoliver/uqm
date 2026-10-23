@@ -6,19 +6,19 @@
 
 use std::ffi::c_void;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use super::creatures::{CreatureCatalog, CreatureKind};
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use super::generation::GeneratedNodeKind;
 use super::generation::{GeneratedNode, ScanNodeId, ScanType, SurfaceGenerator};
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const GENERATE_ALL: u16 = u16::MAX;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 #[repr(C)]
 #[derive(Default)]
 struct CNodeInfo {
@@ -28,7 +28,7 @@ struct CNodeInfo {
     node_type: u16,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn callGenerateForScanType(
         solar_system: *const c_void,
@@ -72,7 +72,7 @@ enum GeneratorRole {
 /// `SetAbsFrameIndex(life_form, (COUNT)TFB_Random())`.  Orbit-scan
 /// rendering never invokes `draw`, so scanning a map from orbit cannot perturb the
 /// gameplay random stream.
-#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+#[cfg_attr(test, allow(dead_code))]
 fn select_initial_frame(role: GeneratorRole, draw: impl FnOnce() -> u32) -> u8 {
     match role {
         GeneratorRole::PlanetSide => (draw() % 4) as u8,
@@ -82,16 +82,16 @@ fn select_initial_frame(role: GeneratorRole, draw: impl FnOnce() -> u32) -> u8 {
 
 /// Deterministic creature frame the orbit-scan renderer ignores, chosen without a
 /// gameplay random draw.
-#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+#[cfg_attr(test, allow(dead_code))]
 const ORBIT_SCAN_INITIAL_FRAME: u8 = 0;
 
 /// Borrowed current-system pointers supplied only at the temporary ABI edge.
 pub struct CffiSurfaceGenerator {
-    #[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+    #[cfg_attr(test, allow(dead_code))]
     solar_system: *mut c_void,
-    #[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+    #[cfg_attr(test, allow(dead_code))]
     world: *mut c_void,
-    #[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+    #[cfg_attr(test, allow(dead_code))]
     role: GeneratorRole,
 }
 
@@ -135,7 +135,7 @@ impl CffiSurfaceGenerator {
 
 impl SurfaceGenerator for CffiSurfaceGenerator {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             let count = callGenerateForScanType(
                 self.solar_system,
@@ -146,7 +146,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             );
             u8::try_from(count).map_err(|_| AdapterError::new("surface_node_count"))
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             let _ = scan;
             Err(AdapterError::new("surface_generator_unlinked"))
@@ -158,7 +158,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         scan: ScanType,
         node: ScanNodeId,
     ) -> Result<GeneratedNode, AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             let mut info = CNodeInfo::default();
             let _ = callGenerateForScanType(
@@ -186,7 +186,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     let creature = CreatureKind::new(creature_index)
                         .ok_or(AdapterError::new("creature_type"))?;
                     // Legacy `generateBioNode` is only embedded in a real
-                    // `GeneratePlanetSide` lander population, never in the orbit
+                    // `generate_planet_side` lander population, never in the orbit
                     // scan render, so only that role draws a random 0..3 frame.
                     let initial_frame =
                         select_initial_frame(self.role, || crate::math::TFB_Random());
@@ -205,7 +205,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 kind,
             })
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             let _ = (scan, node);
             Err(AdapterError::new("surface_generator_unlinked"))
@@ -213,7 +213,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
     }
 
     fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         {
             // A pickup callback may present a discovery report, and the native
             // report helpers were written for the retired lander loop's ambient
@@ -231,7 +231,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 }
             })
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             let _ = (scan, node);
             Err(AdapterError::new("surface_generator_unlinked"))

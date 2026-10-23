@@ -39,14 +39,12 @@ extern "C" {
 
 /// # Safety
 /// `path` must be a terminated resource pathname.
-#[no_mangle]
 pub unsafe extern "C" fn LoadVideoFile(path: *const c_char) -> *mut TFB_VideoClip {
     _init_video_file(path)
 }
 
 /// # Safety
 /// `video` must be null or a live legacy descriptor.
-#[no_mangle]
 pub unsafe extern "C" fn PlayLegacyVideo(video: *mut LegacyVideo) -> *mut LegacyVideoRef {
     if video.is_null() {
         return ptr::null_mut();
@@ -77,7 +75,6 @@ pub unsafe extern "C" fn PlayLegacyVideo(video: *mut LegacyVideo) -> *mut Legacy
 
 /// # Safety
 /// `reference` must be null or an owned, live playback reference.
-#[no_mangle]
 pub unsafe extern "C" fn StopLegacyVideo(reference: *mut LegacyVideoRef) {
     if reference.is_null() {
         return;
@@ -95,12 +92,11 @@ pub unsafe extern "C" fn StopLegacyVideo(reference: *mut LegacyVideoRef) {
 
 /// # Safety
 /// `reference` must be null or a live playback reference.
-#[no_mangle]
 pub unsafe extern "C" fn PlayingLegacyVideo(reference: *mut LegacyVideoRef) -> c_int {
     if reference.is_null() {
         return 0;
     }
-    super::ffi::TFB_VideoPlaying((*reference).video) as c_int
+    super::ffi::tfb_video_playing((*reference).video) as c_int
 }
 
 unsafe extern "C" fn free_legacy_data(data: *mut c_void) -> c_int {
@@ -167,7 +163,6 @@ pub unsafe extern "C" fn InstallVideoResType() -> c_int {
 
 /// # Safety
 /// `resource` must identify a registered legacy video resource.
-#[no_mangle]
 pub unsafe extern "C" fn LoadLegacyVideoInstance(resource: *const c_char) -> *mut LegacyVideo {
     let data = res_GetResource(resource);
     if !data.is_null() {
@@ -178,7 +173,6 @@ pub unsafe extern "C" fn LoadLegacyVideoInstance(resource: *const c_char) -> *mu
 
 /// # Safety
 /// `video` must be null or an owned descriptor returned by resource loading.
-#[no_mangle]
 pub unsafe extern "C" fn DestroyLegacyVideo(video: *mut LegacyVideo) -> c_int {
     free_legacy_data(video.cast())
 }

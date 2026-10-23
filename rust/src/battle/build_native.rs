@@ -30,7 +30,7 @@ unsafe fn escort_window(queue: *const QUEUE, window: &mut BYTE) -> HLINK {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -375,7 +375,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     AddEscortShips, Build, CalculateEscortsWorth, CheckAlliance, CloneShipFragment,
     CountEscortShips, EscortFeasibilityStudy, GetEscortByStarShipIndex, GetIndexFromStarShip,

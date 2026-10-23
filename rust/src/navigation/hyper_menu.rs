@@ -1,5 +1,5 @@
 //! Hyperspace menu dispatch.
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::get;

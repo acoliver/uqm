@@ -99,7 +99,7 @@ fn family_split_empty_partition_keeps_a_writable_tail() {
         let mut selected_end = ptr::null_mut();
         let mut rest = ptr::null_mut();
         let mut rest_end = ptr::null_mut();
-        splitAddrInfoOnFamily(
+        split_addr_info_on_family(
             &mut info,
             libc::AF_INET6,
             &mut selected,

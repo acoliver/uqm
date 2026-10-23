@@ -29,9 +29,9 @@ mod native_smoke;
 mod native_suite;
 mod process;
 
-/// What the game is built with: Rust audio plus the retained C archive.
-const BUILD_FEATURES: &str = "audio_heart,linked_c_archive";
-const LINKED_TEST_FEATURES: &str = "audio_heart,debug-process,linked_c_archive";
+/// What the game is built with: Rust audio and the normal Cargo game target.
+const BUILD_FEATURES: &str = "audio_heart";
+const LINKED_TEST_FEATURES: &str = "audio_heart,debug-process";
 
 /// Subcommand the native-window controller re-invokes this binary with to run
 /// one scenario's game child.
@@ -116,7 +116,7 @@ fn build(root: &Path, release: bool) -> Result<(), String> {
     run_command(&mut command, "Cargo build")
 }
 
-/// The tests that need the retained C archive linked in.
+/// Integration tests against the production Rust providers.
 fn test_linked(root: &Path) -> Result<(), String> {
     run_command(
         Command::new(cargo_program()).current_dir(root).args([
@@ -198,7 +198,7 @@ pub(crate) fn require_native_platform(is_macos: bool) -> Result<(), String> {
 fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
     let cargo = cargo_program();
     let (output, arguments, paths) = cargo_json_build(root, &cargo, true, LINKED_TEST_FEATURES)?;
-    let directory = tempfile::tempdir()
+    let directory = tempfile::tempdir_in(&paths.out_dir)
         .map_err(|error| format!("create linked-build proof directory: {error}"))?;
     let member_limit = native_config::runtime_contract()
         .inventory_limits

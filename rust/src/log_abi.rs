@@ -1,16 +1,6 @@
-//! C ABI for the game log (`libs/log/uqmlog.h`).
-//!
-//! `log_add` and `log_add_nothread` are C variadics, which stable Rust cannot
-//! define; they remain as thin wrappers in `sc2/src/libs/log/uqmlog.c` that
-//! forward their `va_list` to [`log_addV`] and [`log_add_nothreadV`] here.
-//!
-//! The C implementation also kept a ring buffer of recent messages that was
-//! only ever read to fill the fatal-error message box. This platform has no
-//! message box (`msgbox_stub.c` printed a notice and discarded the text), so
-//! the buffer is not kept; `log_setLevel` (which only gated that buffer), `log_captureLines` and `log_initThreads` remain
-//! only because C callers still invoke them.
+//! Rust-owned game logging.
 
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use libc::FILE;
@@ -20,9 +10,6 @@ const LOG_DEBUG: i32 = 5;
 const MAX_LOG_ENTRY_SIZE: usize = 256;
 
 extern "C" {
-    // `va_list` is passed through opaquely; it is pointer-sized on every
-    // supported target.
-    fn vsnprintf(buf: *mut c_char, size: usize, fmt: *const c_char, args: *mut c_void) -> c_int;
     fn atexit(callback: extern "C" fn()) -> c_int;
     #[cfg(target_os = "macos")]
     #[link_name = "__stderrp"]
@@ -49,16 +36,10 @@ pub extern "C" fn log_init(_max_lines: c_int) {
 }
 
 #[no_mangle]
-pub extern "C" fn log_initThreads() {}
-
-#[no_mangle]
 pub extern "C" fn log_exit(code: c_int) -> c_int {
     SHOW_BOX.store(false, Ordering::Relaxed);
     code
 }
-
-#[no_mangle]
-pub extern "C" fn log_setLevel(_level: c_int) {}
 
 /// Sets the new output stream and returns the previous one.
 #[no_mangle]
@@ -70,21 +51,6 @@ pub extern "C" fn log_setOutput(out: *mut FILE) -> *mut FILE {
 pub extern "C" fn log_showBox(show: bool, err: bool) {
     SHOW_BOX.store(show, Ordering::Relaxed);
     ERROR_BOX.store(err, Ordering::Relaxed);
-}
-
-#[no_mangle]
-pub extern "C" fn log_captureLines(_num: c_int) {}
-
-/// Formats `fmt` with `args` and echoes it to the output stream when `level`
-/// is within the stream threshold.
-///
-/// # Safety
-/// `fmt` must be a valid printf format and `args` the matching `va_list`.
-#[no_mangle]
-pub unsafe extern "C" fn log_addV(level: c_int, fmt: *const c_char, args: *mut c_void) {
-    let mut message = [0 as c_char; MAX_LOG_ENTRY_SIZE];
-    vsnprintf(message.as_mut_ptr(), MAX_LOG_ENTRY_SIZE - 1, fmt, args);
-    echo(level, message.as_ptr());
 }
 
 fn echo(level: c_int, message: *const c_char) {
@@ -101,8 +67,8 @@ fn echo(level: c_int, message: *const c_char) {
     }
 }
 
-/// Logs a message already formatted by Rust code, with the same filtering as
-/// [`log_addV`]. Messages are dropped until `log_init` has set the stream.
+/// Logs a formatted message at the game log threshold. Messages are dropped
+/// until `log_init` has set the stream.
 pub fn log_message(level: c_int, message: &str) {
     if STREAM_OUT.load(Ordering::Relaxed).is_null() {
         return;
@@ -115,16 +81,6 @@ pub fn log_message(level: c_int, message: &str) {
         *slot = byte as c_char;
     }
     echo(level, text.as_ptr());
-}
-
-/// Same as [`log_addV`]; the C version differed only in how it queued the
-/// message for the (absent) message box.
-///
-/// # Safety
-/// As for [`log_addV`].
-#[no_mangle]
-pub unsafe extern "C" fn log_add_nothreadV(level: c_int, fmt: *const c_char, args: *mut c_void) {
-    log_addV(level, fmt, args);
 }
 
 extern "C" fn exit_callback() {

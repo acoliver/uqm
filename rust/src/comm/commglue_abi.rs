@@ -62,7 +62,6 @@ mod runtime {
     extern "C" {
         static mut GlobData: CGlobData;
         static mut instantVictory: i32;
-        static mut shared_phrase_buf: [c_char; 2048];
         fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
         fn SetRelStringTableIndex(table: *mut c_void, index: i16) -> *mut c_void;
         fn GetStringAddress(entry: *mut c_void) -> *const c_char;
@@ -139,37 +138,6 @@ mod runtime {
     }
 
     /// # Safety
-    /// Buffers must be live, nonoverlapping, and large enough for both fragments.
-    #[no_mangle]
-    pub unsafe extern "C" fn rust_append_response_fragment(
-        mut buffer: *mut c_char,
-        phrase: i32,
-        name: *const c_char,
-    ) -> *mut c_char {
-        let text = GetStringAddress(SetAbsStringTableIndex(
-            COMM_DATA.conversation_phrases,
-            (phrase - 1) as u16,
-        ));
-        libc::strcpy(buffer, text);
-        buffer = buffer.add(libc::strlen(buffer));
-        if !name.is_null() {
-            libc::strcpy(buffer, name);
-            buffer = buffer.add(libc::strlen(name));
-        }
-        buffer
-    }
-
-    /// # Safety
-    /// End must belong to the same live response buffer as start.
-    #[no_mangle]
-    pub unsafe extern "C" fn rust_finish_response(start: *mut c_char, end: *mut c_char) {
-        *end = 0;
-        if start == (&raw mut shared_phrase_buf).cast() && end > start.add(2048) {
-            panic!("shared_phrase_buf size exceeded");
-        }
-    }
-
-    /// # Safety
     /// Called on the game thread with a valid Segue enum value.
     #[no_mangle]
     pub unsafe extern "C" fn setSegue(segue: i32) {
@@ -213,20 +181,6 @@ mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn init_race(conversation: u32) -> *mut c_void {
         crate::comm::dispatch::rust_init_race_dispatch(conversation)
-    }
-
-    /// # Safety
-    /// Called on the game thread with a valid phrase index and callback.
-    #[no_mangle]
-    pub unsafe extern "C" fn NPCPhrase_cb(index: i32, callback: Option<unsafe extern "C" fn()>) {
-        crate::comm::ffi::rust_NPCPhrase_cb(index, callback);
-    }
-
-    /// # Safety
-    /// Called on the game thread with a nonnegative phrase index.
-    #[no_mangle]
-    pub unsafe extern "C" fn NPCPhrase_splice(index: i32) {
-        crate::comm::ffi::rust_NPCPhrase_splice(index);
     }
 }
 

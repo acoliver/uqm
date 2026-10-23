@@ -68,7 +68,7 @@ pub unsafe extern "C" fn ConnectState_decRef(state: *mut ConnectState) -> bool {
 #[no_mangle]
 pub unsafe extern "C" fn ConnectState_close(state: *mut ConnectState) {
     if !(*state).resolve_state.is_null() {
-        Resolve_close((*state).resolve_state);
+        resolve_close((*state).resolve_state);
         (*state).resolve_state = ptr::null_mut();
     }
     if !(*state).alarm.is_null() {
@@ -167,7 +167,7 @@ extern "C" fn retry_callback(arg: *mut c_void) {
 unsafe fn try_next(state: *mut ConnectState) -> *mut Socket {
     assert!((*state).nd.is_null());
     let info = (*state).info_ptr;
-    let sock = Socket_openNative((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
+    let sock = socket_open_native((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
     if sock.is_null() {
         return sock;
     }
@@ -245,16 +245,16 @@ unsafe fn connect_next(state: *mut ConnectState) {
 }
 
 unsafe extern "C" fn resolved(resolve: *mut ResolveState, mut info: *mut libc::addrinfo) {
-    let state = ResolveState_getExtra(resolve).cast::<ConnectState>();
+    let state = resolve_state_get_extra(resolve).cast::<ConnectState>();
     (*state).state = 2;
-    Resolve_close(resolve);
+    resolve_close(resolve);
     (*state).resolve_state = ptr::null_mut();
     if (*state).flags.family_prefer != libc::PF_UNSPEC {
         let mut preferred = ptr::null_mut();
         let mut preferred_end = ptr::null_mut();
         let mut rest = ptr::null_mut();
         let mut rest_end = ptr::null_mut();
-        splitAddrInfoOnFamily(
+        split_addr_info_on_family(
             info,
             (*state).flags.family_prefer,
             &mut preferred,
@@ -271,9 +271,9 @@ unsafe extern "C" fn resolved(resolve: *mut ResolveState, mut info: *mut libc::a
 }
 
 unsafe extern "C" fn resolve_error(resolve: *mut ResolveState, error: *const ResolveError) {
-    let state = ResolveState_getExtra(resolve).cast::<ConnectState>();
+    let state = resolve_state_get_extra(resolve).cast::<ConnectState>();
     assert_ne!((*error).gai_res, 0);
-    Resolve_close(resolve);
+    resolve_close(resolve);
     (*state).resolve_state = ptr::null_mut();
     report_error(
         state,
@@ -302,9 +302,9 @@ pub unsafe extern "C" fn connectHostByName(
     assert!((0..=2).contains(&(*flags).family_prefer));
     assert!((0..=1).contains(&proto));
     let mut hints: libc::addrinfo = std::mem::zeroed();
-    hints.ai_family = protocolFamilyTranslation[(*flags).family_demand as usize];
-    hints.ai_protocol = protocolTranslation[proto as usize];
-    hints.ai_socktype = socketTypeTranslation[proto as usize];
+    hints.ai_family = PROTOCOL_FAMILY_TRANSLATION[(*flags).family_demand as usize];
+    hints.ai_protocol = PROTOCOL_TRANSLATION[proto as usize];
+    hints.ai_socktype = SOCKET_TYPE_TRANSLATION[proto as usize];
     let state = Box::into_raw(Box::new(ConnectState {
         ref_count: 1,
         state: 1,
@@ -319,7 +319,7 @@ pub unsafe extern "C" fn connectHostByName(
         alarm: ptr::null_mut(),
     }));
     let mut resolve_flags = ResolveFlags { dummy: 0 };
-    (*state).resolve_state = getaddrinfoAsync(
+    (*state).resolve_state = getaddrinfo_async(
         host,
         service,
         &hints,

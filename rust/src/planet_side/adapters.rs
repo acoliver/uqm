@@ -3,24 +3,24 @@
 use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusPort, Tick};
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::player_control_template;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_UP: usize = 0;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_LEFT: usize = 2;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_RIGHT: usize = 3;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_WEAPON: usize = 4;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_SPECIAL: usize = 5;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const KEY_ESCAPE: usize = 6;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const NUM_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
 
 /// Input adapter reading the resolved player-one control template.
@@ -28,7 +28,7 @@ pub struct CffiPlanetSideInput;
 
 impl PlanetSideInput for CffiPlanetSideInput {
     fn poll(&mut self) -> Result<FrameInput, AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
                 return Ok(FrameInput {
@@ -48,7 +48,7 @@ impl PlanetSideInput for CffiPlanetSideInput {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
@@ -61,7 +61,7 @@ extern "C" {
     fn GetStorageBayCapacity() -> u16;
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn read_player_one_input() -> FrameInput {
     // The game loop updates these globals synchronously before invoking the
     // active input callback, so one snapshot cannot race another game tick.
@@ -84,7 +84,7 @@ fn read_player_one_input() -> FrameInput {
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 fn read_player_one_input() -> FrameInput {
     FrameInput::default()
 }
@@ -94,22 +94,22 @@ pub struct CffiPlanetSideClock;
 
 impl PlanetSideClock for CffiPlanetSideClock {
     fn now(&self) -> Tick {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             Tick(GetTimeCounter())
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             Tick(0)
         }
     }
 
     fn sleep_until(&mut self, deadline: Tick) -> Result<(), AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             SleepThreadUntil(deadline.0);
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let _ = deadline;
         Ok(())
     }
@@ -122,7 +122,7 @@ impl CffiShipStatus {
     /// Capture the ship values needed to initialize and settle one trip.
     #[must_use]
     pub fn snapshot(&self) -> ShipStatus {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             let sis = std::ptr::addr_of!(GLOB_DATA.sis_state).read();
             ShipStatus {
@@ -133,7 +133,7 @@ impl CffiShipStatus {
                 total_bio_mass: sis.total_bio_mass,
             }
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             ShipStatus {
                 crew_enlisted: 0,
@@ -148,11 +148,11 @@ impl CffiShipStatus {
     /// Return the current flagship mineral storage capacity.
     #[must_use]
     pub fn storage_capacity(&self) -> u16 {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             GetStorageBayCapacity()
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             0
         }
@@ -161,7 +161,7 @@ impl CffiShipStatus {
 
 impl ShipStatusPort for CffiShipStatus {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             if delta.crew != 0 {
                 DeltaSISGauges(delta.crew, 0, 0);
@@ -188,7 +188,7 @@ impl ShipStatusPort for CffiShipStatus {
                 DrawStorageBays(0);
             }
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let _ = delta;
         Ok(())
     }

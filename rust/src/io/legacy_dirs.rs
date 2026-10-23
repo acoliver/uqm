@@ -23,15 +23,13 @@ fn set_errno(error: c_int) {
 
 /// # Safety
 /// `dir` must be a NUL-terminated path.
-#[no_mangle]
-pub unsafe extern "C" fn createDirectory(dir: *const c_char, mode: c_int) -> c_int {
+pub unsafe extern "C" fn create_directory(dir: *const c_char, mode: c_int) -> c_int {
     libc::mkdir(dir, mode as libc::mode_t)
 }
 
 /// # Safety
 /// `path` must be a NUL-terminated path. Existing final entries, including
 /// files, succeed as they did in C; an intermediate file fails on the next stat.
-#[no_mangle]
 pub unsafe extern "C" fn mkdirhier(path: *const c_char) -> c_int {
     let path = CStr::from_ptr(path).to_bytes();
     let mut buffer = Vec::with_capacity(path.len() + 2);
@@ -68,7 +66,7 @@ pub unsafe extern "C" fn mkdirhier(path: *const c_char) -> c_int {
             }
             creating = true;
         }
-        if creating && createDirectory(buffer.as_ptr().cast(), 0o777) == -1 {
+        if creating && create_directory(buffer.as_ptr().cast(), 0o777) == -1 {
             let error = std::io::Error::last_os_error().raw_os_error().unwrap();
             crate::log_abi::log_message(
                 2,
@@ -97,8 +95,7 @@ pub unsafe extern "C" fn mkdirhier(path: *const c_char) -> c_int {
 }
 
 /// Returns the libc-owned HOME or passwd entry buffer.
-#[no_mangle]
-pub extern "C" fn getHomeDir() -> *const c_char {
+pub extern "C" fn get_home_dir() -> *const c_char {
     unsafe {
         let home = libc::getenv(c"HOME".as_ptr());
         if !home.is_null() {
@@ -249,8 +246,7 @@ fn expand_bytes(
 /// # Safety
 /// `src` is NUL-terminated; `dest` points to `len` writable bytes. Environment
 /// changes must be serialized with this call, as with the original libc API.
-#[no_mangle]
-pub unsafe extern "C" fn expandPath(
+pub unsafe extern "C" fn expand_path(
     dest: *mut c_char,
     len: usize,
     src: *const c_char,
@@ -266,7 +262,7 @@ pub unsafe extern "C" fn expandPath(
             (!value.is_null()).then(|| CStr::from_ptr(value).to_bytes().to_vec())
         },
         || {
-            let home = getHomeDir();
+            let home = get_home_dir();
             (!home.is_null()).then(|| CStr::from_ptr(home).to_bytes().to_vec())
         },
         || {

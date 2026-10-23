@@ -3,8 +3,7 @@ use super::*;
 
 #[no_mangle]
 pub static mut MeleeFrame: FRAME = ptr::null_mut();
-#[no_mangle]
-pub static mut pMeleeState: *mut MELEE_STATE = ptr::null_mut();
+pub static mut P_MELEE_STATE: *mut MELEE_STATE = ptr::null_mut();
 
 pub(super) fn rgb(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -91,12 +90,12 @@ pub(super) unsafe fn teams() {
             ship_box(
                 side as u16,
                 index,
-                MeleeSetup_getShip((*pMeleeState).meleeSetup, side, index as u16),
+                MeleeSetup_getShip((*P_MELEE_STATE).meleeSetup, side, index as u16),
                 false,
             );
         }
-        name(pMeleeState, side as u16, 0, ptr::null());
-        worth(pMeleeState, side as u16, 0);
+        name(P_MELEE_STATE, side as u16, 0, ptr::null());
+        worth(P_MELEE_STATE, side as u16, 0);
     }
 }
 #[no_mangle]
@@ -122,8 +121,8 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     DrawMeleeIcon(37);
     DrawMeleeIcon(26);
     teams();
-    if (*pMeleeState).MeleeOption == 11 {
-        crate::supermelee::native::build_picker::live::DrawPickFrame(pMeleeState);
+    if (*P_MELEE_STATE).MeleeOption == 11 {
+        crate::supermelee::native::build_picker::live::DrawPickFrame(P_MELEE_STATE);
     }
     UnbatchGraphics();
     SetContextOrigin(origin);
@@ -338,7 +337,7 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
     match option {
         1 | 7 => controls(usize::from(option == 1), on),
         10 => {
-            let s = &*pMeleeState;
+            let s = &*P_MELEE_STATE;
             if s.InputFunc.map(|f| f as usize) == Some(edit as *const () as usize) {
                 if s.row < 2 {
                     ship_box(
@@ -348,13 +347,13 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
                         on,
                     );
                 } else if s.CurIndex == u16::MAX {
-                    name(pMeleeState, s.side, if on { 2 } else { 0 }, ptr::null());
-                    worth(pMeleeState, s.side, if on { 2 } else { 0 });
+                    name(P_MELEE_STATE, s.side, if on { 2 } else { 0 }, ptr::null());
+                    worth(P_MELEE_STATE, s.side, if on { 2 } else { 0 });
                 }
             }
         }
         11 => crate::supermelee::native::build_picker::live::DrawPickIcon(
-            (*pMeleeState).currentShip,
+            (*P_MELEE_STATE).currentShip,
             !on,
         ),
         _ => {}

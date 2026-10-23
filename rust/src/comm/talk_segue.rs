@@ -2672,7 +2672,7 @@ mod tests {
     // ========================================================================
 
     /// verify_production_delegates_to_c_p13:
-    /// The #[cfg(not(test))] version of rust_ShowConversationSummary must call
+    /// The #[cfg(not(test))] version of rust_show_conversation_summary must call
     /// c_SelectConversationSummary (P12 requirement).
     #[test]
     fn verify_production_delegates_to_c_p13() {
@@ -2686,7 +2686,7 @@ mod tests {
         let fn_name = "fn rust_ShowConversationSummary";
 
         // Walk the cfg(not(test)) occurrences; the first one whose following
-        // text also contains fn rust_ShowConversationSummary within 200 chars
+        // text also contains fn rust_show_conversation_summary within 200 chars
         // is the production version.
         let fn_start = source
             .match_indices(cfg_guard)
@@ -2712,7 +2712,7 @@ mod tests {
     }
 
     /// verify_no_summaryview_in_production_p13:
-    /// The #[cfg(not(test))] version of rust_ShowConversationSummary must NOT
+    /// The #[cfg(not(test))] version of rust_show_conversation_summary must NOT
     /// contain SummaryView (that is only for the test path).
     #[test]
     fn verify_no_summaryview_in_production_p13() {

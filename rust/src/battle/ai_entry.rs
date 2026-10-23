@@ -32,7 +32,7 @@ fn route(activity: u8, ship: Option<(u8, i16)>, player_control: u8) -> Route {
 
 /// # Safety
 /// Context and any non-null ship must be live engine records, on the game thread.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn computer_intelligence(
     context: *mut crate::ships::native::abi::ComputerInputContext,

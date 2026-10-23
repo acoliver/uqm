@@ -3,11 +3,11 @@
 //! The functions here are plain Rust over explicit inputs (an RNG stream, the
 //! planet table, star description) so they can be tested without C globals.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod c_api;
 pub mod calc;
 pub mod consts;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod ffi;
 pub mod generate;
 pub mod orbit_tables;
@@ -19,7 +19,7 @@ pub mod tables;
 pub mod topography;
 pub mod universe_units;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod starmap_cursor;
 
 #[cfg(not(test))]
@@ -37,7 +37,7 @@ pub mod scan;
 pub mod sphere;
 
 pub(crate) mod solar_coords;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod solarsys;
 
 pub mod pstarmap;

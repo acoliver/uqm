@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 
-use super::{_lpCurCodeDesc, CodeDesc, F, N, R, T, THRESHOLD};
+use super::{CodeDesc, _LP_CUR_CODE_DESC, F, N, R, T, THRESHOLD};
 use crate::resource::ffi_bridge::SeekResFile;
 
 pub(super) struct Encoder {
@@ -281,14 +281,13 @@ impl CodeDesc {
 /// # Safety
 /// `desc` is null or a live write descriptor, and `buf` points to `size * count`
 /// bytes. The memory stream, if used, must have room for compressed output.
-#[no_mangle]
 pub unsafe extern "C" fn cwrite(
     buf: *const c_void,
     size: u16,
     count: u16,
     desc: *mut CodeDesc,
 ) -> u16 {
-    _lpCurCodeDesc = desc;
+    _LP_CUR_CODE_DESC = desc;
     let bytes = size.wrapping_mul(count);
     if desc.is_null() || bytes == 0 {
         return 0;

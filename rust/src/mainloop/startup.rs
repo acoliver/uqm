@@ -15,7 +15,7 @@ fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
     (i32::from(!parsed.opengl), flags)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
 
     use crate::mainloop::{dir_prep, options, options_abi as globals};
@@ -139,7 +139,7 @@ mod live {
         crate::threading::task_abi::InitTaskSystem();
         crate::callback::ffi::Alarm_init();
         crate::callback::ffi::Callback_init();
-        crate::network::Network_init();
+        crate::network::network_init();
         crate::network::manager::NetManager_init();
 
         let (driver, flags) = super::graphics_config(parsed);
@@ -164,7 +164,7 @@ mod live {
             return 1;
         }
         let immediate = ptr::addr_of_mut!(abi::ImmediateInputState);
-        crate::input::sdl_input::TFB_SetInputVectors(
+        crate::input::sdl_input::tfb_set_input_vectors(
             ptr::addr_of_mut!((*immediate).menu).cast(),
             24,
             ptr::addr_of_mut!((*immediate).key).cast(),
@@ -186,7 +186,7 @@ mod live {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use live::*;
 
 #[cfg(test)]

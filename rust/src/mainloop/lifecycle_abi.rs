@@ -64,7 +64,6 @@ pub unsafe extern "C" fn uqm_battle_with_frame_callback() {
 
 /// # Safety
 /// Called on the game thread while live state and input are initialized.
-#[no_mangle]
 pub unsafe extern "C" fn SignalStopMainThread() {
     ptr::addr_of_mut!(GamePaused).write_volatile(0);
     GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16;
@@ -73,7 +72,6 @@ pub unsafe extern "C" fn SignalStopMainThread() {
 
 /// # Safety
 /// Called by the game thread after immediate input has been sampled.
-#[no_mangle]
 pub unsafe extern "C" fn ProcessUtilityKeys() {
     let state = ptr::addr_of!(ImmediateInputState).read_volatile();
     if state.menu[KEY_ABORT as usize] != 0 {
@@ -101,7 +99,6 @@ pub unsafe extern "C" fn ProcessUtilityKeys() {
     }
 }
 
-#[no_mangle]
 pub extern "C" fn Starcon2Main(_arg: *mut c_void) -> i32 {
     super::game_loop::rust_game_loop()
 }

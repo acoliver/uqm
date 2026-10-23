@@ -5,7 +5,7 @@ use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
 
-use crate::io::{copy_file, file_exists};
+use crate::io::{copy_file as copy_path, file_exists as path_exists};
 
 /// Convert C string to PathBuf
 unsafe fn cstr_to_path(c_str: *const c_char) -> Option<PathBuf> {
@@ -73,7 +73,7 @@ extern "C" {
     ) -> *mut uio_Stream;
     pub fn uio_fclose(stream: *mut uio_Stream) -> c_int;
 
-    // uio_open/uio_close - for copyFile
+    // uio_open/uio_close - for copy_file
     pub fn uio_open(
         dir: *mut uio_DirHandle,
         path: *const c_char,
@@ -82,14 +82,14 @@ extern "C" {
     ) -> *mut uio_Handle;
     pub fn uio_close(handle: *mut uio_Handle) -> c_int;
 
-    // uio_read/uio_write - for copyFile
+    // uio_read/uio_write - for copy_file
     pub fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: usize) -> isize;
     pub fn uio_write(handle: *mut uio_Handle, buf: *const u8, count: usize) -> isize;
 
-    // uio_fstat - for copyFile (to get file permissions)
+    // uio_fstat - for copy_file (to get file permissions)
     pub fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int;
 
-    // uio_unlink - for copyFile (to clean up on error)
+    // uio_unlink - for copy_file (to clean up on error)
     pub fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int;
 }
 
@@ -123,8 +123,7 @@ const EINTR: c_int = 4;
 /// # Safety
 ///
 /// - `name` must point to a valid null-terminated C string or be null
-#[no_mangle]
-pub unsafe extern "C" fn fileExists(name: *const c_char) -> c_int {
+pub unsafe extern "C" fn file_exists(name: *const c_char) -> c_int {
     // Write to log immediately to verify we're being called
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -138,7 +137,7 @@ pub unsafe extern "C" fn fileExists(name: *const c_char) -> c_int {
     }
 
     match cstr_to_path(name) {
-        Some(p) if file_exists(&p) => 1,
+        Some(p) if path_exists(&p) => 1,
         Some(_) | None => 0,
     }
 }
@@ -187,8 +186,7 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
 /// - `src_name` must point to a valid null-terminated C string or be null
 /// - `dst_dir` must be a valid pointer to uio_DirHandle or be null
 /// - `new_name` must point to a valid null-terminated C string or be null
-#[no_mangle]
-pub unsafe extern "C" fn copyFile(
+pub unsafe extern "C" fn copy_file(
     src_dir: *mut uio_DirHandle,
     src_name: *const c_char,
     dst_dir: *mut uio_DirHandle,
@@ -291,10 +289,9 @@ pub unsafe extern "C" fn copyFile(
 /// # Safety
 ///
 /// - `path` must point to a valid null-terminated C string or be null
-#[no_mangle]
 pub unsafe extern "C" fn rust_file_exists(path: *const c_char) -> c_int {
     match cstr_to_path(path) {
-        Some(p) if file_exists(&p) => 1,
+        Some(p) if path_exists(&p) => 1,
         Some(_) | None => 0,
     }
 }
@@ -304,10 +301,9 @@ pub unsafe extern "C" fn rust_file_exists(path: *const c_char) -> c_int {
 /// # Safety
 ///
 /// `src_path` and `dst_path` must be valid null-terminated C strings or null.
-#[no_mangle]
 pub unsafe extern "C" fn rust_copy_file(src_path: *const c_char, dst_path: *const c_char) -> c_int {
     match (cstr_to_path(src_path), cstr_to_path(dst_path)) {
-        (Some(src), Some(dst)) => match copy_file(&src, &dst) {
+        (Some(src), Some(dst)) => match copy_path(&src, &dst) {
             Ok(()) => 1,
             Err(_) => 0,
         },

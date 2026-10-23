@@ -7,10 +7,6 @@ use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::mainloop::dir_prep::{contentDir, repository};
 use uqm_rust::memory::rust_hfree;
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 extern "C" {}
 
 fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8> {

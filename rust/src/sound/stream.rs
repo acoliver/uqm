@@ -712,7 +712,7 @@ pub fn init_stream_decoder() -> AudioResult<()> {
     }
 
     // Generate mixer source handles for each sound source slot and store them.
-    // The mixer itself is already initialized by audiocore_rust.c (rust_mixer_Init)
+    // The mixer itself is already initialized by audiocore_rust.c (rust_mixer_init)
     // before InitStreamDecoder is called.
     let handles = mixer_source::mixer_gen_sources(NUM_SOUNDSOURCES as u32)
         .map_err(|_| AudioError::NotInitialized)?;

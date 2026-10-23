@@ -78,25 +78,21 @@ const RESOLVE_RESOLVING: c_int = 1;
 unsafe fn last_errno() -> c_int {
     *libc::__error()
 }
-#[no_mangle]
-pub static protocolFamilyTranslation: [c_int; 3] = [libc::PF_UNSPEC, libc::PF_INET, libc::PF_INET6];
+pub static PROTOCOL_FAMILY_TRANSLATION: [c_int; 3] =
+    [libc::PF_UNSPEC, libc::PF_INET, libc::PF_INET6];
 
-#[no_mangle]
-pub static protocolTranslation: [c_int; 2] = [libc::IPPROTO_TCP, libc::IPPROTO_UDP];
+pub static PROTOCOL_TRANSLATION: [c_int; 2] = [libc::IPPROTO_TCP, libc::IPPROTO_UDP];
 
-#[no_mangle]
-pub static socketTypeTranslation: [c_int; 2] = [libc::SOCK_STREAM, libc::SOCK_DGRAM];
+pub static SOCKET_TYPE_TRANSLATION: [c_int; 2] = [libc::SOCK_STREAM, libc::SOCK_DGRAM];
 
 #[cfg(target_os = "linux")]
 unsafe fn last_errno() -> c_int {
     *libc::__errno_location()
 }
 
-#[no_mangle]
-pub extern "C" fn Network_init() {}
+pub extern "C" fn network_init() {}
 
-#[no_mangle]
-pub extern "C" fn Network_uninit() {}
+pub extern "C" fn network_uninit() {}
 
 unsafe fn socket_ref(sock: *mut Socket) -> &'static mut Socket {
     &mut *sock
@@ -126,8 +122,7 @@ pub unsafe extern "C" fn Socket_open(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_openNative(
+pub unsafe extern "C" fn socket_open_native(
     domain: c_int,
     socket_type: c_int,
     protocol: c_int,
@@ -345,15 +340,13 @@ pub unsafe extern "C" fn Socket_getError(sock: *mut Socket, error: *mut c_int) -
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn ResolveState_incRef(state: *mut ResolveState) {
+pub unsafe extern "C" fn resolve_state_inc_ref(state: *mut ResolveState) {
     (*state).ref_count += 1;
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn ResolveState_decRef(state: *mut ResolveState) -> bool {
+pub unsafe extern "C" fn resolve_state_dec_ref(state: *mut ResolveState) -> bool {
     (*state).ref_count -= 1;
     if (*state).ref_count == 0 {
         debug_assert_eq!((*state).callback_id, CALLBACK_ID_INVALID);
@@ -366,15 +359,13 @@ pub unsafe extern "C" fn ResolveState_decRef(state: *mut ResolveState) -> bool {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn ResolveState_setExtra(state: *mut ResolveState, extra: *mut c_void) {
+pub unsafe extern "C" fn resolve_state_set_extra(state: *mut ResolveState, extra: *mut c_void) {
     (*state).extra = extra;
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn ResolveState_getExtra(state: *mut ResolveState) -> *mut c_void {
+pub unsafe extern "C" fn resolve_state_get_extra(state: *mut ResolveState) -> *mut c_void {
     (*state).extra
 }
 
@@ -382,26 +373,25 @@ unsafe extern "C" fn resolve_callback(arg: *mut c_void) {
     let state = arg.cast::<ResolveState>();
     (*state).callback_id = CALLBACK_ID_INVALID;
     if (*state).error.gai_res == 0 {
-        ResolveState_incRef(state);
+        resolve_state_inc_ref(state);
         if let Some(callback) = (*state).callback {
             callback(state, (*state).result);
         }
-        let released = ResolveState_decRef(state);
+        let released = resolve_state_dec_ref(state);
         debug_assert!(released);
     } else {
-        ResolveState_incRef(state);
+        resolve_state_inc_ref(state);
         if let Some(callback) = (*state).error_callback {
             callback(state, &(*state).error);
         }
-        let released = ResolveState_decRef(state);
+        let released = resolve_state_dec_ref(state);
         debug_assert!(released);
     }
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn getaddrinfoAsync(
+pub unsafe extern "C" fn getaddrinfo_async(
     node: *const c_char,
     service: *const c_char,
     hints: *const libc::addrinfo,
@@ -430,20 +420,18 @@ pub unsafe extern "C" fn getaddrinfoAsync(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Resolve_close(state: *mut ResolveState) {
+pub unsafe extern "C" fn resolve_close(state: *mut ResolveState) {
     if (*state).callback_id != CALLBACK_ID_INVALID {
         Callback_remove((*state).callback_id);
         (*state).callback_id = CALLBACK_ID_INVALID;
     }
     (*state).state = RESOLVE_CLOSED;
-    ResolveState_decRef(state);
+    resolve_state_dec_ref(state);
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn splitAddrInfoOnFamily(
+pub unsafe extern "C" fn split_addr_info_on_family(
     info: *mut libc::addrinfo,
     family: c_int,
     selected: *mut *mut libc::addrinfo,

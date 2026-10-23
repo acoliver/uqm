@@ -202,7 +202,6 @@ extern "C" {
 /// C: `BOOLEAN rust_ships_load_catalog(void);`
 ///
 /// Returns 1 on success, 0 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_load_catalog() -> CBoolean {
     catch_unwind(|| match load_master_ship_list() {
         Ok(()) => 1,
@@ -217,7 +216,6 @@ pub unsafe extern "C" fn rust_ships_load_catalog() -> CBoolean {
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `void rust_ships_free_catalog(void);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_free_catalog() {
     let _ = catch_unwind(free_master_ship_list);
 }
@@ -230,7 +228,6 @@ pub unsafe extern "C" fn rust_ships_free_catalog() {
 /// C: `COUNT rust_ships_get_cost_by_index(COUNT index);`
 ///
 /// Returns 0 if the index is invalid or catalog is not loaded.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
     catch_unwind(|| get_ship_cost_from_index(index as usize).unwrap_or_default())
         .unwrap_or_default()
@@ -249,7 +246,6 @@ pub unsafe extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
 ///
 /// Returns a Rust-owned `*mut CRaceDesc` on success, or null on failure.
 /// Caller must free with `rust_ships_free()`.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_load(
     species: CSpeciesId,
     battle_ready: CBoolean,
@@ -282,7 +278,6 @@ pub unsafe extern "C" fn rust_ships_load(
 ///
 /// # Safety
 /// `desc` must be a valid pointer returned by `rust_ships_load()` and not yet freed.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_free(
     desc: *mut CRaceDesc,
     free_battle: CBoolean,
@@ -314,7 +309,6 @@ pub unsafe extern "C" fn rust_ships_free(
 ///
 /// Allocates a new STARSHIP or SHIP_FRAGMENT entry in the C-owned queue,
 /// initializes it with the species ID, and adds it to the queue.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_build(
     queue: *mut std::os::raw::c_void,
     species: CSpeciesId,
@@ -374,7 +368,6 @@ pub unsafe extern "C" fn rust_ships_build(
 ///
 /// # Safety
 /// Both `src` and `dst` must be valid pointers to C-owned `SHIP_FRAGMENT` structs.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_clone_fragment(
     src: *const std::os::raw::c_void,
     dst: *mut std::os::raw::c_void,
@@ -419,7 +412,6 @@ pub unsafe extern "C" fn rust_ships_clone_fragment(
 ///
 /// # Safety
 /// `starship` must be a valid pointer to a C-owned `STARSHIP` struct.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -> CBoolean {
     catch_unwind(|| {
         if starship.is_null() {
@@ -549,7 +541,6 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
 ///
 /// Returns the number of players (2 for battle, 1 for hyperspace) on success,
 /// 0 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_init() -> CCount {
     #[cfg(debug_assertions)]
     eprintln!("LIFECYCLE: rust_ships_init entry");
@@ -626,7 +617,6 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
 /// - Reinits queues for non-IN_ENCOUNTER
 ///
 /// Idempotent: calling twice is safe (idempotence guard checks Rust + C state).
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_uninit() {
     #[cfg(debug_assertions)]
     eprintln!("LIFECYCLE: rust_ships_uninit entry");
@@ -735,7 +725,6 @@ pub unsafe extern "C" fn rust_ships_uninit() {
 /// which C treats as `FRAME *` (i.e., `FRAME_DESC **`).
 ///
 /// C: `void *rust_race_desc_get_ship_frames(const void *rd);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_race_desc_get_ship_frames(rd: *const c_void) -> *mut c_void {
     if rd.is_null() {
         return ptr::null_mut();
@@ -750,7 +739,6 @@ pub unsafe extern "C" fn rust_race_desc_get_ship_frames(rd: *const c_void) -> *m
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `BYTE rust_race_desc_get_ship_mass(const void *rd);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_race_desc_get_ship_mass(rd: *const c_void) -> CByte {
     if rd.is_null() {
         return 0;
@@ -765,7 +753,6 @@ pub unsafe extern "C" fn rust_race_desc_get_ship_mass(rd: *const c_void) -> CByt
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_race_desc_get_crew_level(const void *rd);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_race_desc_get_crew_level(rd: *const c_void) -> CCount {
     if rd.is_null() {
         return 0;
@@ -780,7 +767,6 @@ pub unsafe extern "C" fn rust_race_desc_get_crew_level(rd: *const c_void) -> CCo
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `void rust_race_desc_set_crew_level(void *rd, COUNT crew);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_race_desc_set_crew_level(rd: *mut c_void, crew: CCount) {
     if rd.is_null() {
         return;
@@ -795,7 +781,6 @@ pub unsafe extern "C" fn rust_race_desc_set_crew_level(rd: *mut c_void, crew: CC
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_race_desc_get_max_crew(const void *rd);`
-#[no_mangle]
 pub unsafe extern "C" fn rust_race_desc_get_max_crew(rd: *const c_void) -> CCount {
     if rd.is_null() {
         return 0;
@@ -939,7 +924,6 @@ unsafe fn extract_starship_from_element(
 ///
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {
@@ -1001,7 +985,6 @@ pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
 ///
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {
@@ -1052,7 +1035,6 @@ pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
 ///
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-#[no_mangle]
 pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {

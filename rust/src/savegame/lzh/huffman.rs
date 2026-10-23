@@ -1,4 +1,4 @@
-use super::{_lpCurCodeDesc, CodeDesc, N_CHAR, R, T};
+use super::{CodeDesc, _LP_CUR_CODE_DESC, N_CHAR, R, T};
 
 impl CodeDesc {
     pub(super) fn start_huff(&mut self) {
@@ -91,14 +91,12 @@ impl CodeDesc {
 
 /// # Safety
 /// The current descriptor must have been selected by the stream API.
-#[no_mangle]
-pub unsafe extern "C" fn StartHuff() {
-    (*_lpCurCodeDesc).start_huff();
+pub unsafe extern "C" fn start_huff() {
+    (*_LP_CUR_CODE_DESC).start_huff();
 }
 
 /// # Safety
 /// The current descriptor must be live and `c` must be a Huffman leaf index.
-#[no_mangle]
 pub unsafe extern "C" fn _update(c: u16) {
-    (*_lpCurCodeDesc).update(c as usize);
+    (*_LP_CUR_CODE_DESC).update(c as usize);
 }

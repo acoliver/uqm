@@ -5,7 +5,7 @@ pub const NUM_GAME_STATE_BYTES: usize = 155;
 
 macro_rules! game_state_fields {
     ($($name:ident ($end_name:ident): $start:literal..=$end:literal,)*) => {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         const _: () = {
             $(
                 assert!(crate::navigation::abi::$name as usize == $start);

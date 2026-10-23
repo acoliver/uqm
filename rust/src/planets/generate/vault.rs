@@ -17,7 +17,7 @@ pub trait VaultSite {
     /// `LoadStdLanderFont`, the vault mask and the vault report strings, with
     /// the report started at `first_report`.
     fn load_vault_scene(&mut self, first_report: u16);
-    /// `SetLanderTakeoff ()`.
+    /// `set_lander_takeoff ()`.
     fn lander_takeoff(&mut self);
 }
 

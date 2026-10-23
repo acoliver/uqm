@@ -1,13 +1,8 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
-#![cfg(feature = "linked_c_archive")]
 
 use std::ffi::CStr;
 use uqm_rust::ships::native::abi::*;
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_probe() -> *mut RACE_DESC;
 }

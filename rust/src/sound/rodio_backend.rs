@@ -701,7 +701,6 @@ fn send_cmd_wait<T>(cmd_fn: impl FnOnce(Sender<T>) -> AudioCmd) -> Option<T> {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
     rust_bridge_log_msg("RODIO_BACKEND_INIT");
 
@@ -750,7 +749,6 @@ pub unsafe extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_backend_uninit() {
     rust_bridge_log_msg("RODIO_BACKEND_UNINIT");
 
@@ -775,7 +773,6 @@ pub unsafe extern "C" fn rust_audio_backend_uninit() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_gen_sources(n: u32, out: *mut AudioObject) {
     if out.is_null() {
         return;
@@ -792,7 +789,6 @@ pub unsafe extern "C" fn rust_audio_gen_sources(n: u32, out: *mut AudioObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObject) {
     if ids.is_null() {
         return;
@@ -804,21 +800,18 @@ pub unsafe extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObje
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_i(src: AudioObject, prop: i32, value: AudioIntVal) {
     send_cmd(AudioCmd::SourceSetInt(src, prop, value));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_f(src: AudioObject, prop: i32, value: f32) {
     send_cmd(AudioCmd::SourceSetFloat(src, prop, value));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_get_source_i(
     src: AudioObject,
     prop: i32,
@@ -842,35 +835,30 @@ pub unsafe extern "C" fn rust_audio_get_source_i(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_play(src: AudioObject) {
     send_cmd(AudioCmd::SourcePlay(src));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_pause(src: AudioObject) {
     send_cmd(AudioCmd::SourcePause(src));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_stop(src: AudioObject) {
     send_cmd(AudioCmd::SourceStop(src));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_rewind(src: AudioObject) {
     send_cmd(AudioCmd::SourceRewind(src));
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_queue_buffers(
     src: AudioObject,
     n: u32,
@@ -887,7 +875,6 @@ pub unsafe extern "C" fn rust_audio_source_queue_buffers(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_unqueue_buffers(
     src: AudioObject,
     n: u32,
@@ -912,7 +899,6 @@ pub unsafe extern "C" fn rust_audio_source_unqueue_buffers(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
     if out.is_null() {
         return;
@@ -929,7 +915,6 @@ pub unsafe extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObject) {
     if ids.is_null() {
         return;
@@ -941,7 +926,6 @@ pub unsafe extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObje
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_buffer_data(
     buf: AudioObject,
     format: u32,
@@ -963,7 +947,6 @@ pub unsafe extern "C" fn rust_audio_buffer_data(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_get_buffer_i(
     buf: AudioObject,
     prop: i32,
@@ -982,7 +965,6 @@ pub unsafe extern "C" fn rust_audio_get_buffer_i(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_is_source(_src: AudioObject) -> i32 {
     // For now, just return 1 - we don't have a way to query without blocking
     1
@@ -990,21 +972,18 @@ pub unsafe extern "C" fn rust_audio_is_source(_src: AudioObject) -> i32 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_is_buffer(_buf: AudioObject) -> i32 {
     1
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_get_error() -> i32 {
     0 // No error
 }
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_source_fv(_src: AudioObject, _prop: i32, _values: *const f32) {
     // Position is the only fv property we care about
     // For now, ignore positioning (rodio doesn't do spatial audio easily)
@@ -1012,7 +991,6 @@ pub unsafe extern "C" fn rust_audio_source_fv(_src: AudioObject, _prop: i32, _va
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_get_source_f(_src: AudioObject, _prop: i32, out: *mut f32) {
     if out.is_null() {
         return;

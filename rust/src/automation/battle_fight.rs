@@ -427,7 +427,7 @@ impl BattleFightTracker {
     }
 }
 
-#[cfg(all(feature = "linked_c_archive", not(test)))]
+#[cfg(not(test))]
 impl BattleSnapshot {
     /// The running battle, read on the game thread.
     ///
@@ -485,7 +485,7 @@ impl BattleSnapshot {
     }
 }
 
-#[cfg(not(all(feature = "linked_c_archive", not(test))))]
+#[cfg(test)]
 impl BattleSnapshot {
     /// Without the linked game there is no battle to read.
     #[must_use]

@@ -1,9 +1,9 @@
 //! Hyperspace movement and encounter spawning.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use super::abi::*;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[derive(Default)]
 struct FuelDistance {
     dx: u16,
@@ -27,7 +27,7 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
@@ -76,7 +76,6 @@ pub(crate) mod live {
     }
     /// # Safety
     /// Called on the game thread when entering hyperspace.
-    #[no_mangle]
     pub unsafe extern "C" fn rust_reset_hyper_distance() {
         DISTANCE = FuelDistance {
             dx: 0,

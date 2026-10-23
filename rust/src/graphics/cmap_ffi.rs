@@ -135,7 +135,6 @@ pub unsafe extern "C" fn rust_cmap_init() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(state) = get_cmap_state() {
@@ -172,7 +171,6 @@ pub unsafe extern "C" fn rust_cmap_uninit() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_set(index: c_int, data: *const u8, len: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -232,7 +230,6 @@ pub unsafe extern "C" fn rust_cmap_set(index: c_int, data: *const u8, len: c_int
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
     /// Static buffer for returning colormap data to C. Valid until next call.
     static GET_BUFFER: CmapGetBuffer = CmapGetBuffer(UnsafeCell::new(
@@ -289,7 +286,6 @@ pub unsafe extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -327,7 +323,6 @@ pub unsafe extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -365,7 +360,6 @@ pub unsafe extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_get_fade_amount() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -393,7 +387,6 @@ pub unsafe extern "C" fn rust_cmap_get_fade_amount() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_xform_step() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -421,7 +414,6 @@ pub unsafe extern "C" fn rust_cmap_xform_step() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_flush_xforms() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
@@ -456,7 +448,6 @@ pub unsafe extern "C" fn rust_cmap_flush_xforms() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_cmap_set_palette(
     palette_data: *const u8,
     num_colors: c_int,

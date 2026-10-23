@@ -121,113 +121,113 @@ extern "C" {
     // Element operations (wrappers for C macros)
     fn AllocElement() -> HElement;
     fn FreeElement(h: HElement);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_PutElement"]
     fn rust_bridge_put_element(h: HElement);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_InsertElement"]
     fn rust_bridge_insert_element(h: HElement, after: HElement);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetHeadElement"]
     fn rust_bridge_get_head_element() -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetTailElement"]
     fn rust_bridge_get_tail_element() -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_LockElement"]
     fn rust_bridge_lock_element(h: HElement, ppe: *mut ElementPtr);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_UnlockElement"]
     fn rust_bridge_unlock_element(h: HElement);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetPredElement"]
     fn rust_bridge_get_pred_element(e: ElementPtr) -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetSuccElement"]
     fn rust_bridge_get_succ_element(e: ElementPtr) -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetFrameIndex"]
     fn rust_bridge_get_frame_index(f: Frame) -> u16;
 
     // Weapon creation
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn rust_bridge_initialize_missile(block: *const MissileBlock) -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn rust_bridge_initialize_laser(block: *const LaserBlock) -> HElement;
 
     // AI
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn rust_bridge_ship_intelligence(ship: ElementPtr, objects: *mut EvaluateDesc, count: u16);
 
     // Sound
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_ProcessSound"]
     fn rust_bridge_process_sound(sound: usize, source: ElementPtr);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_SetAbsSoundIndex"]
     fn rust_bridge_set_abs_sound_index(sounds: usize, index: u16) -> usize;
 
     // Coordinate conversion
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_DISPLAY_TO_WORLD"]
     fn rust_bridge_display_to_world(x: i32) -> i32;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_WORLD_TO_DISPLAY"]
     fn rust_bridge_world_to_display(x: i32) -> i32;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_NORMALIZE_FACING"]
     fn rust_bridge_normalize_facing(f: u16) -> u16;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_FACING_TO_ANGLE"]
     fn rust_bridge_facing_to_angle(f: u16) -> u16;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_SINE"]
     fn rust_bridge_sine(angle: u16, magnitude: i16) -> i32;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_COSINE"]
     fn rust_bridge_cosine(angle: u16, magnitude: i16) -> i32;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_ARCTAN"]
     fn rust_bridge_arctan(dx: i32, dy: i32) -> u16;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_WRAP_X"]
     fn rust_bridge_wrap_x(x: i32) -> i32;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_WRAP_Y"]
     fn rust_bridge_wrap_y(y: i32) -> i32;
 
     // Element state checks
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_CollidingElement"]
     fn rust_bridge_colliding_element(e: ElementPtr) -> c_int;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_OBJECT_CLOAKED"]
     fn rust_bridge_object_cloaked(e: ElementPtr) -> c_int;
 
     // Energy/crew
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_DeltaEnergy"]
     fn rust_bridge_delta_energy(e: ElementPtr, delta: i16) -> c_int;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_DeltaCrew"]
     fn rust_bridge_delta_crew(e: ElementPtr, delta: i16) -> c_int;
 
     // Starship association
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_GetElementStarShip"]
     fn rust_bridge_get_element_star_ship(e: ElementPtr, ss: *mut StarShipPtr);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_SetElementStarShip"]
     fn rust_bridge_set_element_star_ship(e: ElementPtr, ss: StarShipPtr);
 
     // Misc ship helpers
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_TrackShip"]
     fn rust_bridge_track_ship(e: ElementPtr, pfacing: *mut u16) -> i16;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[link_name = "rust_bridge_Untarget"]
     fn rust_bridge_untarget(e: ElementPtr);
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     #[expect(
         dead_code,
         reason = "transitional FFI binding not yet wired into Rust weapon-collision path"
@@ -252,84 +252,84 @@ extern "C" {
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_put_element(h: HElement) {
     crate::ships::native_adapters::rust_bridge_PutElement(h as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_insert_element(h: HElement, after: HElement) {
     crate::ships::native_adapters::rust_bridge_InsertElement(h as _, after as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_head_element() -> HElement {
     (crate::ships::native_adapters::rust_bridge_GetHeadElement()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_tail_element() -> HElement {
     (crate::ships::native_adapters::rust_bridge_GetTailElement()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_lock_element(h: HElement, ppe: *mut ElementPtr) {
     crate::ships::native_adapters::rust_bridge_LockElement(h as _, ppe as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_unlock_element(h: HElement) {
     crate::ships::native_adapters::rust_bridge_UnlockElement(h as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_pred_element(e: ElementPtr) -> HElement {
     (crate::ships::native_adapters::rust_bridge_GetPredElement(e as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_succ_element(e: ElementPtr) -> HElement {
     (crate::ships::native_adapters::rust_bridge_GetSuccElement(e as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_frame_index(f: Frame) -> u16 {
     (crate::ships::native_adapters::rust_bridge_GetFrameIndex(f as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_initialize_missile(block: *const MissileBlock) -> HElement {
     (crate::ships::native_adapters::rust_bridge_initialize_missile(block as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_initialize_laser(block: *const LaserBlock) -> HElement {
     (crate::ships::native_adapters::rust_bridge_initialize_laser(block as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_ship_intelligence(ship: ElementPtr, objects: *mut EvaluateDesc, count: u16) {
     crate::ships::native_adapters::rust_bridge_ship_intelligence(
         ship as _,
@@ -340,133 +340,133 @@ unsafe fn rust_bridge_ship_intelligence(ship: ElementPtr, objects: *mut Evaluate
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_process_sound(sound: usize, source: ElementPtr) {
     crate::ships::native_adapters::rust_bridge_ProcessSound(sound as _, source as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_set_abs_sound_index(sounds: usize, index: u16) -> usize {
     (crate::ships::native_adapters::rust_bridge_SetAbsSoundIndex(sounds as _, index as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_display_to_world(x: i32) -> i32 {
     (crate::ships::native_adapters::rust_bridge_DISPLAY_TO_WORLD(x as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_world_to_display(x: i32) -> i32 {
     (crate::ships::native_adapters::rust_bridge_WORLD_TO_DISPLAY(x as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_normalize_facing(f: u16) -> u16 {
     (crate::ships::native_adapters::rust_bridge_NORMALIZE_FACING(f as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_facing_to_angle(f: u16) -> u16 {
     (crate::ships::native_adapters::rust_bridge_FACING_TO_ANGLE(f as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_sine(angle: u16, magnitude: i16) -> i32 {
     (crate::ships::native_adapters::rust_bridge_SINE(angle as _, magnitude as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_cosine(angle: u16, magnitude: i16) -> i32 {
     (crate::ships::native_adapters::rust_bridge_COSINE(angle as _, magnitude as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_arctan(dx: i32, dy: i32) -> u16 {
     (crate::ships::native_adapters::rust_bridge_ARCTAN(dx as _, dy as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_wrap_x(x: i32) -> i32 {
     (crate::ships::native_adapters::rust_bridge_WRAP_X(x as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_wrap_y(y: i32) -> i32 {
     (crate::ships::native_adapters::rust_bridge_WRAP_Y(y as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_colliding_element(e: ElementPtr) -> c_int {
     (crate::ships::native_adapters::rust_bridge_CollidingElement(e as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_object_cloaked(e: ElementPtr) -> c_int {
     (crate::ships::native_adapters::rust_bridge_OBJECT_CLOAKED(e as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_delta_energy(e: ElementPtr, delta: i16) -> c_int {
     (crate::ships::native_adapters::rust_bridge_DeltaEnergy(e as _, delta as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_delta_crew(e: ElementPtr, delta: i16) -> c_int {
     (crate::ships::native_adapters::rust_bridge_DeltaCrew(e as _, delta as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_get_element_star_ship(e: ElementPtr, ss: *mut StarShipPtr) {
     crate::ships::native_adapters::rust_bridge_GetElementStarShip(e as _, ss as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_set_element_star_ship(e: ElementPtr, ss: StarShipPtr) {
     crate::ships::native_adapters::rust_bridge_SetElementStarShip(e as _, ss as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_track_ship(e: ElementPtr, pfacing: *mut u16) -> i16 {
     (crate::ships::native_adapters::rust_bridge_TrackShip(e as _, pfacing as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn rust_bridge_untarget(e: ElementPtr) {
     crate::ships::native_adapters::rust_bridge_Untarget(e as _);
 }

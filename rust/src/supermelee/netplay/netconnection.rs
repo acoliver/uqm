@@ -1,6 +1,6 @@
 //! C ABI connection lifetime. All access is serialized on the network/game thread.
 use super::abi::*;
-use super::netrcv::dataReadyCallback;
+use super::netrcv::data_ready_callback;
 use super::netstate::NetConnectionStateData_release;
 use super::packetq::{PacketQueue_init, PacketQueue_uninit};
 use std::{ffi::c_void, ptr};
@@ -81,7 +81,7 @@ unsafe fn connected(conn: *mut NetConnection, nd: *mut NetDescriptor, discrimina
     NetConnection_setState(conn, NetState_NetState_init);
     release_connect((*conn).stateData);
     (*conn).stateData = ptr::null_mut();
-    NetDescriptor_setReadCallback(nd, Some(dataReadyCallback));
+    NetDescriptor_setReadCallback(nd, Some(data_ready_callback));
     NetDescriptor_setCloseCallback(nd, Some(descriptor_closed));
     (*conn).connectCallback.expect("connect callback")(conn);
 }
@@ -144,12 +144,6 @@ unsafe extern "C" fn client_error(state: *mut ConnectState, error: *const Connec
         },
     );
 }
-
-#[no_mangle]
-pub static Agreement_nothingAgreed: Agreement = Agreement {
-    _bitfield_align_1: [],
-    _bitfield_1: __BindgenBitfieldUnit::new([0]),
-};
 
 /// # Safety
 /// Options outlive the connection; callbacks follow the connection ownership contract.

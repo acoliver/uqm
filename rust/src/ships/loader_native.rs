@@ -1,5 +1,5 @@
 //! Live descriptor/resource lifecycle translated from uqm/loadship.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::abi::{RACE_DESC, SPECIES_ID_NUM_SPECIES_ID};
     use std::{
@@ -190,5 +190,5 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub(crate) use engine::free_ship;

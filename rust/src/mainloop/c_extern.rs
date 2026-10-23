@@ -50,7 +50,7 @@ extern "C" {
     /// C: `void set_current_activity(UWORD v)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-003
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn set_current_activity(val: u16);
 
     /// Read `NextActivity` — standalone global (`save.h:66`).
@@ -60,7 +60,7 @@ extern "C" {
     /// C: `ACTIVITY get_next_activity(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-003
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn get_next_activity() -> u16;
 
     /// Write `NextActivity`.
@@ -68,54 +68,54 @@ extern "C" {
     /// C: `void set_next_activity(ACTIVITY v)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-003
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn set_next_activity(val: u16);
 
     /// Read `LastActivity` — standalone global (`setup.h:60`).
     ///
     /// C: `ACTIVITY get_last_activity(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn get_last_activity() -> u16;
 
     /// Write `LastActivity`.
     ///
     /// C: `void set_last_activity(ACTIVITY v)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn set_last_activity(val: u16);
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn set_current_activity(val: u16) {
     crate::mainloop::state_abi::set_current_activity(val as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn get_next_activity() -> u16 {
     (crate::mainloop::state_abi::get_next_activity()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn set_next_activity(val: u16) {
     crate::mainloop::state_abi::set_next_activity(val as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn get_last_activity() -> u16 {
     (crate::mainloop::state_abi::get_last_activity()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn set_last_activity(val: u16) {
     crate::mainloop::state_abi::set_last_activity(val as _);
 }
@@ -130,7 +130,7 @@ extern "C" {
     /// C: `BYTE uqm_get_chmmr_bomb_state(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-010
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_get_chmmr_bomb_state() -> u8;
 
     /// Write `SET_GAME_STATE(CHMMR_BOMB_STATE, v)`.
@@ -138,7 +138,7 @@ extern "C" {
     /// C: `void uqm_set_chmmr_bomb_state(BYTE v)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-010
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_set_chmmr_bomb_state(val: u8);
 
     /// Read `GET_GAME_STATE(STARBASE_AVAILABLE)`.
@@ -146,7 +146,7 @@ extern "C" {
     /// C: `BYTE uqm_get_starbase_available(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-010
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_get_starbase_available() -> u8;
 
     /// Read `GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA)`.
@@ -154,7 +154,7 @@ extern "C" {
     /// C: `BYTE uqm_get_global_flags_and_data(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-010
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_get_global_flags_and_data() -> u8;
 
     /// Read `GET_GAME_STATE(KOHR_AH_KILLED_ALL)`.
@@ -162,40 +162,40 @@ extern "C" {
     /// C: `BYTE uqm_get_kohr_ah_killed_all(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
     /// @requirement REQ-ML-010
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_get_kohr_ah_killed_all() -> u8;
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_get_chmmr_bomb_state() -> u8 {
     (crate::mainloop::state_abi::uqm_get_chmmr_bomb_state()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_set_chmmr_bomb_state(val: u8) {
     crate::mainloop::state_abi::uqm_set_chmmr_bomb_state(val as _);
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_get_starbase_available() -> u8 {
     (crate::mainloop::state_abi::uqm_get_starbase_available()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_get_global_flags_and_data() -> u8 {
     (crate::mainloop::state_abi::uqm_get_global_flags_and_data()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_get_kohr_ah_killed_all() -> u8 {
     (crate::mainloop::state_abi::uqm_get_kohr_ah_killed_all()) as _
 }
@@ -211,12 +211,12 @@ extern "C" {
     ///
     /// C: `COUNT uqm_get_crew_enlisted(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn uqm_get_crew_enlisted() -> u16;
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn uqm_get_crew_enlisted() -> u16 {
     (crate::mainloop::state_abi::uqm_get_crew_enlisted()) as _
 }
@@ -230,7 +230,7 @@ extern "C" {
     ///
     /// C: `void set_main_exited(BOOLEAN b)`.
     /// @plan PLAN-20260707-MAINLOOP.P03
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn set_main_exited(b: CBoolean);
 
     /// Calls `SplashScreen(BackgroundInitKernel)`.
@@ -247,7 +247,7 @@ extern "C" {
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn set_main_exited(b: CBoolean) {
     crate::mainloop::state_abi::set_main_exited(b as _);
 }
@@ -341,7 +341,7 @@ extern "C" {
     ///
     /// Returns non-zero (true) to start/load a game, zero to quit.
     /// @plan PLAN-20260707-MAINLOOP.P06
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     pub fn StartGame() -> CBoolean;
 
     /// `void InitGameStructures(void)`.
@@ -407,7 +407,7 @@ extern "C" {
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn start_game() -> CBoolean {
     (crate::mainloop::restart_menu::render_abi::StartGame()) as _
 }
@@ -439,5 +439,5 @@ pub fn test_get_activity() -> u16 {
     TEST_CURRENT_ACTIVITY.load(Ordering::SeqCst)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use start_game as StartGame;

@@ -1,6 +1,6 @@
 //! Orz callbacks and descriptor translated from `sc2/src/uqm/ships/orz/orz.c`.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, normalize_angle,

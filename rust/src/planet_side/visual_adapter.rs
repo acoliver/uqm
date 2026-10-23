@@ -19,7 +19,7 @@ pub struct CffiSurfaceVisuals {
     energy: *mut c_void,
     life: [*mut c_void; 3],
     life_types: [Option<u8>; 3],
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     owned_life: [bool; 3],
 }
 
@@ -37,7 +37,7 @@ impl CffiSurfaceVisuals {
             energy,
             life,
             life_types: [None; 3],
-            #[cfg(feature = "linked_c_archive")]
+            #[cfg(not(test))]
             owned_life: [false; 3],
         })
     }
@@ -54,12 +54,12 @@ impl CffiSurfaceVisuals {
             return Err(AdapterError::new("life_variation_overflow"));
         };
         if self.life[index].is_null() {
-            #[cfg(feature = "linked_c_archive")]
+            #[cfg(not(test))]
             unsafe {
                 self.life[index] = load_life_form(creature);
                 self.owned_life[index] = !self.life[index].is_null();
             }
-            #[cfg(not(feature = "linked_c_archive"))]
+            #[cfg(test)]
             return Err(AdapterError::new("life_frame_missing"));
         }
         if self.life[index].is_null() {
@@ -70,7 +70,7 @@ impl CffiSurfaceVisuals {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
     fn load_life_form(selector: u8) -> *mut c_void;
@@ -80,7 +80,7 @@ extern "C" {
 
 impl Drop for CffiSurfaceVisuals {
     fn drop(&mut self) {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             for (frame, owned) in self.life.iter_mut().zip(self.owned_life) {
                 if owned && !frame.is_null() {
@@ -123,9 +123,9 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             return Err(AdapterError::new("energy_frame_missing"));
         }
 
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, index) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));
@@ -205,9 +205,9 @@ impl<'a, A: PlanetSideAssetAccess> CffiWorldVisuals<'a, A> {
 impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
         let (base, index) = self.lander_shot_frame(facing)?;
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, index) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("shot_frame_missing"));
@@ -221,9 +221,9 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
 
     fn canned_creature_visual(&mut self, kind: CreatureKind) -> Result<EntityVisual, AdapterError> {
         let base = self.surface_visuals.life_frame(kind.index())?;
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, 0) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("canned_frame_missing"));
@@ -237,9 +237,9 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
 
     fn hazard_visual(&mut self, kind: HazardKind) -> Result<EntityVisual, AdapterError> {
         let base = self.hazard_base(kind)?;
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, 0) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("hazard_frame_missing"));
@@ -257,9 +257,9 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
         animation_frame: u16,
     ) -> Result<EntityVisual, AdapterError> {
         let base = self.surface_visuals.life_frame(kind.index())?;
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, animation_frame) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("creature_animation_frame_missing"));
@@ -296,9 +296,9 @@ impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
         if base.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));
         }
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let selected = unsafe { SetAbsFrameIndex(base, frame_index) };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));

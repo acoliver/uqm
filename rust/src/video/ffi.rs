@@ -658,8 +658,7 @@ extern "C" fn rust_dukv_GetTime(decoder: *mut TFB_VideoDecoder) -> f32 {
     unsafe { (*decoder).pos }
 }
 
-#[no_mangle]
-pub static rust_dukv_DecoderVtbl: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs {
+pub static RUST_DUKV_DECODER_VTBL: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs {
     GetName: rust_dukv_GetName,
     InitModule: rust_dukv_InitModule,
     TermModule: rust_dukv_TermModule,
@@ -686,7 +685,6 @@ static PLAYER: Mutex<Option<VideoPlayer>> = Mutex::new(None);
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_play_video(
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -772,7 +770,6 @@ pub unsafe extern "C" fn rust_play_video(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_stop_video() {
     if let Ok(mut guard) = PLAYER.lock() {
         *guard = None;
@@ -783,7 +780,6 @@ pub unsafe extern "C" fn rust_stop_video() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_video_playing() -> bool {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
@@ -797,7 +793,6 @@ pub unsafe extern "C" fn rust_video_playing() -> bool {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_process_video_frame() -> bool {
     let screen = SDL_Screen;
     if screen.is_null() {
@@ -834,7 +829,6 @@ pub unsafe extern "C" fn rust_process_video_frame() -> bool {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_present_video_to_window(
     frame_data: *const u8,
     width: c_int,
@@ -979,7 +973,6 @@ pub unsafe extern "C" fn rust_present_video_to_window(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_get_video_position() -> u32 {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
@@ -998,7 +991,6 @@ pub unsafe extern "C" fn rust_get_video_position() -> u32 {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_play_video_direct_window(
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -1162,8 +1154,7 @@ const VID_NO_LOOP: u32 = 0xFFFF_FFFF;
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_InitVideoPlayer() -> bool {
+pub unsafe extern "C" fn tfb_init_video_player() -> bool {
     true
 }
 
@@ -1171,8 +1162,7 @@ pub unsafe extern "C" fn TFB_InitVideoPlayer() -> bool {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_UninitVideoPlayer() {
+pub unsafe extern "C" fn tfb_uninit_video_player() {
     rust_stop_video();
 }
 
@@ -1180,8 +1170,7 @@ pub unsafe extern "C" fn TFB_UninitVideoPlayer() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_PlayVideo(vid: *mut TFB_VideoClip, _x: u32, _y: u32) -> bool {
+pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, _x: u32, _y: u32) -> bool {
     if vid.is_null() {
         return false;
     }
@@ -1290,8 +1279,7 @@ pub unsafe extern "C" fn TFB_PlayVideo(vid: *mut TFB_VideoClip, _x: u32, _y: u32
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
+pub unsafe extern "C" fn tfb_stop_video(_vid: *mut TFB_VideoClip) {
     // Stop video audio played via rodio
     let audio_handle = VIDEO_AUDIO_HANDLE.swap(0, Ordering::Relaxed);
     if audio_handle != 0 {
@@ -1312,8 +1300,7 @@ pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_VideoPlaying(_vid: *mut TFB_VideoClip) -> bool {
+pub unsafe extern "C" fn tfb_video_playing(_vid: *mut TFB_VideoClip) -> bool {
     rust_video_playing()
 }
 
@@ -1321,8 +1308,7 @@ pub unsafe extern "C" fn TFB_VideoPlaying(_vid: *mut TFB_VideoClip) -> bool {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_ProcessVideoFrame(_vid: *mut TFB_VideoClip) -> bool {
+pub unsafe extern "C" fn tfb_process_video_frame(_vid: *mut TFB_VideoClip) -> bool {
     let ok = rust_process_video_frame();
     rust_bridge_log_msg(&format!(
         "RUST_VIDEO: rust_process_video_frame -> {}",
@@ -1335,8 +1321,7 @@ pub unsafe extern "C" fn TFB_ProcessVideoFrame(_vid: *mut TFB_VideoClip) -> bool
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetVideoPosition(_vid: *mut TFB_VideoClip) -> u32 {
+pub unsafe extern "C" fn tfb_get_video_position(_vid: *mut TFB_VideoClip) -> u32 {
     rust_get_video_position()
 }
 
@@ -1344,7 +1329,6 @@ pub unsafe extern "C" fn TFB_GetVideoPosition(_vid: *mut TFB_VideoClip) -> u32 {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SeekVideo(_vid: *mut TFB_VideoClip, _pos: u32) -> bool {
+pub unsafe extern "C" fn tfb_seek_video(_vid: *mut TFB_VideoClip, _pos: u32) -> bool {
     false
 }

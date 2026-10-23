@@ -457,13 +457,11 @@ mod cffi {
 /// archive needs it to exist. Nothing in a test calls it, and anything that
 /// did would be a defect, so it reports that rather than running.
 #[cfg(test)]
-#[no_mangle]
 pub extern "C" fn rust_game_loop() -> c_int {
     panic!("rust_game_loop must not run under test");
 }
 
 #[cfg(not(test))]
-#[no_mangle]
 pub extern "C" fn rust_game_loop() -> c_int {
     match run_game_lifecycle_impl(&cffi::CffiOps) {
         Ok(_) => 0,

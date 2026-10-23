@@ -622,7 +622,7 @@ static KEYNAMES: &[KeyName] = &[
 ];
 
 /// Get the human-readable name for a keycode
-/// This matches the C VControl_code2name behavior
+/// This matches the C v_control_code2name behavior
 pub fn key_name(keycode: i32) -> &'static str {
     // Linear search like C implementation
     for k in KEYNAMES.iter() {
@@ -634,7 +634,7 @@ pub fn key_name(keycode: i32) -> &'static str {
 }
 
 /// Get the keycode for a key name (case-insensitive)
-/// This matches the C VControl_name2code behavior
+/// This matches the C v_control_name2code behavior
 pub fn key_from_name(name: &str) -> Option<i32> {
     // Case-insensitive linear search like C strcasecmp
     for k in KEYNAMES.iter() {
@@ -653,8 +653,7 @@ pub fn key_from_name(name: &str) -> Option<i32> {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 if not found (matches C behavior)
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
+pub unsafe extern "C" fn rust_v_control_name2code(name: *const c_char) -> c_int {
     if name.is_null() {
         return 0;
     }
@@ -794,8 +793,7 @@ static CSTR_KEYNAMES: &[&[u8]] = &[
 ///
 /// # Safety
 /// The returned pointer is valid for the lifetime of the program
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_code2name(code: c_int) -> *const c_char {
+pub unsafe extern "C" fn rust_v_control_code2name(code: c_int) -> *const c_char {
     // Find index in KEYNAMES by matching code
     for (i, k) in KEYNAMES.iter().enumerate() {
         if k.code == code || k.code == 0 {
@@ -812,15 +810,13 @@ pub unsafe extern "C" fn rust_VControl_code2name(code: c_int) -> *const c_char {
 
 /// # Safety
 /// `name` must point to a NUL-terminated key name.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_name2code(name: *const c_char) -> c_int {
-    rust_VControl_name2code(name)
+pub unsafe extern "C" fn v_control_name2code(name: *const c_char) -> c_int {
+    rust_v_control_name2code(name)
 }
 
 /// Returns a static NUL-terminated key name.
-#[no_mangle]
-pub extern "C" fn VControl_code2name(code: c_int) -> *const c_char {
-    unsafe { rust_VControl_code2name(code) }
+pub extern "C" fn v_control_code2name(code: c_int) -> *const c_char {
+    unsafe { rust_v_control_code2name(code) }
 }
 
 /// Get joystick button name
@@ -857,9 +853,9 @@ mod tests {
             assert_eq!(c_name.to_str().unwrap(), entry.name);
             assert_eq!(key_name(entry.code), entry.name);
             unsafe {
-                assert_eq!(rust_VControl_name2code(c_name.as_ptr()), entry.code);
-                assert_eq!(VControl_name2code(c_name.as_ptr()), entry.code);
-                assert_eq!(CStr::from_ptr(VControl_code2name(entry.code)), c_name);
+                assert_eq!(rust_v_control_name2code(c_name.as_ptr()), entry.code);
+                assert_eq!(v_control_name2code(c_name.as_ptr()), entry.code);
+                assert_eq!(CStr::from_ptr(v_control_code2name(entry.code)), c_name);
             }
             if entry.code != 0 {
                 assert_eq!(
@@ -869,8 +865,8 @@ mod tests {
             }
         }
         unsafe {
-            assert_eq!(CStr::from_ptr(VControl_code2name(-1)), c"Unknown");
-            assert_eq!(VControl_name2code(c"not a key".as_ptr()), 0);
+            assert_eq!(CStr::from_ptr(v_control_code2name(-1)), c"Unknown");
+            assert_eq!(v_control_name2code(c"not a key".as_ptr()), 0);
         }
     }
 

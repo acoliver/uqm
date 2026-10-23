@@ -1,6 +1,6 @@
 //! Thraddash callbacks and descriptor translated from `thradd.c`.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, facing_to_angle, frame_index, normalize_angle,

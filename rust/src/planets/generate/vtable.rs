@@ -5,7 +5,7 @@ use crate::c_bindings::assert_c_layout;
 use crate::c_bindings::global_state::{
     GenerateFunctions as CGenerateFunctions, NODE_INFO, PLANET_DESC, SOLARSYS_STATE,
 };
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use crate::planets::generate::exports;
 
 /// `bool (*)(SOLARSYS_STATE *)`: `initNpcs`, `reinitNpcs`, `uninitNpcs` and
@@ -62,7 +62,7 @@ assert_c_layout!(
 );
 
 /// The default hooks; a special system overrides some of them.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub const DEFAULT_HOOKS: GenerateFunctions = GenerateFunctions {
     init_npcs: Some(exports::init_npcs_c),
     reinit_npcs: Some(exports::reinit_npcs_c),
@@ -80,6 +80,6 @@ pub const DEFAULT_HOOKS: GenerateFunctions = GenerateFunctions {
 };
 
 /// `generateDefaultFunctions`: what a system without a special generator uses.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[export_name = "generateDefaultFunctions"]
 pub static GENERATE_DEFAULT_FUNCTIONS: GenerateFunctions = DEFAULT_HOOKS;

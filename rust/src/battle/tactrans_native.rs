@@ -123,7 +123,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
     (next, thrust, wait)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -311,7 +311,6 @@ mod engine {
 
     /// # Safety
     /// `dead` must be a live dying ship element with an attached starship; its display queue and audio state must be initialized.
-    #[no_mangle]
     pub unsafe extern "C" fn cleanup_dead_ship(dead: *mut ELEMENT) {
         ProcessSound(usize::MAX as SOUND, ptr::null_mut());
         let dead_ship = starship(dead);
@@ -752,7 +751,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::*;
 
 #[cfg(test)]

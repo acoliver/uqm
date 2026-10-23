@@ -1,6 +1,6 @@
 //! In-game menus and flagship status display.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod border;
 pub mod util;
 
@@ -12,7 +12,7 @@ pub mod confirm;
 pub mod getchar;
 pub mod menu;
 pub mod menu_state;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod palette;
 
 pub mod shipstat;

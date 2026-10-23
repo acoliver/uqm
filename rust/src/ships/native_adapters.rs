@@ -19,7 +19,7 @@ unsafe fn display_primitive(
         .add(usize::from(index))
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
     use super::{display_primitive, wrap};
@@ -193,7 +193,7 @@ mod live {
         };
     });
 }
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use live::*;
 
 #[cfg(test)]

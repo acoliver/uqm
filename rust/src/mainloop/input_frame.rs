@@ -26,13 +26,13 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn TFB_FlushGraphicsEx(skip_swap: u32);
     fn TFB_SwapBuffers(force_full_redraw: i32);
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn present_complete_transaction() {
     // Drain even when batching already consumed part of the transaction, then
     // publish exactly one frame. TFB_FlushGraphics alone does not swap when the
@@ -47,7 +47,7 @@ unsafe fn present_complete_transaction() {
 /// (glyph data of a font, for example). Owners call this before freeing such a
 /// resource. A build without the C archive has no draw queue to drain.
 pub fn drain_committed_draws() {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     // SAFETY: Called on the game/main thread, where the legacy renderer
     // consumes the draw queue.
     unsafe {
@@ -59,9 +59,8 @@ pub fn drain_committed_draws() {
 ///
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
-#[no_mangle]
 pub extern "C" fn rust_begin_input_loop() {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     // SAFETY: Called on the game/main thread after the owner has completed the
     // draw transaction that establishes this input loop's initial state.
     unsafe {
@@ -73,11 +72,10 @@ pub extern "C" fn rust_begin_input_loop() {
 ///
 /// Returns the callback's original continue value after presenting its complete
 /// draw transaction in Rust-owned-main builds.
-#[no_mangle]
 pub extern "C" fn rust_complete_input_frame(keep_running: i32) -> i32 {
     let result = complete_input_frame(|| keep_running != 0);
 
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     if result.present {
         // SAFETY: Called on the game/main thread at the same boundary where
         // legacy rendering would make committed input-frame draws visible.

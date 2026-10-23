@@ -45,8 +45,7 @@ fn rgba_steps(src: i32, dst: i32, smooth: bool) -> Vec<i32> {
 
 /// # Safety
 /// Surfaces must contain 32-bit pixels, be locked if required, and not alias.
-#[no_mangle]
-pub unsafe extern "C" fn zoomSurfaceRGBA(
+pub unsafe extern "C" fn zoom_surface_rgba(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     smooth: i32,
@@ -244,8 +243,7 @@ fn size_trig(width: i32, height: i32, angle: f64, zoom: f64) -> (i32, i32, f64, 
 }
 /// # Safety
 /// Output pointers must be valid.
-#[no_mangle]
-pub unsafe extern "C" fn rotozoomSurfaceSize(
+pub unsafe extern "C" fn rotozoom_surface_size(
     width: i32,
     height: i32,
     angle: f64,
@@ -259,8 +257,7 @@ pub unsafe extern "C" fn rotozoomSurfaceSize(
 }
 /// # Safety
 /// Output pointers must be valid.
-#[no_mangle]
-pub unsafe extern "C" fn zoomSurfaceSize(
+pub unsafe extern "C" fn zoom_surface_size(
     width: i32,
     height: i32,
     zoomx: f64,
@@ -312,8 +309,7 @@ unsafe fn alpha(dst: *mut SDL_Surface) {
 
 /// # Safety
 /// Source must be null or a live SDL surface. Returned surface is owned by caller.
-#[no_mangle]
-pub unsafe extern "C" fn rotozoomSurface(
+pub unsafe extern "C" fn rotozoom_surface(
     src: *mut SDL_Surface,
     angle: f64,
     zoom: f64,
@@ -332,7 +328,7 @@ pub unsafe extern "C" fn rotozoomSurface(
         size_trig((*rz_src).w, (*rz_src).h, angle, zoom)
     } else {
         let (mut w, mut h) = (0, 0);
-        zoomSurfaceSize((*rz_src).w, (*rz_src).h, zoom, zoom, &mut w, &mut h);
+        zoom_surface_size((*rz_src).w, (*rz_src).h, zoom, zoom, &mut w, &mut h);
         (w, h, 0.0, 0.0)
     };
     let dst = target(rz_src, w, h);
@@ -350,7 +346,7 @@ pub unsafe extern "C" fn rotozoomSurface(
                     smooth,
                 );
             } else {
-                zoomSurfaceRGBA(rz_src, dst, smooth);
+                zoom_surface_rgba(rz_src, dst, smooth);
             }
             alpha(dst);
         } else {
@@ -383,8 +379,7 @@ pub unsafe extern "C" fn rotozoomSurface(
 
 /// # Safety
 /// Source must be null or live; destination must be null or live and not alias it.
-#[no_mangle]
-pub unsafe extern "C" fn rotateSurface(
+pub unsafe extern "C" fn rotate_surface(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     angle: f64,
@@ -433,8 +428,7 @@ pub unsafe extern "C" fn rotateSurface(
 
 /// # Safety
 /// Source must be null or live. Returned surface is owned by caller.
-#[no_mangle]
-pub unsafe extern "C" fn zoomSurface(
+pub unsafe extern "C" fn zoom_surface(
     src: *mut SDL_Surface,
     zoomx: f64,
     zoomy: f64,
@@ -448,12 +442,12 @@ pub unsafe extern "C" fn zoomSurface(
         return ptr::null_mut();
     }
     let (mut w, mut h) = (0, 0);
-    zoomSurfaceSize((*rz_src).w, (*rz_src).h, zoomx, zoomy, &mut w, &mut h);
+    zoom_surface_size((*rz_src).w, (*rz_src).h, zoomx, zoomy, &mut w, &mut h);
     let dst = target(rz_src, w, h);
     if !dst.is_null() {
         SDL_LockSurface(rz_src);
         if (*(*rz_src).format).BitsPerPixel == 32 {
-            zoomSurfaceRGBA(rz_src, dst, smooth);
+            zoom_surface_rgba(rz_src, dst, smooth);
             alpha(dst);
         } else {
             let mut key = 0;
@@ -490,11 +484,11 @@ mod tests {
             for (x, y, c) in [(0, 0, 0), (1, 0, 100), (0, 1, 200), (1, 1, 240)] {
                 put(src, x, y, [c; 4]);
             }
-            let dst = zoomSurface(src, 2.0, 2.0, 0);
+            let dst = zoom_surface(src, 2.0, 2.0, 0);
             assert_eq!(pixel(dst, 2, 3), [240; 4]);
             assert_eq!(pixel(dst, 1, 0), [0; 4]);
             SDL_FreeSurface(dst);
-            let dst = zoomSurface(src, 1.0, 1.0, 1);
+            let dst = zoom_surface(src, 1.0, 1.0, 1);
             assert_eq!(pixel(dst, 1, 1), [135; 4]);
             SDL_FreeSurface(dst);
             SDL_FreeSurface(src);

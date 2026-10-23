@@ -102,7 +102,6 @@ fn color_from_u32(c: u32) -> Color {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_init() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         if get_dcq_state().is_some() {
@@ -141,7 +140,6 @@ pub unsafe extern "C" fn rust_dcq_init() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(state) = get_dcq_state() {
@@ -167,7 +165,6 @@ pub unsafe extern "C" fn rust_dcq_uninit() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawline(
     x1: c_int,
     y1: c_int,
@@ -212,7 +209,6 @@ pub unsafe extern "C" fn rust_dcq_push_drawline(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawrect(
     x: c_int,
     y: c_int,
@@ -259,7 +255,6 @@ pub unsafe extern "C" fn rust_dcq_push_drawrect(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_fillrect(
     x: c_int,
     y: c_int,
@@ -305,7 +300,6 @@ pub unsafe extern "C" fn rust_dcq_push_fillrect(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -352,7 +346,6 @@ pub unsafe extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_i
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_copy(
     src_rect: *const SDL_Rect,
     src_screen: c_int,
@@ -406,7 +399,6 @@ pub unsafe extern "C" fn rust_dcq_push_copy(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_copytoimage(
     image_id: u32,
     src_rect: *const SDL_Rect,
@@ -452,7 +444,6 @@ pub unsafe extern "C" fn rust_dcq_push_copytoimage(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -482,7 +473,6 @@ pub unsafe extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_waitsignal() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -511,7 +501,6 @@ pub unsafe extern "C" fn rust_dcq_push_waitsignal() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_reinitvideo(
     driver: c_int,
     flags: c_int,
@@ -548,7 +537,6 @@ pub unsafe extern "C" fn rust_dcq_push_reinitvideo(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -583,7 +571,6 @@ pub unsafe extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_scissor_enable(
     x: c_int,
     y: c_int,
@@ -617,7 +604,6 @@ pub unsafe extern "C" fn rust_dcq_push_scissor_enable(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -651,7 +637,6 @@ pub unsafe extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_flush() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -680,7 +665,6 @@ pub unsafe extern "C" fn rust_dcq_flush() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_batch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -708,7 +692,6 @@ pub unsafe extern "C" fn rust_dcq_batch() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_unbatch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -733,7 +716,6 @@ pub unsafe extern "C" fn rust_dcq_unbatch() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -760,7 +742,6 @@ pub unsafe extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_get_screen() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
@@ -783,7 +764,6 @@ pub unsafe extern "C" fn rust_dcq_get_screen() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_dcq_len() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {

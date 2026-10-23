@@ -1,5 +1,4 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{
     ffi::{c_void, CStr},
@@ -10,10 +9,6 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_chmmr() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
@@ -490,7 +485,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                     RemoveElement(spot_handle);
                     FreeElement(spot_handle);
                 } else {
-                    assert_eq!(disp_q.tail, tail);
+                    assert_eq!({ disp_q.tail }, tail);
                     assert_rng_after(seed, 1);
                 }
             }
@@ -521,7 +516,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
         ship.ss.ShipFacing = 5;
         ship.ss.cur_status_flags = WEAPON as u16;
         ship.postprocess(); // tail is the ship itself
-        assert_eq!(disp_q.tail, ship.handle);
+        assert_eq!({ disp_q.tail }, ship.handle);
         for (counter, player, appearing, kind, expected) in [
             (0, 0, true, gfx_object_LINE_PRIM, true),
             (2, 0, true, gfx_object_LINE_PRIM, true),
@@ -557,7 +552,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                 RemoveElement(flash_handle);
                 FreeElement(flash_handle);
             } else {
-                assert_eq!(disp_q.tail, h);
+                assert_eq!({ disp_q.tail }, h);
             }
             RemoveElement(h);
             FreeElement(h);
@@ -641,7 +636,7 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
         let tail = disp_q.tail;
         (ship.desc.preprocess_func.unwrap())(ship.ptr());
         assert!(ship.desc.preprocess_func.is_none());
-        assert_eq!(disp_q.tail, tail);
+        assert_eq!({ disp_q.tail }, tail);
     }
 }
 
@@ -788,7 +783,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
         let before = disp_q.tail;
         TFB_SeedRandom(12);
         ((*element(d)).death_func.unwrap())(element(d));
-        assert_ne!(disp_q.tail, before);
+        assert_ne!({ disp_q.tail }, before);
         let beam = element(disp_q.tail);
         assert_eq!(point((*beam).current.location), point((*s).next.location));
         assert_eq!(velocity(beam), (-40 << VELOCITY_SHIFT, 0));
@@ -891,7 +886,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
         assert_eq!((*s).__bindgen_anon_5.thrust_wait, 1);
         post(s);
         assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
-        assert_eq!(disp_q.tail, tail);
+        assert_eq!({ disp_q.tail }, tail);
         (*s).__bindgen_anon_1.life_span = 0;
         post(s);
         assert_eq!((*s).__bindgen_anon_5.thrust_wait, 255);
@@ -899,7 +894,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
         (*s).__bindgen_anon_5.thrust_wait = 0;
         let held = exhaust();
         post(s);
-        assert_eq!(disp_q.tail, tail);
+        assert_eq!({ disp_q.tail }, tail);
         assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
         for h in held {
             FreeElement(h);
@@ -909,7 +904,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
         let d = defense(s);
         let held = exhaust();
         ((*element(d)).death_func.unwrap())(element(d));
-        assert_eq!(disp_q.tail, d);
+        assert_eq!({ disp_q.tail }, d);
         assert_eq!((*s).__bindgen_anon_5.thrust_wait, 0);
         for h in held {
             FreeElement(h);
@@ -972,7 +967,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 h = (*shadow).succ;
             }
             assert_eq!(h, ship.handle);
-            assert_eq!(disp_q.tail, enemy.handle);
+            assert_eq!({ disp_q.tail }, enemy.handle);
             assert_rng_after(99, 0);
         }
     }
@@ -1009,8 +1004,8 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
             ship.postprocess();
             assert_eq!(ship.ss.special_counter, 0);
             assert_eq!(ship.desc.ship_info.energy_level, 0);
-            assert_eq!(disp_q.tail, tail);
-            assert_eq!(disp_q.head, ship.handle);
+            assert_eq!({ disp_q.tail }, tail);
+            assert_eq!({ disp_q.head }, ship.handle);
             let affected = energy != 0 && mass < 100 && has_target;
             assert_eq!(
                 velocity(enemy.ptr()),
@@ -1145,7 +1140,7 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
                 RemoveElement(spot_handle);
                 FreeElement(spot_handle);
             } else {
-                assert_eq!(disp_q.tail, tail);
+                assert_eq!({ disp_q.tail }, tail);
                 assert_rng_after(seed, 1);
             }
         }
@@ -1164,7 +1159,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
         ship.postprocess();
         assert_eq!(ship.ss.special_counter, 0);
         assert_eq!(ship.desc.ship_info.energy_level, 42);
-        assert_eq!(disp_q.head, ship.handle);
+        assert_eq!({ disp_q.head }, ship.handle);
         assert_rng_after(81, 0);
         let h = ship.laser();
         put_element(h);
@@ -1173,7 +1168,7 @@ fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
         ship.ss.special_counter = 2;
         ship.postprocess();
         assert_eq!(ship.ss.special_counter, 0);
-        assert_eq!(disp_q.tail, h);
+        assert_eq!({ disp_q.tail }, h);
         for h in held {
             FreeElement(h);
         }

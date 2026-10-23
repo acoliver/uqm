@@ -1,5 +1,5 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,

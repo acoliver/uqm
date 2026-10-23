@@ -81,11 +81,11 @@ fn png_and_rotozoom_match_recorded_c_surfaces() {
                 let b = case.operation[2].parse().unwrap();
                 let smooth = case.operation[3].parse().unwrap();
                 match case.operation[0].as_str() {
-                    "zoom" => rotozoom::zoomSurface(src, a, b, smooth),
-                    "rz" => rotozoom::rotozoomSurface(src, a, b, smooth),
+                    "zoom" => rotozoom::zoom_surface(src, a, b, smooth),
+                    "rz" => rotozoom::rotozoom_surface(src, a, b, smooth),
                     "rot" => {
                         let (mut w, mut h) = (0, 0);
-                        rotozoom::rotozoomSurfaceSize((*src).w, (*src).h, a, 1.0, &mut w, &mut h);
+                        rotozoom::rotozoom_surface_size((*src).w, (*src).h, a, 1.0, &mut w, &mut h);
                         let f = &*(*src).format;
                         let dst = SDL_CreateRGBSurface(
                             0,
@@ -98,7 +98,7 @@ fn png_and_rotozoom_match_recorded_c_surfaces() {
                             f.Amask,
                         );
                         assert_eq!(
-                            rotozoom::rotateSurface(src, dst, a, smooth),
+                            rotozoom::rotate_surface(src, dst, a, smooth),
                             0,
                             "{}",
                             case.name

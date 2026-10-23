@@ -29,10 +29,6 @@ use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
 use uqm_rust::state::game_state_keys::set_game_state;
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;

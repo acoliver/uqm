@@ -135,7 +135,7 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
     (t0 <= 0 && t1 >= 0) || (t0 > 0 && velocity >= t0) || (t1 < 0 && velocity <= t1)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -1282,7 +1282,7 @@ mod engine {
         }
     }
 }
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     ship_intelligence, ship_weapons, tactical_intelligence, Avoid, Entice, PlotIntercept, Pursue,
     ThrustShip, TurnShip,

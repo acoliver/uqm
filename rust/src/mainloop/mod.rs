@@ -35,10 +35,10 @@ pub mod init_sequence;
 pub mod init_wrappers;
 pub mod input_frame;
 pub mod logging;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod main2_abi;
 pub mod options;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod options_abi;
 pub mod restart_menu;
 pub mod startup;
@@ -78,8 +78,8 @@ pub enum MainLoopError {
 pub mod platform_abi;
 
 pub mod input_abi;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod lifecycle_abi;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod state_abi;

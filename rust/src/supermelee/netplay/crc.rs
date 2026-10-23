@@ -16,12 +16,11 @@ const fn table() -> [u32; 256] {
     result
 }
 
-#[no_mangle]
-pub static crcTable: [u32; 256] = table();
+pub static CRC_TABLE: [u32; 256] = table();
 
 fn process(state: &mut crc_State, bytes: &[u8]) {
     for &byte in bytes {
-        state.crc = (state.crc >> 8) ^ crcTable[((state.crc ^ u32::from(byte)) & 0xff) as usize];
+        state.crc = (state.crc >> 8) ^ CRC_TABLE[((state.crc ^ u32::from(byte)) & 0xff) as usize];
     }
 }
 

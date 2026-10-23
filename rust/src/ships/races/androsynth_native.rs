@@ -3,7 +3,7 @@
 //! Every value and expression below mirrors `sc2/src/uqm/ships/androsyn/androsyn.c`,
 //! including C integer promotion and truncation, so battles replay identically.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{abi::*, element, starship};

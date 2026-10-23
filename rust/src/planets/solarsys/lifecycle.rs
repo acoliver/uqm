@@ -11,7 +11,7 @@ use crate::comm::locdata::{CGlobData, CPoint};
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::{DoInput, PlayMusic};
 use crate::math::{RandomContext_Random, RandomContext_SeedRandom, ARCTAN};
-use crate::planet_side::orbit_music::LoadLanderData;
+use crate::planet_side::orbit_music::load_lander_data;
 use crate::planets::devices::DevicesMenu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::planets::starmap::FindStar;
@@ -196,8 +196,8 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     let state = system();
     let mut orbital = ptr::null_mut();
     RandomContext_SeedRandom(SysGenRNG.cast(), GetRandomSeedForStar(ffi::CurStarDescPtr));
-    SunFrame = SetAbsFrameIndex(
-        SunFrame.cast(),
+    SUN_FRAME = SetAbsFrameIndex(
+        SUN_FRAME.cast(),
         u16::from(((*ffi::CurStarDescPtr).Type & 0x18) >> 3),
     )
     .cast();
@@ -208,7 +208,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     (*sun).data_index = ((*ffi::CurStarDescPtr).Type & 0x18) >> 3;
     (*sun).location = c::POINT { x: 0, y: 0 };
     (*sun).image.origin = (*sun).location;
-    (*sun).image.frame = SunFrame;
+    (*sun).image.frame = SUN_FRAME;
 
     ((*(*state).genFuncs).generatePlanets.unwrap())(state);
     if get_game_state("PLANETARY_CHANGE") != 0 {
@@ -267,7 +267,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
         if i == 0 {
             i += 1;
         }
-        (*glob()).game_state.ship_stamp.frame = SetAbsFrameIndex(SISIPFrame.cast(), i - 1).cast();
+        (*glob()).game_state.ship_stamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
     }
     orbital
 }
@@ -357,7 +357,7 @@ pub(super) unsafe fn enter_planet_orbit() {
 
 pub(super) unsafe fn init_solar_sys() {
     super::resources::LoadIPData();
-    LoadLanderData();
+    load_lander_data();
 
     let state = system();
     let reentry = (*glob()).game_state.ship_facing != 0;

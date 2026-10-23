@@ -42,7 +42,9 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
     (x, y)
 }
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_INFO, SOLARSYS_STATE};
+#[cfg(test)]
+use crate::c_bindings::global_state::PLANET_INFO;
+use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 
 #[no_mangle]
 pub(crate) unsafe extern "C" fn callGenerateForScanType(
@@ -79,20 +81,20 @@ unsafe extern "C" fn callPickupForScanType(
     callback.expect("scan pickup")(system, world, node)
 }
 
-#[no_mangle]
-unsafe extern "C" fn isNodeRetrieved(info: *mut PLANET_INFO, scan: u8, node: u8) -> bool {
+#[cfg(test)]
+unsafe fn is_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) -> bool {
     (*info).ScanRetrieveMask[usize::from(scan)] & (1_u32 << node) != 0
 }
-#[no_mangle]
-unsafe extern "C" fn countNodesRetrieved(info: *mut PLANET_INFO, scan: u8) -> u16 {
+#[cfg(test)]
+unsafe fn count_nodes_retrieved(info: *mut PLANET_INFO, scan: u8) -> u16 {
     (*info).ScanRetrieveMask[usize::from(scan)].count_ones() as u16
 }
-#[no_mangle]
-unsafe extern "C" fn setNodeRetrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
+#[cfg(test)]
+unsafe fn set_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
     (*info).ScanRetrieveMask[usize::from(scan)] |= 1_u32 << node;
 }
-#[no_mangle]
-unsafe extern "C" fn setNodeNotRetrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
+#[cfg(test)]
+unsafe fn set_node_not_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
     (*info).ScanRetrieveMask[usize::from(scan)] &= !(1_u32 << node);
 }
 
@@ -109,16 +111,16 @@ mod tests {
         unsafe {
             for scan in 0..3 {
                 for node in 0..32 {
-                    assert!(!isNodeRetrieved(&mut info, scan, node));
-                    setNodeRetrieved(&mut info, scan, node);
-                    assert!(isNodeRetrieved(&mut info, scan, node));
-                    assert_eq!(countNodesRetrieved(&mut info, scan), u16::from(node) + 1);
+                    assert!(!is_node_retrieved(&mut info, scan, node));
+                    set_node_retrieved(&mut info, scan, node);
+                    assert!(is_node_retrieved(&mut info, scan, node));
+                    assert_eq!(count_nodes_retrieved(&mut info, scan), u16::from(node) + 1);
                 }
             }
             for scan in 0..3 {
-                setNodeNotRetrieved(&mut info, scan, 31);
-                setNodeNotRetrieved(&mut info, scan, 0);
-                assert_eq!(countNodesRetrieved(&mut info, scan), 30);
+                set_node_not_retrieved(&mut info, scan, 31);
+                set_node_not_retrieved(&mut info, scan, 0);
+                assert_eq!(count_nodes_retrieved(&mut info, scan), 30);
                 assert_eq!(info.ScanRetrieveMask[usize::from(scan)], 0x7fff_fffe);
             }
         }

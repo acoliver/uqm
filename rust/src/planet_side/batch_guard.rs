@@ -47,14 +47,14 @@ pub const fn classify(entry: i32, exit: i32) -> BatchVerdict {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn GetBatchDepth() -> i32;
     fn BatchGraphics();
     fn UnbatchGraphics();
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn depth() -> i32 {
     // SAFETY: reads one int under the draw queue's own recursive mutex.
     unsafe { GetBatchDepth() }
@@ -64,7 +64,7 @@ fn depth() -> i32 {
 ///
 /// The count is computed once from an observed depth rather than by re-reading
 /// the global in a loop, so this always terminates.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn correct_by(levels: i32) {
     // SAFETY: these are the queue's own reference-counting operations.
     unsafe {
@@ -81,7 +81,7 @@ fn correct_by(levels: i32) {
 ///
 /// Fails if the depth is not zero on entry, or if the callback returns having
 /// changed it. `operation` names the boundary for diagnostics.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub fn calling_native_unbatched<T>(
     operation: &'static str,
     body: impl FnOnce() -> T,
@@ -105,7 +105,7 @@ pub fn calling_native_unbatched<T>(
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub fn calling_native_unbatched<T>(
     _operation: &'static str,
     body: impl FnOnce() -> T,

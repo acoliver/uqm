@@ -1,6 +1,6 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, element, normalize_facing, starship};
     use std::{mem, ptr};

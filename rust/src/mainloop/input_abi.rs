@@ -33,7 +33,7 @@ impl Repeat {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
     use super::*;
@@ -360,7 +360,7 @@ mod live {
         result
     }
 }
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use live::*;
 
 #[cfg(test)]

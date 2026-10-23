@@ -286,7 +286,6 @@ pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
 #[cfg(not(test))]
-#[no_mangle]
 pub extern "C" fn rust_start_game() -> c_int {
     let ops = super::restart_ops::CffiOps::new();
     if start_game_impl(&ops) {

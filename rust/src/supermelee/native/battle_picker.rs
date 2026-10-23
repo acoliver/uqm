@@ -117,7 +117,6 @@ pub(super) mod live {
     }
     /// # Safety
     /// The selection and live ship queues belong to the game thread.
-    #[no_mangle]
     pub unsafe extern "C" fn setShipSelected(
         state: *mut GETMELEE_STATE,
         player: u16,

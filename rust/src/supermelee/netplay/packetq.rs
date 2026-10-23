@@ -26,8 +26,7 @@ pub unsafe extern "C" fn PacketQueue_uninit(queue: *mut PacketQueue) {
 
 /// # Safety
 /// `conn` must be connected with an initialized queue. Ownership of `packet` is transferred.
-#[no_mangle]
-pub unsafe extern "C" fn queuePacket(conn: *mut NetConnection, packet: *mut Packet) {
+pub unsafe extern "C" fn queue_packet(conn: *mut NetConnection, packet: *mut Packet) {
     assert!((*conn).stateFlags.connected);
     let queue = &raw mut (*conn).queue;
     let link = libc::malloc(size_of::<PacketQueueLink>()).cast::<PacketQueueLink>();
@@ -82,7 +81,7 @@ mod tests {
             conn.stateFlags.connected = true;
             PacketQueue_init(&raw mut conn.queue);
             for id in 1..=3 {
-                queuePacket(&mut conn, Packet_Ping_create(id).cast());
+                queue_packet(&mut conn, Packet_Ping_create(id).cast());
             }
             assert_eq!(conn.queue.size, 3);
             let mut sent = Vec::new();
@@ -99,7 +98,7 @@ mod tests {
             );
             assert_eq!(sent, [1]);
             assert_eq!(conn.queue.size, 2);
-            queuePacket(&mut conn, Packet_Ping_create(4).cast());
+            queue_packet(&mut conn, Packet_Ping_create(4).cast());
             assert_eq!(
                 flush(&raw mut conn.queue, |packet| {
                     sent.push(u32::from_be((*packet.cast::<Packet_Ping>()).id));
@@ -111,7 +110,7 @@ mod tests {
             assert_eq!(conn.queue.size, 0);
             assert!(conn.queue.first.is_null());
             assert_eq!(conn.queue.end, &raw mut conn.queue.first);
-            queuePacket(&mut conn, Packet_Ping_create(5).cast());
+            queue_packet(&mut conn, Packet_Ping_create(5).cast());
             assert_eq!(conn.queue.size, 1);
             PacketQueue_uninit(&raw mut conn.queue);
         }

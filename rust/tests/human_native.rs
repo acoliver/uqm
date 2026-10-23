@@ -1,13 +1,8 @@
 //! Exercise the race entry point and registered callbacks against the linked engine.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_human() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;

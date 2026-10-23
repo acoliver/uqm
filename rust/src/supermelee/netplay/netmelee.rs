@@ -19,8 +19,7 @@ use std::{ffi::c_void, ptr};
 #[no_mangle]
 pub static mut netConnections: [*mut NetConnection; NETPLAY_NUM_PLAYERS as usize] =
     [ptr::null_mut(); NETPLAY_NUM_PLAYERS as usize];
-#[no_mangle]
-pub static mut numNetConnections: usize = 0;
+pub static mut NUM_NET_CONNECTIONS: usize = 0;
 
 macro_rules! exported {
     (fn $name:ident($($arg:ident: $ty:ty),* $(,)?) $(-> $ret:ty)? $body:block) => {
@@ -33,18 +32,18 @@ macro_rules! exported {
 exported!(
     fn addNetConnection(conn: *mut NetConnection, player: i32) {
         netConnections[player as usize] = conn;
-        numNetConnections += 1;
+        NUM_NET_CONNECTIONS += 1;
     }
 );
 exported!(
     fn removeNetConnection(player: i32) {
         netConnections[player as usize] = ptr::null_mut();
-        numNetConnections -= 1;
+        NUM_NET_CONNECTIONS -= 1;
     }
 );
 exported!(
     fn getNumNetConnections() -> usize {
-        numNetConnections
+        NUM_NET_CONNECTIONS
     }
 );
 
@@ -459,10 +458,10 @@ mod tests {
     fn connection_iteration_order_short_circuit_and_input_delay_negotiation() {
         unsafe {
             let saved_connections = netConnections;
-            let saved_count = numNetConnections;
+            let saved_count = NUM_NET_CONNECTIONS;
             let saved_delay = getBattleInputDelay();
             netConnections = [ptr::null_mut(); 2];
-            numNetConnections = 0;
+            NUM_NET_CONNECTIONS = 0;
             assert!(allConnected());
             assert!(setupInputDelay(7));
             assert_eq!(getBattleInputDelay(), 0);
@@ -505,7 +504,7 @@ mod tests {
             assert_eq!(getNumNetConnections(), 0);
             assert!(allConnected());
             netConnections = saved_connections;
-            numNetConnections = saved_count;
+            NUM_NET_CONNECTIONS = saved_count;
             setBattleInputDelay(saved_delay);
         }
     }

@@ -38,7 +38,7 @@ pub unsafe extern "C" fn TFB_ReInitGraphics(
             && height == ScreenHeightActual,
     );
     GfxFlags = flags;
-    let result = super::pure_abi::TFB_Pure_ConfigureVideo(1, flags, width, height, toggle);
+    let result = super::pure_abi::tfb_pure_configure_video(1, flags, width, height, toggle);
     sys::SDL_ShowCursor(if flags & 1 != 0 { 0 } else { 1 });
     result
 }
@@ -48,8 +48,7 @@ pub extern "C" fn TFB_SetGamma(_gamma: f32) -> bool {
 }
 /// # Safety
 /// Surface must be null or a live SDL surface.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_HasSurfaceAlphaMod(surface: *mut SDL_Surface) -> c_int {
+pub unsafe extern "C" fn tfb_has_surface_alpha_mod(surface: *mut SDL_Surface) -> c_int {
     let mut mode = sys::SDL_BlendMode::SDL_BLENDMODE_NONE;
     if surface.is_null() || sys::SDL_GetSurfaceBlendMode(surface.cast(), &mut mode) != 0 {
         return 0;
@@ -58,8 +57,7 @@ pub unsafe extern "C" fn TFB_HasSurfaceAlphaMod(surface: *mut SDL_Surface) -> c_
 }
 /// # Safety
 /// Surface must be null or live and nonnull alpha writable.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetSurfaceAlphaMod(
+pub unsafe extern "C" fn tfb_get_surface_alpha_mod(
     surface: *mut SDL_Surface,
     alpha: *mut u8,
 ) -> c_int {
@@ -77,8 +75,7 @@ pub unsafe extern "C" fn TFB_GetSurfaceAlphaMod(
 }
 /// # Safety
 /// Surface must be null or a live SDL surface.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetSurfaceAlphaMod(surface: *mut SDL_Surface, alpha: u8) -> c_int {
+pub unsafe extern "C" fn tfb_set_surface_alpha_mod(surface: *mut SDL_Surface, alpha: u8) -> c_int {
     if surface.is_null() {
         return -1;
     }
@@ -92,8 +89,7 @@ pub unsafe extern "C" fn TFB_SetSurfaceAlphaMod(surface: *mut SDL_Surface, alpha
 }
 /// # Safety
 /// Surface must be null or a live SDL surface.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DisableSurfaceAlphaMod(surface: *mut SDL_Surface) -> c_int {
+pub unsafe extern "C" fn tfb_disable_surface_alpha_mod(surface: *mut SDL_Surface) -> c_int {
     if surface.is_null() {
         return -1;
     }
@@ -102,8 +98,7 @@ pub unsafe extern "C" fn TFB_DisableSurfaceAlphaMod(surface: *mut SDL_Surface) -
 }
 /// # Safety
 /// Surface must be null or live; nonnull key must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetColorKey(surface: *mut SDL_Surface, key: *mut u32) -> c_int {
+pub unsafe extern "C" fn tfb_get_color_key(surface: *mut SDL_Surface, key: *mut u32) -> c_int {
     if surface.is_null() || key.is_null() {
         -1
     } else {
@@ -112,8 +107,11 @@ pub unsafe extern "C" fn TFB_GetColorKey(surface: *mut SDL_Surface, key: *mut u3
 }
 /// # Safety
 /// Surface must be null or live.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetColorKey(surface: *mut SDL_Surface, key: u32, rle: c_int) -> c_int {
+pub unsafe extern "C" fn tfb_set_color_key(
+    surface: *mut SDL_Surface,
+    key: u32,
+    rle: c_int,
+) -> c_int {
     if surface.is_null() {
         return -1;
     }
@@ -122,8 +120,7 @@ pub unsafe extern "C" fn TFB_SetColorKey(surface: *mut SDL_Surface, key: u32, rl
 }
 /// # Safety
 /// Surface must be null or live.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_DisableColorKey(surface: *mut SDL_Surface) -> c_int {
+pub unsafe extern "C" fn tfb_disable_color_key(surface: *mut SDL_Surface) -> c_int {
     if surface.is_null() {
         -1
     } else {
@@ -132,15 +129,13 @@ pub unsafe extern "C" fn TFB_DisableColorKey(surface: *mut SDL_Surface) -> c_int
 }
 /// # Safety
 /// Surface must be null or live.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_HasColorKey(surface: *mut SDL_Surface) -> c_int {
+pub unsafe extern "C" fn tfb_has_color_key(surface: *mut SDL_Surface) -> c_int {
     let mut key = 0;
-    c_int::from(TFB_GetColorKey(surface, &mut key) == 0)
+    c_int::from(tfb_get_color_key(surface, &mut key) == 0)
 }
 /// # Safety
 /// Nonnull surface must be live and colors must hold count entries.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_SetColors(
+pub unsafe extern "C" fn tfb_set_colors(
     surface: *mut SDL_Surface,
     colors: *mut sys::SDL_Color,
     first: c_int,
@@ -183,12 +178,12 @@ pub unsafe extern "C" fn TFB_DisplayFormatAlpha(surface: *mut SDL_Surface) -> *m
     }
     let converted =
         sys::SDL_ConvertSurface(source, ptr::from_ref(dst), (*source).flags).cast::<SDL_Surface>();
-    if TFB_HasColorKey(surface) != 0
+    if tfb_has_color_key(surface) != 0
         && !converted.is_null()
-        && TFB_HasColorKey(converted) != 0
-        && TFB_HasSurfaceAlphaMod(converted) != 0
+        && tfb_has_color_key(converted) != 0
+        && tfb_has_surface_alpha_mod(converted) != 0
     {
-        TFB_DisableSurfaceAlphaMod(converted);
+        tfb_disable_surface_alpha_mod(converted);
     }
     converted
 }

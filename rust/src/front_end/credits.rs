@@ -4,7 +4,7 @@
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 const CREDITS_BASE_RATE: c_int = 9;
 const CREDITS_MAX_RATE: c_int = 130;
 const CREDITS_FRAME_RATE: c_int = 36;
@@ -26,7 +26,7 @@ fn scroll_step(rate: c_int) -> (c_int, c_int, TimePeriod) {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
@@ -625,7 +625,7 @@ mod runtime {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::Credits;
 
 #[cfg(test)]

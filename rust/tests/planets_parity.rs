@@ -38,10 +38,6 @@ use uqm_rust::c_bindings::global_state::{
 use uqm_rust::math::RandomContext;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     static mut SysGenRNG: *mut RandomContext;
     static mut pSolarSysState: *mut SOLARSYS_STATE;
@@ -509,7 +505,9 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
 /// fixtures captured from the C originals field for field (strings included).
 #[test]
 fn plandata_tables_equal_the_c_originals() {
-    let stars = unsafe { &*(&raw const starmap_array) };
+    let stars = unsafe {
+        std::slice::from_raw_parts((&raw const starmap_array).cast::<CStarDesc>(), CATALOG_LEN)
+    };
     let frames = unsafe { &planet_array }.as_slice();
     let elements = unsafe { &element_array }.as_slice();
 

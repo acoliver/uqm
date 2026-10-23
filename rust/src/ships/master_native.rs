@@ -19,7 +19,7 @@ unsafe fn find(mut head: HMASTERSHIP, species: SPECIES_ID) -> (HMASTERSHIP, i32)
     (head, -1)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -151,7 +151,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     master_q, FindMasterShip, FindMasterShipIndex, FreeMasterShipList, GetShipCostFromIndex,
     GetShipIconsFromIndex, GetShipMeleeIconsFromIndex, LoadMasterShipList,

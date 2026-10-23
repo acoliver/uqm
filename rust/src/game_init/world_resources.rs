@@ -76,7 +76,7 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
@@ -166,5 +166,5 @@ mod tests {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use live::free_gravity_well;

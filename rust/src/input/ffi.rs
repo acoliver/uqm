@@ -147,8 +147,7 @@ const SDL_JOYBUTTONUP: u32 = 0x604;
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_Init() -> c_int {
+pub unsafe extern "C" fn rust_v_control_init() -> c_int {
     let mut vc = VCONTROL.write();
     match vc.init() {
         Ok(()) => 0,
@@ -161,8 +160,7 @@ pub unsafe extern "C" fn rust_VControl_Init() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_Uninit() {
+pub unsafe extern "C" fn rust_v_control_uninit() {
     let mut vc = VCONTROL.write();
     vc.uninit();
 }
@@ -172,8 +170,7 @@ pub unsafe extern "C" fn rust_VControl_Uninit() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ResetInput() {
+pub unsafe extern "C" fn rust_vcontrol_reset_input() {
     let mut vc = VCONTROL.write();
     unsafe {
         vc.reset_states();
@@ -184,8 +181,7 @@ pub unsafe extern "C" fn rust_VControl_ResetInput() {
 ///
 /// # Safety
 /// `target` must be a valid pointer to an i32 that lives as long as the binding
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_AddKeyBinding(symbol: c_int, target: *mut c_int) -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_add_key_binding(symbol: c_int, target: *mut c_int) -> c_int {
     crate::bridge_log::rust_bridge_log_msg(&format!(
         "RUST_INPUT: AddKeyBinding sym=0x{:X} target={:p}",
         symbol, target
@@ -203,8 +199,7 @@ pub unsafe extern "C" fn rust_VControl_AddKeyBinding(symbol: c_int, target: *mut
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveKeyBinding(
+pub unsafe extern "C" fn rust_vcontrol_remove_key_binding(
     symbol: c_int,
     target: *mut c_int,
 ) -> c_int {
@@ -221,8 +216,7 @@ pub unsafe extern "C" fn rust_VControl_RemoveKeyBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ClearKeyBindings() {
+pub unsafe extern "C" fn rust_vcontrol_clear_key_bindings() {
     let mut vc = VCONTROL.write();
     vc.clear_key_bindings();
 }
@@ -232,8 +226,7 @@ pub unsafe extern "C" fn rust_VControl_ClearKeyBindings() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
+pub unsafe extern "C" fn rust_vcontrol_process_key_down(symbol: c_int) {
     // Debug log for key presses
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyDown sym=0x{:X}", symbol));
 
@@ -248,8 +241,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessKeyUp(symbol: c_int) {
+pub unsafe extern "C" fn rust_vcontrol_process_key_up(symbol: c_int) {
     // Debug log for key releases
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyUp sym=0x{:X}", symbol));
 
@@ -263,8 +255,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessKeyUp(symbol: c_int) {
 ///
 /// # Safety
 /// `name` must be a valid null-terminated C string
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_InitJoystick(
+pub unsafe extern "C" fn rust_vcontrol_init_joystick(
     index: c_int,
     name: *const c_char,
     num_axes: c_int,
@@ -292,8 +283,7 @@ pub unsafe extern "C" fn rust_VControl_InitJoystick(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_UninitJoystick(index: c_int) -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_uninit_joystick(index: c_int) -> c_int {
     let mut vc = VCONTROL.write();
     match vc.uninit_joystick(index as u32) {
         Ok(()) => 0,
@@ -306,8 +296,7 @@ pub unsafe extern "C" fn rust_VControl_UninitJoystick(index: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_GetNumJoysticks() -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_get_num_joysticks() -> c_int {
     let vc = VCONTROL.read();
     vc.num_joysticks() as c_int
 }
@@ -317,8 +306,7 @@ pub unsafe extern "C" fn rust_VControl_GetNumJoysticks() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_AddJoyAxisBinding(
+pub unsafe extern "C" fn rust_vcontrol_add_joy_axis_binding(
     port: c_int,
     axis: c_int,
     polarity: c_int,
@@ -337,8 +325,7 @@ pub unsafe extern "C" fn rust_VControl_AddJoyAxisBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveJoyAxisBinding(
+pub unsafe extern "C" fn rust_vcontrol_remove_joy_axis_binding(
     port: c_int,
     axis: c_int,
     polarity: c_int,
@@ -357,8 +344,7 @@ pub unsafe extern "C" fn rust_VControl_RemoveJoyAxisBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_AddJoyButtonBinding(
+pub unsafe extern "C" fn rust_vcontrol_add_joy_button_binding(
     port: c_int,
     button: c_int,
     target: *mut c_int,
@@ -376,8 +362,7 @@ pub unsafe extern "C" fn rust_VControl_AddJoyButtonBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveJoyButtonBinding(
+pub unsafe extern "C" fn rust_vcontrol_remove_joy_button_binding(
     port: c_int,
     button: c_int,
     target: *mut c_int,
@@ -395,8 +380,7 @@ pub unsafe extern "C" fn rust_VControl_RemoveJoyButtonBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_AddJoyHatBinding(
+pub unsafe extern "C" fn rust_vcontrol_add_joy_hat_binding(
     port: c_int,
     which: c_int,
     dir: c_uchar,
@@ -415,8 +399,7 @@ pub unsafe extern "C" fn rust_VControl_AddJoyHatBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveJoyHatBinding(
+pub unsafe extern "C" fn rust_vcontrol_remove_joy_hat_binding(
     port: c_int,
     which: c_int,
     dir: c_uchar,
@@ -435,8 +418,7 @@ pub unsafe extern "C" fn rust_VControl_RemoveJoyHatBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_SetJoyThreshold(port: c_int, threshold: c_int) -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_set_joy_threshold(port: c_int, threshold: c_int) -> c_int {
     let mut vc = VCONTROL.write();
     match vc.set_joy_threshold(port as u32, threshold) {
         Ok(()) => 0,
@@ -449,8 +431,7 @@ pub unsafe extern "C" fn rust_VControl_SetJoyThreshold(port: c_int, threshold: c
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessJoyButtonDown(port: c_int, button: c_int) {
+pub unsafe extern "C" fn rust_vcontrol_process_joy_button_down(port: c_int, button: c_int) {
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_joy_button(port as u32, button, true);
@@ -462,8 +443,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessJoyButtonDown(port: c_int, button:
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessJoyButtonUp(port: c_int, button: c_int) {
+pub unsafe extern "C" fn rust_vcontrol_process_joy_button_up(port: c_int, button: c_int) {
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_joy_button(port as u32, button, false);
@@ -475,8 +455,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessJoyButtonUp(port: c_int, button: c
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessJoyAxis(port: c_int, axis: c_int, value: c_int) {
+pub unsafe extern "C" fn rust_vcontrol_process_joy_axis(port: c_int, axis: c_int, value: c_int) {
     let mut vc = VCONTROL.write();
     unsafe {
         vc.handle_joy_axis(port as u32, axis, value as i16);
@@ -488,8 +467,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessJoyAxis(port: c_int, axis: c_int, 
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ProcessJoyHat(port: c_int, which: c_int, value: c_uchar) {
+pub unsafe extern "C" fn rust_vcontrol_process_joy_hat(port: c_int, which: c_int, value: c_uchar) {
     let mut vc = VCONTROL.write();
     unsafe {
         vc.handle_joy_hat(port as u32, which, value);
@@ -501,8 +479,7 @@ pub unsafe extern "C" fn rust_VControl_ProcessJoyHat(port: c_int, which: c_int, 
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ClearJoyBindings(joy: c_int) -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_clear_joy_bindings(joy: c_int) -> c_int {
     let mut vc = VCONTROL.write();
     match vc.clear_joy_bindings(joy as u32) {
         Ok(()) => 0,
@@ -515,8 +492,7 @@ pub unsafe extern "C" fn rust_VControl_ClearJoyBindings(joy: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveAllBindings() {
+pub unsafe extern "C" fn rust_vcontrol_remove_all_bindings() {
     let mut vc = VCONTROL.write();
     vc.clear_key_bindings();
     // Clear joystick bindings for all ports
@@ -530,8 +506,7 @@ pub unsafe extern "C" fn rust_VControl_RemoveAllBindings() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_BeginFrame() {
+pub unsafe extern "C" fn rust_vcontrol_begin_frame() {
     let mut vc = VCONTROL.write();
     unsafe {
         vc.begin_frame();
@@ -543,8 +518,7 @@ pub unsafe extern "C" fn rust_VControl_BeginFrame() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ClearGesture() {
+pub unsafe extern "C" fn rust_vcontrol_clear_gesture() {
     let mut vc = VCONTROL.write();
     vc.clear_gesture();
 }
@@ -555,8 +529,7 @@ pub unsafe extern "C" fn rust_VControl_ClearGesture() {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_GetLastGestureType() -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_get_last_gesture_type() -> c_int {
     let vc = VCONTROL.read();
     match vc.get_last_gesture() {
         Some(g) => match g {
@@ -575,8 +548,7 @@ pub unsafe extern "C" fn rust_VControl_GetLastGestureType() -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_GetLastGesture(g: *mut VCONTROL_GESTURE) -> c_int {
+pub unsafe extern "C" fn rust_vcontrol_get_last_gesture(g: *mut VCONTROL_GESTURE) -> c_int {
     if g.is_null() {
         return 0;
     }
@@ -600,8 +572,7 @@ pub unsafe extern "C" fn rust_VControl_GetLastGesture(g: *mut VCONTROL_GESTURE) 
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
+pub unsafe extern "C" fn rust_vcontrol_handle_event(e: *const c_void) {
     if e.is_null() {
         crate::bridge_log::rust_bridge_log_msg("RUST_INPUT: HandleEvent got null event");
         return;
@@ -728,8 +699,7 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_AddGestureBinding(
+pub unsafe extern "C" fn rust_vcontrol_add_gesture_binding(
     g: *mut VCONTROL_GESTURE,
     target: *mut c_int,
 ) -> c_int {
@@ -796,8 +766,7 @@ pub unsafe extern "C" fn rust_VControl_AddGestureBinding(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_RemoveGestureBinding(
+pub unsafe extern "C" fn rust_vcontrol_remove_gesture_binding(
     g: *mut VCONTROL_GESTURE,
     target: *mut c_int,
 ) {
@@ -848,8 +817,10 @@ pub unsafe extern "C" fn rust_VControl_RemoveGestureBinding(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, spec: *const c_char) {
+pub unsafe extern "C" fn rust_vcontrol_parse_gesture(
+    g: *mut VCONTROL_GESTURE,
+    spec: *const c_char,
+) {
     if g.is_null() || spec.is_null() {
         return;
     }
@@ -950,8 +921,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn rust_VControl_DumpGesture(
+pub unsafe extern "C" fn rust_vcontrol_dump_gesture(
     buf: *mut c_char,
     n: c_int,
     g: *mut VCONTROL_GESTURE,
@@ -1018,7 +988,7 @@ mod tests {
     use serial_test::serial;
 
     fn cleanup() {
-        unsafe { rust_VControl_Uninit() };
+        unsafe { rust_v_control_uninit() };
     }
 
     #[test]
@@ -1026,13 +996,13 @@ mod tests {
     fn test_ffi_init_uninit() {
         unsafe {
             cleanup();
-            assert_eq!(rust_VControl_Init(), 0);
+            assert_eq!(rust_v_control_init(), 0);
 
             let vc = VCONTROL.read();
             assert!(vc.is_initialized());
             drop(vc);
 
-            rust_VControl_Uninit();
+            rust_v_control_uninit();
 
             let vc = VCONTROL.read();
             assert!(!vc.is_initialized());
@@ -1044,22 +1014,22 @@ mod tests {
     fn test_ffi_key_binding() {
         unsafe {
             cleanup();
-            rust_VControl_Init();
+            rust_v_control_init();
 
             let mut target: i32 = 0;
-            assert_eq!(rust_VControl_AddKeyBinding(32, &mut target), 0);
+            assert_eq!(rust_vcontrol_add_key_binding(32, &mut target), 0);
 
             // VCONTROL_STARTBIT (0x100) is set on key down, plus the count
             // The test checks the count portion (VCONTROL_MASK = 0xFF)
             const VCONTROL_MASK: i32 = 0xFF;
 
-            rust_VControl_ProcessKeyDown(32);
+            rust_vcontrol_process_key_down(32);
             assert_eq!(target & VCONTROL_MASK, 1);
 
-            rust_VControl_ProcessKeyUp(32);
+            rust_vcontrol_process_key_up(32);
             assert_eq!(target & VCONTROL_MASK, 0);
 
-            assert_eq!(rust_VControl_RemoveKeyBinding(32, &mut target), 0);
+            assert_eq!(rust_vcontrol_remove_key_binding(32, &mut target), 0);
             cleanup();
         }
     }
@@ -1069,13 +1039,13 @@ mod tests {
     fn test_ffi_clear_key_bindings() {
         unsafe {
             cleanup();
-            rust_VControl_Init();
+            rust_v_control_init();
 
             let mut target: i32 = 0;
-            rust_VControl_AddKeyBinding(32, &mut target);
-            rust_VControl_ClearKeyBindings();
+            rust_vcontrol_add_key_binding(32, &mut target);
+            rust_vcontrol_clear_key_bindings();
 
-            rust_VControl_ProcessKeyDown(32);
+            rust_vcontrol_process_key_down(32);
             assert_eq!(target, 0); // Should not be affected
 
             cleanup();
@@ -1087,26 +1057,26 @@ mod tests {
     fn test_ffi_joystick() {
         unsafe {
             cleanup();
-            rust_VControl_Init();
+            rust_v_control_init();
 
             let name = c"Test Joystick";
             {
-                assert_eq!(rust_VControl_InitJoystick(0, name.as_ptr(), 2, 10, 1), 0);
+                assert_eq!(rust_vcontrol_init_joystick(0, name.as_ptr(), 2, 10, 1), 0);
             }
 
-            assert_eq!(rust_VControl_GetNumJoysticks(), 1);
+            assert_eq!(rust_vcontrol_get_num_joysticks(), 1);
 
             let mut target: i32 = 0;
-            assert_eq!(rust_VControl_AddJoyButtonBinding(0, 0, &mut target), 0);
+            assert_eq!(rust_vcontrol_add_joy_button_binding(0, 0, &mut target), 0);
 
-            rust_VControl_ProcessJoyButtonDown(0, 0);
+            rust_vcontrol_process_joy_button_down(0, 0);
             assert_eq!(target, 1);
 
-            rust_VControl_ProcessJoyButtonUp(0, 0);
+            rust_vcontrol_process_joy_button_up(0, 0);
             assert_eq!(target, 0);
 
-            assert_eq!(rust_VControl_UninitJoystick(0), 0);
-            assert_eq!(rust_VControl_GetNumJoysticks(), 0);
+            assert_eq!(rust_vcontrol_uninit_joystick(0), 0);
+            assert_eq!(rust_vcontrol_get_num_joysticks(), 0);
 
             cleanup();
         }
@@ -1117,28 +1087,28 @@ mod tests {
     fn test_ffi_joy_axis() {
         unsafe {
             cleanup();
-            rust_VControl_Init();
+            rust_v_control_init();
 
             let name = c"Test";
             {
-                rust_VControl_InitJoystick(0, name.as_ptr(), 2, 0, 0);
+                rust_vcontrol_init_joystick(0, name.as_ptr(), 2, 0, 0);
             }
 
             let mut neg: i32 = 0;
             let mut pos: i32 = 0;
 
-            rust_VControl_AddJoyAxisBinding(0, 0, -1, &mut neg);
-            rust_VControl_AddJoyAxisBinding(0, 0, 1, &mut pos);
+            rust_vcontrol_add_joy_axis_binding(0, 0, -1, &mut neg);
+            rust_vcontrol_add_joy_axis_binding(0, 0, 1, &mut pos);
 
-            rust_VControl_ProcessJoyAxis(0, 0, -20000);
+            rust_vcontrol_process_joy_axis(0, 0, -20000);
             assert_eq!(neg, 1);
             assert_eq!(pos, 0);
 
-            rust_VControl_ProcessJoyAxis(0, 0, 0);
+            rust_vcontrol_process_joy_axis(0, 0, 0);
             assert_eq!(neg, 0);
             assert_eq!(pos, 0);
 
-            rust_VControl_ProcessJoyAxis(0, 0, 20000);
+            rust_vcontrol_process_joy_axis(0, 0, 20000);
             assert_eq!(neg, 0);
             assert_eq!(pos, 1);
 
@@ -1151,12 +1121,12 @@ mod tests {
     fn test_ffi_reset_states() {
         unsafe {
             cleanup();
-            rust_VControl_Init();
+            rust_v_control_init();
 
             let mut target: i32 = 5;
-            rust_VControl_AddKeyBinding(32, &mut target);
+            rust_vcontrol_add_key_binding(32, &mut target);
 
-            rust_VControl_ResetInput();
+            rust_vcontrol_reset_input();
             assert_eq!(target, 0);
 
             cleanup();

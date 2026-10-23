@@ -5,10 +5,6 @@ use uqm_rust::graphics::{
     ffi,
     sdl::{lifecycle_abi::*, platform_abi::TFB_ReInitGraphics},
 };
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 extern "C" {
     static ScreenWidthActual: i32;
     static ScreenHeightActual: i32;

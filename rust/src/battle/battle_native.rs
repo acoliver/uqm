@@ -57,7 +57,7 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
     state
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
@@ -79,8 +79,7 @@ pub(crate) mod engine {
     pub static mut battle_counter: [BYTE; 2] = [0; 2];
     #[no_mangle]
     pub static mut instantVictory: BOOLEAN = 0;
-    #[no_mangle]
-    pub static mut battleInputOrder: [usize; 2] = [0; 2];
+    pub static mut BATTLE_INPUT_ORDER: [usize; 2] = [0; 2];
     #[no_mangle]
     pub static mut battleFrameCount: BattleFrameCounter = 0;
     static mut BATTLE_REF: MUSIC_REF = ptr::null_mut();
@@ -219,7 +218,7 @@ pub(crate) mod engine {
             .into_iter()
             .enumerate()
         {
-            battleInputOrder[i] = side;
+            BATTLE_INPUT_ORDER[i] = side;
         }
     }
 
@@ -236,7 +235,7 @@ pub(crate) mod engine {
     unsafe fn ProcessInput() {
         netInput();
         let can_run = RunAwayAllowed();
-        for side in battleInputOrder {
+        for side in BATTLE_INPUT_ORDER {
             let mut h = (*race_queue(side)).head;
             while !h.is_null() {
                 let ship = h.cast::<STARSHIP>();
@@ -490,10 +489,10 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
-    battleFrameCount, battleInputOrder, battle_counter, frameInputHuman, instantVictory, Battle,
-    BattleSong, FreeBattleSong, GetPlayerOrder,
+    battleFrameCount, battle_counter, frameInputHuman, instantVictory, Battle, BattleSong,
+    FreeBattleSong, GetPlayerOrder, BATTLE_INPUT_ORDER,
 };
 
 #[cfg(test)]

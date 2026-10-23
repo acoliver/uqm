@@ -18,15 +18,15 @@ pub const STATUS_UNKNOWN_OPERATION: i32 = -3;
 pub const STATUS_INVALID_ARGUMENT: i32 = -4;
 pub const STATUS_RUNTIME_ERROR: i32 = -5;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const DETAIL_RETURNED: u32 = 1;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const DETAIL_DESTROYED: u32 = 2;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const DETAIL_ABORTED: u32 = 3;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const DETAIL_ADAPTER_FAILURE: u32 = 4;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const DETAIL_FRAME_BUDGET: u32 = 5;
 
 /// Fixed-size request for the sole temporary PlanetSide C entry point.
@@ -82,7 +82,6 @@ pub struct PlanetSideReply {
 /// `request` must point to a readable `PlanetSideRequest` and `reply` must
 /// point to writable storage for a `PlanetSideReply`. They may be unaligned,
 /// but must remain valid for the duration of this call and must not overlap.
-#[no_mangle]
 pub unsafe extern "C" fn uqm_rust_planet_side(
     request: *const PlanetSideRequest,
     reply: *mut PlanetSideReply,
@@ -133,17 +132,17 @@ fn dispatch(request: PlanetSideRequest) -> PlanetSideReply {
             if request.context.is_null() {
                 return failure(STATUS_INVALID_ARGUMENT);
             }
-            #[cfg(feature = "linked_c_archive")]
+            #[cfg(not(test))]
             unsafe {
                 run_session(request.context.cast::<PlanetSideRunContext>())
             }
-            #[cfg(not(feature = "linked_c_archive"))]
+            #[cfg(test)]
             failure(STATUS_RUNTIME_ERROR)
         }
         _ => failure(STATUS_UNKNOWN_OPERATION),
     }
 }
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn GetFrameCount(frame: *mut c_void) -> u16;
 }
@@ -157,7 +156,7 @@ const fn failure(status: i32) -> PlanetSideReply {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
     use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus};
     use super::assembly::{assemble_surface, share_surface};

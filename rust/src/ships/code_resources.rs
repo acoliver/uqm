@@ -1,5 +1,5 @@
 //! SHIP resource records and initializer dispatch translated from uqm/dummy.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::{
         memory::{rust_hfree, rust_hmalloc},

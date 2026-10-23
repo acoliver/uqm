@@ -1,6 +1,6 @@
-//! HailAlien encounter orchestration.
+//! hail_alien encounter orchestration.
 //!
-//! Implements the full alien encounter sequence replacing C's `HailAlien()`.
+//! Implements the full alien encounter sequence replacing C's `hail_alien()`.
 //! Follows comm.c:1183–1308 step-by-step plus DoCommunication exit handling
 //! from comm.c:1100–1138.
 //!
@@ -220,7 +220,7 @@ const NORMAL_VOLUME: i32 = 128;
 
 /// Run the full alien encounter sequence.
 ///
-/// Implements C's `HailAlien()` (comm.c:1183–1308) plus the
+/// Implements C's `hail_alien()` (comm.c:1183–1308) plus the
 /// `DoCommunication` exit-handling path (comm.c:1100–1138).
 ///
 /// # Safety
@@ -240,12 +240,12 @@ pub unsafe fn hail_alien() {
         // Reset Rust-side comm state for the new encounter, then sync
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
-        eprintln!("[DBG] hail_alien: clearing COMM_STATE");
+        eprintln!("[DBG] HailAlien: clearing COMM_STATE");
         super::state::COMM_STATE.write().reset_for_encounter();
         {
             let s = super::state::COMM_STATE.read();
             eprintln!(
-                "[DBG] hail_alien: after clear, talking_finished={}",
+                "[DBG] HailAlien: after clear, talking_finished={}",
                 s.is_talking_finished()
             );
         }

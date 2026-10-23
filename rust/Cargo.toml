@@ -95,15 +95,13 @@ mod_player = "0.1"
 fast_image_resize = { version = "5.0", features = ["only_u8x4"] }
 
 [features]
-default = []
+default = ["audio_heart"]
 audio_heart = []
 debug-process = []
-linked_c_archive = []
 
 [[bin]]
 name = "uqm"
 path = "src/main.rs"
-required-features = ["linked_c_archive"]
 
 [[bin]]
 name = "uqm-native-acceptance"
@@ -113,12 +111,10 @@ required-features = ["debug-process"]
 [[test]]
 name = "planets_parity"
 path = "tests/planets_parity.rs"
-required-features = ["linked_c_archive"]
 
 [[test]]
 name = "linked_provider_fixture"
 path = "tests/linked_provider_fixture.rs"
-required-features = ["linked_c_archive"]
 
 [dev-dependencies]
 tempfile = "3"
@@ -130,24 +126,19 @@ serial_test = "3.0"
 [[test]]
 name = "netplay_packets"
 path = "tests/netplay_packets.rs"
-required-features = ["linked_c_archive"]
 
 [[test]]
 name = "graphics_loading"
 path = "tests/graphics_loading.rs"
-required-features = ["linked_c_archive"]
 
 [[test]]
 name = "canvas_native"
 path = "tests/canvas_native.rs"
-required-features = ["linked_c_archive"]
 
 [[test]]
 name = "queue_native"
 path = "tests/queue_native.rs"
-required-features = ["linked_c_archive"]
 
 [[test]]
 name = "video_native"
 path = "tests/video_native.rs"
-required-features = ["linked_c_archive"]

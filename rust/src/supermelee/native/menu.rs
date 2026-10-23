@@ -34,9 +34,9 @@ mod live {
         view_name, Melee_LocalChange_ship, Melee_LocalChange_team, Melee_LocalChange_teamName,
     };
     use drawing::{
-        controls, current, highlight, init_screen, name, pMeleeState, redraw, rgb, ship_box,
-        status, status_player, text, worth, DrawMeleeShipStrings, GetShipBox, MeleeFrame,
-        Melee_flashSelection, RepairMeleeFrame,
+        controls, current, highlight, init_screen, name, redraw, rgb, ship_box, status,
+        status_player, text, worth, DrawMeleeShipStrings, GetShipBox, MeleeFrame,
+        Melee_flashSelection, RepairMeleeFrame, P_MELEE_STATE,
     };
     use editing::*;
     pub(super) unsafe fn key(key: u32) -> bool {
@@ -213,7 +213,7 @@ mod live {
     pub unsafe extern "C" fn Melee() {
         InitGlobData();
         let mut state: MELEE_STATE = mem::zeroed();
-        pMeleeState = &mut state;
+        P_MELEE_STATE = &mut state;
         state.InputFunc = Some(DoMelee);
         state.meleeSetup = MeleeSetup_new();
         state.randomContext = RandomContext_New();

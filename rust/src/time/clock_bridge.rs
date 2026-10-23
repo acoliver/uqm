@@ -135,7 +135,6 @@ where
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
@@ -156,7 +155,6 @@ pub unsafe extern "C" fn rust_clock_init() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
@@ -173,7 +171,6 @@ pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
@@ -204,7 +201,6 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
@@ -227,7 +223,6 @@ pub unsafe extern "C" fn rust_clock_tick() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
     log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
 
@@ -244,7 +239,6 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_lock() {
     log_clock_bridge("RUST_CLOCK_LOCK");
     // Note: The mutex lock is handled by C code
@@ -254,7 +248,6 @@ pub unsafe extern "C" fn rust_clock_lock() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_unlock() {
     log_clock_bridge("RUST_CLOCK_UNLOCK");
     // Note: The mutex unlock is handled by C code
@@ -264,7 +257,6 @@ pub unsafe extern "C" fn rust_clock_unlock() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
 

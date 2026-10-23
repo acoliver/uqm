@@ -7,16 +7,15 @@ use super::assembly::SharedSurface;
 use super::entities::{SurfaceEntityId, SurfaceEntityKind};
 use super::resources::PlanetSideAssetAccess;
 use super::runtime::{AdapterError, PlanetSideGraphics, RenderSnapshot};
-#[cfg(any(feature = "linked_c_archive", test))]
+
 use super::selection::{LANDING_CURSOR_STEP, MAP_WIDTH};
 
-#[cfg(any(feature = "linked_c_archive", test))]
 const SURFACE_WIDTH: i32 = 242;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const SURFACE_HEIGHT: i32 = 162;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const LANDER_SCREEN_X: i32 = SURFACE_WIDTH / 2;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const LANDER_SCREEN_Y: i32 = SURFACE_HEIGHT / 2;
 
 // --- Radar panel layout (from deleted lander.c DeltaLanderCrew / FillLanderHold) ---
@@ -47,7 +46,7 @@ const BIO_FRAME_ODD: u16 = 42;
 const MINERAL_FRAME_EVEN: u16 = 43;
 const MINERAL_FRAME_ODD: u16 = 44;
 const CREW_ALIVE_FRAME: u16 = 55;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const CREW_DEAD_FRAME: u16 = 56;
 
 /// Drawable frame assigned to a Rust surface entity.
@@ -115,7 +114,7 @@ pub struct CffiPlanetSideGraphics<'a, A: PlanetSideAssetAccess> {
     pub last_scan_position: Option<super::model::SurfacePoint>,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CPoint {
@@ -123,13 +122,13 @@ struct CPoint {
     y: i16,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 #[repr(C)]
 struct CStamp {
     origin: CPoint,
     frame: *mut c_void,
 }
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     static mut PlanetContext: *mut c_void;
     static mut RadarContext: *mut c_void;
@@ -146,7 +145,7 @@ extern "C" {
 
 impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, A> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             if self.last_scan_position != Some(snapshot.lander.position) {
                 let scan_position = CPoint {
@@ -228,7 +227,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
             TFB_FlushGraphicsEx(1);
             TFB_SwapBuffers(1);
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let _ = snapshot;
         Ok(())
     }
@@ -241,7 +240,6 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
 /// `LanderGraphic::Return`. During `Explosion`, the base lander frame set index
 /// 46+ is used (the explosion sub-frames). All other phases use the standard
 /// facing-indexed lander frame.
-#[cfg(any(feature = "linked_c_archive", test))]
 #[must_use]
 fn select_lander_graphic(
     phase: super::session::SessionPhase,
@@ -354,7 +352,7 @@ pub const fn crew_alive_frame() -> u16 {
     CREW_ALIVE_FRAME
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn draw_crew_meter(lander_base: *mut c_void, crew_count: u8) {
     for slot in 0..MAX_CREW_SLOTS {
         let Some((x, y)) = crew_slot_position(slot) else {
@@ -373,7 +371,7 @@ unsafe fn draw_crew_meter(lander_base: *mut c_void, crew_count: u8) {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot) {
     // Biological cargo bar.
     let bio_segments = bio_bar_segments(snapshot.biological_level);
@@ -404,7 +402,7 @@ unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot)
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn surface_topography_frame() -> Result<*mut c_void, AdapterError> {
     let state = crate::c_bindings::solar_system::current();
     if state.is_null() {
@@ -420,7 +418,7 @@ unsafe fn surface_topography_frame() -> Result<*mut c_void, AdapterError> {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn draw_surface_tiles(frame: *mut c_void, camera: super::model::SurfacePoint) {
     ClearDrawable();
     let mut stamp = CStamp {
@@ -445,7 +443,6 @@ unsafe fn draw_surface_tiles(frame: *mut c_void, camera: super::model::SurfacePo
 
 /// Convert fixed-point world coordinates to a viewport coordinate, choosing
 /// the shortest horizontal route across the wrapping surface.
-#[cfg(any(feature = "linked_c_archive", test))]
 fn project_surface_point(
     point: super::model::SurfacePoint,
     camera: super::model::SurfacePoint,

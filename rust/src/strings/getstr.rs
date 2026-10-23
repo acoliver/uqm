@@ -208,8 +208,7 @@ unsafe fn load_plain_table(src: &mut impl LineSource, length: u32) -> *mut Strin
 
 /// # Safety
 /// `fp` must be an open UIO stream.
-#[no_mangle]
-pub unsafe extern "C" fn _GetStringData(fp: *mut c_void, length: u32) -> *mut c_void {
+pub unsafe extern "C" fn _get_string_data(fp: *mut c_void, length: u32) -> *mut c_void {
     load_plain_table(&mut UioLines(fp.cast()), length).cast()
 }
 
@@ -335,8 +334,7 @@ unsafe fn load_conversation_table<T: LineSource>(
 ///
 /// # Safety
 /// `path` must be NUL-terminated and `resdata` writable.
-#[no_mangle]
-pub unsafe extern "C" fn _GetConversationData(path: *const c_char, resdata: *mut ResourceData) {
+pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *mut ResourceData) {
     let full = CStr::from_ptr(path).to_bytes();
     let paths = &full[..full.len().min(LINE_SIZE - 1)];
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
@@ -447,8 +445,7 @@ fn split_conversation_path(paths: &[u8]) -> (&[u8], Option<&[u8]>, Option<&[u8]>
 ///
 /// # Safety
 /// `fp` must be an open UIO stream.
-#[no_mangle]
-pub unsafe extern "C" fn _GetBinaryTableData(fp: *mut c_void, length: u32) -> *mut c_void {
+pub unsafe extern "C" fn _get_binary_table_data(fp: *mut c_void, length: u32) -> *mut c_void {
     let file = GetResourceData(fp, length);
     if file.is_null() {
         return null_mut();

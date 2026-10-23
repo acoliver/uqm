@@ -1,5 +1,4 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-#![cfg(feature = "linked_c_archive")]
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
@@ -9,10 +8,6 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_shofixti() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;

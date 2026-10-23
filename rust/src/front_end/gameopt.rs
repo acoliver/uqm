@@ -38,10 +38,10 @@ fn picker_slot(current: u8, left: bool, right: bool, up: bool, down: bool) -> u8
     next
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::{ConfirmSaveLoad, GameOptions, SetNamingCallback};
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::{picker_slot, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::navigation::abi::*;

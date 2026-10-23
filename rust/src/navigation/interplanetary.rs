@@ -15,7 +15,7 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
     *dy >>= shift;
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod live {
     use super::*;

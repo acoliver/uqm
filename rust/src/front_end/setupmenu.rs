@@ -66,7 +66,7 @@ impl GammaRange {
         }
     }
 }
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::*;
     use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
@@ -1221,7 +1221,7 @@ mod runtime {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::{GetGlobalOptions, SetGlobalOptions, SetupMenu};
 
 #[cfg(test)]

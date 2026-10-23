@@ -13,16 +13,16 @@ extern "C" {
 
 #[no_mangle]
 unsafe extern "C" fn FreeIPData() {
-    DestroyDrawable(ReleaseDrawable(SISIPFrame.cast()).cast());
-    SISIPFrame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(SunFrame.cast()).cast());
-    SunFrame = ptr::null_mut();
-    DestroyStringTable(ReleaseStringTable(SunCMap.cast()));
-    SunCMap = ptr::null_mut();
-    DestroyStringTable(ReleaseStringTable(OrbitalCMap.cast()));
-    OrbitalCMap = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(OrbitalFrame.cast()).cast());
-    OrbitalFrame = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(SISIPFRAME.cast()).cast());
+    SISIPFRAME = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(SUN_FRAME.cast()).cast());
+    SUN_FRAME = ptr::null_mut();
+    DestroyStringTable(ReleaseStringTable(SUN_CMAP.cast()));
+    SUN_CMAP = ptr::null_mut();
+    DestroyStringTable(ReleaseStringTable(ORBITAL_CMAP.cast()));
+    ORBITAL_CMAP = ptr::null_mut();
+    DestroyDrawable(ReleaseDrawable(ORBITAL_FRAME.cast()).cast());
+    ORBITAL_FRAME = ptr::null_mut();
     DestroyDrawable(ReleaseDrawable(SpaceJunkFrame.cast()).cast());
     SpaceJunkFrame = ptr::null_mut();
     DestroyMusic(SpaceMusic);
@@ -37,15 +37,15 @@ pub(super) unsafe extern "C" fn LoadIPData() {
         SpaceJunkFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.orbitbackground".as_ptr()).cast())
                 .cast();
-        SISIPFrame =
+        SISIPFRAME =
             CaptureDrawable(LoadGraphicInstance(c"graphics.flagship".as_ptr()).cast()).cast();
-        OrbitalCMap =
+        ORBITAL_CMAP =
             CaptureStringTable(LoadStringTableInstance(c"colortable.orbplan".as_ptr())).cast();
-        OrbitalFrame =
+        ORBITAL_FRAME =
             CaptureDrawable(LoadGraphicInstance(c"graphics.planets".as_ptr()).cast()).cast();
-        SunCMap =
+        SUN_CMAP =
             CaptureStringTable(LoadStringTableInstance(c"colortable.truespace".as_ptr())).cast();
-        SunFrame =
+        SUN_FRAME =
             CaptureDrawable(LoadGraphicInstance(c"graphics.truespacesun".as_ptr()).cast()).cast();
         SpaceMusic = LoadMusicInstance(c"music.space".as_ptr());
     }

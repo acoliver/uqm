@@ -45,8 +45,7 @@ pub(crate) fn finish() -> SpecialPickupEffects {
 }
 
 /// Transitional symbol used by selected-system generators to request takeoff.
-#[no_mangle]
-pub extern "C" fn SetLanderTakeoff() {
+pub extern "C" fn set_lander_takeoff() {
     ACTIVE.with(|active| {
         let mut active = active.borrow_mut();
         if active.active {
@@ -59,8 +58,7 @@ pub extern "C" fn SetLanderTakeoff() {
 ///
 /// The period controls presentation in the legacy implementation. Gameplay is
 /// synchronous here, so it does not alter the deterministic crew effect.
-#[no_mangle]
-pub extern "C" fn KillLanderCrewSeq(num_killed: u16, _period: u32) -> bool {
+pub extern "C" fn kill_lander_crew_seq(num_killed: u16, _period: u32) -> bool {
     ACTIVE.with(|active| {
         let mut active = active.borrow_mut();
         if !active.active {
@@ -81,8 +79,8 @@ mod tests {
     #[test]
     fn callback_effects_are_scoped_to_one_pickup() {
         begin(5);
-        assert!(KillLanderCrewSeq(2, 10));
-        SetLanderTakeoff();
+        assert!(kill_lander_crew_seq(2, 10));
+        set_lander_takeoff();
         assert_eq!(
             finish(),
             SpecialPickupEffects {
@@ -96,14 +94,14 @@ mod tests {
     #[test]
     fn fatal_crew_sequence_reports_no_survivor() {
         begin(3);
-        assert!(!KillLanderCrewSeq(8, 10));
+        assert!(!kill_lander_crew_seq(8, 10));
         assert_eq!(finish().crew_killed, 3);
     }
 
     #[test]
     fn callbacks_outside_pickup_do_not_leak_effects() {
-        SetLanderTakeoff();
-        assert!(!KillLanderCrewSeq(1, 10));
+        set_lander_takeoff();
+        assert!(!kill_lander_crew_seq(1, 10));
         assert_eq!(finish(), SpecialPickupEffects::default());
     }
 }

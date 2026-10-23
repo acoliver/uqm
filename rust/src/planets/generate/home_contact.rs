@@ -91,7 +91,7 @@ pub fn meet(site: &mut impl HomeContactSite, flags_and_data: u8) -> bool {
     }
 }
 
-/// `SetLanderTakeoff ()`.
+/// `set_lander_takeoff ()`.
 pub trait LanderTakeoff {
     fn lander_takeoff(&mut self);
 }

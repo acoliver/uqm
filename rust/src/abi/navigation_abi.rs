@@ -10621,22 +10621,13 @@ extern "C" {
     pub fn log_init(max_lines: ::std::os::raw::c_int);
 }
 extern "C" {
-    pub fn log_initThreads();
-}
-extern "C" {
     pub fn log_exit(code: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn log_setOutput(out: *mut FILE) -> *mut FILE;
 }
 extern "C" {
-    pub fn log_setLevel(level: ::std::os::raw::c_int);
-}
-extern "C" {
     pub fn log_showBox(show: bool, err: bool);
-}
-extern "C" {
-    pub fn log_captureLines(num: ::std::os::raw::c_int);
 }
 pub const log_Level_log_Nothing: log_Level = 0;
 pub const log_Level_log_User: log_Level = 1;

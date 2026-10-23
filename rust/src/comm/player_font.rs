@@ -1,6 +1,6 @@
 //! The conversation's player font.
 //!
-//! `HailAlien` loads `font.player` once and the font must outlive every draw
+//! `hail_alien` loads `font.player` once and the font must outlive every draw
 //! command queued with it: `font_DrawText` queues glyph commands that keep
 //! pointers into the font until the draw queue is consumed. Renderers borrow
 //! the conversation font through [`ConversationFont::current`]; only the

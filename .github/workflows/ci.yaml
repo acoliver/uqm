@@ -20,11 +20,11 @@ jobs:
       run:
         working-directory: rust
     env:
-      # Everything except the retained C archive, which the game-build job covers.
+      # Exercise the production Rust providers and automation support.
       FEATURES: audio_heart,debug-process
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install --yes build-essential libasound2-dev libbz2-dev liblzma-dev libpng-dev libsdl2-dev pkg-config
+      - run: sudo apt-get update && sudo apt-get install --yes libasound2-dev libsdl2-dev pkg-config
         working-directory: .
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
@@ -56,13 +56,13 @@ jobs:
           fi
 
   game-build:
-    # Builds and links the real game binary, retained C archive included, like a local `xtask debug`.
+    # Build the game with the same plain Cargo command used locally.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: brew install bzip2 libpng pkg-config sdl2 xz
+      - run: brew install pkg-config sdl2
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - run: cargo run --locked --manifest-path rust/xtask/Cargo.toml -- debug
+      - run: cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm

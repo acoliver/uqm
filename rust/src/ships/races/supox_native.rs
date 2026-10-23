@@ -3,7 +3,7 @@
 //! Every value and expression below mirrors `sc2/src/uqm/ships/supox/supox.c`,
 //! including C integer promotion and truncation, so battles replay identically.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{abi::*, starship};
     use std::mem;

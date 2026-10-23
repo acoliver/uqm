@@ -1,22 +1,9 @@
 //! Production-linked packet and checksum handlers.
 extern crate uqm_rust;
 
-#[allow(
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals,
-    dead_code,
-    unnecessary_transmutes,
-    clippy::all,
-    clashing_extern_declarations,
-    reason = "generated engine ABI shared with the production netplay bridge"
-)]
-mod abi {
-    include!("../src/abi/netplay_abi.rs");
-}
 use abi::*;
+use uqm_rust::supermelee::netplay::abi;
 
-#[link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")]
 extern "C" {
     fn PacketQueue_init(queue: *mut PacketQueue);
     fn PacketQueue_uninit(queue: *mut PacketQueue);

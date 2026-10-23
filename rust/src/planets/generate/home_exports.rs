@@ -201,12 +201,12 @@ impl UrquanEncounterSite for RaceHome {
     }
 }
 
-/// `SetLanderTakeoff ()`.
+/// `set_lander_takeoff ()`.
 pub(super) struct Takeoff;
 
 impl LanderTakeoff for Takeoff {
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::SetLanderTakeoff();
+        crate::planet_side::special_effects::set_lander_takeoff();
     }
 }
 

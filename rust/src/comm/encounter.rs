@@ -92,7 +92,7 @@ impl CallbackTracker {
 // Encounter state
 // ============================================================================
 
-/// Tracks resource handles loaded during HailAlien for teardown.
+/// Tracks resource handles loaded during hail_alien for teardown.
 /// All handles are pointer-sized (usize) since C returns uintptr_t.
 #[derive(Debug, Default)]
 pub struct EncounterResources {
@@ -211,7 +211,7 @@ impl EncounterState {
 // Public lifecycle functions
 // ============================================================================
 
-/// Begin encounter lifecycle — called after HailAlien resources loaded.
+/// Begin encounter lifecycle — called after hail_alien resources loaded.
 ///
 /// This records that the encounter is active and the init callback has
 /// been invoked. In production, the actual callbacks are invoked by C;

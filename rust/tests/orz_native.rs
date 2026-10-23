@@ -1,5 +1,4 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{
     ffi::{c_void, CStr},
@@ -11,10 +10,6 @@ use uqm_rust::ships::native::{
     put_element, sine,
 };
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_orz() -> *mut RACE_DESC;
     fn intruder_preprocess(e: *mut ELEMENT);

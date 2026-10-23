@@ -52,7 +52,7 @@ unsafe fn insert_event(queue: *mut Queue, date: (u16, u16, u16), selector: u8) -
     new
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub(crate) mod live {
     use super::super::clock_bridge::*;
     use super::*;

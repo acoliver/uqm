@@ -22,7 +22,7 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
     normalize_facing(i32::from(facing) + step)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -55,7 +55,6 @@ mod engine {
 
     /// # Safety
     /// Block must be live and the engine element pool initialized on the game thread.
-    #[no_mangle]
     pub unsafe extern "C" fn initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT {
         let handle = AllocElement();
         if !handle.is_null() {
@@ -92,7 +91,6 @@ mod engine {
 
     /// # Safety
     /// Block and frame array must be live; the element pool must be initialized.
-    #[no_mangle]
     pub unsafe extern "C" fn initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT {
         let handle = AllocElement();
         if !handle.is_null() {
@@ -127,7 +125,6 @@ mod engine {
 
     /// # Safety
     /// Elements, collision points and their image resources must be live.
-    #[no_mangle]
     pub unsafe extern "C" fn weapon_collision(
         w: *mut ELEMENT,
         wp: *mut POINT,
@@ -275,7 +272,6 @@ mod engine {
 
     /// # Safety
     /// Tracker, facing and any target/queue elements must be live engine records.
-    #[no_mangle]
     pub unsafe extern "C" fn TrackShip(tracker: *mut ELEMENT, facing: *mut u16) -> i16 {
         let mut best_distance: i16 = 0;
         let mut best_facing: i16 = -1;
@@ -341,7 +337,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::*;
 
 #[cfg(test)]

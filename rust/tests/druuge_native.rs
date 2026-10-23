@@ -1,5 +1,3 @@
-#![cfg(feature = "linked_c_archive")]
-
 use std::{
     ffi::CStr,
     mem, ptr,
@@ -7,10 +5,6 @@ use std::{
 };
 use uqm_rust::ships::native::{abi::*, element};
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_druuge() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
@@ -160,19 +154,19 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
     unsafe {
         let preprocess = ship.desc.preprocess_func.unwrap();
         (*ship.el()).__bindgen_anon_2.crew_level = 2;
-        (*ship.desc).ship_info.energy_level = 15;
-        (*ship.ss).cur_status_flags = SPECIAL as u16;
+        ship.desc.ship_info.energy_level = 15;
+        ship.ss.cur_status_flags = SPECIAL as u16;
         preprocess(ship.el());
         assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
-        assert_eq!((*ship.desc).ship_info.energy_level, 31);
-        assert_eq!((*ship.ss).special_counter, 30);
+        assert_eq!(ship.desc.ship_info.energy_level, 31);
+        assert_eq!(ship.ss.special_counter, 30);
 
-        (*ship.desc).ship_info.energy_level = 32;
-        (*ship.ss).cur_status_flags = SPECIAL as u16;
-        (*ship.ss).special_counter = 0;
+        ship.desc.ship_info.energy_level = 32;
+        ship.ss.cur_status_flags = SPECIAL as u16;
+        ship.ss.special_counter = 0;
         preprocess(ship.el());
         assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
-        assert_eq!((*ship.ss).cur_status_flags & SPECIAL as u16, 0);
+        assert_eq!(ship.ss.cur_status_flags & SPECIAL as u16, 0);
     }
 }
 
@@ -182,7 +176,7 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
     unsafe {
         let mut ship = Ship::new(0);
         let mut enemy = Ship::new(1);
-        (*ship.desc).ship_info.energy_level = 3;
+        ship.desc.ship_info.energy_level = 3;
         ship.el.__bindgen_anon_2.crew_level = 14;
         (*ship.el()).__bindgen_anon_5.thrust_wait = 0;
         let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
@@ -195,8 +189,8 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
             MOVEMENT_STATE_PURSUE
         );
         assert_eq!((*ship.el()).__bindgen_anon_5.thrust_wait, 11);
-        assert_ne!((*ship.ss).ship_input_state & (WEAPON | SPECIAL) as u8, 0);
-        assert_eq!((*ship.ss).ship_input_state & SPECIAL as u8, SPECIAL as u8);
+        assert_ne!(ship.ss.ship_input_state & (WEAPON | SPECIAL) as u8, 0);
+        assert_eq!(ship.ss.ship_input_state & SPECIAL as u8, SPECIAL as u8);
     }
 }
 

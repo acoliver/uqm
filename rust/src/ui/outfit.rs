@@ -1,5 +1,5 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use crate::navigation::abi::*;

@@ -10,12 +10,10 @@ const LIMIT: i32 = 4096;
 static mut DCQ_MUTEX: *mut c_void = ptr::null_mut();
 #[no_mangle]
 pub static mut RenderingCond: *mut c_void = ptr::null_mut();
-#[no_mangle]
 pub static mut DCQ: [TFB_DrawCommand; MAX as usize] = unsafe { std::mem::zeroed() };
 #[no_mangle]
 pub static mut DrawCommandQueue: TFB_DrawCommandQueue = unsafe { std::mem::zeroed() };
-#[no_mangle]
-pub static mut RenderedFrames: i32 = 0;
+pub static mut RENDERED_FRAMES: i32 = 0;
 static mut SCISSOR: RECT = unsafe { std::mem::zeroed() };
 static mut LAST_FADE: i32 = 255;
 static mut LAST_TRANSITION: i32 = 255;
@@ -77,8 +75,7 @@ unsafe fn wait_for_space() {
 }
 /// # Safety
 /// Queue must be initialized and used according to the render-thread contract.
-#[no_mangle]
-pub unsafe extern "C" fn Lock_DCQ(slots: i32) {
+pub unsafe extern "C" fn lock_dcq(slots: i32) {
     LockRecursiveMutex(DCQ_MUTEX);
     while DrawCommandQueue.FullSize >= MAX - slots {
         wait_for_space();
@@ -86,8 +83,7 @@ pub unsafe extern "C" fn Lock_DCQ(slots: i32) {
 }
 /// # Safety
 /// Caller must hold the draw queue lock.
-#[no_mangle]
-pub unsafe extern "C" fn Unlock_DCQ() {
+pub unsafe extern "C" fn unlock_dcq() {
     UnlockRecursiveMutex(DCQ_MUTEX);
 }
 /// # Safety
@@ -153,14 +149,14 @@ pub unsafe extern "C" fn Uninit_DrawCommandQueue() {
 /// Command and its referenced resources must remain live through dispatch.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_DrawCommandQueue_Push(command: *mut TFB_DrawCommand) {
-    Lock_DCQ(1);
+    lock_dcq(1);
     *ptr::addr_of_mut!(DCQ)
         .cast::<TFB_DrawCommand>()
         .add(DrawCommandQueue.InsertionPoint as usize) = *command;
     DrawCommandQueue.InsertionPoint = (DrawCommandQueue.InsertionPoint + 1) % MAX;
     DrawCommandQueue.FullSize += 1;
     synchronize(&mut *ptr::addr_of_mut!(DrawCommandQueue));
-    Unlock_DCQ();
+    unlock_dcq();
 }
 /// # Safety
 /// Target must be writable and queue initialized.
@@ -168,13 +164,13 @@ pub unsafe extern "C" fn TFB_DrawCommandQueue_Push(command: *mut TFB_DrawCommand
 pub unsafe extern "C" fn TFB_DrawCommandQueue_Pop(target: *mut TFB_DrawCommand) -> i32 {
     LockRecursiveMutex(DCQ_MUTEX);
     if DrawCommandQueue.Size == 0 {
-        Unlock_DCQ();
+        unlock_dcq();
         return 0;
     }
     if DrawCommandQueue.Front == DrawCommandQueue.Back && DrawCommandQueue.Size != MAX {
         log::debug!("Front == Back, Size != DCQ_MAX");
         DrawCommandQueue.Size = 0;
-        Unlock_DCQ();
+        unlock_dcq();
         return 0;
     }
     *target = *ptr::addr_of!(DCQ)
@@ -235,10 +231,10 @@ unsafe fn compute_fps() {
         log::info!(
             "fps {:.2}, effective {:.2}",
             840.0f32 / delta as f32,
-            840.0f32 * RenderedFrames as f32 / FPS_COUNTER as f32
+            840.0f32 * RENDERED_FRAMES as f32 / FPS_COUNTER as f32
         );
         FPS_COUNTER = 0;
-        RenderedFrames = 0;
+        RENDERED_FRAMES = 0;
     }
 }
 unsafe fn register_image(image: *mut TFB_Image, x: i32, y: i32, scale: i32) {
@@ -295,7 +291,7 @@ pub unsafe extern "C" fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN) {
         TFB_BatchReset();
     }
     if DrawCommandQueue.Size > LIMIT {
-        Lock_DCQ(-1);
+        lock_dcq(-1);
         deterrence = true;
     }
     TFB_BBox_Reset();
@@ -307,7 +303,7 @@ pub unsafe extern "C" fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN) {
         handled += 1;
         if !deterrence && handled + DrawCommandQueue.Size > LIMIT {
             deterrence = true;
-            Lock_DCQ(-1);
+            lock_dcq(-1);
         }
         match command.Type {
             9 => {
@@ -461,19 +457,19 @@ pub unsafe extern "C" fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN) {
         }
     }
     if deterrence {
-        Unlock_DCQ();
+        unlock_dcq();
     }
     if skip_swap == 0 {
         TFB_SwapBuffers(0);
     }
-    RenderedFrames += 1;
+    RENDERED_FRAMES += 1;
     BroadcastCondVar(RenderingCond);
 }
 /// # Safety
 /// Called by main thread during shutdown while queue remains initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
-    Lock_DCQ(-1);
+    lock_dcq(-1);
     loop {
         let mut c: TFB_DrawCommand = std::mem::zeroed();
         if TFB_DrawCommandQueue_Pop(&mut c) == 0 {
@@ -492,7 +488,7 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
             _ => {}
         }
     }
-    Unlock_DCQ();
+    unlock_dcq();
 }
 #[cfg(test)]
 mod tests {

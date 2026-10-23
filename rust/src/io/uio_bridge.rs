@@ -1404,7 +1404,6 @@ extern "C" {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn uio_vfprintf(
     stream: *mut uio_Stream,
     format: *const c_char,
@@ -1634,9 +1633,9 @@ pub unsafe extern "C" fn uio_clearerr(stream: *mut uio_Stream) {
 }
 
 // =============================================================================
-// uio_openFileBlock / uio_closeFileBlock / uio_accessFileBlock /
-// uio_copyFileBlock / uio_setFileBlockUsageHint / uio_openFileBlock2
-// uio_clearFileBlockBuffers
+// uio_open_file_block / uio_close_file_block / uio_access_file_block /
+// uio_copy_file_block / uio_set_file_block_usage_hint / uio_open_file_block2
+// uio_clear_file_block_buffers
 // =============================================================================
 
 /// @plan PLAN-20260314-FILE-IO.P08
@@ -1670,8 +1669,7 @@ pub struct uio_FileBlock {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_FileBlock {
+pub unsafe extern "C" fn uio_open_file_block(handle: *mut uio_Handle) -> *mut uio_FileBlock {
     ffi_guard!(ptr::null_mut(), {
         log_marker("uio_openFileBlock called");
 
@@ -1715,8 +1713,7 @@ pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_openFileBlock2(
+pub unsafe extern "C" fn uio_open_file_block2(
     handle: *mut uio_Handle,
     offset: off_t,
     size: size_t,
@@ -1778,8 +1775,7 @@ pub unsafe extern "C" fn uio_openFileBlock2(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_accessFileBlock(
+pub unsafe extern "C" fn uio_access_file_block(
     block: *mut uio_FileBlock,
     offset: off_t,
     length: size_t,
@@ -1877,8 +1873,7 @@ pub unsafe extern "C" fn uio_accessFileBlock(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_copyFileBlock(
+pub unsafe extern "C" fn uio_copy_file_block(
     block: *mut uio_FileBlock,
     offset: off_t,
     buffer: *mut c_char,
@@ -1967,8 +1962,7 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_clearFileBlockBuffers(block: *mut uio_FileBlock) {
+pub unsafe extern "C" fn uio_clear_file_block_buffers(block: *mut uio_FileBlock) {
     ffi_guard!((), {
         log_marker("uio_clearFileBlockBuffers called");
 
@@ -1989,8 +1983,7 @@ pub unsafe extern "C" fn uio_clearFileBlockBuffers(block: *mut uio_FileBlock) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_closeFileBlock(block: *mut uio_FileBlock) -> c_int {
+pub unsafe extern "C" fn uio_close_file_block(block: *mut uio_FileBlock) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_closeFileBlock called");
 
@@ -2011,8 +2004,7 @@ pub unsafe extern "C" fn uio_closeFileBlock(block: *mut uio_FileBlock) -> c_int 
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_setFileBlockUsageHint(
+pub unsafe extern "C" fn uio_set_file_block_usage_hint(
     _block: *mut uio_FileBlock,
     _usage: c_int,
     _read_ahead_buf_size: size_t,
@@ -2024,7 +2016,7 @@ pub unsafe extern "C" fn uio_setFileBlockUsageHint(
 }
 
 // =============================================================================
-// uio_getFileSystemHandler / uio_gPFileFlagsFromPRootFlags / uio_walkGPPath
+// uio_get_file_system_handler / uio_g_pfile_flags_from_proot_flags / uio_walk_gppath
 // =============================================================================
 
 #[repr(C)]
@@ -2036,8 +2028,7 @@ pub struct uio_FileSystemHandler {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_getFileSystemHandler(_id: c_int) -> *mut uio_FileSystemHandler {
+pub unsafe extern "C" fn uio_get_file_system_handler(_id: c_int) -> *mut uio_FileSystemHandler {
     log_marker("uio_getFileSystemHandler called - stub");
     // Return a dummy handler
     let handler = Box::new(uio_FileSystemHandler { _private: [] });
@@ -2048,8 +2039,7 @@ pub unsafe extern "C" fn uio_getFileSystemHandler(_id: c_int) -> *mut uio_FileSy
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_gPFileFlagsFromPRootFlags(_flags: c_int) -> c_int {
+pub unsafe extern "C" fn uio_g_pfile_flags_from_proot_flags(_flags: c_int) -> c_int {
     log_marker("uio_gPFileFlagsFromPRootFlags called - stub");
     _flags // Pass through unchanged
 }
@@ -2058,8 +2048,7 @@ pub unsafe extern "C" fn uio_gPFileFlagsFromPRootFlags(_flags: c_int) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_walkGPPath(
+pub unsafe extern "C" fn uio_walk_gppath(
     _start_gpdir: *mut uio_GPDir,
     _path: *const c_char,
     _flags: c_int,
@@ -2070,7 +2059,7 @@ pub unsafe extern "C" fn uio_walkGPPath(
 }
 
 // =============================================================================
-// uio_getStdioAccess / uio_releaseStdioAccess / uio_printMounts
+// uio_get_stdio_access / uio_release_stdio_access / uio_printMounts
 // =============================================================================
 /// @plan PLAN-20260314-FILE-IO.P10
 /// @requirement REQ-FIO-STDIO-ACCESS
@@ -2141,8 +2130,7 @@ pub unsafe extern "C" fn uio_DirHandle_print(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDirHandle_delete(_handle: *mut uio_PDirHandle) {
+pub unsafe extern "C" fn uio_gpdir_handle_delete(_handle: *mut uio_PDirHandle) {
     log_marker("uio_GPDirHandle_delete called - stub");
     if !_handle.is_null() {
         let _ = Box::from_raw(_handle);
@@ -2153,8 +2141,7 @@ pub unsafe extern "C" fn uio_GPDirHandle_delete(_handle: *mut uio_PDirHandle) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_addFile(
+pub unsafe extern "C" fn uio_gpdir_add_file(
     _g_pdir: *mut uio_GPDir,
     _file_name: *const c_char,
     _file: *mut uio_GPFile,
@@ -2166,8 +2153,7 @@ pub unsafe extern "C" fn uio_GPDir_addFile(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_closeEntries(_g_pdir: *mut uio_GPDir) {
+pub unsafe extern "C" fn uio_gpdir_close_entries(_g_pdir: *mut uio_GPDir) {
     log_marker("uio_GPDir_closeEntries called - stub");
 }
 
@@ -2175,8 +2161,7 @@ pub unsafe extern "C" fn uio_GPDir_closeEntries(_g_pdir: *mut uio_GPDir) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_commitSubDir(
+pub unsafe extern "C" fn uio_gpdir_commit_sub_dir(
     _g_pdir: *mut uio_GPDir,
     _dir_name: *const c_char,
     _sub_dir: *mut uio_GPDir,
@@ -2189,8 +2174,7 @@ pub unsafe extern "C" fn uio_GPDir_commitSubDir(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_getGPDirEntry(
+pub unsafe extern "C" fn uio_gpdir_get_gpdir_entry(
     _g_pdir: *mut uio_GPDir,
     _name: *const c_char,
 ) -> *mut uio_GPDirEntry {
@@ -2202,8 +2186,7 @@ pub unsafe extern "C" fn uio_GPDir_getGPDirEntry(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_getPDirEntryHandle(
+pub unsafe extern "C" fn uio_gpdir_get_pdir_entry_handle(
     _entry: *mut uio_GPDirEntry,
 ) -> *mut uio_PDirHandle {
     log_marker("uio_GPDir_getPDirEntryHandle called - stub");
@@ -2214,8 +2197,7 @@ pub unsafe extern "C" fn uio_GPDir_getPDirEntryHandle(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_openEntries(_g_pdir: *mut uio_GPDir) -> c_int {
+pub unsafe extern "C" fn uio_gpdir_open_entries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_openEntries called - stub");
     -1
 }
@@ -2224,8 +2206,7 @@ pub unsafe extern "C" fn uio_GPDir_openEntries(_g_pdir: *mut uio_GPDir) -> c_int
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_prepareSubDir(
+pub unsafe extern "C" fn uio_gpdir_prepare_sub_dir(
     _g_pdir: *mut uio_GPDir,
     _dir_name: *const c_char,
 ) -> *mut uio_GPDir {
@@ -2237,8 +2218,7 @@ pub unsafe extern "C" fn uio_GPDir_prepareSubDir(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_readEntries(_g_pdir: *mut uio_GPDir) -> c_int {
+pub unsafe extern "C" fn uio_gpdir_read_entries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_readEntries called - stub");
     -1
 }
@@ -2247,8 +2227,7 @@ pub unsafe extern "C" fn uio_GPDir_readEntries(_g_pdir: *mut uio_GPDir) -> c_int
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPFileHandle_delete(_handle: *mut uio_Handle) {
+pub unsafe extern "C" fn uio_gpfile_handle_delete(_handle: *mut uio_Handle) {
     log_marker("uio_GPFileHandle_delete called - stub");
 }
 
@@ -2256,8 +2235,7 @@ pub unsafe extern "C" fn uio_GPFileHandle_delete(_handle: *mut uio_Handle) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPFile_delete(_g_pfile: *mut uio_GPFile) {
+pub unsafe extern "C" fn uio_gpfile_delete(_g_pfile: *mut uio_GPFile) {
     log_marker("uio_GPFile_delete called - stub");
     if !_g_pfile.is_null() {
         let _ = Box::from_raw(_g_pfile);
@@ -2268,8 +2246,7 @@ pub unsafe extern "C" fn uio_GPFile_delete(_g_pfile: *mut uio_GPFile) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPFile_new(
+pub unsafe extern "C" fn uio_gpfile_new(
     _p_root: *mut uio_PRoot,
     _extra: *mut libc::c_void,
     _flags: c_int,
@@ -2283,8 +2260,7 @@ pub unsafe extern "C" fn uio_GPFile_new(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_delete(_g_proot: *mut uio_GPRoot) {
+pub unsafe extern "C" fn uio_gproot_delete(_g_proot: *mut uio_GPRoot) {
     log_marker("uio_GPRoot_delete called - stub");
     if !_g_proot.is_null() {
         let _ = Box::from_raw(_g_proot);
@@ -2295,8 +2271,7 @@ pub unsafe extern "C" fn uio_GPRoot_delete(_g_proot: *mut uio_GPRoot) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_makePRoot(_g_proot: *mut uio_GPRoot) -> *mut uio_PRoot {
+pub unsafe extern "C" fn uio_gproot_make_proot(_g_proot: *mut uio_GPRoot) -> *mut uio_PRoot {
     log_marker("uio_GPRoot_makePRoot called - stub");
     // For simplicity, just cast (assuming compatible layout)
     _g_proot as *mut uio_PRoot
@@ -2306,8 +2281,7 @@ pub unsafe extern "C" fn uio_GPRoot_makePRoot(_g_proot: *mut uio_GPRoot) -> *mut
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_umount(_p_root: *mut uio_PRoot) -> c_int {
+pub unsafe extern "C" fn uio_gproot_umount(_p_root: *mut uio_PRoot) -> c_int {
     log_marker("uio_GPRoot_umount called - stub");
     0
 }
@@ -2316,8 +2290,7 @@ pub unsafe extern "C" fn uio_GPRoot_umount(_p_root: *mut uio_PRoot) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_Handle_new(
+pub unsafe extern "C" fn uio_handle_new(
     _root: *mut uio_PRoot,
     _native: *mut libc::c_void,
     _open_flags: c_int,
@@ -2330,8 +2303,7 @@ pub unsafe extern "C" fn uio_Handle_new(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(
+pub unsafe extern "C" fn uio_proot_get_root_dir_handle(
     _p_root: *mut uio_PRoot,
 ) -> *mut uio_PDirHandle {
     log_marker("uio_PRoot_getRootDirHandle called - stub");
@@ -2347,8 +2319,7 @@ pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_StdioAccessHandle_getPath(
+pub unsafe extern "C" fn uio_stdio_access_handle_get_path(
     handle: *mut uio_StdioAccessHandle,
 ) -> *const c_char {
     ffi_guard!(ptr::null(), {
@@ -2374,8 +2345,7 @@ pub unsafe extern "C" fn uio_StdioAccessHandle_getPath(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_getStdioAccess(
+pub unsafe extern "C" fn uio_get_stdio_access(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     _flags: c_int,
@@ -2556,8 +2526,7 @@ pub unsafe extern "C" fn uio_getStdioAccess(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHandle) {
+pub unsafe extern "C" fn uio_release_stdio_access(handle: *mut uio_StdioAccessHandle) {
     ffi_guard!((), {
         log_marker("uio_releaseStdioAccess called");
 
@@ -2599,8 +2568,7 @@ pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHand
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_copyFile(
+pub unsafe extern "C" fn uio_copy_file(
     src_dir: *mut uio_DirHandle,
     src_path: *const c_char,
     dst_dir: *mut uio_DirHandle,
@@ -2742,7 +2710,6 @@ const SEEK_END: c_int = 2;
 /// The message pointer must be a valid null-terminated C string.
 ///
 /// Returns 0 on success, -1 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_bridge_log_msg_c(message: *const c_char) -> c_int {
     use crate::bridge_log::rust_bridge_log_msg;
 
@@ -6600,14 +6567,14 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 let inner = &*(block as *const FileBlockInner);
                 assert_eq!(inner.base_offset, 0);
                 assert_eq!(inner.size, 13);
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6630,14 +6597,14 @@ mod tests {
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
                 // Create block covering bytes 5-10 (5 bytes)
-                let block = uio_openFileBlock2(handle, 5, 5);
+                let block = uio_open_file_block2(handle, 5, 5);
                 assert!(!block.is_null());
 
                 let inner = &*(block as *const FileBlockInner);
                 assert_eq!(inner.base_offset, 5);
                 assert_eq!(inner.size, 5);
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6660,7 +6627,7 @@ mod tests {
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
                 // Try to create block beyond file size
-                let block = uio_openFileBlock2(handle, 0, 100);
+                let block = uio_open_file_block2(handle, 0, 100);
                 assert!(block.is_null());
                 assert_eq!(current_errno(), libc::EINVAL);
 
@@ -6685,11 +6652,11 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 0, 5, &mut buffer);
 
                 assert_eq!(bytes_read, 5);
                 assert!(!buffer.is_null());
@@ -6697,7 +6664,7 @@ mod tests {
                 let data = slice::from_raw_parts(buffer as *const u8, 5);
                 assert_eq!(data, b"Hello");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6719,11 +6686,11 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 7, 5, &mut buffer);
 
                 assert_eq!(bytes_read, 5);
                 assert!(!buffer.is_null());
@@ -6731,7 +6698,7 @@ mod tests {
                 let data = slice::from_raw_parts(buffer as *const u8, 5);
                 assert_eq!(data, b"World");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6753,12 +6720,12 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 // Request more bytes than available
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 3, 100, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 3, 100, &mut buffer);
 
                 // Should return only 2 bytes (positions 3-4)
                 assert_eq!(bytes_read, 2);
@@ -6767,7 +6734,7 @@ mod tests {
                 let data = slice::from_raw_parts(buffer as *const u8, 2);
                 assert_eq!(data, b"lo");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6789,17 +6756,17 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 // Access beyond file size
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 100, 10, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 100, 10, &mut buffer);
 
                 assert_eq!(bytes_read, 0);
                 assert!(buffer.is_null());
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6822,12 +6789,12 @@ mod tests {
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
                 // Block covering bytes 5-10 (6 bytes: "56789A")
-                let block = uio_openFileBlock2(handle, 5, 6);
+                let block = uio_open_file_block2(handle, 5, 6);
                 assert!(!block.is_null());
 
                 // Access from offset 2 within block (byte 7 in file)
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 2, 3, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 2, 3, &mut buffer);
 
                 assert_eq!(bytes_read, 3);
                 assert!(!buffer.is_null());
@@ -6835,7 +6802,7 @@ mod tests {
                 let data = slice::from_raw_parts(buffer as *const u8, 3);
                 assert_eq!(data, b"789");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6857,16 +6824,16 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 let mut buffer = [0u8; 10];
-                let result = uio_copyFileBlock(block, 7, buffer.as_mut_ptr() as *mut c_char, 5);
+                let result = uio_copy_file_block(block, 7, buffer.as_mut_ptr() as *mut c_char, 5);
 
                 assert_eq!(result, 0); // Success
                 assert_eq!(&buffer[..5], b"World");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6888,29 +6855,29 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 // Access data to populate cache
                 let mut buffer: *mut c_char = ptr::null_mut();
-                let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 0, 5, &mut buffer);
                 assert_eq!(bytes_read, 5);
 
                 let inner = &*(block as *const FileBlockInner);
                 assert!(!inner.cache.is_empty());
 
                 // Clear buffers
-                uio_clearFileBlockBuffers(block);
+                uio_clear_file_block_buffers(block);
 
                 let inner = &*(block as *const FileBlockInner);
                 assert!(inner.cache.is_empty());
 
                 // Block should still be usable
-                let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
+                let bytes_read = uio_access_file_block(block, 7, 5, &mut buffer);
                 assert_eq!(bytes_read, 5);
                 assert!(!buffer.is_null());
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6932,18 +6899,18 @@ mod tests {
                 let file = std::fs::File::open(temp.path()).unwrap();
                 let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-                let block = uio_openFileBlock(handle);
+                let block = uio_open_file_block(handle);
                 assert!(!block.is_null());
 
                 // First access
                 let mut buffer1: *mut c_char = ptr::null_mut();
-                let bytes_read1 = uio_accessFileBlock(block, 0, 5, &mut buffer1);
+                let bytes_read1 = uio_access_file_block(block, 0, 5, &mut buffer1);
                 assert_eq!(bytes_read1, 5);
                 let _first_ptr = buffer1;
 
                 // Second access invalidates first pointer
                 let mut buffer2: *mut c_char = ptr::null_mut();
-                let bytes_read2 = uio_accessFileBlock(block, 7, 5, &mut buffer2);
+                let bytes_read2 = uio_access_file_block(block, 7, 5, &mut buffer2);
                 assert_eq!(bytes_read2, 5);
 
                 // First pointer should not be used after second access
@@ -6951,7 +6918,7 @@ mod tests {
                 let data2 = slice::from_raw_parts(buffer2 as *const u8, 5);
                 assert_eq!(data2, b"World");
 
-                uio_closeFileBlock(block);
+                uio_close_file_block(block);
                 let _ = Box::from_raw(handle);
             }
         }
@@ -6962,7 +6929,7 @@ mod tests {
     #[test]
     fn test_fileblock_null_handle() {
         unsafe {
-            let block = uio_openFileBlock(ptr::null_mut());
+            let block = uio_open_file_block(ptr::null_mut());
             assert!(block.is_null());
             assert_eq!(current_errno(), libc::EINVAL);
         }
@@ -6973,13 +6940,13 @@ mod tests {
     #[test]
     fn test_fileblock_close_null_safe() {
         unsafe {
-            let result = uio_closeFileBlock(ptr::null_mut());
+            let result = uio_close_file_block(ptr::null_mut());
             assert_eq!(result, 0); // Should succeed safely
         }
     }
 
     // =========================================================================
-    // StdioAccess and copyFile Tests (Phase P10)
+    // StdioAccess and copy_file Tests (Phase P10)
     // =========================================================================
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -7008,12 +6975,12 @@ mod tests {
                 }));
 
                 let path = CString::new("test.txt").unwrap();
-                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+                let handle = uio_get_stdio_access(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(!handle.is_null());
 
                 // Get path
-                let path_ptr = uio_StdioAccessHandle_getPath(handle);
+                let path_ptr = uio_stdio_access_handle_get_path(handle);
                 assert!(!path_ptr.is_null());
 
                 let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
@@ -7024,7 +6991,7 @@ mod tests {
                 assert_eq!(content, "direct path content");
 
                 // Release handle
-                uio_releaseStdioAccess(handle);
+                uio_release_stdio_access(handle);
 
                 // File should still exist (direct path, not temp copy)
                 assert!(test_file.exists());
@@ -7094,12 +7061,12 @@ mod tests {
                 }));
 
                 let path = CString::new("data.txt").unwrap();
-                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, temp_dir_handle);
+                let handle = uio_get_stdio_access(dir, path.as_ptr(), 0, temp_dir_handle);
 
                 assert!(!handle.is_null());
 
                 // Get path
-                let path_ptr = uio_StdioAccessHandle_getPath(handle);
+                let path_ptr = uio_stdio_access_handle_get_path(handle);
                 assert!(!path_ptr.is_null());
 
                 let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
@@ -7115,7 +7082,7 @@ mod tests {
                 assert!(temp_file_path.exists());
 
                 // Release handle - should delete temp file
-                uio_releaseStdioAccess(handle);
+                uio_release_stdio_access(handle);
 
                 // Temp file should be deleted
                 assert!(!temp_file_path.exists());
@@ -7157,7 +7124,7 @@ mod tests {
 
                 let path = CString::new("subdir").unwrap();
                 set_errno(0);
-                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+                let handle = uio_get_stdio_access(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
                 assert_eq!(current_errno(), libc::EISDIR);
@@ -7195,7 +7162,7 @@ mod tests {
 
                 let path = CString::new("nonexistent.txt").unwrap();
                 set_errno(0);
-                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+                let handle = uio_get_stdio_access(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
                 assert_eq!(current_errno(), libc::ENOENT);
@@ -7256,7 +7223,7 @@ mod tests {
                 let path = CString::new("data.txt").unwrap();
                 set_errno(0);
                 // No tempDir provided - should fail
-                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+                let handle = uio_get_stdio_access(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
                 assert_eq!(current_errno(), libc::EINVAL);
@@ -7277,7 +7244,7 @@ mod tests {
     fn test_stdio_access_getpath_null_handle() {
         unsafe {
             set_errno(0);
-            let path = uio_StdioAccessHandle_getPath(ptr::null_mut());
+            let path = uio_stdio_access_handle_get_path(ptr::null_mut());
             assert!(path.is_null());
             assert_eq!(current_errno(), libc::EINVAL);
         }
@@ -7290,7 +7257,7 @@ mod tests {
     fn test_stdio_access_release_null_safe() {
         unsafe {
             // Should not crash
-            uio_releaseStdioAccess(ptr::null_mut());
+            uio_release_stdio_access(ptr::null_mut());
         }
     }
 
@@ -7322,7 +7289,7 @@ mod tests {
                 let src_path = CString::new("source.txt").unwrap();
                 let dst_path = CString::new("dest.txt").unwrap();
 
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, 0);
 
                 // Verify destination exists
@@ -7372,7 +7339,7 @@ mod tests {
                 let dst_path = CString::new("dest.txt").unwrap();
 
                 set_errno(0);
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
                 // Should fail with EEXIST (O_EXCL semantics)
                 assert_eq!(current_errno(), libc::EEXIST);
@@ -7416,7 +7383,7 @@ mod tests {
                 let dst_path = CString::new("dest.txt").unwrap();
 
                 set_errno(0);
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
                 assert_eq!(current_errno(), libc::ENOENT);
 
@@ -7463,7 +7430,7 @@ mod tests {
                 let src_path = CString::new("large.dat").unwrap();
                 let dst_path = CString::new("large_copy.dat").unwrap();
 
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, 0);
 
                 // Verify destination exists and has same size
@@ -7732,17 +7699,17 @@ mod tests {
 
     /// @plan PLAN-20260314-FILE-IO.P11
     /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-    /// Test: uio_releaseStdioAccess remains safe (handles are independent of mounts)
+    /// Test: uio_release_stdio_access remains safe (handles are independent of mounts)
     #[test]
     #[serial]
     fn test_release_stdio_safe_after_unmount() {
         unsafe {
             uio_init();
 
-            // This test verifies that uio_releaseStdioAccess can safely free its resources
+            // This test verifies that uio_release_stdio_access can safely free its resources
             // The function already owns its resources independently of mount state
             // Testing the actual function implementation by calling it with null (which is safe)
-            uio_releaseStdioAccess(ptr::null_mut());
+            uio_release_stdio_access(ptr::null_mut());
 
             uio_unInit();
         }

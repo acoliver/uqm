@@ -1,6 +1,6 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
 #![allow(non_snake_case)]
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 
 use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;

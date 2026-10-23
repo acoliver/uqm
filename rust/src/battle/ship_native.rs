@@ -65,7 +65,7 @@ fn acceleration(
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -479,7 +479,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     animation_preprocess, collision, inertial_thrust, ship_postprocess, ship_preprocess,
     spawn_ship, GetInitialStarShips, GetNextStarShip,

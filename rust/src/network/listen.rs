@@ -68,7 +68,7 @@ pub unsafe extern "C" fn ListenState_decRef(state: *mut ListenState) -> bool {
 #[no_mangle]
 pub unsafe extern "C" fn ListenState_close(state: *mut ListenState) {
     if !(*state).resolve_state.is_null() {
-        Resolve_close((*state).resolve_state);
+        resolve_close((*state).resolve_state);
         (*state).resolve_state = ptr::null_mut();
     }
     if !(*state).nds.is_null() {
@@ -112,7 +112,7 @@ unsafe fn close_preserving_errno(sock: *mut Socket) {
 }
 
 unsafe fn listen_single(state: *mut ListenState, info: *mut libc::addrinfo) -> *mut NetDescriptor {
-    let sock = Socket_openNative((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
+    let sock = socket_open_native((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
     if sock.is_null() {
         return ptr::null_mut();
     }
@@ -167,15 +167,15 @@ unsafe fn listen_multi(state: *mut ListenState, info: *mut libc::addrinfo) {
 }
 
 unsafe extern "C" fn resolved(resolve: *mut ResolveState, info: *mut libc::addrinfo) {
-    let state = ResolveState_getExtra(resolve).cast::<ListenState>();
-    Resolve_close((*state).resolve_state);
+    let state = resolve_state_get_extra(resolve).cast::<ListenState>();
+    resolve_close((*state).resolve_state);
     (*state).resolve_state = ptr::null_mut();
     (*state).state = 2;
     listen_multi(state, info);
 }
 
 unsafe extern "C" fn resolve_error(resolve: *mut ResolveState, error: *const ResolveError) {
-    let state = ResolveState_getExtra(resolve).cast::<ListenState>();
+    let state = resolve_state_get_extra(resolve).cast::<ListenState>();
     assert_ne!((*error).gai_res, 0);
     report_error(
         state,
@@ -256,9 +256,9 @@ pub unsafe extern "C" fn listenPort(
     assert!((0..=2).contains(&(*flags).family_prefer));
     assert!((0..=1).contains(&proto));
     let mut hints: libc::addrinfo = std::mem::zeroed();
-    hints.ai_family = protocolFamilyTranslation[(*flags).family_demand as usize];
-    hints.ai_protocol = protocolTranslation[proto as usize];
-    hints.ai_socktype = socketTypeTranslation[proto as usize];
+    hints.ai_family = PROTOCOL_FAMILY_TRANSLATION[(*flags).family_demand as usize];
+    hints.ai_protocol = PROTOCOL_TRANSLATION[proto as usize];
+    hints.ai_socktype = SOCKET_TYPE_TRANSLATION[proto as usize];
     hints.ai_flags = libc::AI_PASSIVE;
     let state = Box::into_raw(Box::new(ListenState {
         ref_count: 1,
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn listenPort(
         num_nd: 0,
     }));
     let mut resolve_flags = ResolveFlags { dummy: 0 };
-    (*state).resolve_state = getaddrinfoAsync(
+    (*state).resolve_state = getaddrinfo_async(
         ptr::null(),
         service,
         &hints,

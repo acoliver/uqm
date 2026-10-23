@@ -100,26 +100,23 @@ extern "C" {
 // Static vtables — matching C's global BattleInputHandlers structs
 // ---------------------------------------------------------------------------
 
-/// C: `BattleInputHandlers ComputerInputHandlers`
-#[no_mangle]
-pub static ComputerInputHandlers: BattleInputHandlers = BattleInputHandlers {
+/// C: `BattleInputHandlers COMPUTER_INPUT_HANDLERS`
+pub static COMPUTER_INPUT_HANDLERS: BattleInputHandlers = BattleInputHandlers {
     frame_input: Some(unsafe_frame_input_computer),
     select_ship: Some(unsafe_select_ship_computer),
     battle_end_ready: Some(unsafe_battle_end_ready_computer),
     delete_context: Some(InputContext_delete),
 };
 
-/// C: `BattleInputHandlers HumanInputHandlers`
-#[no_mangle]
-pub static HumanInputHandlers: BattleInputHandlers = BattleInputHandlers {
+/// C: `BattleInputHandlers HUMAN_INPUT_HANDLERS`
+pub static HUMAN_INPUT_HANDLERS: BattleInputHandlers = BattleInputHandlers {
     frame_input: Some(unsafe_frame_input_human),
     select_ship: Some(unsafe_select_ship_human),
     battle_end_ready: Some(unsafe_battle_end_ready_human),
     delete_context: Some(InputContext_delete),
 };
-/// C: `BattleInputHandlers NetworkInputHandlers`
-#[no_mangle]
-pub static NetworkInputHandlers: BattleInputHandlers = BattleInputHandlers {
+/// C: `BattleInputHandlers NETWORK_INPUT_HANDLERS`
+pub static NETWORK_INPUT_HANDLERS: BattleInputHandlers = BattleInputHandlers {
     frame_input: Some(unsafe_frame_input_network),
     select_ship: Some(unsafe_select_ship_network),
     battle_end_ready: Some(unsafe_battle_end_ready_network),
@@ -214,7 +211,7 @@ pub extern "C" fn ComputerInputContext_new(player_nr: Count) -> *mut ComputerInp
         if !result.is_null() {
             InputContext_init(
                 &mut (*result).base as *mut InputContext,
-                &ComputerInputHandlers as *const _,
+                &COMPUTER_INPUT_HANDLERS as *const _,
                 player_nr,
             );
         }
@@ -231,7 +228,7 @@ pub extern "C" fn HumanInputContext_new(player_nr: Count) -> *mut HumanInputCont
         if !result.is_null() {
             InputContext_init(
                 &mut (*result).base as *mut InputContext,
-                &HumanInputHandlers as *const _,
+                &HUMAN_INPUT_HANDLERS as *const _,
                 player_nr,
             );
         }
@@ -251,7 +248,7 @@ pub extern "C" fn NetworkInputContext_new(player_nr: Count) -> *mut NetworkInput
 
         InputContext_init(
             &mut (*result).base as *mut InputContext,
-            &NetworkInputHandlers as *const _,
+            &NETWORK_INPUT_HANDLERS as *const _,
             player_nr,
         );
         result

@@ -7,21 +7,21 @@ use crate::resource::ffi_bridge::{
     LoadResourceFromPath,
 };
 use crate::resource::ffi_types::ResourceData;
-use crate::strings::getstr::{_GetBinaryTableData, _GetConversationData, _GetStringData};
+use crate::strings::getstr::{_get_binary_table_data, _get_conversation_data, _get_string_data};
 use crate::strings::string_table::StringTable;
 
 unsafe extern "C" fn get_string_table_file_data(
     pathname: *const c_char,
     resdata: *mut ResourceData,
 ) {
-    (*resdata).ptr = LoadResourceFromPath(pathname, Some(_GetStringData));
+    (*resdata).ptr = LoadResourceFromPath(pathname, Some(_get_string_data));
 }
 
 unsafe extern "C" fn get_binary_table_file_data(
     pathname: *const c_char,
     resdata: *mut ResourceData,
 ) {
-    (*resdata).ptr = LoadResourceFromPath(pathname, Some(_GetBinaryTableData));
+    (*resdata).ptr = LoadResourceFromPath(pathname, Some(_get_binary_table_data));
 }
 
 /// Registers `STRTAB`, `BINTAB` and `CONVERSATION`. Always returns TRUE.
@@ -44,7 +44,7 @@ pub extern "C" fn InstallStringTableResType() -> c_int {
         );
         InstallResTypeVectors(
             c"CONVERSATION".as_ptr(),
-            Some(_GetConversationData),
+            Some(_get_conversation_data),
             Some(FreeResourceData),
             None,
         );

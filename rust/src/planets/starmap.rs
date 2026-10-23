@@ -85,7 +85,7 @@ pub unsafe extern "C" fn FindStar(
     find_star(base, last, *point, xb, yb, hi)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod naming {
     use super::*;
     use std::ffi::{c_char, c_void};

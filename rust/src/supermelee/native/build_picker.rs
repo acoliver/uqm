@@ -52,7 +52,6 @@ pub(super) mod live {
 
     /// # Safety
     /// Game thread, with the melee graphics and master ship list loaded.
-    #[no_mangle]
     pub unsafe extern "C" fn BuildBuildPickFrame() {
         let old = SetContext(OffScreenContext);
         let mut stamp = STAMP {
@@ -73,14 +72,12 @@ pub(super) mod live {
     }
     /// # Safety
     /// Game thread; the popup drawable must not be referenced elsewhere.
-    #[no_mangle]
     pub unsafe extern "C" fn DestroyBuildPickFrame() {
         DestroyDrawable(ReleaseDrawable(BUILD_PICK_FRAME));
         BUILD_PICK_FRAME = ptr::null_mut();
     }
     /// # Safety
     /// Game thread, with the popup drawable and ship icons loaded.
-    #[no_mangle]
     pub unsafe extern "C" fn DrawPickIcon(ship: MeleeShip, draw: bool) {
         let rect = frame_rect(BUILD_PICK_FRAME);
         let mut stamp = STAMP {
@@ -105,7 +102,6 @@ pub(super) mod live {
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    #[no_mangle]
     pub unsafe extern "C" fn DrawPickFrame(state: *mut MELEE_STATE) {
         let mut first: RECT = mem::zeroed();
         let mut last: RECT = mem::zeroed();
@@ -134,7 +130,6 @@ pub(super) mod live {
     }
     /// # Safety
     /// Rect must be writable and the popup must be initialized.
-    #[no_mangle]
     pub unsafe extern "C" fn GetBuildPickFrameRect(rect: *mut RECT) {
         GetFrameRect(BUILD_PICK_FRAME, rect);
     }
@@ -174,7 +169,6 @@ pub(super) mod live {
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
-    #[no_mangle]
     pub unsafe extern "C" fn BuildPickShip(state: *mut MELEE_STATE) -> bool {
         FlushInput();
         if (*state).currentShip == 255 {

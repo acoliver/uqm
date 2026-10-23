@@ -8,10 +8,6 @@ use uqm_rust::graphics::{
     native_abi::{Color, DrawMode, TFB_Image, HOT_SPOT},
     native_canvas::{drawing::*, lifecycle::*, DRAW_REPLACE, TFB_SCALE_NEAREST},
 };
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 extern "C" {
     fn CreateMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
     fn DestroyMutex(mutex: *mut c_void);

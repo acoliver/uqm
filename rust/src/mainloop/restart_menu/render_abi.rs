@@ -1,11 +1,11 @@
 //! Restart-menu rendering, ported from restart.c (GPL-2.0-or-later).
 #![allow(non_snake_case)]
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 /// # Safety
 /// Menu and its frame are live; the SDL game thread owns the current context.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
     let mut rect: RECT = std::mem::zeroed();
     GetFrameRect((*menu).CurFrame, &mut rect);
@@ -49,7 +49,7 @@ pub unsafe fn DrawRestartMenuGraphic(menu: *mut MENU_STATE) {
 
 /// # Safety
 /// The menu's flash context and frame must be live on the graphics owner thread.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub unsafe fn DrawRestartMenu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
     let origin = crate::navigation::abi::POINT { x: 0, y: 0 };
     crate::ui::flash::Flash_setOverlay(
@@ -59,7 +59,7 @@ pub unsafe fn DrawRestartMenu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
     );
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub fn StartGame() -> u32 {
     super::orchestration::rust_start_game() as u32
 }

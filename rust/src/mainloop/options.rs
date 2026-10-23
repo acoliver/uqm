@@ -851,12 +851,10 @@ fn discover_content_dir() -> Option<String> {
 ///
 /// Format: `log_file\0run_mode\0config_dir\0content_dir\0...`
 /// Each field is separated by NUL. Empty values are represented as empty strings.
-#[no_mangle]
 pub extern "C" fn rust_options_get_run_mode() -> c_int {
     parsed().run_mode as c_int
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_parse_error() -> c_int {
     if parsed().parse_error {
         1
@@ -873,27 +871,22 @@ fn to_c_string(s: &Option<String>) -> *mut c_char {
     CString::new(val).unwrap_or_default().into_raw()
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_log_file() -> *mut c_char {
     to_c_string(&parsed().log_file)
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_config_dir() -> *mut c_char {
     to_c_string(&parsed().config_dir)
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_content_dir() -> *mut c_char {
     to_c_string(&parsed().content_dir)
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_addon_dir() -> *mut c_char {
     to_c_string(&parsed().addon_dir)
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_graphics_backend() -> *mut c_char {
     to_c_string(&parsed().graphics_backend)
 }
@@ -911,12 +904,10 @@ pub extern "C" fn rust_options_free_string(s: *mut c_char) {
     }
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_addon_count() -> c_int {
     parsed().addons.len() as c_int
 }
 
-#[no_mangle]
 pub extern "C" fn rust_options_get_addon(index: c_int) -> *mut c_char {
     let addons = &parsed().addons;
     if index < 0 || index as usize >= addons.len() {
@@ -979,13 +970,11 @@ int_getter!(rust_options_resolution_width, resolution_width);
 int_getter!(rust_options_resolution_height, resolution_height);
 
 /// Player control overrides from config file. Returns -1 if not set.
-#[no_mangle]
 pub extern "C" fn rust_options_player1_control() -> c_int {
     parsed().player1_control.unwrap_or(-1)
 }
 
 /// Player control overrides from config file. Returns -1 if not set.
-#[no_mangle]
 pub extern "C" fn rust_options_player2_control() -> c_int {
     parsed().player2_control.unwrap_or(-1)
 }

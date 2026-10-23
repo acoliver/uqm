@@ -212,7 +212,7 @@ fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool
     draw(color, r, true);
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -494,7 +494,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     DeltaCrew, DeltaEnergy, DrawBattleCrewAmount, DrawCaptainsWindow, InitStatusOffsets,
     PostProcessStatus, PreProcessStatus,
