@@ -1925,6 +1925,7 @@ mod tests {
     fn hyperspace_departure_counts_down_and_fails_when_exhausted() {
         let actions = [
             Action::NavigateToHyperspace(NavigateToHyperspaceStep {
+                retreat_encounters: false,
                 max_ticks: 2,
                 encounter_response: None,
             }),
@@ -3567,6 +3568,7 @@ mod budgeted_wait_tests {
                 patrol_policy: crate::automation::script::PatrolPolicy::Stop,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep {
+                retreat_encounters: false,
                 max_ticks,
                 encounter_response: None,
             }),

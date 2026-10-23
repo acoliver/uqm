@@ -511,6 +511,8 @@ pub struct NavigateToOrbitStep {
 #[serde(deny_unknown_fields)]
 pub struct NavigateToHyperspaceStep {
     pub max_ticks: u64,
+    #[serde(default)]
+    pub retreat_encounters: bool,
     /// Hail an interrupting patrol and leave using this offered phrase.
     #[serde(default)]
     pub encounter_response: Option<String>,
@@ -2179,6 +2181,13 @@ fn validate_navigation_step(
             flight.max_ticks
         }
         Action::NavigateToHyperspace(navigation) => {
+            if navigation.retreat_encounters && navigation.encounter_response.is_some() {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "departure retreat and encounter_response are mutually exclusive",
+                )));
+            }
             if navigation.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
                     path,
@@ -2539,6 +2548,24 @@ mod tests {
         ).unwrap();
         let encoded = serde_json::to_value(&script.steps()[0]).unwrap();
         assert_eq!(encoded["encounter_response"], "bye_before_space");
+    }
+
+    #[test]
+    fn departure_retreat_is_opt_in_and_excludes_a_dialogue_response() {
+        let source =
+            r#"{"action":"navigate_to_hyperspace","max_ticks":100,"retreat_encounters":true}"#;
+        let script = validated_steps(source).unwrap();
+        assert_eq!(
+            serde_json::to_value(&script.steps()[0]).unwrap()["retreat_encounters"],
+            true
+        );
+        let default =
+            validated_steps(r#"{"action":"navigate_to_hyperspace","max_ticks":100}"#).unwrap();
+        assert_eq!(
+            serde_json::to_value(&default.steps()[0]).unwrap()["retreat_encounters"],
+            false
+        );
+        assert!(validated_steps(r#"{"action":"navigate_to_hyperspace","max_ticks":100,"retreat_encounters":true,"encounter_response":"bye"}"#).is_err());
     }
 
     #[test]

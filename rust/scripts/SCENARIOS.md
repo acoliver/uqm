@@ -289,3 +289,18 @@ outer planet approaches now correct actual velocity rather than merely
 pointing the bow toward the target. Wrong-inner-system departure retains
 its outward steering. This save still does not prove the Mycon lure or
 Sun Device guard victory.
+
+`campaign-s10a-mycon-lure` starts from `dev-driven-ambush` and uses real
+flagship Escape during departure, hyperspace transit and incidental body
+patrols. `navigate_to_hyperspace` now accepts opt-in
+`retreat_encounters: true`; omitted retains combat, and combining retreat
+with `encounter_response` is rejected. Escape completion resumes the same
+navigation action and its remaining budget, without declaring arrival or
+fleet victory.
+
+Native `pmid-82` passed the actual homeworld conversation at Epsilon
+Scorpii: `i_have_a_cunning_plan`, then all three clues. It proved both
+ambush flags and saved `dev-mycon-lure`. Repeated retreats cost fuel and
+crew: the save has 70 crew, two Furies and zero fuel. It is a stranded
+but genuinely earned development checkpoint, not a finished Sun Device
+route or a connected campaign milestone. No resource loss is hidden.

@@ -1719,6 +1719,9 @@ impl Coordinator {
     ) -> SchedulerEvent {
         use super::script::PatrolPolicy;
         let policy = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToHyperspace(step)) if step.retreat_encounters => {
+                PatrolPolicy::Retreat
+            }
             Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
             Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
             _ => PatrolPolicy::Fight,
