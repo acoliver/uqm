@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "campaign-s07e-sol-arrival",
+  "name": "campaign-s07e-portal-staging",
   "start_save": {
     "path": "saves/war-cleared.sav",
     "slot": 0
@@ -160,7 +160,7 @@
     },
     {
       "action": "fly_to_star",
-      "target": "Sol",
+      "target": "Gamma Circini",
       "max_ticks": 180000,
       "retreat_encounters": true
     },
@@ -170,7 +170,7 @@
         {
           "key": "star:current",
           "op": "eq",
-          "value": 82
+          "value": 335
         },
         {
           "key": "sis:crew",
@@ -191,7 +191,7 @@
     },
     {
       "action": "capture",
-      "label": "connected-sol-arrival"
+      "label": "connected-natural-portal-staging"
     },
     {
       "action": "wait_input_ticks",
@@ -272,7 +272,7 @@
     },
     {
       "action": "capture",
-      "label": "saved-connected-sol-arrival-slot-1"
+      "label": "saved-connected-portal-staging-slot-1"
     },
     {
       "action": "finish"

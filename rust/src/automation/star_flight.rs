@@ -12,9 +12,14 @@ impl StarTarget {
     const QUASISPACE_ENTRANCE: Self = Self(u16::MAX);
     const ARILOU_HOME: Self = Self(518);
     const UMGAH_EXIT: Self = Self(515);
+    const SOL_EXIT: Self = Self(507);
 
     pub fn is_portal(self) -> bool {
-        self == Self::QUASISPACE_ENTRANCE || self == Self::ARILOU_HOME || self == Self::UMGAH_EXIT
+        self == Self::QUASISPACE_ENTRANCE || self == Self::ARILOU_HOME || self.is_exit()
+    }
+
+    fn is_exit(self) -> bool {
+        self == Self::UMGAH_EXIT || self == Self::SOL_EXIT
     }
 
     pub fn is_arilou_home(self) -> bool {
@@ -45,6 +50,8 @@ impl StarTarget {
                 "Arilou home"
             } else if self == Self::UMGAH_EXIT {
                 "QuasiSpace Umgah exit"
+            } else if self == Self::SOL_EXIT {
+                "QuasiSpace Sol exit"
             } else {
                 "QuasiSpace entrance"
             }
@@ -81,6 +88,7 @@ impl StarTarget {
             Self::QUASISPACE_ENTRANCE,
             Self::ARILOU_HOME,
             Self::UMGAH_EXIT,
+            Self::SOL_EXIT,
         ] {
             if target.name().eq_ignore_ascii_case(name) {
                 return Ok(target);
@@ -200,7 +208,7 @@ impl StarFlight {
                 obs.space_side == 3
                     && obs.current_star == Some(step.target.index())
                     && obs.conversation_active
-            } else if step.target == StarTarget::UMGAH_EXIT {
+            } else if step.target.is_exit() {
                 obs.space_side == 0
             } else {
                 obs.space_side == 3
@@ -329,12 +337,7 @@ pub fn arrival_satisfies(label: &str, target: StarTarget) -> bool {
             && number("target") == Some(i64::from(target.index()))
             && number("x") == Some(i64::from(target.coordinates().0))
             && number("y") == Some(i64::from(target.coordinates().1))
-            && number("space_side")
-                == Some(if target == StarTarget::UMGAH_EXIT {
-                    0
-                } else {
-                    3
-                })
+            && number("space_side") == Some(if target.is_exit() { 0 } else { 3 })
             && number("fuel_before").is_some_and(|fuel| (0..=u32::MAX as i64).contains(&fuel))
             && number("fuel_after").is_some_and(|fuel| (0..=u32::MAX as i64).contains(&fuel))
             && (!target.is_arilou_home()
@@ -424,6 +427,44 @@ mod tests {
                 not_arrived.observe(step, hyper()),
                 Progress::Input(_)
             ));
+        }
+    }
+
+    #[test]
+    fn sol_exit_requires_a_real_return_from_quasispace() {
+        let target = StarTarget::resolve("QuasiSpace Sol exit").unwrap();
+        assert_eq!(target.index(), 507);
+        assert_eq!(target.coordinates(), (5060, 4740));
+        assert_eq!(
+            serde_json::from_str::<StarTarget>(&serde_json::to_string(&target).unwrap()).unwrap(),
+            target
+        );
+        for side in [0, 3] {
+            let mut flight = StarFlight {
+                phase: Phase::Fly,
+                ticks: 10,
+                initial_fuel: Some(9000),
+            };
+            let step = FlyToStarStep {
+                retreat_encounters: false,
+                target,
+                max_ticks: 200,
+            };
+            let observation = Observation {
+                space_side: side,
+                ..hyper()
+            };
+            match flight.observe(step, observation) {
+                Progress::Arrived(label) if side == 0 => {
+                    assert!(arrival_satisfies(&label, target));
+                    assert!(!arrival_satisfies(
+                        &label.replace("space_side=0", "space_side=3"),
+                        target
+                    ));
+                }
+                Progress::Input(_) if side == 3 => {}
+                other => panic!("unexpected transition {other:?}"),
+            }
         }
     }
 
