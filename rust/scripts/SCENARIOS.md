@@ -227,3 +227,17 @@ connected S08 campaign milestone.
 from `dev-rainbow-refueled`. Native `pmid-66` passed, saving
 `dev-refueled-ambush` with 15935 raw fuel, 64 crew, three Furies, the vault
 unlocked and `MYCON_AMBUSH=1`. Its larger fuel reserve supports lure development.
+
+### Connected bomb transit refuel
+
+`campaign-s07a-bomb-refueled` starts from the connected `utwig-bomb.sav`,
+visits Gamma Aquarii to record another rainbow world, then buys fuel from
+the Melnorme at Alpha Aquilae. The northern route avoids taking the
+32-crew, unescorted flagship through hostile space to Alpha Eridani.
+`load-bomb-refueled-v1` independently reloads the extracted slot.
+
+Campaign replay seeds now apply at every `Battle` entry, including hyperspace,
+where the production clock seed previously replaced the script's seed.
+The trace records each application, encounter entry, and retreat result.
+An accepted Escape starts a vulnerable flee animation; it is not sufficient
+for a surviving retreat assertion.

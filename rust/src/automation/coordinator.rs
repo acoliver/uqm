@@ -4189,10 +4189,9 @@ mod tests {
         let mut doc = crate::automation::script::parse_script(bytes, "seed-test.json").unwrap();
         doc.seed = Some(u64::from(seed));
         let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
-        assert_eq!(
-            rust_automation_seed_value(SeedDomain::NEW_GAME_ID, 999),
-            999
-        );
+        for domain in [SeedDomain::NEW_GAME_ID, SeedDomain::CAMPAIGN_BATTLE_ID] {
+            assert_eq!(rust_automation_seed_value(domain, 999), 999);
+        }
         Coordinator::init(script, temp.path().to_path_buf());
         let mut expected = Vec::new();
         for domain in [

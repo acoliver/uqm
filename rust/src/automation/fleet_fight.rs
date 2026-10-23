@@ -431,6 +431,27 @@ mod retreat_tests {
     }
 
     #[test]
+    fn death_during_the_escape_animation_is_not_a_completed_retreat() {
+        let mut retreat = FleetRetreat::default();
+        retreat.observe(1000, obs(0x202));
+        let mut fleeing = obs(0x202);
+        fleeing.counters = [0, 1];
+        fleeing.escape_generation = 1;
+        assert!(matches!(
+            retreat.observe(1000, fleeing),
+            RetreatProgress::Input { escape: true, .. }
+        ));
+        let mut dead = obs(0);
+        dead.flagship_crew = Some(u16::MAX);
+        dead.escape_generation = 1;
+        let RetreatProgress::Failed(label) = retreat.observe(1000, dead) else {
+            panic!("a requested escape must not hide flagship destruction");
+        };
+        assert!(label.contains("crew=Some(65535):activity=0"));
+        assert!(label.contains("escape_baseline=0:escape_generation=1"));
+    }
+
+    #[test]
     fn retreat_requires_escape_input_living_flagship_and_surviving_enemy() {
         let mut retreat = FleetRetreat::default();
         assert!(matches!(
