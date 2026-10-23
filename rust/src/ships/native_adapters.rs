@@ -9,10 +9,20 @@ fn wrap(value: i32, extent: i32) -> u16 {
     }) as u16
 }
 
+unsafe fn display_primitive(
+    state: *const crate::navigation::abi::GAME_STATE,
+    index: u16,
+) -> *mut crate::ships::native::abi::PRIMITIVE {
+    (*state)
+        .DisplayArray
+        .cast::<crate::ships::native::abi::PRIMITIVE>()
+        .add(usize::from(index))
+}
+
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 mod live {
     #![allow(non_snake_case)]
-    use super::wrap;
+    use super::{display_primitive, wrap};
     use crate::ships::native::{abi::*, cosine, normalize_facing, sine};
     use std::{mem, ptr};
 
@@ -58,7 +68,7 @@ mod live {
     operation!(rust_bridge_WRAP_Y(value: i32) -> i32 { i32::from(wrap(value, height())) });
     operation!(rust_bridge_CollidingElement(element: *mut ELEMENT) -> u32 { u32::from((*element).state_flags & (NONSOLID | DISAPPEARING) as u16 == 0) });
     operation!(rust_bridge_OBJECT_CLOAKED(element: *mut ELEMENT) -> u32 { {
-    let primitive = &*ptr::addr_of!(crate::navigation::globals::GlobData.Game_state.DisplayArray).cast::<PRIMITIVE>().add((*element).PrimIndex as usize);
+    let primitive = &*display_primitive(ptr::addr_of!(crate::navigation::globals::GlobData.Game_state), (*element).PrimIndex);
     u32::from(primitive.Type as u32 >= gfx_object_NUM_PRIMS || (primitive.Type as u32 == gfx_object_STAMPFILL_PRIM && primitive.color.r == 0 && primitive.color.g == 0 && primitive.color.b == 0 && primitive.color.a == 255))
 } });
     operation!(rust_bridge_DeltaEnergy(element: *mut ELEMENT, delta: i16) -> u32 { crate::battle::status_native::DeltaEnergy(element, delta) });
@@ -89,7 +99,7 @@ mod live {
         (*element).__bindgen_anon_5.thrust_wait = 0;
         (*element).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
         (*element).colorCycleIndex = 0;
-        let primitive = ptr::addr_of_mut!(crate::navigation::globals::GlobData.Game_state.DisplayArray).cast::<PRIMITIVE>().add((*element).PrimIndex as usize);
+        let primitive = display_primitive(ptr::addr_of!(crate::navigation::globals::GlobData.Game_state), (*element).PrimIndex);
         (*primitive).Type = gfx_object_STAMP_PRIM as u8;
         let frames = crate::ships::ffi::rust_race_desc_get_ship_frames(descriptor.cast()).cast::<FRAME>();
         (*element).current.image.farray = frames;
@@ -188,7 +198,23 @@ pub use live::*;
 
 #[cfg(test)]
 mod tests {
-    use super::wrap;
+    use super::{display_primitive, wrap};
+    #[test]
+    fn display_primitive_uses_the_pointed_to_array() {
+        use crate::ships::native::abi::{gfx_object_STAMP_PRIM, PRIMITIVE};
+        let mut primitives: [PRIMITIVE; 3] = unsafe { std::mem::zeroed() };
+        let mut state: crate::navigation::abi::GAME_STATE = unsafe { std::mem::zeroed() };
+        state.DisplayArray = primitives.as_mut_ptr().cast();
+        let original = state.DisplayArray;
+        unsafe {
+            (*display_primitive(&state, 2)).Type = gfx_object_STAMP_PRIM as u8;
+        }
+        assert_eq!(state.DisplayArray, original);
+        assert_eq!(primitives[0].Type, 0);
+        assert_eq!(primitives[1].Type, 0);
+        assert_eq!(primitives[2].Type, gfx_object_STAMP_PRIM as u8);
+    }
+
     #[test]
     fn world_wrap_uses_one_adjustment_not_modulo() {
         assert_eq!(wrap(-1, 8192), 8191);
