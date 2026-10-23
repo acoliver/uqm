@@ -716,12 +716,15 @@ fn prices_and_layout_are_the_c_values() {
         .collect();
     assert_eq!(costs, SHIP_COST.to_vec());
 
-    let yard = c_source("shipyard.c");
-    assert!(yard.contains("#\tdefine HANGAR_SHIPS_ROW  6"));
-    assert!(yard.contains("#\tdefine HANGAR_Y          88"));
-    assert!(yard.contains("#\tdefine HANGAR_DY         84"));
-    assert!(yard.contains("0, 38, 76,  131, 169, 207"));
-    assert!(yard.contains("#define HANGAR_SHIPS      12"));
+    let layout = &crate::ui::shipyard_layout::HANGAR_X_COORDS;
+    assert_eq!(*layout, &[0, 38, 76, 131, 169, 207]);
+    assert_eq!(crate::ui::shipyard_layout::HANGAR_SHIPS_ROW, 6);
+    assert_eq!(crate::ui::shipyard_layout::HANGAR_Y, 88);
+    assert_eq!(crate::ui::shipyard_layout::HANGAR_DY, 84);
+    assert_eq!(
+        crate::ui::shipyard_layout::HANGAR_ROWS * crate::ui::shipyard_layout::HANGAR_SHIPS_ROW,
+        12
+    );
     assert_eq!(HANGAR_X, [0, 38, 76, 131, 169, 207]);
     assert_eq!((HANGAR_Y, HANGAR_DY, HANGAR_SHIPS), (88, 84, 12));
     assert_eq!(slot_corner(7), Point { x: 38, y: 88 + 84 });

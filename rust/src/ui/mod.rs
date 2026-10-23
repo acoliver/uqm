@@ -20,3 +20,6 @@ pub mod sis;
 pub(crate) mod sis_capacity_math;
 
 pub mod outfit;
+
+pub mod shipyard;
+pub(crate) mod shipyard_layout;
