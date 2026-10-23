@@ -1,0 +1,68 @@
+//! Window reconfiguration without replacing the live screen surfaces.
+use super::*;
+
+pub(crate) fn reconfigure_video(flags: c_int, width: c_int, height: c_int) -> Result<(), String> {
+    if width <= 0 || height <= 0 {
+        return Err("invalid video dimensions".into());
+    }
+    let state = get_gfx_state().ok_or("graphics not initialized")?;
+    let fullscreen = flags & 1 != 0;
+    let window = state.canvas.window_mut();
+    window.set_fullscreen(if fullscreen {
+        sdl2::video::FullscreenType::Desktop
+    } else {
+        sdl2::video::FullscreenType::Off
+    })?;
+    if !fullscreen {
+        window
+            .set_size(width as u32, height as u32)
+            .map_err(|e| e.to_string())?;
+    }
+    state.flags = flags;
+    state.width = width as u32;
+    state.height = height as u32;
+    state.fullscreen = fullscreen;
+    let buffer_size = scale_factor_from_flags(flags)
+        .map(|scale| (SCREEN_WIDTH * scale * SCREEN_HEIGHT * scale * 4) as usize);
+    for buffer in &mut state.scaled_buffers {
+        *buffer = buffer_size.map(|size| vec![0; size]);
+    }
+    state.software_scaler_logged = false;
+    state.xbrz_logged = false;
+    Ok(())
+}
+
+pub(super) fn scanlines(
+    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+) -> Result<(), String> {
+    canvas.set_draw_color(sdl2::pixels::Color::RGBA(0, 0, 0, 64));
+    canvas.set_blend_mode(BlendMode::Blend);
+    canvas
+        .set_logical_size(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2)
+        .map_err(|e| e.to_string())?;
+    for y in (0..SCREEN_HEIGHT * 2).step_by(2) {
+        canvas.draw_line(
+            sdl2::rect::Point::new(0, y as i32),
+            sdl2::rect::Point::new((SCREEN_WIDTH * 2 - 1) as i32, y as i32),
+        )?;
+    }
+    canvas
+        .set_logical_size(SCREEN_WIDTH, SCREEN_HEIGHT)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn rejects_invalid_dimensions_before_accessing_sdl_state() {
+        assert_eq!(
+            reconfigure_video(0, 0, 480),
+            Err("invalid video dimensions".into())
+        );
+        assert_eq!(
+            reconfigure_video(1, 640, -1),
+            Err("invalid video dimensions".into())
+        );
+    }
+}

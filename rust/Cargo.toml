@@ -147,3 +147,8 @@ required-features = ["linked_c_archive"]
 name = "queue_native"
 path = "tests/queue_native.rs"
 required-features = ["linked_c_archive"]
+
+[[test]]
+name = "video_native"
+path = "tests/video_native.rs"
+required-features = ["linked_c_archive"]
