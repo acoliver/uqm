@@ -718,22 +718,25 @@ pub unsafe extern "C" fn GraphForegroundStream(
 }
 
 // =============================================================================
-// Track Player FFI (17 functions)
+// Speech track facade
 // =============================================================================
 
-/// C callback type: void (*CallbackFunction)(void* arg)
-pub type CallbackFunction = unsafe extern "C" fn(*mut c_void);
+unsafe fn phrase_track_callback(
+    callback: Option<PhraseCallback>,
+) -> Option<Box<dyn Fn(i32) + Send>> {
+    callback.map(|callback| Box::new(move |_| callback()) as Box<dyn Fn(i32) + Send>)
+}
 
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SpliceTrack(
+/// Non-null strings must be NUL-terminated and valid for the call.
+/// Any callback must remain valid whenever playback or seeking dispatches it.
+pub unsafe fn splice_track(
     track_name_ptr: *const c_char,
     track_text_ptr: *const c_char,
     timestamp_ptr: *const c_char,
-    callback_ptr: Option<CallbackFunction>,
+    callback_ptr: Option<PhraseCallback>,
 ) {
     let name = unicode_ptr_to_option(track_name_ptr);
     let text = unicode_ptr_to_option(track_text_ptr);
@@ -745,11 +748,7 @@ pub unsafe extern "C" fn SpliceTrack(
         timestamp.as_ref().map(|s| s.len()),
         callback_ptr.is_some()
     );
-    let callback: Option<Box<dyn Fn(i32) + Send>> = callback_ptr.map(|f| {
-        Box::new(move |val: i32| {
-            f(val as *mut c_void);
-        }) as Box<dyn Fn(i32) + Send>
-    });
+    let callback = phrase_track_callback(callback_ptr);
 
     // Create per-page decoders with time-limited ranges (like C's SoundDecoder_Load)
     let decoders = create_per_page_decoders(name.as_deref(), text.as_deref(), timestamp.as_deref());
@@ -766,9 +765,9 @@ pub unsafe extern "C" fn SpliceTrack(
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SpliceMultiTrack(
+/// The names array must be null or NUL-terminated; each non-null string
+/// must be NUL-terminated and valid for the call.
+pub unsafe fn splice_multi_track(
     track_names_ptr: *const *const c_char,
     track_text_ptr: *const c_char,
 ) {
@@ -792,12 +791,7 @@ pub unsafe extern "C" fn SpliceMultiTrack(
     let _ = trackplayer::splice_multi_track(&name_refs, &text_refs, None);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PlayTrack() {
+pub fn play_track() {
     eprintln!("[PlayTrack] called");
     match trackplayer::play_track(true) {
         Ok(()) => eprintln!("[PlayTrack] OK"),
@@ -805,113 +799,53 @@ pub unsafe extern "C" fn PlayTrack() {
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn StopTrack() {
+pub fn stop_track() {
     let _ = trackplayer::stop_track();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn JumpTrack() {
+pub fn jump_track() {
     let _ = trackplayer::jump_track(0);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PauseTrack() {
+pub fn pause_track() {
     let _ = trackplayer::pause_track();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn ResumeTrack() {
+pub fn resume_track() {
     let _ = trackplayer::resume_track();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PlayingTrack() -> u16 {
+pub fn playing_track() -> u16 {
     trackplayer::playing_track_num()
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn FastReverse_Smooth() {
+pub fn fast_reverse_smooth() {
     let _ = trackplayer::fast_reverse_smooth();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn FastForward_Smooth() {
+pub fn fast_forward_smooth() {
     let _ = trackplayer::fast_forward_smooth();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn FastReverse_Page() {
+pub fn fast_reverse_page() {
     let _ = trackplayer::fast_reverse_page();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn FastForward_Page() {
+pub fn fast_forward_page() {
     let _ = trackplayer::fast_forward_page();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
+pub fn get_track_position(in_units: c_int) -> c_int {
     trackplayer::get_track_position(in_units as u32) as c_int
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn GetTrackSubtitle() -> *const c_char {
+pub fn get_track_subtitle() -> *const c_char {
     // Return a stable pointer from the chunk's cached CString.
     // C's CheckSubtitles uses pointer identity to detect subtitle changes.
     trackplayer::get_track_subtitle_cstr()
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
+pub fn get_first_track_subtitle() -> *mut c_void {
     // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
     trackplayer::get_first_chunk_ptr() as *mut c_void
 }
@@ -920,8 +854,7 @@ pub unsafe extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void {
+pub unsafe fn get_next_track_subtitle(last_ref: *mut c_void) -> *mut c_void {
     // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
     // LastRef is an opaque pointer to a SoundChunk in the linked list
     if last_ref.is_null() {
@@ -934,8 +867,7 @@ pub unsafe extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_v
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn GetTrackSubtitleText(sub_ref_ptr: *mut c_void) -> *const c_char {
+pub unsafe fn get_track_subtitle_text(sub_ref_ptr: *mut c_void) -> *const c_char {
     if sub_ref_ptr.is_null() {
         return ptr::null();
     }
@@ -1768,7 +1700,7 @@ mod tests {
     #[test]
 
     fn test_playing_track_matches_trackplayer_state() {
-        let result = unsafe { PlayingTrack() };
+        let result = playing_track();
         assert_eq!(result, trackplayer::playing_track_num());
     }
 
@@ -1815,5 +1747,21 @@ mod tests {
     fn test_c_callback_wrapper_is_send() {
         fn assert_send<T: Send>() {}
         assert_send::<CCallbackWrapper>();
+    }
+
+    #[test]
+    fn phrase_callback_is_optional_and_reusable_when_seeking() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        unsafe fn notified() {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+        }
+
+        assert!(unsafe { phrase_track_callback(None) }.is_none());
+        let callback = unsafe { phrase_track_callback(Some(notified)) }.unwrap();
+        callback(0);
+        callback(17);
+        assert_eq!(CALLS.load(Ordering::SeqCst), 2);
     }
 }

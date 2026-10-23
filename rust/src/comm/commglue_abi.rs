@@ -58,6 +58,8 @@ mod runtime {
     use std::ffi::{c_char, c_void};
     use std::ptr::null_mut;
 
+    use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
+    use crate::sound::heart_ffi::splice_track as SpliceTrack;
     #[allow(clashing_extern_declarations)]
     extern "C" {
         static mut GlobData: CGlobData;
@@ -66,13 +68,6 @@ mod runtime {
         fn SetRelStringTableIndex(table: *mut c_void, index: i16) -> *mut c_void;
         fn GetStringAddress(entry: *mut c_void) -> *const c_char;
         fn GetStringSoundClip(entry: *mut c_void) -> *mut c_void;
-        fn SpliceTrack(
-            clip: *mut c_char,
-            text: *mut c_char,
-            timestamp: *mut c_char,
-            callback: Option<unsafe extern "C" fn()>,
-        );
-        fn SpliceMultiTrack(tracks: *mut *mut c_char, text: *mut c_char);
     }
 
     fn get(key: &str) -> u8 {
@@ -103,7 +98,7 @@ mod runtime {
             let speech = &*COMM_DATA.alien_number_speech.cast::<NUMBER_SPEECH_DESC>();
             let mut indices = Vec::new();
             number_phrases(speech, number, true, &mut indices);
-            let mut tracks = [null_mut(); 20];
+            let mut tracks = [std::ptr::null::<c_char>(); 20];
             assert!(indices.len() < tracks.len());
             for (track, index) in tracks.iter_mut().zip(indices) {
                 *track = GetStringSoundClip(SetAbsStringTableIndex(
@@ -114,7 +109,7 @@ mod runtime {
             }
             let mut buffer = [0 as c_char; 60];
             libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
-            SpliceMultiTrack(tracks.as_mut_ptr(), buffer.as_mut_ptr());
+            SpliceMultiTrack(tracks.as_ptr(), buffer.as_ptr());
         }
     }
 

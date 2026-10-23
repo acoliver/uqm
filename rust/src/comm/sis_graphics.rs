@@ -143,6 +143,9 @@ mod c_bridge {
     use super::*;
     pub use crate::comm::ffi::rust_get_response_text;
 
+    pub use crate::sound::heart_ffi::get_first_track_subtitle as GetFirstTrackSubtitle;
+    pub use crate::sound::heart_ffi::get_next_track_subtitle as GetNextTrackSubtitle;
+    pub use crate::sound::heart_ffi::get_track_subtitle_text as GetTrackSubtitleText;
     #[allow(clashing_extern_declarations)]
     extern "C" {
         // C globals
@@ -205,9 +208,6 @@ mod c_bridge {
         // BUILD_COLOR(col, idx) = col (palette index ignored)
 
         // Trackplayer subtitle functions (trackplayer.c)
-        pub fn GetFirstTrackSubtitle() -> *mut std::ffi::c_void;
-        pub fn GetNextTrackSubtitle(last: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-        pub fn GetTrackSubtitleText(sub: *mut std::ffi::c_void) -> *const std::ffi::c_char;
         pub fn comm_ClearSubtitles();
     }
 }

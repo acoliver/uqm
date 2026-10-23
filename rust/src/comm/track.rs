@@ -1,38 +1,25 @@
 //! Audio track management for speech playback
 //!
 //! Handles speech track loading, playback, and chunk management.
-//! In production (linked with C), the authoritative trackplayer in
-//! `sc2/src/libs/sound/trackplayer.c` owns playback state. This module
-//! provides a synthetic model for tests and delegates to C via FFI
-//! when linked.
+//! Production playback delegates directly to the Rust audio trackplayer.
+//! The local model supplies deterministic track state for unit tests.
 //!
 //! @plan PLAN-20260314-COMM.P06
 //! @requirement TP-REQ-001, TP-REQ-003, TP-REQ-007, TP-REQ-008, TP-REQ-009
 
 #[cfg(not(test))]
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::CStr;
 
-// FFI declarations for the authoritative C trackplayer.
-// These map to the c_* wrappers in rust_comm.c which delegate
-// to trackplayer.c.
 #[cfg(not(test))]
-extern "C" {
-    fn PlayTrack();
-    fn StopTrack();
-    fn JumpTrack();
-    fn PlayingTrack() -> u16;
-    fn PauseTrack();
-    fn ResumeTrack();
-    fn GetTrackSubtitle() -> *const c_char;
-    fn GetFirstTrackSubtitle() -> *mut c_void;
-    fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void;
-    fn GetTrackSubtitleText(sub_ref: *mut c_void) -> *const c_char;
-    fn FastForward_Page();
-    fn FastForward_Smooth();
-    fn FastReverse_Page();
-    fn FastReverse_Smooth();
-    fn GetTrackPosition(in_units: c_int) -> c_int;
-}
+use crate::sound::heart_ffi::{
+    fast_forward_page as FastForward_Page, fast_forward_smooth as FastForward_Smooth,
+    fast_reverse_page as FastReverse_Page, fast_reverse_smooth as FastReverse_Smooth,
+    get_first_track_subtitle as GetFirstTrackSubtitle,
+    get_next_track_subtitle as GetNextTrackSubtitle, get_track_position as GetTrackPosition,
+    get_track_subtitle as GetTrackSubtitle, get_track_subtitle_text as GetTrackSubtitleText,
+    jump_track as JumpTrack, pause_track as PauseTrack, play_track as PlayTrack,
+    playing_track as PlayingTrack, resume_track as ResumeTrack, stop_track as StopTrack,
+};
 
 /// Bridge to the authoritative C trackplayer.
 /// Used in production to delegate real playback operations.
@@ -43,7 +30,7 @@ pub struct CTrackBridge;
 impl CTrackBridge {
     /// Check if a track is currently playing via the C trackplayer.
     pub fn is_playing() -> bool {
-        unsafe { PlayingTrack() != 0 }
+        PlayingTrack() != 0
     }
 
     /// Get the current subtitle from the C trackplayer.
@@ -80,52 +67,52 @@ impl CTrackBridge {
 
     /// Stop playback via the C trackplayer.
     pub fn stop() {
-        unsafe { StopTrack() }
+        StopTrack()
     }
 
     /// Play via the C trackplayer.
     pub fn play() {
-        unsafe { PlayTrack() }
+        PlayTrack()
     }
 
     /// Jump (skip current phrase) via the C trackplayer.
     pub fn jump() {
-        unsafe { JumpTrack() }
+        JumpTrack()
     }
 
     /// Pause via the C trackplayer.
     pub fn pause() {
-        unsafe { PauseTrack() }
+        PauseTrack()
     }
 
     /// Resume via the C trackplayer.
     pub fn resume() {
-        unsafe { ResumeTrack() }
+        ResumeTrack()
     }
 
     /// Fast forward by page.
     pub fn fast_forward_page() {
-        unsafe { FastForward_Page() }
+        FastForward_Page()
     }
 
     /// Fast forward smooth.
     pub fn fast_forward_smooth() {
-        unsafe { FastForward_Smooth() }
+        FastForward_Smooth()
     }
 
     /// Fast reverse by page.
     pub fn fast_reverse_page() {
-        unsafe { FastReverse_Page() }
+        FastReverse_Page()
     }
 
     /// Fast reverse smooth.
     pub fn fast_reverse_smooth() {
-        unsafe { FastReverse_Smooth() }
+        FastReverse_Smooth()
     }
 
     /// Get track position in the specified units.
     pub fn get_position(in_units: i32) -> i32 {
-        unsafe { GetTrackPosition(in_units) }
+        GetTrackPosition(in_units)
     }
 }
 

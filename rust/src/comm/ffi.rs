@@ -1181,28 +1181,21 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
 // C bridge declarations used only by NPCPhrase (not test-compiled).
 #[cfg(not(test))]
+use crate::sound::heart_ffi::splice_track as SpliceTrack;
+#[cfg(not(test))]
 extern "C" {
     // Direct C functions for phrase access (replacing c_get_* wrappers)
     fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
     fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
     fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    // Direct SpliceTrack call (replaces c_SpliceTrack forwarder)
-    fn SpliceTrack(
-        filespec: *mut std::ffi::c_char,
-        textspec: *mut std::ffi::c_char,
-        timestamp: *mut std::ffi::c_char,
-        cb: Option<unsafe extern "C" fn()>,
-    );
     // C globals for direct access
     pub static mut GlobData: crate::comm::locdata::CGlobData;
 }
 
 // Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
 #[cfg(not(test))]
-extern "C" {
-    fn SpliceMultiTrack(track_names: *mut *mut std::ffi::c_char, track_text: *mut std::ffi::c_char);
-}
+use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
 
 /// Ported from C's c_get_alliance_name: returns alliance name phrase text.
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
@@ -1296,7 +1289,7 @@ unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
 ///
 /// @plan PLAN-20260326-COMMPT2.P04
 /// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
-pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: Option<unsafe extern "C" fn()>) {
+pub unsafe fn rust_npc_phrase_cb(index: c_int, cb: super::glue::PhraseCallback) {
     eprintln!(
         "[DBG] rust_NPCPhrase_cb: index={} cb={}",
         index,
@@ -1431,8 +1424,8 @@ pub unsafe fn rust_npc_phrase_splice(index: c_int) {
         if clip.is_null() {
             SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
         } else {
-            let mut tracks: [*mut std::ffi::c_char; 2] = [clip as *mut _, ptr::null_mut()];
-            SpliceMultiTrack(tracks.as_mut_ptr(), text as *mut _);
+            let tracks: [*const std::ffi::c_char; 2] = [clip.cast(), ptr::null()];
+            SpliceMultiTrack(tracks.as_ptr(), text);
         }
     }
 
