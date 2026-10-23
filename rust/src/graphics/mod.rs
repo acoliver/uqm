@@ -100,3 +100,6 @@ pub mod drawable_abi;
 pub mod software_primitives;
 
 pub mod native_canvas;
+
+pub mod tfb_draw_abi;
+pub mod tfb_prim_abi;

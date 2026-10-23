@@ -163,3 +163,34 @@ fn scale_target_reuses_matching_canvas_and_replaces_other_kinds() {
         SDL_FreeSurface(src);
     }
 }
+
+#[test]
+fn image_scaling_reuses_cache_until_dirty_then_refreshes_pixels() {
+    use uqm_rust::graphics::tfb_draw_abi::TFB_DrawImage_FixScaling;
+    unsafe {
+        let source = surface(4, 4, false);
+        put(source, 0, 0, rgb(12, 34, 56));
+        let mut image: TFB_Image = std::mem::zeroed();
+        image.NormalImg = source.cast();
+        image.last_scale_type = -1;
+        TFB_DrawImage_FixScaling(&mut image, 128, TFB_SCALE_NEAREST);
+        let scaled: *mut SDL_Surface = image.ScaledImg.cast();
+        assert_eq!((image.extent.width, image.extent.height), (2, 2));
+        assert_eq!(
+            (image.last_scale, image.last_scale_type, image.dirty),
+            (128, TFB_SCALE_NEAREST, 0)
+        );
+        assert_eq!(px(scaled, 0, 0), rgb(12, 34, 56));
+        put(source, 0, 0, rgb(78, 90, 12));
+        TFB_DrawImage_FixScaling(&mut image, 128, TFB_SCALE_NEAREST);
+        assert_eq!(image.ScaledImg, scaled.cast());
+        assert_eq!(px(scaled, 0, 0), rgb(12, 34, 56));
+        image.dirty = 1;
+        TFB_DrawImage_FixScaling(&mut image, 128, TFB_SCALE_NEAREST);
+        assert_eq!(image.ScaledImg, scaled.cast());
+        assert_eq!(image.dirty, 0);
+        assert_eq!(px(scaled, 0, 0), rgb(78, 90, 12));
+        SDL_FreeSurface(scaled);
+        SDL_FreeSurface(source);
+    }
+}
