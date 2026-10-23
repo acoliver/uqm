@@ -153,6 +153,7 @@ pub trait RestartMenuOps {
     fn free_game_data(&self);
     fn credits(&self, victory: bool);
     fn victory(&self);
+    fn introduction(&self);
     fn splash_screen(&self);
     fn do_popup_window_msg(&self, string_id: u16);
 
@@ -557,6 +558,10 @@ impl RestartMenuOps for CffiOps {
     fn victory(&self) {
         // SAFETY: Victory displays the victory sequence.
         unsafe { c_extern::Victory() }
+    }
+    fn introduction(&self) {
+        // SAFETY: invoked on the initialized game thread before a new campaign.
+        unsafe { crate::front_end::fmv::Introduction() }
     }
     fn splash_screen(&self) {
         // SAFETY: SplashScreen with None callback is safe (null function pointer).

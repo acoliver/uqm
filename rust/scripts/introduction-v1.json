@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "name": "introduction-v1",
+  "budgets": {
+    "max_input_ticks": 5000,
+    "max_presentations": 10000,
+    "max_wallclock_seconds": 300
+  },
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 30},
+    {"action": "wait_input_ticks", "count": 300},
+    {"action": "capture", "label": "opening-presentation-first-scene"},
+    {"action": "wait_input_ticks", "count": 1700},
+    {"action": "capture", "label": "opening-presentation-later-scene"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 120},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "capture", "label": "new-campaign-after-skipping-presentation"},
+    {"action": "finish"}
+  ]
+}

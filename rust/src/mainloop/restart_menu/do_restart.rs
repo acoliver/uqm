@@ -590,6 +590,7 @@ mod tests {
         fn free_game_data(&self) {}
         fn credits(&self, _victory: bool) {}
         fn victory(&self) {}
+        fn introduction(&self) {}
         fn splash_screen(&self) {}
         fn do_popup_window_msg(&self, _string_id: u16) {
             self.popup_called.set(true);

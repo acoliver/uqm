@@ -172,6 +172,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("collect-moon-energy-v1", &[Domain::PlanetSideResults]),
     row("main-menu-v1", &[Domain::BootMenu]),
+    row("introduction-v1", &[Domain::BootMenu, Domain::NewGame]),
     row("mode-main-menu-v1", &[Domain::BootMenu]),
     row("state-sync-v1", &[Domain::BootMenu]),
     row("quit-v1", &[Domain::Quit]),
