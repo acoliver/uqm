@@ -53,7 +53,6 @@ sc2/src/uqm/menu.c
 sc2/src/uqm/outfit.c
 sc2/src/uqm/planets/plangen.c
 sc2/src/uqm/planets/pstarmap.c
-sc2/src/uqm/planets/scan.c
 sc2/src/uqm/planets/solarsys.c
 sc2/src/uqm/process.c
 sc2/src/uqm/restart.c
