@@ -67,6 +67,7 @@ parking_lot = "0.12"
 # nothing here uses, and with them an unmaintained transitive dependency.
 image = { version = "0.25", default-features = false, features = ["png"] }
 png = "0.18"
+moxcms = "0.8"
 portable-atomic = "1.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
