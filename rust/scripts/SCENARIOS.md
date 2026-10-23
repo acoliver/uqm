@@ -1315,3 +1315,13 @@ system Beta Librae, and uses the peaceful `anyone_around_here`,
 It requires `ULTRON_CONDITION=1` and the retained Clear Spindle before saving
 local flight to slot 1. Patrol contacts are dismissed with `bye_neutral`;
 they do not substitute for the scripted homeworld conversation.
+
+`campaign-s03c-thraddash-diverted` continues from `broken-ultron.sav` to
+Delta Draconis. The conversation selects `what_about_you_1`,
+`what_about_you_2`, `what_about_urquan_1`, `what_about_urquan_2`, then
+`got_idea`. The game's event starts the mission; the producer waits for
+`THRADD_MISSION` in 1..3 before saving. The extracted local-flight checkpoint
+has mission 1, Ultron condition 1, the Clear Spindle, 5494 raw fuel, 115 RU
+and 46 crew. `load-thraddash-diverted-v1` verifies the extracted state. The
+Thraddash descriptor uses the shipped `comm.thraddash.*` assets; using the
+source module abbreviation `comm.thradd.*` leaves contact without responses.

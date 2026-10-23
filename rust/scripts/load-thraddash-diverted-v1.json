@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "load-thraddash-diverted-v1",
+  "start_save": {
+    "path": "saves/thraddash-diverted.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 120
+  },
+  "seed": 1437213464,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "story:ULTRON_CONDITION", "op": "eq", "value": 1}, {"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}, {"key": "story:THRADD_MISSION", "op": "eq", "value": 1}, {"key": "sis:fuel", "op": "eq", "value": 5494}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "sis:ru", "op": "eq", "value": 115}, {"key": "star:current", "op": "eq", "value": 421}, {"key": "activity", "op": "eq", "value": 4}, {"key": "escorts:count", "op": "eq", "value": 4}]},
+    {"action": "capture", "label": "reloaded-thraddash-diverted"},
+    {"action": "finish"}
+  ]
+}
