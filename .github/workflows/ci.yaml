@@ -92,8 +92,8 @@ jobs:
           mkdir -p tmp/failure-scenarios
           cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- \
             native run --scenario ${{ matrix.scenario }} \
-            --artifacts tmp/failure-scenarios/${{ matrix.scenario }} \
-            --content sc2/content/packages
+            --artifacts "$GITHUB_WORKSPACE/tmp/failure-scenarios/${{ matrix.scenario }}" \
+            --content "$GITHUB_WORKSPACE/sc2/content/packages"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
