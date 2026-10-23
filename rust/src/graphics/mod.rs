@@ -96,3 +96,5 @@ pub mod loaddisp;
 pub mod context_abi;
 
 pub mod drawable_abi;
+
+pub mod software_primitives;
