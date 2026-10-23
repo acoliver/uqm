@@ -4,7 +4,7 @@ uqm_CFILES="
 		   fmv.c
 		gameinp.c gameopt.c
 		init.c intro.c
-		 outfit.c
+		 
 		 restart.c  setup.c setupmenu.c
 		  shipyard.c  starbase.c starcon.c
 		  uqmdebug.c "
