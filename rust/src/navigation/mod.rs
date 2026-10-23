@@ -29,14 +29,14 @@ pub mod initial_state;
 pub mod interplanetary;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-fn get(name: &str) -> u8 {
+pub(crate) fn get(name: &str) -> u8 {
     let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
         .expect("navigation state key exists");
     unsafe { crate::state::ffi::rust_get_game_state_bits(start as i32, end as i32) }
 }
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
-fn set(name: &str, value: u8) {
+pub(crate) fn set(name: &str, value: u8) {
     let (start, end) = crate::state::game_state::lookup_game_state_bits(name)
         .expect("navigation state key exists");
     unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }

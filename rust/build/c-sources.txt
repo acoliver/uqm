@@ -9,6 +9,5 @@ sc2/src/uqm/rust_bridge_mainloop.c
 sc2/src/uqm/rust_bridge_restart.c
 sc2/src/uqm/rust_bridge_ships.c
 sc2/src/uqm/setupmenu.c
-sc2/src/uqm/starcon.c
 sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/uqmdebug.c

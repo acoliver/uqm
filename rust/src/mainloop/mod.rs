@@ -73,3 +73,5 @@ pub enum MainLoopError {
 pub mod platform_abi;
 
 pub mod input_abi;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod lifecycle_abi;
