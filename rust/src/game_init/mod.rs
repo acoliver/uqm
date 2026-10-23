@@ -11,3 +11,6 @@ pub use master::*;
 pub use setup::*;
 
 pub mod world_resources;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod macro_abi;
