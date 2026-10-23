@@ -31,11 +31,11 @@ pub mod global_state {
     include!(concat!(env!("OUT_DIR"), "/global_state_abi.rs"));
 }
 
-/// The C-owned live solar-system state, `pSolarSysState` (solarsys.c).
+/// The live solar-system state exported by `planets::solarsys` as `pSolarSysState`.
 ///
 /// Every Rust reader of this global goes through [`current`], so the symbol is
-/// declared once with the whole bindgen layout of `SOLARSYS_STATE`. C still
-/// allocates, initialises and tears the state down; Rust only borrows it, and
+/// declared once with the whole bindgen layout of `SOLARSYS_STATE`. The solar
+/// system lifecycle owns its stack storage; other modules only borrow it, and
 /// no field is reached through an offset written by hand.
 ///
 /// The declaration exists where a consumer exists: the game build, and the
@@ -53,7 +53,7 @@ pub mod solar_system {
     /// The live `pSolarSysState`; NULL outside a solar system.
     ///
     /// # Safety
-    /// Game thread only: C replaces the pointer while entering and leaving a
+    /// Game thread only: the lifecycle replaces the pointer while entering and leaving a
     /// solar system. The caller may dereference the result only while it knows
     /// the state is not being torn down.
     pub unsafe fn current() -> *mut SOLARSYS_STATE {
