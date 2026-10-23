@@ -63,13 +63,7 @@ pub mod abi {
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::battle_native::frameInputHuman;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
-        extern "C" {
-            #[link_name = "FleetIsInfinite"]
-            fn legacy(player: u16) -> i32;
-        }
-        legacy(player) as BOOLEAN
-    }
+    pub use crate::battle::encount_native::FleetIsInfinite;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::galaxy::MoveGalaxy;
     #[cfg(any(not(test), feature = "linked_c_archive"))]

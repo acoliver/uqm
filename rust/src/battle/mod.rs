@@ -12,6 +12,7 @@ pub mod c_bridge;
 pub mod collision;
 pub mod display_list;
 pub mod element;
+pub mod encount_native;
 pub mod ffi;
 pub mod galaxy;
 pub mod gendef;
