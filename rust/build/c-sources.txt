@@ -22,7 +22,6 @@ sc2/src/uqm/gameopt.c
 sc2/src/uqm/getchar.c
 sc2/src/uqm/init.c
 sc2/src/uqm/intro.c
-sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
 sc2/src/uqm/menu.c
 sc2/src/uqm/outfit.c

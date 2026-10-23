@@ -3,7 +3,7 @@ uqm_CFILES="   cleanup.c
 		cnctdlg.c comm_variadic.c confirm.c credits.c
 		   fmv.c
 		gameinp.c gameopt.c getchar.c
-		cons_res.c init.c intro.c load.c
+		cons_res.c init.c intro.c
 		load_legacy.c
 		menu.c outfit.c
 		 restart.c  setup.c setupmenu.c

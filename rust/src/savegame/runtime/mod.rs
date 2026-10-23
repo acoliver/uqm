@@ -1,29 +1,8 @@
-//! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
-//! "Grps", "BtGp", "RacQ", "NpcQ", "ShpQ", "IGpQ" and "Enct" sections, plus the
-//! "Summ" summary and the "Star" location of a save, and the preparation of the
-//! solar-system location (`location`) and of the hyperspace facing
-//! (`hyper_save`) that `SaveGameState` records.
+//! Capture and restore of the live campaign sections used by SaveGame and
+//! LoadGame: global/story state, queues, state files, summary and location.
 //!
-//! The first three are the part of a save that lives in `GlobData`, the Rust
-//! game-state singleton and the game clock's event queue; the next three are
-//! the state files (`statefiles`); then come the fleet and ship queues of
-//! `GlobData` (`queues`) and its interplanetary group and encounter queues
-//! (`groups`). `summary` and `star` read the flagship, the clock, the game
-//! state and the star catalog the same way. The functions here work on those
-//! live structures, not on copies. The `SaveGame`/`LoadGame` orchestration, the
-//! initialisation of the solar-system state and the owner of the star catalog
-//! are not ported yet (`solar` ports the reads of the summary and `location` the
-//! solar-location step of a save), so nothing
-//! here is wired to a menu and no selector here makes a save atomic.
-//!
-//! `ip_group_save` is the first owner of the group step of `SaveGame`
-//! (`PutGroupInfo (GROUPS_RANDOM, GROUP_SAVE_IP)`): it plans and installs the
-//! `RANDGRPINFO` image under an owner borrow the caller holds. It is not called
-//! by any save route yet. `hyper_save` ports `getSisElement` and
-//! `SaveSisHyperState` over the C-owned `race_q` and `disp_q` pools and is not
-//! called yet either. The `LastEncGroup` static of grpinfo.c and the removal of
-//! departed groups from the live `ip_group_q` have no Rust owner, so no
-//! function here writes a whole save.
+//! Location preparation runs before capture. The menu ABI coordinates these
+//! owners on the game thread and installs the saved activity after loading.
 
 pub mod events;
 pub mod global;
@@ -162,3 +141,6 @@ mod statefile_tests;
 mod summary_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod campaign_tests;

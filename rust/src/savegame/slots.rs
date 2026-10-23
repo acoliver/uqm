@@ -130,7 +130,7 @@ impl SaveSlots {
         Ok((stream, len))
     }
 
-    fn open(&self, name: &str, mode: &std::ffi::CStr) -> Option<Stream> {
+    pub(super) fn open(&self, name: &str, mode: &std::ffi::CStr) -> Option<Stream> {
         let name = CString::new(name).expect("slot file names contain no NUL");
         // SAFETY: `dir` is live per the contract of `new`; both strings are
         // NUL-terminated and outlive the call.
@@ -158,13 +158,13 @@ fn check_slot(slot: usize) -> Result<(), SlotError> {
 }
 
 /// An open resource file, closed when dropped.
-struct Stream {
-    fp: *mut c_void,
+pub(super) struct Stream {
+    pub(super) fp: *mut c_void,
     closed: bool,
 }
 
 impl Stream {
-    fn is_directory(&self) -> bool {
+    pub(super) fn is_directory(&self) -> bool {
         self.fp == STREAM_SENTINEL
     }
 
