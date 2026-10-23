@@ -238,6 +238,23 @@ sprite.png -1 0 0 0
         repository = repo.cast();
         check_font(c"font", false, &alpha);
         check_font(c"font.zip", true, &alpha);
+        abi::_cur_resfile_name = c"busy".as_ptr();
+        assert!(uqm_rust::graphics::filegfx::LoadGraphicFile(c"frames.ani".as_ptr()).is_null());
+        assert!(uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr()).is_null());
+        abi::_cur_resfile_name = ptr::null();
+        assert!(uqm_rust::graphics::filegfx::LoadGraphicFile(c"missing.ani".as_ptr()).is_null());
+        assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
+        let font = uqm_rust::graphics::filegfx::LoadFontFile(c"font".as_ptr());
+        assert!(!font.is_null());
+        assert_eq!(((*font).Leading, (*font).LeadingWidth), (10, 4));
+        let page = (*font).fontPages;
+        for i in 0..(*page).numChars {
+            rust_hfree((*(*page).charDesc.add(i)).data.cast());
+        }
+        rust_hfree((*page).charDesc.cast());
+        rust_hfree(page.cast());
+        rust_hfree(font.cast());
+        assert!(ptr::addr_of!(abi::_cur_resfile_name).read().is_null());
         check_animation(c"frames.ani");
         check_animation(c"/animation/packed.ani");
         contentDir = saved_dir;

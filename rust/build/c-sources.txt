@@ -1,7 +1,6 @@
 sc2/src/libs/graphics/context.c
 sc2/src/libs/graphics/dcqueue.c
 sc2/src/libs/graphics/drawable.c
-sc2/src/libs/graphics/filegfx.c
 sc2/src/libs/graphics/font.c
 sc2/src/libs/graphics/frame.c
 sc2/src/libs/graphics/gfx_common.c

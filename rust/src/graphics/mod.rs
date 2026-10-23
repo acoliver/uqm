@@ -82,3 +82,5 @@ pub mod pixmap_abi;
 pub mod cmap_abi;
 
 pub mod gfxload;
+
+pub mod filegfx;
