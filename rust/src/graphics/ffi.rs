@@ -137,6 +137,8 @@ struct RustGraphicsState {
     presented_frame: Option<crate::automation::capture::PresentedFrame>,
     /// Number of frames actually presented by this backend instance.
     presentation_count: u64,
+    #[cfg(feature = "debug-process")]
+    native_display_bounds: Option<sdl2::rect::Rect>,
 }
 
 static RUST_GFX: GraphicsStateCell = GraphicsStateCell(UnsafeCell::new(None));
@@ -369,6 +371,8 @@ pub unsafe extern "C" fn rust_gfx_init(
         fullscreen,
         presented_frame: None,
         presentation_count: 0,
+        #[cfg(feature = "debug-process")]
+        native_display_bounds: None,
     };
 
     // Use the same software-scaler policy for allocation and presentation.
@@ -542,6 +546,13 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe extern "C" fn rust_gfx_postprocess() {
+    #[cfg(feature = "debug-process")]
+    if let Err(error) = video::sync_native_display_geometry() {
+        rust_bridge_log_msg(&format!(
+            "RUST_GFX_POSTPROCESS: display placement failed: {error}"
+        ));
+        std::process::exit(1);
+    }
     if let Some(state) = get_gfx_state() {
         if state.flags & (1 << 2) != 0 {
             if let Err(error) = video::scanlines(&mut state.canvas) {

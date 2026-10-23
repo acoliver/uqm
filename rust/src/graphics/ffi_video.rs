@@ -1,5 +1,33 @@
 //! Window reconfiguration without replacing the live screen surfaces.
 use super::*;
+#[cfg(feature = "debug-process")]
+fn display_geometry_changed(
+    previous: &mut Option<sdl2::rect::Rect>,
+    current: sdl2::rect::Rect,
+) -> bool {
+    let changed = previous.is_some_and(|bounds| bounds != current);
+    *previous = Some(current);
+    changed
+}
+
+#[cfg(feature = "debug-process")]
+pub(super) fn sync_native_display_geometry() -> Result<(), String> {
+    let Some(config) = crate::automation::native_window::active_native_window_config() else {
+        return Ok(());
+    };
+    let state = get_gfx_state().ok_or("native graphics not initialized")?;
+    let display = state.canvas.window().display_index()?;
+    let bounds = state.video.display_bounds(display)?;
+    if display_geometry_changed(&mut state.native_display_bounds, bounds) {
+        // Cocoa preserves bottom-left window coordinates across desktop-height
+        // changes. Native proof owns a fixed top-left client rectangle instead.
+        state.canvas.window_mut().set_position(
+            sdl2::video::WindowPos::Positioned(config.client_bounds.x),
+            sdl2::video::WindowPos::Positioned(config.client_bounds.y),
+        );
+    }
+    Ok(())
+}
 
 pub(crate) fn reconfigure_video(flags: c_int, width: c_int, height: c_int) -> Result<(), String> {
     if width <= 0 || height <= 0 {
@@ -62,6 +90,20 @@ pub(super) fn scanlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn native_placement_updates_only_when_the_desktop_geometry_changes() {
+        let original = sdl2::rect::Rect::new(0, 0, 1920, 1080);
+        let resized = sdl2::rect::Rect::new(0, 0, 1728, 1117);
+        let mut previous = None;
+        assert!(!display_geometry_changed(&mut previous, original));
+        assert!(!display_geometry_changed(&mut previous, original));
+        assert!(display_geometry_changed(&mut previous, resized));
+        assert!(!display_geometry_changed(&mut previous, resized));
+        assert!(display_geometry_changed(&mut previous, original));
+    }
+
     #[test]
     fn readback_reports_renderer_dimensions_instead_of_logical_dimensions() {
         let surface =
