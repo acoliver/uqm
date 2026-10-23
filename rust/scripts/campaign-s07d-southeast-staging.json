@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "campaign-s07d-sol-arrival",
+  "name": "campaign-s07d-southeast-staging",
   "start_save": {
     "path": "saves/war-cleared.sav",
     "slot": 0
@@ -8,7 +8,7 @@
   "budgets": {
     "max_input_ticks": 600000,
     "max_presentations": 1200000,
-    "max_wallclock_seconds": 7200
+    "max_wallclock_seconds": 1800
   },
   "seed": 1437213507,
   "steps": [
@@ -150,42 +150,8 @@
       "max_ticks": 18000
     },
     {
-      "action": "record_hyperspace_position"
-    },
-    {
-      "action": "tap_player_key",
-      "key": "thrust",
-      "value": 1,
-      "hold": 240,
-      "settle": 1
-    },
-    {
-      "action": "assert_hyperspace_displacement",
-      "minimum_logical_units": 1000
-    },
-    {
       "action": "fly_to_star",
       "target": "Alpha Draconis",
-      "max_ticks": 90000,
-      "retreat_encounters": false
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 18000
-    },
-    {
-      "action": "fly_to_star",
-      "target": "Alpha Delphini",
-      "max_ticks": 90000,
-      "retreat_encounters": false
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 18000
-    },
-    {
-      "action": "fly_to_star",
-      "target": "Sol",
       "max_ticks": 90000,
       "retreat_encounters": true
     },
@@ -195,12 +161,12 @@
         {
           "key": "star:current",
           "op": "eq",
-          "value": 82
+          "value": 420
         },
         {
           "key": "sis:crew",
           "op": "ge",
-          "value": 8
+          "value": 14
         },
         {
           "key": "sis:ru",
@@ -216,7 +182,7 @@
     },
     {
       "action": "capture",
-      "label": "connected-sol-arrival-after-southeast-departure"
+      "label": "connected-southeast-staging"
     },
     {
       "action": "wait_input_ticks",
@@ -297,7 +263,7 @@
     },
     {
       "action": "capture",
-      "label": "saved-connected-sol-arrival-slot-1"
+      "label": "saved-connected-southeast-staging-slot-1"
     },
     {
       "action": "finish"
