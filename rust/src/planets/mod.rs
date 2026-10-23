@@ -27,3 +27,5 @@ pub mod devices;
 pub mod cargo;
 
 pub mod report;
+
+pub mod roster;

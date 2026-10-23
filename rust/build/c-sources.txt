@@ -60,7 +60,6 @@ sc2/src/uqm/planets/pl_stuff.c
 sc2/src/uqm/planets/planets.c
 sc2/src/uqm/planets/plangen.c
 sc2/src/uqm/planets/pstarmap.c
-sc2/src/uqm/planets/roster.c
 sc2/src/uqm/planets/scan.c
 sc2/src/uqm/planets/solarsys.c
 sc2/src/uqm/process.c
