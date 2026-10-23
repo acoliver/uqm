@@ -67,6 +67,16 @@ dismisses and rehires a crew member, then departs with resource assertions.
 the battle to a result and returns to setup. The failure scenarios include
 `out-of-fuel-v1`, `lost-battle-v1` and `lander-destroyed-v1`.
 
+`out-of-fuel-v1` sells fuel down to 100 raw points, departs and holds thrust
+until the tank empties. It waits for `sis:fuel eq 0` and `hyper:stopped eq 1`
+within 400 ticks, then measures exactly zero logical displacement over 300 ticks
+with thrust still held. `hyper:stopped` reads the flight velocity published by
+the flagship's hyperspace postprocess; it is unavailable outside hyperspace or
+during conversation. The original `sis_hyper_preprocess` disables thrust at zero
+fuel and decelerates rather than stopping instantly. Sampling starts at the
+observed stop instead of after a fixed delay: a stranded ship attracts Melnorme,
+and the encounter transition deliberately moves it toward the contact.
+
 Campaign producer scripts save through the Game menu. Extract a checkpoint only
 from a passing producer run, naming the scenario and slot explicitly:
 

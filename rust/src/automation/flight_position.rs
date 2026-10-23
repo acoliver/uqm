@@ -361,6 +361,43 @@ mod tests {
     }
 
     #[test]
+    fn out_of_fuel_samples_after_observed_stop_without_relaxing_displacement() {
+        use crate::automation::script::{parse_script, Action};
+
+        let script = parse_script(
+            include_bytes!("../../scripts/out-of-fuel-v1.json"),
+            "out-of-fuel-v1.json",
+        )
+        .unwrap();
+        let record = script
+            .steps
+            .iter()
+            .position(|step| matches!(step, Action::RecordHyperspacePosition(_)))
+            .unwrap();
+        let Action::WaitForState(settle) = &script.steps[record - 1] else {
+            panic!("wait for the actual stop, not an arbitrary delay into a rescue encounter");
+        };
+        assert_eq!(settle.max_ticks, 400);
+        let expected = serde_json::from_str(
+            r#"{"all":[{"key":"sis:fuel","op":"eq","value":0},{"key":"hyper:stopped","op":"eq","value":1}]}"#,
+        )
+        .unwrap();
+        assert_eq!(settle.predicate, expected);
+        assert!(matches!(
+            &script.steps[record + 1],
+            Action::WaitInputTicks(wait) if wait.count == 300
+        ));
+        assert!(matches!(
+            &script.steps[record + 2],
+            Action::AssertHyperspaceStationary(check) if check.maximum_logical_units == 0
+        ));
+        assert!(!script.steps[..record + 3].iter().any(|step| matches!(
+            step,
+            Action::SetPlayerKey(input) if input.value == 0
+        )));
+    }
+
+    #[test]
     fn a_stationary_ship_is_rejected() {
         let mut tracker = FlightPositionTracker::default();
         tracker.record(hyperspace(), at(1752, 1450)).unwrap();

@@ -32,6 +32,8 @@ pub enum StateKey {
     StarCurrent,
     HyperX,
     HyperY,
+    /// Whether the hyperspace flight velocity has reached zero on both axes.
+    HyperStopped,
     StarmapCursorX,
     StarmapCursorY,
     /// `GLOBAL_SIS(FuelOnBoard)`, raw fuel points.
@@ -119,6 +121,7 @@ impl StateKey {
             "star:current" => Ok(Self::StarCurrent),
             "hyper:x" => Ok(Self::HyperX),
             "hyper:y" => Ok(Self::HyperY),
+            "hyper:stopped" => Ok(Self::HyperStopped),
             "starmap:cursor_x" => Ok(Self::StarmapCursorX),
             "starmap:cursor_y" => Ok(Self::StarmapCursorY),
             "escorts:count" => Ok(Self::EscortCount),
@@ -138,7 +141,7 @@ impl StateKey {
             "battle:ships_p2" => Ok(Self::BattleShipsP2),
             _ => Err(format!(
                 "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
-                 date:day|month|year, star:current, hyper:x|y, starmap:cursor_x|cursor_y, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
+                 date:day|month|year, star:current, hyper:x|y|stopped, starmap:cursor_x|cursor_y, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
             )),
         }
     }
@@ -166,7 +169,10 @@ impl StateKey {
             | Self::SisDrive(_)
             | Self::SisJet(_)
             | Self::SisModule(_) => u32::from(u8::MAX),
-            Self::FlagshipDestroyed | Self::CyborgEnabled | Self::EncounterMenu => 1,
+            Self::FlagshipDestroyed
+            | Self::CyborgEnabled
+            | Self::EncounterMenu
+            | Self::HyperStopped => 1,
             Self::CombatSpeed => 3,
             Self::EscortCount | Self::EscortSpecies(_) => 12,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
@@ -414,6 +420,7 @@ impl StateSource for LiveCampaign {
             StateKey::HyperY => {
                 input_ffi::hyperspace_position().and_then(|(_, y)| u32::try_from(y).ok())
             }
+            StateKey::HyperStopped => input_ffi::hyperspace_stopped().map(u32::from),
             StateKey::Story(name) => crate::state::ffi::named_state_value(name).map(u32::from),
             StateKey::Activity => Some(u32::from(crate::mainloop::ffi::get_current_activity().0)),
             StateKey::SisDrive(slot) => input_ffi::sis_fittings()
@@ -575,6 +582,7 @@ mod tests {
                 StateKey::StarCurrent => "star:current",
                 StateKey::HyperX => "hyper:x",
                 StateKey::HyperY => "hyper:y",
+                StateKey::HyperStopped => "hyper:stopped",
                 StateKey::StarmapCursorX => "starmap:cursor_x",
                 StateKey::StarmapCursorY => "starmap:cursor_y",
                 StateKey::EscortCount => "escorts:count",
@@ -656,6 +664,7 @@ mod tests {
             ("star:current", 501),
             ("hyper:x", i32::MAX as u32),
             ("hyper:y", i32::MAX as u32),
+            ("hyper:stopped", 1),
             ("starmap:cursor_x", 9999),
             ("starmap:cursor_y", 9999),
         ] {
@@ -678,6 +687,19 @@ mod tests {
             };
             assert!(too_wide.validate().is_err());
         }
+    }
+
+    #[test]
+    fn stopped_wait_requires_empty_tank_and_observed_zero_velocity() {
+        let stopped = predicate(
+            r#"{"all":[{"key":"sis:fuel","op":"eq","value":0},{"key":"hyper:stopped","op":"eq","value":1}]}"#,
+        );
+        stopped.validate().unwrap();
+        assert!(!evaluate(&stopped, &fake(&[("sis:fuel", 0)])).held);
+        assert!(!evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 0)])).held);
+        assert!(!evaluate(&stopped, &fake(&[("sis:fuel", 1), ("hyper:stopped", 1)])).held);
+        assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
+        assert_eq!(LiveCampaign.read(StateKey::HyperStopped), None);
     }
 
     #[test]
