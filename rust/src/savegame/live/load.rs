@@ -11,7 +11,6 @@ use crate::planets::c_api::GLOB_DATA;
 pub static mut NextActivity: u16 = 0;
 
 extern "C" {
-    fn LoadLegacyGame(slot: u16, summary: *mut SummaryDesc) -> u32;
     fn FindStar(
         last: *mut std::ffi::c_void,
         point: *mut crate::comm::dispatch::CPoint,
@@ -80,7 +79,7 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         let slots = SaveSlots::new(saveDir)?;
         // C tries the old filename when opening or decoding the summary fails.
         let Ok(saved_summary) = slots.read_summary(usize::from(slot)) else {
-            return if LoadLegacyGame(slot, summary) != 0 {
+            return if super::super::legacy::LoadLegacyGame(slot, summary) != 0 {
                 Ok(())
             } else {
                 anyhow::bail!("no readable save in slot {slot}")

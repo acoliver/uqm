@@ -8,6 +8,7 @@ pub mod decode;
 pub mod encode;
 pub mod error;
 pub mod format;
+pub mod legacy;
 #[cfg(not(test))]
 mod live;
 pub mod lzh;
@@ -27,3 +28,6 @@ pub use encode::encode_save;
 pub use error::{EncodeError, SaveFormatError, SaveNameError, Section, SlotError};
 pub use slots::{SaveSlots, SlotState};
 pub use types::*;
+
+#[cfg(test)]
+mod legacy_tests;

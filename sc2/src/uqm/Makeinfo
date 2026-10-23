@@ -4,7 +4,6 @@ uqm_CFILES="   cleanup.c
 		   fmv.c
 		gameinp.c gameopt.c getchar.c
 		cons_res.c init.c intro.c
-		load_legacy.c
 		menu.c outfit.c
 		 restart.c  setup.c setupmenu.c
 		 shipstat.c shipyard.c sis.c starbase.c starcon.c
