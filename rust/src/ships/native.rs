@@ -61,24 +61,9 @@ pub mod abi {
         rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn frameInputHuman(
-        context: *mut HumanInputContext,
-        ship: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE {
-        extern "C" {
-            #[link_name = "frameInputHuman"]
-            fn legacy(context: *mut std::ffi::c_void, ship: *mut std::ffi::c_void) -> u32;
-        }
-        legacy(context.cast(), ship.cast()) as BATTLE_INPUT_STATE
-    }
+    pub use crate::battle::battle_native::frameInputHuman;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
-        extern "C" {
-            #[link_name = "FleetIsInfinite"]
-            fn legacy(player: u16) -> i32;
-        }
-        legacy(player) as BOOLEAN
-    }
+    pub use crate::battle::encount_native::FleetIsInfinite;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::galaxy::MoveGalaxy;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
@@ -88,29 +73,9 @@ pub mod abi {
         CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
     };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyComputer(context: *mut ComputerInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyComputer"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyHuman(context: *mut HumanInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyHuman"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyNetwork"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
+    pub use crate::battle::tactrans_native::{
+        battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
+    };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::world_elements::do_damage;
     pub use crate::math::TFB_SeedRandom;
