@@ -18,8 +18,8 @@ use super::teardown;
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 pub fn run_uqm(argc: c_int, argv: *mut *mut std::os::raw::c_char) -> c_int {
-    // Phase 1: C init sequence (option parsing, config, subsystems)
-    let init_result = unsafe { c_main_extern::uqm_c_do_init(argc, argv) };
+    // Initialize subsystems using the Rust-parsed configuration.
+    let init_result = unsafe { c_main_extern::initialize(argc, argv) };
 
     if init_result != 0 {
         // -1 means version/usage was printed (clean early exit)

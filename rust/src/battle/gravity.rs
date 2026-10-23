@@ -13,8 +13,11 @@ use std::os::raw::{c_int, c_void};
 // ---------------------------------------------------------------------------
 
 extern "C" {
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     fn uqm_get_head_element() -> HElement;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     fn uqm_wrap_delta_x(dx: i16) -> i16;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     fn uqm_wrap_delta_y(dy: i16) -> i16;
 
     // Graphics intersection — real C functions
@@ -28,6 +31,26 @@ extern "C" {
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
     fn SetEquFrameIndex(dst_frame: *const c_void, src_frame: *const c_void) -> *const c_void;
+}
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+unsafe fn uqm_get_head_element() -> HElement {
+    (crate::mainloop::main2_abi::uqm_get_head_element()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+unsafe fn uqm_wrap_delta_x(dx: i16) -> i16 {
+    (crate::mainloop::main2_abi::uqm_wrap_delta_x(dx as _)) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+unsafe fn uqm_wrap_delta_y(dy: i16) -> i16 {
+    (crate::mainloop::main2_abi::uqm_wrap_delta_y(dy as _)) as _
 }
 
 // ---------------------------------------------------------------------------

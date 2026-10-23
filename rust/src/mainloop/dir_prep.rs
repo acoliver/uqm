@@ -165,7 +165,7 @@ extern "C" {
 }
 
 /// Maximum path length, matching C's PATH_MAX on macOS.
-const PATH_MAX: usize = 4096;
+const PATH_MAX: usize = libc::PATH_MAX as usize;
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
