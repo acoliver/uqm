@@ -209,6 +209,7 @@ pub(crate) mod engine {
             (*primitive(e)).color = rgb15(0x0b, 0, 0);
             (*primitive(e)).Type = gfx_object_STAMPFILL_PRIM as u8;
             (*ship).ship_input_state = 0;
+            crate::automation::ui_observation::record_ship_escape();
         }
     }
 

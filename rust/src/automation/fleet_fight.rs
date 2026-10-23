@@ -23,6 +23,7 @@ pub struct Observation {
     pub flagship_crew: Option<u16>,
     pub picker: Option<Picker>,
     pub encounter_menu: bool,
+    pub escape_generation: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -144,6 +145,7 @@ mod tests {
             flagship_crew: Some(46),
             picker: None,
             encounter_menu: false,
+            escape_generation: 0,
         }
     }
 
@@ -268,6 +270,197 @@ mod tests {
         assert!(matches!(
             FleetFight::default().observe(1, obs([5, 2])),
             Progress::Failed(_)
+        ));
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct FleetRetreat {
+    ticks: u64,
+    started: bool,
+    escape_pressed: bool,
+    preview_ticks: u64,
+    enemy_left: u8,
+    escape_baseline: Option<u64>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RetreatProgress {
+    Input { menu: Option<MenuKey>, escape: bool },
+    Escaped(String),
+    Failed(String),
+}
+
+impl FleetRetreat {
+    pub fn observe(&mut self, max_ticks: u64, obs: Observation) -> RetreatProgress {
+        use RetreatProgress::*;
+        let baseline = *self.escape_baseline.get_or_insert(obs.escape_generation);
+        self.ticks += 1;
+        if obs
+            .flagship_crew
+            .is_none_or(|crew| crew == 0 || crew == u16::MAX)
+            || obs.activity & (0x1000 | 0x2000 | 0x4000) != 0
+        {
+            return Failed("fleet_retreat_flagship_lost_or_aborted".into());
+        }
+        if self.ticks >= max_ticks {
+            return Failed("fleet_retreat_timeout".into());
+        }
+        if !self.started && obs.encounter_menu {
+            self.preview_ticks += 1;
+            return Input {
+                menu: match self.preview_ticks {
+                    3 => Some(MenuKey::Down),
+                    7 => Some(MenuKey::Select),
+                    _ => None,
+                },
+                escape: false,
+            };
+        }
+        if obs.activity & 0x0200 == 0 || obs.activity & 0xff != 2 {
+            return if self.started
+                && self.escape_pressed
+                && obs.escape_generation > baseline
+                && self.enemy_left > 0
+                && matches!(obs.activity & 0xff, 3 | 4)
+            {
+                Escaped(format!(
+                    "fleet_escaped:enemy_initial={}:flagship_crew={}:ticks={}",
+                    self.enemy_left,
+                    obs.flagship_crew.unwrap(),
+                    self.ticks
+                ))
+            } else {
+                Input {
+                    menu: None,
+                    escape: false,
+                }
+            };
+        }
+        self.started = true;
+        self.enemy_left = self.enemy_left.max(obs.counters[1]);
+        if let Some(picker) = obs.picker {
+            let target = Cursor::START;
+            let menu = if self.ticks % 4 != 1 {
+                None
+            } else if picker.cursor.x < target.x {
+                Some(MenuKey::Right)
+            } else if picker.cursor.x > target.x {
+                Some(MenuKey::Left)
+            } else if picker.cursor.y != target.y {
+                Some(MenuKey::Down)
+            } else {
+                Some(MenuKey::Select)
+            };
+            return Input {
+                menu,
+                escape: false,
+            };
+        }
+        self.escape_pressed = true;
+        Input {
+            menu: None,
+            escape: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod retreat_tests {
+    use super::*;
+    fn obs(activity: u16) -> Observation {
+        Observation {
+            activity,
+            cyborg: true,
+            speed: 1,
+            counters: [4, 2],
+            flagship_crew: Some(32),
+            picker: None,
+            encounter_menu: false,
+            escape_generation: 0,
+        }
+    }
+    #[test]
+    fn encounter_handoff_waits_but_cannot_outlive_its_budget() {
+        let mut retreat = FleetRetreat::default();
+        assert!(matches!(
+            retreat.observe(3, obs(2)),
+            RetreatProgress::Input { escape: false, .. }
+        ));
+        assert!(matches!(
+            retreat.observe(3, obs(2)),
+            RetreatProgress::Input { escape: false, .. }
+        ));
+        assert!(matches!(
+            retreat.observe(3, obs(2)),
+            RetreatProgress::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn flagship_picker_does_not_send_escape_before_selection() {
+        let mut retreat = FleetRetreat::default();
+        let mut selecting = obs(0x202);
+        selecting.picker = Some(Picker {
+            generation: 1,
+            cursor: Cursor::START,
+            escorts: vec![0, 1],
+        });
+        assert_eq!(
+            retreat.observe(100, selecting),
+            RetreatProgress::Input {
+                menu: Some(MenuKey::Select),
+                escape: false
+            }
+        );
+        let mut battle = obs(0x202);
+        battle.counters[1] = 0;
+        assert!(matches!(
+            retreat.observe(100, battle),
+            RetreatProgress::Input { escape: true, .. }
+        ));
+        let mut returned = obs(0x203);
+        returned.escape_generation = 1;
+        assert!(matches!(
+            retreat.observe(100, returned),
+            RetreatProgress::Escaped(_)
+        ));
+    }
+
+    #[test]
+    fn retreat_requires_escape_input_living_flagship_and_surviving_enemy() {
+        let mut retreat = FleetRetreat::default();
+        assert!(matches!(
+            retreat.observe(100, obs(0x202)),
+            RetreatProgress::Input { escape: true, .. }
+        ));
+        let mut returned = obs(3);
+        assert!(matches!(
+            retreat.observe(100, returned.clone()),
+            RetreatProgress::Input { .. }
+        ));
+        returned.escape_generation = 1;
+        assert!(matches!(
+            retreat.observe(100, returned),
+            RetreatProgress::Escaped(_)
+        ));
+        assert!(matches!(
+            FleetRetreat::default().observe(1, obs(3)),
+            RetreatProgress::Failed(_)
+        ));
+        let mut dead = obs(0x202);
+        dead.flagship_crew = Some(u16::MAX);
+        assert!(matches!(
+            FleetRetreat::default().observe(100, dead),
+            RetreatProgress::Failed(_)
+        ));
+        let mut win = obs(0x202);
+        win.counters[1] = 0;
+        let mut retreat = FleetRetreat::default();
+        retreat.observe(100, win);
+        assert!(matches!(
+            retreat.observe(1, obs(3)),
+            RetreatProgress::Failed(_)
         ));
     }
 }

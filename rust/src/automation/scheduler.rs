@@ -3555,6 +3555,13 @@ mod budgeted_wait_tests {
                 encounter_response: None,
             }),
             Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
+                retreat_encounters: false,
+                target: crate::automation::star_flight::StarTarget::resolve("Alpha Centauri")
+                    .unwrap(),
+                max_ticks,
+            }),
+            Action::FlyToStar(crate::automation::star_flight::FlyToStarStep {
+                retreat_encounters: true,
                 target: crate::automation::star_flight::StarTarget::resolve("Alpha Centauri")
                     .unwrap(),
                 max_ticks,

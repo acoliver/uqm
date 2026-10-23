@@ -882,7 +882,7 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 pub(crate) fn star_flight_observation(
     target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
-    use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
+    use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
     extern "C" {
         static CurStarDescPtr: *const CStarDesc;
         fn universeToDispx(x: std::ffi::c_long) -> i16;
@@ -896,9 +896,8 @@ pub(crate) fn star_flight_observation(
         let base = std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY) as usize;
         let offset = current.wrapping_sub(base);
         let entry_size = std::mem::size_of::<CStarDesc>();
-        let current_star = (offset < NUM_SOLAR_SYSTEMS * entry_size
-            && offset.is_multiple_of(entry_size))
-        .then_some((offset / entry_size) as u16);
+        let current_star = (offset < CATALOG_LEN * entry_size && offset.is_multiple_of(entry_size))
+            .then_some((offset / entry_size) as u16);
         let cursor = crate::planets::starmap_cursor::cursor();
         let (tx, ty) = target.coordinates();
         let cursor_delta = cursor.map_or((0, 0), |(x, y)| {
@@ -911,6 +910,10 @@ pub(crate) fn star_flight_observation(
         super::star_flight::Observation {
             activity: crate::mainloop::ffi::get_current_activity().0,
             current_star,
+            space_side: crate::state::ffi::named_state_value("ARILOU_SPACE_SIDE")
+                .expect("initialized state"),
+            conversation_active: crate::automation::ui_observation::conversation_snapshot().active,
+            portal_open: crate::state::ffi::named_state_value("ARILOU_SPACE") == Some(1),
             solar_active: departure_snapshot().active != 0,
             cursor,
             cursor_delta,
@@ -995,6 +998,7 @@ pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
         flagship_crew: sis_crew_and_landers().map(|(crew, _)| crew),
         picker,
         encounter_menu: super::ui_observation::encounter_menu_active(),
+        escape_generation: super::ui_observation::ship_escape_generation(),
     }
 }
 
