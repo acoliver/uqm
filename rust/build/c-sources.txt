@@ -14,5 +14,4 @@ sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
 sc2/src/uqm/starcon.c
 sc2/src/uqm/supermelee/melee.c
-sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/uqmdebug.c
