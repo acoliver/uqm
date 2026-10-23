@@ -87,6 +87,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "south-refueled" => (4, 2, 2156, 32, 21000, 115, 4),
             "dev-shattered-knowledge" => (6, 4, 2156, 32, 12880, 115, 4),
             "dev-syreen-shuttle" => (22, 5, 2156, 31, 7036, 115, 4),
+            "dev-vault-open" => (7, 6, 2156, 29, 5141, 115, 4),
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "repaired-ultron" => (4, 4, 2156, 32, 12880, 115, 4),
             "north-refueled" => (6, 9, 2155, 43, 21000, 115, 4),

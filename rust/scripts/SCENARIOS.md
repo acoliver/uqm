@@ -107,3 +107,10 @@ Phrase-based dialogue presents the proof and earns `SYREEN_KNOW_ABOUT_MYCON`,
 checkpoint. Neither save claims connected campaign ancestry. Use
 `prepare_mid_segment.py --start-save` to substitute the campaign's earned
 ancestor while retaining the scripts' story/resource preconditions.
+
+`campaign-s09c-syreen-vault` starts from `dev-syreen-shuttle.sav` and flies to
+Epsilon Camelopardalis I-a. The lander uses the shuttle at the vault, which
+remains on the surface: completion requires a fresh vault unlock and shuttle
+consumption on the same trip. Native `pmid-20` passed and saved slot 1;
+`dev-vault-open.sav` is its development output. This subsegment stops before
+returning to Talana and does not prove `MYCON_AMBUSH`.

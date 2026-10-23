@@ -250,6 +250,25 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 })
         }
         Action::CollectEnergyNode(_) => {
+            if label.starts_with("energy_vault_unlocked:") {
+                return shape(
+                    label,
+                    "energy_vault_unlocked",
+                    &[
+                        "generation=",
+                        "node=",
+                        "vault_before=",
+                        "vault_after=",
+                        "shuttle_before=",
+                        "shuttle_after=",
+                    ],
+                ) && at_least(label, "generation=", 1)
+                    && number(label, "node=") == Some(0)
+                    && number(label, "vault_before=") == Some(0)
+                    && number(label, "vault_after=") == Some(1)
+                    && number(label, "shuttle_before=") == Some(1)
+                    && number(label, "shuttle_after=") == Some(0);
+            }
             shape(
                 label,
                 "energy_node_collected",
@@ -886,6 +905,26 @@ mod tests {
             4,
             "flagship_turn_overshot:direction=right:facings=4:turned=5"
         ));
+    }
+
+    #[test]
+    fn vault_proof_requires_fresh_unlock_consumption_and_the_vault_node() {
+        let action =
+            Action::CollectEnergyNode(super::super::story_actions::CollectEnergyNodeStep {
+                max_ticks: 50,
+            });
+        let good = "energy_vault_unlocked:generation=3:node=0:vault_before=0:vault_after=1:shuttle_before=1:shuttle_after=0";
+        assert!(semantic_satisfied(&action, good));
+        for bad in [
+            good.replace("generation=3", "generation=0"),
+            good.replace("node=0", "node=1"),
+            good.replace("vault_before=0", "vault_before=1"),
+            good.replace("vault_after=1", "vault_after=0"),
+            good.replace("shuttle_before=1", "shuttle_before=0"),
+            good.replace("shuttle_after=0", "shuttle_after=1"),
+        ] {
+            assert!(!semantic_satisfied(&action, &bad), "{bad}");
+        }
     }
 
     #[test]
