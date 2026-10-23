@@ -2,3 +2,4 @@
 pub mod credits;
 pub mod fmv;
 pub mod intro;
+pub mod gameopt;
