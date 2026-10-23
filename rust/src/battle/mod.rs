@@ -23,6 +23,8 @@ pub mod sounds;
 pub mod tactical;
 pub mod velocity;
 pub mod weapon;
+pub mod weapon_native;
+pub mod world_elements;
 
 pub use ai::*;
 pub use battle_types::*;

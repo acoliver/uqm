@@ -58,7 +58,6 @@ sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
 sc2/src/uqm/loadship.c
 sc2/src/uqm/menu.c
-sc2/src/uqm/misc.c
 sc2/src/uqm/oscill.c
 sc2/src/uqm/outfit.c
 sc2/src/uqm/planets/cargo.c
@@ -98,4 +97,3 @@ sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/tactrans.c
 sc2/src/uqm/uqmdebug.c
 sc2/src/uqm/util.c
-sc2/src/uqm/weapon.c

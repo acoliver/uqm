@@ -359,6 +359,7 @@ fn generate_ship_abi_bindings() -> Result<(), String> {
         .allowlist_type("(MASTER_SHIP_INFO|ComputerInputContext|SoundPosition)")
         .allowlist_function("(tactical_intelligence|CurrentInputToBattleInput|SleepThread|ChannelPlaying|GetPositionalObject|SetPositionalObject|UpdateSoundPosition|PlaySoundEffect|GetStringAddress|InitQueue|UninitQueue|GetStarShipFromIndex|ReleaseDrawable|DestroyDrawable|ReleaseStringTable|DestroyStringTable|DrawablesIntersect|SetContext|DrawStamp|InitShipStatus|animation_preprocess|AllocDisplayPrim|InsertPrim|inHQSpace)")
         .allowlist_var("(PlayerControl|IN_LAST_BATTLE|SUPER_MELEE|CYBORG_CONTROL|PSYTRON_CONTROL|RPG_PLAYER_NUM|BATTLE_ESCAPE|BATTLE_WEAPON|ONE_SECOND|DisplayArray|FIRST_SFX_CHANNEL|LAST_SFX_CHANNEL|MIN_FX_CHANNEL|NUM_FX_CHANNELS|GAME_SOUND_PRIORITY|stars_in_space|status_y_offsets|StatusContext|VIEW_.*|TFB_SCALE_STEP|optMeleeScale|MAX_REDUCTION|MAX_VIS_REDUCTION|BACKGROUND_SHIFT|ZOOM_SHIFT|MAX_ZOOM_OUT|MAX_TIME_VALUE|NO_PRIM|MODIFY_SWAP|TARGET_DAMAGED_.*|GRAB_CREW)")
+        .blocklist_function("(initialize_missile|initialize_laser|TrackShip|weapon_collision|ModifySilhouette|AbandonShip|ProcessSound)")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate_comments(false)
         .layout_tests(true)
