@@ -15,39 +15,39 @@ impl SavedState {
     unsafe fn snapshot() -> Self {
         let pointer = super::SysGenRNG;
         assert!(!pointer.is_null());
-        let global_seed = math::TFB_SeedRandom(1);
-        math::TFB_SeedRandom(global_seed);
+        let global_seed = math::seed_random(1);
+        math::seed_random(global_seed);
         Self {
             pointer,
-            system_seed: math::RandomContext_GetSeed(pointer),
+            system_seed: (*pointer).seed(),
             global_seed,
             screen: super::ScreenWidth,
         }
     }
     fn draws(&self) -> [u32; 8] {
-        let draws = std::array::from_fn(|_| math::TFB_Random());
-        math::TFB_SeedRandom(self.global_seed);
+        let draws = std::array::from_fn(|_| math::random());
+        math::seed_random(self.global_seed);
         draws
     }
     unsafe fn check(&self, expected: [u32; 8]) {
         let pointer = super::SysGenRNG;
         let screen = super::ScreenWidth;
         assert_eq!(pointer, self.pointer, "SysGenRNG pointer changed");
-        assert_eq!(math::RandomContext_GetSeed(self.pointer), self.system_seed);
+        assert_eq!((*self.pointer).seed(), self.system_seed);
         assert_eq!(screen, self.screen);
-        let current_seed = math::TFB_SeedRandom(self.global_seed);
+        let current_seed = math::seed_random(self.global_seed);
         assert_eq!(current_seed, self.global_seed, "TFB global seed changed");
-        assert_eq!(self.draws(), expected, "TFB_Random stream changed");
+        assert_eq!(self.draws(), expected, "random stream changed");
     }
 }
 impl Drop for SavedState {
     fn drop(&mut self) {
         unsafe {
             super::SysGenRNG = self.pointer;
-            math::RandomContext_SeedRandom(self.pointer, self.system_seed);
+            (*self.pointer).reseed(self.system_seed);
             super::ScreenWidth = self.screen;
         }
-        math::TFB_SeedRandom(self.global_seed);
+        math::seed_random(self.global_seed);
     }
 }
 

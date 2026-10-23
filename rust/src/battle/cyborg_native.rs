@@ -393,7 +393,7 @@ mod engine {
             return 0;
         }
         if delta == angle_to_facing(HALF_CIRCLE as i32) as u16 {
-            delta = break_opposite_facing_tie(delta, || TFB_Random());
+            delta = break_opposite_facing_tie(delta, TFB_Random);
         }
         let mut f = i32::from(facing);
         if delta < angle_to_facing(HALF_CIRCLE as i32) as u16 {

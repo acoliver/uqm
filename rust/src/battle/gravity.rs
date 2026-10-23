@@ -4,7 +4,7 @@
 
 use super::battle_types::{cosine, sine};
 use super::element::{Element, ElementFlags, HElement};
-use crate::math::ARCTAN;
+use crate::math::arctan;
 
 use std::os::raw::{c_int, c_void};
 
@@ -209,7 +209,7 @@ pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
             break;
         } else {
             // Apply gravitational pull to the test element
-            let angle = ARCTAN(dx, dy);
+            let angle = arctan(dx, dy);
             let world_vel = 1i32 << VELOCITY_SHIFT; // WORLD_TO_VELOCITY(1)
 
             unsafe {

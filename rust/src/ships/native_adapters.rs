@@ -63,7 +63,7 @@ mod live {
     operation!(rust_bridge_FACING_TO_ANGLE(value: u16) -> u16 { value.wrapping_shl(2) });
     operation!(rust_bridge_SINE(angle: u16, magnitude: i16) -> i32 { i32::from(sine(i32::from(angle), i32::from(magnitude))) });
     operation!(rust_bridge_COSINE(angle: u16, magnitude: i16) -> i32 { i32::from(cosine(i32::from(angle), i32::from(magnitude))) });
-    operation!(rust_bridge_ARCTAN(dx: i32, dy: i32) -> u16 { crate::math::ARCTAN(dx as i16, dy as i16) });
+    operation!(rust_bridge_ARCTAN(dx: i32, dy: i32) -> u16 { crate::math::arctan(dx as i16, dy as i16) });
     operation!(rust_bridge_WRAP_X(value: i32) -> i32 { i32::from(wrap(value, width())) });
     operation!(rust_bridge_WRAP_Y(value: i32) -> i32 { i32::from(wrap(value, height())) });
     operation!(rust_bridge_CollidingElement(element: *mut ELEMENT) -> u32 { u32::from((*element).state_flags & (NONSOLID | DISAPPEARING) as u16 == 0) });
@@ -110,12 +110,12 @@ mod live {
             (*element).current.location.y = (height() >> 1) as i16;
             (*element).__bindgen_anon_1.life_span += 1;
         } else {
-            (*ship).ShipFacing = normalize_facing(i32::from(crate::math::TFB_Random() as u16));
+            (*ship).ShipFacing = normalize_facing(i32::from(crate::math::random() as u16));
             if inHQSpace() != 0 { (*ship).ShipFacing = crate::navigation::globals::GlobData.Game_state.ShipFacing.saturating_sub(1); }
             (*element).current.image.frame = SetAbsFrameIndex(*frames, (*ship).ShipFacing);
             loop {
-                (*element).current.location.x = wrap(((i32::from(crate::math::TFB_Random() as u16) % width()) as i16 & !3) as i32, width()) as i16;
-                (*element).current.location.y = wrap(((i32::from(crate::math::TFB_Random() as u16) % height()) as i16 & !3) as i32, height()) as i16;
+                (*element).current.location.x = wrap(((i32::from(crate::math::random() as u16) % width()) as i16 & !3) as i32, width()) as i16;
+                (*element).current.location.y = wrap(((i32::from(crate::math::random() as u16) % height()) as i16 & !3) as i32, height()) as i16;
                 if CalculateGravity(element) == 0 && TimeSpaceMatterConflict(element) == 0 { break; }
             }
         }

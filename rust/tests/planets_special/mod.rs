@@ -73,7 +73,7 @@ impl Harness {
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
             rust_init_game_state();
-            SysGenRNG = uqm_rust::math::RandomContext_New();
+            SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
@@ -92,11 +92,11 @@ impl Harness {
     }
 
     fn seed(&self, seed: u32) {
-        unsafe { uqm_rust::math::RandomContext_SeedRandom(SysGenRNG, seed) };
+        unsafe { (*SysGenRNG).reseed(seed) };
     }
 
     fn rng_position(&self) -> u32 {
-        unsafe { uqm_rust::math::RandomContext_GetSeed(SysGenRNG) }
+        unsafe { (*SysGenRNG).seed() }
     }
 
     /// The C `generatePlanets` slot: planet table, drawn count, RNG position.

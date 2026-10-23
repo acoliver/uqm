@@ -93,7 +93,7 @@ mod live {
             unsafe { usingSpeech != 0 }
         }
         fn random(&mut self) -> u32 {
-            crate::math::TFB_Random()
+            crate::math::random()
         }
         fn talking_animation(&mut self, enabled: bool) {
             unsafe {

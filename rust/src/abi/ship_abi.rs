@@ -1,5 +1,13 @@
 // Shared engine records used by the Rust runtime.
 
+pub use crate::math::{
+    RandomContext,
+    arctan as ARCTAN,
+    random as TFB_Random,
+    sinetab,
+    square_root,
+};
+
 pub const CONTENTDIR: &[u8; 13] = b"/uqm/content\0";
 pub const USERDIR: &[u8; 8] = b"~/.uqm/\0";
 pub const CONFIGDIR: &[u8; 8] = b"~/.uqm/\0";
@@ -1118,17 +1126,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn UninitShips();
 }
-unsafe extern "C" {
-    pub fn TFB_Random() -> DWORD;
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct RandomContext {
-    _unused: [u8; 0],
-}
-unsafe extern "C" {
-    pub fn square_root(value: DWORD) -> COUNT;
-}
+
 pub type SOUND_REF = STRING_TABLE;
 pub type SOUND = STRING;
 #[repr(C)]
@@ -1380,12 +1378,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut ScreenHeight: ::std::os::raw::c_int;
 }
-unsafe extern "C" {
-    pub static mut sinetab: [SIZE; 0usize];
-}
-unsafe extern "C" {
-    pub fn ARCTAN(delta_x: SIZE, delta_y: SIZE) -> COUNT;
-}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct velocity_desc {

@@ -2,7 +2,7 @@
 use super::*;
 use crate::graphics::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
 use crate::graphics::resgfx::LoadGraphicInstance;
-use crate::math::{RandomContext_Delete, RandomContext_New};
+use crate::math::{delete_context as RandomContext_Delete, new_context as RandomContext_New};
 use crate::sound::{heart_ffi::DestroyMusic, resource_types::LoadMusicInstance};
 use crate::strings::sresins::LoadStringTableInstance;
 use crate::strings::string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable};

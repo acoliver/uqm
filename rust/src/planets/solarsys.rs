@@ -37,7 +37,7 @@ static mut SOLAR_SYS_FRAME: *mut c::FRAME_DESC = ptr::null_mut();
 #[no_mangle]
 pub static mut EncounterGroup: c::BYTE = 0;
 #[no_mangle]
-pub static mut SysGenRNG: *mut c_void = ptr::null_mut();
+pub static mut SysGenRNG: *mut crate::math::RandomContext = ptr::null_mut();
 
 #[no_mangle]
 pub extern "C" fn locationToDisplay(pt: c::POINT, scale_radius: c::SIZE) -> c::POINT {

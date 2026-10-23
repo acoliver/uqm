@@ -1,5 +1,16 @@
 // Shared engine records used by the Rust runtime.
 
+pub use crate::math::{
+    RandomContext,
+    arctan as ARCTAN,
+    delete_context as RandomContext_Delete,
+    new_context as RandomContext_New,
+    random as TFB_Random,
+    seed_random as TFB_SeedRandom,
+    sinetab,
+    square_root,
+};
+
 #[repr(C)]
 #[derive(Default)]
 pub struct __IncompleteArrayField<T>(::std::marker::PhantomData<T>, [T; 0]);
@@ -4285,38 +4296,7 @@ extern "C" {
 extern "C" {
     pub fn SetGlobalOptions(opts: *mut GLOBALOPTS);
 }
-extern "C" {
-    pub fn TFB_SeedRandom(seed: DWORD) -> DWORD;
-}
-extern "C" {
-    pub fn TFB_Random() -> DWORD;
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct RandomContext {
-    _unused: [u8; 0],
-}
-extern "C" {
-    pub fn RandomContext_New() -> *mut RandomContext;
-}
-extern "C" {
-    pub fn RandomContext_Delete(context: *mut RandomContext);
-}
-extern "C" {
-    pub fn RandomContext_Copy(source: *const RandomContext) -> *mut RandomContext;
-}
-extern "C" {
-    pub fn RandomContext_Random(context: *mut RandomContext) -> DWORD;
-}
-extern "C" {
-    pub fn RandomContext_SeedRandom(context: *mut RandomContext, new_seed: DWORD) -> DWORD;
-}
-extern "C" {
-    pub fn RandomContext_GetSeed(context: *mut RandomContext) -> DWORD;
-}
-extern "C" {
-    pub fn square_root(value: DWORD) -> COUNT;
-}
+
 pub const PlanetScanTypes_MINERAL_SCAN: PlanetScanTypes = 0;
 pub const PlanetScanTypes_ENERGY_SCAN: PlanetScanTypes = 1;
 pub const PlanetScanTypes_BIOLOGICAL_SCAN: PlanetScanTypes = 2;
@@ -4625,12 +4605,7 @@ extern "C" {
 extern "C" {
     pub static mut ScreenHeight: ::std::os::raw::c_int;
 }
-extern "C" {
-    pub static mut sinetab: [SIZE; 0usize];
-}
-extern "C" {
-    pub fn ARCTAN(delta_x: SIZE, delta_y: SIZE) -> COUNT;
-}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LIFEFORM_DESC {

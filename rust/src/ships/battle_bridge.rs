@@ -239,9 +239,6 @@ extern "C" {
         p1: *mut c_void,
     ) -> HElement;
 
-    // RNG
-    fn TFB_Random() -> u32;
-
     // Frame operations (real C functions)
     fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
     fn IncFrameIndex(frame: Frame) -> Frame;
@@ -677,7 +674,7 @@ pub mod bridge {
     }
 
     pub fn random() -> u32 {
-        unsafe { TFB_Random() }
+        crate::math::random()
     }
     /// # Safety
     ///

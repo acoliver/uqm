@@ -8,7 +8,7 @@ pub(super) trait MyconApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl MyconApi for super::super::script::live::LiveScript<Handler> {
     fn random(&mut self) -> u32 {
-        crate::math::TFB_Random()
+        crate::math::random()
     }
 }
 

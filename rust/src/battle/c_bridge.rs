@@ -15,6 +15,7 @@
 //! # C Reference
 //! `sc2/src/uqm/process.c`, `sc2/src/libs/graphics/*.c`, `sc2/src/libs/sound/*.c`
 
+pub use crate::math::seed_random as TFB_SeedRandom;
 use std::os::raw::{c_int, c_void};
 
 use super::element::{Element, Point};
@@ -216,12 +217,6 @@ extern "C" {
 
     // --- RNG/Timing ---
 
-    /// Get a random number
-    pub fn TFB_Random() -> u32;
-
-    /// Seed the random number generator
-    pub fn TFB_SeedRandom(seed: u32);
-
     /// Get current time counter
     pub fn GetTimeCounter() -> u32;
 
@@ -369,13 +364,7 @@ pub unsafe fn current_activity() -> u16 {
     crate::mainloop::ffi::get_current_activity().0
 }
 
-/// Safe wrapper: get a random number.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn random() -> u32 {
-    TFB_Random()
-}
+pub use crate::math::random;
 
 /// Safe wrapper: get current time counter.
 /// # Safety

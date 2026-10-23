@@ -52,15 +52,6 @@ pub(super) unsafe fn openPlayerNetworkConnection(
 ) -> *mut NetConnection {
     net::openPlayerNetworkConnection(player, state).cast()
 }
-pub(super) unsafe fn RandomContext_New() -> *mut RandomContext {
-    crate::math::RandomContext_New().cast()
-}
-pub(super) unsafe fn RandomContext_SeedRandom(context: *mut RandomContext, seed: u32) {
-    crate::math::RandomContext_SeedRandom(context.cast(), seed);
-}
-pub(super) unsafe fn RandomContext_Delete(context: *mut RandomContext) {
-    crate::math::RandomContext_Delete(context.cast());
-}
 pub(super) unsafe fn CaptureSound(sound: *mut std::ffi::c_void) -> SOUND {
     crate::game_init::macro_abi::CaptureSound(sound.cast()).cast()
 }

@@ -4076,11 +4076,11 @@ mod tests {
         crate::mainloop::restart_menu::restart_ops::seed_new_campaign(|| {
             panic!("the clock seed must not run while automation supplies a seed")
         });
-        let after_restart = crate::math::TFB_Random();
-        crate::math::TFB_SeedRandom(1437213463);
+        let after_restart = crate::math::random();
+        crate::math::seed_random(1437213463);
         assert_eq!(
             after_restart,
-            crate::math::TFB_Random(),
+            crate::math::random(),
             "the generator must be seeded from the scenario seed"
         );
 

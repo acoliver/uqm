@@ -186,7 +186,7 @@ impl UrquanEncounterSite for RaceHome {
         unsafe { delta_fuel(delta) };
     }
     fn random(&mut self) -> u32 {
-        crate::math::TFB_Random()
+        crate::math::random()
     }
     fn clear_sis_message(&mut self) {
         // SAFETY: game thread.

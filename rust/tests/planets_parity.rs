@@ -150,7 +150,7 @@ impl Topography for ExportedTopography {
             "DeltaTopography wrote past the map for {case:?}"
         );
         map.copy_from_slice(&padded[..map.len()]);
-        unsafe { uqm_rust::math::RandomContext_GetSeed(SysGenRNG) }
+        unsafe { (*SysGenRNG).seed() }
     }
 }
 
@@ -179,7 +179,7 @@ impl ExportedGenerators {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         let star = Box::new([0u8; 8]);
         unsafe {
-            SysGenRNG = uqm_rust::math::RandomContext_New();
+            SysGenRNG = uqm_rust::math::new_context();
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
@@ -280,7 +280,7 @@ impl DefaultOps for ExportedGenerators {
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(GenerateDefault_generatePlanets(&mut *self.state));
-            uqm_rust::math::RandomContext_GetSeed(SysGenRNG)
+            (*SysGenRNG).seed()
         };
         let drawn = self.state.SunDesc[0].NumPlanets;
         Layout {
@@ -301,7 +301,7 @@ impl DefaultOps for ExportedGenerators {
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(GenerateDefault_generateMoons(&mut *self.state, &mut planet));
-            uqm_rust::math::RandomContext_GetSeed(SysGenRNG)
+            (*SysGenRNG).seed()
         };
         Layout {
             worlds: self.state.MoonDesc[..usize::from(count)]
@@ -331,7 +331,7 @@ impl DefaultOps for ExportedGenerators {
                 NodeKind::Artifact => GenerateDefault_generateArtifact(system, which, node),
                 NodeKind::Ruins => GenerateDefault_generateRuins(system, which, node),
             };
-            (count, uqm_rust::math::RandomContext_GetSeed(SysGenRNG))
+            (count, (*SysGenRNG).seed())
         }
     }
 }
@@ -380,7 +380,7 @@ fn render_plan_data(table: &[PlanetFrame]) -> String {
 
 /// Reseed the `RandomContext` the exports use, through the exported C symbol.
 fn reseed_c(context: *mut uqm_rust::math::RandomContext, seed: u32) {
-    uqm_rust::math::RandomContext_SeedRandom(context, seed);
+    unsafe { (*context).reseed(seed) };
 }
 
 fn fixture_path(name: &str) -> PathBuf {

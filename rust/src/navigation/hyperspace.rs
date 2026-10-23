@@ -123,12 +123,12 @@ pub(crate) mod live {
             DISTANCE.dy = DISTANCE.dy.wrapping_add(y as u16);
             let adjusted_x = universe_x(16 * DISTANCE.dx as i32) as u32;
             let adjusted_y = (9999 - universe_y(16 * DISTANCE.dy as i32) as i32) as u32;
-            let distance = (square_root(
+            let distance = square_root(
                 adjusted_x
                     .wrapping_mul(adjusted_x)
                     .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
-            ) as u16)
-                .wrapping_add(DISTANCE.extra);
+            )
+            .wrapping_add(DISTANCE.extra);
             let mut ticks = distance >> 4;
             if ticks > DISTANCE.ticks as u16 {
                 DeltaSISGauges(0, DISTANCE.ticks as i16 - ticks as i16, 0);

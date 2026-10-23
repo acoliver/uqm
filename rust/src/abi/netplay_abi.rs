@@ -1,5 +1,10 @@
 // Shared engine records used by the Rust runtime.
 
+pub use crate::math::{
+    RandomContext,
+    seed_random as TFB_SeedRandom,
+};
+
 pub use super::netconnection::NetConnection_setState;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1357,14 +1362,7 @@ pub struct MeleeSetup {
     _unused: [u8; 0],
 }
 pub type FleetShipIndex = COUNT;
-extern "C" {
-    pub fn TFB_SeedRandom(seed: DWORD) -> DWORD;
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct RandomContext {
-    _unused: [u8; 0],
-}
+
 pub type SOUND = STRING;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

@@ -57,7 +57,7 @@ extern "C" {
     fn SetInputCallback(callback: Option<unsafe extern "C" fn()>)
         -> Option<unsafe extern "C" fn()>;
     fn GetTimeCounter() -> u32;
-    fn TFB_Random() -> u32;
+
     fn PutGroupInfo(offset: u32, which: u8) -> u32;
     fn SaveSolarSysLocation();
     fn InitLander(flags: u8);
@@ -239,7 +239,7 @@ unsafe fn dispatch_lander() -> bool {
         life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
         landing_x: i32::from(PLANET_LOCATION.x),
         landing_y: i32::from(PLANET_LOCATION.y),
-        facing: TFB_Random() as u8,
+        facing: crate::math::random() as u8,
         retrieval_masks: (*system).SysInfo.PlanetInfo.ScanRetrieveMask,
         tick_period: 840 / 35,
         frame_budget: u32::MAX,

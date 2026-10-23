@@ -681,10 +681,10 @@ mod runtime {
         let old_system = pSolarSysState;
         let old_star = CurStarDescPtr;
         CurStarDescPtr = star;
-        RandomContext_SeedRandom(SysGenRNG, GetRandomSeedForStar(star));
+        (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
         system.SunDesc[0].pPrevDesc = ptr::null_mut();
-        system.SunDesc[0].rand_seed = RandomContext_Random(SysGenRNG);
+        system.SunDesc[0].rand_seed = (*SysGenRNG).next_random();
         system.SunDesc[0].data_index = (((*star).Type as u32
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
             >> STAR_TYPE_SHIFT) as BYTE;
@@ -724,7 +724,7 @@ mod runtime {
             cb(planet, recurse.arg);
         }
         if recurse.moonFunc.is_some() {
-            RandomContext_SeedRandom(SysGenRNG, (*planet).rand_seed);
+            (*SysGenRNG).reseed((*planet).rand_seed);
             ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
             forAllMoons(star, system, planet, Some(moonRecurse), arg);
         }
