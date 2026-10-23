@@ -22,6 +22,7 @@
 //! }
 //! ```
 
+pub mod control;
 pub mod decoder;
 pub mod ffi;
 #[cfg(test)]
