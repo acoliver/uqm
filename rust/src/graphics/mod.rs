@@ -88,3 +88,5 @@ pub mod filegfx;
 pub mod resgfx;
 
 pub mod frame_abi;
+
+pub mod font_abi;
