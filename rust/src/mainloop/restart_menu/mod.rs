@@ -20,3 +20,7 @@ pub mod menu_logic;
 pub mod orchestration;
 pub mod restart_ops;
 pub mod types;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod menu_abi;
+pub mod render_abi;
