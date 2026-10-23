@@ -3,6 +3,7 @@
 // @requirement Foundation module for shared types extracted from ships
 
 pub mod ai;
+pub mod build_native;
 pub mod status_native;
 pub mod ai_entry;
 pub mod battle_controls;
