@@ -250,9 +250,12 @@ pub unsafe extern "C" fn rust_gfx_init(
     window_builder.position_centered();
     #[cfg(feature = "debug-process")]
     if let Some(config) = crate::automation::native_window::active_native_window_config() {
-        // Position before showing: moving during Cocoa's order-front animation
-        // races its completion and can leave a shifted client origin.
-        window_builder.position(config.client_bounds.x, config.client_bounds.y);
+        // A decorated 960px client exceeds a 1080px desktop's work area once
+        // the menu bar and Dock are included. Cocoa then moves it on activation.
+        // Borderless proof windows also avoid the title-frame show animation.
+        window_builder
+            .borderless()
+            .position(config.client_bounds.x, config.client_bounds.y);
     }
 
     let window = match window_builder.build() {
