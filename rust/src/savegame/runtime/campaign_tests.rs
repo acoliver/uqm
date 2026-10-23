@@ -129,6 +129,8 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-portal-approach" => (28, 5, 2156, 150, 16002, 534, 3),
             "dev-funded-shuttle" => (16, 7, 2156, 145, 6810, 534, 3),
             "dev-funded-vault" => (28, 7, 2156, 145, 4915, 534, 3),
+            "dev-syreen-ambush" => (10, 8, 2156, 135, 2086, 534, 3),
+            "dev-rainbow-refueled" => (13, 8, 2156, 70, 21000, 534, 3),
             "dev-crew-ready" => (4, 4, 2156, 100, 4900, 461, 2),
             "dev-refitted" => (28, 3, 2156, 32, 15400, 665, 2),
             "dev-vault-open" => (7, 6, 2156, 29, 5141, 115, 4),
