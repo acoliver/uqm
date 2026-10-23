@@ -4,9 +4,11 @@
 pub mod battle_bridge;
 pub mod c_bridge;
 pub mod catalog;
+mod code_resources;
 pub mod ffi_contract;
 pub mod lifecycle;
 pub mod loader;
+mod loader_native;
 pub mod master_native;
 pub mod native;
 pub mod queue;

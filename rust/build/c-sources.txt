@@ -39,7 +39,6 @@ sc2/src/uqm/confirm.c
 sc2/src/uqm/cons_res.c
 sc2/src/uqm/credits.c
 sc2/src/uqm/cyborg.c
-sc2/src/uqm/dummy.c
 sc2/src/uqm/encount.c
 sc2/src/uqm/flash.c
 sc2/src/uqm/fmv.c
@@ -56,7 +55,6 @@ sc2/src/uqm/intro.c
 sc2/src/uqm/ipdisp.c
 sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
-sc2/src/uqm/loadship.c
 sc2/src/uqm/menu.c
 sc2/src/uqm/oscill.c
 sc2/src/uqm/outfit.c
