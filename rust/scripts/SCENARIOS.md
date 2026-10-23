@@ -177,3 +177,17 @@ or Talking Pet acquisition is implied by the resupply scripts.
 All three scenarios accept a different earned ancestor through
 `prepare_mid_segment.py --start-save`; their initial inventory and resource
 assertions still apply. Shipyard sales and purchases use the ordinary menus.
+
+### Funded shuttle and vault replay
+
+`campaign-s09f-funded-shuttle` repeats the egg-casing and Talana proof route
+from `dev-funded-knowledge`, using peaceful departure from the Druuge trade
+world and opt-in escape during interstellar travel. Native run `pmid-51`
+returned the casing, accepted Talana's proof dialogue, acquired the shuttle,
+and saved `dev-funded-shuttle` with 145 crew and three Furies.
+
+`campaign-s09g-funded-vault` continues from that development save. It approaches
+the vault planet before navigating its moon, lands, unlocks the vault with the
+shuttle, returns the lander, and saves `dev-funded-vault`. Native run `pmid-56`
+proved `SHIP_VAULT_UNLOCKED=1` and `SYREEN_SHUTTLE_ON_SHIP=0`, with 145 crew,
+4915 raw fuel, and three Furies. Neither save is a connected campaign milestone.
