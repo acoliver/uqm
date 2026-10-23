@@ -1308,3 +1308,10 @@ scenario asserts that setting rather than cycling it again.
 Save extraction now includes the named story keys asserted or awaited by the
 selected producer. Their values are decoded from the saved file, including
 zeros; they are not copied from the script's expected values.
+
+`campaign-s03b-broken-ultron` loads `north-ready.sav`, flies to the Supox home
+system Beta Librae, and uses the peaceful `anyone_around_here`,
+`whats_wrong_with_utwig`, `whats_ultron`, `what_do_i_do_now` dialogue branch.
+It requires `ULTRON_CONDITION=1` and the retained Clear Spindle before saving
+local flight to slot 1. Patrol contacts are dismissed with `bye_neutral`;
+they do not substitute for the scripted homeworld conversation.

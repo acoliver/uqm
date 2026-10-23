@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "name": "campaign-s03b-broken-ultron",
+  "start_save": {
+    "path": "saves/north-ready.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 1800
+  },
+  "seed": 1437213465,
+  "steps": [
+    {"action": "wait_for_main_menu_ready"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "assert_state", "all": [{"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}, {"key": "sis:fuel", "op": "eq", "value": 20000}, {"key": "sis:ru", "op": "eq", "value": 115}, {"key": "sis:crew", "op": "eq", "value": 46}, {"key": "escorts:species:4", "op": "eq", "value": 3}, {"key": "star:current", "op": "eq", "value": 82}, {"key": "combat:cyborg", "op": "eq", "value": 1}, {"key": "combat:speed", "op": "eq", "value": 1}]},
+    {"action": "navigate_to_hyperspace", "max_ticks": 9000},
+    {"action": "fly_to_star", "target": "Beta Librae", "max_ticks": 90000},
+    {"action": "navigate_to_planet", "planet": 0, "max_ticks": 9000, "encounter_response": "bye_neutral"},
+    {"action": "navigate_to_orbit", "planet": 0, "max_ticks": 9000, "stop_at_encounter": true, "encounter_response": "bye_neutral"},
+    {"action": "wait_for_communication_responses", "minimum": 2, "max_ticks": 6000},
+    {"action": "select_response", "phrase": "anyone_around_here", "max_ticks": 3000},
+    {"action": "select_response", "phrase": "whats_wrong_with_utwig", "max_ticks": 3000},
+    {"action": "select_response", "phrase": "whats_ultron", "max_ticks": 3000},
+    {"action": "select_response", "phrase": "what_do_i_do_now", "max_ticks": 3000},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 6000},
+    {"action": "assert_state", "all": [{"key": "story:ULTRON_CONDITION", "op": "eq", "value": 1}, {"key": "story:CLEAR_SPINDLE_ON_SHIP", "op": "eq", "value": 1}]},
+    {"action": "capture", "label": "supox-gift-broken-ultron"},
+    {"action": "wait_input_ticks", "count": 120},
+    {"action": "assert_state", "all": [{"key": "activity", "op": "eq", "value": 4}]},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 20},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 1},
+    {"action": "assert_game_options"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 30},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 45},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "saved-broken-ultron-slot-1"},
+    {"action": "finish"}
+  ]
+}

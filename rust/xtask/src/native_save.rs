@@ -934,7 +934,10 @@ mod tests {
     #[test]
     fn northern_checkpoint_reload_matches_the_extracted_snapshot() {
         let root = repository_root();
-        for (checkpoint, parent) in [("north-ready", "spindle-pkunk")] {
+        for (checkpoint, parent) in [
+            ("north-ready", "spindle-pkunk"),
+            ("broken-ultron", "north-ready"),
+        ] {
             let save = root.join(format!("rust/scripts/saves/{checkpoint}.sav"));
             let provenance: Provenance =
                 read_json(&provenance_path(&save), MANIFEST_LIMIT).unwrap();
