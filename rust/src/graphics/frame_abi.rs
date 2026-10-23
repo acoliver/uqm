@@ -1,4 +1,5 @@
 //! Drawing front-end ABI, ported from frame.c (GPL-2.0-or-later).
+use super::font_abi::{_text_blt, TextRect};
 use super::native_abi::*;
 use std::ptr;
 
@@ -67,10 +68,6 @@ unsafe fn clear_background(clip: &RECT) {
         DrawMode { kind: 0, factor: 0 },
         clip.corner,
     );
-}
-extern "C" {
-    fn TextRect(text: *mut TEXT, rect: *mut RECT, delta: *mut u8) -> BOOLEAN;
-    fn _text_blt(rect: *mut RECT, text: *mut TEXT, origin: POINT);
 }
 /// # Safety
 /// Primitives and their linked indices must be live and valid on the graphics thread.
