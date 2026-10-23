@@ -52,4 +52,3 @@ sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/meleesetup.c
 sc2/src/uqm/supermelee/pickmele.c
 sc2/src/uqm/uqmdebug.c
-sc2/src/uqm/util.c
