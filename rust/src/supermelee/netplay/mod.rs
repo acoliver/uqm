@@ -44,3 +44,8 @@ mod notify;
 mod notifyall;
 
 mod netmelee;
+
+#[cfg(not(test))]
+pub(crate) use netconnection::NetConnection_isConnected;
+#[cfg(not(test))]
+pub(crate) use notify::Netplay_Notify_shipSelected;
