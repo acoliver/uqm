@@ -289,7 +289,7 @@ impl RecordingPlatform {
     /// the C initializer, with `res_units` to spend.
     pub fn with_new_game_flagship(res_units: u32) -> Self {
         let platform = Self::new();
-        let mut flagship = NewGameFlagship::from_c_source();
+        let mut flagship = NewGameFlagship::from_initializer();
         flagship.res_units = res_units;
         *platform.sis.borrow_mut() = flagship.sis_view();
         platform

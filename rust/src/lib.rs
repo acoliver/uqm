@@ -48,3 +48,5 @@ pub use input::{VControl, VCONTROL};
 pub use logging::LogLevel;
 pub use sound::rust_ova_DecoderVtbl;
 pub use sound::rust_wav_DecoderVtbl;
+
+pub mod navigation;

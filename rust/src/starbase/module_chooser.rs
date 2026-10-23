@@ -672,7 +672,7 @@ mod tests {
     ];
 
     fn new_game() -> SisView {
-        NewGameFlagship::from_c_source().sis_view()
+        NewGameFlagship::from_initializer().sis_view()
     }
 
     fn input<'a>(ship: &'a SisView, pulses: MenuPulses) -> ChooserInput<'a> {

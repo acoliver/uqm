@@ -33,11 +33,9 @@ sc2/src/uqm/cyborg.c
 sc2/src/uqm/encount.c
 sc2/src/uqm/flash.c
 sc2/src/uqm/fmv.c
-sc2/src/uqm/gameev.c
 sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
 sc2/src/uqm/getchar.c
-sc2/src/uqm/globdata.c
 sc2/src/uqm/grpinfo.c
 sc2/src/uqm/hyper.c
 sc2/src/uqm/init.c

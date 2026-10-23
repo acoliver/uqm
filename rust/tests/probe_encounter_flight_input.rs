@@ -781,7 +781,7 @@ fn the_second_commander_visit_waits_for_its_offer_before_the_first_pick() {
 //
 // The expected fuel and RU of every `assert_ship_resources` in the
 // preparation are derived here from the game's own rules and data: the
-// opening tank and fuel price in `globdata.c`, Luna's density and radius in
+// opening tank and fuel price in the Rust world initializer, Luna's density and radius in
 // `gensol.c`, the landing cost and Outfit rounding of the Rust port, and the
 // Commander's reward from the Rust dialogue. Nothing below copies an observed value.
 // ---------------------------------------------------------------------------
@@ -791,29 +791,6 @@ use uqm_rust::starbase::sis_modules::{FUEL_RESERVE, FUEL_TANK_CAPACITY, FUEL_TAN
 use uqm_rust::starbase::{
     change_fuel_quantity, round_fuel_on_outfit_entry, FuelChange, FuelKey, FuelRuState,
 };
-
-fn c_source(relative: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("sc2/src/uqm")
-        .join(relative);
-    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {path:?}: {error}"))
-}
-
-/// The unsigned integer that directly follows `needle` in `text`.
-fn number_after(text: &str, needle: &str) -> u32 {
-    let start = text
-        .find(needle)
-        .unwrap_or_else(|| panic!("source no longer contains {needle:?}"))
-        + needle.len();
-    let digits: String = text[start..]
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect();
-    digits
-        .parse()
-        .unwrap_or_else(|_| panic!("no number after {needle:?}"))
-}
 
 /// The state the preparation must be in once the Starbase menu is up: the
 /// opening tank minus exactly one Luna landing, plus the Commander's reward.
@@ -828,10 +805,12 @@ struct DerivedPreparation {
 
 impl DerivedPreparation {
     fn from_game_data(opening_res_units: u32) -> Self {
-        let globdata = c_source("globdata.c");
-        let opening_fuel = number_after(&globdata, "GLOBAL_SIS (FuelOnBoard) = ") * FUEL_TANK_SCALE;
-        let fuel_price = u8::try_from(number_after(&globdata, "GLOBAL (FuelCost) = "))
-            .expect("fuel price fits a byte");
+        let mut sis = unsafe { std::mem::zeroed() };
+        let mut state = unsafe { std::mem::zeroed() };
+        uqm_rust::navigation::initial_state::equipment(&mut sis);
+        uqm_rust::navigation::initial_state::prices(&mut sis, &mut state);
+        let opening_fuel = sis.FuelOnBoard;
+        let fuel_price = state.FuelCost;
 
         // Derive fuel cost from the production Sol physical owner.
         let mut lunar_info = unsafe { std::mem::zeroed() };
