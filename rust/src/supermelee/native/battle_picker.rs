@@ -62,6 +62,11 @@ pub(super) mod live {
     use std::{ffi::CString, mem, ptr};
     #[no_mangle]
     pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
+    unsafe fn connections() -> [*mut NetConnection; 2] {
+        ptr::addr_of!(netConnections)
+            .cast::<[*mut NetConnection; 2]>()
+            .read()
+    }
     unsafe fn player_queue(player: usize) -> *mut QUEUE {
         crate::c_bindings::live_queues::player_ships(player)
             .cast_mut()
@@ -103,7 +108,7 @@ pub(super) mod live {
         Flash_setRect(s.flashContext, &r);
     }
     unsafe fn report(choice: u16) {
-        for conn in *ptr::addr_of!(netConnections) {
+        for conn in connections() {
             if !conn.is_null() && crate::supermelee::netplay::NetConnection_isConnected(conn.cast())
             {
                 crate::supermelee::netplay::Netplay_Notify_shipSelected(conn.cast(), choice);
@@ -216,7 +221,8 @@ pub(super) mod live {
             !allConnected() || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0;
         let mut done = true;
         if !abort {
-            for (player, input) in (*ptr::addr_of!(PlayerInput)).into_iter().enumerate() {
+            for player in 0..2 {
+                let input = crate::battle::battle_native::engine::player_input(player);
                 if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
                     continue;
                 }
@@ -465,7 +471,7 @@ pub(super) mod live {
     }
     unsafe fn get_ships(mask: u16, ships: *mut HSTARSHIP) -> u32 {
         let mut state: GETMELEE_STATE = mem::zeroed();
-        for (player, conn) in (*ptr::addr_of!(netConnections)).into_iter().enumerate() {
+        for (player, conn) in connections().into_iter().enumerate() {
             if mask & (1 << player) != 0 && !conn.is_null() {
                 let bs = NetConnection_getStateData(conn).cast::<BattleStateData>();
                 (*bs).getMeleeState = &mut state;
@@ -528,7 +534,7 @@ pub(super) mod live {
         if !ok {
             GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
         }
-        for (player, conn) in (*ptr::addr_of!(netConnections)).into_iter().enumerate() {
+        for (player, conn) in connections().into_iter().enumerate() {
             if mask & (1 << player) != 0
                 && !conn.is_null()
                 && crate::supermelee::netplay::NetConnection_isConnected(conn.cast())
