@@ -71,6 +71,9 @@ unsafe fn interplanetary(element: *mut ELEMENT) {
             GlobData.SIS_state.log_x = logx(x);
             GlobData.SIS_state.log_y = logy(y);
             set("ARILOU_SPACE_SIDE", 0);
+            // The source portal is not a star at the HyperSpace destination.
+            // Keeping it makes a save name a descriptor from the wrong catalog.
+            CurStarDescPtr = ptr::null_mut();
         }
     }
 }
@@ -90,6 +93,7 @@ unsafe fn arilou() {
         GlobData.SIS_state.log_y = logy(ARILOU_SPACE_Y as i16);
         set("ARILOU_SPACE_SIDE", 0);
     }
+    CurStarDescPtr = ptr::null_mut();
 }
 unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
     (*element).state_flags |= CHANGING as u16;
