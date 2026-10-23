@@ -2,7 +2,7 @@
   "version": 1,
   "name": "campaign-s07e-sol-arrival",
   "start_save": {
-    "path": "saves/southeast-staging.sav",
+    "path": "saves/war-cleared.sav",
     "slot": 0
   },
   "budgets": {
@@ -60,7 +60,7 @@
         {
           "key": "date:day",
           "op": "eq",
-          "value": 4
+          "value": 1
         },
         {
           "key": "date:month",
@@ -78,234 +78,14 @@
           "value": 0
         },
         {
-          "key": "escorts:species:0",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:1",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:10",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:11",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:12",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:13",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:14",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:15",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:16",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:17",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:18",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:19",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:2",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:20",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:21",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:22",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:23",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:24",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:3",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:4",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:5",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:6",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:7",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:8",
-          "op": "eq",
-          "value": 0
-        },
-        {
-          "key": "escorts:species:9",
-          "op": "eq",
-          "value": 0
-        },
-        {
           "key": "sis:crew",
-          "op": "eq",
-          "value": 14
-        },
-        {
-          "key": "sis:drive:0",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:1",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:10",
-          "op": "eq",
-          "value": 20
-        },
-        {
-          "key": "sis:drive:2",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:3",
-          "op": "eq",
-          "value": 20
-        },
-        {
-          "key": "sis:drive:4",
-          "op": "eq",
-          "value": 20
-        },
-        {
-          "key": "sis:drive:5",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:6",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "sis:drive:7",
-          "op": "eq",
-          "value": 20
-        },
-        {
-          "key": "sis:drive:8",
-          "op": "eq",
-          "value": 20
-        },
-        {
-          "key": "sis:drive:9",
           "op": "eq",
           "value": 20
         },
         {
           "key": "sis:fuel",
           "op": "eq",
-          "value": 20256
-        },
-        {
-          "key": "sis:jet:0",
-          "op": "eq",
-          "value": 2
-        },
-        {
-          "key": "sis:jet:1",
-          "op": "eq",
-          "value": 21
-        },
-        {
-          "key": "sis:jet:2",
-          "op": "eq",
-          "value": 21
-        },
-        {
-          "key": "sis:jet:3",
-          "op": "eq",
-          "value": 21
-        },
-        {
-          "key": "sis:jet:4",
-          "op": "eq",
-          "value": 21
-        },
-        {
-          "key": "sis:jet:5",
-          "op": "eq",
-          "value": 21
-        },
-        {
-          "key": "sis:jet:6",
-          "op": "eq",
-          "value": 2
-        },
-        {
-          "key": "sis:jet:7",
-          "op": "eq",
-          "value": 21
+          "value": 21000
         },
         {
           "key": "sis:landers",
@@ -318,86 +98,6 @@
           "value": 0
         },
         {
-          "key": "sis:module:0",
-          "op": "eq",
-          "value": 5
-        },
-        {
-          "key": "sis:module:1",
-          "op": "eq",
-          "value": 5
-        },
-        {
-          "key": "sis:module:10",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:11",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:12",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:13",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:14",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:15",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:2",
-          "op": "eq",
-          "value": 3
-        },
-        {
-          "key": "sis:module:3",
-          "op": "eq",
-          "value": 5
-        },
-        {
-          "key": "sis:module:4",
-          "op": "eq",
-          "value": 5
-        },
-        {
-          "key": "sis:module:5",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:6",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:7",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:8",
-          "op": "eq",
-          "value": 22
-        },
-        {
-          "key": "sis:module:9",
-          "op": "eq",
-          "value": 22
-        },
-        {
           "key": "sis:ru",
           "op": "eq",
           "value": 1175
@@ -405,7 +105,7 @@
         {
           "key": "star:current",
           "op": "eq",
-          "value": 420
+          "value": 427
         },
         {
           "key": "story:CLEAR_SPINDLE_ON_SHIP",
