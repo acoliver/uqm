@@ -6,8 +6,8 @@
     "slot": 0
   },
   "budgets": {
-    "max_input_ticks": 600000,
-    "max_presentations": 1200000,
+    "max_input_ticks": 700000,
+    "max_presentations": 1400000,
     "max_wallclock_seconds": 5400
   },
   "seed": 1437213508,
