@@ -28,6 +28,7 @@ pub fn generate() -> Result<(), String> {
         "process.h",
         "sounds.h",
         "sis.h",
+        "starbase.h",
         "menustat.h",
         "status.h",
         "ship.h",

@@ -11,7 +11,6 @@ sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
 sc2/src/uqm/init.c
 sc2/src/uqm/intro.c
-sc2/src/uqm/outfit.c
 sc2/src/uqm/restart.c
 sc2/src/uqm/rust_bridge_main2.c
 sc2/src/uqm/rust_bridge_mainloop.c
@@ -19,8 +18,6 @@ sc2/src/uqm/rust_bridge_restart.c
 sc2/src/uqm/rust_bridge_ships.c
 sc2/src/uqm/setup.c
 sc2/src/uqm/setupmenu.c
-sc2/src/uqm/shipyard.c
-sc2/src/uqm/starbase.c
 sc2/src/uqm/starcon.c
 sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/supermelee/pickmele.c
