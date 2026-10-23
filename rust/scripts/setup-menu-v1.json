@@ -32,6 +32,21 @@
       "settle": 6
     },
     {
+      "action": "assert_main_menu_transition",
+      "from": "NewGame",
+      "to": "LoadGame"
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "LoadGame",
+      "to": "SuperMelee"
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "SuperMelee",
+      "to": "Setup"
+    },
+    {
       "action": "tap_menu_key",
       "key": "select",
       "value": 1,
