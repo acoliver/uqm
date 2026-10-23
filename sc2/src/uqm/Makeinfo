@@ -3,8 +3,7 @@ uqm_CFILES="
 		cnctdlg.c comm_variadic.c  credits.c
 		   fmv.c
 		gameinp.c gameopt.c
-		init.c intro.c
-		 
+		intro.c
 		 restart.c  setup.c setupmenu.c
 		     starcon.c
 		  uqmdebug.c "

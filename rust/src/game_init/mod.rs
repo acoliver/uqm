@@ -17,3 +17,5 @@ pub mod macro_abi;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod cleanup;
+
+pub mod space_resources;
