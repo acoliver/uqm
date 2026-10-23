@@ -400,7 +400,7 @@ fn generate_ship_abi_bindings() -> Result<(), String> {
         .blocklist_function(
             "(AbandonShip|AllocElement|AllocLink|CalcSoundPosition|CalculateGravity\
              |CaptureDrawable|CurrentInputToBattleInput|DecFrameIndex|DestroyDrawable\
-             |DestroyMusic|DestroySound|DestroyStringTable|DoInput|DrawBatch\
+             |DestroyMusic|DestroySound|DestroyStringTable|DoInput|DoMenuChooser|DrawBatch\
              |DrawFilledRectangle|DrawFilledStamp|DrawRectangle|DrawSISTitle\
              |DrawStamp|DrawablesIntersect|FleetIsInfinite|FreeElement|GetFrameCount\
              |GetFrameHot|GetFrameIndex|GetFrameRect|GetStringAddress|IncFrameIndex\

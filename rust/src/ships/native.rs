@@ -33,6 +33,15 @@ pub mod abi {
         string_address as GetStringAddress, utf8_string_copy as utf8StringCopy,
     };
 
+    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
+        extern "C" {
+            #[link_name = "DoMenuChooser"]
+            fn choose(menu: *mut crate::c_bindings::global_state::MENU_STATE, first: u8) -> u32;
+        }
+        choose(menu.cast(), first)
+    }
+
     // Bindgen does not translate these cast-expression macros from controls.h
     // and intel.h. Keep their C operand widths at the shared ABI boundary.
     pub const BATTLE_LEFT: BATTLE_INPUT_STATE = 1 << 0;
