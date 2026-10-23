@@ -51,7 +51,6 @@ sc2/src/uqm/load.c
 sc2/src/uqm/load_legacy.c
 sc2/src/uqm/menu.c
 sc2/src/uqm/outfit.c
-sc2/src/uqm/planets/planets.c
 sc2/src/uqm/planets/plangen.c
 sc2/src/uqm/planets/pstarmap.c
 sc2/src/uqm/planets/scan.c

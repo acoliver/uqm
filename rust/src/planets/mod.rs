@@ -30,4 +30,5 @@ pub mod report;
 
 pub mod roster;
 
+pub mod orbit;
 pub mod sphere;

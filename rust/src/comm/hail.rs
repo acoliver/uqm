@@ -41,7 +41,10 @@ pub(super) mod c_bridge {
         pub fn ReleaseStringTable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // Context management
+        #[cfg(feature = "debug-process")]
         pub fn CreateContextAux(name: *const c_char) -> *mut std::ffi::c_void;
+        #[cfg(not(feature = "debug-process"))]
+        pub fn CreateContextAux() -> *mut std::ffi::c_void;
         pub fn DestroyContext(ctx: *mut std::ffi::c_void) -> c_int;
         pub fn SetContext(ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         pub fn SetContextFGFrame(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
@@ -322,7 +325,7 @@ pub unsafe fn hail_alien() {
         // Step 5: TextCacheContext setup
         // ----------------------------------------------------------------
         let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
-        let text_cache_ctx = CreateContextAux(text_cache_ctx_name);
+        let text_cache_ctx = create_named_context(text_cache_ctx_name);
 
         let sis_w = unsafe { c_bridge::ScreenWidth - 78 };
         let sis_h = unsafe { c_bridge::ScreenHeight - 13 };
@@ -366,7 +369,7 @@ pub unsafe fn hail_alien() {
         // Step 8: Create AnimContext and configure
         // ----------------------------------------------------------------
         let anim_ctx_name = c"AnimContext".as_ptr() as *const _;
-        let anim_ctx = CreateContextAux(anim_ctx_name);
+        let anim_ctx = create_named_context(anim_ctx_name);
         c_SetAnimContext(anim_ctx);
         SetContext(anim_ctx);
         let screen = unsafe { Screen };
@@ -567,5 +570,18 @@ mod tests {
             // In test mode this is a no-op — no C runtime needed.
             super::hail_alien();
         }
+    }
+}
+
+#[cfg(not(test))]
+unsafe fn create_named_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
+    #[cfg(feature = "debug-process")]
+    {
+        c_bridge::CreateContextAux(name)
+    }
+    #[cfg(not(feature = "debug-process"))]
+    {
+        let _ = name;
+        c_bridge::CreateContextAux()
     }
 }
