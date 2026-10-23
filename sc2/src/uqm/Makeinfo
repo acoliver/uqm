@@ -1,6 +1,6 @@
 uqm_SUBDIRS="comm planets ships supermelee"
 uqm_CFILES="cnctdlg.c comm_variadic.c
-		 restart.c   setupmenu.c
+		    setupmenu.c
 
 		  uqmdebug.c "
 
