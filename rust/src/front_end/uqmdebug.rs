@@ -321,9 +321,6 @@ mod runtime {
         }
         UnlockGameClock();
     }
-    unsafe extern "C" fn dumpEventCallback(event: *mut LINK, arg: *mut c_void) {
-        dumpEvent(arg.cast(), event.cast());
-    }
     /// # Safety
     /// `out` must be an open C stream and `event` a readable event record.
     #[no_mangle]
@@ -342,10 +339,9 @@ mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn dumpEvents(out: *mut FILE) {
         LockGameClock();
-        ForAllLinks(
-            ptr::addr_of_mut!(GlobData.Game_state.GameClock.event_q),
-            Some(dumpEventCallback),
-            out.cast(),
+        crate::collections::queue::for_all_links(
+            ptr::addr_of_mut!(GlobData.Game_state.GameClock.event_q).cast(),
+            |event| dumpEvent(out, ptr::from_mut(event).cast()),
         );
         UnlockGameClock();
     }
