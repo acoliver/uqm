@@ -90,3 +90,20 @@ python3 rust/scripts/prepare_mid_segment.py campaign-s07-taalo-protected \
 
 The named file must exist in `saves/`. Run and extract the resulting producer
 before claiming that the segment connects to that ancestor.
+
+### S09: shattered-world knowledge and Syreen shuttle
+
+`campaign-s09a-shattered-knowledge` starts at Zeta Persei from
+`repaired-ultron.sav`. Three separate peaceful Druuge homeworld conversations
+raise `DRUUGE_HOME_INFO` to 3 and earn `KNOW_ABOUT_SHATTERED=2`. Native run
+`pmid-11` passed and wrote slot 1. `dev-shattered-knowledge.sav` is its
+extracted development checkpoint.
+
+`campaign-s09b-syreen-shuttle` starts from that development save, lands on
+Beta Copernicus I, collects an egg casing, then visits Talana at Betelgeuse.
+Phrase-based dialogue presents the proof and earns `SYREEN_KNOW_ABOUT_MYCON`,
+`SYREEN_SHUTTLE`, and `SYREEN_SHUTTLE_ON_SHIP`, all equal to 1. Native run
+`pmid-13` passed and wrote slot 1. `dev-syreen-shuttle.sav` is its extracted
+checkpoint. Neither save claims connected campaign ancestry. Use
+`prepare_mid_segment.py --start-save` to substitute the campaign's earned
+ancestor while retaining the scripts' story/resource preconditions.

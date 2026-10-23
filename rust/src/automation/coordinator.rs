@@ -1696,7 +1696,8 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
-                    target_guard_active: false,
+                    target_guard_active: snapshot.wait_intersect
+                        == crate::automation::navigation::planet_wait_intersect(navigation.planet),
                 },
             );
             if reached || contact {

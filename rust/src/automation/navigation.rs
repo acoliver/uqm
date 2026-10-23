@@ -153,11 +153,14 @@ pub const fn hyperspace_reached(
     flight_observed && !solar_system_active && activity_word & 0x00ff == IN_HYPERSPACE
 }
 
-/// Encode the collision guard used by C for a moon in an inner system.
-///
-/// Mirrors `MAKE_WORD (planetOffset, moonOffset)` in `CheckIntersect`, where
-/// the planet offset is one-based and the moon offset is two-based (offset 1
-/// denotes the planet itself).
+/// `CheckIntersect` guard for a planet in its inner-system view.
+#[must_use]
+pub const fn planet_wait_intersect(planet: u8) -> u16 {
+    (planet as u16 + 1) | (1 << 8)
+}
+
+/// `MAKE_WORD (planetOffset, moonOffset)`, with one-based planets and
+/// two-based moons (moon offset 1 denotes the planet itself).
 #[must_use]
 pub const fn moon_wait_intersect(planet: u8, moon: u8) -> u16 {
     (planet as u16 + 1) | ((moon as u16 + 2) << 8)
@@ -533,6 +536,19 @@ mod tests {
                 "departure failed to leave the view from ({start_x}, {start_y})"
             );
         }
+    }
+
+    #[test]
+    fn a_guarded_planet_is_left_before_reapproaching_it() {
+        assert_eq!(planet_wait_intersect(0), 0x0101);
+        assert_eq!(planet_wait_intersect(8), 0x0109);
+        let mut state = observation(120, 100, 0, 120, 100);
+        state.view_center_x = 120;
+        state.view_center_y = 100;
+        assert_eq!(steer_moon_navigation(state), NavigationControl::default());
+        state.target_guard_active = true;
+        let backing_off = steer_moon_navigation(state);
+        assert!(backing_off.thrust || backing_off.left || backing_off.right);
     }
 
     #[test]
