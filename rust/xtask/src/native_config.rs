@@ -61,9 +61,10 @@ const RUNTIME_CONTRACT: NativeWindowRuntimeContract = NativeWindowRuntimeContrac
         path_bytes: 4096,
         aggregate_path_bytes: 8 * 1024 * 1024,
     },
+    // Borderless client fits above the Dock on a 1080px desktop.
     expected_client_bounds: NativeWindowBounds {
         x: 80,
-        y: 80,
+        y: 48,
         width: 1280,
         height: 960,
     },
@@ -171,6 +172,17 @@ mod tests {
             .and_then(Path::parent)
             .expect("xtask lives two levels below the repository root")
             .to_path_buf()
+    }
+
+    #[test]
+    fn proof_client_fits_the_1080p_desktop_work_area() {
+        let work_area = NativeWindowBounds {
+            x: 0,
+            y: 30,
+            width: 1920,
+            height: 1002,
+        };
+        assert!(work_area.contains(runtime_contract().expected_client_bounds));
     }
 
     #[test]
