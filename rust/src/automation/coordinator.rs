@@ -1578,6 +1578,19 @@ impl Coordinator {
         if crate::automation::ui_observation::encounter_menu_active()
             && !flight.target.is_arilou_home()
         {
+            if !inner.star_encounter_active {
+                let observation = input_ffi::fleet_fight_observation();
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "flight_encounter_started:crew={:?}:activity={}:escape_generation={}",
+                        observation.flagship_crew,
+                        observation.activity,
+                        observation.escape_generation
+                    ),
+                );
+            }
             inner.star_encounter_active = true;
         }
         if inner.star_encounter_active {
@@ -4186,6 +4199,7 @@ mod tests {
             SeedDomain::SUPER_MELEE_MENU_ID,
             SeedDomain::SUPER_MELEE_BATTLE_ID,
             SeedDomain::NEW_GAME_ID,
+            SeedDomain::CAMPAIGN_BATTLE_ID,
         ] {
             assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
             expected.push(SeedApplication {

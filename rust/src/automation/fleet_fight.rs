@@ -301,7 +301,10 @@ impl FleetRetreat {
             .is_none_or(|crew| crew == 0 || crew == u16::MAX)
             || obs.activity & (0x1000 | 0x2000 | 0x4000) != 0
         {
-            return Failed("fleet_retreat_flagship_lost_or_aborted".into());
+            return Failed(format!(
+                "fleet_retreat_flagship_lost_or_aborted:crew={:?}:activity={}:ticks={}:escape_baseline={baseline}:escape_generation={}",
+                obs.flagship_crew, obs.activity, self.ticks, obs.escape_generation
+            ));
         }
         if self.ticks >= max_ticks {
             return Failed("fleet_retreat_timeout".into());
