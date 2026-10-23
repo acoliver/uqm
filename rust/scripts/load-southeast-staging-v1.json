@@ -33,12 +33,21 @@
       "action": "tap_menu_key",
       "key": "select",
       "value": 1,
-      "hold": 3,
-      "settle": 45
+      "hold": 1,
+      "settle": 1
     },
     {
-      "action": "wait_input_ticks",
-      "count": 50
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "activity",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "max_ticks": 3000
     },
     {
       "action": "assert_state",
