@@ -171,6 +171,7 @@ pub struct EnergyObservation {
     pub lander: super::planet_minerals::PlanetSnapshot,
     pub nodes: Vec<(u8, i32, i32)>,
     pub retrieved: u32,
+    pub vault_unlocked: bool,
     pub flags: Vec<u32>,
 }
 
@@ -189,6 +190,7 @@ pub struct EnergyTracker {
     target: Option<u8>,
     flags: Vec<u32>,
     retrieved: u32,
+    vault_unlocked: bool,
 }
 
 impl EnergyTracker {
@@ -201,12 +203,30 @@ impl EnergyTracker {
             self.generation = Some(obs.lander.generation);
             self.flags.clone_from(&obs.flags);
             self.retrieved = obs.retrieved;
+            self.vault_unlocked = obs.vault_unlocked;
         }
         self.ticks += 1;
         if self.generation != Some(obs.lander.generation) {
             return EnergyProgress::Failed("energy_collection_changed_trip".into());
         }
         if let Some(node) = self.target {
+            // The vault stays on the surface. Recovery consumes its shuttle
+            // instead of setting a scan retrieval bit.
+            let shuttle = ARTIFACT_FLAGS
+                .iter()
+                .position(|flag| *flag == "SYREEN_SHUTTLE_ON_SHIP")
+                .expect("shuttle observation");
+            if node == 0
+                && !self.vault_unlocked
+                && obs.vault_unlocked
+                && self.flags[shuttle] == 1
+                && obs.flags[shuttle] == 0
+            {
+                return EnergyProgress::Complete(format!(
+                    "energy_vault_unlocked:generation={}:node={node}:vault_before=0:vault_after=1:shuttle_before=1:shuttle_after=0",
+                    obs.lander.generation
+                ));
+            }
             let bit = 1u32 << node;
             if obs.retrieved & bit != 0 && self.retrieved & bit == 0 {
                 if let Some(index) = self
@@ -395,6 +415,7 @@ mod tests {
             },
             nodes: vec![(0, 120, 100)],
             retrieved: 0,
+            vault_unlocked: false,
             flags: vec![0; ARTIFACT_FLAGS.len()],
         }
     }
@@ -418,6 +439,40 @@ mod tests {
         assert!(matches!(
             tracker.observe(step, &obs),
             EnergyProgress::Complete(_)
+        ));
+    }
+
+    #[test]
+    fn vault_recovery_requires_unlock_and_shuttle_consumption_on_the_same_trip() {
+        let step = CollectEnergyNodeStep { max_ticks: 100 };
+        let shuttle = ARTIFACT_FLAGS
+            .iter()
+            .position(|flag| *flag == "SYREEN_SHUTTLE_ON_SHIP")
+            .unwrap();
+        let mut obs = energy();
+        obs.flags[shuttle] = 1;
+        let mut tracker = EnergyTracker::default();
+        tracker.observe(step, &obs);
+        obs.vault_unlocked = true;
+        assert!(matches!(
+            tracker.observe(step, &obs),
+            EnergyProgress::Steering(_)
+        ));
+        obs.flags[shuttle] = 0;
+        let EnergyProgress::Complete(label) = tracker.observe(step, &obs) else {
+            panic!("vault interaction must complete without retrieving the persistent node")
+        };
+        assert_eq!(label, "energy_vault_unlocked:generation=7:node=0:vault_before=0:vault_after=1:shuttle_before=1:shuttle_after=0");
+        assert_eq!(obs.retrieved, 0);
+
+        let mut already_unlocked = EnergyTracker::default();
+        assert!(matches!(
+            already_unlocked.observe(step, &obs),
+            EnergyProgress::Steering(_)
+        ));
+        assert!(matches!(
+            already_unlocked.observe(step, &obs),
+            EnergyProgress::Steering(_)
         ));
     }
 

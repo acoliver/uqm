@@ -1345,6 +1345,7 @@ impl Coordinator {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
+            vault_unlocked: crate::state::ffi::named_state_value("SHIP_VAULT_UNLOCKED") == Some(1),
             flags,
         };
         let progress = inner.energy.observe(step, &observation);
