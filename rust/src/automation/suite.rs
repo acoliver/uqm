@@ -99,11 +99,21 @@ pub struct ScenarioRow {
 /// [`tests::every_scenario_on_disk_is_classified`], which is the point.
 pub const MATRIX: &[ScenarioRow] = &[
     row(
-        "campaign-s09d-syreen-ambush",
+        "campaign-s09i-refueled-ambush",
         &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,
             Domain::CommunicationChoices,
+            Domain::PlanetSideResults,
+        ],
+    ),
+    row(
+        "campaign-s08-talking-pet",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
         ],
     ),
     row(
@@ -112,6 +122,14 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,
             Domain::CommunicationChoices,
+        ],
+    ),
+    row(
+        "campaign-s09g-funded-vault",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::PlanetSideResults,
         ],
     ),
     row(
@@ -124,12 +142,19 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row(
-        "campaign-s09g-funded-vault",
+        "campaign-s08e-portal-approach",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::BattleOutcomes,
+        ],
+    ),
+    row(
+        "campaign-s09e-funded-knowledge",
         &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,
             Domain::CommunicationChoices,
-            Domain::PlanetSideResults,
         ],
     ),
     row(
@@ -157,7 +182,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row(
-        "campaign-s08e-portal-approach",
+        "campaign-s08a-arilou-home",
         &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,
@@ -165,7 +190,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row(
-        "campaign-s09e-funded-knowledge",
+        "campaign-s09d-syreen-ambush",
         &[
             Domain::SaveLoad,
             Domain::NavigationOrbitScan,

@@ -202,3 +202,28 @@ visits the unreported rainbow world at catalog 187, then trades its location
 for credits at catalog 153. Native `pmid-62` bought a full tank through the
 Melnorme dialogue and saved `dev-rainbow-refueled` with 21000 raw fuel,
 70 crew and three Furies. Travel casualties are retained, not replaced.
+
+### Arilou prerequisite and Talking Pet development
+
+`campaign-s08a-arilou-home` waits inside Gamma Circini for the natural portal,
+flies through QuasiSpace, visits Arilou home, returns through the Umgah-side
+exit, and reaches Beta Orionis before saving. Arilou's own conversation sets
+`UMGAH_ZOMBIE_BLOBBIES=1`. Runs `pmid-59` and `pmid-64` completed those story
+and navigation assertions, but failed final native screen comparison at the
+portal-entry capture (#451). They are **not full native acceptance passes**.
+`dev-arilou-home` retains the genuine `pmid-59` menu save solely for development;
+its provenance and the Pet producer's parent digest refer to that exact file.
+The scenario does not claim that the failed portal capture is visually valid.
+
+`campaign-s08-talking-pet` loads that protected, post-Arilou Beta Orionis save.
+Native `pmid-63` passed: normal-speed rendered Cyborg defeated all ten Umgah
+guards, then the Dnyarri deal set `TALKING_PET_ON_SHIP=1`. Assertions also proved
+`PLAYER_HYPNOTIZED=0`, the Protector still aboard, and the zombie flag cleared.
+The real losses remain in `dev-talking-pet`: all three Furies were lost, while
+flagship crew stayed 150. This is an independent development branch, not a
+connected S08 campaign milestone.
+
+`campaign-s09i-refueled-ambush` repeats vault recovery and Talana's ambush talk
+from `dev-rainbow-refueled`. Native `pmid-66` passed, saving
+`dev-refueled-ambush` with 15935 raw fuel, 64 crew, three Furies, the vault
+unlocked and `MYCON_AMBUSH=1`. Its larger fuel reserve supports lure development.
