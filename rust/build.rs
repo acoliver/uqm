@@ -505,7 +505,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .opaque_type("(tfb_image|drawable_desc|race_desc|RACE_DESC)")
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
-             |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
+             |MAX_MOONS|STAR_NUMBER_BASE|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
              |SAMATRA_DEFINED|CHMMR_DEFINED|ILWRATH_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM|EncounterRace|EncounterGroup\
              |ScreenWidth|ScreenHeight)",
         )
