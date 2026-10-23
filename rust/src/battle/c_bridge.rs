@@ -61,6 +61,7 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
+pub use crate::time::counter_abi::GetTimeCounter;
 extern "C" {
     // --- Graphics Integration ---
 
@@ -215,11 +216,6 @@ extern "C" {
     /// Set velocity vector from magnitude + facing
     pub fn SetVelocityVector(vel: *mut c_void, magnitude: c_int, facing: c_int, direction: c_int);
 
-    // --- RNG/Timing ---
-
-    /// Get current time counter
-    pub fn GetTimeCounter() -> u32;
-
     // --- Display Prim Management ---
 
     /// Allocate a display primitive slot
@@ -366,13 +362,7 @@ pub unsafe fn current_activity() -> u16 {
 
 pub use crate::math::random;
 
-/// Safe wrapper: get current time counter.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn time_counter() -> u32 {
-    GetTimeCounter()
-}
+pub use crate::time::counter_abi::GetTimeCounter as time_counter;
 
 /// Safe wrapper: task switch / yield.
 /// # Safety

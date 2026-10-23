@@ -27,6 +27,7 @@ static mut CURSOR_RECT: CRect = CRect {
 };
 static mut ERASE_FRAME: *mut c_void = std::ptr::null_mut();
 
+use crate::time::counter_abi::GetTimeCounter;
 extern "C" {
     static mut GlobData: CGlobData;
     static mut NextActivity: u16;
@@ -56,7 +57,6 @@ extern "C" {
     fn PlayMenuSound(sound: i32);
     fn SetInputCallback(callback: Option<unsafe extern "C" fn()>)
         -> Option<unsafe extern "C" fn()>;
-    fn GetTimeCounter() -> u32;
 
     fn PutGroupInfo(offset: u32, which: u8) -> u32;
     fn SaveSolarSysLocation();

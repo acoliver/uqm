@@ -70,6 +70,7 @@ pub(super) mod c_bridge {
     use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_int, c_uint, c_void};
 
+    pub use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
         pub fn PlayingTrack() -> u16;
         pub fn JumpTrack();
@@ -97,7 +98,6 @@ pub(super) mod c_bridge {
         pub static mut ActivityFrame: *mut c_void;
 
         // Graphics functions for update_speech_graphics (replacing c_UpdateSpeechGraphics)
-        pub fn GetTimeCounter() -> u32;
         pub fn DrawOscilloscope();
         pub fn DrawSlider();
         pub fn SetContext(ctx: *mut c_void) -> *mut c_void;

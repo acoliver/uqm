@@ -22,6 +22,7 @@ static mut FPS_COUNTER: u32 = 0;
 extern "C" {
     fn TaskSwitch();
 }
+use crate::time::counter_abi::GetTimeCounter;
 extern "C" {
     fn CreateRecursiveMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
     fn DestroyRecursiveMutex(mutex: *mut c_void);
@@ -35,7 +36,6 @@ extern "C" {
     fn UnlockMutex(mutex: *mut c_void);
     fn ClearSemaphore(sem: *mut c_void);
 
-    fn GetTimeCounter() -> u32;
     static ScreenWidth: i32;
     static ScreenHeight: i32;
     static ScreenWidthActual: i32;

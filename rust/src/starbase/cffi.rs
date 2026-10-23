@@ -879,8 +879,7 @@ impl Platform for CffiPlatform {
     }
 
     fn now(&self) -> u32 {
-        // SAFETY: plain call.
-        unsafe { base::uqm_get_time_counter() }
+        base::uqm_get_time_counter()
     }
 
     fn sleep_thread(&self, ticks: u32) {

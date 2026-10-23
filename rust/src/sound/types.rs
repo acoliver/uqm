@@ -132,15 +132,16 @@ pub const BUFFER_SIZE: usize = 16384;
 // =============================================================================
 
 #[cfg(not(test))]
+use crate::time::counter_abi::GetTimeCounter;
+#[cfg(not(test))]
 extern "C" {
-    fn GetTimeCounter() -> u32;
     static QuitPosted: i32;
 }
 
-/// Safe wrapper around the C `GetTimeCounter()` function.
+/// Current game time in 840 units per second.
 #[cfg(not(test))]
 pub fn get_time_counter() -> u32 {
-    unsafe { GetTimeCounter() }
+    GetTimeCounter()
 }
 
 /// Safe wrapper around the C `QuitPosted` global flag.

@@ -68,6 +68,7 @@ static mut NEXT_TIME: u32 = 0;
 mod ffi {
     use super::*;
 
+    pub(super) use crate::time::counter_abi::GetTimeCounter;
     pub(super) use crate::ui::border::DrawSISFrame;
     pub(super) use crate::ui::settings::StopMusic;
     pub(super) use crate::ui::sis::RepairSISBorder;
@@ -112,7 +113,6 @@ mod ffi {
         pub(super) fn GameOptions() -> u32;
         pub(super) fn StarMap() -> i32;
         pub(super) fn SleepThreadUntil(time: u32);
-        pub(super) fn GetTimeCounter() -> u32;
 
     }
 }

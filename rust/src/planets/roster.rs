@@ -86,6 +86,7 @@ mod live {
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::{c_char, c_void, CString};
 
+    use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
         static mut GlobData: CGlobData;
         fn GetCrewPodCapacity() -> u16;
@@ -94,7 +95,6 @@ mod live {
         fn DeltaSISGauges(crew: i16, fuel: i16, units: i32);
         fn SetMenuSounds(move_sound: u16, select_sound: u16);
         fn PlayMenuSound(sound: i32);
-        fn GetTimeCounter() -> u32;
     }
 
     #[repr(C)]

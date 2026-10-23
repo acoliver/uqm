@@ -32,6 +32,7 @@ pub use isolated::*;
 
 #[cfg(test)]
 mod isolated {
+    pub use crate::time::counter_abi::UnInitTimeSystem;
     extern "C" {
         pub fn initialize(argc: i32, argv: *mut *mut std::ffi::c_char) -> i32;
         pub fn TFB_UninitInput();
@@ -42,7 +43,6 @@ mod isolated {
         pub fn uqm_callback_uninit();
         pub fn uqm_alarm_uninit();
         pub fn CleanupTaskSystem();
-        pub fn UnInitTimeSystem();
         pub fn uqm_unprepare_all_dirs();
         pub fn uninitIO();
         pub fn UnInitThreadSystem();
