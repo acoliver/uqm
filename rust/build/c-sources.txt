@@ -6,5 +6,4 @@ sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/rust_bridge_main2.c
 sc2/src/uqm/rust_bridge_ships.c
 sc2/src/uqm/setupmenu.c
-sc2/src/uqm/supermelee/melee.c
 sc2/src/uqm/uqmdebug.c

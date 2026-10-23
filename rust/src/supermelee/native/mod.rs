@@ -2,4 +2,5 @@
 mod battle_picker;
 mod build_picker;
 mod load_teams;
+mod menu;
 mod teams;

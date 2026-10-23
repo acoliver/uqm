@@ -1,4 +1,4 @@
-uqm_CFILES="melee.c"
+uqm_CFILES=""
 uqm_HFILES="buildpick.h loadmele.h melee.h meleesetup.h meleeship.h pickmele.h"
 if [ -n "$uqm_NETPLAY" ]; then
 	uqm_SUBDIRS="$uqm_SUBDIRS netplay"

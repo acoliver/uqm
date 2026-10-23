@@ -34,7 +34,7 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod live {
+pub(super) mod live {
     use super::page;
     extern "C" {
         fn SaveProblem();
