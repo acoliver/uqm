@@ -1566,7 +1566,7 @@ impl Coordinator {
     fn service_star_flight(
         &self,
         inner: &mut CoordInner,
-        flight: crate::automation::star_flight::FlyToStarStep,
+        flight: &crate::automation::star_flight::FlyToStarStep,
         event: SchedulerEvent,
     ) -> SchedulerEvent {
         use crate::automation::script::{MenuKey, PlayerKey};
@@ -1574,6 +1574,44 @@ impl Coordinator {
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.star_flight = StarFlight::default();
             inner.star_encounter_active = false;
+        }
+        let preview = crate::automation::ui_observation::encounter_menu_active();
+        if preview && flight.stop_at_encounter {
+            if !Self::set_navigation_controls(Default::default()) {
+                self.reject_input(inner, "fly_to_star_encounter", -1, -1);
+                return event;
+            }
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!("star_encounter_reached:target={}", flight.target.index()),
+            );
+            return SchedulerEvent::NavigationReached;
+        }
+        if let Some(phrase) = flight.encounter_response.as_deref() {
+            if self.service_patrol_contact(inner, phrase) {
+                inner.star_encounter_active = true;
+                return event;
+            }
+            if inner.star_encounter_active {
+                let observation = input_ffi::fleet_fight_observation();
+                if observation.activity & 0xff != 3
+                    || observation.activity & (0x1000 | 0x2000 | 0x4000) != 0
+                    || observation
+                        .flagship_crew
+                        .is_none_or(|crew| crew == 0 || crew == u16::MAX)
+                {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!("star_contact_did_not_return_to_hyperspace:{observation:?}"),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return event;
+                }
+                inner.star_encounter_active = false;
+                inner.star_flight.resume_after_encounter();
+            }
         }
         if crate::automation::ui_observation::encounter_menu_active()
             && !flight.target.is_arilou_home()
@@ -1944,7 +1982,7 @@ impl Coordinator {
         } else if let Some(Action::FlyToStar(flight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_star_flight(inner, *flight, scheduler_event);
+            scheduler_event = self.service_star_flight(inner, flight, scheduler_event);
         } else if let Some(Action::NavigateToHyperspace(_)) =
             self.actions.get(inner.sched_state.step_index)
         {

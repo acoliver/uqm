@@ -282,7 +282,13 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                     .any(|flag| label.contains(&format!(":flag={flag}:")))
                 && number(label, "value=") == Some(1)
         }
-        Action::FlyToStar(flight) => super::star_flight::arrival_satisfies(label, flight.target),
+        Action::FlyToStar(flight) => {
+            if flight.stop_at_encounter {
+                label == format!("star_encounter_reached:target={}", flight.target.index())
+            } else {
+                super::star_flight::arrival_satisfies(label, flight.target)
+            }
+        }
         Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
         Action::TurnFlagship(value) => {
             shape(
@@ -700,6 +706,27 @@ mod tests {
             wrong.kind = RecordKind::Failure;
             assert!(!satisfied(&action, &[wrong], &frame()));
         }
+    }
+
+    #[test]
+    fn encounter_handoff_is_not_a_destination_arrival_or_a_different_target() {
+        let flight: Action = serde_json::from_value(json!({
+            "action":"fly_to_star", "target":"Gamma Vulpeculae", "max_ticks":100,
+            "stop_at_encounter":true
+        }))
+        .unwrap();
+        let arrival: Action = serde_json::from_value(json!({
+            "action":"fly_to_star", "target":"Gamma Vulpeculae", "max_ticks":100
+        }))
+        .unwrap();
+        let reached = record("star_encounter_reached:target=150");
+        assert!(satisfied(&flight, std::slice::from_ref(&reached), &frame()));
+        assert!(!satisfied(&arrival, &[reached], &frame()));
+        assert!(!satisfied(
+            &flight,
+            &[record("star_encounter_reached:target=154")],
+            &frame()
+        ));
     }
 
     #[test]
