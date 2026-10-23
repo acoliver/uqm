@@ -442,26 +442,14 @@ pub unsafe fn hail_alien() {
             const MENU_SOUND_DOWN: u16 = 1 << 1;
             const MENU_SOUND_SELECT: u16 = 1 << 4;
 
-            #[repr(C)]
-            struct EncounterStateDInput {
-                input_func: unsafe extern "C" fn(*mut EncounterStateDInput) -> std::ffi::c_int,
-                num_responses: u8,
-                cur_response: u8,
-                top_response: u8,
-                _phrase_buf: [u16; 1024],
-            }
+            type EncounterStateDInput = crate::comm::comm_abi::EncounterState;
 
             unsafe extern "C" fn encounter_cb(_es: *mut EncounterStateDInput) -> std::ffi::c_int {
                 crate::comm::ffi::rust_DoCommunication()
             }
 
-            let mut es = EncounterStateDInput {
-                input_func: encounter_cb,
-                num_responses: 0,
-                cur_response: 0,
-                top_response: 0,
-                _phrase_buf: [0; 1024],
-            };
+            let mut es: EncounterStateDInput = std::mem::zeroed();
+            es.input = Some(encounter_cb);
             unsafe {
                 use crate::mainloop::restart_menu::c_extern::DoInput;
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
@@ -495,10 +483,7 @@ pub unsafe fn hail_alien() {
         StopSound();
         StopTrack();
         let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
-        // ONE_SECOND/60 ≈ 16ms at 60Hz; FadeMusic returns TimeCount
-        // The sleep ensures the fade completes before teardown.
-        // We approximate ONE_SECOND/60 as 1 tick unit (C uses GetTimeCounter units).
-        SleepThreadUntil(fade_end + 1);
+        SleepThreadUntil(fade_end.wrapping_add(840 / 60));
 
         // ----------------------------------------------------------------
         // Step 16: Call post/uninit encounter funcs

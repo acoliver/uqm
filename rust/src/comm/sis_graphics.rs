@@ -43,16 +43,31 @@ pub(crate) struct CText {
     _pad1: [u8; 2], // align struct size to 8
 }
 
-impl Default for CText {
-    fn default() -> Self {
+crate::c_bindings::assert_c_layout!(
+    CText,
+    crate::c_bindings::global_state::TEXT {
+        baseline: baseline,
+        p_str: pStr,
+        align: align,
+        char_count: CharCount,
+    }
+);
+
+impl CText {
+    pub(crate) const fn new(p_str: *const std::ffi::c_char, char_count: u16) -> Self {
         Self {
-            baseline: CPoint::default(),
+            baseline: CPoint { x: 0, y: 0 },
             _pad0: [0; 4],
-            p_str: std::ptr::null(),
+            p_str,
             align: 0,
-            char_count: 0,
+            char_count,
             _pad1: [0; 2],
         }
+    }
+}
+impl Default for CText {
+    fn default() -> Self {
+        Self::new(std::ptr::null(), 0)
     }
 }
 
