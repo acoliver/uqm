@@ -937,6 +937,7 @@ mod tests {
         for (checkpoint, parent) in [
             ("north-ready", "spindle-pkunk"),
             ("broken-ultron", "north-ready"),
+            ("thraddash-diverted", "broken-ultron"),
         ] {
             let save = root.join(format!("rust/scripts/saves/{checkpoint}.sav"));
             let provenance: Provenance =

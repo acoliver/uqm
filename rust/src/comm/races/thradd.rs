@@ -737,11 +737,11 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 }
 fn descriptor() -> CLocData {
     let mut d = CLocData {
-        alien_frame_res: c"comm.thradd.graphics".as_ptr(),
-        alien_font_res: c"comm.thradd.font".as_ptr(),
-        alien_colormap_res: c"comm.thradd.colortable".as_ptr(),
-        alien_song_res: c"comm.thradd.music".as_ptr(),
-        conversation_phrases_res: c"comm.thradd.dialogue".as_ptr(),
+        alien_frame_res: c"comm.thraddash.graphics".as_ptr(),
+        alien_font_res: c"comm.thraddash.font".as_ptr(),
+        alien_colormap_res: c"comm.thraddash.colortable".as_ptr(),
+        alien_song_res: c"comm.thraddash.music".as_ptr(),
+        conversation_phrases_res: c"comm.thraddash.dialogue".as_ptr(),
         alien_text_fcolor: CColor {
             r: 255,
             g: 255,

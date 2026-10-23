@@ -1,6 +1,32 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+
+#[test]
+fn descriptor_resources_exist_in_the_shipped_map() {
+    let desc = descriptor();
+    let map = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../sc2/content/uqm.rmp"
+    ));
+    for resource in [
+        desc.alien_frame_res,
+        desc.alien_font_res,
+        desc.alien_colormap_res,
+        desc.alien_song_res,
+        desc.conversation_phrases_res,
+    ] {
+        let key = unsafe { std::ffi::CStr::from_ptr(resource) }
+            .to_str()
+            .unwrap();
+        assert!(
+            map.lines()
+                .any(|line| line.split_once(" = ").is_some_and(|(name, _)| name == key)),
+            "missing shipped resource {key}"
+        );
+    }
+}
+
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
