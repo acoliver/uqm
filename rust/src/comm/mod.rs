@@ -18,6 +18,8 @@
 //! come from the audio thread. Shared state is protected by Mutex.
 
 pub mod animation;
+mod commanim_abi;
+mod commglue_abi;
 pub mod dispatch;
 pub mod encounter;
 pub mod ffi;
@@ -26,6 +28,7 @@ mod ffi_behavior_tests;
 pub mod glue;
 pub mod hail;
 pub mod locdata;
+mod oscill_abi;
 pub mod oscilloscope;
 pub mod phrase_state;
 pub mod player_font;
