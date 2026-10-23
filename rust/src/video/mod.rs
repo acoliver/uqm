@@ -26,6 +26,7 @@ pub mod decoder;
 pub mod ffi;
 #[cfg(test)]
 mod ffi_vtable_tests;
+pub mod legacy;
 pub mod player;
 pub mod scaler;
 

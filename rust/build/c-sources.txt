@@ -5,11 +5,8 @@ sc2/src/libs/graphics/sdl/sdl_common.c
 sc2/src/libs/graphics/widgets.c
 sc2/src/libs/log/uqmlog.c
 sc2/src/libs/threads/rust_thrcommon.c
-sc2/src/libs/video/legacyplayer.c
-sc2/src/libs/video/vfileins.c
 sc2/src/libs/video/video.c
 sc2/src/libs/video/videodec.c
-sc2/src/libs/video/vresins.c
 sc2/src/options.c
 sc2/src/port.c
 sc2/src/uqm.c
