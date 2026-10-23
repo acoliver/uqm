@@ -6,7 +6,7 @@ uqm_CFILES="battle.c border.c  cleanup.c
 		cons_res.c init.c intro.c load.c
 		load_legacy.c
 		menu.c outfit.c
-		process.c restart.c save.c settings.c setup.c setupmenu.c
+		 restart.c save.c settings.c setup.c setupmenu.c
 		 shipstat.c shipyard.c sis.c starbase.c starcon.c
 		 tactrans.c uqmdebug.c util.c"
 

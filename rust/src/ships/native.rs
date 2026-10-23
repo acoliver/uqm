@@ -82,21 +82,7 @@ pub mod abi {
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::galaxy::MoveGalaxy;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn AllocElement() -> HELEMENT {
-        extern "C" {
-            #[link_name = "AllocElement"]
-            fn legacy() -> usize;
-        }
-        legacy() as HELEMENT
-    }
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn FreeElement(handle: HELEMENT) {
-        extern "C" {
-            #[link_name = "FreeElement"]
-            fn legacy(handle: usize);
-        }
-        legacy(handle as usize)
-    }
+    pub use crate::battle::process_native::{AllocElement, FreeElement};
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::sounds::{
         CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
