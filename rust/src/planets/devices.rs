@@ -19,6 +19,7 @@ use crate::state::game_state_keys::{get_game_state as get, set_game_state as set
 
 static OBSERVATION: Mutex<DeviceObservation> = Mutex::new(DeviceObservation {
     in_orbit: false,
+    pc_menu: false,
     list: None,
     selected: 0,
     activation: None,
@@ -27,6 +28,7 @@ static OBSERVATION: Mutex<DeviceObservation> = Mutex::new(DeviceObservation {
 pub fn observation() -> DeviceObservation {
     let mut observed = OBSERVATION.lock().unwrap().clone();
     observed.in_orbit = unsafe { playerInPlanetOrbit() };
+    observed.pc_menu = unsafe { crate::navigation::abi::optWhichMenu == 2 };
     observed
 }
 

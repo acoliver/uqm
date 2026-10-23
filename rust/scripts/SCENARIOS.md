@@ -1368,3 +1368,19 @@ saving. The retained checkpoint has 13382 raw fuel and 32 crew; natural surface
 hazards cost 11 crew during this producing run. The Ultron remains at condition
 1, with the Spindle and Helix still aboard. `load-burvixese-caster-v1` verifies
 these exact saved values before the Ilwrath diversion.
+
+### Ilwrath caster diversion
+
+`campaign-s04c-ilwrath-approach` flies the earned Burvixese caster from Arcturus
+to Alpha Tauri and saves ordinary local flight. Its reload retains 3722 fuel,
+32 crew, the caster, both repair pieces and the broken Ultron. The separate
+`campaign-s04d-caster-diversion` invokes the caster through Devices, selects
+`go_kill_thraddash` and `bye_gods`, and saves `caster-diversion.sav` with
+`ILWRATH_DECEIVED=1`, `BURV_BROADCASTERS_ON_SHIP=1` and `ULTRON_CONDITION=1`.
+`load-caster-diversion-v1` independently reloads those values before barter.
+
+Device opening reads the actual menu setting: PC menus require Manifest then
+Devices; 3DO menus have a direct Devices entry. `device-menu-probe` exercises a
+real Clear Spindle invocation from the earned caster checkpoint and requires
+its consumption and Ultron condition 1 -> 2. This independent probe does not
+replace or mutate the campaign checkpoint.
