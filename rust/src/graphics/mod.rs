@@ -86,3 +86,5 @@ pub mod gfxload;
 pub mod filegfx;
 
 pub mod resgfx;
+
+pub mod frame_abi;

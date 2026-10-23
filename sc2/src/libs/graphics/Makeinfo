@@ -4,7 +4,7 @@ fi
 
 uqm_CFILES="context.c drawable.c
 		dcqueue.c
-		font.c frame.c gfx_common.c loaddisp.c
+		font.c gfx_common.c loaddisp.c
 		tfb_draw.c tfb_prim.c widgets.c"
 
 uqm_HFILES="bbox.h cmap.h context.h dcqueue.h drawable.h drawcmd.h font.h
