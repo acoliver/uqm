@@ -341,8 +341,13 @@ fn v1_to_v5_end_by_asserting_the_return_to_sol() {
 fn every_flagship_menu_visit_leaves_through_navigation() {
     for name in ["probe-encounter-v6", "probe-encounter-v7"] {
         let steps = script_steps(name);
+        assert!(is_tap(&steps[1], "select"), "{name} selects New Game");
+        assert!(is_tap(&steps[2], "cancel"), "{name} skips the introduction");
         let mut visits = 0;
-        let mut index = 0;
+        let mut index = steps
+            .iter()
+            .position(|step| action_of(step) == "navigate_to_hyperspace")
+            .expect("the route enters hyperspace before opening its flagship menu");
         while index < steps.len() {
             if !is_tap(&steps[index], "cancel") {
                 index += 1;

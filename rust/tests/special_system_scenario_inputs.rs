@@ -42,7 +42,7 @@ fn complete_sources_validate_and_preserve_the_existing_new_game_probe_inputs() {
             assert!(value.get(field).is_none(), "{name}: no injected {field}");
         }
         let steps = value["steps"].as_array().unwrap();
-        assert_eq!(&steps[..9], &reference["steps"].as_array().unwrap()[..9]);
+        assert_eq!(&steps[..10], &reference["steps"].as_array().unwrap()[..10]);
         assert_eq!(steps.last().unwrap(), &json!({"action": "finish"}));
         assert_eq!(value["budgets"]["max_wallclock_seconds"], 300);
         assert_eq!(value["budgets"]["max_input_ticks"], 25000);
@@ -80,7 +80,7 @@ fn complete_destination_tails_require_real_arrival_orbit_and_unchanged_resources
             ]);
         }
         expected.push(json!({"action": "finish"}));
-        assert_eq!(&steps[9..], expected);
+        assert_eq!(&steps[10..], expected);
     }
 }
 
@@ -93,27 +93,27 @@ fn arrival_scan_and_assertion_steps_have_ordered_native_checkpoint_obligations()
         let plan = NativeCheckpointPlan::derive(&bytes, &script).unwrap();
         let mut expected = vec![
             (0, CheckpointClass::SemanticWait),
-            (3, CheckpointClass::Assertion),
-            (4, CheckpointClass::Navigation),
-            (6, CheckpointClass::Assertion),
-            (7, CheckpointClass::SemanticWait),
-            (8, CheckpointClass::Assertion),
+            (4, CheckpointClass::Assertion),
+            (5, CheckpointClass::Navigation),
+            (7, CheckpointClass::Assertion),
+            (8, CheckpointClass::SemanticWait),
             (9, CheckpointClass::Assertion),
-            (10, CheckpointClass::Navigation),
-            (11, CheckpointClass::Capture),
-            (12, CheckpointClass::Navigation),
+            (10, CheckpointClass::Assertion),
+            (11, CheckpointClass::Navigation),
+            (12, CheckpointClass::Capture),
             (13, CheckpointClass::Navigation),
-            (14, CheckpointClass::Assertion),
+            (14, CheckpointClass::Navigation),
             (15, CheckpointClass::Assertion),
-            (16, CheckpointClass::Capture),
+            (16, CheckpointClass::Assertion),
+            (17, CheckpointClass::Capture),
         ];
         if name == "real-sol-pluto-orbit-scan" {
             expected.extend([
-                (17, CheckpointClass::Navigation),
                 (18, CheckpointClass::Navigation),
-                (20, CheckpointClass::Assertion),
+                (19, CheckpointClass::Navigation),
                 (21, CheckpointClass::Assertion),
-                (22, CheckpointClass::Capture),
+                (22, CheckpointClass::Assertion),
+                (23, CheckpointClass::Capture),
             ]);
         }
         let actual: Vec<_> = plan
@@ -125,7 +125,7 @@ fn arrival_scan_and_assertion_steps_have_ordered_native_checkpoint_obligations()
         for checkpoint in &plan.checkpoints {
             assert_eq!(checkpoint.action, script.steps()[checkpoint.action_index]);
         }
-        assert!(matches!(script.steps()[12], Action::NavigateToOrbit(_)));
+        assert!(matches!(script.steps()[13], Action::NavigateToOrbit(_)));
         assert!(!plan.linked_floors);
         assert!(!plan.expects_quit);
     }
@@ -134,7 +134,7 @@ fn arrival_scan_and_assertion_steps_have_ordered_native_checkpoint_obligations()
 #[test]
 fn closed_schema_rejects_unknown_root_action_and_navigation_fields() {
     for (name, _) in SCENARIOS {
-        for pointer in ["", "/steps/10", "/steps/12", "/steps/13"] {
+        for pointer in ["", "/steps/11", "/steps/13", "/steps/14"] {
             let mut value = document(name);
             value
                 .pointer_mut(pointer)
@@ -146,7 +146,7 @@ fn closed_schema_rejects_unknown_root_action_and_navigation_fields() {
             assert!(error.contains("teleport"), "{error}");
         }
         let mut value = document(name);
-        value["steps"][10]["action"] = json!("teleport");
+        value["steps"][11]["action"] = json!("teleport");
         assert!(validate(&value).unwrap_err().contains("teleport"));
     }
 }
@@ -154,7 +154,7 @@ fn closed_schema_rejects_unknown_root_action_and_navigation_fields() {
 #[test]
 fn invalid_targets_zero_navigation_bounds_and_insufficient_budgets_are_rejected() {
     for (name, _) in SCENARIOS {
-        for index in [10, 12] {
+        for index in [11, 13] {
             let mut value = document(name);
             value["steps"][index]["planet"] = json!(9);
             assert!(validate(&value).is_err());
