@@ -1290,3 +1290,21 @@ against the extracted save through the ordinary Load menu. The adjacent
 provenance records the parent, producing script, seed, output slot and decoded
 snapshot. Native screen checks retain an intermediate hyperspace capture so
 Sol and Gamma Krueger solar views are not mistaken for a missing transition.
+
+### Northern campaign preparation
+
+`campaign-s03a-north-ready` continues from `spindle-pkunk.sav`, returns to
+Sol through hyperspace and funds the northern trip through ordinary Starbase
+menus. It sells one of the four gifted Furies (seven crew refunds plus the
+hull: 2021 RU), the ion cannon (2000 RU) and the cargo bay (750 RU). The
+crew pod in slot 2 remains installed. The ledger is 1464 -> 3485 -> 5485 ->
+6235 RU, followed by three 500-RU tanks, two 500-RU thrusters and 181 fuel
+units costing 3620 RU. The checkpoint has 20000 raw fuel, 115 RU, 46 flagship
+crew, three Furies and the Earthling Cruiser. New tanks occupy module slots
+0, 3 and 4; new thrusters occupy drive slots 1 and 2. The Clear Spindle stays
+aboard. Normal rendered Cyborg is restored by loading the predecessor, so the
+scenario asserts that setting rather than cycling it again.
+
+Save extraction now includes the named story keys asserted or awaited by the
+selected producer. Their values are decoded from the saved file, including
+zeros; they are not copied from the script's expected values.
