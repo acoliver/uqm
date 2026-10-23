@@ -1,5 +1,4 @@
 uqm_CFILES="sdl2_pure.c
-		sdl_common.c
 		"
 uqm_HFILES="opengl.h palette.h
 		primitives.h pure.h rotozoom.h

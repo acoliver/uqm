@@ -25,6 +25,7 @@ pub mod keyboard;
 pub mod keynames;
 pub mod menu_binding;
 mod sdl_input;
+pub(crate) use sdl_input::ProcessInputEvent;
 pub mod templates;
 pub mod vcontrol;
 

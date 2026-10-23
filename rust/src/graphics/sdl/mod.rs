@@ -45,3 +45,4 @@ pub mod rotozoom;
 mod surface_fixture_tests;
 
 pub mod platform_abi;
+pub mod lifecycle_abi;

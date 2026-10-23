@@ -1,6 +1,5 @@
 sc2/src/libs/graphics/gfx_common.c
 sc2/src/libs/graphics/sdl/sdl2_pure.c
-sc2/src/libs/graphics/sdl/sdl_common.c
 sc2/src/libs/graphics/widgets.c
 sc2/src/libs/log/uqmlog.c
 sc2/src/libs/threads/rust_thrcommon.c
