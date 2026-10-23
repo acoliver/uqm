@@ -549,6 +549,7 @@ mod tests {
                 max_ticks: 100,
                 stop_at_encounter,
                 encounter_response: None,
+                patrol_policy: crate::automation::script::PatrolPolicy::Stop,
             })
         };
         assert!(!wait_or_navigation_satisfied(

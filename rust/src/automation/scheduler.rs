@@ -3552,6 +3552,7 @@ mod budgeted_wait_tests {
                 planet: 1,
                 max_ticks,
                 encounter_response: None,
+                patrol_policy: crate::automation::script::PatrolPolicy::Stop,
             }),
             Action::NavigateToMoon(NavigateToMoonStep {
                 planet: 1,
@@ -3563,6 +3564,7 @@ mod budgeted_wait_tests {
                 max_ticks,
                 stop_at_encounter: false,
                 encounter_response: None,
+                patrol_policy: crate::automation::script::PatrolPolicy::Stop,
             }),
             Action::NavigateToHyperspace(NavigateToHyperspaceStep {
                 max_ticks,
