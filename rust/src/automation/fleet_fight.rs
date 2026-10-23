@@ -84,6 +84,12 @@ impl FleetFight {
             self.initial = obs.counters;
         }
         if in_battle {
+            if self.last != obs.counters {
+                eprintln!(
+                    "FLEET_FIGHT: ticks={} player_left={} enemy_left={} flagship_crew={crew} picks={}",
+                    self.ticks, obs.counters[0], obs.counters[1], self.picks
+                );
+            }
             self.last = obs.counters;
         } else {
             if self.last[1] != 0 || self.last[0] == 0 {
@@ -124,6 +130,10 @@ impl FleetFight {
         } else if picker.cursor.y != target.y {
             MenuKey::Down
         } else {
+            eprintln!(
+                "FLEET_PICK: ticks={} generation={} cursor={:?} escorts={:?}",
+                self.ticks, picker.generation, picker.cursor, picker.escorts
+            );
             self.selected_generation = picker.generation;
             self.picks += 1;
             MenuKey::Select

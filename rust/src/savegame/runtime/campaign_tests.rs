@@ -139,6 +139,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-fueled-mycon-lure" => (30, 10, 2156, 92, 16835, 315, 2),
             "dev-armed-flagship" => (22, 11, 2156, 92, 12200, 315, 2),
             "dev-sun-fleet" => (23, 11, 2156, 50, 5200, 737, 6),
+            "dev-sun-device" => (17, 12, 2156, 37, 581, 1887, 4),
             "dev-ambush-crew" => (28, 8, 2156, 150, 18779, 294, 3),
             "dev-refueled-ambush" => (11, 9, 2156, 64, 15935, 534, 3),
             "dev-talking-pet" => (14, 7, 2156, 150, 14251, 1404, 0),
