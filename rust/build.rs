@@ -547,6 +547,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(generate)
         .header(drawable)
         .header(ship_build)
+        .header("../sc2/src/uqm/save.h")
         .allowlist_function(
             "(planetOuterLocation|XFormIPLoc|EscortFeasibilityStudy|_clip_line|DrawBatch\
              |DrawLine|DrawOval|DrawFilledOval|GetContextForeGroundColor\
@@ -555,7 +556,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
-            "(LOCDATA|ANIMATION_DESC|GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
+            "(SUMMARY_DESC|LOCDATA|ANIMATION_DESC|GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
              |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|STAR_DESC|FRAME_DESC|ELEMENT\
              |STARSHIP|GenerateFunctions|gfx_object|MENU_STATE)",
         )

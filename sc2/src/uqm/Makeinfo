@@ -3,10 +3,9 @@ uqm_CFILES="   cleanup.c
 		cnctdlg.c comm_variadic.c confirm.c credits.c
 		   fmv.c
 		gameinp.c gameopt.c getchar.c
-		cons_res.c init.c intro.c load.c
-		load_legacy.c
+		cons_res.c init.c intro.c
 		menu.c outfit.c
-		 restart.c save.c  setup.c setupmenu.c
+		 restart.c  setup.c setupmenu.c
 		 shipstat.c shipyard.c sis.c starbase.c starcon.c
 		  uqmdebug.c "
 

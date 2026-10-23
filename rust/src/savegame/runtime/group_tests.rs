@@ -821,3 +821,12 @@ fn capture_refuses_what_restore_would_refuse() {
         })
     );
 }
+
+#[test]
+fn load_game_retains_the_build_group_zero_template_icon() {
+    let mut game = LiveGame::new();
+    restore_loaded_groups(&mut game, &sections(vec![group(7, 1)], Vec::new())).unwrap();
+    let loaded = raw_groups(&game.ip_group_q);
+    assert_eq!(loaded[0].race_id, 7);
+    assert_eq!(loaded[0].melee_icon, handle(0, 3));
+}

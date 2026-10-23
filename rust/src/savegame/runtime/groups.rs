@@ -289,6 +289,23 @@ fn check_capacity(queue: QueueKind, count: usize, capacity: usize) -> Result<(),
 /// Both queues are emptied first, as `LoadGame` does, then filled in order from
 /// their own pools. On error the queues are untouched.
 pub fn restore_groups(game: &mut CGameState, sections: &GroupSections) -> Result<(), GroupError> {
+    restore_groups_with_icons(game, sections, false)
+}
+
+/// LoadGame calls BuildGroup(queue, 0) before overwriting the saved race byte.
+/// Keep its fleet-zero icon at this ABI boundary.
+pub(crate) fn restore_loaded_groups(
+    game: &mut CGameState,
+    sections: &GroupSections,
+) -> Result<(), GroupError> {
+    restore_groups_with_icons(game, sections, true)
+}
+
+fn restore_groups_with_icons(
+    game: &mut CGameState,
+    sections: &GroupSections,
+    first_fleet_icon: bool,
+) -> Result<(), GroupError> {
     let fleets = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?;
     check_capacity(
         QueueKind::IpGroups,
@@ -308,7 +325,12 @@ pub fn restore_groups(game: &mut CGameState, sections: &GroupSections) -> Result
     for entry in &sections.ip_group_queue {
         // SAFETY: `fleets` are the live slots of `avail_race_q` and the
         // validation above bounded `race_id` by their number.
-        let melee_icon = unsafe { (*fleets[usize::from(entry.race_id)]).melee_icon };
+        let icon_index = if first_fleet_icon {
+            0
+        } else {
+            usize::from(entry.race_id)
+        };
+        let melee_icon = unsafe { (*fleets[icon_index]).melee_icon };
         let link = AllocLink(group_queue);
         assert!(
             !link.is_null(),
