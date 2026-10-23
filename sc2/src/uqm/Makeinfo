@@ -1,5 +1,5 @@
 uqm_SUBDIRS="comm planets ships supermelee"
-		  uqmdebug.c "
+uqm_CFILES="cnctdlg.c comm_variadic.c"
 
 # The clock API is provided by Rust.
 
