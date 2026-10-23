@@ -18,6 +18,11 @@ pub mod events;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod globals;
 pub mod groups;
+pub mod hyper_data;
+pub mod hyper_encounters;
+pub mod hyper_menu;
+pub mod hyper_radar;
+pub mod hyper_transition;
 pub mod hyper_units;
 pub mod hyperspace;
 pub mod initial_state;

@@ -62,6 +62,18 @@ pub(crate) mod live {
     pub(crate) unsafe fn universe_y(value: i32) -> i16 {
         crate::navigation::hyper_units::universe_y(value, ScreenHeight)
     }
+    pub(crate) unsafe fn primitive(element: *mut ELEMENT) -> *mut PRIMITIVE {
+        ptr::addr_of_mut!(DisplayArray)
+            .cast::<PRIMITIVE>()
+            .add((*element).PrimIndex as usize)
+    }
+    pub(crate) unsafe fn sine(angle: u16, magnitude: i32) -> i16 {
+        ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
+            as i16
+    }
+    pub(crate) unsafe fn cosine(angle: u16, magnitude: i32) -> i16 {
+        sine(angle.wrapping_add(16), magnitude)
+    }
     /// # Safety
     /// Called on the game thread when entering hyperspace.
     #[no_mangle]
