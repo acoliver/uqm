@@ -3,10 +3,8 @@ sc2/src/libs/threads/rust_thrcommon.c
 sc2/src/options.c
 sc2/src/port.c
 sc2/src/uqm.c
-sc2/src/uqm/cleanup.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
-sc2/src/uqm/cons_res.c
 sc2/src/uqm/credits.c
 sc2/src/uqm/fmv.c
 sc2/src/uqm/gameinp.c
@@ -15,7 +13,6 @@ sc2/src/uqm/init.c
 sc2/src/uqm/intro.c
 sc2/src/uqm/outfit.c
 sc2/src/uqm/restart.c
-sc2/src/uqm/rust_bridge_macros.c
 sc2/src/uqm/rust_bridge_main2.c
 sc2/src/uqm/rust_bridge_mainloop.c
 sc2/src/uqm/rust_bridge_restart.c
