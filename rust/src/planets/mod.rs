@@ -23,3 +23,9 @@ pub mod starmap_cursor;
 
 #[cfg(not(test))]
 pub mod devices;
+
+pub mod cargo;
+
+pub mod report;
+
+pub mod roster;
