@@ -1408,3 +1408,31 @@ is April 4, 2156, Zeta Persei/star 174, activity 4, fuel 12880, crew 32 and RU 1
 It retains `ROSY_SPHERE=1`, `ULTRON_CONDITION=4` and `ILWRATH_DECEIVED=1`; caster
 and all three repair-piece inventory flags are zero. `load-repaired-ultron-v1`
 reloads the extracted file and asserts this snapshot before an Utwig handover.
+
+### S07: Taalo Protector (parallel development)
+
+`campaign-s07-taalo-protected` starts from `south-refueled.sav`, which was the
+latest committed checkpoint when this segment was developed. It uses peaceful
+Orz contact at Gamma Vulpeculae, obtains permission at Delta Vulpeculae II-c,
+lands, and collects the Protector through the real energy-node collision.
+The script asserts both `TAALO_UNPROTECTED=1` and
+`TAALO_PROTECTOR_ON_SHIP=1`, then writes slot 1 through the Game menu.
+
+The native `pmid-2` run passed from that save. `dev-taalo-protected.sav` is its
+extracted **development checkpoint**, not an S06 descendant and not a campaign
+chain milestone. Its provenance records its actual south-refueled parent.
+
+To replay from a different earned solar-flight ancestor, replace only the
+input save with:
+
+```sh
+python3 rust/scripts/prepare_mid_segment.py campaign-s07-taalo-protected \
+  --start-save utwig-bomb.sav
+```
+
+The file must already exist under `rust/scripts/saves/`. This changes the
+script's `start_save` path, leaves the save bytes untouched, and retains all
+milestone/resource assertions. The campaign lane must run and extract its own
+connected checkpoint. Initial Orz contact must still be unvisited; the route
+requires at least 50 displayed fuel, 12 crew, and one lander. Travel uses the
+live starting location rather than any recorded ship position.
