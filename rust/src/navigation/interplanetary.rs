@@ -30,7 +30,8 @@ mod live {
     ];
 
     unsafe fn sine(angle: u16, magnitude: i32) -> i16 {
-        ((sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT) as i16
+        ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
+            as i16
     }
     unsafe fn cosine(angle: u16, magnitude: i32) -> i16 {
         sine(angle.wrapping_add(16), magnitude)

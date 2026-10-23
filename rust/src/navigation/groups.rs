@@ -132,6 +132,13 @@ pub unsafe extern "C" fn WriteIpGroup(file: *mut GameStateFile, group: *const IP
     write(file, &(*group).loc.y.to_ne_bytes());
 }
 
+fn sine(angle: u32, magnitude: i32) -> i32 {
+    (crate::math::sinetab[(angle & 63) as usize] as i32 * magnitude) >> 14
+}
+fn cosine(angle: u32, magnitude: i32) -> i32 {
+    sine(angle + 16, magnitude)
+}
+
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 mod live {
     use super::*;
@@ -576,19 +583,19 @@ mod live {
         CloseStateFile(file);
         offset
     }
-
-    unsafe fn sine(angle: u32, magnitude: i32) -> i32 {
-        (sinetab[(angle & 63) as usize] as i32 * magnitude) >> SIN_SHIFT
-    }
-    unsafe fn cosine(angle: u32, magnitude: i32) -> i32 {
-        sine(angle + QUADRANT, magnitude)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::state::c_api::*;
+
+    #[test]
+    fn on_station_positions_use_the_full_rust_sine_table() {
+        assert_eq!((cosine(0, 1600), sine(0, 1600)), (0, -1600));
+        assert_eq!((cosine(16, 1600), sine(16, 1600)), (1600, 0));
+        assert_eq!(sine(68, 1600), -1479);
+    }
 
     #[test]
     #[serial_test::serial]
