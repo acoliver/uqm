@@ -978,26 +978,12 @@ pub type PDWORDFUNC = ::std::option::Option<unsafe extern "C" fn() -> DWORD>;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
 extern "C" {
-    pub fn InitTimeSystem();
-}
-extern "C" {
-    pub fn UnInitTimeSystem();
-}
-extern "C" {
     pub fn GetTimeCounter() -> TimeCount;
 }
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::InitThreadSystem;
-#[cfg(test)]
-extern "C" {
-    pub fn InitThreadSystem();
-}
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::UnInitThreadSystem;
-#[cfg(test)]
-extern "C" {
-    pub fn UnInitThreadSystem();
-}
 pub type ThreadFunction = ::std::option::Option<
     unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void) -> ::std::os::raw::c_int,
 >;
@@ -1018,110 +1004,16 @@ pub const SYNC_CLASS_VIDEO: _bindgen_ty_1 = 4;
 pub const SYNC_CLASS_RESOURCE: _bindgen_ty_1 = 8;
 pub type _bindgen_ty_1 = ::std::os::raw::c_uint;
 extern "C" {
-    pub fn CreateThread_Core(
-        func: ThreadFunction,
-        data: *mut ::std::os::raw::c_void,
-        stackSize: SDWORD,
-        name: *const ::std::os::raw::c_char,
-    ) -> Thread;
-}
-extern "C" {
-    pub fn CreateSemaphore_Core(
-        initial: DWORD,
-        name: *const ::std::os::raw::c_char,
-        syncClass: DWORD,
-    ) -> Semaphore;
-}
-extern "C" {
-    pub fn CreateMutex_Core(name: *const ::std::os::raw::c_char, syncClass: DWORD) -> Mutex;
-}
-extern "C" {
-    pub fn CreateRecursiveMutex_Core(
-        name: *const ::std::os::raw::c_char,
-        syncClass: DWORD,
-    ) -> RecursiveMutex;
-}
-extern "C" {
-    pub fn CreateCondVar_Core(name: *const ::std::os::raw::c_char, syncClass: DWORD) -> CondVar;
-}
-extern "C" {
-    pub fn CreateThreadLocal() -> *mut ThreadLocal;
-}
-extern "C" {
-    pub fn DestroyThreadLocal(tl: *mut ThreadLocal);
-}
-extern "C" {
-    pub fn GetMyThreadLocal() -> *mut ThreadLocal;
-}
-extern "C" {
-    pub fn HibernateThread(timePeriod: TimePeriod);
-}
-extern "C" {
     pub fn SleepThread(timePeriod: TimePeriod);
 }
 extern "C" {
     pub fn SleepThreadUntil(wakeTime: TimeCount);
 }
 extern "C" {
-    pub fn DestroyThread(arg1: Thread);
-}
-extern "C" {
     pub fn TaskSwitch();
-}
-extern "C" {
-    pub fn WaitThread(thread: Thread, status: *mut ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn FinishThread(arg1: Thread);
 }
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::ProcessThreadLifecycles;
-#[cfg(test)]
-extern "C" {
-    pub fn ProcessThreadLifecycles();
-}
-extern "C" {
-    pub fn DestroySemaphore(sem: Semaphore);
-}
-extern "C" {
-    pub fn SetSemaphore(sem: Semaphore);
-}
-extern "C" {
-    pub fn ClearSemaphore(sem: Semaphore);
-}
-extern "C" {
-    pub fn DestroyMutex(sem: Mutex);
-}
-extern "C" {
-    pub fn LockMutex(sem: Mutex);
-}
-extern "C" {
-    pub fn UnlockMutex(sem: Mutex);
-}
-extern "C" {
-    pub fn DestroyRecursiveMutex(m: RecursiveMutex);
-}
-extern "C" {
-    pub fn LockRecursiveMutex(m: RecursiveMutex);
-}
-extern "C" {
-    pub fn UnlockRecursiveMutex(m: RecursiveMutex);
-}
-extern "C" {
-    pub fn GetRecursiveMutexDepth(m: RecursiveMutex) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn DestroyCondVar(arg1: CondVar);
-}
-extern "C" {
-    pub fn WaitCondVar(arg1: CondVar);
-}
-extern "C" {
-    pub fn SignalCondVar(arg1: CondVar);
-}
-extern "C" {
-    pub fn BroadcastCondVar(arg1: CondVar);
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct taskstruct {
@@ -1131,25 +1023,7 @@ pub struct taskstruct {
     pub thread: Thread,
 }
 pub type Task = *mut taskstruct;
-extern "C" {
-    pub fn InitTaskSystem();
-}
-extern "C" {
-    pub fn CleanupTaskSystem();
-}
-extern "C" {
-    pub fn Task_SetState(task: Task, state_mask: DWORD) -> DWORD;
-}
-extern "C" {
-    pub fn Task_ClearState(task: Task, state_mask: DWORD) -> DWORD;
-}
-extern "C" {
-    pub fn FinishTask(task: Task);
-}
 pub type timespec = libc::timespec;
-extern "C" {
-    pub fn strupr(str_: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
 pub type stat = libc::stat;
 pub use crate::memory::rust_hcalloc;
 pub use crate::memory::rust_hfree;
@@ -1231,15 +1105,6 @@ pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 extern "C" {
-    pub fn InitGameClock() -> BOOLEAN;
-}
-extern "C" {
-    pub fn UninitGameClock() -> BOOLEAN;
-}
-extern "C" {
-    pub fn SetGameClockRate(seconds_per_day: COUNT);
-}
-extern "C" {
     pub fn ValidateEvent(
         type_: EVENT_TYPE,
         pmonth_index: *mut COUNT,
@@ -1258,9 +1123,6 @@ extern "C" {
 }
 extern "C" {
     pub fn EventHandler(selector: BYTE);
-}
-extern "C" {
-    pub fn GameClockTick();
 }
 extern "C" {
     pub fn MoveGameClockDays(days: COUNT);
@@ -1339,35 +1201,6 @@ pub struct match_SubStringContext {
 pub struct match_RegexContext {
     _unused: [u8; 0],
 }
-extern "C" {
-    pub fn match_prepareContext(
-        pattern: *const ::std::os::raw::c_char,
-        contextPtr: *mut *mut match_MatchContext,
-        type_: match_MatchType,
-    ) -> match_Result;
-}
-extern "C" {
-    pub fn match_matchPattern(
-        context: *mut match_MatchContext,
-        string: *const ::std::os::raw::c_char,
-    ) -> match_Result;
-}
-extern "C" {
-    pub fn match_errorString(
-        context: *mut match_MatchContext,
-        result: match_Result,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn match_freeContext(context: *mut match_MatchContext);
-}
-extern "C" {
-    pub fn match_matchPatternOnce(
-        pattern: *const ::std::os::raw::c_char,
-        type_: match_MatchType,
-        string: *const ::std::os::raw::c_char,
-    ) -> match_Result;
-}
 pub type uio_FileSystemID = ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1375,9 +1208,6 @@ pub struct uio_Repository {
     _unused: [u8; 0],
 }
 pub type FILE = libc::FILE;
-extern "C" {
-    pub fn uio_printMounts(outStream: *mut FILE, repository: *const uio_Repository);
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_Stream {
@@ -1394,73 +1224,6 @@ extern "C" {
     pub fn uio_fclose(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn uio_fread(
-        buf: *mut ::std::os::raw::c_void,
-        size: usize,
-        nmemb: usize,
-        stream: *mut uio_Stream,
-    ) -> usize;
-}
-extern "C" {
-    pub fn uio_fgets(
-        buf: *mut ::std::os::raw::c_char,
-        size: ::std::os::raw::c_int,
-        stream: *mut uio_Stream,
-    ) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn uio_fgetc(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_ungetc(c: ::std::os::raw::c_int, stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_fprintf(
-        stream: *mut uio_Stream,
-        format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_fputc(c: ::std::os::raw::c_int, stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_fputs(
-        s: *const ::std::os::raw::c_char,
-        stream: *mut uio_Stream,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_fseek(
-        stream: *mut uio_Stream,
-        offset: ::std::os::raw::c_long,
-        whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_ftell(stream: *mut uio_Stream) -> ::std::os::raw::c_long;
-}
-extern "C" {
-    pub fn uio_fwrite(
-        buf: *const ::std::os::raw::c_void,
-        size: usize,
-        nmemb: usize,
-        stream: *mut uio_Stream,
-    ) -> usize;
-}
-extern "C" {
-    pub fn uio_fflush(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_feof(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_ferror(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_clearerr(stream: *mut uio_Stream);
-}
-extern "C" {
     pub fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_Handle;
 }
 pub type uio_bool = bool;
@@ -1471,9 +1234,6 @@ pub type uio_sint16 = ::std::os::raw::c_short;
 pub type uio_uint32 = ::std::os::raw::c_uint;
 pub type uio_sint32 = ::std::os::raw::c_int;
 pub type uio_uintptr = ::std::os::raw::c_ulong;
-extern "C" {
-    pub fn uio_debugInteractive(in_: *mut FILE, out: *mut FILE, err: *mut FILE);
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_AutoMount {
@@ -1490,159 +1250,7 @@ pub struct uio_DirList {
 }
 pub use crate::io::uio_bridge::uio_init;
 extern "C" {
-    pub fn uio_unInit();
-}
-extern "C" {
-    pub fn uio_openRepository(flags: ::std::os::raw::c_int) -> *mut uio_Repository;
-}
-extern "C" {
-    pub fn uio_closeRepository(repository: *mut uio_Repository);
-}
-extern "C" {
-    pub fn uio_mountDir(
-        destRep: *mut uio_Repository,
-        mountPoint: *const ::std::os::raw::c_char,
-        fsType: uio_FileSystemID,
-        sourceDir: *mut uio_DirHandle,
-        sourcePath: *const ::std::os::raw::c_char,
-        inPath: *const ::std::os::raw::c_char,
-        autoMount: *mut *mut uio_AutoMount,
-        flags: ::std::os::raw::c_int,
-        relative: *mut uio_MountHandle,
-    ) -> *mut uio_MountHandle;
-}
-extern "C" {
-    pub fn uio_transplantDir(
-        mountPoint: *const ::std::os::raw::c_char,
-        sourceDir: *mut uio_DirHandle,
-        flags: ::std::os::raw::c_int,
-        relative: *mut uio_MountHandle,
-    ) -> *mut uio_MountHandle;
-}
-extern "C" {
-    pub fn uio_unmountDir(mountHandle: *mut uio_MountHandle) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_unmountAllDirs(repository: *mut uio_Repository) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_getMountFileSystemType(mountHandle: *mut uio_MountHandle) -> uio_FileSystemID;
-}
-extern "C" {
-    pub fn uio_open(
-        dir: *mut uio_DirHandle,
-        file: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-        mode: mode_t,
-    ) -> *mut uio_Handle;
-}
-extern "C" {
-    pub fn uio_close(handle: *mut uio_Handle) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_rename(
-        oldDir: *mut uio_DirHandle,
-        oldPath: *const ::std::os::raw::c_char,
-        newDir: *mut uio_DirHandle,
-        newPath: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_access(
-        dir: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        mode: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn uio_fstat(handle: *mut uio_Handle, statBuf: *mut stat) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_stat(
-        dir: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        statBuf: *mut stat,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_mkdir(
-        dir: *mut uio_DirHandle,
-        name: *const ::std::os::raw::c_char,
-        mode: mode_t,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_read(
-        handle: *mut uio_Handle,
-        buf: *mut ::std::os::raw::c_void,
-        count: usize,
-    ) -> isize;
-}
-extern "C" {
-    pub fn uio_rmdir(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_lseek(
-        handle: *mut uio_Handle,
-        offset: off_t,
-        whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_write(
-        handle: *mut uio_Handle,
-        buf: *const ::std::os::raw::c_void,
-        count: usize,
-    ) -> isize;
-}
-extern "C" {
-    pub fn uio_unlink(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_getFileLocation(
-        dir: *mut uio_DirHandle,
-        inPath: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-        mountHandle: *mut *mut uio_MountHandle,
-        outPath: *mut *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_openDir(
-        repository: *mut uio_Repository,
-        path: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> *mut uio_DirHandle;
-}
-extern "C" {
-    pub fn uio_openDirRelative(
-        base: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> *mut uio_DirHandle;
-}
-extern "C" {
-    pub fn uio_closeDir(dirHandle: *mut uio_DirHandle) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_getDirList(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        pattern: *const ::std::os::raw::c_char,
-        matchType: match_MatchType,
-    ) -> *mut uio_DirList;
-}
-extern "C" {
-    pub fn uio_DirList_free(dirList: *mut uio_DirList);
-}
-extern "C" {
-    pub fn uio_DirHandle_print(dirHandle: *const uio_DirHandle, out: *mut FILE);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1658,9 +1266,6 @@ pub union RESOURCE_DATA {
     pub num: DWORD,
     pub ptr: *mut ::std::os::raw::c_void,
     pub str_: *const ::std::os::raw::c_char,
-}
-extern "C" {
-    pub static mut _cur_resfile_name: *const ::std::os::raw::c_char;
 }
 pub type ResourceLoadFun = ::std::option::Option<
     unsafe extern "C" fn(pathname: *const ::std::os::raw::c_char, resdata: *mut RESOURCE_DATA),
@@ -1678,12 +1283,6 @@ pub type ResourceLoadFileFun = ::std::option::Option<
     unsafe extern "C" fn(fp: *mut uio_Stream, len: DWORD) -> *mut ::std::os::raw::c_void,
 >;
 extern "C" {
-    pub fn LoadResourceFromPath(
-        pathname: *const ::std::os::raw::c_char,
-        fn_: ResourceLoadFileFun,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
     pub fn res_OpenResFile(
         dir: *mut uio_DirHandle,
         filename: *const ::std::os::raw::c_char,
@@ -1691,43 +1290,11 @@ extern "C" {
     ) -> *mut uio_Stream;
 }
 extern "C" {
-    pub fn ReadResFile(
-        lpBuf: *mut ::std::os::raw::c_void,
-        size: usize,
-        count: usize,
-        fp: *mut uio_Stream,
-    ) -> usize;
-}
-extern "C" {
-    pub fn WriteResFile(
-        lpBuf: *const ::std::os::raw::c_void,
-        size: usize,
-        count: usize,
-        fp: *mut uio_Stream,
-    ) -> usize;
-}
-extern "C" {
     pub fn GetResFileChar(fp: *mut uio_Stream) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn PutResFileChar(ch: ::std::os::raw::c_char, fp: *mut uio_Stream)
         -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn PutResFileNewline(fp: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn SeekResFile(
-        fp: *mut uio_Stream,
-        offset: ::std::os::raw::c_long,
-        whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_long;
-}
-extern "C" {
-    pub fn TellResFile(fp: *mut uio_Stream) -> ::std::os::raw::c_long;
-}
-extern "C" {
-    pub fn LengthResFile(fp: *mut uio_Stream) -> usize;
 }
 extern "C" {
     pub fn res_CloseResFile(fp: *mut uio_Stream) -> BOOLEAN;
@@ -1739,46 +1306,7 @@ extern "C" {
     ) -> BOOLEAN;
 }
 extern "C" {
-    pub fn InitResourceSystem() -> RESOURCE_INDEX;
-}
-extern "C" {
-    pub fn UninitResourceSystem();
-}
-extern "C" {
-    pub fn InstallResTypeVectors(
-        res_type: *const ::std::os::raw::c_char,
-        loadFun: ResourceLoadFun,
-        freeFun: ResourceFreeFun,
-        stringFun: ResourceStringFun,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetResource(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn res_DetachResource(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn res_FreeResource(res: RESOURCE);
-}
-extern "C" {
-    pub fn CountResourceTypes() -> COUNT;
-}
-extern "C" {
-    pub fn res_GetIntResource(res: RESOURCE) -> DWORD;
-}
-extern "C" {
-    pub fn res_GetBooleanResource(res: RESOURCE) -> BOOLEAN;
-}
-extern "C" {
     pub fn res_GetResourceType(res: RESOURCE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn LoadResourceIndex(
-        dir: *mut uio_DirHandle,
-        filename: *const ::std::os::raw::c_char,
-        prefix: *const ::std::os::raw::c_char,
-    );
 }
 extern "C" {
     pub fn SaveResourceIndex(
@@ -1788,41 +1316,9 @@ extern "C" {
         strip_root: BOOLEAN,
     );
 }
-extern "C" {
-    pub fn GetResourceData(fp: *mut uio_Stream, length: DWORD) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn FreeResourceData(arg1: *mut ::std::os::raw::c_void) -> BOOLEAN;
-}
 pub type UniChar = uint32;
 extern "C" {
-    pub fn getCharFromString(ptr: *mut *const ::std::os::raw::c_char) -> UniChar;
-}
-extern "C" {
-    pub fn getCharFromStringN(
-        ptr: *mut *const ::std::os::raw::c_char,
-        end: *const ::std::os::raw::c_char,
-    ) -> UniChar;
-}
-extern "C" {
-    pub fn getLineFromString(
-        start: *const ::std::os::raw::c_char,
-        end: *mut *const ::std::os::raw::c_char,
-        startNext: *mut *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_uchar;
-}
-extern "C" {
     pub fn utf8StringCount(start: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn utf8StringCountN(
-        start: *const ::std::os::raw::c_char,
-        end: *const ::std::os::raw::c_char,
-    ) -> usize;
-}
-extern "C" {
-    pub fn utf8StringPos(pStr: *const ::std::os::raw::c_char, ch: UniChar)
-        -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn utf8StringCopy(
@@ -1832,23 +1328,10 @@ extern "C" {
     ) -> *mut ::std::os::raw::c_uchar;
 }
 extern "C" {
-    pub fn utf8StringCompare(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn skipUTF8Chars(
         ptr: *const ::std::os::raw::c_char,
         num: usize,
     ) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn getUniCharFromString(
-        wstr: *mut UniChar,
-        maxcount: usize,
-        start: *const ::std::os::raw::c_char,
-    ) -> usize;
 }
 extern "C" {
     pub fn getStringFromChar(
@@ -1858,31 +1341,7 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn getStringFromWideN(
-        ptr: *mut ::std::os::raw::c_char,
-        size: usize,
-        wstr: *const UniChar,
-        count: usize,
-    ) -> usize;
-}
-extern "C" {
-    pub fn getStringFromWide(
-        ptr: *mut ::std::os::raw::c_char,
-        size: usize,
-        wstr: *const UniChar,
-    ) -> usize;
-}
-extern "C" {
-    pub fn UniChar_isGraph(ch: UniChar) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn UniChar_isPrint(ch: UniChar) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn UniChar_toUpper(ch: UniChar) -> UniChar;
-}
-extern "C" {
-    pub fn UniChar_toLower(ch: UniChar) -> UniChar;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1899,9 +1358,6 @@ pub type STRING_TABLE_DESC = string_table;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
-extern "C" {
-    pub fn InstallStringTableResType() -> BOOLEAN;
-}
 extern "C" {
     pub fn LoadStringTableInstance(res: RESOURCE) -> STRING_TABLE;
 }
@@ -1921,13 +1377,7 @@ extern "C" {
     pub fn ReleaseStringTable(String: STRING) -> STRING_TABLE;
 }
 extern "C" {
-    pub fn GetStringTable(String: STRING) -> STRING_TABLE;
-}
-extern "C" {
     pub fn GetStringTableCount(String: STRING) -> COUNT;
-}
-extern "C" {
-    pub fn GetStringTableIndex(String: STRING) -> COUNT;
 }
 extern "C" {
     pub fn SetAbsStringTableIndex(String: STRING, StringTableIndex: COUNT) -> STRING;
@@ -1939,47 +1389,12 @@ extern "C" {
     pub fn GetStringLength(String: STRING) -> COUNT;
 }
 extern "C" {
-    pub fn GetStringLengthBin(String: STRING) -> COUNT;
-}
-extern "C" {
     pub fn GetStringAddress(String: STRING) -> STRINGPTR;
-}
-extern "C" {
-    pub fn GetStringName(String: STRING) -> STRINGPTR;
-}
-extern "C" {
-    pub fn GetStringSoundClip(String: STRING) -> STRINGPTR;
-}
-extern "C" {
-    pub fn GetStringTimeStamp(String: STRING) -> STRINGPTR;
 }
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
 extern "C" {
-    pub fn LoadDirEntryTable(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        pattern: *const ::std::os::raw::c_char,
-        matchType: match_MatchType,
-    ) -> DIRENTRY_REF;
-}
-extern "C" {
-    pub fn res_HasKey(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_IsString(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetString(key: *const ::std::os::raw::c_char) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
     pub fn res_PutString(key: *const ::std::os::raw::c_char, value: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn res_IsInteger(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetInteger(key: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn res_PutInteger(key: *const ::std::os::raw::c_char, value: ::std::os::raw::c_int);
@@ -1992,18 +1407,6 @@ extern "C" {
 }
 extern "C" {
     pub fn res_PutBoolean(key: *const ::std::os::raw::c_char, value: BOOLEAN);
-}
-extern "C" {
-    pub fn res_IsColor(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetColor(key: *const ::std::os::raw::c_char) -> Color;
-}
-extern "C" {
-    pub fn res_PutColor(key: *const ::std::os::raw::c_char, value: Color);
-}
-extern "C" {
-    pub fn res_Remove(key: *const ::std::os::raw::c_char) -> BOOLEAN;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2119,12 +1522,6 @@ pub struct INTERSECT_CONTROL {
 }
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-extern "C" {
-    pub fn BoxIntersect(pr1: *mut RECT, pr2: *mut RECT, printer: *mut RECT) -> INTERSECT_CODE;
-}
-extern "C" {
-    pub fn BoxUnion(pr1: *mut RECT, pr2: *mut RECT, punion: *mut RECT);
-}
 pub const ScreenFadeType_FadeAllToWhite: ScreenFadeType = 250;
 pub const ScreenFadeType_FadeSomeToWhite: ScreenFadeType = 251;
 pub const ScreenFadeType_FadeAllToBlack: ScreenFadeType = 252;
@@ -2150,9 +1547,6 @@ extern "C" {
     pub fn SetContextForeGroundColor(Color: Color) -> Color;
 }
 extern "C" {
-    pub fn GetContextForeGroundColor() -> Color;
-}
-extern "C" {
     pub fn SetContextBackGroundColor(Color: Color) -> Color;
 }
 extern "C" {
@@ -2174,17 +1568,7 @@ extern "C" {
     pub fn SetContextDrawMode(arg1: DrawMode) -> DrawMode;
 }
 extern "C" {
-    pub fn GetContextDrawMode() -> DrawMode;
-}
-extern "C" {
     pub fn CopyContextRect(area: *const RECT) -> DRAWABLE;
-}
-extern "C" {
-    pub fn DrawablesIntersect(
-        pControl0: *mut INTERSECT_CONTROL,
-        pControl1: *mut INTERSECT_CONTROL,
-        max_time_val: TIME_VALUE,
-    ) -> TIME_VALUE;
 }
 extern "C" {
     pub fn DrawStamp(pStamp: *mut STAMP);
@@ -2211,13 +1595,7 @@ extern "C" {
     pub fn font_DrawTracedText(pText: *mut TEXT, text: Color, trace: Color);
 }
 extern "C" {
-    pub fn DrawBatch(pBasePrim: *mut PRIMITIVE, PrimLinks: PRIM_LINKS, BatchFlags: BATCH_FLAGS);
-}
-extern "C" {
     pub fn BatchGraphics();
-}
-extern "C" {
-    pub fn GetBatchDepth() -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn UnbatchGraphics();
@@ -2235,13 +1613,6 @@ extern "C" {
 }
 extern "C" {
     pub fn DestroyContext(ContextRef: CONTEXT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn CreateDisplay(
-        CreateFlags: CREATE_FLAGS,
-        pwidth: *mut SIZE,
-        pheight: *mut SIZE,
-    ) -> DRAWABLE;
 }
 extern "C" {
     pub fn CreateDrawable(
@@ -2267,16 +1638,10 @@ extern "C" {
     pub fn GetNextContext(context: CONTEXT) -> CONTEXT;
 }
 extern "C" {
-    pub fn GetContextCount() -> usize;
-}
-extern "C" {
     pub fn SetFrameHot(Frame: FRAME, HotSpot: HOT_SPOT) -> HOT_SPOT;
 }
 extern "C" {
     pub fn GetFrameHot(Frame: FRAME) -> HOT_SPOT;
-}
-extern "C" {
-    pub fn InstallGraphicResTypes() -> BOOLEAN;
 }
 extern "C" {
     pub fn LoadGraphicFile(pStr: *const ::std::os::raw::c_char) -> DRAWABLE;
@@ -2306,9 +1671,6 @@ extern "C" {
     pub fn GetContextFontLeading(pheight: *mut SIZE) -> BOOLEAN;
 }
 extern "C" {
-    pub fn GetContextFontLeadingWidth(pwidth: *mut SIZE) -> BOOLEAN;
-}
-extern "C" {
     pub fn GetFrameCount(Frame: FRAME) -> COUNT;
 }
 extern "C" {
@@ -2321,16 +1683,10 @@ extern "C" {
     pub fn SetRelFrameIndex(Frame: FRAME, FrameOffs: SIZE) -> FRAME;
 }
 extern "C" {
-    pub fn SetEquFrameIndex(DstFrame: FRAME, SrcFrame: FRAME) -> FRAME;
-}
-extern "C" {
     pub fn IncFrameIndex(Frame: FRAME) -> FRAME;
 }
 extern "C" {
     pub fn DecFrameIndex(Frame: FRAME) -> FRAME;
-}
-extern "C" {
-    pub fn CopyFrameRect(Frame: FRAME, area: *const RECT) -> DRAWABLE;
 }
 extern "C" {
     pub fn CloneFrame(Frame: FRAME) -> DRAWABLE;
@@ -2339,49 +1695,7 @@ extern "C" {
     pub fn RotateFrame(Frame: FRAME, angle_deg: ::std::os::raw::c_int) -> DRAWABLE;
 }
 extern "C" {
-    pub fn RescaleFrame(
-        arg1: FRAME,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> DRAWABLE;
-}
-extern "C" {
-    pub fn ReadFramePixelColors(
-        frame: FRAME,
-        pixels: *mut Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn WriteFramePixelColors(
-        frame: FRAME,
-        pixels: *const Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn ReadFramePixelIndexes(
-        frame: FRAME,
-        pixels: *mut BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn WriteFramePixelIndexes(
-        frame: FRAME,
-        pixels: *const BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
     pub fn SetFrameTransparentColor(arg1: FRAME, arg2: Color);
-}
-extern "C" {
-    pub fn GetFramePixel(arg1: FRAME, pixelPt: POINT) -> Color;
 }
 extern "C" {
     pub fn CaptureDrawable(Drawable: DRAWABLE) -> FRAME;
@@ -2390,13 +1704,7 @@ extern "C" {
     pub fn ReleaseDrawable(Frame: FRAME) -> DRAWABLE;
 }
 extern "C" {
-    pub fn GetFrameParentDrawable(Frame: FRAME) -> DRAWABLE;
-}
-extern "C" {
     pub fn SetColorMap(ColorMapPtr: COLORMAPPTR) -> BOOLEAN;
-}
-extern "C" {
-    pub fn XFormColorMap(ColorMapPtr: COLORMAPPTR, TimeInterval: SIZE) -> DWORD;
 }
 extern "C" {
     pub fn FadeScreen(fadeType: ScreenFadeType, TimeInterval: SIZE) -> DWORD;
@@ -2424,9 +1732,6 @@ pub struct soundposition {
     pub y: ::std::os::raw::c_int,
 }
 pub type SoundPosition = soundposition;
-extern "C" {
-    pub fn GetSoundAddress(sound: SOUND) -> SOUNDPTR;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_soundsample {
@@ -2435,22 +1740,7 @@ pub struct tfb_soundsample {
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
 extern "C" {
-    pub fn InitSound(
-        argc: ::std::os::raw::c_int,
-        argv: *mut *mut ::std::os::raw::c_char,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn UninitSound();
-}
-extern "C" {
-    pub fn LoadSoundFile(pStr: *const ::std::os::raw::c_char) -> SOUND_REF;
-}
-extern "C" {
     pub fn LoadMusicFile(pStr: *const ::std::os::raw::c_char) -> MUSIC_REF;
-}
-extern "C" {
-    pub fn LoadSoundInstance(res: RESOURCE) -> SOUND_REF;
 }
 extern "C" {
     pub fn LoadMusicInstance(res: RESOURCE) -> MUSIC_REF;
@@ -2468,22 +1758,10 @@ extern "C" {
     pub fn PLRStop(MusicRef: MUSIC_REF);
 }
 extern "C" {
-    pub fn PLRPlaying(MusicRef: MUSIC_REF) -> BOOLEAN;
-}
-extern "C" {
-    pub fn PLRSeek(MusicRef: MUSIC_REF, pos: DWORD);
-}
-extern "C" {
     pub fn PLRPause(MusicRef: MUSIC_REF);
 }
 extern "C" {
     pub fn PLRResume(MusicRef: MUSIC_REF);
-}
-extern "C" {
-    pub fn snd_PlaySpeech(SpeechRef: MUSIC_REF);
-}
-extern "C" {
-    pub fn snd_StopSpeech();
 }
 extern "C" {
     pub fn PlayChannel(
@@ -2495,21 +1773,6 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn ChannelPlaying(Channel: COUNT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetPositionalObject(channel: COUNT) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn SetPositionalObject(channel: COUNT, positional_object: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn UpdateSoundPosition(channel: COUNT, pos: SoundPosition);
-}
-extern "C" {
-    pub fn StopChannel(Channel: COUNT, Priority: BYTE);
-}
-extern "C" {
     pub fn SetMusicVolume(Volume: COUNT);
 }
 extern "C" {
@@ -2517,9 +1780,6 @@ extern "C" {
 }
 extern "C" {
     pub fn StopSound();
-}
-extern "C" {
-    pub fn SoundPlaying() -> BOOLEAN;
 }
 extern "C" {
     pub fn WaitForSoundEnd(Channel: COUNT);
@@ -2903,13 +2163,7 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn SetVelocityVector(velocityptr: *mut VELOCITY_DESC, magnitude: SIZE, facing: COUNT);
-}
-extern "C" {
     pub fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
-}
-extern "C" {
-    pub fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2927,15 +2181,6 @@ pub struct ANIMATION_DESC {
 #[derive(Debug, Copy, Clone)]
 pub struct SEQUENCE {
     _unused: [u8; 0],
-}
-extern "C" {
-    pub fn DrawAlienFrame(pSeq: *mut SEQUENCE, Num: COUNT, fullRedraw: BOOLEAN) -> BOOLEAN;
-}
-extern "C" {
-    pub fn InitCommAnimations();
-}
-extern "C" {
-    pub fn ProcessCommAnimations(fullRedraw: BOOLEAN, paused: BOOLEAN) -> BOOLEAN;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -4768,12 +4013,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_19 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn CalcGravity(arg1: *const PLANET_INFO) -> UWORD;
-}
-extern "C" {
-    pub static mut PlanData: *const PlanetFrame;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SYSTEM_INFO {
@@ -4781,41 +4020,6 @@ pub struct SYSTEM_INFO {
     pub StarIntensity: BYTE,
     pub StarEnergy: UWORD,
     pub PlanetInfo: PLANET_INFO,
-}
-extern "C" {
-    pub fn GenerateMineralDeposits(
-        arg1: *const SYSTEM_INFO,
-        whichDeposit: COUNT,
-        info: *mut NODE_INFO,
-    ) -> COUNT;
-}
-extern "C" {
-    pub fn GenerateLifeForms(
-        arg1: *const SYSTEM_INFO,
-        whichLife: COUNT,
-        info: *mut NODE_INFO,
-    ) -> COUNT;
-}
-extern "C" {
-    pub fn GenerateRandomLocation(loc: *mut POINT);
-}
-extern "C" {
-    pub fn GenerateRandomNodes(
-        arg1: *const SYSTEM_INFO,
-        scan: COUNT,
-        numNodes: COUNT,
-        type_: COUNT,
-        whichNode: COUNT,
-        info: *mut NODE_INFO,
-    ) -> COUNT;
-}
-extern "C" {
-    pub fn GeneratePresetLife(
-        arg1: *const SYSTEM_INFO,
-        lifeTypes: *const SBYTE,
-        whichLife: COUNT,
-        info: *mut NODE_INFO,
-    ) -> COUNT;
 }
 extern "C" {
     pub fn DoPlanetaryAnalysis(SysInfoPtr: *mut SYSTEM_INFO, pPlanetDesc: *mut PLANET_DESC);
@@ -4894,12 +4098,6 @@ extern "C" {
     pub static mut pSolarSysState: *mut SOLARSYS_STATE;
 }
 extern "C" {
-    pub static mut SpaceMusic: MUSIC_REF;
-}
-extern "C" {
-    pub static mut PlanetContext: CONTEXT;
-}
-extern "C" {
     pub static mut SysGenRNG: *mut RandomContext;
 }
 extern "C" {
@@ -4912,16 +4110,7 @@ extern "C" {
     pub fn playerInInnerSystem() -> bool;
 }
 extern "C" {
-    pub fn worldIsPlanet(solarSys: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool;
-}
-extern "C" {
-    pub fn worldIsMoon(solarSys: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool;
-}
-extern "C" {
     pub fn planetIndex(solarSys: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> COUNT;
-}
-extern "C" {
-    pub fn moonIndex(solarSys: *const SOLARSYS_STATE, moon: *const PLANET_DESC) -> COUNT;
 }
 extern "C" {
     pub fn matchWorld(
@@ -4944,98 +4133,7 @@ extern "C" {
     pub fn planetOuterLocation(planetI: COUNT) -> POINT;
 }
 extern "C" {
-    pub fn LoadPlanet(SurfDefFrame: FRAME);
-}
-extern "C" {
-    pub fn DrawPlanet(dy: ::std::os::raw::c_int, tintColor: Color);
-}
-extern "C" {
-    pub fn FreePlanet();
-}
-extern "C" {
-    pub fn LoadStdLanderFont(info: *mut PLANET_INFO);
-}
-extern "C" {
-    pub fn FreeLanderFont(info: *mut PLANET_INFO);
-}
-extern "C" {
-    pub fn ExploreSolarSys();
-}
-extern "C" {
-    pub fn DrawStarBackGround();
-}
-extern "C" {
-    pub fn XFormIPLoc(pIn: *mut POINT, pOut: *mut POINT, ToDisplay: BOOLEAN);
-}
-extern "C" {
-    pub fn DrawOval(pRect: *mut RECT, num_off_pixels: BYTE);
-}
-extern "C" {
-    pub fn DrawFilledOval(pRect: *mut RECT);
-}
-extern "C" {
-    pub fn FillOrbits(
-        system: *mut SOLARSYS_STATE,
-        NumPlanets: BYTE,
-        pBaseDesc: *mut PLANET_DESC,
-        TypesDefined: BOOLEAN,
-    );
-}
-extern "C" {
     pub fn InitLander(LanderFlags: BYTE);
-}
-extern "C" {
-    pub fn InitSphereRotation(direction: ::std::os::raw::c_int, shielded: BOOLEAN);
-}
-extern "C" {
-    pub fn UninitSphereRotation();
-}
-extern "C" {
-    pub fn PrepareNextRotationFrame();
-}
-extern "C" {
-    pub fn DrawPlanetSphere(x: ::std::os::raw::c_int, y: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn DrawDefaultPlanetSphere();
-}
-extern "C" {
-    pub fn RenderPlanetSphere(Frame: FRAME, offset: ::std::os::raw::c_int, doThrob: BOOLEAN);
-}
-extern "C" {
-    pub fn SetShieldThrobEffect(FromFrame: FRAME, offset: ::std::os::raw::c_int, ToFrame: FRAME);
-}
-extern "C" {
-    pub fn ZoomInPlanetSphere();
-}
-extern "C" {
-    pub fn RotatePlanetSphere(keepRate: BOOLEAN);
-}
-extern "C" {
-    pub fn DrawScannedObjects(Reversed: BOOLEAN);
-}
-extern "C" {
-    pub fn GeneratePlanetSurface(pPlanetDesc: *mut PLANET_DESC, SurfDefFrame: FRAME);
-}
-extern "C" {
-    pub fn DeltaTopography(
-        num_iterations: COUNT,
-        DepthArray: *mut SBYTE,
-        pRect: *mut RECT,
-        depth_delta: SIZE,
-    );
-}
-extern "C" {
-    pub fn DrawPlanetSurfaceBorder();
-}
-extern "C" {
-    pub fn RedrawPlanetOrbitDisplay();
-}
-extern "C" {
-    pub fn GetNamedPlanetaryBody() -> *mut UNICODE;
-}
-extern "C" {
-    pub fn PlanetOrbitMenu();
 }
 extern "C" {
     pub fn SaveSolarSysLocation();
@@ -5131,16 +4229,10 @@ extern "C" {
     pub static mut disp_q: QUEUE;
 }
 extern "C" {
-    pub static mut DisplayFreeList: COUNT;
-}
-extern "C" {
     pub static mut DisplayArray: [PRIMITIVE; 330usize];
 }
 extern "C" {
     pub fn AllocElement() -> HELEMENT;
-}
-extern "C" {
-    pub fn FreeElement(hElement: HELEMENT);
 }
 extern "C" {
     pub fn RemoveElement(hLink: HLINK);
@@ -5152,38 +4244,10 @@ extern "C" {
     pub fn spawn_asteroid(ElementPtr: *mut ELEMENT);
 }
 extern "C" {
-    pub fn do_damage(ElementPtr: *mut ELEMENT, damage: SIZE);
-}
-extern "C" {
-    pub fn crew_preprocess(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn crew_collision(
-        ElementPtr0: *mut ELEMENT,
-        pPt0: *mut POINT,
-        ElementPtr1: *mut ELEMENT,
-        pPt1: *mut POINT,
-    );
-}
-extern "C" {
-    pub fn AbandonShip(ShipPtr: *mut ELEMENT, TargetPtr: *mut ELEMENT, crew_loss: COUNT);
-}
-extern "C" {
     pub fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN;
 }
 extern "C" {
-    pub fn PlotIntercept(
-        ElementPtr0: *mut ELEMENT,
-        ElementPtr1: *mut ELEMENT,
-        max_turns: COUNT,
-        margin_of_error: COUNT,
-    ) -> COUNT;
-}
-extern "C" {
     pub fn InitGalaxy();
-}
-extern "C" {
-    pub fn MoveGalaxy(view_state: VIEW_STATE, dx: SIZE, dy: SIZE);
 }
 extern "C" {
     pub fn CalculateGravity(ElementPtr: *mut ELEMENT) -> BOOLEAN;
@@ -5574,9 +4638,6 @@ extern "C" {
     pub fn starPresenceString(index: BYTE) -> *const ::std::os::raw::c_char;
 }
 extern "C" {
-    pub fn dumpPlanets(out: *mut FILE, star: *const STAR_DESC);
-}
-extern "C" {
     pub fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC);
 }
 extern "C" {
@@ -5700,9 +4761,6 @@ extern "C" {
     pub fn LoadGame(which_game: COUNT, summary_desc: *mut SUMMARY_DESC) -> BOOLEAN;
 }
 extern "C" {
-    pub fn LoadLegacyGame(which_game: COUNT, summary_desc: *mut SUMMARY_DESC) -> BOOLEAN;
-}
-extern "C" {
     pub fn SaveProblem();
 }
 extern "C" {
@@ -5711,25 +4769,6 @@ extern "C" {
         summary_desc: *mut SUMMARY_DESC,
         name: *const ::std::os::raw::c_char,
     ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn InstallCodeResType() -> BOOLEAN;
-}
-extern "C" {
-    pub fn LoadCodeResInstance(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn CaptureCodeRes(
-        hCode: *mut ::std::os::raw::c_void,
-        pData: *mut ::std::os::raw::c_void,
-        ppLocData: *mut *mut ::std::os::raw::c_void,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn ReleaseCodeRes(CodeRef: *mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn DestroyCodeRes(hCode: *mut ::std::os::raw::c_void) -> BOOLEAN;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5748,15 +4787,6 @@ pub use crate::callback::ffi::Callback_remove;
 pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_haveMore;
 extern "C" {
-    pub fn PlayTrack();
-}
-extern "C" {
-    pub fn StopTrack();
-}
-extern "C" {
-    pub fn JumpTrack();
-}
-extern "C" {
     pub fn PauseTrack();
 }
 extern "C" {
@@ -5765,50 +4795,12 @@ extern "C" {
 extern "C" {
     pub fn PlayingTrack() -> COUNT;
 }
-extern "C" {
-    pub fn FastReverse_Smooth();
-}
-extern "C" {
-    pub fn FastForward_Smooth();
-}
-extern "C" {
-    pub fn FastReverse_Page();
-}
-extern "C" {
-    pub fn FastForward_Page();
-}
-extern "C" {
-    pub fn SpliceTrack(
-        filespec: *mut UNICODE,
-        textspec: *mut UNICODE,
-        TimeStamp: *mut UNICODE,
-        cb: CallbackFunction,
-    );
-}
-extern "C" {
-    pub fn SpliceMultiTrack(TrackNames: *mut *mut UNICODE, TrackText: *mut UNICODE);
-}
-extern "C" {
-    pub fn GetTrackPosition(in_units: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_soundchunk {
     _unused: [u8; 0],
 }
 pub type SUBTITLE_REF = *mut tfb_soundchunk;
-extern "C" {
-    pub fn GetFirstTrackSubtitle() -> SUBTITLE_REF;
-}
-extern "C" {
-    pub fn GetNextTrackSubtitle(LastRef: SUBTITLE_REF) -> SUBTITLE_REF;
-}
-extern "C" {
-    pub fn GetTrackSubtitleText(SubRef: SUBTITLE_REF) -> *const UNICODE;
-}
-extern "C" {
-    pub fn GetTrackSubtitle() -> *const UNICODE;
-}
 pub const CONVERSATION_ARILOU_CONVERSATION: CONVERSATION = 0;
 pub const CONVERSATION_CHMMR_CONVERSATION: CONVERSATION = 1;
 pub const CONVERSATION_COMMANDER_CONVERSATION: CONVERSATION = 2;
@@ -5839,700 +4831,10 @@ pub const CONVERSATION_INVALID_CONVERSATION: CONVERSATION = 26;
 pub type CONVERSATION = ::std::os::raw::c_uint;
 
 extern "C" {
-    pub static mut shared_phrase_buf: [UNICODE; 2048usize];
-}
-extern "C" {
-    pub fn rust_InitCommunication() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_UninitCommunication();
-}
-extern "C" {
-    pub fn rust_IsCommInitialized() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_ClearCommunication();
-}
-extern "C" {
-    pub fn rust_HailAlien();
-}
-extern "C" {
-    pub fn rust_AlienTalkSegue(wait_track: ::std::os::raw::c_uint) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_DoCommunication() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_NPCPhrase_cb(
-        index: ::std::os::raw::c_int,
-        cb: ::std::option::Option<unsafe extern "C" fn()>,
-    );
-}
-extern "C" {
-    pub fn rust_NPCPhrase_splice(index: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_StartTrack() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_StopTrack();
-}
-extern "C" {
-    pub fn rust_RewindTrack();
-}
-extern "C" {
-    pub fn rust_JumpTrack();
-}
-extern "C" {
-    pub fn rust_SeekTrack(position: f32);
-}
-extern "C" {
-    pub fn rust_CommitTrack() -> f32;
-}
-extern "C" {
-    pub fn rust_WaitTrack() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_GetTrackPosition() -> f32;
-}
-extern "C" {
-    pub fn rust_GetTrackLength() -> f32;
-}
-extern "C" {
-    pub fn rust_SpliceTrack(
-        audio_handle: ::std::os::raw::c_uint,
-        text: *const ::std::os::raw::c_char,
-        start_time: f32,
-        duration: f32,
-    );
-}
-extern "C" {
-    pub fn rust_SpliceTrackText(
-        text: *const ::std::os::raw::c_char,
-        start_time: f32,
-        duration: f32,
-    );
-}
-extern "C" {
-    pub fn rust_ClearTrack();
-}
-extern "C" {
-    pub fn rust_GetSubtitle() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn rust_SetSubtitlesEnabled(enabled: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_AreSubtitlesEnabled() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_DisplayResponses();
-}
-extern "C" {
-    pub fn rust_ClearResponses();
-}
-extern "C" {
-    pub fn rust_SelectNextResponse() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_SelectPrevResponse() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_GetSelectedResponse() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_GetResponseCount() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_GetResponseText(
-        index: ::std::os::raw::c_int,
-        buf: *mut ::std::os::raw::c_char,
-        buf_len: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_ExecuteResponse() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_StartCommAnimation(index: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn rust_StopCommAnimation(index: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn rust_StartAllCommAnimations();
-}
-extern "C" {
-    pub fn rust_StopAllCommAnimations();
-}
-extern "C" {
-    pub fn rust_PauseCommAnimations();
-}
-extern "C" {
-    pub fn rust_ResumeCommAnimations();
-}
-extern "C" {
-    pub fn rust_GetCommAnimationFrame(index: ::std::os::raw::c_uint) -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_ProcessCommAnimations_cb(
-        clear: ::std::os::raw::c_int,
-        paused: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_WantTalkingAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_HaveTalkingAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_HaveTransitionAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_SetRunIntroAnim(run: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_SetRunTalkingAnim(run: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_SetStopTalkingAnim();
-}
-extern "C" {
-    pub fn rust_RunningIntroAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_RunningTalkingAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_AddOscilloscopeSamples(
-        samples: *const ::std::os::raw::c_short,
-        count: ::std::os::raw::c_uint,
-    );
-}
-extern "C" {
-    pub fn rust_UpdateOscilloscope();
-}
-extern "C" {
-    pub fn rust_GetOscilloscopeY(x: ::std::os::raw::c_uint) -> ::std::os::raw::c_uchar;
-}
-extern "C" {
-    pub fn rust_ClearOscilloscope();
-}
-extern "C" {
-    pub fn rust_IsTalking() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_IsTalkingFinished() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_SetTalkingFinished(finished: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_GetCommIntroMode() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_SetCommIntroMode(mode: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn rust_GetCommFadeTime() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_SetCommFadeTime(time: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn rust_IsCommInputPaused() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_SetCommInputPaused(paused: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_UpdateCommunication(delta_time: f32);
-}
-extern "C" {
-    pub fn rust_PlayingTrack() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_FastForward_Page();
-}
-extern "C" {
-    pub fn rust_FastForward_Smooth();
-}
-extern "C" {
-    pub fn rust_FastReverse_Page();
-}
-extern "C" {
-    pub fn rust_FastReverse_Smooth();
-}
-extern "C" {
-    pub fn rust_ClearSubtitles();
-}
-extern "C" {
-    pub fn rust_CheckSubtitles();
-}
-extern "C" {
-    pub fn rust_RedrawSubtitles();
-}
-extern "C" {
-    pub fn rust_PhraseEnabled(index: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_DisablePhrase(index: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn rust_SetSegue(segue: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn rust_GetSegue() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn rust_GetBattleSegue() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn c_SpliceTrack(
-        filespec: *mut UNICODE,
-        textspec: *mut UNICODE,
-        timestamp: *mut UNICODE,
-        cb: CallbackFunction,
-    );
-}
-extern "C" {
-    pub fn c_SpliceMultiTrack(track_names: *mut *mut UNICODE, track_text: *mut UNICODE);
-}
-extern "C" {
-    pub fn c_PlayTrack();
-}
-extern "C" {
-    pub fn c_StopTrack();
-}
-extern "C" {
-    pub fn c_JumpTrack();
-}
-extern "C" {
-    pub fn c_PlayingTrack() -> COUNT;
-}
-extern "C" {
-    pub fn c_PauseTrack();
-}
-extern "C" {
-    pub fn c_ResumeTrack();
-}
-extern "C" {
-    pub fn c_GetTrackSubtitle() -> *const UNICODE;
-}
-extern "C" {
-    pub fn c_GetFirstTrackSubtitle() -> SUBTITLE_REF;
-}
-extern "C" {
-    pub fn c_GetNextTrackSubtitle(last_ref: SUBTITLE_REF) -> SUBTITLE_REF;
-}
-extern "C" {
-    pub fn c_GetTrackSubtitleText(sub_ref: SUBTITLE_REF) -> *const UNICODE;
-}
-extern "C" {
-    pub fn c_FastForward_Page();
-}
-extern "C" {
-    pub fn c_FastForward_Smooth();
-}
-extern "C" {
-    pub fn c_FastReverse_Page();
-}
-extern "C" {
-    pub fn c_FastReverse_Smooth();
-}
-extern "C" {
-    pub fn c_GetTrackPosition(in_units: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub static mut sliderDisabled: BOOLEAN;
 }
 extern "C" {
     pub static mut oscillDisabled: BOOLEAN;
-}
-extern "C" {
-    pub fn InitOscilloscope(scopeBg: FRAME);
-}
-extern "C" {
-    pub fn DrawOscilloscope();
-}
-extern "C" {
-    pub fn UninitOscilloscope();
-}
-extern "C" {
-    pub fn InitSlider(
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        width: ::std::os::raw::c_int,
-        sliderFrame: FRAME,
-        buttonFrame: FRAME,
-    );
-}
-extern "C" {
-    pub fn SetSliderImage(f: FRAME);
-}
-extern "C" {
-    pub fn DrawSlider();
-}
-extern "C" {
-    pub fn c_InitOscilloscope(frame: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn c_DrawOscilloscope();
-}
-extern "C" {
-    pub fn c_DrawSlider();
-}
-extern "C" {
-    pub fn c_SetSliderImage(frame: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn c_ClearSubtitles();
-}
-extern "C" {
-    pub fn c_CheckSubtitles();
-}
-extern "C" {
-    pub fn c_RedrawSubtitles();
-}
-extern "C" {
-    pub fn comm_ClearSubtitles();
-}
-extern "C" {
-    pub fn comm_CheckSubtitles();
-}
-extern "C" {
-    pub fn comm_RedrawSubtitles();
-}
-extern "C" {
-    pub fn c_FadeMusic(
-        vol: ::std::os::raw::c_int,
-        duration: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn c_StopMusic();
-}
-extern "C" {
-    pub fn c_SetMenuSounds(up_down: ::std::os::raw::c_uint, select: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn c_SetColorMapFromCommData();
-}
-extern "C" {
-    pub fn c_PlayAlienMusic();
-}
-extern "C" {
-    pub fn c_HasTransitionAnim() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_get_alliance_name_full(
-        adjusted_index: ::std::os::raw::c_int,
-        buf: *mut ::std::os::raw::c_char,
-        buf_len: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_uchar;
-}
-extern "C" {
-    pub fn c_get_phrase_sound_clip(
-        phrases: *const ::std::os::raw::c_void,
-        index: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn c_get_phrase_timestamp(
-        phrases: *const ::std::os::raw::c_void,
-        index: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn c_LoadGraphic(res: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_LoadFont(res: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_LoadColorMap(res: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_LoadMusic(res: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_LoadStringTable(res: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_CaptureDrawable(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_CaptureColorMap(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_CaptureStringTable(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_ReleaseDrawable(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_ReleaseColorMap(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_ReleaseStringTable(handle: usize) -> usize;
-}
-extern "C" {
-    pub fn c_CreateContext(name: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn c_DestroyContext(ctx: usize);
-}
-extern "C" {
-    pub fn c_SetContext(ctx: usize) -> usize;
-}
-extern "C" {
-    pub fn c_SetContextFGFrame(frame: usize);
-}
-extern "C" {
-    pub fn c_SetContextClipRect(
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_ClearContextClipRect();
-}
-extern "C" {
-    pub fn c_SetContextBackGroundColor(
-        r: ::std::os::raw::c_int,
-        g: ::std::os::raw::c_int,
-        b: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_SetContextFont(font: usize) -> usize;
-}
-extern "C" {
-    pub fn c_CreateDrawable(
-        type_: ::std::os::raw::c_uint,
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        num_frames: ::std::os::raw::c_int,
-    ) -> usize;
-}
-extern "C" {
-    pub fn c_SetFrameTransparentColor(
-        frame: usize,
-        r: ::std::os::raw::c_int,
-        g: ::std::os::raw::c_int,
-        b: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_ClearDrawable();
-}
-extern "C" {
-    pub fn c_GetFrameRect(
-        frame: usize,
-        x: *mut ::std::os::raw::c_int,
-        y: *mut ::std::os::raw::c_int,
-        w: *mut ::std::os::raw::c_int,
-        h: *mut ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_BatchGraphics();
-}
-extern "C" {
-    pub fn c_UnbatchGraphics();
-}
-extern "C" {
-    pub fn c_SetTransitionSource(rect_ptr: usize);
-}
-extern "C" {
-    pub fn c_ScreenTransition(num_frames: ::std::os::raw::c_int, rect_ptr: usize);
-}
-extern "C" {
-    pub fn c_DrawSISFrame();
-}
-extern "C" {
-    pub fn c_DrawSISMessage(msg: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn c_DrawSISTitle(title: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn c_DoInput(state: *mut ::std::os::raw::c_void, exclusive: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn c_GetScreen() -> usize;
-}
-extern "C" {
-    pub fn c_GetSpaceContext() -> usize;
-}
-extern "C" {
-    pub fn c_SetLastActivityCheckLoad();
-}
-extern "C" {
-    pub fn c_GetCommDataAlienFrameRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetCommDataAlienFontRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetCommDataAlienColorMapRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetCommDataAlienSongRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetCommDataAlienAltSongRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetCommDataAlienSongFlags() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn c_GetCommDataConversationPhrasesRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_SetCommDataAlienFrame(frame: usize);
-}
-extern "C" {
-    pub fn c_SetCommDataAlienFont(font: usize);
-}
-extern "C" {
-    pub fn c_SetCommDataAlienColorMap(cmap: usize);
-}
-extern "C" {
-    pub fn c_SetCommDataAlienSong(song: usize);
-}
-extern "C" {
-    pub fn c_SetCommDataConversationPhrases(phrases: usize);
-}
-extern "C" {
-    pub fn c_ClearCommDataConversationPhrasesRes();
-}
-extern "C" {
-    pub fn c_ClearCommDataConversationPhrases();
-}
-extern "C" {
-    pub fn c_GetCommConversationPhrases() -> *const ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn c_CallInitEncounterFunc();
-}
-extern "C" {
-    pub fn c_CallPostEncounterFunc();
-}
-extern "C" {
-    pub fn c_CallUninitEncounterFunc();
-}
-extern "C" {
-    pub fn c_IsStarbaseConversation() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetGameString(
-        base: ::std::os::raw::c_int,
-        offset: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetPlanetName() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_CheckLoad() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetSISScreenWidth() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetSISScreenHeight() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetSliderY() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetSliderHeight() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn c_GetSISOrigin(x: *mut ::std::os::raw::c_int, y: *mut ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn c_GetPlayerFontRes() -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn c_GetWantPixmap() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn c_GetCommWndRect(
-        x: *mut ::std::os::raw::c_int,
-        y: *mut ::std::os::raw::c_int,
-        w: *mut ::std::os::raw::c_int,
-        h: *mut ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_SetCommWndRect(
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn c_RunEncounterDoInput();
-}
-extern "C" {
-    pub fn c_StopSound();
-}
-extern "C" {
-    pub fn c_SleepThreadUntil(time: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn c_FlushColorXForms();
-}
-extern "C" {
-    pub fn c_GetTimeCounter() -> ::std::os::raw::c_uint;
-}
-extern "C" {
-    pub fn c_SleepThread(duration: ::std::os::raw::c_uint);
-}
-extern "C" {
-    pub fn c_RunTalkSegue(wait_track: ::std::os::raw::c_uint) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_UpdateSpeechGraphics();
-}
-extern "C" {
-    pub fn c_SetTalkingFinished(finished: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn c_SetupSubtitleTextFromCommData();
-}
-extern "C" {
-    pub fn c_SetCurInputState(state: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn c_ClearPhraseBuf();
-}
-extern "C" {
-    pub fn c_SetAnimContext(ctx: usize);
-}
-extern "C" {
-    pub fn c_SetTextCacheContext(ctx: usize);
-}
-extern "C" {
-    pub fn c_SetTextCacheFrame(frame: usize);
-}
-extern "C" {
-    pub fn c_GetAnimContext() -> CONTEXT;
-}
-extern "C" {
-    pub fn c_GetClearSubtitles() -> BOOLEAN;
-}
-extern "C" {
-    pub fn c_ResetClearSubtitles();
-}
-extern "C" {
-    pub fn rust_init_race_dialogue(comm_id: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_22 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_22 = -999999;
@@ -6540,113 +4842,11 @@ pub const GLOBAL_ALLIANCE_NAME: _bindgen_ty_22 = -999998;
 pub type _bindgen_ty_22 = ::std::os::raw::c_int;
 pub type RESPONSE_REF = COUNT;
 pub type RESPONSE_FUNC = ::std::option::Option<unsafe extern "C" fn(R: RESPONSE_REF)>;
-extern "C" {
-    pub fn DoNPCPhrase(pStr: *mut UNICODE);
-}
-extern "C" {
-    pub fn NPCNumber(number: ::std::os::raw::c_int, fmt: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn GetAllianceName(buf: *mut UNICODE, name_1: RESPONSE_REF);
-}
-extern "C" {
-    pub fn construct_response(buf: *mut UNICODE, R: ::std::os::raw::c_int, ...);
-}
 pub const Segue_Segue_peace: Segue = 0;
 pub const Segue_Segue_hostile: Segue = 1;
 pub const Segue_Segue_victory: Segue = 2;
 pub const Segue_Segue_defeat: Segue = 3;
 pub type Segue = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn setSegue(segue: Segue);
-}
-extern "C" {
-    pub fn getSegue() -> Segue;
-}
-extern "C" {
-    pub fn init_race(comm_id: CONVERSATION) -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_arilou_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_blackurq_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_chmmr_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_commander_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_druuge_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_ilwrath_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_melnorme_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_mycon_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_orz_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_pkunk_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_rebel_yehat_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_shofixti_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_slyland_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_slylandro_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_spahome_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_spathi_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_starbase_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_supox_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_syreen_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_talkpet_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_thradd_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_umgah_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_urquan_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_utwig_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_vux_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_yehat_comm() -> *mut LOCDATA;
-}
-extern "C" {
-    pub fn init_zoqfot_comm() -> *mut LOCDATA;
-}
 pub type HENCOUNTER = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -6676,18 +4876,6 @@ pub struct encounter {
 pub const HAIL: _bindgen_ty_23 = 0;
 pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn EncounterBattle();
-}
-extern "C" {
-    pub fn BuildBattle(which_player: COUNT);
-}
-extern "C" {
-    pub fn InitEncounter() -> COUNT;
-}
-extern "C" {
-    pub fn UninitEncounter() -> COUNT;
-}
 extern "C" {
     pub fn FleetIsInfinite(playerNr: COUNT) -> BOOLEAN;
 }
@@ -6731,28 +4919,13 @@ extern "C" {
     pub static mut master_q: QUEUE;
 }
 extern "C" {
-    pub fn LoadMasterShipList(YieldProcessing: ::std::option::Option<unsafe extern "C" fn()>);
-}
-extern "C" {
-    pub fn FreeMasterShipList();
-}
-extern "C" {
     pub fn FindMasterShip(ship_ref: SPECIES_ID) -> HMASTERSHIP;
 }
 extern "C" {
     pub fn FindMasterShipIndex(ship_ref: SPECIES_ID) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn GetShipCostFromIndex(Index: ::std::os::raw::c_uint) -> COUNT;
-}
-extern "C" {
-    pub fn GetShipIconsFromIndex(Index: ::std::os::raw::c_uint) -> FRAME;
-}
-extern "C" {
     pub fn GetShipMeleeIconsFromIndex(Index: ::std::os::raw::c_uint) -> FRAME;
-}
-extern "C" {
-    pub static mut hResIndex: RESOURCE_INDEX;
 }
 extern "C" {
     pub static mut Screen: FRAME;
@@ -6785,12 +4958,6 @@ extern "C" {
     pub static mut StatusContext: CONTEXT;
 }
 extern "C" {
-    pub static mut screen_width: SIZE;
-}
-extern "C" {
-    pub static mut screen_height: SIZE;
-}
-extern "C" {
     pub static mut StarConFont: FONT;
 }
 extern "C" {
@@ -6798,9 +4965,6 @@ extern "C" {
 }
 extern "C" {
     pub static mut TinyFont: FONT;
-}
-extern "C" {
-    pub static mut RenderingCond: CondVar;
 }
 extern "C" {
     pub static mut race_q: [QUEUE; 0usize];
@@ -6811,56 +4975,16 @@ extern "C" {
 extern "C" {
     pub static mut PlayerControl: [BYTE; 0usize];
 }
-extern "C" {
-    pub static mut usingSpeech: BOOLEAN;
-}
-extern "C" {
-    pub fn InitContexts() -> BOOLEAN;
-}
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::UninitPlayerInput;
-#[cfg(test)]
-extern "C" {
-    pub fn UninitPlayerInput();
-}
-extern "C" {
-    pub fn InitGameKernel() -> BOOLEAN;
-}
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::UninitGameKernel;
-#[cfg(test)]
-extern "C" {
-    pub fn UninitGameKernel();
-}
-extern "C" {
-    pub fn LoadKernel(
-        argc: ::std::os::raw::c_int,
-        argv: *mut *mut ::std::os::raw::c_char,
-    ) -> BOOLEAN;
-}
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::FreeKernel;
-#[cfg(test)]
-extern "C" {
-    pub fn FreeKernel();
-}
-extern "C" {
-    pub fn initIO() -> ::std::os::raw::c_int;
-}
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::uninitIO;
-#[cfg(test)]
-extern "C" {
-    pub fn uninitIO();
-}
-extern "C" {
-    pub fn SetPlayerInput(playerI: COUNT) -> bool;
-}
 extern "C" {
     pub fn SetPlayerInputAll() -> bool;
-}
-extern "C" {
-    pub fn ClearPlayerInput(playerI: COUNT);
 }
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
@@ -6924,26 +5048,10 @@ extern "C" {
     pub fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG;
 }
 extern "C" {
-    pub fn NameCaptain(pQueue: *mut QUEUE, SpeciesID: SPECIES_ID) -> BYTE;
-}
-extern "C" {
-    pub fn ActivateStarShip(which_ship: COUNT, state: SIZE) -> COUNT;
-}
-extern "C" {
     pub fn GetIndexFromStarShip(pShipQ: *mut QUEUE, hStarShip: HLINK) -> COUNT;
 }
 extern "C" {
-    pub fn SetEscortCrewComplement(
-        which_ship: COUNT,
-        crew_level: COUNT,
-        captain: BYTE,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT;
-}
-extern "C" {
-    pub fn CalculateEscortsWorth() -> COUNT;
 }
 extern "C" {
     pub fn SetRaceAllied(race: COUNT, flag: BOOLEAN) -> COUNT;
@@ -6952,25 +5060,7 @@ extern "C" {
     pub fn StartSphereTracking(race: COUNT) -> COUNT;
 }
 extern "C" {
-    pub fn CountEscortShips(race: COUNT) -> COUNT;
-}
-extern "C" {
-    pub fn HaveEscortShip(race: COUNT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn EscortFeasibilityStudy(race: COUNT) -> COUNT;
-}
-extern "C" {
     pub fn CheckAlliance(race: COUNT) -> COUNT;
-}
-extern "C" {
-    pub fn RemoveSomeEscortShips(race: COUNT, count: COUNT) -> COUNT;
-}
-extern "C" {
-    pub fn RemoveEscortShips(race: COUNT);
-}
-extern "C" {
-    pub fn load_ship(SpeciesID: SPECIES_ID, LoadBattleData: BOOLEAN) -> *mut RACE_DESC;
 }
 extern "C" {
     pub fn free_ship(RaceDescPtr: *mut RACE_DESC, FreeIconData: BOOLEAN, FreeBattleData: BOOLEAN);
@@ -6986,12 +5076,6 @@ extern "C" {
 }
 extern "C" {
     pub fn UninitPlanetInfo();
-}
-extern "C" {
-    pub fn GetPlanetInfo();
-}
-extern "C" {
-    pub fn PutPlanetInfo();
 }
 extern "C" {
     pub fn InitGroupInfo(FirstTime: BOOLEAN);
@@ -7241,23 +5325,6 @@ extern "C" {
 extern "C" {
     pub fn UninitSpace();
 }
-extern "C" {
-    pub fn InitShips() -> SIZE;
-}
-extern "C" {
-    pub fn UninitShips();
-}
-extern "C" {
-    pub fn load_animation(
-        pixarray: *mut FRAME,
-        big_res: RESOURCE,
-        med_res: RESOURCE,
-        sml_res: RESOURCE,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn free_image(pixarray: *mut FRAME) -> BOOLEAN;
-}
 pub const PacketType_PACKET_INIT: PacketType = 0;
 pub const PacketType_PACKET_PING: PacketType = 1;
 pub const PacketType_PACKET_ACK: PacketType = 2;
@@ -7328,18 +5395,12 @@ pub type NetState = ::std::os::raw::c_uint;
 pub struct NetStateData {
     pub name: *const ::std::os::raw::c_char,
 }
-extern "C" {
-    pub static mut netStateData: [NetStateData; 0usize];
-}
 pub type NetConnectionStateData_ReleaseFunction =
     ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetConnectionStateData {
     pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-}
-extern "C" {
-    pub fn NetConnectionStateData_release(stateData: *mut NetConnectionStateData);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -7416,9 +5477,6 @@ extern "C" {
 extern "C" {
     pub static mut baseContentPath: [::std::os::raw::c_char; 1024usize];
 }
-extern "C" {
-    pub static mut optAddons: *mut *const ::std::os::raw::c_char;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _input_template {
@@ -7428,21 +5486,8 @@ pub type INPUT_TEMPLATE = _input_template;
 extern "C" {
     pub static mut input_templates: [INPUT_TEMPLATE; 6usize];
 }
-extern "C" {
-    pub fn prepareAddons(addons: *mut *const ::std::os::raw::c_char);
-}
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::unprepareAllDirs;
-#[cfg(test)]
-extern "C" {
-    pub fn unprepareAllDirs();
-}
-extern "C" {
-    pub fn loadAddon(addon: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn loadIndices(baseDir: *mut uio_DirHandle) -> ::std::os::raw::c_int;
-}
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::setGammaCorrection;
 #[cfg(test)]
@@ -7463,92 +5508,13 @@ pub struct battlestate_struct {
 }
 pub type BATTLE_STATE = battlestate_struct;
 extern "C" {
-    pub static mut battle_counter: [BYTE; 2usize];
-}
-extern "C" {
-    pub static mut instantVictory: BOOLEAN;
-}
-extern "C" {
-    pub static mut battleFrameCount: BattleFrameCounter;
-}
-extern "C" {
-    pub fn GetPlayerOrder(i: COUNT) -> COUNT;
-}
-extern "C" {
     pub fn Battle(arg1: BattleFrameCallback) -> BOOLEAN;
-}
-extern "C" {
-    pub fn BattleSong(DoPlay: BOOLEAN);
-}
-extern "C" {
-    pub fn FreeBattleSong();
 }
 pub type Checksum = uint32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct crc_State {
     pub crc: uint32,
-}
-extern "C" {
-    pub fn crc_init(state: *mut crc_State);
-}
-extern "C" {
-    pub fn crc_processBytes(state: *mut crc_State, buf: *mut uint8, bufLen: usize);
-}
-extern "C" {
-    pub fn crc_processUint8(state: *mut crc_State, val: uint8);
-}
-extern "C" {
-    pub fn crc_processUint16(state: *mut crc_State, val: uint16);
-}
-extern "C" {
-    pub fn crc_processUint32(state: *mut crc_State, val: uint32);
-}
-extern "C" {
-    pub fn crc_finish(state: *const crc_State) -> uint32;
-}
-extern "C" {
-    pub fn crc_processEXTENT(state: *mut crc_State, val: *const EXTENT);
-}
-extern "C" {
-    pub fn crc_processVELOCITY_DESC(state: *mut crc_State, val: *const VELOCITY_DESC);
-}
-extern "C" {
-    pub fn crc_processPOINT(state: *mut crc_State, val: *const POINT);
-}
-extern "C" {
-    pub fn crc_processSTATE(state: *mut crc_State, val: *const STATE);
-}
-extern "C" {
-    pub fn crc_processELEMENT(state: *mut crc_State, val: *const ELEMENT);
-}
-extern "C" {
-    pub fn crc_processDispQueue(state: *mut crc_State);
-}
-extern "C" {
-    pub fn crc_processRNG(state: *mut crc_State);
-}
-extern "C" {
-    pub fn crc_processState(state: *mut crc_State);
-}
-extern "C" {
-    pub fn initChecksumBuffers();
-}
-extern "C" {
-    pub fn uninitChecksumBuffers();
-}
-extern "C" {
-    pub fn addLocalChecksum(frameNr: BattleFrameCounter, checksum: Checksum);
-}
-extern "C" {
-    pub fn addRemoteChecksum(
-        conn: *mut NetConnection,
-        frameNr: BattleFrameCounter,
-        checksum: Checksum,
-    );
-}
-extern "C" {
-    pub fn verifyChecksums(frameNr: BattleFrameCounter) -> bool;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -7561,26 +5527,6 @@ pub struct ChecksumBuffer {
     pub checksums: *mut ChecksumEntry,
     pub maxSize: usize,
     pub interval: usize,
-}
-extern "C" {
-    pub fn ChecksumBuffer_init(cb: *mut ChecksumBuffer, delay: usize, interval: usize);
-}
-extern "C" {
-    pub fn ChecksumBuffer_uninit(cb: *mut ChecksumBuffer);
-}
-extern "C" {
-    pub fn ChecksumBuffer_addChecksum(
-        cb: *mut ChecksumBuffer,
-        frameNr: BattleFrameCounter,
-        checksum: Checksum,
-    ) -> bool;
-}
-extern "C" {
-    pub fn ChecksumBuffer_getChecksum(
-        cb: *mut ChecksumBuffer,
-        frameNr: BattleFrameCounter,
-        result: *mut Checksum,
-    ) -> bool;
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -7604,42 +5550,7 @@ pub struct NetStatistics {
     pub packetTypeSent: [usize; 18usize],
 }
 extern "C" {
-    pub fn NetConnection_open(
-        player: ::std::os::raw::c_int,
-        options: *const NetplayPeerOptions,
-        connectCallback: NetConnection_ConnectCallback,
-        closeCallback: NetConnection_CloseCallback,
-        errorCallback: NetConnection_ErrorCallback,
-        deleteCallback: NetConnection_DeleteCallback,
-        extra: *mut ::std::os::raw::c_void,
-    ) -> *mut NetConnection;
-}
-extern "C" {
-    pub fn NetConnection_close(conn: *mut NetConnection);
-}
-extern "C" {
     pub fn NetConnection_isConnected(conn: *const NetConnection) -> bool;
-}
-extern "C" {
-    pub fn NetConnection_doErrorCallback(nd: *mut NetConnection, err: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn NetConnection_setStateData(
-        conn: *mut NetConnection,
-        stateData: *mut NetConnectionStateData,
-    );
-}
-extern "C" {
-    pub fn NetConnection_getStateData(conn: *const NetConnection) -> *mut NetConnectionStateData;
-}
-extern "C" {
-    pub fn NetConnection_setExtra(conn: *mut NetConnection, extra: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn NetConnection_getExtra(conn: *const NetConnection) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn NetConnection_setState(conn: *mut NetConnection, state: NetState);
 }
 extern "C" {
     pub fn NetConnection_getState(conn: *const NetConnection) -> NetState;
@@ -7653,49 +5564,6 @@ extern "C" {
 extern "C" {
     pub fn NetConnection_getPlayerNr(conn: *const NetConnection) -> ::std::os::raw::c_int;
 }
-extern "C" {
-    pub fn NetConnection_getInputDelay(conn: *const NetConnection) -> usize;
-}
-extern "C" {
-    pub fn NetConnection_getChecksumBuffer(conn: *mut NetConnection) -> *mut ChecksumBuffer;
-}
-extern "C" {
-    pub fn NetConnection_getChecksumInterval(conn: *const NetConnection) -> usize;
-}
-extern "C" {
-    pub fn NetConnection_setReadyCallback(
-        conn: *mut NetConnection,
-        callback: NetConnection_ReadyCallback,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn NetConnection_getReadyCallback(
-        conn: *const NetConnection,
-    ) -> NetConnection_ReadyCallback;
-}
-extern "C" {
-    pub fn NetConnection_getReadyCallbackArg(
-        conn: *const NetConnection,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn NetConnection_setResetCallback(
-        conn: *mut NetConnection,
-        callback: NetConnection_ResetCallback,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn NetConnection_getResetCallback(
-        conn: *const NetConnection,
-    ) -> NetConnection_ResetCallback;
-}
-extern "C" {
-    pub fn NetConnection_getResetCallbackArg(
-        conn: *const NetConnection,
-    ) -> *mut ::std::os::raw::c_void;
-}
 pub type PacketHandler = ::std::option::Option<
     unsafe extern "C" fn(
         conn: *mut NetConnection,
@@ -7708,9 +5576,6 @@ pub struct PacketTypeData {
     pub len: usize,
     pub handler: PacketHandler,
     pub name: *const ::std::os::raw::c_char,
-}
-extern "C" {
-    pub static mut packetTypeData: [PacketTypeData; 0usize];
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -7862,71 +5727,7 @@ pub struct Packet_Reset {
     pub reason: uint16,
     pub padding0: uint16,
 }
-extern "C" {
-    pub fn Packet_delete(packet: *mut Packet);
-}
-extern "C" {
-    pub fn Packet_Init_create() -> *mut Packet_Init;
-}
-extern "C" {
-    pub fn Packet_Ping_create(id: uint32) -> *mut Packet_Ping;
-}
-extern "C" {
-    pub fn Packet_Ack_create(id: uint32) -> *mut Packet_Ack;
-}
-extern "C" {
-    pub fn Packet_Ready_create() -> *mut Packet_Ready;
-}
-extern "C" {
-    pub fn Packet_Handshake0_create() -> *mut Packet_Handshake0;
-}
-extern "C" {
-    pub fn Packet_Handshake1_create() -> *mut Packet_Handshake1;
-}
-extern "C" {
-    pub fn Packet_HandshakeCancel_create() -> *mut Packet_HandshakeCancel;
-}
-extern "C" {
-    pub fn Packet_HandshakeCancelAck_create() -> *mut Packet_HandshakeCancelAck;
-}
-extern "C" {
-    pub fn Packet_SeedRandom_create(seed: uint32) -> *mut Packet_SeedRandom;
-}
-extern "C" {
-    pub fn Packet_InputDelay_create(delay: uint32) -> *mut Packet_InputDelay;
-}
-extern "C" {
-    pub fn Packet_Fleet_create(side: NetplaySide, numShips: usize) -> *mut Packet_Fleet;
-}
-extern "C" {
-    pub fn Packet_TeamName_create(
-        side: NetplaySide,
-        name: *const ::std::os::raw::c_char,
-        size: usize,
-    ) -> *mut Packet_TeamName;
-}
-extern "C" {
-    pub fn Packet_SelectShip_create(ship: uint16) -> *mut Packet_SelectShip;
-}
-extern "C" {
-    pub fn Packet_BattleInput_create(state: uint8) -> *mut Packet_BattleInput;
-}
-extern "C" {
-    pub fn Packet_FrameCount_create(frameCount: uint32) -> *mut Packet_FrameCount;
-}
-extern "C" {
-    pub fn Packet_Checksum_create(frameNr: uint32, checksum: uint32) -> *mut Packet_Checksum;
-}
-extern "C" {
-    pub fn Packet_Abort_create(reason: uint16) -> *mut Packet_Abort;
-}
-extern "C" {
-    pub fn Packet_Reset_create(reason: uint16) -> *mut Packet_Reset;
-}
 pub type MELEE_STATE = melee_state;
-extern "C" {
-    pub static mut PickMeleeFrame: FRAME;
-}
 pub type MELEE_OPTIONS = BYTE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -7953,13 +5754,6 @@ extern "C" {
 }
 extern "C" {
     pub fn DoSaveTeam(pMS: *mut MELEE_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn ReadTeamImage(pTI: *mut MeleeTeam, load_fp: *mut uio_Stream) -> bool;
-}
-extern "C" {
-    pub fn WriteTeamImage(pTI: *const MeleeTeam, save_fp: *mut uio_Stream)
-        -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn LoadTeamList(pMS: *mut MELEE_STATE);
@@ -8107,52 +5901,10 @@ extern "C" {
     );
 }
 extern "C" {
-    pub static MeleeTeam_serialSize: usize;
-}
-extern "C" {
-    pub fn MeleeTeam_init(team: *mut MeleeTeam);
-}
-extern "C" {
-    pub fn MeleeTeam_new() -> *mut MeleeTeam;
-}
-extern "C" {
-    pub fn MeleeTeam_delete(team: *mut MeleeTeam);
-}
-extern "C" {
-    pub fn MeleeSetup_resetSentTeams(setup: *mut MeleeSetup);
-}
-extern "C" {
-    pub fn MeleeTeam_serialize(
-        team: *const MeleeTeam,
-        stream: *mut uio_Stream,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn MeleeTeam_deserialize(
-        team: *mut MeleeTeam,
-        stream: *mut uio_Stream,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn MeleeTeam_getValue(team: *const MeleeTeam) -> COUNT;
-}
-extern "C" {
-    pub fn MeleeTeam_getShip(team: *const MeleeTeam, slotNr: FleetShipIndex) -> MeleeShip;
-}
-extern "C" {
-    pub fn MeleeTeam_setShip(team: *mut MeleeTeam, slotNr: FleetShipIndex, ship: MeleeShip);
-}
-extern "C" {
     pub fn MeleeTeam_getFleet(team: *const MeleeTeam) -> *const MeleeShip;
 }
 extern "C" {
     pub fn MeleeTeam_getTeamName(team: *const MeleeTeam) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn MeleeTeam_setName(team: *mut MeleeTeam, name: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn MeleeTeam_copy(copy: *mut MeleeTeam, original: *const MeleeTeam);
 }
 extern "C" {
     pub fn MeleeSetup_getSentShip(
@@ -8204,16 +5956,6 @@ extern "C" {
     ) -> MeleeShip;
 }
 extern "C" {
-    pub fn MeleeSetup_setFleet(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        fleet: *const MeleeShip,
-    ) -> bool;
-}
-extern "C" {
-    pub fn MeleeSetup_getFleet(setup: *const MeleeSetup, teamNr: usize) -> *const MeleeShip;
-}
-extern "C" {
     pub fn MeleeSetup_setTeamName(
         setup: *mut MeleeSetup,
         teamNr: usize,
@@ -8244,30 +5986,6 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn MeleeState_setShip(
-        pMS: *mut MELEE_STATE,
-        teamNr: usize,
-        slotNr: FleetShipIndex,
-        ship: MeleeShip,
-    );
-}
-extern "C" {
-    pub fn MeleeState_setFleet(pMS: *mut MELEE_STATE, teamNr: usize, fleet: *const MeleeShip);
-}
-extern "C" {
-    pub fn MeleeState_setTeamName(
-        pMS: *mut MELEE_STATE,
-        teamNr: usize,
-        name: *const ::std::os::raw::c_char,
-    );
-}
-extern "C" {
-    pub fn MeleeState_setTeam(pMS: *mut MELEE_STATE, teamNr: usize, team: *const MeleeTeam);
-}
-extern "C" {
-    pub fn MeleeShipDeath(arg1: *mut STARSHIP);
-}
-extern "C" {
     pub fn BuildPickMeleeFrame();
 }
 extern "C" {
@@ -8275,33 +5993,6 @@ extern "C" {
 }
 extern "C" {
     pub fn FillPickMeleeFrame(setup: *mut MeleeSetup);
-}
-extern "C" {
-    pub fn MeleeGameOver();
-}
-extern "C" {
-    pub fn GetInitialMeleeStarShips(result: *mut HSTARSHIP) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetNextMeleeStarShip(which_player: COUNT, result: *mut HSTARSHIP) -> BOOLEAN;
-}
-extern "C" {
-    pub fn updateMeleeSelection(gms: *mut GETMELEE_STATE, player: COUNT, ship: COUNT) -> bool;
-}
-extern "C" {
-    pub fn selectShipHuman(context: *mut HumanInputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn selectShipComputer(
-        context: *mut ComputerInputContext,
-        gms: *mut GETMELEE_STATE,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn selectShipNetwork(
-        context: *mut NetworkInputContext,
-        gms: *mut GETMELEE_STATE,
-    ) -> BOOLEAN;
 }
 pub type BattleFrameInputFunction = ::std::option::Option<
     unsafe extern "C" fn(
@@ -8348,52 +6039,12 @@ pub struct NetworkInputContext {
     pub handlers: *mut BattleInputHandlers,
     pub playerNr: COUNT,
 }
-extern "C" {
-    pub fn ComputerInputContext_new(playerNr: COUNT) -> *mut ComputerInputContext;
-}
-extern "C" {
-    pub fn HumanInputContext_new(playerNr: COUNT) -> *mut HumanInputContext;
-}
-extern "C" {
-    pub fn NetworkInputContext_new(playerNr: COUNT) -> *mut NetworkInputContext;
-}
-extern "C" {
-    pub static mut PlayerInput: [*mut InputContext; 0usize];
-}
-extern "C" {
-    pub fn frameInputHuman(
-        context: *mut HumanInputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE;
-}
-extern "C" {
-    pub fn InputContext_init(
-        context: *mut InputContext,
-        handlers: *mut BattleInputHandlers,
-        playerNr: COUNT,
-    );
-}
-extern "C" {
-    pub fn InputContext_delete(context: *mut InputContext);
-}
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;
 pub const GRAVITY_MASS_INDEX: _bindgen_ty_28 = 3;
 pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn computer_intelligence(
-        context: *mut ComputerInputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE;
-}
-extern "C" {
-    pub fn tactical_intelligence(
-        context: *mut ComputerInputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE;
-}
 extern "C" {
     pub fn ship_intelligence(
         ShipPtr: *mut ELEMENT,
@@ -8402,47 +6053,16 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn ship_weapons(
-        ShipPtr: *mut ELEMENT,
-        OtherPtr: *mut ELEMENT,
-        margin_of_error: COUNT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn Pursue(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-extern "C" {
-    pub fn Entice(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-extern "C" {
-    pub fn Avoid(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-extern "C" {
-    pub fn TurnShip(ShipPtr: *mut ELEMENT, angle: COUNT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn ThrustShip(ShipPtr: *mut ELEMENT, angle: COUNT) -> BOOLEAN;
-}
-extern "C" {
     pub fn NotifyOthers(which_race: COUNT, target_loc: BYTE);
 }
 extern "C" {
     pub fn DoMissions();
 }
 extern "C" {
-    pub fn collide(ElementPtr0: *mut ELEMENT, ElementPtr1: *mut ELEMENT);
-}
-extern "C" {
-    pub fn RedrawQueue(clear: BOOLEAN);
-}
-extern "C" {
     pub fn InitDisplayList();
 }
 extern "C" {
     pub fn SetUpElement(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn InsertPrim(pLinks: *mut PRIM_LINKS, primIndex: COUNT, iPI: COUNT);
 }
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
 pub const SOUND_EFFECTS_SHIP_EXPLODES: SOUND_EFFECTS = 1;
@@ -8470,28 +6090,10 @@ extern "C" {
     pub fn GetMenuSounds(sound_0: *mut MENU_SOUND_FLAGS, sound_1: *mut MENU_SOUND_FLAGS);
 }
 extern "C" {
-    pub fn PlaySound(S: SOUND, Pos: SoundPosition, PositionalObject: *mut ELEMENT, Priority: BYTE);
-}
-extern "C" {
     pub fn PlayMenuSound(S: MENU_SOUND_EFFECT);
 }
 extern "C" {
     pub fn ProcessSound(Sound: SOUND, PositionalObject: *mut ELEMENT);
-}
-extern "C" {
-    pub fn CalcSoundPosition(ElementPtr: *mut ELEMENT) -> SoundPosition;
-}
-extern "C" {
-    pub fn NotPositional() -> SoundPosition;
-}
-extern "C" {
-    pub fn UpdateSoundPositions();
-}
-extern "C" {
-    pub fn FlushSounds();
-}
-extern "C" {
-    pub fn RemoveSoundsForObject(PosObj: *mut ELEMENT);
 }
 pub const TALK_COMMANDER: _bindgen_ty_29 = 0;
 pub const OUTFIT_STARSHIP: _bindgen_ty_29 = 1;
@@ -8532,9 +6134,6 @@ extern "C" {
     pub static mut status_y_offsets: [COORD; 0usize];
 }
 extern "C" {
-    pub fn InitStatusOffsets();
-}
-extern "C" {
     pub fn DrawCrewFuelString(y: COORD, state: SIZE);
 }
 extern "C" {
@@ -8562,25 +6161,10 @@ extern "C" {
     pub fn DrawBattleCrewAmount(ShipInfoPtr: *mut SHIP_INFO, y_offs: COORD);
 }
 extern "C" {
-    pub fn DrawCaptainsWindow(StarShipPtr: *mut STARSHIP);
-}
-extern "C" {
     pub fn DeltaEnergy(ElementPtr: *mut ELEMENT, energy_delta: SIZE) -> BOOLEAN;
 }
 extern "C" {
     pub fn DeltaCrew(ElementPtr: *mut ELEMENT, crew_delta: SIZE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn PreProcessStatus(ShipPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn PostProcessStatus(ShipPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn GetNextStarShip(LastStarShipPtr: *mut STARSHIP, which_side: COUNT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetInitialStarShips() -> BOOLEAN;
 }
 extern "C" {
     pub fn animation_preprocess(ElementPtr: *mut ELEMENT);
@@ -8598,9 +6182,6 @@ extern "C" {
         ElementPtr1: *mut ELEMENT,
         pPt1: *mut POINT,
     );
-}
-extern "C" {
-    pub fn inertial_thrust(ElementPtr: *mut ELEMENT) -> STATUS_FLAGS;
 }
 extern "C" {
     pub fn ConfirmSaveLoad(MsgStamp: *mut STAMP);
@@ -8623,12 +6204,6 @@ extern "C" {
 }
 extern "C" {
     pub fn StarMap() -> BOOLEAN;
-}
-extern "C" {
-    pub fn DrawCargoStrings(OldElement: BYTE, NewElement: BYTE);
-}
-extern "C" {
-    pub fn ShowRemainingCapacity();
 }
 extern "C" {
     pub fn InventoryDevices(pDeviceMap: *mut BYTE, Size: COUNT) -> SIZE;
@@ -8690,21 +6265,6 @@ extern "C" {
         PositionalObject: *mut ::std::os::raw::c_void,
         Priority: BYTE,
     );
-}
-extern "C" {
-    pub fn LoadIPData();
-}
-extern "C" {
-    pub fn FreeIPData();
-}
-extern "C" {
-    pub fn log_init(max_lines: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn log_exit(code: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn log_showBox(show: bool, err: bool);
 }
 pub const log_Level_log_Nothing: log_Level = 0;
 pub const log_Level_log_User: log_Level = 1;
@@ -9064,12 +6624,6 @@ extern "C" {
     ) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn Widget_ReceiveFocusSlider(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn Widget_ReceiveFocusControlEntry(
         _self: *mut WIDGET,
         event: ::std::os::raw::c_int,
@@ -9205,39 +6759,13 @@ extern "C" {
     pub static mut GfxFlags: ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn TFB_InitGraphics(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        renderer: *const ::std::os::raw::c_char,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_ReInitGraphics(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_UninitGraphics();
-}
-extern "C" {
     pub fn TFB_ProcessEvents();
 }
 extern "C" {
     pub fn TFB_SetGamma(gamma: f32) -> bool;
 }
 extern "C" {
-    pub fn TFB_UploadTransitionScreen();
-}
-extern "C" {
     pub fn TFB_SupportsHardwareScaling() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_SwapBuffers(force_full_redraw: ::std::os::raw::c_int);
 }
 pub const SCALE_TFB_SCALE_STEP: SCALE = 0;
 pub const SCALE_TFB_SCALE_NEAREST: SCALE = 1;
@@ -9254,13 +6782,7 @@ extern "C" {
     pub fn SetGraphicScale(scale: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
 }
 extern "C" {
-    pub fn GetGraphicScale() -> ::std::os::raw::c_int;
-}
-extern "C" {
     pub fn SetGraphicScaleMode(mode: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn GetGraphicScaleMode() -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn SetTransitionSource(pRect: *const RECT);
@@ -9269,34 +6791,10 @@ extern "C" {
     pub fn ScreenTransition(transition: ::std::os::raw::c_int, pRect: *const RECT);
 }
 extern "C" {
-    pub static mut TransitionAmount: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut TransitionClipRect: RECT;
-}
-extern "C" {
-    pub static mut FrameRate: f32;
-}
-extern "C" {
-    pub static mut FrameRateTickBase: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_FlushGraphics();
-}
-extern "C" {
-    pub fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN);
-}
-extern "C" {
-    pub fn TFB_PurgeDanglingGraphics();
-}
-extern "C" {
     pub static mut ScreenWidthActual: ::std::os::raw::c_int;
 }
 extern "C" {
     pub static mut ScreenHeightActual: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut ScreenColorDepth: ::std::os::raw::c_int;
 }
 extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
@@ -9316,43 +6814,6 @@ pub struct tfb_colormap {
     pub palette: *mut NativePalette,
 }
 pub type TFB_ColorMap = tfb_colormap;
-extern "C" {
-    pub fn GetFadeAmount() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn InitColorMaps();
-}
-extern "C" {
-    pub fn UninitColorMaps();
-}
-extern "C" {
-    pub fn GetColorMapColors(colors: *mut Color, arg1: *mut TFB_ColorMap);
-}
-extern "C" {
-    pub fn TFB_GetColorMap(index: ::std::os::raw::c_int) -> *mut TFB_ColorMap;
-}
-extern "C" {
-    pub fn TFB_ReturnColorMap(map: *mut TFB_ColorMap);
-}
-extern "C" {
-    pub fn XFormColorMap_step() -> BOOLEAN;
-}
-extern "C" {
-    pub fn AllocNativePalette() -> *mut NativePalette;
-}
-extern "C" {
-    pub fn FreeNativePalette(arg1: *mut NativePalette);
-}
-extern "C" {
-    pub fn SetNativePaletteColor(
-        arg1: *mut NativePalette,
-        index: ::std::os::raw::c_int,
-        arg2: Color,
-    );
-}
-extern "C" {
-    pub fn GetNativePaletteColor(arg1: *mut NativePalette, index: ::std::os::raw::c_int) -> Color;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_image {
@@ -9403,75 +6864,7 @@ pub struct tfb_pixelformat {
 }
 pub type TFB_PixelFormat = tfb_pixelformat;
 extern "C" {
-    pub fn TFB_DrawScreen_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, dest: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
     pub fn TFB_DrawScreen_Copy(r: *const RECT, src: SCREEN, dest: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_CopyToImage(img: *mut TFB_Image, r: *const RECT, src: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_SetMipmap(
-        img: *mut TFB_Image,
-        mmimg: *mut TFB_Image,
-        hotx: ::std::os::raw::c_int,
-        hoty: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_DeleteImage(img: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_DeleteData(arg1: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_WaitForSignal();
 }
 extern "C" {
     pub fn TFB_DrawScreen_ReinitVideo(
@@ -9480,387 +6873,6 @@ extern "C" {
         width: ::std::os::raw::c_int,
         height: ::std::os::raw::c_int,
     );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Callback(
-        callback: ::std::option::Option<unsafe extern "C" fn(arg: *mut ::std::os::raw::c_void)>,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_New(canvas: TFB_Canvas) -> *mut TFB_Image;
-}
-extern "C" {
-    pub fn TFB_DrawImage_CreateForScreen(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        withalpha: BOOLEAN,
-    ) -> *mut TFB_Image;
-}
-extern "C" {
-    pub fn TFB_DrawImage_New_Rotated(
-        img: *mut TFB_Image,
-        angle: ::std::os::raw::c_int,
-    ) -> *mut TFB_Image;
-}
-extern "C" {
-    pub fn TFB_DrawImage_SetMipmap(
-        img: *mut TFB_Image,
-        mmimg: *mut TFB_Image,
-        hotx: ::std::os::raw::c_int,
-        hoty: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Delete(image: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawImage_FixScaling(
-        image: *mut TFB_Image,
-        target: ::std::os::raw::c_int,
-        type_: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Intersect(
-        img1: *mut TFB_Image,
-        img1org: POINT,
-        img2: *mut TFB_Image,
-        img2org: POINT,
-        interRect: *const RECT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawImage_CopyRect(
-        source: *mut TFB_Image,
-        srcRect: *const RECT,
-        target: *mut TFB_Image,
-        dstPt: POINT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, target: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawImage_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_LoadFromFile(
-        dir: *mut ::std::os::raw::c_void,
-        fileName: *const ::std::os::raw::c_char,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_TrueColor(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        hasalpha: BOOLEAN,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_ForScreen(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        withalpha: BOOLEAN,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_Paletted(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        palette: *mut Color,
-        transparent_index: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_ScaleTarget(
-        canvas: TFB_Canvas,
-        oldcanvas: TFB_Canvas,
-        type_: ::std::os::raw::c_int,
-        last_type: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_RotationTarget(
-        src: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_ToScreenFormat(canvas: TFB_Canvas) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_IsPaletted(canvas: TFB_Canvas) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rescale_Nearest(
-        src: TFB_Canvas,
-        dst: TFB_Canvas,
-        scale: ::std::os::raw::c_int,
-        src_hs: *mut HOT_SPOT,
-        size: *mut EXTENT,
-        dst_hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rescale_Bilinear(
-        src: TFB_Canvas,
-        dst: TFB_Canvas,
-        scale: ::std::os::raw::c_int,
-        src_hs: *mut HOT_SPOT,
-        size: *mut EXTENT,
-        dst_hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rescale_Trilinear(
-        src: TFB_Canvas,
-        mipmap: TFB_Canvas,
-        dst: TFB_Canvas,
-        scale: ::std::os::raw::c_int,
-        src_hs: *mut HOT_SPOT,
-        mm_hs: *mut HOT_SPOT,
-        size: *mut EXTENT,
-        dst_hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetScaledExtent(
-        src_canvas: TFB_Canvas,
-        src_hs: *mut HOT_SPOT,
-        src_mipmap: TFB_Canvas,
-        mm_hs: *mut HOT_SPOT,
-        scale: ::std::os::raw::c_int,
-        type_: ::std::os::raw::c_int,
-        size: *mut EXTENT,
-        hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rotate(
-        src: TFB_Canvas,
-        dst: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-        size: EXTENT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetRotatedExtent(
-        src: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-        size: *mut EXTENT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetExtent(canvas: TFB_Canvas, size: *mut EXTENT);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetClipRect(canvas: TFB_Canvas, clipRect: *const RECT);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Delete(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, target: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_CopyRect(
-        source: TFB_Canvas,
-        srcRect: *const RECT,
-        target: TFB_Canvas,
-        dstPt: POINT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetFontCharData(
-        canvas: TFB_Canvas,
-        outData: *mut BYTE,
-        dataPitch: ::std::os::raw::c_uint,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_ExtractPalette(canvas: TFB_Canvas) -> *mut Color;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPalette(target: TFB_Canvas, palette: *mut Color);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetTransparentIndex(canvas: TFB_Canvas) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetTransparentIndex(
-        canvas: TFB_Canvas,
-        i: ::std::os::raw::c_int,
-        rleaccel: BOOLEAN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetTransparentColor(canvas: TFB_Canvas, color: *mut Color) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetTransparentColor(canvas: TFB_Canvas, color: Color, rleaccel: BOOLEAN);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_CopyTransparencyInfo(src: TFB_Canvas, dst: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Initialize();
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Lock(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Unlock(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetScreenFormat(fmt: *mut TFB_PixelFormat);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetStride(canvas: TFB_Canvas) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetLine(
-        canvas: TFB_Canvas,
-        line: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixel(
-        canvas: TFB_Canvas,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    ) -> Color;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Intersect(
-        canvas1: TFB_Canvas,
-        c1org: POINT,
-        canvas2: TFB_Canvas,
-        c2org: POINT,
-        interRect: *const RECT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixelColors(
-        arg1: TFB_Canvas,
-        pixels: *mut Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPixelColors(
-        arg1: TFB_Canvas,
-        pixels: *const Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixelIndexes(
-        arg1: TFB_Canvas,
-        data: *mut BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPixelIndexes(
-        arg1: TFB_Canvas,
-        data: *const BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_GetScreenCanvas(screen: SCREEN) -> TFB_Canvas;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -9892,29 +6904,11 @@ pub struct drawable_desc {
     pub MaxIndex: UWORD,
     pub Frame: *mut FRAME_DESC,
 }
-extern "C" {
-    pub fn AllocDrawable(num_frames: COUNT) -> DRAWABLE;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct IMAGE_BOX {
     pub Box: RECT,
     pub FramePtr: FRAME,
-}
-extern "C" {
-    pub fn _clip_line(pClipRect: *const RECT, pLine: *mut BRESENHAM_LINE) -> INTERSECT_CODE;
-}
-extern "C" {
-    pub fn _GetCelData(fp: *mut uio_Stream, length: DWORD) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn _ReleaseCelData(handle: *mut ::std::os::raw::c_void) -> BOOLEAN;
-}
-extern "C" {
-    pub static mut _CurFramePtr: FRAME;
-}
-extern "C" {
-    pub fn _text_blt(pClipRect: *mut RECT, TextPtr: *mut TEXT, ctxOrigin: POINT);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -9931,29 +6925,9 @@ extern "C" {
     pub fn StringBank_Free(bank: *mut stringbank);
 }
 extern "C" {
-    pub fn StringBank_AddString(
-        bank: *mut stringbank,
-        str_: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn StringBank_AddSubstring(
-        bank: *mut stringbank,
-        str_: *const ::std::os::raw::c_char,
-        n: ::std::os::raw::c_uint,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
     pub fn StringBank_AddOrFindString(
         bank: *mut stringbank,
         str_: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn StringBank_AddOrFindSubstring(
-        bank: *mut stringbank,
-        str_: *const ::std::os::raw::c_char,
-        n: ::std::os::raw::c_uint,
     ) -> *const ::std::os::raw::c_char;
 }
 extern "C" {
@@ -10073,90 +7047,6 @@ pub struct audio_Driver {
 extern "C" {
     pub fn initAudio(driver: sint32, flags: sint32) -> sint32;
 }
-extern "C" {
-    pub fn unInitAudio();
-}
-extern "C" {
-    pub fn audio_GetError() -> sint32;
-}
-extern "C" {
-    pub fn audio_GenSources(n: uint32, psrcobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_DeleteSources(n: uint32, psrcobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_IsSource(srcobj: audio_Object) -> bool;
-}
-extern "C" {
-    pub fn audio_Sourcei(srcobj: audio_Object, pname: audio_SourceProp, value: audio_IntVal);
-}
-extern "C" {
-    pub fn audio_Sourcef(srcobj: audio_Object, pname: audio_SourceProp, value: f32);
-}
-extern "C" {
-    pub fn audio_Sourcefv(srcobj: audio_Object, pname: audio_SourceProp, value: *mut f32);
-}
-extern "C" {
-    pub fn audio_GetSourcei(
-        srcobj: audio_Object,
-        pname: audio_SourceProp,
-        value: *mut audio_IntVal,
-    );
-}
-extern "C" {
-    pub fn audio_GetSourcef(srcobj: audio_Object, pname: audio_SourceProp, value: *mut f32);
-}
-extern "C" {
-    pub fn audio_SourceRewind(srcobj: audio_Object);
-}
-extern "C" {
-    pub fn audio_SourcePlay(srcobj: audio_Object);
-}
-extern "C" {
-    pub fn audio_SourcePause(srcobj: audio_Object);
-}
-extern "C" {
-    pub fn audio_SourceStop(srcobj: audio_Object);
-}
-extern "C" {
-    pub fn audio_SourceQueueBuffers(srcobj: audio_Object, n: uint32, pbufobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_SourceUnqueueBuffers(srcobj: audio_Object, n: uint32, pbufobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_GenBuffers(n: uint32, pbufobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_DeleteBuffers(n: uint32, pbufobj: *mut audio_Object);
-}
-extern "C" {
-    pub fn audio_IsBuffer(bufobj: audio_Object) -> bool;
-}
-extern "C" {
-    pub fn audio_GetBufferi(
-        bufobj: audio_Object,
-        pname: audio_BufferProp,
-        value: *mut audio_IntVal,
-    );
-}
-extern "C" {
-    pub fn audio_BufferData(
-        bufobj: audio_Object,
-        format: uint32,
-        data: *mut ::std::os::raw::c_void,
-        size: uint32,
-        freq: uint32,
-    );
-}
-extern "C" {
-    pub fn audio_GetFormatInfo(
-        format: uint32,
-        channels: *mut ::std::os::raw::c_int,
-        sample_size: *mut ::std::os::raw::c_int,
-    ) -> bool;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_decoderformats {
@@ -10234,24 +7124,6 @@ pub type _bindgen_ty_35 = ::std::os::raw::c_uint;
 pub struct TFB_RegSoundDecoder {
     _unused: [u8; 0],
 }
-extern "C" {
-    pub fn SoundDecoder_SwapWords(data: *mut uint16, size: uint32);
-}
-extern "C" {
-    pub fn SoundDecoder_Init(
-        flags: ::std::os::raw::c_int,
-        formats: *mut TFB_DecoderFormats,
-    ) -> sint32;
-}
-extern "C" {
-    pub fn SoundDecoder_Uninit();
-}
-extern "C" {
-    pub fn SoundDecoder_Seek(decoder: *mut TFB_SoundDecoder, msecs: uint32);
-}
-extern "C" {
-    pub fn SoundDecoder_Rewind(decoder: *mut TFB_SoundDecoder);
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct TFB_SoundTag {
@@ -10288,100 +7160,13 @@ extern "C" {
     pub static mut speechVolumeScale: f32;
 }
 extern "C" {
-    pub fn StopSource(iSource: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn CleanSource(iSource: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn SetSFXVolume(volume: f32);
-}
-extern "C" {
     pub fn SetSpeechVolume(volume: f32);
-}
-extern "C" {
-    pub fn TFB_CreateSoundSample(
-        arg1: *mut TFB_SoundDecoder,
-        num_buffers: uint32,
-        arg2: *const TFB_SoundCallbacks,
-    ) -> *mut TFB_SoundSample;
-}
-extern "C" {
-    pub fn TFB_DestroySoundSample(arg1: *mut TFB_SoundSample);
-}
-extern "C" {
-    pub fn TFB_SetSoundSampleData(arg1: *mut TFB_SoundSample, data: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn TFB_GetSoundSampleData(arg1: *mut TFB_SoundSample) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn TFB_SetSoundSampleCallbacks(arg1: *mut TFB_SoundSample, arg2: *const TFB_SoundCallbacks);
-}
-extern "C" {
-    pub fn TFB_GetSoundSampleDecoder(arg1: *mut TFB_SoundSample) -> *mut TFB_SoundDecoder;
-}
-extern "C" {
-    pub fn TFB_FindTaggedBuffer(
-        arg1: *mut TFB_SoundSample,
-        buffer: audio_Object,
-    ) -> *mut TFB_SoundTag;
-}
-extern "C" {
-    pub fn TFB_ClearBufferTag(arg1: *mut TFB_SoundTag);
-}
-extern "C" {
-    pub fn TFB_TagBuffer(arg1: *mut TFB_SoundSample, buffer: audio_Object, data: isize) -> bool;
-}
-extern "C" {
-    pub fn InitStreamDecoder() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn UninitStreamDecoder();
-}
-extern "C" {
-    pub fn PlayStream(
-        sample: *mut TFB_SoundSample,
-        source: uint32,
-        looping: bool,
-        scope: bool,
-        rewind: bool,
-    );
-}
-extern "C" {
-    pub fn StopStream(source: uint32);
-}
-extern "C" {
-    pub fn PauseStream(source: uint32);
-}
-extern "C" {
-    pub fn ResumeStream(source: uint32);
-}
-extern "C" {
-    pub fn SeekStream(source: uint32, pos: uint32);
-}
-extern "C" {
-    pub fn PlayingStream(source: uint32) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GraphForegroundStream(
-        data: *mut uint8,
-        width: sint32,
-        height: sint32,
-        wantSpeech: bool,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn SetMusicStreamFade(howLong: sint32, endVolume: ::std::os::raw::c_int) -> bool;
 }
 extern "C" {
     pub fn AnyButtonPress(DetectSpecial: BOOLEAN) -> BOOLEAN;
 }
 extern "C" {
     pub fn TFB_ResetControls();
-}
-extern "C" {
-    pub static mut MouseButtonDown: ::std::os::raw::c_int;
 }
 extern "C" {
     pub static mut QuitPosted: ::std::os::raw::c_int;
