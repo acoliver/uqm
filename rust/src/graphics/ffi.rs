@@ -553,11 +553,8 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
         if crate::automation::Coordinator::is_active() {
             let generation = crate::automation::input_ffi::get_runtime()
                 .map(|runtime| runtime.mirror.capture_generation());
-            match state
-                .canvas
-                .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)
-            {
-                Ok(mut rgba) => {
+            match video::readback(&state.canvas) {
+                Ok((width, height, mut rgba)) => {
                     for pixel in rgba.as_chunks_mut::<4>().0 {
                         pixel[3] = u8::MAX;
                     }
@@ -565,8 +562,8 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
                         generation.map(|generation| crate::automation::capture::PresentedFrame {
                             count: state.presentation_count,
                             generation,
-                            width: state.width,
-                            height: state.height,
+                            width,
+                            height,
                             rgba,
                         });
                 }

@@ -32,6 +32,14 @@ pub(crate) fn reconfigure_video(flags: c_int, width: c_int, height: c_int) -> Re
     Ok(())
 }
 
+pub(super) fn readback<T: sdl2::render::RenderTarget>(
+    canvas: &sdl2::render::Canvas<T>,
+) -> Result<(u32, u32, Vec<u8>), String> {
+    let (width, height) = canvas.output_size()?;
+    let rgba = canvas.read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)?;
+    Ok((width, height, rgba))
+}
+
 pub(super) fn scanlines(
     canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
 ) -> Result<(), String> {
@@ -54,6 +62,17 @@ pub(super) fn scanlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn readback_reports_renderer_dimensions_instead_of_logical_dimensions() {
+        let surface =
+            sdl2::surface::Surface::new(7, 5, sdl2::pixels::PixelFormatEnum::RGBA32).unwrap();
+        let mut canvas = surface.into_canvas().unwrap();
+        canvas.set_logical_size(3, 2).unwrap();
+        let (width, height, bytes) = readback(&canvas).unwrap();
+        assert_eq!((width, height), (7, 5));
+        assert_eq!(bytes.len(), (width * height * 4) as usize);
+    }
+
     #[test]
     fn rejects_invalid_dimensions_before_accessing_sdl_state() {
         assert_eq!(
