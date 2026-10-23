@@ -20,9 +20,7 @@ use crate::state::ffi::snapshot_game_state;
 use crate::time::clock_bridge::{CEvent, NUM_EVENTS};
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
 // Chunk positions inside C_WRITTEN_SAVE, read with a separate script.
 const FIXTURE_GLST: std::ops::Range<usize> = 180..255;

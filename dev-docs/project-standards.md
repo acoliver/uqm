@@ -10,18 +10,15 @@ These standards are normative. "Must" and "must not" are requirements.
 
 ## 1) What this project is
 
-This repository is porting The Ur-Quan Masters from C to Rust, subsystem by
-subsystem. Two facts follow from that and shape everything below.
+This repository runs The Ur-Quan Masters in Rust. The first-party C migration is complete.
 
 **The end state is zero first-party native code.** No C, C++, Objective-C,
 assembly, implementation-bearing headers, generated native source, helper or
-test native source, or internal migration ABI. Retained C is transitional and
-is being deleted, not maintained. Adding C to solve a problem moves the project
+test native source, or internal migration ABI. Do not reintroduce C game implementations. Adding C to solve a problem moves the project
 backwards; port the subsystem instead.
 
-**External libraries are the exception, and they are governed.** Only the
-libraries named in `rust/build.rs` (SDL2, libpng, liblzma, bzip2 and the
-platform libraries) may be linked. Vendoring or patching any of them is
+**External libraries are the exception, and they are governed.** SDL2 is discovered through `rust/build.rs`; audio and platform dependencies
+are declared by Cargo. Vendoring or patching any of them is
 forbidden, because a patched copy is first-party native code again.
 
 ---
@@ -59,8 +56,7 @@ The same rule applies to configuration. Which transitional paths are active is
 decided in one place; a second place that can also decide is a duplicate
 authority even when the two currently agree.
 
-When a subsystem is cut over, the superseded provider, bridge, object and build
-entry (its line in `rust/build/c-sources.txt`) and generated binding are removed in the same change.
+Remove superseded implementations and adapters when replacing a subsystem.
 
 ---
 
@@ -81,9 +77,8 @@ Production paths must not rely on panic-driven control flow. Use `Result` and
 
 - Do not use weak or stringly-typed values where an enum or struct fits.
 - Public module APIs must have explicit types and stated contracts.
-- Struct layouts mirrored from C must state which C type they mirror, and any
-  offset assumption must be justified against the C definition rather than
-  guessed. A wrong offset reads unrelated memory and can appear to work.
+- Shared pointer views must agree on layout. Prefer a single Rust type rather
+  than duplicate layouts or manually maintained offsets.
 
 ### Error handling
 
@@ -112,11 +107,10 @@ pushes to `main`. Gates may be tightened. They must not be weakened.
 | Lints | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | Tests | `cargo test --workspace --locked` |
 | C ratchet | The tracked C/C++/Objective-C file count must not exceed the base branch count. |
-| Game build | `cargo xtask debug` builds and links the real game on macOS. |
+| Game build | `cargo build --release --locked --bin uqm` builds the game on macOS. |
 
 Notes that matter:
 
-- Clippy runs over **all targets**. A lint failure in test or binary code counts.
 - Clippy runs over **all targets**. A lint failure in test or binary code counts.
 
 ### Explicit prohibitions
@@ -144,7 +138,7 @@ Layers:
 
 - Unit tests for pure logic.
 - Property or fixture tests where input space is large.
-- Production-linked integration tests across FFI boundaries, covering
+- Integration tests across runtime module boundaries, covering
   initialisation, normal behaviour, errors at external boundaries, restart and
   reentry, and teardown.
 

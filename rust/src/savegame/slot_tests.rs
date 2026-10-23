@@ -20,9 +20,7 @@ const UIO_FSTYPE_STDIO: i32 = 1;
 const UIO_MOUNT_TOP: i32 = 1 << 2;
 
 /// The save game the C game wrote (epic 20 load/save evidence).
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/legacy-save.00");
 
 /// A scratch directory mounted at the root of a fresh uio repository, used
 /// as the save directory.

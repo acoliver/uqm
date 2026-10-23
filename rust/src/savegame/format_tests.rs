@@ -1452,9 +1452,7 @@ fn input_shorter_than_its_declared_length_is_truncated() {
 // ---------------------------------------------------------------------------
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/legacy-save.00");
 
 #[test]
 fn c_written_save_decodes_to_the_values_in_its_bytes() {

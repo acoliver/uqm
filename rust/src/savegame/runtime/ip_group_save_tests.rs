@@ -9,9 +9,7 @@ use crate::savegame::decode_save;
 use crate::savegame::types::{IpGroup, Point, GAME_STATE_BYTES};
 use crate::state::state_file::{StateFileManager, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
 
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
-    "../../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
-);
+const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../../tests/fixtures/savegame/legacy-save.00");
 
 const STAR: u16 = 0x0102;
 const NOW: Date = Date {
