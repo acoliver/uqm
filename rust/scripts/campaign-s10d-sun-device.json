@@ -293,7 +293,7 @@
     },
     {
       "action": "wait_for_communication_end",
-      "minimum_completions": 2,
+      "minimum_completions": 1,
       "max_ticks": 6000
     },
     {
