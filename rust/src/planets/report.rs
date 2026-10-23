@@ -41,8 +41,6 @@ mod live {
         static optWhichFonts: i32;
         static ScreenWidth: i32;
         static GlobData: CGlobData;
-        #[cfg(feature = "debug-process")]
-        static disableInteractivity: i32;
         fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
         fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
         fn GetScanContext(owner: *mut i32) -> *mut c_void;
@@ -199,7 +197,7 @@ mod live {
     #[no_mangle]
     unsafe extern "C" fn DoDiscoveryReport(sounds: *mut c_void) {
         #[cfg(feature = "debug-process")]
-        if disableInteractivity != 0 {
+        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
         let mut own_context = 0;

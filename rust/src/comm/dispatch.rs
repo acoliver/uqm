@@ -800,10 +800,7 @@ fn conversation_setup(conversation: u32) -> (u32, u16) {
 pub unsafe fn init_communication(which_comm: u32) -> u16 {
     #[cfg(all(not(test), feature = "debug-process"))]
     {
-        extern "C" {
-            static disableInteractivity: i32;
-        }
-        if disableInteractivity != 0 {
+        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return 0;
         }
     }

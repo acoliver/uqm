@@ -46,12 +46,6 @@ extern "C" {
     fn SetMenuSounds(move_sound: u16, select_sound: u16);
     fn PlayMenuSound(sound: i32);
     fn SleepThreadUntil(time: u32);
-    #[cfg(feature = "debug-process")]
-    static instantMove: i32;
-    #[cfg(feature = "debug-process")]
-    static mut debugHook: Option<unsafe extern "C" fn()>;
-    #[cfg(feature = "debug-process")]
-    fn doInstantMove();
 }
 
 /// Copy the active cursor on its owning game thread.
@@ -109,13 +103,14 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
             y: selected.y,
         };
         #[cfg(feature = "debug-process")]
-        if instantMove != 0 {
+        if crate::front_end::uqmdebug::INSTANT_MOVE != 0 {
             PlayMenuSound(3);
             if hyper {
-                doInstantMove();
+                crate::front_end::uqmdebug::doInstantMove();
             } else if activity & 0xff == 4 {
                 (*glob).game_state.current_activity |= 0x0800;
-                debugHook = Some(doInstantMove);
+                crate::front_end::uqmdebug::DEBUG_HOOK =
+                    Some(crate::front_end::uqmdebug::doInstantMove);
             }
             ACTIVE = false;
             return 0;

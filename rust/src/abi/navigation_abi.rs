@@ -4504,234 +4504,104 @@ pub const URQUAN_DRONE_SHIP: _bindgen_ty_21 = 23;
 pub const SAMATRA_SHIP: _bindgen_ty_21 = 23;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_21 = 24;
 pub type _bindgen_ty_21 = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut disableInteractivity: BOOLEAN;
-}
-extern "C" {
-    pub static mut debugHook: ::std::option::Option<unsafe extern "C" fn()>;
-}
-extern "C" {
-    pub fn debugKeyPressed();
-}
-extern "C" {
-    pub fn debugKeyPressedSynchronous();
-}
-extern "C" {
-    pub fn forwardToNextEvent(skipHEE: BOOLEAN);
-}
-extern "C" {
-    pub fn dumpEvents(out: *mut FILE);
-}
-extern "C" {
-    pub fn dumpEvent(out: *mut FILE, eventPtr: *const EVENT);
-}
-extern "C" {
-    pub fn eventName(func_index: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn equipShip();
-}
-extern "C" {
-    pub fn giveDevices();
-}
-extern "C" {
-    pub fn clearEscorts();
-}
-extern "C" {
-    pub fn showSpheres();
-}
-extern "C" {
-    pub fn activateAllShips();
-}
-extern "C" {
-    pub fn doInstantMove();
-}
-extern "C" {
-    pub fn forAllStars(
-        callback: ::std::option::Option<
-            unsafe extern "C" fn(arg1: *mut STAR_DESC, arg2: *mut ::std::os::raw::c_void),
-        >,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn forAllPlanets(
-        star: *mut STAR_DESC,
-        system: *mut SOLARSYS_STATE,
-        callback: ::std::option::Option<
-            unsafe extern "C" fn(
-                arg1: *mut STAR_DESC,
-                arg2: *mut SOLARSYS_STATE,
-                arg3: *mut PLANET_DESC,
-                arg4: *mut ::std::os::raw::c_void,
-            ),
-        >,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn forAllMoons(
-        star: *mut STAR_DESC,
-        system: *mut SOLARSYS_STATE,
-        planet: *mut PLANET_DESC,
-        callback: ::std::option::Option<
-            unsafe extern "C" fn(
-                arg1: *mut STAR_DESC,
-                arg2: *mut SOLARSYS_STATE,
-                arg3: *mut PLANET_DESC,
-                arg4: *mut PLANET_DESC,
-                arg5: *mut ::std::os::raw::c_void,
-            ),
-        >,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct UniverseRecurseArg {
-    pub systemFuncPre: ::std::option::Option<
-        unsafe extern "C" fn(
-            star: *const STAR_DESC,
-            system: *const SOLARSYS_STATE,
-            arg: *mut ::std::os::raw::c_void,
-        ),
-    >,
-    pub systemFuncPost: ::std::option::Option<
-        unsafe extern "C" fn(
-            star: *const STAR_DESC,
-            system: *const SOLARSYS_STATE,
-            arg: *mut ::std::os::raw::c_void,
-        ),
-    >,
-    pub planetFuncPre: ::std::option::Option<
-        unsafe extern "C" fn(planet: *const PLANET_DESC, arg: *mut ::std::os::raw::c_void),
-    >,
-    pub planetFuncPost: ::std::option::Option<
-        unsafe extern "C" fn(planet: *const PLANET_DESC, arg: *mut ::std::os::raw::c_void),
-    >,
-    pub moonFunc: ::std::option::Option<
-        unsafe extern "C" fn(moon: *const PLANET_DESC, arg: *mut ::std::os::raw::c_void),
-    >,
-    pub arg: *mut ::std::os::raw::c_void,
-}
-extern "C" {
-    pub fn UniverseRecurse(universeRecurseArg: *mut UniverseRecurseArg);
-}
-extern "C" {
-    pub fn dumpUniverse(out: *mut FILE);
-}
-extern "C" {
-    pub fn dumpUniverseToFile();
-}
-extern "C" {
-    pub fn dumpSystem(out: *mut FILE, star: *const STAR_DESC, system: *const SOLARSYS_STATE);
-}
-extern "C" {
-    pub fn bodyColorString(col: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn starTypeString(type_: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn starPresenceString(index: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC);
-}
-extern "C" {
-    pub fn dumpMoon(out: *mut FILE, moon: *const PLANET_DESC);
-}
-extern "C" {
-    pub fn calculateMineralValue(system: *const SOLARSYS_STATE, world: *const PLANET_DESC)
-        -> COUNT;
-}
-extern "C" {
-    pub fn generateMineralIndex(
-        system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        minerals: *mut COUNT,
-    );
-}
-extern "C" {
-    pub fn calculateBioValue(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> COUNT;
-}
-extern "C" {
-    pub fn uqm_debug_creature_bio_value(creature_type: BYTE) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn generateBioIndex(
-        system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        bio: *mut COUNT,
-    );
-}
-extern "C" {
-    pub fn tallyResources(out: *mut FILE);
-}
-extern "C" {
-    pub fn tallyResourcesToFile();
-}
-extern "C" {
-    pub fn forAllPlanetTypes(
-        callBack: ::std::option::Option<
-            unsafe extern "C" fn(
-                arg1: ::std::os::raw::c_int,
-                arg2: *const PlanetFrame,
-                arg3: *mut ::std::os::raw::c_void,
-            ),
-        >,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn dumpPlanetType(
-        out: *mut FILE,
-        index: ::std::os::raw::c_int,
-        planetFrame: *const PlanetFrame,
-    );
-}
-extern "C" {
-    pub fn dumpPlanetTypes(out: *mut FILE);
-}
-extern "C" {
-    pub fn planetTypeString(typeIndex: ::std::os::raw::c_int) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn worldSizeString(size: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn worldGenAlgoString(algo: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn tectonicsString(tectonics: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn atmosphereString(atmosphere: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn densityString(density: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn depositQualityString(quality: BYTE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn findPlayerShip(playerNr: SIZE) -> *mut STARSHIP;
-}
-extern "C" {
-    pub fn resetCrewBattle();
-}
-extern "C" {
-    pub fn resetEnergyBattle();
-}
-extern "C" {
-    pub static mut instantMove: BOOLEAN;
-}
-extern "C" {
-    pub fn dumpStrings(out: *mut FILE);
-}
-extern "C" {
-    pub fn debugContexts();
-}
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DEBUG_HOOK;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::debugKeyPressed;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::debugKeyPressedSynchronous;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forwardToNextEvent;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpEvents;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpEvent;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::eventName;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::equipShip;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::giveDevices;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::clearEscorts;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::showSpheres;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::activateAllShips;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::doInstantMove;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllStars;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllPlanets;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllMoons;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::UniverseRecurse;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpUniverse;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpUniverseToFile;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpSystem;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::bodyColorString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::starTypeString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::starPresenceString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpPlanet;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpMoon;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::calculateMineralValue;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::generateMineralIndex;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::calculateBioValue;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::generateBioIndex;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tallyResources;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tallyResourcesToFile;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllPlanetTypes;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpPlanetType;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpPlanetTypes;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::planetTypeString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::worldSizeString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::worldGenAlgoString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tectonicsString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::atmosphereString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::densityString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::depositQualityString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::findPlayerShip;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::resetCrewBattle;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::resetEnergyBattle;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::INSTANT_MOVE;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::dumpStrings;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::debugContexts;
 extern "C" {
     pub fn MeleeConnectDialog(side: ::std::os::raw::c_int) -> BOOLEAN;
 }

@@ -37,8 +37,6 @@ mod live {
         static Screen: *mut c_void;
         static optWhichMenu: i32;
         #[cfg(feature = "debug-process")]
-        static disableInteractivity: i32;
-        #[cfg(feature = "debug-process")]
         fn CreateContextAux(name: *const c_char) -> *mut c_void;
         #[cfg(not(feature = "debug-process"))]
         fn CreateContextAux() -> *mut c_void;
@@ -225,7 +223,7 @@ mod live {
     #[no_mangle]
     unsafe extern "C" fn LoadPlanet(surface: *mut crate::c_bindings::global_state::FRAME_DESC) {
         #[cfg(feature = "debug-process")]
-        if disableInteractivity != 0 {
+        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
         let system = solar_system::current();

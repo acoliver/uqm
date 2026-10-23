@@ -8,11 +8,6 @@ use std::{ffi::c_void, ptr};
 #[no_mangle]
 pub static mut MainExited: i32 = 0;
 
-extern "C" {
-    #[cfg(feature = "debug-process")]
-    fn debugKeyPressed();
-}
-
 unsafe extern "C" fn on_battle_frame() {
     crate::time::clock_abi::live::GameClockTick();
     let opening = crate::navigation::get("ARILOU_SPACE") == 1;
@@ -91,7 +86,7 @@ pub unsafe extern "C" fn ProcessUtilityKeys() {
         static mut DEBUG_KEY_STATE: i32 = 0;
         let pressed = state.menu[KEY_DEBUG as usize];
         if pressed != 0 && DEBUG_KEY_STATE == 0 {
-            debugKeyPressed();
+            crate::front_end::uqmdebug::debugKeyPressed();
         }
         DEBUG_KEY_STATE = pressed;
     }

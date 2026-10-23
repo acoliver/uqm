@@ -40,8 +40,7 @@ fn hsvaToRgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     };
     Color { r, g, b, a: alpha }
 }
-#[no_mangle]
-pub extern "C" fn eventName(value: BYTE) -> *const c_char {
+pub fn eventName(value: BYTE) -> *const c_char {
     match value as u32 {
         ARILOU_ENTRANCE_EVENT => c"ARILOU_ENTRANCE_EVENT".as_ptr(),
         ARILOU_EXIT_EVENT => c"ARILOU_EXIT_EVENT".as_ptr(),
@@ -65,8 +64,7 @@ pub extern "C" fn eventName(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn bodyColorString(value: BYTE) -> *const c_char {
+pub fn bodyColorString(value: BYTE) -> *const c_char {
     match value as u32 {
         BLUE_BODY => c"blue".as_ptr(),
         GREEN_BODY => c"green".as_ptr(),
@@ -81,8 +79,7 @@ pub extern "C" fn bodyColorString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn starTypeString(value: BYTE) -> *const c_char {
+pub fn starTypeString(value: BYTE) -> *const c_char {
     match value as u32 {
         DWARF_STAR => c"dwarf".as_ptr(),
         GIANT_STAR => c"giant".as_ptr(),
@@ -91,8 +88,7 @@ pub extern "C" fn starTypeString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn starPresenceString(value: BYTE) -> *const c_char {
+pub fn starPresenceString(value: BYTE) -> *const c_char {
     match value as u32 {
         0 => c"".as_ptr(),
         SOL_DEFINED => c"Sol".as_ptr(),
@@ -144,8 +140,7 @@ pub extern "C" fn starPresenceString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn worldSizeString(value: BYTE) -> *const c_char {
+pub fn worldSizeString(value: BYTE) -> *const c_char {
     match value as u32 {
         SMALL_ROCKY_WORLD => c"small rocky world".as_ptr(),
         LARGE_ROCKY_WORLD => c"large rocky world".as_ptr(),
@@ -154,8 +149,7 @@ pub extern "C" fn worldSizeString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn worldGenAlgoString(value: BYTE) -> *const c_char {
+pub fn worldGenAlgoString(value: BYTE) -> *const c_char {
     match value as u32 {
         TOPO_ALGO => c"TOPO_ALGO".as_ptr(),
         CRATERED_ALGO => c"CRATERED_ALGO".as_ptr(),
@@ -164,8 +158,7 @@ pub extern "C" fn worldGenAlgoString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn atmosphereString(value: BYTE) -> *const c_char {
+pub fn atmosphereString(value: BYTE) -> *const c_char {
     match value as u32 {
         LIGHT => c"thin".as_ptr(),
         MEDIUM => c"normal".as_ptr(),
@@ -174,8 +167,7 @@ pub extern "C" fn atmosphereString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn densityString(value: BYTE) -> *const c_char {
+pub fn densityString(value: BYTE) -> *const c_char {
     match value as u32 {
         GAS_DENSITY => c"gaseous".as_ptr(),
         LIGHT_DENSITY => c"light".as_ptr(),
@@ -187,8 +179,7 @@ pub extern "C" fn densityString(value: BYTE) -> *const c_char {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn depositQualityString(value: BYTE) -> *const c_char {
+pub fn depositQualityString(value: BYTE) -> *const c_char {
     match value as u32 {
         LIGHT => c"low".as_ptr(),
         MEDIUM => c"medium".as_ptr(),
@@ -197,16 +188,27 @@ pub extern "C" fn depositQualityString(value: BYTE) -> *const c_char {
     }
 }
 
+type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut T);
+type WorldVisitor<T> = unsafe fn(*const PLANET_DESC, &mut T);
+
+pub struct UniverseRecurseArg<'a, T> {
+    pub systemFuncPre: Option<SystemVisitor<T>>,
+    pub systemFuncPost: Option<SystemVisitor<T>>,
+    pub planetFuncPre: Option<WorldVisitor<T>>,
+    pub planetFuncPost: Option<WorldVisitor<T>>,
+    pub moonFunc: Option<WorldVisitor<T>>,
+    pub arg: &'a mut T,
+}
+
 #[cfg(not(test))]
 mod runtime {
     use super::*;
     use crate::navigation::globals::GlobData;
+    use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use crate::state::game_state_keys::{get_game_state, set_game_state};
     use libc::FILE;
-    use std::{ffi::c_void, mem, ptr};
+    use std::{mem, ptr};
     extern "C" {
-        static mut starmap_array: [STAR_DESC; NUM_SOLAR_SYSTEMS as usize];
-        static planet_array: [PlanetFrame; NUMBER_OF_PLANET_TYPES as usize];
         #[cfg(target_os = "macos")]
         #[link_name = "__stderrp"]
         static mut error_stream: *mut FILE;
@@ -239,17 +241,13 @@ mod runtime {
 
     const INFINITE_RADIUS: COUNT = COUNT::MAX;
 
-    #[no_mangle]
-    pub static mut instantMove: BOOLEAN = 0;
-    #[no_mangle]
-    pub static mut disableInteractivity: BOOLEAN = 0;
-    #[no_mangle]
-    pub static mut debugHook: Option<unsafe extern "C" fn()> = None;
+    pub static mut INSTANT_MOVE: BOOLEAN = 0;
+    pub static mut DISABLE_INTERACTIVITY: BOOLEAN = 0;
+    pub static mut DEBUG_HOOK: Option<unsafe fn()> = None;
 
     /// # Safety
     /// Must run synchronously on the game thread with initialized game state.
-    #[no_mangle]
-    pub unsafe extern "C" fn debugKeyPressedSynchronous() {
+    pub unsafe fn debugKeyPressedSynchronous() {
         equipShip();
         giveDevices();
         clearEscorts();
@@ -271,19 +269,17 @@ mod runtime {
         }
         resetCrewBattle();
         resetEnergyBattle();
-        instantMove = BOOLEAN::from(instantMove == 0);
+        INSTANT_MOVE = BOOLEAN::from(INSTANT_MOVE == 0);
         showSpheres();
         activateAllShips();
     }
 
     // The asynchronous C debug-key hook contains no enabled operations.
-    #[no_mangle]
-    pub extern "C" fn debugKeyPressed() {}
+    pub fn debugKeyPressed() {}
 
     /// # Safety
     /// Must run on the game thread. The game clock and event queue must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn forwardToNextEvent(skipHEE: BOOLEAN) {
+    pub unsafe fn forwardToNextEvent(skipHEE: BOOLEAN) {
         if GameClockRunning() == 0 {
             return;
         }
@@ -323,8 +319,7 @@ mod runtime {
     }
     /// # Safety
     /// `out` must be an open C stream and `event` a readable event record.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpEvent(out: *mut FILE, event: *const EVENT) {
+    pub unsafe fn dumpEvent(out: *mut FILE, event: *const EVENT) {
         libc::fprintf(
             out,
             c"%4u/%02u/%02u: %s\n".as_ptr(),
@@ -336,8 +331,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run with a live game clock and an open output stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpEvents(out: *mut FILE) {
+    pub unsafe fn dumpEvents(out: *mut FILE) {
         LockGameClock();
         crate::collections::queue::for_all_links(
             ptr::addr_of_mut!(GlobData.Game_state.GameClock.event_q).cast(),
@@ -348,8 +342,7 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
-    #[no_mangle]
-    pub unsafe extern "C" fn equipShip() {
+    pub unsafe fn equipShip() {
         if GlobData.Game_state.CurrentActivity as u8 as u32 == SUPER_MELEE {
             return;
         }
@@ -465,8 +458,7 @@ mod runtime {
 
     /// # Safety
     /// Must run with the game-state singleton initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn giveDevices() {
+    pub unsafe fn giveDevices() {
         for key in [
             "ROSY_SPHERE_ON_SHIP",
             "ARTIFACT_2_ON_SHIP",
@@ -496,8 +488,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn clearEscorts() {
+    pub unsafe fn clearEscorts() {
         let queue = ptr::addr_of_mut!(GlobData.Game_state.built_ship_q);
         clear_escort_queue(queue.cast());
         DeltaSISGauges(
@@ -520,8 +511,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread in HyperSpace or QuasiSpace.
-    #[no_mangle]
-    pub unsafe extern "C" fn doInstantMove() {
+    pub unsafe fn doInstantMove() {
         let (log_x, log_y) = log_units();
         let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
         let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
@@ -555,8 +545,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn showSpheres() {
+    pub unsafe fn showSpheres() {
         let mut handle = GlobData.Game_state.avail_race_q.head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
@@ -572,8 +561,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn activateAllShips() {
+    pub unsafe fn activateAllShips() {
         let mut handle = GlobData.Game_state.avail_race_q.head;
         while !handle.is_null() {
             let fleet = handle.cast::<FLEET_INFO>();
@@ -586,14 +574,10 @@ mod runtime {
     }
 
     /// # Safety
-    /// The callback must be non-null and accept each star and the supplied context.
-    #[no_mangle]
-    pub unsafe extern "C" fn forAllStars(
-        callback: Option<unsafe extern "C" fn(*mut STAR_DESC, *mut c_void)>,
-        arg: *mut c_void,
-    ) {
+    /// Must run on the game thread. The callback must accept every star and its context.
+    pub unsafe fn forAllStars<T>(callback: unsafe fn(*mut STAR_DESC, &mut T), arg: &mut T) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
-            callback.unwrap()(
+            callback(
                 ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
                 arg,
             );
@@ -601,24 +585,16 @@ mod runtime {
     }
     /// # Safety
     /// `system` and `star` must be the active system. Callback and context must be valid.
-    #[no_mangle]
-    pub unsafe extern "C" fn forAllPlanets(
+    pub unsafe fn forAllPlanets<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
-        callback: Option<
-            unsafe extern "C" fn(
-                *mut STAR_DESC,
-                *mut SOLARSYS_STATE,
-                *mut PLANET_DESC,
-                *mut c_void,
-            ),
-        >,
-        arg: *mut c_void,
+        callback: unsafe fn(*mut STAR_DESC, *mut SOLARSYS_STATE, *mut PLANET_DESC, &mut T),
+        arg: &mut T,
     ) {
         assert!(CurStarDescPtr == star);
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].NumPlanets as usize {
-            callback.unwrap()(
+            callback(
                 star,
                 system,
                 ptr::addr_of_mut!((*system).PlanetDesc[i]),
@@ -628,25 +604,22 @@ mod runtime {
     }
     /// # Safety
     /// The planet and system must be active and their generated moon records valid.
-    #[no_mangle]
-    pub unsafe extern "C" fn forAllMoons(
+    pub unsafe fn forAllMoons<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
-        callback: Option<
-            unsafe extern "C" fn(
-                *mut STAR_DESC,
-                *mut SOLARSYS_STATE,
-                *mut PLANET_DESC,
-                *mut PLANET_DESC,
-                *mut c_void,
-            ),
-        >,
-        arg: *mut c_void,
+        callback: unsafe fn(
+            *mut STAR_DESC,
+            *mut SOLARSYS_STATE,
+            *mut PLANET_DESC,
+            *mut PLANET_DESC,
+            &mut T,
+        ),
+        arg: &mut T,
     ) {
         assert!(pSolarSysState == system);
         for i in 0..(*planet).NumPlanets as usize {
-            callback.unwrap()(
+            callback(
                 star,
                 system,
                 planet,
@@ -658,26 +631,24 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
-    #[no_mangle]
-    pub unsafe extern "C" fn UniverseRecurse(arg: *mut UniverseRecurseArg) {
-        if (*arg).systemFuncPre.is_none()
-            && (*arg).systemFuncPost.is_none()
-            && (*arg).planetFuncPre.is_none()
-            && (*arg).planetFuncPost.is_none()
-            && (*arg).moonFunc.is_none()
+    pub unsafe fn UniverseRecurse<T>(arg: &mut UniverseRecurseArg<'_, T>) {
+        if arg.systemFuncPre.is_none()
+            && arg.systemFuncPost.is_none()
+            && arg.planetFuncPre.is_none()
+            && arg.planetFuncPost.is_none()
+            && arg.moonFunc.is_none()
         {
             return;
         }
         LockGameClock();
         let saved_activity = GlobData.Game_state.CurrentActivity;
-        disableInteractivity = 1;
-        forAllStars(Some(starRecurse), arg.cast());
-        disableInteractivity = 0;
+        DISABLE_INTERACTIVITY = 1;
+        forAllStars(starRecurse, arg);
+        DISABLE_INTERACTIVITY = 0;
         GlobData.Game_state.CurrentActivity = saved_activity;
         UnlockGameClock();
     }
-    unsafe extern "C" fn starRecurse(star: *mut STAR_DESC, arg: *mut c_void) {
-        let recurse = &*arg.cast::<UniverseRecurseArg>();
+    unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
         let old_system = pSolarSysState;
         let old_star = CurStarDescPtr;
         CurStarDescPtr = star;
@@ -699,7 +670,7 @@ mod runtime {
             || recurse.planetFuncPost.is_some()
             || recurse.moonFunc.is_some()
         {
-            forAllPlanets(star, &mut system, Some(planetRecurse), arg);
+            forAllPlanets(star, &mut system, planetRecurse, recurse);
         }
         if let Some(cb) = recurse.systemFuncPost {
             cb(star, &system, recurse.arg);
@@ -707,13 +678,12 @@ mod runtime {
         pSolarSysState = old_system;
         CurStarDescPtr = old_star;
     }
-    unsafe extern "C" fn planetRecurse(
+    unsafe fn planetRecurse<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
-        arg: *mut c_void,
+        recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        let recurse = &*arg.cast::<UniverseRecurseArg>();
         assert!(CurStarDescPtr == star);
         assert!(pSolarSysState == system);
         (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
@@ -726,7 +696,7 @@ mod runtime {
         if recurse.moonFunc.is_some() {
             (*SysGenRNG).reseed((*planet).rand_seed);
             ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
-            forAllMoons(star, system, planet, Some(moonRecurse), arg);
+            forAllMoons(star, system, planet, moonRecurse, recurse);
         }
         if let Some(cb) = recurse.planetFuncPost {
             (*system).pOrbitalDesc = planet;
@@ -735,14 +705,13 @@ mod runtime {
             cb(planet, recurse.arg);
         }
     }
-    unsafe extern "C" fn moonRecurse(
+    unsafe fn moonRecurse<T>(
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PLANET_DESC,
         moon: *mut PLANET_DESC,
-        arg: *mut c_void,
+        recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        let recurse = &*arg.cast::<UniverseRecurseArg>();
         assert!(CurStarDescPtr == star);
         assert!(pSolarSysState == system);
         (*moon).pPrevDesc = planet;
@@ -763,8 +732,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpUniverse(out: *mut FILE) {
+    pub unsafe fn dumpUniverse(out: *mut FILE) {
         let mut context = DumpUniverseArg { out };
         let mut recurse = UniverseRecurseArg {
             systemFuncPre: Some(dumpSystemCallback),
@@ -772,13 +740,13 @@ mod runtime {
             planetFuncPre: Some(dumpPlanetCallback),
             planetFuncPost: None,
             moonFunc: Some(dumpMoonCallback),
-            arg: ptr::addr_of_mut!(context).cast(),
+            arg: &mut context,
         };
         UniverseRecurse(&mut recurse);
     }
     unsafe fn write_generation_file(
         name: *const c_char,
-        callback: unsafe extern "C" fn(*mut FILE),
+        callback: unsafe fn(*mut FILE),
         message: *const c_char,
     ) {
         let out = libc::fopen(name, c"w".as_ptr());
@@ -798,25 +766,23 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpUniverseToFile() {
+    pub unsafe fn dumpUniverseToFile() {
         write_generation_file(
             c"PlanetInfo".as_ptr(),
             dumpUniverse,
             c"*** Star dump complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
-    unsafe extern "C" fn dumpSystemCallback(
+    unsafe fn dumpSystemCallback(
         star: *const STAR_DESC,
         system: *const SOLARSYS_STATE,
-        arg: *mut c_void,
+        arg: &mut DumpUniverseArg,
     ) {
-        dumpSystem((*arg.cast::<DumpUniverseArg>()).out, star, system);
+        dumpSystem(arg.out, star, system);
     }
     /// # Safety
     /// Star and system records must be readable, and `out` an open stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpSystem(
+    pub unsafe fn dumpSystem(
         out: *mut FILE,
         star: *const STAR_DESC,
         _system: *const SOLARSYS_STATE,
@@ -850,13 +816,12 @@ mod runtime {
             starPresenceString((*star).Index),
         );
     }
-    unsafe extern "C" fn dumpPlanetCallback(planet: *const PLANET_DESC, arg: *mut c_void) {
-        dumpPlanet((*arg.cast::<DumpUniverseArg>()).out, planet);
+    unsafe fn dumpPlanetCallback(planet: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+        dumpPlanet(arg.out, planet);
     }
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC) {
+    pub unsafe fn dumpPlanet(out: *mut FILE, planet: *const PLANET_DESC) {
         ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
         libc::fprintf(
             out,
@@ -866,13 +831,12 @@ mod runtime {
         );
         dumpWorld(out, planet);
     }
-    unsafe extern "C" fn dumpMoonCallback(moon: *const PLANET_DESC, arg: *mut c_void) {
-        dumpMoon((*arg.cast::<DumpUniverseArg>()).out, moon);
+    unsafe fn dumpMoonCallback(moon: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+        dumpMoon(arg.out, moon);
     }
     /// # Safety
     /// Moon must belong to the active system, and `out` be an open stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpMoon(out: *mut FILE, moon: *const PLANET_DESC) {
+    pub unsafe fn dumpMoon(out: *mut FILE, moon: *const PLANET_DESC) {
         let kind = if (*moon).data_index == HIERARCHY_STARBASE as BYTE {
             c"StarBase".as_ptr()
         } else if (*moon).data_index == SA_MATRA as BYTE {
@@ -961,14 +925,12 @@ mod runtime {
             calculateMineralValue(pSolarSysState, world) as c_int,
         );
     }
-    #[no_mangle]
-    pub extern "C" fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
+    pub fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
         crate::planet_side::creatures::rust_creature_bio_value(kind)
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
-    #[no_mangle]
-    pub unsafe extern "C" fn calculateBioValue(
+    pub unsafe fn calculateBioValue(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
     ) -> COUNT {
@@ -1000,8 +962,7 @@ mod runtime {
     }
     /// # Safety
     /// World must be active, and `bio` writable for all creature-type counters.
-    #[no_mangle]
-    pub unsafe extern "C" fn generateBioIndex(
+    pub unsafe fn generateBioIndex(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
         bio: *mut COUNT,
@@ -1035,8 +996,7 @@ mod runtime {
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
-    #[no_mangle]
-    pub unsafe extern "C" fn calculateMineralValue(
+    pub unsafe fn calculateMineralValue(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
     ) -> COUNT {
@@ -1068,8 +1028,7 @@ mod runtime {
     }
     /// # Safety
     /// World must be active, and `minerals` writable for all element-category counters.
-    #[no_mangle]
-    pub unsafe extern "C" fn generateMineralIndex(
+    pub unsafe fn generateMineralIndex(
         system: *const SOLARSYS_STATE,
         world: *const PLANET_DESC,
         minerals: *mut COUNT,
@@ -1105,8 +1064,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn tallyResources(out: *mut FILE) {
+    pub unsafe fn tallyResources(out: *mut FILE) {
         let mut context = TallyResourcesArg {
             out,
             mineralCount: 0,
@@ -1118,35 +1076,34 @@ mod runtime {
             planetFuncPre: Some(tallyPlanetCallback),
             planetFuncPost: None,
             moonFunc: Some(tallyMoonCallback),
-            arg: ptr::addr_of_mut!(context).cast(),
+            arg: &mut context,
         };
         UniverseRecurse(&mut recurse);
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    #[no_mangle]
-    pub unsafe extern "C" fn tallyResourcesToFile() {
+    pub unsafe fn tallyResourcesToFile() {
         write_generation_file(
             c"ResourceTally".as_ptr(),
             tallyResources,
             c"*** Resource tally complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
-    unsafe extern "C" fn tallySystemPreCallback(
+    unsafe fn tallySystemPreCallback(
         _: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
-        arg: *mut c_void,
+        arg: &mut TallyResourcesArg,
     ) {
-        let context = &mut *arg.cast::<TallyResourcesArg>();
+        let context = arg;
         context.mineralCount = 0;
         context.bioCount = 0;
     }
-    unsafe extern "C" fn tallySystemPostCallback(
+    unsafe fn tallySystemPostCallback(
         star: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
-        arg: *mut c_void,
+        arg: &mut TallyResourcesArg,
     ) {
-        let context = &*arg.cast::<TallyResourcesArg>();
+        let context = arg;
         let mut name = [0 as c_char; 256];
         GetClusterName(star, name.as_mut_ptr());
         libc::fprintf(
@@ -1157,36 +1114,35 @@ mod runtime {
             context.bioCount as c_int,
         );
     }
-    unsafe extern "C" fn tallyPlanetCallback(world: *const PLANET_DESC, arg: *mut c_void) {
-        tallyResourcesWorld(arg.cast(), world);
+    unsafe fn tallyPlanetCallback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+        tallyResourcesWorld(arg, world);
     }
-    unsafe extern "C" fn tallyMoonCallback(world: *const PLANET_DESC, arg: *mut c_void) {
-        tallyResourcesWorld(arg.cast(), world);
+    unsafe fn tallyMoonCallback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+        tallyResourcesWorld(arg, world);
     }
-    unsafe fn tallyResourcesWorld(arg: *mut TallyResourcesArg, world: *const PLANET_DESC) {
+    unsafe fn tallyResourcesWorld(arg: &mut TallyResourcesArg, world: *const PLANET_DESC) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
         if (*world).data_index == SA_MATRA as BYTE {
             return;
         }
-        (*arg).bioCount = (*arg)
+        arg.bioCount = arg
             .bioCount
             .wrapping_add(calculateBioValue(pSolarSysState, world));
-        (*arg).mineralCount = (*arg)
+        arg.mineralCount = arg
             .mineralCount
             .wrapping_add(calculateMineralValue(pSolarSysState, world));
     }
 
     /// # Safety
-    /// Callback must be non-null and accept each immutable planet-type record.
-    #[no_mangle]
-    pub unsafe extern "C" fn forAllPlanetTypes(
-        callback: Option<unsafe extern "C" fn(c_int, *const PlanetFrame, *mut c_void)>,
-        arg: *mut c_void,
+    /// The callback must accept every immutable planet-type record and its context.
+    pub unsafe fn forAllPlanetTypes<T>(
+        callback: unsafe fn(c_int, *const PlanetFrame, &mut T),
+        arg: &mut T,
     ) {
         for i in 0..NUMBER_OF_PLANET_TYPES as usize {
-            callback.unwrap()(
+            callback(
                 i as c_int,
                 ptr::addr_of!(planet_array).cast::<PlanetFrame>().add(i),
                 arg,
@@ -1198,32 +1154,23 @@ mod runtime {
     }
     /// # Safety
     /// `out` must be an open output stream, with game strings initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpPlanetTypes(out: *mut FILE) {
+    pub unsafe fn dumpPlanetTypes(out: *mut FILE) {
         let mut context = DumpPlanetTypesArg { out };
-        forAllPlanetTypes(
-            Some(dumpPlanetTypeCallback),
-            ptr::addr_of_mut!(context).cast(),
-        );
+        forAllPlanetTypes(dumpPlanetTypeCallback, &mut context);
     }
-    unsafe extern "C" fn dumpPlanetTypeCallback(
+    unsafe fn dumpPlanetTypeCallback(
         index: c_int,
         planet: *const PlanetFrame,
-        arg: *mut c_void,
+        arg: &mut DumpPlanetTypesArg,
     ) {
-        dumpPlanetType((*arg.cast::<DumpPlanetTypesArg>()).out, index, planet);
+        dumpPlanetType(arg.out, index, planet);
     }
     unsafe fn game_string(index: usize) -> *const c_char {
         GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT))
     }
     /// # Safety
     /// Planet type must be readable, game strings initialized, and stream open.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpPlanetType(
-        out: *mut FILE,
-        index: c_int,
-        planet: *const PlanetFrame,
-    ) {
+    pub unsafe fn dumpPlanetType(out: *mut FILE, index: c_int, planet: *const PlanetFrame) {
         libc::fprintf(out,c"%s\n\tType: %s\n\tColor: %s\n\tSurface generation algoritm: %s\n\tTectonics: %s\n\tAtmosphere: %s\n\tDensity: %s\n\tElements:\n".as_ptr(),
         planetTypeString(index),worldSizeString((*planet).Type & PLAN_SIZE_MASK as BYTE),
         bodyColorString((*planet).Type >> 4),worldGenAlgoString((*planet).Type & PLAN_ALGO_MASK as BYTE),
@@ -1250,8 +1197,7 @@ mod runtime {
     }
     /// # Safety
     /// Game strings must be initialized. Returned storage is shared and non-reentrant.
-    #[no_mangle]
-    pub unsafe extern "C" fn planetTypeString(index: c_int) -> *const c_char {
+    pub unsafe fn planetTypeString(index: c_int) -> *const c_char {
         static mut BUFFER: [c_char; 40] = [0; 40];
         let buffer = ptr::addr_of_mut!(BUFFER).cast();
         if index >= FIRST_GAS_GIANT as c_int {
@@ -1274,8 +1220,7 @@ mod runtime {
     }
     /// # Safety
     /// Returned fallback-number storage is shared and must not be accessed concurrently.
-    #[no_mangle]
-    pub unsafe extern "C" fn tectonicsString(value: BYTE) -> *const c_char {
+    pub unsafe fn tectonicsString(value: BYTE) -> *const c_char {
         static mut BUFFER: [c_char; 5] = [0; 5];
         match value as u32 {
             NO_TECTONICS => c"none".as_ptr(),
@@ -1293,8 +1238,7 @@ mod runtime {
 
     /// # Safety
     /// Element queue must be initialized and accessed on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn findPlayerShip(player: SIZE) -> *mut STARSHIP {
+    pub unsafe fn findPlayerShip(player: SIZE) -> *mut STARSHIP {
         let mut handle = disp_q.head;
         while !handle.is_null() {
             let element = handle.cast::<ELEMENT>();
@@ -1310,8 +1254,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn resetCrewBattle() {
+    pub unsafe fn resetCrewBattle() {
         if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
             return;
         }
@@ -1327,8 +1270,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn resetEnergyBattle() {
+    pub unsafe fn resetEnergyBattle() {
         if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
             return;
         }
@@ -1345,8 +1287,7 @@ mod runtime {
 
     /// # Safety
     /// Game strings must be initialized and `out` an open C stream.
-    #[no_mangle]
-    pub unsafe extern "C" fn dumpStrings(out: *mut FILE) {
+    pub unsafe fn dumpStrings(out: *mut FILE) {
         macro_rules! category {
             ($name:literal,$base:ident,$count:ident) => {
                 (
@@ -1565,9 +1506,9 @@ mod runtime {
     }
     #[repr(C)]
     struct WaitState {
-        InputFunc: Option<unsafe extern "C" fn(*mut WaitState) -> BOOLEAN>,
+        InputFunc: Option<unsafe fn(*mut WaitState) -> BOOLEAN>,
     }
-    unsafe extern "C" fn waitForKey(_: *mut WaitState) -> BOOLEAN {
+    unsafe fn waitForKey(_: *mut WaitState) -> BOOLEAN {
         if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
             || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
         {
@@ -1599,8 +1540,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the main thread with live graphics and input systems.
-    #[no_mangle]
-    pub unsafe extern "C" fn debugContexts() {
+    pub unsafe fn debugContexts() {
         static mut IN_DEBUG_CONTEXTS: bool = false;
         if ptr::read_volatile(ptr::addr_of!(IN_DEBUG_CONTEXTS)) {
             return;
@@ -1645,19 +1585,45 @@ mod runtime {
 #[cfg(not(test))]
 pub use runtime::{
     activateAllShips, calculateBioValue, calculateMineralValue, clearEscorts, debugContexts,
-    debugHook, debugKeyPressed, debugKeyPressedSynchronous, disableInteractivity, doInstantMove,
-    dumpEvent, dumpEvents, dumpMoon, dumpPlanet, dumpPlanetType, dumpPlanetTypes, dumpStrings,
-    dumpSystem, dumpUniverse, dumpUniverseToFile, equipShip, findPlayerShip, forAllMoons,
-    forAllPlanetTypes, forAllPlanets, forAllStars, forwardToNextEvent, generateBioIndex,
-    generateMineralIndex, giveDevices, instantMove, planetTypeString, resetCrewBattle,
-    resetEnergyBattle, showSpheres, tallyResources, tallyResourcesToFile, tectonicsString,
-    uqm_debug_creature_bio_value, UniverseRecurse,
+    debugKeyPressed, debugKeyPressedSynchronous, doInstantMove, dumpEvent, dumpEvents, dumpMoon,
+    dumpPlanet, dumpPlanetType, dumpPlanetTypes, dumpStrings, dumpSystem, dumpUniverse,
+    dumpUniverseToFile, equipShip, findPlayerShip, forAllMoons, forAllPlanetTypes, forAllPlanets,
+    forAllStars, forwardToNextEvent, generateBioIndex, generateMineralIndex, giveDevices,
+    planetTypeString, resetCrewBattle, resetEnergyBattle, showSpheres, tallyResources,
+    tallyResourcesToFile, tectonicsString, uqm_debug_creature_bio_value, UniverseRecurse,
+    DEBUG_HOOK, DISABLE_INTERACTIVITY, INSTANT_MOVE,
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::collections::queue::{AllocLink, InitQueue, PutQueue, Queue, UninitQueue};
+
+    #[test]
+    fn traversal_callbacks_borrow_typed_context_without_an_abi_cast() {
+        fn system(_: *const STAR_DESC, _: *const SOLARSYS_STATE, events: &mut Vec<&str>) {
+            events.push("system");
+        }
+        fn world(_: *const PLANET_DESC, events: &mut Vec<&str>) {
+            events.push("world");
+        }
+        let mut events = Vec::new();
+        let visitor = UniverseRecurseArg {
+            systemFuncPre: Some(system),
+            systemFuncPost: None,
+            planetFuncPre: Some(world),
+            planetFuncPost: None,
+            moonFunc: None,
+            arg: &mut events,
+        };
+        // These callbacks do not inspect the records; only their typed context.
+        unsafe {
+            visitor.systemFuncPre.unwrap()(std::ptr::null(), std::ptr::null(), visitor.arg);
+            visitor.planetFuncPre.unwrap()(std::ptr::null(), visitor.arg);
+        }
+        assert_eq!(events, ["system", "world"]);
+        let _: fn(u8) -> *const c_char = eventName;
+    }
 
     #[test]
     fn clearing_escort_queue_returns_every_fragment_slot_to_pool() {

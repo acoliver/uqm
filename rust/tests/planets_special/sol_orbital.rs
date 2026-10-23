@@ -55,7 +55,7 @@ impl Ops for Harness {
     }
 }
 
-struct DebugTraversal(i32, u32, u32);
+struct DebugTraversal(u32, u32, u32);
 
 impl DebugTraversal {
     fn enter() -> Self {
