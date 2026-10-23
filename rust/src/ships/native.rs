@@ -61,16 +61,7 @@ pub mod abi {
         rel_frame_index as SetRelFrameIndex,
     };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn frameInputHuman(
-        context: *mut HumanInputContext,
-        ship: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE {
-        extern "C" {
-            #[link_name = "frameInputHuman"]
-            fn legacy(context: *mut std::ffi::c_void, ship: *mut std::ffi::c_void) -> u32;
-        }
-        legacy(context.cast(), ship.cast()) as BATTLE_INPUT_STATE
-    }
+    pub use crate::battle::battle_native::frameInputHuman;
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub unsafe fn FleetIsInfinite(player: COUNT) -> BOOLEAN {
         extern "C" {

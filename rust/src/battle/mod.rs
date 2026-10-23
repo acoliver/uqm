@@ -5,6 +5,7 @@
 pub mod ai;
 pub mod ai_entry;
 pub mod battle_controls;
+pub mod battle_native;
 pub mod battle_types;
 pub mod build_native;
 pub mod c_bridge;
