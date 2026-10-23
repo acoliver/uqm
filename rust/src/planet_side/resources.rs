@@ -46,7 +46,7 @@ pub trait PlanetSideAssetAccess {
 }
 
 /// Scoped snapshot of the single production asset owner established by
-/// `LoadLanderData` and released by `FreeLanderData`.
+/// `load_lander_data` and released by `free_lander_data`.
 pub struct BorrowedPlanetSideAssets {
     pub(crate) graphics: [*mut c_void; 8],
     pub(crate) sounds: *mut c_void,
@@ -150,7 +150,7 @@ pub struct CffiResourcePort {
     handles: HashMap<&'static str, *mut c_void>,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
     fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
@@ -172,7 +172,7 @@ impl ResourcePort for CffiResourcePort {
             return Err(AdapterError::new("detach_resource"));
         }
 
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         let captured = unsafe {
             if key == SOUND_KEY {
                 CaptureSound(detached)
@@ -180,11 +180,11 @@ impl ResourcePort for CffiResourcePort {
                 CaptureDrawable(detached)
             }
         };
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let captured = detached;
 
         if captured.is_null() {
-            #[cfg(feature = "linked_c_archive")]
+            #[cfg(not(test))]
             unsafe {
                 if key == SOUND_KEY {
                     crate::sound::heart_ffi::DestroySound(ReleaseSound(detached));
@@ -202,7 +202,7 @@ impl ResourcePort for CffiResourcePort {
         let Some(handle) = self.handles.remove(key) else {
             return;
         };
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             if key == SOUND_KEY {
                 crate::sound::heart_ffi::DestroySound(ReleaseSound(handle));
@@ -210,7 +210,7 @@ impl ResourcePort for CffiResourcePort {
                 DestroyDrawable(ReleaseDrawable(handle));
             }
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let _ = handle;
     }
 }

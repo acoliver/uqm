@@ -15,19 +15,17 @@ static ORBIT_MUSIC: Mutex<[MusicHandle; NUM_ORBIT_THEMES]> =
     Mutex::new([MusicHandle(std::ptr::null_mut()); NUM_ORBIT_THEMES]);
 
 /// Selected orbit music handle retained for the transitional C caller.
-#[no_mangle]
-pub static mut LanderMusic: *mut c_void = std::ptr::null_mut();
+pub static mut LANDER_MUSIC: *mut c_void = std::ptr::null_mut();
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn load_orbit_theme(selector: u8) -> *mut c_void;
 }
 
 /// Load the orbit themes once. Active PlanetSide assets are session-scoped and
 /// are deliberately not kept in global C state.
-#[no_mangle]
-pub extern "C" fn LoadLanderData() {
-    #[cfg(feature = "linked_c_archive")]
+pub extern "C" fn load_lander_data() {
+    #[cfg(not(test))]
     {
         let Ok(mut themes) = ORBIT_MUSIC.lock() else {
             return;
@@ -45,9 +43,8 @@ pub extern "C" fn LoadLanderData() {
 }
 
 /// Release globally retained orbit themes.
-#[no_mangle]
-pub extern "C" fn FreeLanderData() {
-    #[cfg(feature = "linked_c_archive")]
+pub extern "C" fn free_lander_data() {
+    #[cfg(not(test))]
     {
         let Ok(mut themes) = ORBIT_MUSIC.lock() else {
             return;
@@ -61,20 +58,19 @@ pub extern "C" fn FreeLanderData() {
             }
         }
         unsafe {
-            LanderMusic = std::ptr::null_mut();
+            LANDER_MUSIC = std::ptr::null_mut();
         }
     }
     super::init_lander::free_lander_frames();
 }
 
 /// Select one of the five source-defined orbit themes.
-#[no_mangle]
-pub extern "C" fn SetPlanetMusic(planet_type: u8) {
+pub extern "C" fn set_planet_music(planet_type: u8) {
     let Ok(themes) = ORBIT_MUSIC.lock() else {
         return;
     };
     unsafe {
-        LanderMusic = themes[usize::from(planet_type) % NUM_ORBIT_THEMES].0;
+        LANDER_MUSIC = themes[usize::from(planet_type) % NUM_ORBIT_THEMES].0;
     }
 }
 

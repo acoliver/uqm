@@ -488,7 +488,6 @@ pub unsafe fn read_locdata_from_c(locdata_ptr: *const c_void) -> CommData {
 /// # Safety
 /// `locdata_ptr` must be a valid, non-null pointer to a C `LOCDATA` struct,
 /// or null to clear the singleton.
-#[no_mangle]
 pub unsafe extern "C" fn rust_sync_comm_data(locdata_ptr: *const c_void) {
     if locdata_ptr.is_null() {
         clear_comm_data();
@@ -507,7 +506,6 @@ pub unsafe extern "C" fn rust_sync_comm_data(locdata_ptr: *const c_void) {
 /// This is an FFI function called from C. It accesses a global Mutex; the
 /// caller must ensure no other thread is simultaneously accessing the
 /// CommData singleton.
-#[no_mangle]
 pub unsafe extern "C" fn rust_clear_comm_data() {
     clear_comm_data();
 }

@@ -49,13 +49,13 @@ impl From<std::io::Error> for DirPrepError {
 }
 
 // ---------------------------------------------------------------------------
-// Path resolution (pure Rust — replaces C expandPath)
+// Path resolution (pure Rust — replaces C expand_path)
 // ---------------------------------------------------------------------------
 
 /// Expand `~` and `${VAR}` patterns in a path string, returning an
 /// absolute [`PathBuf`].
 ///
-/// Mirrors C `expandPath(buf, len, path, EP_ALL_SYSTEM)`:
+/// Mirrors C `expand_path(buf, len, path, EP_ALL_SYSTEM)`:
 /// - `~` or `~/...` → `$HOME/...`
 /// - `${VAR}` / `$VAR` → env value
 pub fn expand_path(input: &str) -> Result<PathBuf, DirPrepError> {
@@ -654,7 +654,6 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
 
 /// # Safety
 /// C strings must be valid UTF-8 or NULL.
-#[no_mangle]
 pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c_int {
     let dir = if config_dir.is_null() {
         None
@@ -676,7 +675,6 @@ pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c
 
 /// # Safety
 /// C strings must be valid UTF-8 or NULL.
-#[no_mangle]
 pub unsafe extern "C" fn rust_prepare_content_dir(
     content_dir: *const c_char,
     addon_dir: *const c_char,
@@ -711,7 +709,6 @@ pub unsafe extern "C" fn rust_prepare_content_dir(
 
 /// # Safety
 /// No parameters — safe to call.
-#[no_mangle]
 pub unsafe extern "C" fn rust_prepare_save_dir() -> c_int {
     match prepare_save_dir() {
         Ok(()) => 0,
@@ -724,7 +721,6 @@ pub unsafe extern "C" fn rust_prepare_save_dir() -> c_int {
 
 /// # Safety
 /// No parameters — safe to call.
-#[no_mangle]
 pub unsafe extern "C" fn rust_prepare_melee_dir() -> c_int {
     match prepare_melee_dir() {
         Ok(()) => 0,
@@ -737,7 +733,6 @@ pub unsafe extern "C" fn rust_prepare_melee_dir() -> c_int {
 
 /// # Safety
 /// `addons` must be a NULL-terminated array of C strings.
-#[no_mangle]
 pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char) -> c_int {
     if addons.is_null() {
         return 0;

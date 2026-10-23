@@ -1,6 +1,6 @@
 //! Descriptor for the noncombat Ur-Quan drone.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::abi::RACE_DESC;
     use std::mem;

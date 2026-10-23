@@ -6,7 +6,7 @@
 //! consumer runs leaves commands reading freed glyph data. [`QueuedGfx`]
 //! models that deferred consumer and records every such use after free.
 //! The conversation owns its player font and frees it at teardown through
-//! [`ConversationFont`], the same path `HailAlien` uses.
+//! [`ConversationFont`], the same path `hail_alien` uses.
 
 use super::locdata::{CColor, CRect};
 use super::player_font::{ConversationFont, FontRelease};

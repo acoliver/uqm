@@ -63,8 +63,7 @@ mod runtime {
     pub static mut oscillDisabled: i32 = 0;
     #[no_mangle]
     pub static mut sliderDisabled: i32 = 0;
-    #[no_mangle]
-    pub static mut sliderSpace: i32 = 0;
+    pub static mut SLIDER_SPACE: i32 = 0;
 
     /// # Safety
     /// Called on the graphics thread with a live background frame.
@@ -167,7 +166,7 @@ mod runtime {
             },
             frame: button.cast(),
         };
-        sliderSpace = width - i32::from(button_size.width);
+        SLIDER_SPACE = width - i32::from(button_size.width);
     }
 
     /// # Safety
@@ -185,7 +184,7 @@ mod runtime {
         if sliderDisabled != 0 {
             return;
         }
-        let offset = GetTrackPosition(sliderSpace);
+        let offset = GetTrackPosition(SLIDER_SPACE);
         if offset != LAST_OFFSET || SLIDER_CHANGED {
             SLIDER_CHANGED = false;
             LAST_OFFSET = offset;

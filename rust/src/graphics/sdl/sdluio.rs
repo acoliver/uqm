@@ -22,8 +22,7 @@ unsafe fn io_error(format: &std::ffi::CStr) {
 
 /// # Safety
 /// Directory and filename must be valid UIO inputs.
-#[no_mangle]
-pub unsafe extern "C" fn sdluio_loadImage(
+pub unsafe extern "C" fn sdluio_load_image(
     dir: *mut c_void,
     filename: *const c_char,
 ) -> *mut SDL_Surface {
@@ -48,8 +47,7 @@ pub unsafe extern "C" fn sdluio_loadImage(
 }
 
 /// # Safety
-/// Context must be one created by sdluio_loadImage and still open.
-#[no_mangle]
+/// Context must be one created by sdluio_load_image and still open.
 pub unsafe extern "C" fn sdluio_seek(context: *mut SDL_RWops, offset: i64, whence: c_int) -> i64 {
     if uio_bridge::uio_fseek(stream(context), offset as libc::c_long, whence) == -1 {
         io_error(c"Error seeking in uio_Stream: %s");
@@ -59,7 +57,6 @@ pub unsafe extern "C" fn sdluio_seek(context: *mut SDL_RWops, offset: i64, whenc
 }
 /// # Safety
 /// Context must be open and ptr must hold size * maxnum writable bytes.
-#[no_mangle]
 pub unsafe extern "C" fn sdluio_read(
     context: *mut SDL_RWops,
     ptr: *mut c_void,
@@ -75,7 +72,6 @@ pub unsafe extern "C" fn sdluio_read(
 }
 /// # Safety
 /// Context must be open and ptr must hold size * num readable bytes.
-#[no_mangle]
 pub unsafe extern "C" fn sdluio_write(
     context: *mut SDL_RWops,
     ptr: *const c_void,
@@ -91,7 +87,6 @@ pub unsafe extern "C" fn sdluio_write(
 }
 /// # Safety
 /// Context must be an open sdluio RWops allocation, consumed by this call.
-#[no_mangle]
 pub unsafe extern "C" fn sdluio_close(context: *mut SDL_RWops) -> c_int {
     let result = uio_bridge::uio_fclose(stream(context));
     rust_hfree(context.cast());

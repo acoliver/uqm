@@ -7,13 +7,13 @@
 use std::ffi::c_void;
 use std::sync::Mutex;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use super::resources::{CffiResourcePort, ResourcePort};
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 
 /// Global lander graphic frames, matching the C `FRAME LanderFrame[8]`.
-/// Loaded by `LoadLanderData`, freed by `FreeLanderData`.
+/// Loaded by `load_lander_data`, freed by `free_lander_data`.
 struct LanderFrameState {
     frames: [*mut c_void; 8],
     sounds: *mut c_void,
@@ -31,38 +31,30 @@ static LANDER_FRAMES: Mutex<LanderFrameState> = Mutex::new(LanderFrameState {
 });
 
 /// Disaster shield bit indices (from planets.h DISASTER_TYPE enum).
-#[cfg(any(feature = "linked_c_archive", test))]
 const EARTHQUAKE_DISASTER: u8 = 1;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const BIOLOGICAL_DISASTER: u8 = 0;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const LIGHTNING_DISASTER: u8 = 2;
-#[cfg(any(feature = "linked_c_archive", test))]
+
 const LAVASPOT_DISASTER: u8 = 3;
 
 /// `MAX_SCROUNGED` (from planets.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const MAX_SCROUNGED: u16 = 50;
 
 /// `RADAR_WIDTH` = STATUS_WIDTH - 8 = 64 - 8 = 56 (from units.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const RADAR_WIDTH: i16 = 56;
 /// `RADAR_HEIGHT` (from units.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const RADAR_HEIGHT: i16 = 53;
 
 /// `FULL_CIRCLE` = 1 << CIRCLE_SHIFT = 1 << 6 = 64 (from units.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const FULL_CIRCLE: u16 = 64;
 /// `CIRCLE_SHIFT` (from units.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const CIRCLE_SHIFT: u32 = 6;
 /// `FACING_SHIFT` (from units.h).
-#[cfg(any(feature = "linked_c_archive", test))]
 const FACING_SHIFT: u32 = 4;
 
 /// `ANGLE_TO_FACING(a) = (a + (1 << (CIRCLE_SHIFT - FACING_SHIFT - 1))) >> (CIRCLE_SHIFT - FACING_SHIFT)`
-#[cfg(any(feature = "linked_c_archive", test))]
 fn angle_to_facing(angle: u16) -> u16 {
     let shift = CIRCLE_SHIFT - FACING_SHIFT;
     (angle + (1 << (shift - 1))) >> shift
@@ -71,7 +63,7 @@ fn angle_to_facing(angle: u16) -> u16 {
 /// Black color matching C's `MAKE_RGB15(0,0,0)` which hardcodes `a = 0xff`.
 /// `BUILD_COLOR` discards its palette-index argument; the alpha comes from the
 /// RGB15 macro. With `a: 0` the fill is a fully-transparent no-op.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const BLACK_COLOR: CColor = CColor {
     r: 0,
     g: 0,
@@ -79,7 +71,7 @@ const BLACK_COLOR: CColor = CColor {
     a: 0xff,
 };
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     static mut RadarContext: *mut c_void;
     fn SetContext(context: *mut c_void) -> *mut c_void;
@@ -96,9 +88,9 @@ extern "C" {
     fn GetStorageBayCapacity() -> u16;
 }
 
-/// Load the global LanderFrame graphics. Called by `LoadLanderData`.
+/// Load the global LanderFrame graphics. Called by `load_lander_data`.
 pub fn load_lander_frames() {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     {
         let Ok(mut state) = LANDER_FRAMES.lock() else {
             return;
@@ -153,9 +145,9 @@ pub fn load_lander_frames() {
     }
 }
 
-/// Free the global LanderFrame graphics. Called by `FreeLanderData`.
+/// Free the global LanderFrame graphics. Called by `free_lander_data`.
 pub fn free_lander_frames() {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     {
         let Ok(mut state) = LANDER_FRAMES.lock() else {
             return;
@@ -179,7 +171,7 @@ pub fn free_lander_frames() {
     }
 }
 
-/// Borrow the production asset set loaded by `LoadLanderData`.
+/// Borrow the production asset set loaded by `load_lander_data`.
 pub fn borrowed_assets(
 ) -> Result<super::resources::BorrowedPlanetSideAssets, super::runtime::AdapterError> {
     let state = LANDER_FRAMES
@@ -196,7 +188,7 @@ pub fn borrowed_assets(
     })
 }
 /// Read `GLOBAL_SIS(NumLanders)` from the global SIS state.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn sis_num_landers() -> u8 {
     use crate::comm::locdata::CGlobData;
     extern "C" {
@@ -207,7 +199,7 @@ fn sis_num_landers() -> u8 {
 }
 
 /// Read `GLOBAL_SIS(TotalElementMass)` from the global SIS state.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn sis_total_element_mass() -> u16 {
     use crate::comm::locdata::CGlobData;
     extern "C" {
@@ -218,7 +210,7 @@ fn sis_total_element_mass() -> u16 {
 }
 
 /// Read a game state bit-field via the FFI singleton.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn get_game_state(name: &str) -> u32 {
     crate::state::game_state_keys::get_game_state(name)
 }
@@ -231,7 +223,7 @@ fn get_game_state(name: &str) -> u32 {
 /// flag bits directly.
 #[no_mangle]
 pub extern "C" fn InitLander(lander_flags: u8) {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     unsafe {
         let Ok(state) = LANDER_FRAMES.lock() else {
             return;
@@ -260,13 +252,13 @@ pub extern "C" fn InitLander(lander_flags: u8) {
         UnbatchGraphics();
         SetContext(old_context);
     }
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     {
         let _ = lander_flags;
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
     let facing = angle_to_facing(FULL_CIRCLE) << 1;
 
@@ -374,7 +366,7 @@ mod tests {
         assert_eq!(MAX_SCROUNGED, 50);
     }
 
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     #[test]
     fn black_color_is_opaque_like_make_rgb15() {
         // MAKE_RGB15 hardcodes a = 0xff; BUILD_COLOR's palette index is discarded.

@@ -132,7 +132,7 @@ fn player_queue() -> *const crate::comm::locdata::CQueue {
     unsafe { live_queues::player_ships(RPG_PLAYER_NUM) }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn live_escort_indices() -> Vec<u16> {
     escort_links()
         .into_iter()

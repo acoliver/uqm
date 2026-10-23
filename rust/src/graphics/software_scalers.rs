@@ -192,8 +192,7 @@ unsafe fn scale(
 /// # Safety
 /// Surfaces must be disjoint, locked 32-bit SDL surfaces in the same format;
 /// `dst` must have twice the source dimensions and `region` must be within `src`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_Nearest(
+pub unsafe extern "C" fn scale_nearest(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -202,9 +201,8 @@ pub unsafe extern "C" fn Scale_Nearest(
 }
 
 /// # Safety
-/// Same surface and region requirements as `Scale_Nearest`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_BilinearFilter(
+/// Same surface and region requirements as `scale_nearest`.
+pub unsafe extern "C" fn scale_bilinear_filter(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -213,9 +211,8 @@ pub unsafe extern "C" fn Scale_BilinearFilter(
 }
 
 /// # Safety
-/// Same surface and region requirements as `Scale_Nearest`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_TriScanFilter(
+/// Same surface and region requirements as `scale_nearest`.
+pub unsafe extern "C" fn scale_tri_scan_filter(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -337,9 +334,8 @@ fn hq(image: &Image<'_>, fmt: &SDL_PixelFormat, x: i32, y: i32) -> [u32; 4] {
 }
 
 /// # Safety
-/// Same surface and region requirements as `Scale_Nearest`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_BiAdaptFilter(
+/// Same surface and region requirements as `scale_nearest`.
+pub unsafe extern "C" fn scale_bi_adapt_filter(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -348,9 +344,8 @@ pub unsafe extern "C" fn Scale_BiAdaptFilter(
 }
 
 /// # Safety
-/// Same surface and region requirements as `Scale_Nearest`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_BiAdaptAdvFilter(
+/// Same surface and region requirements as `scale_nearest`.
+pub unsafe extern "C" fn scale_bi_adapt_adv_filter(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -359,9 +354,8 @@ pub unsafe extern "C" fn Scale_BiAdaptAdvFilter(
 }
 
 /// # Safety
-/// Same surface and region requirements as `Scale_Nearest`.
-#[no_mangle]
-pub unsafe extern "C" fn Scale_HqFilter(
+/// Same surface and region requirements as `scale_nearest`.
+pub unsafe extern "C" fn scale_hq_filter(
     src: *mut SDL_Surface,
     dst: *mut SDL_Surface,
     region: *mut SDL_Rect,
@@ -377,50 +371,47 @@ pub struct ScaleFuncDef {
     pub func: ScaleFunc,
 }
 
-#[no_mangle]
-pub static Scale_C_Functions: [ScaleFuncDef; 6] = [
+pub static SCALE_C_FUNCTIONS: [ScaleFuncDef; 6] = [
     ScaleFuncDef {
         flag: 1 << 3,
-        func: Scale_BilinearFilter,
+        func: scale_bilinear_filter,
     },
     ScaleFuncDef {
         flag: 1 << 4,
-        func: Scale_BiAdaptFilter,
+        func: scale_bi_adapt_filter,
     },
     ScaleFuncDef {
         flag: 1 << 5,
-        func: Scale_BiAdaptAdvFilter,
+        func: scale_bi_adapt_adv_filter,
     },
     ScaleFuncDef {
         flag: 1 << 6,
-        func: Scale_TriScanFilter,
+        func: scale_tri_scan_filter,
     },
     ScaleFuncDef {
         flag: 1 << 7,
-        func: Scale_HqFilter,
+        func: scale_hq_filter,
     },
     ScaleFuncDef {
         flag: 0,
-        func: Scale_Nearest,
+        func: scale_nearest,
     },
 ];
 
 // The command-line parser still writes this setting. As with the former
 // USE_RUST_GFX build, screen filters use the scalar integer implementation.
-#[no_mangle]
-pub static mut force_platform: libc::c_int = 0;
+pub static mut FORCE_PLATFORM: libc::c_int = 0;
 
 #[no_mangle]
 pub extern "C" fn Scale_Init() {
     let _ = yuv_table();
 }
 
-#[no_mangle]
-pub extern "C" fn Scale_PrepPlatform(
+pub extern "C" fn scale_prep_platform(
     flags: libc::c_int,
     _fmt: *const SDL_PixelFormat,
 ) -> ScaleFunc {
-    Scale_C_Functions
+    SCALE_C_FUNCTIONS
         .iter()
         .find(|entry| flags & entry.flag == entry.flag)
         .expect("the scaler table ends with its default entry")
@@ -453,7 +444,7 @@ pub(crate) unsafe fn scale_surface_to_rgbx(src: *mut SDL_Surface, flags: i32, bu
         w: source.w,
         h: source.h,
     };
-    Scale_PrepPlatform(flags, source.format)(src, &mut dst, &mut region);
+    scale_prep_platform(flags, source.format)(src, &mut dst, &mut region);
     for (pixel, bytes) in pixels.into_iter().zip(buffer.as_chunks_mut::<4>().0) {
         *bytes = pixel.to_ne_bytes();
     }

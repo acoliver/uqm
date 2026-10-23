@@ -38,10 +38,9 @@ pub mod global_state {
 /// system lifecycle owns its stack storage; other modules only borrow it, and
 /// no field is reached through an offset written by hand.
 ///
-/// The declaration exists where a consumer exists: the game build, and the
-/// unit-test build of the `linked_c_archive` feature. The plain unit-test
-/// build has no C archive and no consumer.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+/// The declaration is available to the running game and integration tests;
+/// isolated unit tests do not own a live solar system.
+#[cfg(not(test))]
 pub mod solar_system {
     use super::global_state::SOLARSYS_STATE;
 
@@ -70,9 +69,8 @@ pub mod solar_system {
 /// is declared once, here. What the slots hold is checked by the reader, which
 /// walks the queue against its pool before it follows a link.
 ///
-/// The declaration exists where a consumer exists: the game build, and the
-/// unit-test build of the `linked_c_archive` feature.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+/// The declaration is available to the running game and integration tests.
+#[cfg(not(test))]
 pub mod live_queues {
     use crate::battle::battle_controls::NUM_PLAYERS;
     use crate::comm::locdata::CQueue;

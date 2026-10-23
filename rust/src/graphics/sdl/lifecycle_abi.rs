@@ -1,7 +1,7 @@
 //! SDL lifecycle and composition, ported from sdl_common.c (GPL-2.0-or-later).
 use crate::graphics::{
     ffi::{self, SDL_Rect, SDL_Surface},
-    geometry_ffi::TFB_BBox,
+    geometry_ffi::TFB_B_BOX,
     native_abi::RECT,
 };
 use std::{
@@ -11,10 +11,8 @@ use std::{
 const NUM_SCREENS: usize = 3;
 #[no_mangle]
 pub static mut SDL_Screen: *mut SDL_Surface = ptr::null_mut();
-#[no_mangle]
-pub static mut TransitionScreen: *mut SDL_Surface = ptr::null_mut();
-#[no_mangle]
-pub static mut SDL_Screens: [*mut SDL_Surface; NUM_SCREENS] = [ptr::null_mut(); NUM_SCREENS];
+pub static mut TRANSITION_SCREEN: *mut SDL_Surface = ptr::null_mut();
+pub static mut SDL_SCREENS: [*mut SDL_Surface; NUM_SCREENS] = [ptr::null_mut(); NUM_SCREENS];
 #[no_mangle]
 pub static mut format_conv_surf: *mut SDL_Surface = ptr::null_mut();
 #[no_mangle]
@@ -38,8 +36,7 @@ static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
     screen: ffi::rust_gfx_screen,
     color: ffi::rust_gfx_color,
 };
-#[no_mangle]
-pub static mut graphics_backend: *mut TfbGraphicsBackend = ptr::null_mut();
+pub static mut GRAPHICS_BACKEND: *mut TfbGraphicsBackend = ptr::null_mut();
 extern "C" {
     fn Init_DrawCommandQueue();
     fn Uninit_DrawCommandQueue();
@@ -62,9 +59,9 @@ pub(crate) unsafe fn refresh_rust_screen_globals() -> bool {
             return false;
         }
     }
-    SDL_Screens = screens;
+    SDL_SCREENS = screens;
     SDL_Screen = screens[0];
-    TransitionScreen = screens[2];
+    TRANSITION_SCREEN = screens[2];
     format_conv_surf = ffi::rust_gfx_get_format_conv_surf();
     !format_conv_surf.is_null()
 }
@@ -82,9 +79,9 @@ pub(crate) unsafe fn update_video_globals(
     ScreenHeightActual = height;
 }
 pub(crate) unsafe fn clear_rust_screen_globals() {
-    SDL_Screens = [ptr::null_mut(); NUM_SCREENS];
+    SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
     SDL_Screen = ptr::null_mut();
-    TransitionScreen = ptr::null_mut();
+    TRANSITION_SCREEN = ptr::null_mut();
     format_conv_surf = ptr::null_mut();
 }
 /// # Safety
@@ -97,7 +94,7 @@ pub unsafe extern "C" fn TFB_InitGraphics(
     width: c_int,
     height: c_int,
 ) -> c_int {
-    SDL_Screens = [ptr::null_mut(); NUM_SCREENS];
+    SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
     update_video_globals(driver, flags, width, height);
     if ffi::rust_gfx_init(driver, flags, renderer, width, height) != 0 {
         std::process::exit(1);
@@ -106,7 +103,7 @@ pub unsafe extern "C" fn TFB_InitGraphics(
         refresh_rust_screen_globals(),
         "initialized graphics surfaces"
     );
-    graphics_backend = ptr::addr_of_mut!(RUST_BACKEND);
+    GRAPHICS_BACKEND = ptr::addr_of_mut!(RUST_BACKEND);
     if flags & 1 != 0 {
         sdl2_sys::SDL_ShowCursor(0);
     }
@@ -129,7 +126,7 @@ pub unsafe extern "C" fn TFB_ProcessEvents() {
     let mut event = std::mem::MaybeUninit::uninit();
     while sdl2_sys::SDL_PollEvent(event.as_mut_ptr()) > 0 {
         let event = event.assume_init();
-        crate::input::ProcessInputEvent(&event);
+        crate::input::process_input_event(&event);
         if event.type_ == sdl2_sys::SDL_EventType::SDL_QUIT as u32 {
             ptr::write_volatile(ptr::addr_of_mut!(QuitPosted), 1);
         } else if event.type_ == sdl2_sys::SDL_EventType::SDL_WINDOWEVENT as u32
@@ -179,7 +176,7 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
     let fade = GetFadeAmount();
     let transition = ptr::read_volatile(ptr::addr_of!(TransitionAmount));
     if redraw == 0
-        && TFB_BBox.valid == 0
+        && TFB_B_BOX.valid == 0
         && fade == 255
         && transition == 255
         && LAST_FADE == 255
@@ -194,7 +191,7 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
     }
     LAST_FADE = fade;
     LAST_TRANSITION = transition;
-    let backend = &*graphics_backend;
+    let backend = &*GRAPHICS_BACKEND;
     (backend.preprocess)(redraw, transition, fade);
     (backend.screen)(0, 255, ptr::null_mut());
     if transition != 255 {
@@ -218,18 +215,17 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
 /// Screen must be a valid screen ID; called on graphics thread.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_GetScreenCanvas(screen: u32) -> *mut c_void {
-    SDL_Screens[screen as usize].cast()
+    SDL_SCREENS[screen as usize].cast()
 }
 /// # Safety
 /// Called on the SDL main thread with graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_UploadTransitionScreen() {
-    ((*graphics_backend).upload_transition_screen)();
+    ((*GRAPHICS_BACKEND).upload_transition_screen)();
 }
 /// # Safety
 /// Pointer must be writable and refer to null or an owned SDL surface.
-#[no_mangle]
-pub unsafe extern "C" fn UnInit_Screen(screen: *mut *mut SDL_Surface) {
+pub unsafe extern "C" fn un_init_screen(screen: *mut *mut SDL_Surface) {
     if !(*screen).is_null() {
         sdl2_sys::SDL_FreeSurface((*screen).cast());
         *screen = ptr::null_mut();

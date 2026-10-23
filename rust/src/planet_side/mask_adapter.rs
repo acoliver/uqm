@@ -7,11 +7,10 @@
 use std::ffi::c_void;
 
 use super::geometry::CollisionMask;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
 
-#[cfg(feature = "linked_c_archive")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CPoint {
@@ -19,7 +18,6 @@ struct CPoint {
     y: i16,
 }
 
-#[cfg(feature = "linked_c_archive")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CExtent {
@@ -28,7 +26,6 @@ struct CExtent {
 }
 
 /// Exact `FRAME_DESC` layout from `libs/graphics/drawable.h`.
-#[cfg(feature = "linked_c_archive")]
 #[repr(C)]
 struct CFrameDesc {
     frame_type: u16,
@@ -39,7 +36,7 @@ struct CFrameDesc {
     parent: *mut c_void,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CColor {
@@ -49,7 +46,7 @@ struct CColor {
     a: u8,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
     fn TFB_DrawCanvas_Lock(canvas: *mut c_void);
@@ -57,10 +54,10 @@ extern "C" {
     fn TFB_DrawCanvas_GetPixel(canvas: *mut c_void, x: i32, y: i32) -> CColor;
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 struct CanvasLock(*mut c_void);
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 impl Drop for CanvasLock {
     fn drop(&mut self) {
         unsafe { TFB_DrawCanvas_Unlock(self.0) };
@@ -74,7 +71,7 @@ impl Drop for CanvasLock {
 /// `frame` must be a live captured `FRAME_DESC` whose image owns a live normal
 /// canvas for the duration of the call.
 pub unsafe fn extract_frame_mask(frame: *mut c_void) -> Result<CollisionMask, AdapterError> {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     {
         if frame.is_null() {
             return Err(AdapterError::new("collision_frame_null"));
@@ -116,7 +113,7 @@ pub unsafe fn extract_frame_mask(frame: *mut c_void) -> Result<CollisionMask, Ad
         )
         .map_err(|_| AdapterError::new("collision_mask_build"))
     }
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     {
         let _ = frame;
         Err(AdapterError::new("collision_mask_unlinked"))
@@ -129,7 +126,7 @@ pub unsafe fn extract_frame_mask(frame: *mut c_void) -> Result<CollisionMask, Ad
 ///
 /// `base` must be a live captured lander frame handle with at least 16 frames.
 pub unsafe fn extract_lander_masks(base: *mut c_void) -> Result<Vec<CollisionMask>, AdapterError> {
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     {
         if base.is_null() {
             return Err(AdapterError::new("lander_collision_frame_null"));
@@ -141,7 +138,7 @@ pub unsafe fn extract_lander_masks(base: *mut c_void) -> Result<Vec<CollisionMas
         }
         Ok(masks)
     }
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     {
         let _ = base;
         Err(AdapterError::new("collision_mask_unlinked"))
@@ -164,7 +161,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(feature = "linked_c_archive", target_pointer_width = "64"))]
+    #[cfg(target_pointer_width = "64")]
     #[test]
     fn frame_descriptor_layout_matches_64_bit_c_abi() {
         assert_eq!(std::mem::size_of::<CFrameDesc>(), 32);

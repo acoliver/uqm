@@ -2,8 +2,7 @@ use super::abi::*;
 use super::checkbuf::*;
 use super::crc::*;
 
-#[no_mangle]
-pub static mut localChecksumBuffer: ChecksumBuffer = ChecksumBuffer {
+pub static mut LOCAL_CHECKSUM_BUFFER: ChecksumBuffer = ChecksumBuffer {
     checksums: std::ptr::null_mut(),
     maxSize: 0,
     interval: 0,
@@ -112,7 +111,7 @@ pub unsafe extern "C" fn initChecksumBuffers() {
         }
     }
     ChecksumBuffer_init(
-        &raw mut localChecksumBuffer,
+        &raw mut LOCAL_CHECKSUM_BUFFER,
         getBattleInputDelay(),
         NETPLAY_CHECKSUM_INTERVAL as usize,
     );
@@ -127,7 +126,7 @@ pub unsafe extern "C" fn uninitChecksumBuffers() {
             ChecksumBuffer_uninit(NetConnection_getChecksumBuffer(conn));
         }
     }
-    ChecksumBuffer_uninit(&raw mut localChecksumBuffer);
+    ChecksumBuffer_uninit(&raw mut LOCAL_CHECKSUM_BUFFER);
 }
 
 /// # Safety
@@ -135,7 +134,7 @@ pub unsafe extern "C" fn uninitChecksumBuffers() {
 #[no_mangle]
 pub unsafe extern "C" fn addLocalChecksum(frame: u32, checksum: u32) {
     assert_eq!(frame, { battleFrameCount });
-    ChecksumBuffer_addChecksum(&raw mut localChecksumBuffer, frame, checksum);
+    ChecksumBuffer_addChecksum(&raw mut LOCAL_CHECKSUM_BUFFER, frame, checksum);
 }
 
 /// # Safety
@@ -153,7 +152,7 @@ pub unsafe extern "C" fn addRemoteChecksum(conn: *mut NetConnection, frame: u32,
 #[no_mangle]
 pub unsafe extern "C" fn verifyChecksums(frame: u32) -> bool {
     let mut local = 0;
-    if !ChecksumBuffer_getChecksum(&raw mut localChecksumBuffer, frame, &mut local) {
+    if !ChecksumBuffer_getChecksum(&raw mut LOCAL_CHECKSUM_BUFFER, frame, &mut local) {
         return false;
     }
     for conn in netConnections {

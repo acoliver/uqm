@@ -279,10 +279,10 @@ fn responses_are_offered_displayed_and_selected_with_wraparound() {
         assert_eq!(rust_SelectPrevResponse(), 1);
         assert_eq!(rust_GetSelectedResponse(), 2, "previous wraps to the last");
 
-        assert_eq!(rust_SelectResponseIndex(1), 1);
+        assert_eq!(rust_select_response_index(1), 1);
         assert_eq!(rust_GetSelectedResponse(), 1);
-        assert_eq!(rust_SelectResponseIndex(3), 0);
-        assert_eq!(rust_SelectResponseIndex(-1), 0);
+        assert_eq!(rust_select_response_index(3), 0);
+        assert_eq!(rust_select_response_index(-1), 0);
         assert_eq!(rust_GetSelectedResponse(), 1, "a bad index changes nothing");
     }
 }
@@ -294,7 +294,7 @@ fn there_is_nothing_to_select_without_responses() {
     unsafe {
         assert_eq!(rust_SelectNextResponse(), 0);
         assert_eq!(rust_SelectPrevResponse(), 0);
-        assert_eq!(rust_SelectResponseIndex(0), 0);
+        assert_eq!(rust_select_response_index(0), 0);
         assert_eq!(rust_ExecuteResponse(), 0);
     }
 }
@@ -307,7 +307,7 @@ fn a_response_with_a_handler_calls_it_with_its_reference() {
     offer("First", 11, None);
     offer("Second", 22, Some(remember_choice));
     unsafe {
-        assert_eq!(rust_SelectResponseIndex(1), 1);
+        assert_eq!(rust_select_response_index(1), 1);
         assert_eq!(rust_ExecuteResponse(), 22);
     }
     assert_eq!(CHOSEN.load(Ordering::SeqCst), 22);
@@ -400,7 +400,7 @@ fn clearing_responses_empties_the_list() {
 fn intro_and_talking_animation_flags_follow_their_setters() {
     let _comm = Comm::new();
     unsafe {
-        rust_InitCommAnimations();
+        rust_init_comm_animations();
         assert_eq!(rust_RunningIntroAnim(), 0);
         rust_SetRunIntroAnim(1);
         assert_eq!(rust_RunningIntroAnim(), 1);
@@ -447,7 +447,7 @@ fn animation_callbacks_report_a_change_on_redraw_and_none_when_paused() {
             0,
             "no animations means no change"
         );
-        assert_eq!(rust_ProcessCommAnimations(4), 0);
+        assert_eq!(rust_process_comm_animations(4), 0);
     }
 }
 
@@ -456,29 +456,29 @@ fn animation_callbacks_report_a_change_on_redraw_and_none_when_paused() {
 fn the_encounter_lifecycle_begins_and_ends_in_order() {
     let _comm = Comm::new();
     unsafe {
-        if rust_IsEncounterActive() == 1 {
-            rust_EndEncounterAbort();
+        if rust_is_encounter_active() == 1 {
+            rust_end_encounter_abort();
         }
-        assert_eq!(rust_IsEncounterActive(), 0);
-        assert_eq!(rust_EndEncounterNormal(), 0, "nothing to end");
-        assert_eq!(rust_EndEncounterAbort(), 0);
+        assert_eq!(rust_is_encounter_active(), 0);
+        assert_eq!(rust_end_encounter_normal(), 0, "nothing to end");
+        assert_eq!(rust_end_encounter_abort(), 0);
 
-        assert_eq!(rust_BeginEncounter(), 1);
-        assert_eq!(rust_IsEncounterActive(), 1);
-        assert_eq!(rust_BeginEncounter(), 0, "one encounter at a time");
-        assert_eq!(rust_EndEncounterNormal(), 1);
-        assert_eq!(rust_IsEncounterActive(), 0);
+        assert_eq!(rust_begin_encounter(), 1);
+        assert_eq!(rust_is_encounter_active(), 1);
+        assert_eq!(rust_begin_encounter(), 0, "one encounter at a time");
+        assert_eq!(rust_end_encounter_normal(), 1);
+        assert_eq!(rust_is_encounter_active(), 0);
 
-        assert_eq!(rust_BeginEncounter(), 1);
-        assert_eq!(rust_EndEncounterAbort(), 1);
-        assert_eq!(rust_IsEncounterActive(), 0);
+        assert_eq!(rust_begin_encounter(), 1);
+        assert_eq!(rust_end_encounter_abort(), 1);
+        assert_eq!(rust_is_encounter_active(), 0);
 
         assert_eq!(
-            rust_EndEncounterAttack(),
+            rust_end_encounter_attack(),
             1,
             "attacking without hailing still ends cleanly"
         );
-        assert_eq!(rust_IsEncounterActive(), 0);
+        assert_eq!(rust_is_encounter_active(), 0);
     }
 }
 
@@ -594,7 +594,7 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
         rust_ClearSubtitles();
         rust_RedrawSubtitles();
         offer("Choice", 1, None);
-        rust_RefreshResponses();
+        rust_refresh_responses();
         assert_eq!(
             rust_GetResponseCount(),
             1,
@@ -610,13 +610,13 @@ fn the_conversation_summary_pages_through_what_was_said() {
     let line = CString::new("Something the alien said").unwrap();
     unsafe {
         assert_eq!(
-            rust_ShowConversationSummary(),
+            rust_show_conversation_summary(),
             1,
             "an empty history exits at once"
         );
         for i in 0..30 {
             rust_SpliceTrack(i + 1, line.as_ptr(), i as f32, 1.0);
         }
-        assert_eq!(rust_ShowConversationSummary(), 1);
+        assert_eq!(rust_show_conversation_summary(), 1);
     }
 }

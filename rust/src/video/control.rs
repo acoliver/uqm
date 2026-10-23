@@ -23,7 +23,6 @@ extern "C" {
 
 /// # Safety
 /// Must run on the graphics thread with graphics initialized.
-#[no_mangle]
 pub unsafe extern "C" fn InitVideoPlayer(_use_cdrom: c_int) -> c_int {
     let mut format = std::mem::zeroed::<crate::graphics::native_abi::TFB_PixelFormat>();
     crate::graphics::native_abi::TFB_DrawCanvas_GetScreenFormat(&mut format);
@@ -37,14 +36,13 @@ pub unsafe extern "C" fn InitVideoPlayer(_use_cdrom: c_int) -> c_int {
     ) {
         return 0;
     }
-    TFB_InitVideoPlayer() as c_int
+    tfb_init_video_player() as c_int
 }
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
 pub unsafe extern "C" fn UninitVideoPlayer() {
-    TFB_UninitVideoPlayer();
+    tfb_uninit_video_player();
     VideoDecoder_Uninit();
 }
 
@@ -56,7 +54,7 @@ pub unsafe extern "C" fn VidStop() {
         snd_StopSpeech();
     }
     if !CURRENT_VIDEO.is_null() {
-        TFB_StopVideo(CURRENT_VIDEO);
+        tfb_stop_video(CURRENT_VIDEO);
     }
     CURRENT_SPEECH = ptr::null_mut();
     CURRENT_VIDEO = ptr::null_mut();
@@ -64,9 +62,8 @@ pub unsafe extern "C" fn VidStop() {
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
 pub unsafe extern "C" fn VidPlaying() -> *mut TFB_VideoClip {
-    if CURRENT_VIDEO.is_null() || !TFB_VideoPlaying(CURRENT_VIDEO) {
+    if CURRENT_VIDEO.is_null() || !tfb_video_playing(CURRENT_VIDEO) {
         ptr::null_mut()
     } else {
         CURRENT_VIDEO
@@ -75,34 +72,31 @@ pub unsafe extern "C" fn VidPlaying() -> *mut TFB_VideoClip {
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
 pub unsafe extern "C" fn VidProcessFrame() -> c_int {
     if CURRENT_VIDEO.is_null() {
         0
     } else {
-        TFB_ProcessVideoFrame(CURRENT_VIDEO) as c_int
+        tfb_process_video_frame(CURRENT_VIDEO) as c_int
     }
 }
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
 pub unsafe extern "C" fn VidGetPosition() -> u32 {
     if VidPlaying().is_null() {
         0
     } else {
-        TFB_GetVideoPosition(CURRENT_VIDEO)
+        tfb_get_video_position(CURRENT_VIDEO)
     }
 }
 
 /// # Safety
 /// Must run on the graphics thread, serialized with video operations.
-#[no_mangle]
 pub unsafe extern "C" fn VidSeek(position: u32) -> c_int {
     if VidPlaying().is_null() {
         0
     } else {
-        TFB_SeekVideo(CURRENT_VIDEO, position) as c_int
+        tfb_seek_video(CURRENT_VIDEO, position) as c_int
     }
 }
 
@@ -132,7 +126,7 @@ pub unsafe extern "C" fn VidPlayEx(
     // C promotes the unsigned clip dimensions before converting the centered coordinates.
     let x = (ScreenWidth as u32).wrapping_sub((*video).w) / 2;
     let y = (ScreenHeight as u32).wrapping_sub((*video).h) / 2;
-    if TFB_PlayVideo(video, x, y) {
+    if tfb_play_video(video, x, y) {
         CURRENT_VIDEO = video;
         if !speech.is_null() {
             CURRENT_SPEECH = speech;
@@ -145,7 +139,6 @@ pub unsafe extern "C" fn VidPlayEx(
 
 /// # Safety
 /// Video must be a live handle; calls belong to the graphics thread.
-#[no_mangle]
 pub unsafe extern "C" fn VidPlay(video: *mut TFB_VideoClip) -> c_int {
     VidPlayEx(video, ptr::null_mut(), ptr::null_mut(), u32::MAX)
 }
@@ -174,7 +167,7 @@ pub unsafe extern "C" fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int {
     if video.is_null() {
         return 0;
     }
-    TFB_StopVideo(video);
+    tfb_stop_video(video);
     VideoDecoder_Free((*video).decoder);
     DestroyMutex((*video).guard);
     rust_hfree(video.cast());

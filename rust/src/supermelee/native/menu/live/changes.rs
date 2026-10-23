@@ -32,7 +32,7 @@ unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: *const c_char) 
     if !MeleeSetup_setTeamName((*state).meleeSetup, side as usize, value) {
         return false;
     }
-    if (*state).row != 2 || (*state).side != side || (*pMeleeState).CurIndex == u16::MAX {
+    if (*state).row != 2 || (*state).side != side || (*P_MELEE_STATE).CurIndex == u16::MAX {
         view_name(state, side);
     }
     true

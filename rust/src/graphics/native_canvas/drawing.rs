@@ -459,7 +459,7 @@ pub(super) unsafe fn draw_filled_image_locked(
     let palette = format(surf).palette;
     if !palette.is_null() {
         // set palette for fill-stamp
-        // Calling TFB_SetColors() results in an expensive src -> dst
+        // Calling tfb_set_colors() results in an expensive src -> dst
         // color-mapping operation for an SDL blit, following the call.
         // We want to avoid that as much as possible.
 

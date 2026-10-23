@@ -1,22 +1,9 @@
 //! Production-linked packet and checksum handlers.
 extern crate uqm_rust;
 
-#[allow(
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals,
-    dead_code,
-    unnecessary_transmutes,
-    clippy::all,
-    clashing_extern_declarations,
-    reason = "generated engine ABI shared with the production netplay bridge"
-)]
-mod abi {
-    include!("../src/abi/netplay_abi.rs");
-}
 use abi::*;
+use uqm_rust::supermelee::netplay::abi;
 
-#[link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")]
 extern "C" {
     fn PacketQueue_init(queue: *mut PacketQueue);
     fn PacketQueue_uninit(queue: *mut PacketQueue);
@@ -319,8 +306,12 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         // stream framing and descriptor read callback on both connections.
         assert_eq!(Netplay_confirm(a), 0);
         assert_eq!(Netplay_confirm(b), 0);
-        while (*a).state != NetState_NetState_preBattle || (*b).state != NetState_NetState_preBattle
-        {
+        loop {
+            if (*a).state == NetState_NetState_preBattle
+                && (*b).state == NetState_NetState_preBattle
+            {
+                break;
+            }
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
@@ -342,7 +333,10 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             (&raw mut ready_b).cast(),
             true
         ));
-        while ready_a == 0 || ready_b == 0 {
+        loop {
+            if ready_a != 0 && ready_b != 0 {
+                break;
+            }
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
@@ -357,7 +351,10 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         Netplay_setResetCallback(a, Some(reset_count), (&raw mut reset_a).cast());
         Netplay_setResetCallback(b, Some(reset_count), (&raw mut reset_b).cast());
         Netplay_localReset(a, NetplayResetReason_ResetReason_manualReset);
-        while reset_a == 0 || reset_b == 0 {
+        loop {
+            if reset_a != 0 && reset_b != 0 {
+                break;
+            }
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);

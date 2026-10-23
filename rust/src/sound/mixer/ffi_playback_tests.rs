@@ -39,8 +39,8 @@ impl Mixer {
     fn start_with_flags(flags: c_uint) -> Self {
         let lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
-            assert_eq!(rust_mixer_Init(RATE, C_STEREO16, 1, flags), 1);
+            rust_mixer_uninit();
+            assert_eq!(rust_mixer_init(RATE, C_STEREO16, 1, flags), 1);
         }
         Mixer { _lease: lease }
     }
@@ -50,13 +50,13 @@ impl Drop for Mixer {
     fn drop(&mut self) {
         unsafe {
             for mut source in SOURCES.take() {
-                rust_mixer_SourceStop(source);
-                rust_mixer_DeleteSources(1, &mut source);
+                rust_mixer_source_stop(source);
+                rust_mixer_delete_sources(1, &mut source);
             }
             for mut buffer in BUFFERS.take() {
-                rust_mixer_DeleteBuffers(1, &mut buffer);
+                rust_mixer_delete_buffers(1, &mut buffer);
             }
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 }
@@ -78,8 +78,8 @@ fn buffer_with(format: c_uint, samples: &[i16]) -> MixerObject {
     let mut handle = [0 as MixerObject; 1];
     let data = pcm(samples);
     unsafe {
-        rust_mixer_GenBuffers(1, handle.as_mut_ptr());
-        rust_mixer_BufferData(handle[0], format, data.as_ptr(), data.len() as c_uint, RATE);
+        rust_mixer_gen_buffers(1, handle.as_mut_ptr());
+        rust_mixer_buffer_data(handle[0], format, data.as_ptr(), data.len() as c_uint, RATE);
     }
     BUFFERS.with_borrow_mut(|all| all.push(handle[0]));
     handle[0]
@@ -87,25 +87,25 @@ fn buffer_with(format: c_uint, samples: &[i16]) -> MixerObject {
 
 fn source() -> MixerObject {
     let mut handle = [0 as MixerObject; 1];
-    unsafe { rust_mixer_GenSources(1, handle.as_mut_ptr()) };
+    unsafe { rust_mixer_gen_sources(1, handle.as_mut_ptr()) };
     SOURCES.with_borrow_mut(|all| all.push(handle[0]));
     handle[0]
 }
 
 fn queue(source: MixerObject, buffer: MixerObject) {
     let mut handle = [buffer];
-    unsafe { rust_mixer_SourceQueueBuffers(source, 1, handle.as_mut_ptr()) };
+    unsafe { rust_mixer_source_queue_buffers(source, 1, handle.as_mut_ptr()) };
 }
 
 fn state_of(source: MixerObject, prop: c_uint) -> MixerIntVal {
     let mut value: MixerIntVal = -99;
-    unsafe { rust_mixer_GetSourcei(source, prop, &mut value) };
+    unsafe { rust_mixer_get_sourcei(source, prop, &mut value) };
     value
 }
 
 fn render(frames: usize) -> Vec<i16> {
     let mut stream = vec![0x55u8; frames * 4];
-    unsafe { rust_mixer_MixChannels(ptr::null_mut(), stream.as_mut_ptr(), stream.len() as c_int) };
+    unsafe { rust_mixer_mix_channels(ptr::null_mut(), stream.as_mut_ptr(), stream.len() as c_int) };
     read_pcm(&stream)
 }
 
@@ -126,9 +126,9 @@ fn c_formats_decode_to_the_matching_mixer_format() {
 fn init_reports_the_negotiated_frequency_and_format() {
     let _mixer = Mixer::start();
     unsafe {
-        assert_eq!(rust_mixer_GetFrequency(), RATE);
-        assert_eq!(rust_mixer_GetFormat(), MixerFormat::Stereo16 as c_uint);
-        assert_eq!(rust_mixer_GetError(), 0);
+        assert_eq!(rust_mixer_get_frequency(), RATE);
+        assert_eq!(rust_mixer_get_format(), MixerFormat::Stereo16 as c_uint);
+        assert_eq!(rust_mixer_get_error(), 0);
     }
 }
 
@@ -138,13 +138,13 @@ fn buffer_data_is_recorded_with_its_original_properties() {
     let buffer = buffer_with(C_STEREO16, &[1, -1, 2, -2, 3, -3]);
     let mut value: MixerIntVal = 0;
     unsafe {
-        rust_mixer_GetBufferi(buffer, BufferProp::Frequency as c_uint, &mut value);
+        rust_mixer_get_bufferi(buffer, BufferProp::Frequency as c_uint, &mut value);
         assert_eq!(value, RATE as MixerIntVal);
-        rust_mixer_GetBufferi(buffer, BufferProp::Channels as c_uint, &mut value);
+        rust_mixer_get_bufferi(buffer, BufferProp::Channels as c_uint, &mut value);
         assert_eq!(value, 2);
-        rust_mixer_GetBufferi(buffer, BufferProp::Bits as c_uint, &mut value);
+        rust_mixer_get_bufferi(buffer, BufferProp::Bits as c_uint, &mut value);
         assert_eq!(value, 16);
-        rust_mixer_GetBufferi(buffer, BufferProp::Size as c_uint, &mut value);
+        rust_mixer_get_bufferi(buffer, BufferProp::Size as c_uint, &mut value);
         assert_eq!(value, 12);
     }
 }
@@ -158,7 +158,7 @@ pub(crate) fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_proce
     queue(source, buffer);
     assert_eq!(state_of(source, QUEUED), 1);
 
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     assert_eq!(state_of(source, STATE), STATE_PLAYING);
 
     let out = render(4);
@@ -172,7 +172,7 @@ pub(crate) fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_proce
     assert_eq!(state_of(source, PROCESSED), 1);
 
     let mut returned = [0 as MixerObject; 1];
-    unsafe { rust_mixer_SourceUnqueueBuffers(source, 1, returned.as_mut_ptr()) };
+    unsafe { rust_mixer_source_unqueue_buffers(source, 1, returned.as_mut_ptr()) };
     assert_eq!(returned[0], buffer);
     assert_eq!(state_of(source, QUEUED), 0);
 }
@@ -184,11 +184,11 @@ fn gain_scales_what_reaches_the_stream() {
     let source = source();
     queue(source, buffer);
     unsafe {
-        rust_mixer_Sourcef(source, GAIN, 0.5);
+        rust_mixer_sourcef(source, GAIN, 0.5);
         let mut gain = 0.0f32;
-        rust_mixer_GetSourcef(source, GAIN, &mut gain);
+        rust_mixer_get_sourcef(source, GAIN, &mut gain);
         assert!((gain - 0.5).abs() < 1e-6);
-        rust_mixer_SourcePlay(source);
+        rust_mixer_source_play(source);
     }
     let out = render(2);
     assert_eq!(out, [375, -375, 750, -750]);
@@ -201,13 +201,13 @@ fn the_looping_flag_is_kept_on_the_source_and_stopping_clears_the_queue() {
     let source = source();
     queue(source, buffer);
     unsafe {
-        rust_mixer_Sourcei(source, LOOPING, 1);
-        rust_mixer_SourcePlay(source);
+        rust_mixer_sourcei(source, LOOPING, 1);
+        rust_mixer_source_play(source);
     }
     assert_eq!(state_of(source, LOOPING), 1);
     assert_eq!(render(2), [30, 60, 90, 120]);
 
-    unsafe { rust_mixer_SourceStop(source) };
+    unsafe { rust_mixer_source_stop(source) };
     assert_eq!(state_of(source, STATE), STATE_STOPPED);
     assert_eq!(state_of(source, QUEUED), 0, "stopping unqueues everything");
     assert_eq!(render(2), [0, 0, 0, 0]);
@@ -219,14 +219,14 @@ fn pausing_silences_the_source_and_resuming_continues_where_it_left_off() {
     let buffer = buffer_with(C_STEREO16, &[40, 80, 120, 160, 200, 240, 280, 320]);
     let source = source();
     queue(source, buffer);
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     assert_eq!(render(1), [30, 60]);
 
-    unsafe { rust_mixer_SourcePause(source) };
+    unsafe { rust_mixer_source_pause(source) };
     assert_eq!(state_of(source, STATE), STATE_PAUSED);
     assert_eq!(render(1), [0, 0]);
 
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     assert_eq!(render(1), [90, 120]);
 }
 
@@ -236,12 +236,12 @@ fn rewinding_restarts_the_queue_from_the_first_sample() {
     let buffer = buffer_with(C_STEREO16, &[44, 48, 52, 56]);
     let source = source();
     queue(source, buffer);
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     render(1);
     unsafe {
-        rust_mixer_SourceRewind(source);
+        rust_mixer_source_rewind(source);
         assert_eq!(state_of(source, STATE), STATE_INITIAL);
-        rust_mixer_SourcePlay(source);
+        rust_mixer_source_play(source);
     }
     assert_eq!(render(1), [33, 36]);
 }
@@ -254,8 +254,8 @@ fn two_sources_are_summed_into_the_stream() {
     queue(first, buffer_with(C_STEREO16, &[400, 800]));
     queue(second, buffer_with(C_STEREO16, &[40, 80]));
     unsafe {
-        rust_mixer_SourcePlay(first);
-        rust_mixer_SourcePlay(second);
+        rust_mixer_source_play(first);
+        rust_mixer_source_play(second);
     }
     assert_eq!(render(1), [330, 660]);
 }
@@ -268,9 +268,9 @@ fn queued_buffers_play_back_to_back() {
         buffer_with(C_STEREO16, &[40, 40]),
         buffer_with(C_STEREO16, &[80, 80]),
     ];
-    unsafe { rust_mixer_SourceQueueBuffers(source, 2, buffers.as_mut_ptr()) };
+    unsafe { rust_mixer_source_queue_buffers(source, 2, buffers.as_mut_ptr()) };
     assert_eq!(state_of(source, QUEUED), 2);
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     assert_eq!(render(2), [30, 30, 60, 60]);
     assert_eq!(state_of(source, PROCESSED), 2);
 }
@@ -281,10 +281,10 @@ fn deleting_objects_invalidates_their_handles_and_zeroes_the_caller_array() {
     let mut sources = [source(), source()];
     let mut buffers = [buffer_with(C_STEREO16, &[1, 2])];
     unsafe {
-        assert_eq!(rust_mixer_IsSource(sources[0]), 1);
-        assert_eq!(rust_mixer_IsBuffer(buffers[0]), 1);
-        rust_mixer_DeleteSources(2, sources.as_mut_ptr());
-        rust_mixer_DeleteBuffers(1, buffers.as_mut_ptr());
+        assert_eq!(rust_mixer_is_source(sources[0]), 1);
+        assert_eq!(rust_mixer_is_buffer(buffers[0]), 1);
+        rust_mixer_delete_sources(2, sources.as_mut_ptr());
+        rust_mixer_delete_buffers(1, buffers.as_mut_ptr());
     }
     assert_eq!(sources, [0, 0]);
     assert_eq!(buffers, [0]);
@@ -296,32 +296,32 @@ fn unknown_properties_and_empty_requests_are_ignored() {
     let source = source();
     unsafe {
         let mut value: MixerIntVal = 1234;
-        rust_mixer_GetSourcei(source, 0x7777, &mut value);
+        rust_mixer_get_sourcei(source, 0x7777, &mut value);
         assert_eq!(value, 1234, "unknown property leaves the output alone");
         let mut gain = 9.0f32;
-        rust_mixer_GetSourcef(source, 0x7777, &mut gain);
+        rust_mixer_get_sourcef(source, 0x7777, &mut gain);
         assert_eq!(gain, 9.0);
-        rust_mixer_GetSourcei(source, STATE, ptr::null_mut());
-        rust_mixer_GetSourcef(source, GAIN, ptr::null_mut());
-        rust_mixer_GetBufferi(source, BufferProp::Size as c_uint, ptr::null_mut());
-        rust_mixer_Sourcei(source, 0x7777, 5);
-        rust_mixer_Sourcef(source, 0x7777, 5.0);
-        rust_mixer_Sourcefv(source, GAIN, ptr::null());
-        rust_mixer_GenSources(0, ptr::null_mut());
-        rust_mixer_GenSources(2, ptr::null_mut());
-        rust_mixer_GenBuffers(0, ptr::null_mut());
-        rust_mixer_GenBuffers(2, ptr::null_mut());
-        rust_mixer_DeleteSources(0, ptr::null_mut());
-        rust_mixer_DeleteBuffers(0, ptr::null_mut());
-        rust_mixer_SourceQueueBuffers(source, 0, ptr::null_mut());
-        rust_mixer_SourceQueueBuffers(source, 1, ptr::null_mut());
-        rust_mixer_SourceUnqueueBuffers(source, 0, ptr::null_mut());
-        rust_mixer_SourceUnqueueBuffers(source, 1, ptr::null_mut());
-        rust_mixer_BufferData(1, C_STEREO16, ptr::null(), 4, RATE);
-        rust_mixer_MixChannels(ptr::null_mut(), ptr::null_mut(), 16);
-        rust_mixer_MixChannels(ptr::null_mut(), [0u8; 4].as_mut_ptr(), 0);
-        rust_mixer_MixFake(ptr::null_mut(), ptr::null_mut(), 16);
-        rust_mixer_MixFake(ptr::null_mut(), [0u8; 4].as_mut_ptr(), -1);
+        rust_mixer_get_sourcei(source, STATE, ptr::null_mut());
+        rust_mixer_get_sourcef(source, GAIN, ptr::null_mut());
+        rust_mixer_get_bufferi(source, BufferProp::Size as c_uint, ptr::null_mut());
+        rust_mixer_sourcei(source, 0x7777, 5);
+        rust_mixer_sourcef(source, 0x7777, 5.0);
+        rust_mixer_sourcefv(source, GAIN, ptr::null());
+        rust_mixer_gen_sources(0, ptr::null_mut());
+        rust_mixer_gen_sources(2, ptr::null_mut());
+        rust_mixer_gen_buffers(0, ptr::null_mut());
+        rust_mixer_gen_buffers(2, ptr::null_mut());
+        rust_mixer_delete_sources(0, ptr::null_mut());
+        rust_mixer_delete_buffers(0, ptr::null_mut());
+        rust_mixer_source_queue_buffers(source, 0, ptr::null_mut());
+        rust_mixer_source_queue_buffers(source, 1, ptr::null_mut());
+        rust_mixer_source_unqueue_buffers(source, 0, ptr::null_mut());
+        rust_mixer_source_unqueue_buffers(source, 1, ptr::null_mut());
+        rust_mixer_buffer_data(1, C_STEREO16, ptr::null(), 4, RATE);
+        rust_mixer_mix_channels(ptr::null_mut(), ptr::null_mut(), 16);
+        rust_mixer_mix_channels(ptr::null_mut(), [0u8; 4].as_mut_ptr(), 0);
+        rust_mixer_mix_fake(ptr::null_mut(), ptr::null_mut(), 16);
+        rust_mixer_mix_fake(ptr::null_mut(), [0u8; 4].as_mut_ptr(), -1);
     }
     assert_eq!(state_of(source, STATE), STATE_INITIAL);
     assert_eq!(state_of(source, QUEUED), 0);
@@ -332,12 +332,12 @@ fn a_zero_sized_or_malformed_buffer_upload_is_refused() {
     let _mixer = Mixer::start();
     let mut handle = [0 as MixerObject; 1];
     unsafe {
-        rust_mixer_GenBuffers(1, handle.as_mut_ptr());
+        rust_mixer_gen_buffers(1, handle.as_mut_ptr());
         let data = [0u8; 8];
-        rust_mixer_BufferData(handle[0], C_STEREO16, data.as_ptr(), 0, RATE);
-        rust_mixer_BufferData(handle[0], 0, data.as_ptr(), 8, RATE);
+        rust_mixer_buffer_data(handle[0], C_STEREO16, data.as_ptr(), 0, RATE);
+        rust_mixer_buffer_data(handle[0], 0, data.as_ptr(), 8, RATE);
         let mut size: MixerIntVal = -1;
-        rust_mixer_GetBufferi(handle[0], BufferProp::Size as c_uint, &mut size);
+        rust_mixer_get_bufferi(handle[0], BufferProp::Size as c_uint, &mut size);
         assert_eq!(size, 0, "neither upload took effect");
     }
 }
@@ -347,9 +347,9 @@ fn mono_buffers_are_accepted_by_a_stereo_mixer() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_MONO16, &[5, 6, 7, 8]);
     let mut value: MixerIntVal = 0;
-    unsafe { rust_mixer_GetBufferi(buffer, BufferProp::Channels as c_uint, &mut value) };
+    unsafe { rust_mixer_get_bufferi(buffer, BufferProp::Channels as c_uint, &mut value) };
     assert_eq!(value, 1);
-    unsafe { rust_mixer_GetBufferi(buffer, BufferProp::Size as c_uint, &mut value) };
+    unsafe { rust_mixer_get_bufferi(buffer, BufferProp::Size as c_uint, &mut value) };
     assert_eq!(value, 8);
 }
 
@@ -357,9 +357,9 @@ fn mono_buffers_are_accepted_by_a_stereo_mixer() {
 fn fake_mode_renders_without_real_buffers() {
     let _mixer = Mixer::start_with_flags(1);
     let source = source();
-    unsafe { rust_mixer_SourcePlay(source) };
+    unsafe { rust_mixer_source_play(source) };
     let mut stream = [0u8; 16];
-    unsafe { rust_mixer_MixFake(ptr::null_mut(), stream.as_mut_ptr(), 16) };
+    unsafe { rust_mixer_mix_fake(ptr::null_mut(), stream.as_mut_ptr(), 16) };
 }
 
 #[test]

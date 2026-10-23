@@ -1,5 +1,4 @@
 //! Exercise the Chenjesu descriptor and callbacks against the linked engine.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{
     ffi::{c_void, CStr},
@@ -11,10 +10,6 @@ use uqm_rust::ships::native::{
     put_element, sine,
 };
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_chenjesu() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
@@ -596,7 +591,8 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
         let tail = disp_q.tail;
         collide(crystal, &mut pa, &mut target, &mut pb);
         assert_eq!(
-            disp_q.tail, tail,
+            { disp_q.tail },
+            tail,
             "already-collided crystal creates no second blast"
         );
         FreeElement(h);
@@ -796,7 +792,10 @@ fn doggy_death_preserves_unrelated_fields_and_starts_six_frame_animation() {
         assert!((*dog).death_func.is_none());
         assert!((*dog).collision_func.is_none());
         assert_ne!((*dog).preprocess_func.unwrap() as usize, preprocess);
-        assert_eq!((*dog).postprocess_func.unwrap() as usize, sentinel as usize);
+        assert_eq!(
+            (*dog).postprocess_func.unwrap() as usize,
+            sentinel as *const () as usize
+        );
         assert_eq!((*dog).hTarget, ship.handle);
         assert_eq!((*dog).pParent, (&raw mut *ship.ss).cast());
         assert_eq!((*dog).__bindgen_anon_2.hit_points, 3);

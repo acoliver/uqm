@@ -1,6 +1,6 @@
 //! Frame selection rules for scan dots and mineral sprites in `miscdata.ani`.
 //!
-//! These mirror `GeneratePlanetSide` in the original C `scan.c`
+//! These mirror `generate_planet_side` in the original C `scan.c`
 //! (`NUM_SCANDOT_TRANSITIONS` is 4 in `planets.h`).  Both the orbit-scan
 //! display list and the lander surface visuals select frames here so the two
 //! cannot drift apart.

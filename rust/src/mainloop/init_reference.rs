@@ -67,7 +67,7 @@
 //! | 22 | `InitTaskSystem()` | Task (coroutine) scheduler init |
 //! | 23 | `Alarm_init()` | Alarm/timer callback system |
 //! | 24 | `Callback_init()` | Global callback registry init |
-//! | 25 | `Network_init()` *(NETPLAY only)* | Network subsystem |
+//! | 25 | `network_init()` *(NETPLAY only)* | Network subsystem |
 //! | 26 | `NetManager_init()` *(NETPLAY only)* | Netplay session manager |
 //!
 //! ## 5. Graphics
@@ -86,7 +86,7 @@
 //! | # | Call | Notes |
 //! |---|------|-------|
 //! | 33 | `assert(sizeof(int[NUM_TEMPLATES*NUM_KEYS]) == ...)` | Compile-time array-layout check |
-//! | 34 | `TFB_SetInputVectors(menu, key, ...)` | Wire input vectors into immediate input state |
+//! | 34 | `tfb_set_input_vectors(menu, key, ...)` | Wire input vectors into immediate input state |
 //! | 35 | `TFB_InitInput(TFB_INPUTDRIVER_SDL, 0)` | **Input subsystem init** — SDL event capture begins |
 //!
 //! ## 7. Launch game thread
@@ -127,7 +127,7 @@
 //! 5. `UninitColorMaps()`
 //! 6. `TFB_UninitGraphics()`
 //! 7. `NetManager_uninit()` *(NETPLAY only)*
-//! 8. `Network_uninit()` *(NETPLAY only)*
+//! 8. `network_uninit()` *(NETPLAY only)*
 //! 9. `Callback_uninit()`
 //! 10. `Alarm_uninit()`
 //! 11. `CleanupTaskSystem()`
@@ -163,7 +163,7 @@
 //!   `InitGameClock`, `AddInitialGameEvents`, `SetPlayerInputAll`,
 //!   `initAudio`.
 //! - Startup-path symbols are present: `TFB_InitGraphics`, `TFB_InitInput`,
-//!   `Callback_init`, `Network_init`, `NetManager_init`.
+//!   `Callback_init`, `network_init`, `NetManager_init`.
 //! - No `uqm_rust_safe_startup` wrapper symbol exists in the binary —
 //!   Rust does not wrap or replicate C startup.
 //!

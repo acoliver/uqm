@@ -413,8 +413,7 @@ pub unsafe extern "C" fn rust_GetSelectedResponse() -> c_int {
 /// Select an exact response index for semantic automation.
 ///
 /// Returns 1 only when the index is valid for the current response list.
-#[no_mangle]
-pub extern "C" fn rust_SelectResponseIndex(index: c_int) -> c_int {
+pub extern "C" fn rust_select_response_index(index: c_int) -> c_int {
     if COMM_STATE.write().responses_mut().select(index) {
         1
     } else {
@@ -535,8 +534,7 @@ pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// @plan PLAN-20260314-COMM.P07
-#[no_mangle]
-pub unsafe extern "C" fn rust_InitCommAnimations() {
+pub unsafe extern "C" fn rust_init_comm_animations() {
     // Animation initialization requires CommData to be loaded.
     // In production, this is called after init_race populates CommData.
     // The actual descriptor population happens from C side (stubs in commanim).
@@ -547,8 +545,7 @@ pub unsafe extern "C" fn rust_InitCommAnimations() {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// @plan PLAN-20260314-COMM.P07
-#[no_mangle]
-pub unsafe extern "C" fn rust_ProcessCommAnimations(delta_ticks: c_uint) -> c_int {
+pub unsafe extern "C" fn rust_process_comm_animations(delta_ticks: c_uint) -> c_int {
     let changed = COMM_STATE.write().animations_mut().process(delta_ticks);
     changed as c_int
 }
@@ -663,8 +660,7 @@ pub unsafe extern "C" fn rust_GetCommAnimationFrame(index: c_uint) -> c_uint {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_BeginEncounter() -> c_int {
+pub unsafe extern "C" fn rust_begin_encounter() -> c_int {
     match super::encounter::begin_encounter() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -675,8 +671,7 @@ pub unsafe extern "C" fn rust_BeginEncounter() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_EndEncounterNormal() -> c_int {
+pub unsafe extern "C" fn rust_end_encounter_normal() -> c_int {
     match super::encounter::end_encounter_normal() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -687,8 +682,7 @@ pub unsafe extern "C" fn rust_EndEncounterNormal() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_EndEncounterAbort() -> c_int {
+pub unsafe extern "C" fn rust_end_encounter_abort() -> c_int {
     match super::encounter::end_encounter_abort() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -699,8 +693,7 @@ pub unsafe extern "C" fn rust_EndEncounterAbort() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_EndEncounterAttack() -> c_int {
+pub unsafe extern "C" fn rust_end_encounter_attack() -> c_int {
     match super::encounter::end_encounter_attack() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -711,8 +704,7 @@ pub unsafe extern "C" fn rust_EndEncounterAttack() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_IsEncounterActive() -> c_int {
+pub unsafe extern "C" fn rust_is_encounter_active() -> c_int {
     super::encounter::is_encounter_active() as c_int
 }
 
@@ -1004,8 +996,7 @@ fn run_alien_talk_unlocked(
 ///
 /// Matches C `TalkSegue(wait_track)`.
 /// Returns 1 if playback ended naturally, 0 if aborted.
-#[no_mangle]
-pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
+pub unsafe extern "C" fn rust_talk_segue(wait: c_int) -> c_int {
     let wait_track = if wait <= 0 { 0 } else { wait as u32 };
     let mut state = COMM_STATE.write();
     if super::talk_segue::talk_segue(&mut state, wait_track) {
@@ -1312,8 +1303,7 @@ pub unsafe extern "C" fn rust_UpdateSpeechGraphics() {
 ///
 /// Matches C `RefreshResponses`. Delegates rendering to C bridge; Rust
 /// updates scroll state.
-#[no_mangle]
-pub unsafe extern "C" fn rust_RefreshResponses() {
+pub unsafe extern "C" fn rust_refresh_responses() {
     let mut state = COMM_STATE.write();
     let selected = state.responses().selected().max(0) as usize;
     // We need an owned snapshot of responses to avoid split-borrow.
@@ -1389,8 +1379,7 @@ pub unsafe extern "C" fn rust_RedrawSubtitles() {
 /// @requirement REQ-CS-002
 /// @pseudocode 004-summary-guard-stale-markers lines 01-24
 #[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
+pub unsafe extern "C" fn rust_show_conversation_summary() -> c_int {
     super::response_ui::select_conversation_summary_production();
     1
 }
@@ -1407,8 +1396,7 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 /// @requirement REQ-CS-002, REQ-CS-003, REQ-SM-001
 /// @pseudocode 004-summary-guard-stale-markers lines 01-47
 #[cfg(test)]
-#[no_mangle]
-pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
+pub unsafe extern "C" fn rust_show_conversation_summary() -> c_int {
     use super::summary::SummaryResult;
     use super::summary::SummaryView;
 
@@ -1438,7 +1426,7 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 }
 
 // ============================================================================
-// HailAlien bridge
+// hail_alien bridge
 // @plan PLAN-20260326-COMMPT2.P07
 // @requirement REQ-HL-001
 // ============================================================================
@@ -1448,7 +1436,7 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
-/// Under USE_RUST_COMM, InitCommunication calls this instead of the C HailAlien().
+/// Under USE_RUST_COMM, InitCommunication calls this instead of the C hail_alien().
 /// Delegates to `hail::hail_alien()` which implements the full encounter loop:
 /// resource loading → context setup → init_encounter_func → DoInput loop →
 /// post/uninit_encounter_func → resource cleanup.
@@ -1471,7 +1459,7 @@ const GLOBAL_SHIP_NAME: c_int = -999_999;
 #[cfg(not(test))]
 const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
 
-// Size of the per-call alliance-name working buffer (matches C NPCPhrase_cb buf[400]).
+// Size of the per-call alliance-name working buffer (matches C npcphrase_cb buf[400]).
 #[cfg(not(test))]
 const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
@@ -1496,7 +1484,7 @@ extern "C" {
     pub static mut CommData: crate::comm::locdata::CLocData;
 }
 
-// Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
+// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
 #[cfg(not(test))]
 extern "C" {
     fn SpliceMultiTrack(track_names: *mut *mut std::ffi::c_char, track_text: *mut std::ffi::c_char);
@@ -1577,9 +1565,9 @@ unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
     len
 }
 
-/// NPCPhrase with callback — the Rust replacement for C's NPCPhrase_cb.
+/// NPCPhrase with callback — the Rust replacement for C's npcphrase_cb.
 ///
-/// Implements all six branches from commglue.c NPCPhrase_cb (lines 36–97):
+/// Implements all six branches from commglue.c npcphrase_cb (lines 36–97):
 ///  1. index == 0: no-op, return immediately
 ///  2. GLOBAL_PLAYER_NAME: use commander name, null clip/timestamp
 ///  3. GLOBAL_SHIP_NAME: use ship name, null clip/timestamp
@@ -1676,7 +1664,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
     COMM_STATE.write().rebuild_summary();
 }
 
-/// NPCPhrase_splice variant preserving C `NPCPhrase_splice` behavior.
+/// npcphrase_splice variant preserving C `npcphrase_splice` behavior.
 ///
 /// C semantics (commglue.c):
 /// - index == 0: return
@@ -1701,7 +1689,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
         use std::ptr;
 
         if index < 0 {
-            // For special negative phrases, reuse NPCPhrase_cb behavior.
+            // For special negative phrases, reuse npcphrase_cb behavior.
             rust_NPCPhrase_cb(index, None);
             return;
         }

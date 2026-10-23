@@ -508,7 +508,7 @@ mod tests {
             _scan: super::super::generation::ScanType,
             _node: super::super::generation::ScanNodeId,
         ) -> Result<bool, AdapterError> {
-            super::super::special_effects::SetLanderTakeoff();
+            super::super::special_effects::set_lander_takeoff();
             Ok(true)
         }
     }
@@ -770,7 +770,7 @@ mod tests {
 
     /// C `lander.c` ~786-803: a stun bolt on a creature whose catalog value is 0
     /// skips `shotCreature`, so the first bolt retires the node through
-    /// `callPickupForScanType`/`setNodeRetrieved` whatever its hit points were.
+    /// `callPickupForScanType`/`set_node_retrieved` whatever its hit points were.
     #[test]
     fn first_stun_bolt_retires_a_multi_hit_point_brainbox_node() {
         use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};
@@ -1040,7 +1040,7 @@ mod tests {
     #[test]
     fn energy_pickup_reports_the_takeoff_its_callback_requested() {
         // Luna's moon base is an energy node whose selected-system callback
-        // calls SetLanderTakeoff() before returning "picked up". The adapter
+        // calls set_lander_takeoff() before returning "picked up". The adapter
         // must surface that request, otherwise the lander never lifts off.
         let mut world = SurfaceWorld::new();
         let id = world.insert(SurfaceEntity {

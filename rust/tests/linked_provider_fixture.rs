@@ -2,10 +2,6 @@
 
 use std::os::raw::c_int;
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn uqm_debug_creature_bio_value(creature_type: u8) -> c_int;
 }
@@ -19,10 +15,6 @@ fn debug_c_consumer_observes_the_canonical_rust_creature_catalog() {
     }
 }
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     /// The real per-game initialiser the game runs when starting a new game.
     fn InitGlobData();

@@ -1,4 +1,4 @@
-//! Permission checks (`uio_access`) and host-path access (`uio_getStdioAccess`)
+//! Permission checks (`uio_access`) and host-path access (`uio_get_stdio_access`)
 //! against mount stacks that mix writable directories, read-only directories
 //! and archives, checking the result code and the errno C callers read.
 
@@ -26,7 +26,7 @@ fn stdio_access(
     temp: *mut uio_DirHandle,
 ) -> (*mut uio_StdioAccessHandle, c_int) {
     let path = CString::new(path).unwrap();
-    let handle = unsafe { uio_getStdioAccess(stack.root, path.as_ptr(), 0, temp) };
+    let handle = unsafe { uio_get_stdio_access(stack.root, path.as_ptr(), 0, temp) };
     (handle, if handle.is_null() { errno_value() } else { 0 })
 }
 
@@ -168,12 +168,12 @@ fn a_loose_file_can_be_reached_by_path_on_the_host() {
     let (handle, errno) = stdio_access(&stack, "loose.txt", ptr::null_mut());
     assert!(!handle.is_null(), "errno {errno}");
     unsafe {
-        let path = CStr::from_ptr(uio_StdioAccessHandle_getPath(handle))
+        let path = CStr::from_ptr(uio_stdio_access_handle_get_path(handle))
             .to_str()
             .unwrap();
         assert_eq!(std::path::Path::new(path), root.join("loose.txt"));
         assert_eq!(std::fs::read(path).unwrap(), b"loose");
-        uio_releaseStdioAccess(handle);
+        uio_release_stdio_access(handle);
     }
     assert!(
         root.join("loose.txt").exists(),
@@ -204,13 +204,13 @@ fn host_path_access_refuses_directories_missing_files_and_unmounted_paths() {
 
     let path = CString::new("a.txt").unwrap();
     unsafe {
-        assert!(uio_getStdioAccess(ptr::null_mut(), path.as_ptr(), 0, ptr::null_mut()).is_null());
+        assert!(uio_get_stdio_access(ptr::null_mut(), path.as_ptr(), 0, ptr::null_mut()).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
-        assert!(uio_getStdioAccess(stack.root, ptr::null(), 0, ptr::null_mut()).is_null());
+        assert!(uio_get_stdio_access(stack.root, ptr::null(), 0, ptr::null_mut()).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
-        assert!(uio_StdioAccessHandle_getPath(ptr::null_mut()).is_null());
+        assert!(uio_stdio_access_handle_get_path(ptr::null_mut()).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
-        uio_releaseStdioAccess(ptr::null_mut());
+        uio_release_stdio_access(ptr::null_mut());
     }
 }
 
@@ -227,13 +227,13 @@ fn an_archive_entry_is_copied_to_the_temp_directory_and_removed_on_release() {
     let (handle, errno) = stdio_access(&stack, "data/level.bin", temp.handle);
     assert!(!handle.is_null(), "errno {errno}");
     unsafe {
-        let path = CStr::from_ptr(uio_StdioAccessHandle_getPath(handle))
+        let path = CStr::from_ptr(uio_stdio_access_handle_get_path(handle))
             .to_str()
             .unwrap();
         assert!(std::path::Path::new(path).starts_with(temp.dir.path()));
         assert_eq!(std::fs::read(path).unwrap(), b"level bytes");
         let copy = std::path::PathBuf::from(path);
-        uio_releaseStdioAccess(handle);
+        uio_release_stdio_access(handle);
         assert!(!copy.exists(), "the temporary copy is deleted on release");
     }
 }

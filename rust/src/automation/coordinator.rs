@@ -47,16 +47,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::controller_input::{
     CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
 };
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::player_control_template;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const NUM_PLAYER_KEYS: usize = NUM_KEYS as usize;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 const NUM_INPUT_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,7 +100,7 @@ fn inject_player_key(index: i32, value: i32) -> bool {
     !input_ffi::injection_rejected()
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 fn read_player_input_state(index: i32) -> Option<(i32, i32)> {
     let index = usize::try_from(index).ok()?;
     if index >= NUM_PLAYER_KEYS {
@@ -118,7 +118,7 @@ fn read_player_input_state(index: i32) -> Option<(i32, i32)> {
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 fn read_player_input_state(_index: i32) -> Option<(i32, i32)> {
     None
 }
@@ -874,7 +874,10 @@ impl Coordinator {
             {
                 match crate::comm::ffi::offered_response_index(&select.phrase) {
                     Ok(index) if ready => {
-                        assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
+                        assert_eq!(
+                            crate::comm::ffi::rust_select_response_index(index as i32),
+                            1
+                        );
                         let key_index =
                             i32::from(crate::automation::script::MenuKey::Select.index());
                         if !inject_menu_key(key_index, 1) {
@@ -906,7 +909,7 @@ impl Coordinator {
                 && count > select.index
             {
                 if ready {
-                    crate::comm::ffi::rust_SelectResponseIndex(select.index as i32);
+                    crate::comm::ffi::rust_select_response_index(select.index as i32);
                     let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
                     if !inject_menu_key(key_index, 1) {
                         self.reject_input(inner, "menu", key_index, 1);
@@ -1516,7 +1519,10 @@ impl Coordinator {
         if active && count > 0 && generation > inner.consumed_response_generation {
             match crate::comm::ffi::offered_response_index(phrase) {
                 Ok(index) if ready => {
-                    assert_eq!(crate::comm::ffi::rust_SelectResponseIndex(index as i32), 1);
+                    assert_eq!(
+                        crate::comm::ffi::rust_select_response_index(index as i32),
+                        1
+                    );
                     select = true;
                     inner.consumed_response_generation = generation;
                     inner.patrol_response_pending = true;
@@ -2891,7 +2897,7 @@ impl Coordinator {
         // activity state machine exits, and set MainExited so the
         // outer game loop stops requesting new games.
         // CHECK_ABORT = 0x4000 (setup.h).
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             crate::mainloop::c_extern::set_current_activity(
                 crate::mainloop::c_extern::get_current_activity() | 0x4000,

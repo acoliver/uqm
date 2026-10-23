@@ -12,13 +12,13 @@ pub use setup::*;
 
 pub mod world_resources;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod macro_abi;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod cleanup;
 
 pub mod space_resources;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod kernel_abi;

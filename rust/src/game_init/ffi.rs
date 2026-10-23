@@ -14,7 +14,6 @@ use super::setup::{init_contexts, init_game_kernel, uninit_contexts, uninit_game
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_init_space() -> c_int {
     match init_space() {
         Ok(()) => 1,
@@ -26,7 +25,6 @@ pub unsafe extern "C" fn rust_init_space() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_uninit_space() -> c_int {
     match uninit_space() {
         Ok(()) => 1,
@@ -40,7 +38,6 @@ pub unsafe extern "C" fn rust_uninit_space() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_init_ships() -> c_int {
     crate::ships::ffi::rust_ships_init() as c_int
 }
@@ -49,7 +46,6 @@ pub unsafe extern "C" fn rust_init_ships() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_uninit_ships() -> c_int {
     crate::ships::ffi::rust_ships_uninit();
     1
@@ -61,7 +57,6 @@ pub unsafe extern "C" fn rust_uninit_ships() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_init_game_kernel() -> c_int {
     match init_game_kernel() {
         Ok(()) => 1,
@@ -73,7 +68,6 @@ pub unsafe extern "C" fn rust_init_game_kernel() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_uninit_game_kernel() -> c_int {
     match uninit_game_kernel() {
         Ok(()) => 1,
@@ -87,7 +81,6 @@ pub unsafe extern "C" fn rust_uninit_game_kernel() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_init_contexts() -> c_int {
     match init_contexts() {
         Ok(()) => 1,
@@ -99,7 +92,6 @@ pub unsafe extern "C" fn rust_init_contexts() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_uninit_contexts() -> c_int {
     match uninit_contexts() {
         Ok(()) => 1,
@@ -113,7 +105,6 @@ pub unsafe extern "C" fn rust_uninit_contexts() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
     crate::ships::ffi::rust_ships_load_catalog() as c_int
 }
@@ -122,7 +113,6 @@ pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_free_master_ship_list() -> c_int {
     crate::ships::ffi::rust_ships_free_catalog();
     1
@@ -132,7 +122,6 @@ pub unsafe extern "C" fn rust_free_master_ship_list() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_get_ship_name(species_id: c_int) -> *mut c_char {
     use crate::ships::catalog::race_name_for_species;
     use crate::ships::types::SpeciesId;
@@ -152,7 +141,6 @@ pub unsafe extern "C" fn rust_get_ship_name(species_id: c_int) -> *mut c_char {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_get_ship_crew(species_id: c_int) -> u16 {
     use super::master::find_master_ship;
     use crate::ships::catalog::with_catalog;
@@ -170,7 +158,6 @@ pub unsafe extern "C" fn rust_get_ship_crew(species_id: c_int) -> u16 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_get_ship_energy(species_id: c_int) -> u16 {
     use super::master::find_master_ship;
     use crate::ships::catalog::with_catalog;
@@ -190,7 +177,6 @@ pub unsafe extern "C" fn rust_get_ship_energy(species_id: c_int) -> u16 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_is_master_ship_list_loaded() -> c_int {
     use super::master::is_master_ship_list_loaded;
 
@@ -205,7 +191,6 @@ pub unsafe extern "C" fn rust_is_master_ship_list_loaded() -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_get_master_ship_count() -> c_int {
     use super::master::get_master_ship_count;
 

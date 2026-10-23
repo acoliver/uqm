@@ -36,10 +36,10 @@ impl CffiPlanetSideAudio {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::sound::types::CSoundPosition as SoundPosition;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn SetAbsStringTableIndex(sound: *mut c_void, index: u16) -> *mut c_void;
     fn NotPositional() -> SoundPosition;
@@ -57,7 +57,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
             return Err(AdapterError::new("lander_sound_table_not_loaded"));
         }
 
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             let sound = SetAbsStringTableIndex(self.sounds.0, sound_index(cue));
             let priority = if matches!(cue, SoundCue::Returns | SoundCue::Destroyed) {
@@ -67,14 +67,13 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
             };
             PlaySound(sound, NotPositional(), std::ptr::null_mut(), priority);
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         let _ = cue;
         super::telemetry::sound(cue);
         Ok(())
     }
 }
 
-#[cfg(any(feature = "linked_c_archive", test))]
 const fn sound_index(cue: SoundCue) -> u16 {
     match cue {
         SoundCue::BiologicalDisaster => 0,

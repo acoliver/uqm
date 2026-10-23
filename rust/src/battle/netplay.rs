@@ -10,7 +10,7 @@ use super::velocity::{Extent, VelocityDesc};
 // ---------------------------------------------------------------------------
 
 /// CRC-32 table for polynomial 0x04c11db7 (IEEE 802.3)
-/// Bit-identical to C's crcTable from crc.c
+/// Bit-identical to C's CRC_TABLE from crc.c
 const CRC_TABLE: [u32; 256] = [
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
     0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988, 0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn crc_table_first_entries_match_c() {
-        // Verify first 6 entries match C's crcTable
+        // Verify first 6 entries match C's CRC_TABLE
         assert_eq!(CRC_TABLE[0], 0x00000000);
         assert_eq!(CRC_TABLE[1], 0x77073096);
         assert_eq!(CRC_TABLE[2], 0xee0e612c);

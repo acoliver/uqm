@@ -1,15 +1,10 @@
 //! Exercise the Arilou live descriptor and registered callbacks against the linked engine.
-#![cfg(feature = "linked_c_archive")]
 
 use std::ffi::{c_void, CStr};
 use std::sync::{Mutex, MutexGuard};
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_arilou() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;

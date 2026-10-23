@@ -335,7 +335,7 @@ impl FadeState {
 }
 
 /// Position passed by value through the engine sound ABI.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct CSoundPosition {

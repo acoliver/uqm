@@ -1006,7 +1006,7 @@ pub(crate) unsafe fn clone_ship_fragment_from(
 ///
 /// # Safety
 /// Game structures and both fleet queues must already be initialized.
-#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+#[cfg_attr(test, allow(dead_code))]
 pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static str> {
     let npc_q = npc_built_ship_queue();
     let avail_q = avail_race_queue();
@@ -1033,7 +1033,7 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 ///
 /// # Safety
 /// The star map must be initialized.
-#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+#[cfg_attr(test, allow(dead_code))]
 pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'static str> {
     let mut universe = CPoint {
         x: location.0,
@@ -1106,7 +1106,6 @@ unsafe fn name_captain(
 /// Must be called from an initialized game context (after resource loading).
 /// The returned pointer is a raw C LOCDATA pointer and must not be freed by
 /// the caller — it points to static C data.
-#[no_mangle]
 pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
     crate::automation::scenario::observe_dialogue_dispatch(comm_id);
 

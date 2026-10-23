@@ -22,7 +22,6 @@ const LOG_PATH: &str = "rust-bridge.log";
 ///
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_bridge_init() -> libc::c_int {
     // Use absolute path to ensure log file is created in project root
     let log_path = std::env::current_dir()
@@ -80,7 +79,6 @@ pub fn rust_bridge_log_msg(message: &str) {
 /// The message pointer must be a valid null-terminated C string.
 ///
 /// Returns 0 on success, -1 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_bridge_log(message: *const c_char) -> libc::c_int {
     if message.is_null() {
         return -1;

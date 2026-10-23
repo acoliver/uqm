@@ -1,7 +1,9 @@
 //! Decoder registry and dispatch, ported from videodec.c.
 #![allow(non_snake_case)]
 
-use super::ffi::{rust_dukv_DecoderVtbl, TFB_PixelFormat, TFB_VideoDecoder, TFB_VideoDecoderFuncs};
+use super::ffi::{
+    TFB_PixelFormat, TFB_VideoDecoder, TFB_VideoDecoderFuncs, RUST_DUKV_DECODER_VTBL,
+};
 use crate::io::ffi::uio_DirHandle;
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use std::ffi::{c_char, c_int, CStr};
@@ -29,7 +31,7 @@ static mut DECODERS: [RegisteredDecoder; MAX_DECODERS + 1] = {
         builtin: true,
         used: true,
         extension: c"duk".as_ptr(),
-        functions: &rust_dukv_DecoderVtbl,
+        functions: &RUST_DUKV_DECODER_VTBL,
     };
     entries
 };
@@ -88,7 +90,6 @@ fn pixel_format(depth: c_int, r: u32, g: u32, b: u32, a: u32) -> Option<TFB_Pixe
 
 /// # Safety
 /// Must be serialized with all decoder registration and lifetime operations.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Init(
     flags: c_int,
     depth: c_int,
@@ -114,7 +115,6 @@ pub unsafe extern "C" fn VideoDecoder_Init(
 
 /// # Safety
 /// No decoders may remain live, and registry access must be serialized.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Uninit() {
     let mut entry = ptr::addr_of_mut!(DECODERS).cast::<RegisteredDecoder>();
     while (*entry).used {
@@ -132,7 +132,6 @@ pub unsafe extern "C" fn VideoDecoder_Uninit() {
 
 /// # Safety
 /// Extension and vtable must remain valid until unregistration; calls are serialized.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Register(
     extension: *const c_char,
     functions: *mut TFB_VideoDecoderFuncs,
@@ -171,7 +170,6 @@ pub unsafe extern "C" fn VideoDecoder_Register(
 
 /// # Safety
 /// Registry access must be serialized. `entry` is a registration handle.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Unregister(entry: *mut RegisteredDecoder) {
     let base = ptr::addr_of_mut!(DECODERS).cast::<RegisteredDecoder>();
     if entry < base
@@ -188,7 +186,6 @@ pub unsafe extern "C" fn VideoDecoder_Unregister(entry: *mut RegisteredDecoder) 
 
 /// # Safety
 /// `extension` is a terminated string, and registry access must be serialized.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Lookup(
     extension: *const c_char,
 ) -> *const TFB_VideoDecoderFuncs {
@@ -207,7 +204,6 @@ pub unsafe extern "C" fn VideoDecoder_Lookup(
 
 /// # Safety
 /// `filename` is terminated, `dir` is live, and decoder lifecycle access is serialized.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Load(
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -242,7 +238,6 @@ pub unsafe extern "C" fn VideoDecoder_Load(
 
 /// # Safety
 /// `decoder` is null or a live decoder.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_GetName(decoder: *mut TFB_VideoDecoder) -> *const c_char {
     if decoder.is_null() || (*decoder).funcs.is_null() {
         c"(Null)".as_ptr()
@@ -253,7 +248,6 @@ pub unsafe extern "C" fn VideoDecoder_GetName(decoder: *mut TFB_VideoDecoder) ->
 
 /// # Safety
 /// `decoder` is null or a live decoder owned by this thread.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Decode(decoder: *mut TFB_VideoDecoder) -> c_int {
     if decoder.is_null() {
         return 0;
@@ -274,7 +268,6 @@ pub unsafe extern "C" fn VideoDecoder_Decode(decoder: *mut TFB_VideoDecoder) -> 
 
 /// # Safety
 /// `decoder` is null or a live decoder owned by this thread.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Seek(decoder: *mut TFB_VideoDecoder, position: f32) -> f32 {
     if decoder.is_null() {
         return 0.0;
@@ -286,7 +279,6 @@ pub unsafe extern "C" fn VideoDecoder_Seek(decoder: *mut TFB_VideoDecoder, posit
 
 /// # Safety
 /// `decoder` is null or a live decoder owned by this thread.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) -> u32 {
     if decoder.is_null() {
         return 0;
@@ -298,7 +290,6 @@ pub unsafe extern "C" fn VideoDecoder_SeekFrame(decoder: *mut TFB_VideoDecoder, 
 
 /// # Safety
 /// `decoder` is null or a live decoder owned by this thread.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Rewind(decoder: *mut TFB_VideoDecoder) {
     if !decoder.is_null() {
         VideoDecoder_Seek(decoder, 0.0);
@@ -307,7 +298,6 @@ pub unsafe extern "C" fn VideoDecoder_Rewind(decoder: *mut TFB_VideoDecoder) {
 
 /// # Safety
 /// `decoder` is null or an owned decoder, and must not be used after this call.
-#[no_mangle]
 pub unsafe extern "C" fn VideoDecoder_Free(decoder: *mut TFB_VideoDecoder) {
     if decoder.is_null() {
         return;
@@ -342,7 +332,7 @@ mod tests {
     fn registry_reuses_removed_slots_and_rejects_duplicates() {
         unsafe {
             assert!(VideoDecoder_Init(0, 32, 0xff, 0xff00, 0xff0000, 0xff000000));
-            let functions = ptr::addr_of!(rust_dukv_DecoderVtbl).cast_mut();
+            let functions = ptr::addr_of!(RUST_DUKV_DECODER_VTBL).cast_mut();
             let first = VideoDecoder_Register(c"one".as_ptr(), functions);
             assert!(!first.is_null());
             assert!(VideoDecoder_Register(c"one".as_ptr(), functions).is_null());

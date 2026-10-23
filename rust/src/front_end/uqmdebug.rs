@@ -197,7 +197,7 @@ pub extern "C" fn depositQualityString(value: BYTE) -> *const c_char {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::*;
     use crate::navigation::globals::GlobData;
@@ -1646,7 +1646,7 @@ mod runtime {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::{
     activateAllShips, calculateBioValue, calculateMineralValue, clearEscorts, debugContexts,
     debugHook, debugKeyPressed, debugKeyPressedSynchronous, disableInteractivity, doInstantMove,

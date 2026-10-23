@@ -6,7 +6,7 @@ use std::ptr::{addr_of_mut, null, null_mut};
 use crate::resource::ffi_bridge::{
     _cur_resfile_name, res_CloseResFile, res_OpenResFile, LengthResFile,
 };
-use crate::strings::getstr::_GetStringData;
+use crate::strings::getstr::_get_string_data;
 use crate::strings::string_table::StringTable;
 
 /// Loads a `STRTAB`-format file. Returns NULL if the file cannot be opened
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn LoadStringTableFile(
         return null_mut();
     }
     *addr_of_mut!(_cur_resfile_name) = file_name;
-    let table = _GetStringData(fp, LengthResFile(fp) as u32);
+    let table = _get_string_data(fp, LengthResFile(fp) as u32);
     *addr_of_mut!(_cur_resfile_name) = null();
     res_CloseResFile(fp);
     table.cast()

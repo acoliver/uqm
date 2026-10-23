@@ -344,7 +344,6 @@ fn send_command(cmd: AudioCommand) -> bool {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_init() -> i32 {
     rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
 
@@ -388,7 +387,6 @@ pub unsafe extern "C" fn rust_audio_init() -> i32 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_uninit() {
     rust_bridge_log_msg("RUST_AUDIO_UNINIT");
 
@@ -414,7 +412,6 @@ pub unsafe extern "C" fn rust_audio_uninit() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_wav(
     data: *const u8,
     len: usize,
@@ -444,7 +441,6 @@ pub unsafe extern "C" fn rust_audio_play_wav(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_ogg(
     data: *const u8,
     len: usize,
@@ -474,7 +470,6 @@ pub unsafe extern "C" fn rust_audio_play_ogg(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_raw(
     data: *const u8,
     len: usize,
@@ -550,7 +545,6 @@ pub fn stop_sound(handle: u32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_stop(handle: u32) {
     send_command(AudioCommand::Stop(handle));
 }
@@ -559,7 +553,6 @@ pub unsafe extern "C" fn rust_audio_stop(handle: u32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_pause(handle: u32) {
     send_command(AudioCommand::Pause(handle));
 }
@@ -568,7 +561,6 @@ pub unsafe extern "C" fn rust_audio_pause(handle: u32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_resume(handle: u32) {
     send_command(AudioCommand::Resume(handle));
 }
@@ -577,7 +569,6 @@ pub unsafe extern "C" fn rust_audio_resume(handle: u32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_volume(handle: u32, volume: f32) {
     send_command(AudioCommand::SetVolume(handle, volume));
 }
@@ -586,7 +577,6 @@ pub unsafe extern "C" fn rust_audio_set_volume(handle: u32, volume: f32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_master_volume(volume: f32) {
     send_command(AudioCommand::SetMasterVolume(volume));
 }
@@ -595,7 +585,6 @@ pub unsafe extern "C" fn rust_audio_set_master_volume(volume: f32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_music_volume(volume: f32) {
     send_command(AudioCommand::SetMusicVolume(volume));
 }
@@ -604,7 +593,6 @@ pub unsafe extern "C" fn rust_audio_set_music_volume(volume: f32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_sfx_volume(volume: f32) {
     send_command(AudioCommand::SetSfxVolume(volume));
 }
@@ -613,7 +601,6 @@ pub unsafe extern "C" fn rust_audio_set_sfx_volume(volume: f32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_speech_volume(volume: f32) {
     send_command(AudioCommand::SetSpeechVolume(volume));
 }
@@ -622,7 +609,6 @@ pub unsafe extern "C" fn rust_audio_set_speech_volume(volume: f32) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
     let (tx, rx) = mpsc::channel();
     if send_command(AudioCommand::IsPlaying(handle, tx)) {
@@ -640,7 +626,6 @@ pub unsafe extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_stop_all() {
     send_command(AudioCommand::StopAll);
 }
@@ -649,7 +634,6 @@ pub unsafe extern "C" fn rust_audio_stop_all() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_audio_cleanup() {
     send_command(AudioCommand::Cleanup);
 }

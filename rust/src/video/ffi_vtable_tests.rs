@@ -10,8 +10,9 @@ use serial_test::serial;
 
 use super::decoder::DukVideoDecoder;
 use super::ffi::{
-    rust_dukv_DecoderVtbl, rust_get_video_position, rust_play_video, rust_play_video_direct_window,
-    rust_stop_video, rust_video_playing, TFB_PixelFormat, TFB_VideoDecoder, TFB_VideoDecoderFuncs,
+    rust_get_video_position, rust_play_video, rust_play_video_direct_window, rust_stop_video,
+    rust_video_playing, TFB_PixelFormat, TFB_VideoDecoder, TFB_VideoDecoderFuncs,
+    RUST_DUKV_DECODER_VTBL,
 };
 use super::DUCK_FPS;
 use crate::io::ffi::uio_DirHandle;
@@ -36,7 +37,7 @@ fn logo_dir() -> PathBuf {
 }
 
 fn funcs() -> &'static TFB_VideoDecoderFuncs {
-    &rust_dukv_DecoderVtbl
+    &RUST_DUKV_DECODER_VTBL
 }
 
 fn logo_directory() -> Directory {

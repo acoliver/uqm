@@ -6,7 +6,7 @@
 //! number of evaluations of their arguments, because `TFB_Random` is one of
 //! those arguments.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::battle::gravity::{CalculateGravity, TimeSpaceMatterConflict};
     use crate::memory::{rust_hfree, rust_hmalloc};

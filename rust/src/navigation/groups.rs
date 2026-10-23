@@ -139,7 +139,7 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
     sine(angle + 16, magnitude)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
     use super::*;
     use crate::navigation::abi::*;

@@ -8,10 +8,6 @@ use uqm_rust::graphics::{
     dcqueue_abi::*,
     tfb_draw_abi::{TFB_DrawScreen_Callback, TFB_DrawScreen_WaitForSignal},
 };
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 extern "C" {
     static mut ScreenWidth: i32;
     static mut ScreenHeight: i32;
@@ -40,7 +36,7 @@ fn nested_batches_publish_in_order_and_wait_flushes_without_a_presenter() {
         assert_eq!(TFB_GetBatchDepth(), 1);
         assert_eq!(NEXT.load(Ordering::SeqCst), 2);
         assert_eq!((*ptr::addr_of!(DrawCommandQueue)).FullSize, 0);
-        assert_eq!(ptr::addr_of!(RenderedFrames).read(), 1);
+        assert_eq!(ptr::addr_of!(RENDERED_FRAMES).read(), 1);
         TFB_UnbatchGraphics();
         Uninit_DrawCommandQueue();
     }

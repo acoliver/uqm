@@ -35,7 +35,7 @@ const fn crew_color(high: bool) -> Color {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -357,7 +357,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     crew_collision, crew_preprocess, do_damage, spawn_asteroid, spawn_planet, AbandonShip,
 };

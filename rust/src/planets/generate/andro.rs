@@ -46,7 +46,7 @@ pub fn generate_planets(
     })
 }
 
-/// The number of ruins already visited (`isNodeRetrieved (.., ENERGY_SCAN, i)`
+/// The number of ruins already visited (`is_node_retrieved (.., ENERGY_SCAN, i)`
 /// for `i` in 16 to 31).
 fn ruins_visited(info: &PLANET_INFO) -> u32 {
     VISITED_BITS

@@ -42,16 +42,11 @@ pub struct CodeDesc {
     encoder: Option<Box<encode::Encoder>>,
 }
 
-#[no_mangle]
-pub static mut _lpCurCodeDesc: *mut CodeDesc = ptr::null_mut();
-#[no_mangle]
-pub static mut _StreamType: u8 = 0;
-#[no_mangle]
-pub static mut _Stream: *mut u8 = ptr::null_mut();
-#[no_mangle]
-pub static mut _workbuf: u16 = 0;
-#[no_mangle]
-pub static mut _workbuflen: u8 = 0;
+pub static mut _LP_CUR_CODE_DESC: *mut CodeDesc = ptr::null_mut();
+pub static mut _STREAM_TYPE: u8 = 0;
+pub static mut _STREAM: *mut u8 = ptr::null_mut();
+pub static mut _WORKBUF: u16 = 0;
+pub static mut _WORKBUFLEN: u8 = 0;
 
 impl CodeDesc {
     fn new(stream: *mut c_void, stream_type: u8, stream_mode: u8) -> Self {
@@ -98,13 +93,13 @@ impl CodeDesc {
     }
 
     unsafe fn publish(&self) {
-        _StreamType = self.stream_type;
-        _Stream = self.stream.cast();
-        _workbuf = self.workbuf;
-        _workbuflen = self.workbuflen;
+        _STREAM_TYPE = self.stream_type;
+        _STREAM = self.stream.cast();
+        _WORKBUF = self.workbuf;
+        _WORKBUFLEN = self.workbuflen;
     }
 }
 
 pub use decode::{cclose, cfilelength, copen, cread};
 pub use encode::cwrite;
-pub use huffman::{_update, StartHuff};
+pub use huffman::{_update, start_huff};

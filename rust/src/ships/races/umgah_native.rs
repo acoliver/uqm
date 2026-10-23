@@ -1,6 +1,6 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{

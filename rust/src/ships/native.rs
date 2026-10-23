@@ -11,7 +11,7 @@
 pub mod abi {
     include!("../abi/ship_abi.rs");
 
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use super::engine::{
         abs_frame_index as SetAbsFrameIndex, abs_string_index as SetAbsStringTableIndex,
         calculate_gravity as CalculateGravity, capture_drawable as CaptureDrawable,
@@ -33,7 +33,7 @@ pub mod abi {
         string_address as GetStringAddress, utf8_string_copy as utf8StringCopy,
     };
 
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
         extern "C" {
             #[link_name = "DoMenuChooser"]
@@ -52,43 +52,43 @@ pub mod abi {
     pub const STANDARD_RATING: BYTE = 1 << 4;
     pub const GOOD_RATING: BYTE = 1 << 5;
     pub const AWESOME_RATING: BYTE = 1 << 6;
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use super::engine::sleep_thread as SleepThread;
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use super::engine::{
         alloc_link as AllocLink, draw_batch as DrawBatch, draw_rectangle as DrawRectangle,
         frame_count as GetFrameCount, frame_index as GetFrameIndex, put_queue as PutQueue,
         rel_frame_index as SetRelFrameIndex,
     };
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::battle_native::frameInputHuman;
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::encount_native::FleetIsInfinite;
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::galaxy::MoveGalaxy;
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::process_native::{AllocElement, FreeElement};
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::sounds::{
         CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
     };
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::tactrans_native::{
         battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
     };
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::world_elements::do_damage;
     pub use crate::math::TFB_SeedRandom;
 
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::weapon_native::{
         initialize_laser, initialize_missile, weapon_collision, ModifySilhouette, TrackShip,
     };
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     pub use crate::battle::world_elements::AbandonShip;
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use super::abi;
     use std::ffi::{c_int, c_void};
@@ -107,13 +107,13 @@ mod engine {
         fn SetStatusMessageMode(mode: i32) -> i32;
         fn SetTransitionSource(rect: *mut c_void);
         fn DrawRectangle(rect: *mut crate::comm::locdata::CRect);
-        #[cfg(all(test, not(feature = "linked_c_archive")))]
+        #[cfg(test)]
         #[link_name = "rust_bridge_OBJECT_CLOAKED"]
         fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int;
     }
     /// # Safety
     /// Called on the game thread with the live resources required by the Rust provider.
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
+    #[cfg(not(test))]
     unsafe fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int {
         (crate::ships::native_adapters::rust_bridge_OBJECT_CLOAKED(element as _)) as _
     }
@@ -436,7 +436,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{frame_count, frame_index, object_cloaked, put_element, rel_frame_index};
 
 /// Queue-table handles are the element addresses, not separate allocations.

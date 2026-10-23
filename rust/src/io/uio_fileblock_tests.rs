@@ -77,7 +77,7 @@ fn handle(stack: &Stack, name: &str) -> *mut uio_Handle {
 
 unsafe fn access(block: *mut uio_FileBlock, offset: off_t, length: size_t) -> (isize, Vec<u8>) {
     let mut buffer: *mut c_char = ptr::null_mut();
-    let got = uio_accessFileBlock(block, offset, length, &mut buffer);
+    let got = uio_access_file_block(block, offset, length, &mut buffer);
     let bytes = if got > 0 && !buffer.is_null() {
         std::slice::from_raw_parts(buffer as *const u8, got as usize).to_vec()
     } else {
@@ -88,7 +88,7 @@ unsafe fn access(block: *mut uio_FileBlock, offset: off_t, length: size_t) -> (i
 
 unsafe fn copy(block: *mut uio_FileBlock, offset: off_t, length: size_t) -> (c_int, Vec<u8>) {
     let mut out = vec![b'.'; length];
-    let result = uio_copyFileBlock(block, offset, out.as_mut_ptr() as *mut c_char, length);
+    let result = uio_copy_file_block(block, offset, out.as_mut_ptr() as *mut c_char, length);
     (result, out)
 }
 
@@ -98,7 +98,7 @@ fn a_block_over_the_whole_file_serves_any_window_of_it() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock(file);
+        let block = uio_open_file_block(file);
         assert!(!block.is_null());
         assert_eq!(access(block, 0, 10), (10, DIGITS.to_vec()));
         assert_eq!(access(block, 3, 4), (4, b"3456".to_vec()));
@@ -109,7 +109,7 @@ fn a_block_over_the_whole_file_serves_any_window_of_it() {
         );
         assert_eq!(access(block, 10, 4).0, 0, "at the end");
         assert_eq!(access(block, 50, 4).0, 0, "past the end");
-        assert_eq!(uio_closeFileBlock(block), 0);
+        assert_eq!(uio_close_file_block(block), 0);
         uio_close(file);
     }
 }
@@ -120,11 +120,11 @@ fn an_access_past_the_end_leaves_the_caller_with_no_buffer() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock(file);
+        let block = uio_open_file_block(file);
         let mut buffer = ptr::dangling_mut::<c_char>();
-        assert_eq!(uio_accessFileBlock(block, 10, 4, &mut buffer), 0);
+        assert_eq!(uio_access_file_block(block, 10, 4, &mut buffer), 0);
         assert!(buffer.is_null());
-        uio_closeFileBlock(block);
+        uio_close_file_block(block);
         uio_close(file);
     }
 }
@@ -135,7 +135,7 @@ fn copying_from_a_block_fills_the_callers_buffer() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock(file);
+        let block = uio_open_file_block(file);
         assert_eq!(copy(block, 2, 5), (0, b"23456".to_vec()));
         let (result, out) = copy(block, 8, 6);
         assert_eq!(result, 0);
@@ -146,7 +146,7 @@ fn copying_from_a_block_fills_the_callers_buffer() {
             (0, b"...".to_vec()),
             "past the end copies nothing"
         );
-        uio_closeFileBlock(block);
+        uio_close_file_block(block);
         uio_close(file);
     }
 }
@@ -157,7 +157,7 @@ fn a_sub_block_addresses_offsets_relative_to_its_start() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock2(file, 3, 5);
+        let block = uio_open_file_block2(file, 3, 5);
         assert!(!block.is_null());
         assert_eq!(access(block, 0, 5), (5, b"34567".to_vec()));
         assert_eq!(
@@ -167,7 +167,7 @@ fn a_sub_block_addresses_offsets_relative_to_its_start() {
         );
         assert_eq!(access(block, 5, 1).0, 0, "the block ends at offset 5");
         assert_eq!(copy(block, 1, 2), (0, b"45".to_vec()));
-        uio_closeFileBlock(block);
+        uio_close_file_block(block);
         uio_close(file);
     }
 }
@@ -178,22 +178,22 @@ fn a_sub_block_must_lie_inside_the_file() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        assert!(!uio_openFileBlock2(file, 0, 10).is_null());
+        assert!(!uio_open_file_block2(file, 0, 10).is_null());
         assert!(
-            uio_openFileBlock2(file, 5, 6).is_null(),
+            uio_open_file_block2(file, 5, 6).is_null(),
             "ends past the file"
         );
         assert_eq!(errno_value(), libc::EINVAL);
-        assert!(uio_openFileBlock2(file, -1, 2).is_null());
+        assert!(uio_open_file_block2(file, -1, 2).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
         assert!(
-            uio_openFileBlock2(file, 1, usize::MAX).is_null(),
+            uio_open_file_block2(file, 1, usize::MAX).is_null(),
             "offset plus size overflows"
         );
         assert_eq!(errno_value(), libc::EINVAL);
-        assert!(uio_openFileBlock2(ptr::null_mut(), 0, 1).is_null());
+        assert!(uio_open_file_block2(ptr::null_mut(), 0, 1).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
-        assert!(uio_openFileBlock(ptr::null_mut()).is_null());
+        assert!(uio_open_file_block(ptr::null_mut()).is_null());
         assert_eq!(errno_value(), libc::EINVAL);
         uio_close(file);
     }
@@ -205,28 +205,31 @@ fn block_calls_refuse_missing_arguments_and_negative_offsets() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock(file);
+        let block = uio_open_file_block(file);
         let mut buffer: *mut c_char = ptr::null_mut();
         let mut out = [0u8; 4];
-        assert_eq!(uio_accessFileBlock(ptr::null_mut(), 0, 1, &mut buffer), -1);
-        assert_eq!(errno_value(), libc::EINVAL);
-        assert_eq!(uio_accessFileBlock(block, 0, 1, ptr::null_mut()), -1);
-        assert_eq!(uio_accessFileBlock(block, -1, 1, &mut buffer), -1);
-        assert_eq!(errno_value(), libc::EINVAL);
         assert_eq!(
-            uio_copyFileBlock(ptr::null_mut(), 0, out.as_mut_ptr() as *mut c_char, 4),
-            -1
-        );
-        assert_eq!(uio_copyFileBlock(block, 0, ptr::null_mut(), 4), -1);
-        assert_eq!(
-            uio_copyFileBlock(block, -1, out.as_mut_ptr() as *mut c_char, 4),
+            uio_access_file_block(ptr::null_mut(), 0, 1, &mut buffer),
             -1
         );
         assert_eq!(errno_value(), libc::EINVAL);
-        uio_clearFileBlockBuffers(ptr::null_mut());
-        uio_setFileBlockUsageHint(block, 0, 0);
-        assert_eq!(uio_closeFileBlock(ptr::null_mut()), 0);
-        uio_closeFileBlock(block);
+        assert_eq!(uio_access_file_block(block, 0, 1, ptr::null_mut()), -1);
+        assert_eq!(uio_access_file_block(block, -1, 1, &mut buffer), -1);
+        assert_eq!(errno_value(), libc::EINVAL);
+        assert_eq!(
+            uio_copy_file_block(ptr::null_mut(), 0, out.as_mut_ptr() as *mut c_char, 4),
+            -1
+        );
+        assert_eq!(uio_copy_file_block(block, 0, ptr::null_mut(), 4), -1);
+        assert_eq!(
+            uio_copy_file_block(block, -1, out.as_mut_ptr() as *mut c_char, 4),
+            -1
+        );
+        assert_eq!(errno_value(), libc::EINVAL);
+        uio_clear_file_block_buffers(ptr::null_mut());
+        uio_set_file_block_usage_hint(block, 0, 0);
+        assert_eq!(uio_close_file_block(ptr::null_mut()), 0);
+        uio_close_file_block(block);
         uio_close(file);
     }
 }
@@ -237,11 +240,11 @@ fn clearing_block_buffers_does_not_change_what_a_later_access_returns() {
     let stack = digits_stack();
     let file = handle(&stack, "digits.txt");
     unsafe {
-        let block = uio_openFileBlock(file);
+        let block = uio_open_file_block(file);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
-        uio_clearFileBlockBuffers(block);
+        uio_clear_file_block_buffers(block);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
-        uio_closeFileBlock(block);
+        uio_close_file_block(block);
         uio_close(file);
     }
 }

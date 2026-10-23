@@ -6,8 +6,7 @@ use super::ffi::{self, VCONTROL_GESTURE};
 
 /// # Safety
 /// `event` must be null or point to an SDL2 event.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_HandleEvent(event: *const c_void) {
+pub unsafe extern "C" fn vcontrol_handle_event(event: *const c_void) {
     if event.is_null() {
         return;
     }
@@ -24,56 +23,51 @@ pub unsafe extern "C" fn VControl_HandleEvent(event: *const c_void) {
         )),
         _ => {}
     }
-    ffi::rust_VControl_HandleEvent((event as *const sdl2::sys::SDL_Event).cast());
+    ffi::rust_vcontrol_handle_event((event as *const sdl2::sys::SDL_Event).cast());
 }
 
 /// # Safety
 /// Non-null pointers must address a gesture and a target that outlives its binding.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_AddGestureBinding(
+pub unsafe extern "C" fn vcontrol_add_gesture_binding(
     gesture: *mut VCONTROL_GESTURE,
     target: *mut c_int,
 ) -> c_int {
     if gesture.is_null() || target.is_null() {
         return -1;
     }
-    ffi::rust_VControl_AddGestureBinding(gesture, target)
+    ffi::rust_vcontrol_add_gesture_binding(gesture, target)
 }
 
 /// # Safety
 /// Non-null pointers must address the gesture and target of a live binding.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_RemoveGestureBinding(
+pub unsafe extern "C" fn vcontrol_remove_gesture_binding(
     gesture: *mut VCONTROL_GESTURE,
     target: *mut c_int,
 ) {
-    ffi::rust_VControl_RemoveGestureBinding(gesture, target);
+    ffi::rust_vcontrol_remove_gesture_binding(gesture, target);
 }
 
 /// # Safety
 /// `gesture` must be null or writable for one gesture.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_GetLastGesture(gesture: *mut VCONTROL_GESTURE) -> c_int {
-    ffi::rust_VControl_GetLastGesture(gesture)
+pub unsafe extern "C" fn vcontrol_get_last_gesture(gesture: *mut VCONTROL_GESTURE) -> c_int {
+    ffi::rust_vcontrol_get_last_gesture(gesture)
 }
 
 /// # Safety
 /// Non-null arguments must be a writable gesture and a NUL-terminated specification.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_ParseGesture(
+pub unsafe extern "C" fn vcontrol_parse_gesture(
     gesture: *mut VCONTROL_GESTURE,
     spec: *const c_char,
 ) {
-    ffi::rust_VControl_ParseGesture(gesture, spec);
+    ffi::rust_vcontrol_parse_gesture(gesture, spec);
 }
 
 /// # Safety
 /// Non-null `buffer` must hold `size` bytes and `gesture` must point to a gesture.
-#[no_mangle]
-pub unsafe extern "C" fn VControl_DumpGesture(
+pub unsafe extern "C" fn vcontrol_dump_gesture(
     buffer: *mut c_char,
     size: c_int,
     gesture: *mut VCONTROL_GESTURE,
 ) -> c_int {
-    ffi::rust_VControl_DumpGesture(buffer, size, gesture)
+    ffi::rust_vcontrol_dump_gesture(buffer, size, gesture)
 }

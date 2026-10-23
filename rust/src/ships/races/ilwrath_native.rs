@@ -63,7 +63,7 @@ const fn decloak_step(color: Color) -> Option<Color> {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use super::*;
     use crate::ships::native::{abi::*, element, starship};

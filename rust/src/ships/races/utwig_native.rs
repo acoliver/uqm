@@ -1,5 +1,5 @@
 //! Live utwig callbacks translated from ships/utwig/utwig.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine, starship};
     use std::{mem, ptr};

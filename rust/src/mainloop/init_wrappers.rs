@@ -28,7 +28,6 @@ const SDL_INIT_VIDEO: u32 = 0x00000020;
 ///
 /// Equivalent to C `TFB_PreInit()`: calls `SDL_Init(SDL_INIT_VIDEO)` and
 /// logs the SDL version. SDL is cleaned up at process exit by the OS.
-#[no_mangle]
 pub extern "C" fn rust_tfb_preinit() -> c_int {
     tracing::info!("Initializing base SDL functionality.");
 
@@ -66,7 +65,6 @@ pub extern "C" fn rust_tfb_preinit() -> c_int {
 /// The C version creates a Mutex for the logging system. With tracing,
 /// logging is already thread-safe, so this is a no-op that just ensures
 /// compatibility with C code that checks the lock.
-#[no_mangle]
 pub extern "C" fn rust_log_init_threads() {
     // tracing::subscriber is already thread-safe; no mutex needed.
     tracing::debug!("log_initThreads: tracing handles thread safety natively");
@@ -83,7 +81,6 @@ extern "C" {
 ///
 /// Equivalent to C `InitColorMaps()` but delegates to `rust_cmap_init()`
 /// from `graphics::cmap_ffi`.
-#[no_mangle]
 pub extern "C" fn rust_init_color_maps() -> c_int {
     let result = unsafe { rust_cmap_init() };
     if result == 0 {
@@ -115,7 +112,6 @@ extern "C" {
 ///
 /// Currently delegates to C `TFB_InitGraphics()` which configures the SDL
 /// driver. The Rust graphics driver is selected via build config.
-#[no_mangle]
 pub unsafe extern "C" fn rust_tfb_init_graphics(
     driver: c_int,
     flags: c_int,
@@ -131,7 +127,6 @@ pub unsafe extern "C" fn rust_tfb_init_graphics(
 // ===========================================================================
 
 /// Initialize the communication system through its Rust implementation.
-#[no_mangle]
 pub extern "C" fn rust_init_communication() {
     let initialized = unsafe { crate::comm::ffi::rust_InitCommunication() };
     if initialized == 0 {
@@ -156,7 +151,6 @@ extern "C" {
 /// Initialize the input subsystem.
 ///
 /// Delegates to C `TFB_InitInput()` which configures the SDL input driver.
-#[no_mangle]
 pub extern "C" fn rust_tfb_init_input(driver: c_int, flags: c_int) {
     unsafe { TFB_InitInput(driver, flags) };
     tracing::debug!(

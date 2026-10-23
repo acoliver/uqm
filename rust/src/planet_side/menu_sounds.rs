@@ -20,7 +20,7 @@ pub const MENU_SOUND_NONE: u16 = 0;
 /// `GetMenuSounds`/`SetMenuSounds` read and write unsynchronised C statics, so
 /// they may only be used from the thread that owns the game loop. That is
 /// enforced by keeping [`MenuSoundSilence`] `!Send`.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 mod policy {
     extern "C" {
         fn GetMenuSounds(sound_0: *mut u16, sound_1: *mut u16);
@@ -44,7 +44,7 @@ mod policy {
 
 /// Unlinked builds keep the policy in thread-local state, which gives the tests
 /// the same observable behaviour as the linked game without a C archive.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 mod policy {
     use std::cell::Cell;
 
@@ -123,7 +123,7 @@ mod tests {
 
     // The thread-local policy records what was set; the linked build drives
     // unsynchronised C statics instead and cannot observe that.
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     #[test]
     fn silencing_restores_the_callers_policy_exactly_once() {
         policy::reset((0x0F, 0x10));
@@ -153,7 +153,7 @@ mod tests {
 
     // The thread-local policy records what was set; the linked build drives
     // unsynchronised C statics instead and cannot observe that.
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     #[test]
     fn nested_trips_each_restore_their_own_caller_policy() {
         policy::reset((0x21, 0x22));

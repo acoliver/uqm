@@ -47,7 +47,6 @@ pub(super) fn hold_thread_system() -> std::sync::MutexGuard<'static, ()> {
 /// Validates that we can spawn a thread, have it do work, and join it.
 /// The C implementation uses CreateThread_Core -> NativeCreateThread -> SDL_CreateThread
 /// and WaitThread -> NativeWaitThread -> SDL_WaitThread.
-
 #[test]
 fn test_thread_spawn_and_join() {
     let _guard = hold_thread_system();

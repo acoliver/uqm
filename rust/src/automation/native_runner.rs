@@ -3207,7 +3207,7 @@ fn validate_linked_build_receipt(
             .source_sha
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        || receipt.feature != "audio_heart,debug-process,linked_c_archive"
+        || receipt.feature != "audio_heart,debug-process"
         || receipt.executable != *executable
         || !Path::new(&receipt.cargo_executable_path).is_absolute()
         || !Path::new(&receipt.cargo_rust_archive_path).is_absolute()
@@ -3227,7 +3227,7 @@ fn validate_linked_build_receipt(
         "--release",
         "--no-default-features",
         "--features",
-        "audio_heart,debug-process,linked_c_archive",
+        "audio_heart,debug-process",
         "--bin",
         "uqm",
         "--message-format=json-render-diagnostics",
@@ -4205,7 +4205,7 @@ mod tests {
             schema: NATIVE_LINKED_BUILD_RECEIPT_SCHEMA.to_string(),
             source_sha: "a".repeat(40),
             cargo_command: Vec::new(),
-            feature: "audio_heart,debug-process,linked_c_archive".to_string(),
+            feature: "audio_heart,debug-process".to_string(),
             cargo_executable_path: "/target/release/uqm".to_string(),
             cargo_rust_archive_path: "/target/release/deps/libuqm_rust-test.a".to_string(),
             cargo_out_dir: "/target/release/build/uqm-test/out".to_string(),

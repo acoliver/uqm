@@ -1,7 +1,7 @@
 //! Splash, introduction, victory and ship-spin presentations, ported from uqm/fmv.c.
 #![allow(non_snake_case)]
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::super::intro::ShowPresentation;
     use crate::navigation::abi::*;
@@ -109,5 +109,5 @@ mod runtime {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::{DoShipSpin, Introduction, SplashScreen, Victory};

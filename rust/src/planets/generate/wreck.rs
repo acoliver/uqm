@@ -16,7 +16,7 @@ pub trait WreckSite {
     /// `LoadStdLanderFont`, the wreck mask and the wreck report strings, with
     /// the report started at `first_report`.
     fn load_wreck_scene(&mut self, first_report: u16);
-    /// `SetLanderTakeoff ()`.
+    /// `set_lander_takeoff ()`.
     fn lander_takeoff(&mut self);
 }
 

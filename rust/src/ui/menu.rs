@@ -1,4 +1,4 @@
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use super::palette::*;
@@ -19,7 +19,6 @@ const OPT_PC: i32 = 2;
 
 /// # Safety
 /// Menu state and game settings must be valid on the game thread.
-#[no_mangle]
 pub unsafe extern "C" fn PreviousMenuState(base: BYTE, current: BYTE) -> BYTE {
     super::menu_state::previous_state(base, current, GlobData.Game_state.glob_flags)
 }

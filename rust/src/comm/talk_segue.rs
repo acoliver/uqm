@@ -2672,7 +2672,7 @@ mod tests {
     // ========================================================================
 
     /// verify_production_delegates_to_c_p13:
-    /// The #[cfg(not(test))] version of rust_ShowConversationSummary must call
+    /// The #[cfg(not(test))] version of rust_show_conversation_summary must call
     /// c_SelectConversationSummary (P12 requirement).
     #[test]
     fn verify_production_delegates_to_c_p13() {
@@ -2683,10 +2683,10 @@ mod tests {
         // We find it by scanning for the cfg annotation followed by no_mangle
         // followed by the function name on the same stretch of source.
         let cfg_guard = "#[cfg(not(test))]";
-        let fn_name = "fn rust_ShowConversationSummary";
+        let fn_name = "fn rust_show_conversation_summary";
 
         // Walk the cfg(not(test)) occurrences; the first one whose following
-        // text also contains fn rust_ShowConversationSummary within 200 chars
+        // text also contains fn rust_show_conversation_summary within 200 chars
         // is the production version.
         let fn_start = source
             .match_indices(cfg_guard)
@@ -2698,28 +2698,28 @@ mod tests {
                     None
                 }
             })
-            .expect("must find #[cfg(not(test))] rust_ShowConversationSummary in ffi.rs");
+            .expect("must find #[cfg(not(test))] rust_show_conversation_summary in ffi.rs");
 
         let after = &source[fn_start..];
         let body = extract_fn_body(after, fn_name)
-            .expect("must extract rust_ShowConversationSummary body from non-test block");
+            .expect("must extract rust_show_conversation_summary body from non-test block");
 
         assert!(
             body.contains("select_conversation_summary"),
-            "production rust_ShowConversationSummary must call select_conversation_summary; body: {:?}",
+            "production rust_show_conversation_summary must call select_conversation_summary; body: {:?}",
             body
         );
     }
 
     /// verify_no_summaryview_in_production_p13:
-    /// The #[cfg(not(test))] version of rust_ShowConversationSummary must NOT
+    /// The #[cfg(not(test))] version of rust_show_conversation_summary must NOT
     /// contain SummaryView (that is only for the test path).
     #[test]
     fn verify_no_summaryview_in_production_p13() {
         let source = include_str!("ffi.rs");
 
         let cfg_guard = "#[cfg(not(test))]";
-        let fn_name = "fn rust_ShowConversationSummary";
+        let fn_name = "fn rust_show_conversation_summary";
 
         let fn_start = source
             .match_indices(cfg_guard)
@@ -2731,15 +2731,15 @@ mod tests {
                     None
                 }
             })
-            .expect("must find #[cfg(not(test))] rust_ShowConversationSummary in ffi.rs");
+            .expect("must find #[cfg(not(test))] rust_show_conversation_summary in ffi.rs");
 
         let after = &source[fn_start..];
         let body = extract_fn_body(after, fn_name)
-            .expect("must extract rust_ShowConversationSummary body from non-test block");
+            .expect("must extract rust_show_conversation_summary body from non-test block");
 
         assert!(
             !body.contains("SummaryView"),
-            "production rust_ShowConversationSummary must not reference SummaryView; body: {:?}",
+            "production rust_show_conversation_summary must not reference SummaryView; body: {:?}",
             body
         );
     }

@@ -3,7 +3,7 @@
 //! Reads the same loaded `menu.<name>.N` resource strings as
 //! `register_menu_controls` in `sc2/src/libs/input/sdl/input.c`, parses each
 //! alternate through the production gesture parser
-//! ([`rust_VControl_ParseGesture`]), and selects the first keyboard
+//! ([`rust_vcontrol_parse_gesture`]), and selects the first keyboard
 //! (`VCONTROL_KEY`) binding.
 //!
 //! This must be called from an initialized child (after the resource system
@@ -15,7 +15,7 @@
 use std::ffi::CString;
 
 use super::ffi::{
-    rust_VControl_ParseGesture, GestureUnion, VCONTROL_GESTURE, VCONTROL_KEY, VCONTROL_NONE,
+    rust_vcontrol_parse_gesture, GestureUnion, VCONTROL_GESTURE, VCONTROL_KEY, VCONTROL_NONE,
 };
 use crate::resource::ffi_bridge::{res_GetString, res_IsString};
 
@@ -77,7 +77,7 @@ pub fn query_menu_binding(menu_name: &str) -> MenuBindingResult {
         };
         // SAFETY: gesture is a valid, aligned out-pointer and spec is a
         // valid NUL-terminated C string.
-        unsafe { rust_VControl_ParseGesture(&mut gesture, spec) };
+        unsafe { rust_vcontrol_parse_gesture(&mut gesture, spec) };
 
         result.num_alternates += 1;
 

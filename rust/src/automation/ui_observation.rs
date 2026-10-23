@@ -27,7 +27,6 @@ pub enum PlanetMenuPhase {
 }
 
 /// Record the current production planet-menu phase.
-#[no_mangle]
 pub extern "C" fn rust_automation_observe_planet_menu(phase: usize) {
     let previous = PLANET_MENU_PHASE.swap(phase, Ordering::AcqRel);
     if phase != PlanetMenuPhase::Inactive as usize && previous != phase {
@@ -71,7 +70,6 @@ pub fn starbase_menu_active() -> bool {
 }
 
 /// Record entry to or exit from the production Game Options input loop.
-#[no_mangle]
 pub extern "C" fn rust_automation_observe_game_options(active: i32) {
     GAME_OPTIONS_ACTIVE.store(active != 0, Ordering::Release);
 }
@@ -181,7 +179,6 @@ pub fn communication_replay_observation() -> (u64, bool) {
 }
 
 /// C ABI observer used by the production response-list renderer.
-#[no_mangle]
 pub extern "C" fn rust_automation_observe_communication_responses(count: u32) {
     observe_communication_responses(count as usize);
 }

@@ -1,7 +1,7 @@
 //! Melnorme callbacks and descriptor for the live battle engine.
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine, starship,

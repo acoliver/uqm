@@ -3,9 +3,9 @@
 
 use std::os::raw::c_void;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use crate::planets::generate::vtable::GENERATE_DEFAULT_FUNCTIONS;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use crate::planets::generate::{
     home_exports, late_exports, sol_exports, special_exports, story_exports,
 };
@@ -69,7 +69,7 @@ pub const MYCON_TRAP_DEFINED: u8 = 45;
 /// Returns a pointer to the appropriate GenerateFunctions struct based
 /// on the solar system type index. Default falls back to
 /// generateDefaultFunctions.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
     match index {

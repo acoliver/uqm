@@ -1,6 +1,6 @@
 //! Druuge callbacks registered with the live battle engine.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, cosine, element, facing_to_angle, frame_index, sine, starship,

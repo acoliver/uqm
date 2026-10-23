@@ -52,7 +52,7 @@ unsafe fn uninit_kernel() {
 #[no_mangle]
 pub unsafe extern "C" fn FreeGameData() {
     crate::navigation::globals::FreeSC2Data();
-    crate::planet_side::orbit_music::FreeLanderData();
+    crate::planet_side::orbit_music::free_lander_data();
     FreeIPData();
     crate::navigation::hyper_data::FreeHyperData();
 }

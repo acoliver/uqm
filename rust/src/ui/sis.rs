@@ -1,4 +1,4 @@
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use crate::callback::ffi::{AlarmHandle, Alarm_addAbsoluteMs, Alarm_remove};
@@ -17,8 +17,7 @@ static mut FLASH_CONTEXT: *mut FlashContext = ptr::null_mut();
 static mut FLASH_RECT: RECT = unsafe { mem::zeroed() };
 static mut FLASH_ALARM: *mut AlarmHandle = ptr::null_mut();
 static mut FLASH_PAUSED: BOOLEAN = 0;
-#[no_mangle]
-pub static mut updateFlashRectRecursion: COUNT = 0;
+pub static mut UPDATE_FLASH_RECT_RECURSION: COUNT = 0;
 
 const UNDEFINED_DELTA_LOCAL: SIZE = 0x7fff;
 const SFR_MENU_3DO: usize = usize::MAX;
@@ -1124,8 +1123,8 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
 #[no_mangle]
 pub unsafe extern "C" fn PreUpdateFlashRect() {
     if !FLASH_ALARM.is_null() {
-        updateFlashRectRecursion = updateFlashRectRecursion.wrapping_add(1);
-        if updateFlashRectRecursion > 1 {
+        UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_add(1);
+        if UPDATE_FLASH_RECT_RECURSION > 1 {
             return;
         }
         Flash_preUpdate(FLASH_CONTEXT);
@@ -1136,8 +1135,8 @@ pub unsafe extern "C" fn PreUpdateFlashRect() {
 #[no_mangle]
 pub unsafe extern "C" fn PostUpdateFlashRect() {
     if !FLASH_ALARM.is_null() {
-        updateFlashRectRecursion = updateFlashRectRecursion.wrapping_sub(1);
-        if updateFlashRectRecursion > 0 {
+        UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_sub(1);
+        if UPDATE_FLASH_RECT_RECURSION > 0 {
             return;
         }
         Flash_postUpdate(FLASH_CONTEXT);

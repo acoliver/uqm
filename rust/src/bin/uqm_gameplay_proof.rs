@@ -35,7 +35,7 @@ const SUPPORTED_SCHEMAS: &[&str] = &[SCHEMA];
 const FAILURE_FILE: &str = "failure-lcar-v2.json";
 const PASS_FILE: &str = "lcar-v2.json";
 const PRODUCTION_SCHEMA: &str = "uqm-deterministic-artifacts-v4";
-const PRODUCTION_FEATURES: [&str; 2] = ["audio_heart", "linked_c_archive"];
+const PRODUCTION_FEATURES: [&str; 1] = ["audio_heart"];
 const LOG_BUDGET: u64 = 64 * 1024 * 1024;
 const TIMEOUT_SECONDS: u64 = 900;
 

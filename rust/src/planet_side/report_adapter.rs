@@ -29,7 +29,7 @@ pub trait DiscoveryReportPort {
 /// The slot is updated when cycling and cleared after table destruction, so
 /// Rust owns the same lifecycle invariant as the gameplay operation.
 pub struct CffiDiscoveryReport {
-    #[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+    #[cfg_attr(test, allow(dead_code))]
     discovery_string: *mut *mut c_void,
 }
 
@@ -43,7 +43,7 @@ impl CffiDiscoveryReport {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     static MenuSounds: *mut c_void;
     fn DoDiscoveryReport(readout_sounds: *mut c_void);
@@ -55,7 +55,7 @@ extern "C" {
 
 impl DiscoveryReportPort for CffiDiscoveryReport {
     fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             let string = self.discovery_string.read();
             if string.is_null() {
@@ -83,7 +83,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             }
             Ok(true)
         }
-        #[cfg(not(feature = "linked_c_archive"))]
+        #[cfg(test)]
         {
             let _ = disposition;
             Err(AdapterError::new("discovery_report_unlinked"))
@@ -91,7 +91,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
     }
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn destroy_and_clear(slot: *mut *mut c_void, string: *mut c_void) {
     if !string.is_null() {
         let _ = DestroyStringTable(ReleaseStringTable(string));

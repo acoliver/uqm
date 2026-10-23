@@ -5,7 +5,7 @@ use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 use std::ptr;
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub(super) const WANT_PIXMAP: CREATE_FLAGS = 1 << 1;
 pub(super) const BLACK_COLOR: Color = rgb15(0, 0, 0);
 
@@ -53,7 +53,7 @@ pub(super) unsafe fn parse_text_lines(
     count
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod runtime {
     use super::*;
     use crate::navigation::globals::GlobData;
@@ -791,7 +791,7 @@ mod runtime {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use runtime::ShowPresentation;
 
 #[cfg(test)]

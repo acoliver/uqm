@@ -67,7 +67,7 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
     }) as u16
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use super::*;
     use crate::ships::native::{abi::*, starship};

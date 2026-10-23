@@ -62,7 +62,7 @@ fn box_rectangles(
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;

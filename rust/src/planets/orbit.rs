@@ -236,10 +236,10 @@ mod live {
         base::StopMusic();
         let planet = (*system).pOrbitalDesc;
         GeneratePlanetSurface(planet, surface);
-        orbit_music::SetPlanetMusic((*planet).data_index & !0x80);
-        orbit_scan::GeneratePlanetSide();
+        orbit_music::set_planet_music((*planet).data_index & !0x80);
+        orbit_scan::generate_planet_side();
         if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-            base::PlayMusic(orbit_music::LanderMusic, 1, 1);
+            base::PlayMusic(orbit_music::LANDER_MUSIC, 1, 1);
         }
         if wait {
             ZoomInPlanetSphere();

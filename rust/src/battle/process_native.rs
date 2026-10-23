@@ -246,7 +246,7 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
     }) as COORD
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 mod engine {
     use super::*;
@@ -1182,7 +1182,7 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub use engine::{
     AllocElement, FreeElement, InitDisplayList, InsertPrim, RedrawQueue, RemoveElement,
     SetUpElement, Untarget,

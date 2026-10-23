@@ -5,7 +5,7 @@ use super::transparency::{TFB_DrawCanvas_CopyTransparencyInfo, TFB_DrawCanvas_Se
 use super::TFB_SCALE_BILINEAR;
 use super::{TFB_SCALE_NEAREST, TFB_SCALE_TRILINEAR};
 use crate::graphics::native_abi::{Color, TFB_Canvas, TFB_PixelFormat, BOOLEAN, EXTENT};
-use crate::graphics::sdl::sdluio::sdluio_loadImage;
+use crate::graphics::sdl::sdluio::sdluio_load_image;
 use sdl2_sys::{
     SDL_CreateRGBSurface, SDL_FreeSurface, SDL_GetError, SDL_LockSurface, SDL_PixelFormat,
     SDL_SetError, SDL_Surface, SDL_UnlockSurface,
@@ -233,7 +233,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_LoadFromFile(
     dir: *mut c_void,
     file_name: *const c_char,
 ) -> TFB_Canvas {
-    let mut surf = sdluio_loadImage(dir, file_name);
+    let mut surf = sdluio_load_image(dir, file_name);
     if surf.is_null() {
         return std::ptr::null_mut();
     }

@@ -137,14 +137,14 @@ impl Story for SolPickup {
 
 impl sol::Pickup for SolPickup {
     fn kill_lander_crew(&mut self, count: u16, interval_ticks: u32) -> bool {
-        crate::planet_side::special_effects::KillLanderCrewSeq(count, interval_ticks)
+        crate::planet_side::special_effects::kill_lander_crew_seq(count, interval_ticks)
     }
     fn lander_report(&mut self) {
         // SAFETY: the live slot remains valid through report presentation.
         unsafe { default::lander_report(&mut discovery_report(self.system)) };
     }
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::SetLanderTakeoff();
+        crate::planet_side::special_effects::set_lander_takeoff();
     }
 }
 

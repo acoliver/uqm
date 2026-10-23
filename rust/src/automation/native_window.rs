@@ -3664,7 +3664,7 @@ fn validate_linked_build_receipt_bundle(
         serde_json::from_slice(&receipt_bytes).map_err(|_| NativeWindowProofError::Receipt)?;
     if receipt.schema != NATIVE_LINKED_BUILD_RECEIPT_SCHEMA
         || !is_lower_hex(&receipt.source_sha, 40)
-        || receipt.feature != "audio_heart,debug-process,linked_c_archive"
+        || receipt.feature != "audio_heart,debug-process"
         || receipt.executable != manifest.executable
         || receipt
             .cargo_command
@@ -3684,7 +3684,7 @@ fn validate_linked_build_receipt_bundle(
         "--release",
         "--no-default-features",
         "--features",
-        "audio_heart,debug-process,linked_c_archive",
+        "audio_heart,debug-process",
         "--bin",
         "uqm",
         "--message-format=json-render-diagnostics",
@@ -4459,12 +4459,12 @@ mod tests {
                 "--release".to_string(),
                 "--no-default-features".to_string(),
                 "--features".to_string(),
-                "audio_heart,debug-process,linked_c_archive".to_string(),
+                "audio_heart,debug-process".to_string(),
                 "--bin".to_string(),
                 "uqm".to_string(),
                 "--message-format=json-render-diagnostics".to_string(),
             ],
-            feature: "audio_heart,debug-process,linked_c_archive".to_string(),
+            feature: "audio_heart,debug-process".to_string(),
             cargo_executable_path: "/tmp/uqm".to_string(),
             cargo_rust_archive_path: "/tmp/libuqm_rust-a.a".to_string(),
             cargo_out_dir: "/tmp/out".to_string(),

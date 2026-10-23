@@ -1,5 +1,5 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, normalize_facing, object_cloaked, put_element, starship,

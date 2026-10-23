@@ -51,7 +51,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_SetPalette(target: TFB_Canvas, palette: 
     set_colors(target.cast(), colors.as_ptr(), 0, 256);
 }
 
-/// Deliberately keeps the engine's test polarity: `TFB_GetColorKey` returns 0
+/// Deliberately keeps the engine's test polarity: `tfb_get_color_key` returns 0
 /// when a colorkey exists, and the original only reports the key on failure.
 ///
 /// # Safety

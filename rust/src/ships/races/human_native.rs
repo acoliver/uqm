@@ -16,7 +16,7 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
         && (weapon_turn.is_some_and(|turn| turn <= 2) || enemy_turn.is_some_and(|turn| turn <= 4))
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use super::{in_defense_range, nuke_speed, use_defense};
     use crate::ships::native::{

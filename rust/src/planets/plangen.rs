@@ -11,7 +11,7 @@ fn map_light(value: u8, diffuse: u32, variance: i32) -> u8 {
         .clamp(0, 255) as u8
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod live {
     use super::{map_light, shield_level};
     use crate::c_bindings::{global_state as c, solar_system};

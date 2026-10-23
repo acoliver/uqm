@@ -1,6 +1,6 @@
 //! Input-free planet rendering, including the live oval ABI provider.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub mod c_api;
 pub mod oval;
 pub mod sphere_geometry;

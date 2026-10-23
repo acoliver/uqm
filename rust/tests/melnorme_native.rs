@@ -1,5 +1,4 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{
     ffi::{c_void, CStr},
@@ -10,10 +9,6 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_melnorme() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
@@ -626,7 +621,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
             let old_tail = disp_q.tail;
             TFB_SeedRandom(33);
             (*e).collision_func.unwrap()(e, &mut point, &mut obstacle, &mut point);
-            assert_ne!(disp_q.tail, old_tail);
+            assert_ne!({ disp_q.tail }, old_tail);
             let blast = element(disp_q.tail);
             assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);
             assert_eq!((*e).__bindgen_anon_2.hit_points, 0);

@@ -9,8 +9,7 @@ extern "C" {
 
 /// # Safety
 /// Called on the SDL main thread; renderer name must be null or a live C string.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_Pure_InitGraphics(
+pub unsafe extern "C" fn tfb_pure_init_graphics(
     driver: c_int,
     flags: c_int,
     renderer: *const c_char,
@@ -20,7 +19,7 @@ pub unsafe extern "C" fn TFB_Pure_InitGraphics(
     if ffi::rust_gfx_init(driver, flags, renderer, width, height) != 0 {
         std::process::exit(1);
     }
-    if TFB_Pure_ConfigureVideo(driver, flags, width, height, 0) != 0 {
+    if tfb_pure_configure_video(driver, flags, width, height, 0) != 0 {
         std::process::exit(1);
     }
     Scale_Init();
@@ -29,8 +28,7 @@ pub unsafe extern "C" fn TFB_Pure_InitGraphics(
 
 /// # Safety
 /// Called on the SDL main thread with the Rust graphics owner initialized.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_Pure_ConfigureVideo(
+pub unsafe extern "C" fn tfb_pure_configure_video(
     driver: c_int,
     flags: c_int,
     width: c_int,
@@ -50,8 +48,7 @@ pub unsafe extern "C" fn TFB_Pure_ConfigureVideo(
 
 /// # Safety
 /// Called on the SDL main thread after graphics users have stopped.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_Pure_UninitGraphics() {
+pub unsafe extern "C" fn tfb_pure_uninit_graphics() {
     ffi::rust_gfx_uninit();
     super::lifecycle_abi::clear_rust_screen_globals();
 }

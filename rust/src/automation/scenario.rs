@@ -302,10 +302,10 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
     ops.fade_screen_to_color();
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 struct LinkedSceneEntry;
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 impl SceneEntryOps for LinkedSceneEntry {
     fn set_last_activity(&mut self, activity: u16) {
         crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(activity));
@@ -350,7 +350,7 @@ pub fn activate(
     let plan = scene_plan(scene, boundary)?;
     observation().lock().begin(scene);
 
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     unsafe {
         if scene == AutomationScene::SolProbeEncounter {
             if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter() {
@@ -368,12 +368,12 @@ pub fn activate(
         enter_scene(&plan, &mut LinkedSceneEntry);
     }
 
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     {
         let _ = plan;
         *observation().lock() = SceneObservation::default();
         return Err(SceneError::SetupFailed(
-            "linked_c_archive is required for runtime scene activation",
+            "runtime scene activation is unavailable in isolated unit tests",
         ));
     }
 

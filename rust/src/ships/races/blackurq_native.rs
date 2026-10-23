@@ -1,5 +1,5 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, frame_count, frame_index, init_intersect_points,

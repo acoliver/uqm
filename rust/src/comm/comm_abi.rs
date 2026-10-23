@@ -315,9 +315,3 @@ pub unsafe extern "C" fn InitCommunication(conversation: u32) -> u16 {
 pub unsafe extern "C" fn RaceCommunication() {
     super::dispatch::rust_race_communication();
 }
-/// # Safety
-/// Game thread only, with CommData initialized.
-#[no_mangle]
-pub unsafe extern "C" fn HailAlien() {
-    super::hail::hail_alien();
-}

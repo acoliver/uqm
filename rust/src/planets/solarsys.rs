@@ -23,18 +23,13 @@ const STATUS_WIDTH: i32 = 64;
 const SPACE_RIGHT_MARGIN: i32 = 14;
 const SPACE_BOTTOM_MARGIN: i32 = 13;
 
-#[no_mangle]
-pub static mut SISIPFrame: *mut c::FRAME_DESC = ptr::null_mut();
-#[no_mangle]
-pub static mut SunFrame: *mut c::FRAME_DESC = ptr::null_mut();
-#[no_mangle]
-pub static mut OrbitalFrame: *mut c::FRAME_DESC = ptr::null_mut();
+pub static mut SISIPFRAME: *mut c::FRAME_DESC = ptr::null_mut();
+pub static mut SUN_FRAME: *mut c::FRAME_DESC = ptr::null_mut();
+pub static mut ORBITAL_FRAME: *mut c::FRAME_DESC = ptr::null_mut();
 #[no_mangle]
 pub static mut SpaceJunkFrame: *mut c::FRAME_DESC = ptr::null_mut();
-#[no_mangle]
-pub static mut OrbitalCMap: *mut c_void = ptr::null_mut();
-#[no_mangle]
-pub static mut SunCMap: *mut c_void = ptr::null_mut();
+pub static mut ORBITAL_CMAP: *mut c_void = ptr::null_mut();
+pub static mut SUN_CMAP: *mut c_void = ptr::null_mut();
 #[no_mangle]
 pub static mut SpaceMusic: *mut c_void = ptr::null_mut();
 static mut STARS_FRAME: *mut c::FRAME_DESC = ptr::null_mut();

@@ -1,12 +1,12 @@
 use super::abi::*;
 use std::ffi::c_char;
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 use std::ffi::c_void;
 
 macro_rules! packet_data {
     ($(($ty:ty, $handler:ident, $name:literal)),+ $(,)?) => {
         const LENGTHS: [usize; 18] = [$(size_of::<$ty>()),+];
-        #[cfg(any(not(test), feature = "linked_c_archive"))]
+        #[cfg(not(test))]
         #[no_mangle]
         pub static mut packetTypeData: [PacketTypeData; 18] = [$(PacketTypeData {
             len: size_of::<$ty>(), handler: {
@@ -47,6 +47,10 @@ packet_data!(
     (Packet_Abort, PacketHandler_Abort, "Abort"),
     (Packet_Reset, PacketHandler_Reset, "Reset"),
 );
+
+pub(super) fn minimum_length(kind: usize) -> usize {
+    LENGTHS[kind]
+}
 
 unsafe fn create<T>(kind: usize, extra: usize) -> *mut T {
     assert!(extra.is_multiple_of(4));

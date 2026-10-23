@@ -42,8 +42,7 @@ fn decode_c_format(format: c_uint) -> MixerFormat {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_Init(
+pub unsafe extern "C" fn rust_mixer_init(
     frequency: c_uint,
     format: c_uint,
     quality: c_uint,
@@ -92,8 +91,7 @@ pub unsafe extern "C" fn rust_mixer_Init(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_Uninit() {
+pub unsafe extern "C" fn rust_mixer_uninit() {
     let _ = mixer_uninit();
 }
 
@@ -101,8 +99,7 @@ pub unsafe extern "C" fn rust_mixer_Uninit() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetError() -> c_uint {
+pub unsafe extern "C" fn rust_mixer_get_error() -> c_uint {
     mixer_get_error() as c_uint
 }
 
@@ -110,8 +107,7 @@ pub unsafe extern "C" fn rust_mixer_GetError() -> c_uint {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GenSources(n: c_uint, psrcobj: *mut MixerObject) {
+pub unsafe extern "C" fn rust_mixer_gen_sources(n: c_uint, psrcobj: *mut MixerObject) {
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenSources: n={}", n));
 
     if n == 0 {
@@ -148,8 +144,7 @@ pub unsafe extern "C" fn rust_mixer_GenSources(n: c_uint, psrcobj: *mut MixerObj
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_DeleteSources(n: c_uint, psrcobj: *mut MixerObject) {
+pub unsafe extern "C" fn rust_mixer_delete_sources(n: c_uint, psrcobj: *mut MixerObject) {
     if n == 0 {
         return;
     }
@@ -179,8 +174,7 @@ pub unsafe extern "C" fn rust_mixer_DeleteSources(n: c_uint, psrcobj: *mut Mixer
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_IsSource(srcobj: MixerObject) -> c_int {
+pub unsafe extern "C" fn rust_mixer_is_source(srcobj: MixerObject) -> c_int {
     match mixer_is_source(srcobj as usize) {
         true => 1,
         false => 0,
@@ -191,8 +185,7 @@ pub unsafe extern "C" fn rust_mixer_IsSource(srcobj: MixerObject) -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_Sourcei(
+pub unsafe extern "C" fn rust_mixer_sourcei(
     srcobj: MixerObject,
     pname: c_uint,
     value: MixerIntVal,
@@ -210,8 +203,7 @@ pub unsafe extern "C" fn rust_mixer_Sourcei(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_Sourcef(srcobj: MixerObject, pname: c_uint, value: f32) {
+pub unsafe extern "C" fn rust_mixer_sourcef(srcobj: MixerObject, pname: c_uint, value: f32) {
     let prop = match pname {
         p if p == SourceProp::Gain as u32 => SourceProp::Gain,
         _ => return,
@@ -224,8 +216,7 @@ pub unsafe extern "C" fn rust_mixer_Sourcef(srcobj: MixerObject, pname: c_uint, 
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_Sourcefv(
+pub unsafe extern "C" fn rust_mixer_sourcefv(
     _srcobj: MixerObject,
     _pname: c_uint,
     _value: *const f32,
@@ -237,8 +228,7 @@ pub unsafe extern "C" fn rust_mixer_Sourcefv(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetSourcei(
+pub unsafe extern "C" fn rust_mixer_get_sourcei(
     srcobj: MixerObject,
     pname: c_uint,
     pvalue: *mut MixerIntVal,
@@ -266,8 +256,7 @@ pub unsafe extern "C" fn rust_mixer_GetSourcei(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetSourcef(
+pub unsafe extern "C" fn rust_mixer_get_sourcef(
     srcobj: MixerObject,
     pname: c_uint,
     pvalue: *mut f32,
@@ -292,8 +281,7 @@ pub unsafe extern "C" fn rust_mixer_GetSourcef(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourcePlay(srcobj: MixerObject) {
+pub unsafe extern "C" fn rust_mixer_source_play(srcobj: MixerObject) {
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_SourcePlay: src={}", srcobj));
     let _ = mixer_source_play(srcobj as usize);
 }
@@ -302,8 +290,7 @@ pub unsafe extern "C" fn rust_mixer_SourcePlay(srcobj: MixerObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourcePause(srcobj: MixerObject) {
+pub unsafe extern "C" fn rust_mixer_source_pause(srcobj: MixerObject) {
     let _ = mixer_source_pause(srcobj as usize);
 }
 
@@ -311,8 +298,7 @@ pub unsafe extern "C" fn rust_mixer_SourcePause(srcobj: MixerObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourceStop(srcobj: MixerObject) {
+pub unsafe extern "C" fn rust_mixer_source_stop(srcobj: MixerObject) {
     let _ = mixer_source_stop(srcobj as usize);
 }
 
@@ -320,8 +306,7 @@ pub unsafe extern "C" fn rust_mixer_SourceStop(srcobj: MixerObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourceRewind(srcobj: MixerObject) {
+pub unsafe extern "C" fn rust_mixer_source_rewind(srcobj: MixerObject) {
     let _ = mixer_source_rewind(srcobj as usize);
 }
 
@@ -329,8 +314,7 @@ pub unsafe extern "C" fn rust_mixer_SourceRewind(srcobj: MixerObject) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourceQueueBuffers(
+pub unsafe extern "C" fn rust_mixer_source_queue_buffers(
     srcobj: MixerObject,
     n: c_uint,
     pbufobj: *mut MixerObject,
@@ -378,8 +362,7 @@ pub unsafe extern "C" fn rust_mixer_SourceQueueBuffers(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_SourceUnqueueBuffers(
+pub unsafe extern "C" fn rust_mixer_source_unqueue_buffers(
     srcobj: MixerObject,
     n: c_uint,
     pbufobj: *mut MixerObject,
@@ -405,8 +388,7 @@ pub unsafe extern "C" fn rust_mixer_SourceUnqueueBuffers(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GenBuffers(n: c_uint, pbufobj: *mut MixerObject) {
+pub unsafe extern "C" fn rust_mixer_gen_buffers(n: c_uint, pbufobj: *mut MixerObject) {
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenBuffers: n={}", n));
 
     if n == 0 {
@@ -443,8 +425,7 @@ pub unsafe extern "C" fn rust_mixer_GenBuffers(n: c_uint, pbufobj: *mut MixerObj
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_DeleteBuffers(n: c_uint, pbufobj: *mut MixerObject) {
+pub unsafe extern "C" fn rust_mixer_delete_buffers(n: c_uint, pbufobj: *mut MixerObject) {
     if n == 0 {
         return;
     }
@@ -474,8 +455,7 @@ pub unsafe extern "C" fn rust_mixer_DeleteBuffers(n: c_uint, pbufobj: *mut Mixer
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_IsBuffer(bufobj: MixerObject) -> c_int {
+pub unsafe extern "C" fn rust_mixer_is_buffer(bufobj: MixerObject) -> c_int {
     match mixer_is_buffer(bufobj as usize) {
         true => 1,
         false => 0,
@@ -486,8 +466,7 @@ pub unsafe extern "C" fn rust_mixer_IsBuffer(bufobj: MixerObject) -> c_int {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetBufferi(
+pub unsafe extern "C" fn rust_mixer_get_bufferi(
     bufobj: MixerObject,
     pname: c_uint,
     pvalue: *mut MixerIntVal,
@@ -516,8 +495,7 @@ pub unsafe extern "C" fn rust_mixer_GetBufferi(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_BufferData(
+pub unsafe extern "C" fn rust_mixer_buffer_data(
     bufobj: MixerObject,
     format: c_uint,
     data: *const u8,
@@ -564,8 +542,7 @@ pub unsafe extern "C" fn rust_mixer_BufferData(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_MixChannels(
+pub unsafe extern "C" fn rust_mixer_mix_channels(
     _userdata: *mut c_void,
     stream: *mut u8,
     len: c_int,
@@ -583,8 +560,7 @@ pub unsafe extern "C" fn rust_mixer_MixChannels(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_MixFake(_userdata: *mut c_void, stream: *mut u8, len: c_int) {
+pub unsafe extern "C" fn rust_mixer_mix_fake(_userdata: *mut c_void, stream: *mut u8, len: c_int) {
     if stream.is_null() || len <= 0 {
         return;
     }
@@ -598,8 +574,7 @@ pub unsafe extern "C" fn rust_mixer_MixFake(_userdata: *mut c_void, stream: *mut
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetFrequency() -> c_uint {
+pub unsafe extern "C" fn rust_mixer_get_frequency() -> c_uint {
     mixer_get_frequency()
 }
 
@@ -607,8 +582,7 @@ pub unsafe extern "C" fn rust_mixer_GetFrequency() -> c_uint {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
-pub unsafe extern "C" fn rust_mixer_GetFormat() -> c_uint {
+pub unsafe extern "C" fn rust_mixer_get_format() -> c_uint {
     mixer_get_format() as c_uint
 }
 
@@ -621,9 +595,9 @@ mod tests {
     fn test_ffi_init_uninit() {
         let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
             assert_eq!(
-                rust_mixer_Init(
+                rust_mixer_init(
                     44100,
                     MixerFormat::Stereo16 as u32,
                     MixerQuality::Medium as u32,
@@ -631,7 +605,7 @@ mod tests {
                 ),
                 1
             );
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 
@@ -639,8 +613,8 @@ mod tests {
     fn test_ffi_gen_sources() {
         let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
-            rust_mixer_Init(
+            rust_mixer_uninit();
+            rust_mixer_init(
                 44100,
                 MixerFormat::Stereo16 as u32,
                 MixerQuality::Medium as u32,
@@ -648,18 +622,18 @@ mod tests {
             );
 
             let mut handles = [0isize; 3];
-            rust_mixer_GenSources(3, handles.as_mut_ptr());
+            rust_mixer_gen_sources(3, handles.as_mut_ptr());
 
-            assert_eq!(rust_mixer_IsSource(handles[0]), 1);
-            assert_eq!(rust_mixer_IsSource(handles[1]), 1);
-            assert_eq!(rust_mixer_IsSource(handles[2]), 1);
-            assert_eq!(rust_mixer_IsSource(999), 0);
+            assert_eq!(rust_mixer_is_source(handles[0]), 1);
+            assert_eq!(rust_mixer_is_source(handles[1]), 1);
+            assert_eq!(rust_mixer_is_source(handles[2]), 1);
+            assert_eq!(rust_mixer_is_source(999), 0);
 
-            rust_mixer_DeleteSources(3, handles.as_mut_ptr());
+            rust_mixer_delete_sources(3, handles.as_mut_ptr());
             // After deletion, source may still be in pool but marked invalid
             // depending on implementation
 
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 
@@ -667,8 +641,8 @@ mod tests {
     fn test_ffi_gen_buffers() {
         let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
-            rust_mixer_Init(
+            rust_mixer_uninit();
+            rust_mixer_init(
                 44100,
                 MixerFormat::Stereo16 as u32,
                 MixerQuality::Medium as u32,
@@ -676,16 +650,16 @@ mod tests {
             );
 
             let mut handles = [0isize; 2];
-            rust_mixer_GenBuffers(2, handles.as_mut_ptr());
+            rust_mixer_gen_buffers(2, handles.as_mut_ptr());
 
-            assert_eq!(rust_mixer_IsBuffer(handles[0]), 1);
-            assert_eq!(rust_mixer_IsBuffer(handles[1]), 1);
-            assert_eq!(rust_mixer_IsBuffer(999), 0);
+            assert_eq!(rust_mixer_is_buffer(handles[0]), 1);
+            assert_eq!(rust_mixer_is_buffer(handles[1]), 1);
+            assert_eq!(rust_mixer_is_buffer(999), 0);
 
-            rust_mixer_DeleteBuffers(2, handles.as_mut_ptr());
+            rust_mixer_delete_buffers(2, handles.as_mut_ptr());
             // After deletion, buffer may still be in pool but marked invalid
 
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 
@@ -693,8 +667,8 @@ mod tests {
     fn test_ffi_source_properties() {
         let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
-            rust_mixer_Init(
+            rust_mixer_uninit();
+            rust_mixer_init(
                 44100,
                 MixerFormat::Stereo16 as u32,
                 MixerQuality::Medium as u32,
@@ -702,23 +676,23 @@ mod tests {
             );
 
             let mut src_handles = [0isize; 1];
-            rust_mixer_GenSources(1, src_handles.as_mut_ptr());
+            rust_mixer_gen_sources(1, src_handles.as_mut_ptr());
 
             // Test gain
-            rust_mixer_Sourcef(src_handles[0], SourceProp::Gain as u32, 0.5);
+            rust_mixer_sourcef(src_handles[0], SourceProp::Gain as u32, 0.5);
 
             let mut gain: f32 = 0.0;
-            rust_mixer_GetSourcef(src_handles[0], SourceProp::Gain as u32, &mut gain);
+            rust_mixer_get_sourcef(src_handles[0], SourceProp::Gain as u32, &mut gain);
             assert!((gain - 0.5).abs() < 0.01);
 
             // Test looping
-            rust_mixer_Sourcei(src_handles[0], SourceProp::Looping as u32, 1);
+            rust_mixer_sourcei(src_handles[0], SourceProp::Looping as u32, 1);
 
             let mut looping: MixerIntVal = 0;
-            rust_mixer_GetSourcei(src_handles[0], SourceProp::Looping as u32, &mut looping);
+            rust_mixer_get_sourcei(src_handles[0], SourceProp::Looping as u32, &mut looping);
             assert_eq!(looping, 1);
 
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 
@@ -726,8 +700,8 @@ mod tests {
     fn test_ffi_buffer_data() {
         let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
-            rust_mixer_Uninit();
-            rust_mixer_Init(
+            rust_mixer_uninit();
+            rust_mixer_init(
                 44100,
                 MixerFormat::Mono8 as u32,
                 MixerQuality::Medium as u32,
@@ -735,10 +709,10 @@ mod tests {
             );
 
             let mut buf_handles = [0isize; 1];
-            rust_mixer_GenBuffers(1, buf_handles.as_mut_ptr());
+            rust_mixer_gen_buffers(1, buf_handles.as_mut_ptr());
 
             let data: [u8; 100] = [128; 100];
-            rust_mixer_BufferData(
+            rust_mixer_buffer_data(
                 buf_handles[0],
                 MixerFormat::Mono8 as u32,
                 data.as_ptr(),
@@ -747,14 +721,14 @@ mod tests {
             );
 
             let mut freq: MixerIntVal = 0;
-            rust_mixer_GetBufferi(buf_handles[0], BufferProp::Frequency as u32, &mut freq);
+            rust_mixer_get_bufferi(buf_handles[0], BufferProp::Frequency as u32, &mut freq);
             assert_eq!(freq, 44100);
 
             let mut size: MixerIntVal = 0;
-            rust_mixer_GetBufferi(buf_handles[0], BufferProp::Size as u32, &mut size);
+            rust_mixer_get_bufferi(buf_handles[0], BufferProp::Size as u32, &mut size);
             assert_eq!(size, 100);
 
-            rust_mixer_Uninit();
+            rust_mixer_uninit();
         }
     }
 

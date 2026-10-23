@@ -87,7 +87,6 @@ pub struct SurfaceCanvas {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_from_surface(surface: *mut SDL_Surface) -> *mut SurfaceCanvas {
     let result = catch_unwind(|| {
         if surface.is_null() {
@@ -145,7 +144,6 @@ pub unsafe extern "C" fn rust_canvas_from_surface(surface: *mut SDL_Surface) -> 
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_destroy(canvas: *mut SurfaceCanvas) {
     let _ = catch_unwind(|| {
         if canvas.is_null() {
@@ -178,7 +176,6 @@ pub unsafe extern "C" fn rust_canvas_destroy(canvas: *mut SurfaceCanvas) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_line(
     canvas: *mut SurfaceCanvas,
     x1: c_int,
@@ -220,7 +217,6 @@ pub unsafe extern "C" fn rust_canvas_draw_line(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_rect(
     canvas: *mut SurfaceCanvas,
     x: c_int,
@@ -272,7 +268,6 @@ pub unsafe extern "C" fn rust_canvas_draw_rect(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_fill_rect(
     canvas: *mut SurfaceCanvas,
     x: c_int,
@@ -317,7 +312,6 @@ pub unsafe extern "C" fn rust_canvas_fill_rect(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_copy(
     dst: *mut SurfaceCanvas,
     src: *const SurfaceCanvas,
@@ -378,7 +372,6 @@ pub unsafe extern "C" fn rust_canvas_copy(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_image(
     canvas: *mut SurfaceCanvas,
     image_data: *const u8,
@@ -435,7 +428,6 @@ pub unsafe extern "C" fn rust_canvas_draw_image(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_fontchar(
     canvas: *mut SurfaceCanvas,
     glyph_data: *const u8,
@@ -558,7 +550,6 @@ pub unsafe extern "C" fn rust_canvas_draw_fontchar(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_set_scissor(
     canvas: *mut SurfaceCanvas,
     x: c_int,
@@ -594,7 +585,6 @@ pub unsafe extern "C" fn rust_canvas_set_scissor(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_clear_scissor(canvas: *mut SurfaceCanvas) -> c_int {
     catch_unwind(|| {
         if canvas.is_null() {
@@ -625,7 +615,6 @@ pub unsafe extern "C" fn rust_canvas_clear_scissor(canvas: *mut SurfaceCanvas) -
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_canvas_get_extent(
     canvas: *mut SurfaceCanvas,
     w: *mut c_int,

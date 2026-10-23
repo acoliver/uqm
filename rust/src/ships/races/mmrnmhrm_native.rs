@@ -1,6 +1,6 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{

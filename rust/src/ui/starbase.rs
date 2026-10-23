@@ -1,5 +1,5 @@
 //! Starbase encounters, menus and flagship-piece rendering, ported from starbase.c.
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use super::{outfit::DoOutfit, shipyard::DoShipyard};

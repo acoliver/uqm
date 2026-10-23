@@ -9,7 +9,7 @@
     clashing_extern_declarations,
     reason = "generated ABI declarations share engine pointer types with other bridges"
 )]
-mod abi {
+pub mod abi {
     include!("../../abi/netplay_abi.rs");
 }
 mod checkbuf;

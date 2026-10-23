@@ -1,4 +1,4 @@
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use crate::battle::status_native::status_y_offsets;

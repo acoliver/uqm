@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::ptr;
 
-use super::{_lpCurCodeDesc, CodeDesc, N, R, T, THRESHOLD};
+use super::{CodeDesc, _LP_CUR_CODE_DESC, N, R, T, THRESHOLD};
 
 impl CodeDesc {
     unsafe fn bits(&mut self, n: u8) -> u16 {
@@ -36,7 +36,6 @@ impl CodeDesc {
 /// # Safety
 /// `stream` is a live UIO stream (type 0) or a memory buffer (type 1) large
 /// enough for all reads/writes, including decoder lookahead beyond the last bit.
-#[no_mangle]
 pub unsafe extern "C" fn copen(
     stream: *mut c_void,
     stream_type: u8,
@@ -56,18 +55,17 @@ pub unsafe extern "C" fn copen(
     }
     desc.publish();
     if desc.stream_length == u32::MAX {
-        _lpCurCodeDesc = ptr::null_mut();
+        _LP_CUR_CODE_DESC = ptr::null_mut();
     } else {
-        _lpCurCodeDesc = Box::into_raw(desc);
+        _LP_CUR_CODE_DESC = Box::into_raw(desc);
     }
-    _lpCurCodeDesc
+    _LP_CUR_CODE_DESC
 }
 
 /// # Safety
 /// `desc` is null or a live descriptor returned by `copen`, closed exactly once.
-#[no_mangle]
 pub unsafe extern "C" fn cclose(desc: *mut CodeDesc) -> u32 {
-    _lpCurCodeDesc = desc;
+    _LP_CUR_CODE_DESC = desc;
     if desc.is_null() {
         return 0;
     }
@@ -77,13 +75,12 @@ pub unsafe extern "C" fn cclose(desc: *mut CodeDesc) -> u32 {
     }
     let result = desc.stream_index;
     desc.publish();
-    _lpCurCodeDesc = ptr::null_mut();
+    _LP_CUR_CODE_DESC = ptr::null_mut();
     result
 }
 
 /// # Safety
 /// `desc` is null or live and `length` points to writable DWORD storage.
-#[no_mangle]
 pub unsafe extern "C" fn cfilelength(desc: *mut CodeDesc, length: *mut u32) {
     *length = if desc.is_null() {
         0
@@ -95,14 +92,13 @@ pub unsafe extern "C" fn cfilelength(desc: *mut CodeDesc, length: *mut u32) {
 /// # Safety
 /// `desc` is null or live. `buf` has room for `size * count` bytes. The stream
 /// must contain a valid legacy-compressed payload and its decoder lookahead.
-#[no_mangle]
 pub unsafe extern "C" fn cread(
     buf: *mut c_void,
     size: u16,
     count: u16,
     desc: *mut CodeDesc,
 ) -> u16 {
-    _lpCurCodeDesc = desc;
+    _LP_CUR_CODE_DESC = desc;
     if desc.is_null() || size == 0 || count == 0 {
         return 0;
     }

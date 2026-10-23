@@ -176,7 +176,6 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_init(
     _driver: c_int,
     flags: c_int,
@@ -391,7 +390,6 @@ pub unsafe extern "C" fn rust_gfx_init(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_uninit() {
     rust_bridge_log_msg("RUST_GFX_UNINIT");
 
@@ -447,29 +445,26 @@ pub unsafe extern "C" fn rust_gfx_uninit() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(0)
 }
 
-/// Get TransitionScreen pointer for C code (screen = 2)
+/// Get TRANSITION_SCREEN pointer for C code (screen = 2)
 // PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
 ///
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(2)
 }
 
-/// Get SDL_Screens[i] pointer for C code
+/// Get SDL_SCREENS[i] pointer for C code
 // PANIC-FREE: Range check before indexing, if-let guard for uninitialized state.
 ///
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface {
     if screen < 0 || screen >= TFB_GFX_NUMSCREENS as c_int {
         return ptr::null_mut();
@@ -487,7 +482,6 @@ pub unsafe extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
     if let Some(state) = get_gfx_state() {
         return state.format_conv_surf;
@@ -509,7 +503,6 @@ pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
     _transition_amount: c_int,
@@ -539,7 +532,6 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
         if state.flags & (1 << 2) != 0 {
@@ -601,7 +593,6 @@ pub(crate) fn take_presented_frame() -> Option<crate::automation::capture::Prese
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_upload_transition_screen() {
     // Intentional no-op: see doc comment above.
 }
@@ -624,7 +615,6 @@ pub unsafe extern "C" fn rust_gfx_upload_transition_screen() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
     // REQ-SCR-140: uninitialized guard
     let state = match get_gfx_state() {
@@ -791,7 +781,6 @@ pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const 
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
     // REQ-CLR-060: uninitialized guard
     let state = match get_gfx_state() {
@@ -837,7 +826,6 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
         for event in state.event_pump.poll_iter() {
@@ -954,7 +942,6 @@ fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
     let Some(state) = get_gfx_state() else {
         return -1;
@@ -975,7 +962,6 @@ pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_is_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
         return if state.fullscreen { 1 } else { 0 };
@@ -989,7 +975,6 @@ pub unsafe extern "C" fn rust_gfx_is_fullscreen() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
     -1 // Not supported
 }
@@ -1000,7 +985,6 @@ pub unsafe extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_width() -> c_int {
     SCREEN_WIDTH as c_int
 }
@@ -1011,7 +995,6 @@ pub unsafe extern "C" fn rust_gfx_get_width() -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_height() -> c_int {
     SCREEN_HEIGHT as c_int
 }

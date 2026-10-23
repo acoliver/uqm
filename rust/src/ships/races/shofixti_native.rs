@@ -1,5 +1,5 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod engine {
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
     use std::{mem, ptr};

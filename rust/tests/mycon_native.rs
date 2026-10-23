@@ -1,15 +1,10 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
 static ENGINE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_mycon() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
@@ -120,17 +115,17 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
         assert_eq!((*plasma).__bindgen_anon_1.life_span, 39);
         assert_eq!((*plasma).__bindgen_anon_3.mass_points, 3);
         assert_eq!((*plasma).__bindgen_anon_4.turn_wait, 1);
-        (*ship).__bindgen_anon_2.crew_level = 17;
+        ship.__bindgen_anon_2.crew_level = 17;
         ss.cur_status_flags = SPECIAL as u16;
         desc.postprocess_func.unwrap()(&raw mut *ship);
-        assert_eq!((*ship).__bindgen_anon_2.crew_level, 20);
+        assert_eq!(ship.__bindgen_anon_2.crew_level, 20);
         assert_eq!(desc.ship_info.energy_level, 0);
         assert_eq!(ss.special_counter, 0);
 
-        (*ship).__bindgen_anon_2.crew_level = 10;
+        ship.__bindgen_anon_2.crew_level = 10;
         desc.ship_info.energy_level = 39;
         desc.postprocess_func.unwrap()(&raw mut *ship);
-        assert_eq!((*ship).__bindgen_anon_2.crew_level, 10);
+        assert_eq!(ship.__bindgen_anon_2.crew_level, 10);
         assert_eq!(desc.ship_info.energy_level, 39);
         FreeElement(handles[0]);
         UninitQueue(&raw mut disp_q);

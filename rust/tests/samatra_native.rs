@@ -1,4 +1,3 @@
-#![cfg(feature = "linked_c_archive")]
 mod native_ship_common;
 use native_ship_common::*;
 use uqm_rust::{

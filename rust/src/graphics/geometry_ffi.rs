@@ -44,8 +44,7 @@ const BOTTOM: u8 = 8;
 const NOCLIP: u8 = 128;
 const ALL_SIDES: u8 = LEFT | TOP | RIGHT | BOTTOM;
 
-#[no_mangle]
-pub static mut TFB_BBox: Bbox = Bbox {
+pub static mut TFB_B_BOX: Bbox = Bbox {
     valid: 0,
     region: Rect {
         corner: Point { x: 0, y: 0 },
@@ -72,7 +71,7 @@ static mut MAX_HEIGHT: i32 = 0;
 pub unsafe extern "C" fn TFB_BBox_Init(width: i32, height: i32) {
     MAX_WIDTH = width;
     MAX_HEIGHT = height;
-    (*std::ptr::addr_of_mut!(TFB_BBox)).clip.extent = Extent {
+    (*std::ptr::addr_of_mut!(TFB_B_BOX)).clip.extent = Extent {
         width: width as i16,
         height: height as i16,
     };
@@ -82,14 +81,14 @@ pub unsafe extern "C" fn TFB_BBox_Init(width: i32, height: i32) {
 /// callers must obey the single graphics-thread access contract.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_BBox_Reset() {
-    (*std::ptr::addr_of_mut!(TFB_BBox)).valid = 0;
+    (*std::ptr::addr_of_mut!(TFB_B_BOX)).valid = 0;
 }
 /// # Safety
 /// Pointer arguments must be valid for the duration of the call; graphics ABI
 /// callers must obey the single graphics-thread access contract.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_BBox_SetClipRect(r: *const Rect) {
-    let b = &mut *std::ptr::addr_of_mut!(TFB_BBox);
+    let b = &mut *std::ptr::addr_of_mut!(TFB_B_BOX);
     if r.is_null() {
         b.clip = Rect {
             corner: Point { x: 0, y: 0 },
@@ -115,7 +114,7 @@ pub unsafe extern "C" fn TFB_BBox_SetClipRect(r: *const Rect) {
 /// callers must obey the single graphics-thread access contract.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_BBox_RegisterPoint(x: i32, y: i32) {
-    let b = &mut *std::ptr::addr_of_mut!(TFB_BBox);
+    let b = &mut *std::ptr::addr_of_mut!(TFB_B_BOX);
     let mut x = x;
     let mut y = y;
     let x1 = i32::from(b.clip.corner.x);

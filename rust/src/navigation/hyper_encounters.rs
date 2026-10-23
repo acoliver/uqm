@@ -1,9 +1,9 @@
 //! Hyperspace encounter elements, transition animation, tracking and radar.
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 use super::abi::*;
 use super::get;
 use super::globals::GlobData;
-use super::hyper_data::hyperstars;
+use super::hyper_data::HYPERSTARS;
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{
     cosine, height, logx, logy, primitive, sine, universe_x, universe_y, width,
@@ -37,7 +37,7 @@ pub(super) unsafe fn allocate(point: POINT) -> HELEMENT {
         y: wrap(ly, height()),
     };
     (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-    (*element).current.image.farray = ptr::addr_of_mut!(hyperstars)
+    (*element).current.image.farray = ptr::addr_of_mut!(HYPERSTARS)
         .cast::<FRAME>()
         .add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
     handle

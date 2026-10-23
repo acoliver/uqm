@@ -1,5 +1,4 @@
 //! Exercise the Mmrnmhrm callbacks through the linked engine ABI.
-#![cfg(feature = "linked_c_archive")]
 
 use std::{
     ffi::CStr,
@@ -8,10 +7,6 @@ use std::{
 };
 use uqm_rust::ships::native::abi::*;
 
-#[cfg_attr(
-    target_os = "macos",
-    link(name = "uqm_c", kind = "static", modifiers = "+whole-archive")
-)]
 unsafe extern "C" {
     fn init_mmrnmhrm() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;

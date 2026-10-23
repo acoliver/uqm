@@ -1,7 +1,7 @@
 //! SDL surface helpers shared by the canvas modules.
 //!
 //! The colorkey, alpha-mod and palette helpers do what the engine's SDL2
-//! compatibility layer (`TFB_GetColorKey` and friends) does, called directly
+//! compatibility layer (`tfb_get_color_key` and friends) does, called directly
 //! on `sdl2_sys` so canvas code has no dependency on the C compatibility layer.
 use crate::graphics::native_abi::{Color, TFB_ColorMap, BOOLEAN};
 use sdl2_sys::{

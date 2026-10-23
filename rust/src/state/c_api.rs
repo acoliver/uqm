@@ -86,7 +86,7 @@ pub unsafe extern "C" fn SeekStateFile(
     rust_seek_state_file((*file).index, offset, whence)
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 mod planets {
     use super::*;
     use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};

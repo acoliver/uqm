@@ -149,7 +149,6 @@ pub(crate) fn coordinator_queues_fixture_request() -> Result<(), AdapterError> {
 /// Ordinary gameplay that never executed the script action gets `None`; production
 /// [`Coordinator::is_active`] is checked by the caller before tapping, so a stale
 /// queue cannot be consumed or fail outside automation.
-#[cfg(any(test, feature = "linked_c_archive"))]
 #[must_use]
 pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
     if FIXTURE_REQUESTED.swap(false, Ordering::SeqCst) {

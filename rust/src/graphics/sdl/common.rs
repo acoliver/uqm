@@ -276,12 +276,12 @@ impl DriverConfig {
 pub trait GraphicsDriver {
     /// Initialize the driver with the given configuration.
     ///
-    /// Corresponds to `TFB_Pure_InitGraphics` / `TFB_GL_InitGraphics` in C.
+    /// Corresponds to `tfb_pure_init_graphics` / `TFB_GL_InitGraphics` in C.
     fn init(&mut self, config: &DriverConfig) -> DriverResult<()>;
 
     /// Shutdown the driver and release resources.
     ///
-    /// Corresponds to `TFB_Pure_UninitGraphics` / `TFB_GL_UninitGraphics` in C.
+    /// Corresponds to `tfb_pure_uninit_graphics` / `TFB_GL_UninitGraphics` in C.
     fn uninit(&mut self) -> DriverResult<()>;
 
     /// Swap buffers (display the rendered frame).

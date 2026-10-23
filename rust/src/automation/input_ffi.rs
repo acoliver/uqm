@@ -19,9 +19,9 @@
 
 use crate::automation::coordinator::Coordinator;
 use crate::automation::runtime::RuntimeModel;
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
 
 // ===========================================================================
@@ -51,7 +51,7 @@ pub(crate) struct NavigationSnapshot {
     pub(crate) view_center_y: i32,
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 extern "C" {
     fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
     fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
@@ -105,7 +105,7 @@ impl ViewGeometry {
     }
 
     /// Read the geometry from the live C screen-size globals.
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     fn current() -> Self {
         let (width, height) = screen_size();
         Self::from_screen(width, height)
@@ -113,7 +113,7 @@ impl ViewGeometry {
 }
 
 /// The live `ScreenWidth` and `ScreenHeight`.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn screen_size() -> (i32, i32) {
     // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
     // init and are read-only thereafter; this runs on the game thread.
@@ -126,16 +126,16 @@ pub(crate) fn screen_size() -> (i32, i32) {
 }
 
 /// Without the linked game the screen is the baseline size.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn screen_size() -> (i32, i32) {
     (DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
 }
 
 /// The game's baseline screen size, used only when the C globals are absent.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 const DEFAULT_SCREEN_WIDTH: i32 = 320;
 /// The game's baseline screen size, used only when the C globals are absent.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 
 /// Read the target-independent flight state of the live solar system.
@@ -143,7 +143,7 @@ const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 /// # Safety
 /// Must run on the game thread while `solar_system` is the live
 /// `pSolarSysState`, as the automation input hook does.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut NavigationSnapshot) {
     snapshot.active = 1;
     snapshot.in_ip_flight = i32::from(solar_system.InIpFlight != 0);
@@ -194,7 +194,7 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
 ///
 /// Hyperspace flight moves exactly these fields (`hyper.c`), so they are the
 /// position a movement assertion must read.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
@@ -208,7 +208,7 @@ pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
 }
 
 /// Without the linked game there is no position to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
     None
 }
@@ -216,7 +216,7 @@ pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
 /// The hyperspace flagship's own `ShipFacing`, read from the player's
 /// `STARSHIP` as `SaveSisHyperState` finds it. `None` when no flagship is in
 /// flight or its queues are inconsistent. Nothing is written.
-#[cfg(all(feature = "linked_c_archive", not(test)))]
+#[cfg(not(test))]
 pub(crate) fn hyperspace_facing() -> Option<u8> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, after `InitKernel` and `InitSpace` set up the queues.
@@ -228,7 +228,7 @@ pub(crate) fn hyperspace_facing() -> Option<u8> {
 }
 
 /// Without the linked game there is no facing to read.
-#[cfg(not(all(feature = "linked_c_archive", not(test))))]
+#[cfg(test)]
 pub(crate) fn hyperspace_facing() -> Option<u8> {
     None
 }
@@ -237,7 +237,7 @@ pub(crate) fn hyperspace_facing() -> Option<u8> {
 ///
 /// `DeltaSISGauges` changes exactly these `SIS_STATE` fields, so a reward or
 /// a purchase is visible here only after the game applied it.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn ship_resources() -> Option<(u32, u32)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
@@ -251,13 +251,13 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
 }
 
 /// Without the linked game there is no flagship state to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn ship_resources() -> Option<(u32, u32)> {
     None
 }
 
 /// The flagship's `CrewEnlisted` and `NumLanders`, in that order.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
@@ -271,14 +271,14 @@ pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
 }
 
 /// Without the linked game there is no flagship state to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
     None
 }
 
 type SisFittings = ([u8; 11], [u8; 8], [u8; 16], u16);
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn sis_fittings() -> Option<SisFittings> {
     unsafe {
         let sis = std::ptr::addr_of!(GLOB_DATA.sis_state).read();
@@ -290,13 +290,13 @@ pub(crate) fn sis_fittings() -> Option<SisFittings> {
         ))
     }
 }
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn sis_fittings() -> Option<SisFittings> {
     None
 }
 
 /// The game clock's `(day, month, year)` indices.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
@@ -311,7 +311,7 @@ pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
 }
 
 /// Without the linked game there is no clock to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
     None
 }
@@ -320,7 +320,7 @@ pub(crate) fn game_date() -> Option<(u8, u8, u16)> {
 ///
 /// The lander hold is added to these when it returns to the ship, so they
 /// change only after the trip. Nothing is written.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
@@ -331,7 +331,7 @@ pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
 }
 
 /// Without the linked game there is no flagship state to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
     None
 }
@@ -339,7 +339,7 @@ pub(crate) fn ship_element_amounts() -> Option<[u16; 8]> {
 /// The ships left on each side of the live or last battle, in player order.
 ///
 /// `tactrans.c` decrements these when a ship dies. Nothing is written.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so the counters cannot change during this read.
@@ -348,7 +348,7 @@ pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
 }
 
 /// Without the linked game there are no fleets to read.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
     None
 }
@@ -357,7 +357,7 @@ pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
 ///
 /// `active` is 0 whenever no solar system is live, which is how a departure
 /// observes that production has torn interplanetary flight down.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     let geometry = ViewGeometry::current();
     let mut snapshot = NavigationSnapshot {
@@ -379,13 +379,13 @@ pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     snapshot
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn departure_snapshot() -> NavigationSnapshot {
     navigation_snapshot(0, None)
 }
 
 /// Copy a live group's target geometry without moving it or invoking contact.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
     use crate::c_bindings::global_state::POINT;
     use crate::savegame::runtime::groups::CIpGroup;
@@ -429,12 +429,12 @@ pub(crate) fn contact_snapshot(race: u8) -> Option<(NavigationSnapshot, bool)> {
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn contact_snapshot(_race: u8) -> Option<(NavigationSnapshot, bool)> {
     None
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn contact_race() -> Option<u8> {
     unsafe {
         std::ptr::addr_of!(GLOB_DATA.game_state.npc_built_ship_q.head)
@@ -445,7 +445,7 @@ pub(crate) fn contact_race() -> Option<u8> {
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn contact_race() -> Option<u8> {
     None
 }
@@ -462,7 +462,6 @@ pub(crate) fn contact_race() -> Option<u8> {
 /// planet.
 ///
 /// C integer division truncates toward zero, as Rust's does.
-#[cfg(any(test, feature = "linked_c_archive"))]
 fn planet_display_target(
     inside_target_inner_system: bool,
     outer_origin: (i32, i32),
@@ -483,7 +482,7 @@ fn planet_display_target(
     )
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn navigation_snapshot(
     target_planet: i32,
     target_moon: Option<i32>,
@@ -538,7 +537,7 @@ pub(crate) fn navigation_snapshot(
     snapshot
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn navigation_snapshot(
     _target_planet: i32,
     _target_moon: Option<i32>,
@@ -599,7 +598,6 @@ pub fn get_runtime() -> Option<&'static RuntimeModel> {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-001, REQ-INJECT-002
-#[no_mangle]
 pub extern "C" fn rust_automation_service_do_input() -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
@@ -627,7 +625,7 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
         // re-asserting on every DoInput call, we ensure the activity
         // state machine's should_continue() check sees CHECK_ABORT and
         // exits the inner loop.
-        #[cfg(feature = "linked_c_archive")]
+        #[cfg(not(test))]
         unsafe {
             crate::mainloop::c_extern::set_current_activity(
                 crate::mainloop::c_extern::get_current_activity() | 0x4000,
@@ -655,7 +653,6 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006, REQ-INJECT-007
-#[no_mangle]
 pub extern "C" fn rust_automation_after_input_update() -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
@@ -706,8 +703,7 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-003
-#[no_mangle]
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
     unsafe { c_automation_set_immediate_menu_key(index, value) }
 }
@@ -717,8 +713,7 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-003
-#[no_mangle]
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
     use crate::automation::input::{setter_set_menu_key, SetterResult};
 
@@ -737,14 +732,12 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 
 /// Set one player-one gameplay control through the native owner of
 /// `ImmediateInputState`, forwarding its verdict unchanged.
-#[no_mangle]
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i32) -> i32 {
     unsafe { c_automation_set_immediate_player_key(index, value) }
 }
 
-#[no_mangle]
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i32) -> i32 {
     if (0..7).contains(&index) {
         0
@@ -760,7 +753,7 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
 /// scripted tap counts input updates, so on a slow host that clock fires
 /// inside one tap and the game sees several presses. Returns `false` for an
 /// index outside the menu key table.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn discard_menu_pulse(index: i32) -> bool {
     let Some(index) = menu_key_slot(index) else {
         return false;
@@ -774,7 +767,7 @@ pub(crate) fn discard_menu_pulse(index: i32) -> bool {
 }
 
 /// Stub for builds without the linked C archive, which have no pulsed state.
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn discard_menu_pulse(index: i32) -> bool {
     menu_key_slot(index).is_some()
 }
@@ -840,8 +833,7 @@ pub extern "C" fn rust_automation_presented_frame() -> i32 {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006
-#[no_mangle]
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
@@ -850,8 +842,7 @@ pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
 }
 
 /// C-callable getter for `CurrentInputState.menu[index]` (stub for tests).
-#[no_mangle]
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
@@ -865,8 +856,7 @@ pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006
-#[no_mangle]
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
@@ -875,8 +865,7 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 }
 
 /// C-callable getter for `PulsedInputState.menu[index]` (stub for tests).
-#[no_mangle]
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
@@ -889,7 +878,7 @@ pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
 // ===========================================================================
 
 /// Read-only interstellar observations, copied at the automation game-thread boundary.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn star_flight_observation(
     target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
@@ -942,7 +931,7 @@ pub(crate) fn star_flight_observation(
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn star_flight_observation(
     _target: super::star_flight::StarTarget,
 ) -> super::star_flight::Observation {
@@ -950,19 +939,19 @@ pub(crate) fn star_flight_observation(
 }
 
 /// Player-selected combat settings: enabled flag and speed selector.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
     // Game thread, read only while the input callback owns the live game.
     let flags = unsafe { std::ptr::addr_of!(GLOB_DATA.game_state.glob_flags).read() };
     Some((flags & (1 << 5) != 0, flags >> 6))
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn cyborg_settings() -> Option<(bool, u8)> {
     None
 }
 
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
     crate::state::ffi::named_state_value("STARBASE_AVAILABLE")?;
     use crate::comm::dispatch::CShipFragment;
@@ -979,7 +968,7 @@ pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
     }
 }
 
-#[cfg(not(feature = "linked_c_archive"))]
+#[cfg(test)]
 pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
     None
 }
@@ -987,7 +976,7 @@ pub(crate) fn escort_roster() -> Option<Vec<(u8, u16)>> {
 pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
     let (cyborg, speed) = cyborg_settings().unwrap_or((false, 0));
     let (player, enemy) = battle_fleets().unwrap_or((0, 0));
-    #[cfg(feature = "linked_c_archive")]
+    #[cfg(not(test))]
     let picker = {
         let (generation, active) = super::ui_observation::ship_picker_observation();
         active.then(|| super::fleet_fight::Picker {
@@ -996,7 +985,7 @@ pub(crate) fn fleet_fight_observation() -> super::fleet_fight::Observation {
             escorts: crate::pickship::ffi::live_escort_indices(),
         })
     };
-    #[cfg(not(feature = "linked_c_archive"))]
+    #[cfg(test)]
     let picker = None;
     super::fleet_fight::Observation {
         activity: crate::mainloop::ffi::get_current_activity().0,

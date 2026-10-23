@@ -24,12 +24,12 @@ fn c_scaler_surface_fixtures() {
         let (expected, rest) = rest.split_at((dp * h * 2) as usize);
         records = rest;
         let scaler: ScaleFunc = match kind {
-            0 => Scale_Nearest,
-            1 => Scale_BilinearFilter,
-            2 => Scale_TriScanFilter,
-            3 => Scale_BiAdaptAdvFilter,
-            4 => Scale_BiAdaptFilter,
-            5 => Scale_HqFilter,
+            0 => scale_nearest,
+            1 => scale_bilinear_filter,
+            2 => scale_tri_scan_filter,
+            3 => scale_bi_adapt_adv_filter,
+            4 => scale_bi_adapt_filter,
+            5 => scale_hq_filter,
             _ => panic!("unknown fixture scaler"),
         };
         let mut input = input.to_vec();
@@ -153,12 +153,12 @@ fn all_hq_patterns_and_conditional_edges_match_c() {
 #[test]
 fn selection_preserves_flag_priority_and_default_for_every_setting() {
     let expected: [ScaleFunc; 6] = [
-        Scale_BilinearFilter,
-        Scale_BiAdaptFilter,
-        Scale_BiAdaptAdvFilter,
-        Scale_TriScanFilter,
-        Scale_HqFilter,
-        Scale_Nearest,
+        scale_bilinear_filter,
+        scale_bi_adapt_filter,
+        scale_bi_adapt_adv_filter,
+        scale_tri_scan_filter,
+        scale_hq_filter,
+        scale_nearest,
     ];
     // Include scanlines, fullscreen, unrelated bits, and the xBRZ flags,
     // which historically select nearest in this 2x software table.
@@ -167,7 +167,10 @@ fn selection_preserves_flag_priority_and_default_for_every_setting() {
             .find(|bit| flags & (1 << bit) != 0)
             .map_or(5, |bit| bit - 3);
         assert!(
-            std::ptr::fn_addr_eq(Scale_PrepPlatform(flags, std::ptr::null()), expected[index]),
+            std::ptr::fn_addr_eq(
+                scale_prep_platform(flags, std::ptr::null()),
+                expected[index]
+            ),
             "flags {flags:#x}"
         );
     }

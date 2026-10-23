@@ -23,7 +23,6 @@ use std::os::raw::c_int;
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 on success, -1 on failure.
 /// Buffer must be at least MELEE_TEAM_SERIAL_SIZE bytes.
-#[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_team_serialize(
     ships: *const u8,
     name: *const u8,
@@ -65,7 +64,6 @@ pub unsafe extern "C" fn rust_supermelee_team_serialize(
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 on success, -1 on failure.
-#[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_team_deserialize(
     in_buf: *const u8,
     buf_len: usize,
@@ -105,7 +103,6 @@ pub unsafe extern "C" fn rust_supermelee_team_deserialize(
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 for invalid/sentinel values.
-#[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
     match MeleeShip::from_u8(ship_id) {
         Some(ship) => ship_cost(ship),
@@ -122,7 +119,6 @@ pub unsafe extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// `ships` must point to MELEE_FLEET_SIZE bytes.
-#[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
     if ships.is_null() {
         return 0;
@@ -142,7 +138,6 @@ pub unsafe extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-#[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_team_serial_size() -> usize {
     MELEE_TEAM_SERIAL_SIZE
 }

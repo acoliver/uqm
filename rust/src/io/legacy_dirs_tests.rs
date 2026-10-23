@@ -89,12 +89,12 @@ fn expansion_boundaries_home_failures_and_nonrecursive_environment() {
 #[serial_test::serial]
 fn ffi_expansion_and_home_pointer() {
     unsafe {
-        let home = getHomeDir();
+        let home = get_home_dir();
         assert!(!home.is_null());
         let home_bytes = CStr::from_ptr(home).to_bytes();
         let mut result = vec![0i8; home_bytes.len() + 16];
         assert_eq!(
-            expandPath(
+            expand_path(
                 result.as_mut_ptr(),
                 result.len(),
                 c"~/save".as_ptr(),
@@ -106,13 +106,13 @@ fn ffi_expansion_and_home_pointer() {
             CStr::from_ptr(result.as_ptr()).to_bytes(),
             [home_bytes, b"/save"].concat()
         );
-        assert_eq!(expandPath(result.as_mut_ptr(), 1, c"xx".as_ptr(), 0), -1);
+        assert_eq!(expand_path(result.as_mut_ptr(), 1, c"xx".as_ptr(), 0), -1);
         assert_eq!(
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::ENAMETOOLONG)
         );
         assert_eq!(
-            expandPath(
+            expand_path(
                 result.as_mut_ptr(),
                 result.len(),
                 c"${broken".as_ptr(),
@@ -150,7 +150,7 @@ fn mkdirhier_preserves_existing_entries_and_reports_intermediate_files() {
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::ENOTDIR)
         );
-        assert_eq!(createDirectory(file.as_ptr(), 0o777), -1);
+        assert_eq!(create_directory(file.as_ptr(), 0o777), -1);
         assert_eq!(
             std::io::Error::last_os_error().raw_os_error(),
             Some(libc::EEXIST)

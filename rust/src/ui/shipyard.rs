@@ -1,4 +1,4 @@
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.

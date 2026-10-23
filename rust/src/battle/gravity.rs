@@ -13,11 +13,11 @@ use std::os::raw::{c_int, c_void};
 // ---------------------------------------------------------------------------
 
 extern "C" {
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn uqm_get_head_element() -> HElement;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn uqm_wrap_delta_x(dx: i16) -> i16;
-    #[cfg(all(test, not(feature = "linked_c_archive")))]
+    #[cfg(test)]
     fn uqm_wrap_delta_y(dy: i16) -> i16;
 
     // Graphics intersection — real C functions
@@ -34,21 +34,21 @@ extern "C" {
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn uqm_get_head_element() -> HElement {
     (crate::mainloop::main2_abi::uqm_get_head_element()) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn uqm_wrap_delta_x(dx: i16) -> i16 {
     (crate::mainloop::main2_abi::uqm_wrap_delta_x(dx as _)) as _
 }
 
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 unsafe fn uqm_wrap_delta_y(dy: i16) -> i16 {
     (crate::mainloop::main2_abi::uqm_wrap_delta_y(dy as _)) as _
 }

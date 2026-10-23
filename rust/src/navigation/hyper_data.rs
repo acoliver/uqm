@@ -1,13 +1,12 @@
 //! Hyperspace graphics resources and entry/exit lifecycle.
-#![cfg(any(not(test), feature = "linked_c_archive"))]
+#![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::globals::{GlobData, RadarContext};
 use super::{get, set};
 use std::ptr;
 
-#[no_mangle]
-pub static mut hyperstars: [FRAME; 3] = [ptr::null_mut(); 3];
+pub static mut HYPERSTARS: [FRAME; 3] = [ptr::null_mut(); 3];
 static mut CMAPS: [COLORMAP; 2] = [ptr::null_mut(); 2];
 
 pub(super) fn color(r: u8, g: u8, b: u8) -> Color {
@@ -23,7 +22,7 @@ pub(super) fn color(r: u8, g: u8, b: u8) -> Color {
 /// Game-thread access, after hyperspace users release their frames and maps.
 #[no_mangle]
 pub unsafe extern "C" fn FreeHyperData() {
-    let frames = ptr::addr_of_mut!(hyperstars).cast::<FRAME>();
+    let frames = ptr::addr_of_mut!(HYPERSTARS).cast::<FRAME>();
     for i in 0..3 {
         DestroyDrawable(ReleaseDrawable(*frames.add(i)));
         *frames.add(i) = ptr::null_mut();
@@ -36,14 +35,14 @@ pub unsafe extern "C" fn FreeHyperData() {
 }
 
 unsafe fn load() {
-    if hyperstars[0].is_null() {
-        hyperstars[0] =
+    if HYPERSTARS[0].is_null() {
+        HYPERSTARS[0] =
             CaptureDrawable(LoadGraphicInstance(AMBIENT_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        hyperstars[1] =
+        HYPERSTARS[1] =
             CaptureDrawable(LoadGraphicInstance(HYPERSTARS_MASK_PMAP_ANIM.as_ptr().cast()).cast());
         CMAPS[0] =
             CaptureStringTable(LoadStringTableInstance(HYPER_COLOR_TAB.as_ptr().cast()).cast());
-        hyperstars[2] =
+        HYPERSTARS[2] =
             CaptureDrawable(LoadGraphicInstance(ARISPACE_MASK_PMAP_ANIM.as_ptr().cast()).cast());
         CMAPS[1] =
             CaptureStringTable(LoadStringTableInstance(ARISPACE_COLOR_TAB.as_ptr().cast()).cast());
@@ -58,7 +57,7 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
     GlobData.Game_state.ShipStamp.origin = POINT { x: -9999, y: -9999 };
     load();
     std::ptr::swap(
-        ptr::addr_of_mut!(hyperstars[0]),
+        ptr::addr_of_mut!(HYPERSTARS[0]),
         ptr::addr_of_mut!(stars_in_space),
     );
     if LastActivity & CHECK_LOAD as u16 == 0 {
@@ -93,7 +92,7 @@ pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
 #[no_mangle]
 pub unsafe extern "C" fn FreeHyperspace() -> BOOLEAN {
     std::ptr::swap(
-        ptr::addr_of_mut!(hyperstars[0]),
+        ptr::addr_of_mut!(HYPERSTARS[0]),
         ptr::addr_of_mut!(stars_in_space),
     );
     1

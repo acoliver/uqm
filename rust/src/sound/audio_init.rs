@@ -8,7 +8,7 @@ use crate::sound::formats::DecoderFormats;
 use crate::sound::heart_ffi::{
     InitStreamDecoder, SetMusicVolume, SetSFXVolume, SetSpeechVolume, UninitStreamDecoder,
 };
-use crate::sound::mixer::ffi::{rust_mixer_Init, rust_mixer_Uninit};
+use crate::sound::mixer::ffi::{rust_mixer_init, rust_mixer_uninit};
 use crate::sound::volume_globals::{musicVolume, sfxVolumeScale, speechVolumeScale};
 
 // Values of the `audio_FORMAT_*` enumerators in audiocore.h. The decoders
@@ -40,7 +40,7 @@ static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
     log::info!("initAudio: Using Rust mixer backend");
 
-    if rust_mixer_Init(
+    if rust_mixer_init(
         MIXER_FREQUENCY,
         MIXER_FORMAT_STEREO16,
         MIXER_QUALITY_MEDIUM,
@@ -62,14 +62,14 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
     };
     if SoundDecoder_Init(flags, &mut formats) != 0 {
         log::error!("Sound decoders initialization failed.");
-        rust_mixer_Uninit();
+        rust_mixer_uninit();
         return -1;
     }
     log::info!("Sound decoders initialized.");
 
     if InitStreamDecoder() != 0 {
         log::error!("Stream decoder initialization failed.");
-        rust_mixer_Uninit();
+        rust_mixer_uninit();
         return -1;
     }
 
@@ -96,6 +96,6 @@ pub extern "C" fn unInitAudio() {
     unsafe {
         UninitStreamDecoder();
         SoundDecoder_Uninit();
-        rust_mixer_Uninit();
+        rust_mixer_uninit();
     }
 }

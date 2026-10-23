@@ -51,7 +51,6 @@ unsafe extern "C" fn putpixel<const BPP: usize>(
 }
 /// # Safety
 /// Surface and its format must be live; returned function requires in-bounds coordinates.
-#[no_mangle]
 pub unsafe extern "C" fn getpixel_for(surface: *mut SDL_Surface) -> Option<GetPixelFn> {
     match (*(*surface).format).BytesPerPixel {
         1 => Some(getpixel::<1>),
@@ -63,7 +62,6 @@ pub unsafe extern "C" fn getpixel_for(surface: *mut SDL_Surface) -> Option<GetPi
 }
 /// # Safety
 /// Surface and its format must be live; returned function requires in-bounds coordinates.
-#[no_mangle]
 pub unsafe extern "C" fn putpixel_for(surface: *mut SDL_Surface) -> Option<PutPixelFn> {
     match (*(*surface).format).BytesPerPixel {
         1 => Some(putpixel::<1>),
@@ -144,7 +142,6 @@ fn code(x: f32, y: f32, xmin: f32, ymin: f32, xmax: f32, ymax: f32) -> u8 {
 }
 /// # Safety
 /// Endpoint pointers must be writable and rectangle readable.
-#[no_mangle]
 pub unsafe extern "C" fn clip_line(
     lx0: *mut i32,
     ly0: *mut i32,
@@ -192,7 +189,6 @@ pub unsafe extern "C" fn clip_line(
 }
 /// # Safety
 /// Destination must be live and locked, callback must support its format.
-#[no_mangle]
 #[allow(clippy::too_many_arguments, reason = "existing C ABI")]
 pub unsafe extern "C" fn line_prim(
     mut x1: i32,
@@ -250,7 +246,6 @@ pub unsafe extern "C" fn line_prim(
 }
 /// # Safety
 /// Rectangle must be writable and clipping rectangle readable.
-#[no_mangle]
 pub unsafe extern "C" fn clip_rect(rect: *mut SDL_Rect, clip: *const SDL_Rect) -> i32 {
     let r = &mut *rect;
     let c = &*clip;
@@ -284,7 +279,6 @@ pub unsafe extern "C" fn clip_rect(rect: *mut SDL_Rect, clip: *const SDL_Rect) -
 }
 /// # Safety
 /// Destination must be live and locked, callback must support its format.
-#[no_mangle]
 pub unsafe extern "C" fn fillrect_prim(
     mut rect: SDL_Rect,
     color: u32,
@@ -306,7 +300,6 @@ pub unsafe extern "C" fn fillrect_prim(
 }
 /// # Safety
 /// Source and destination must be writable, clip must be readable.
-#[no_mangle]
 pub unsafe extern "C" fn clip_blt_rects(
     src: *mut SDL_Rect,
     dst: *mut SDL_Rect,
@@ -355,7 +348,6 @@ pub unsafe extern "C" fn clip_blt_rects(
 }
 /// # Safety
 /// Surfaces must be live and locked; callback must support destination format.
-#[no_mangle]
 pub unsafe extern "C" fn blt_prim(
     src: *mut SDL_Surface,
     mut src_r: SDL_Rect,

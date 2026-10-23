@@ -54,8 +54,8 @@ struct Driver;
 impl Driver {
     fn new() -> Self {
         unsafe {
-            ffi::rust_VControl_Uninit();
-            ffi::rust_VControl_Init();
+            ffi::rust_v_control_uninit();
+            ffi::rust_v_control_init();
         }
         *INPUT.lock() = InputState::new();
         INPUT.lock().initialized = true;
@@ -76,8 +76,8 @@ fn character_modes_defer_sdl_changes_to_events_and_clear_input() {
     let _driver = Driver::new();
     let mut target = 0;
     unsafe {
-        ffi::rust_VControl_AddKeyBinding(32, &mut target);
-        ffi::rust_VControl_ProcessKeyDown(32);
+        ffi::rust_vcontrol_add_key_binding(32, &mut target);
+        ffi::rust_vcontrol_process_key_down(32);
     }
     EnterCharacterMode();
     assert_eq!(target, 0);
@@ -90,7 +90,7 @@ fn character_modes_defer_sdl_changes_to_events_and_clear_input() {
     {
         *dest = *byte as c_char;
     }
-    unsafe { ProcessInputEvent(&text) };
+    unsafe { process_input_event(&text) };
     assert!(INPUT.lock().applied_character_mode);
     assert_eq!(GetNextCharacter(), u32::from('é'));
     assert_eq!(GetNextCharacter(), u32::from('水'));
@@ -100,7 +100,7 @@ fn character_modes_defer_sdl_changes_to_events_and_clear_input() {
     assert_eq!(GetLastCharacter(), 0);
     assert!(!INPUT.lock().character_mode);
     assert!(INPUT.lock().applied_character_mode);
-    unsafe { ProcessInputEvent(&event(0x400)) };
+    unsafe { process_input_event(&event(0x400)) };
     assert!(!INPUT.lock().applied_character_mode);
 }
 
@@ -110,20 +110,20 @@ fn numlock_keypad_characters_bypass_controls_only_in_character_mode() {
     let _driver = Driver::new();
     let key = super::super::keynames::sdl2_keys::SDLK_KP_1;
     let mut target = 0;
-    unsafe { ffi::rust_VControl_AddKeyBinding(key, &mut target) };
+    unsafe { ffi::rust_vcontrol_add_key_binding(key, &mut target) };
     let mut key_down = event(0x300);
     key_down.key.keysym.sym = key;
     key_down.key.keysym.mod_ = sys::SDL_Keymod::KMOD_NUM as u16;
     EnterCharacterMode();
-    unsafe { ProcessInputEvent(&key_down) };
+    unsafe { process_input_event(&key_down) };
     assert_eq!(target, 0);
     ExitCharacterMode();
-    unsafe { ProcessInputEvent(&key_down) };
+    unsafe { process_input_event(&key_down) };
     assert_eq!(target & 0xff, 1);
     TFB_ResetControls();
     EnterCharacterMode();
     key_down.key.keysym.mod_ = 0;
-    unsafe { ProcessInputEvent(&key_down) };
+    unsafe { process_input_event(&key_down) };
     assert_eq!(target & 0xff, 1);
     TFB_ResetControls();
     key_down.key.keysym.sym = super::super::keynames::sdl2_keys::SDLK_KP_ENTER;
@@ -138,18 +138,18 @@ fn input_gate_mouse_buttons_frame_start_and_reset_match_c() {
     unsafe {
         ptr::write_volatile(ptr::addr_of_mut!(MouseButtonDown), 0);
         INPUT.lock().initialized = false;
-        ProcessInputEvent(&event(0x401));
+        process_input_event(&event(0x401));
         assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 0);
         INPUT.lock().initialized = true;
-        ProcessInputEvent(&event(0x401));
+        process_input_event(&event(0x401));
         assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 1);
-        ProcessInputEvent(&event(0x402));
+        process_input_event(&event(0x402));
         assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 0);
     }
     let mut target = 0;
     unsafe {
-        ffi::rust_VControl_AddKeyBinding(32, &mut target);
-        ffi::rust_VControl_ProcessKeyDown(32);
+        ffi::rust_vcontrol_add_key_binding(32, &mut target);
+        ffi::rust_vcontrol_process_key_down(32);
     }
     assert_eq!(target, 0x101);
     BeginInputFrame();
@@ -186,7 +186,7 @@ fn resource_controls_register_menu_alternates_templates_and_removal() {
         put("keys.1.up.2", "key w");
         let mut menu = [0; 24];
         let mut flight = [0; 14];
-        TFB_SetInputVectors(menu.as_mut_ptr(), 24, flight.as_mut_ptr(), 2, 7);
+        tfb_set_input_vectors(menu.as_mut_ptr(), 24, flight.as_mut_ptr(), 2, 7);
         {
             let mut state = INPUT.lock();
             state.controls = (0..28).map(|_| empty_gesture()).collect();
@@ -205,11 +205,11 @@ fn resource_controls_register_menu_alternates_templates_and_removal() {
         let name = CStr::from_ptr(ptr::addr_of!(INPUT_TEMPLATES).cast::<c_char>());
         assert_eq!(name.to_bytes(), b"a name longer than twenty nin");
         assert_eq!(*ptr::addr_of!(INPUT_TEMPLATES).cast::<c_char>().add(30), 0);
-        ffi::rust_VControl_ProcessKeyDown(32);
+        ffi::rust_vcontrol_process_key_down(32);
         assert_eq!(menu[0] & 0xff, 1);
-        ffi::rust_VControl_ProcessKeyDown(27);
+        ffi::rust_vcontrol_process_key_down(27);
         assert_eq!(menu[0] & 0xff, 1, "alternate after a gap is not loaded");
-        ffi::rust_VControl_ProcessKeyDown(super::super::keynames::sdl2_keys::SDLK_UP);
+        ffi::rust_vcontrol_process_key_down(super::super::keynames::sdl2_keys::SDLK_UP);
         assert_eq!(flight[0] & 0xff, 1);
         let mut buffer = [0 as c_char; 40];
         InterrogateInputState(0, 0, 1, buffer.as_mut_ptr(), 40);
@@ -218,8 +218,8 @@ fn resource_controls_register_menu_alternates_templates_and_removal() {
         assert_eq!(buffer[0], 0);
         RemoveInputState(0, 0, 1);
         assert_eq!(res_HasKey(c"keys.1.up.2".as_ptr()), 0);
-        ffi::rust_VControl_ResetInput();
-        ffi::rust_VControl_ProcessKeyDown(i32::from(b'w'));
+        ffi::rust_vcontrol_reset_input();
+        ffi::rust_vcontrol_process_key_down(i32::from(b'w'));
         assert_eq!(flight[0], 0);
         TFB_UninitInput();
         UninitResourceSystem();

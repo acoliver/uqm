@@ -177,11 +177,11 @@ pub fn generate_life(
 /// The lander effects of Sol's energy pickup, ordered with the story writes.
 /// Report ownership and takeoff are the same operations as the default host.
 pub trait Pickup: Story {
-    /// `KillLanderCrewSeq (8, ONE_SECOND / 20)`; false stops the pickup.
+    /// `kill_lander_crew_seq (8, ONE_SECOND / 20)`; false stops the pickup.
     fn kill_lander_crew(&mut self, count: u16, interval_ticks: u32) -> bool;
     /// `GenerateDefault_landerReport (solarSys)`.
     fn lander_report(&mut self);
-    /// `SetLanderTakeoff ()`.
+    /// `set_lander_takeoff ()`.
     fn lander_takeoff(&mut self);
 }
 

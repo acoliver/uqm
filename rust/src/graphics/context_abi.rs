@@ -33,11 +33,9 @@ pub static mut _locPrim: PRIMITIVE = unsafe { std::mem::zeroed() };
 #[no_mangle]
 pub static mut _CurFontPtr: *mut font_desc = ptr::null_mut();
 #[cfg(feature = "debug-process")]
-#[no_mangle]
-pub static mut firstContext: *mut context_desc = ptr::null_mut();
+pub static mut FIRST_CONTEXT: *mut context_desc = ptr::null_mut();
 #[cfg(feature = "debug-process")]
-#[no_mangle]
-pub static mut contextEnd: *mut *mut context_desc = ptr::addr_of_mut!(firstContext);
+pub static mut CONTEXT_END: *mut *mut context_desc = ptr::addr_of_mut!(FIRST_CONTEXT);
 
 /// # Safety
 /// Context must be null or live, and context operations must be serialized.
@@ -80,8 +78,8 @@ pub unsafe extern "C" fn CreateContextAux(name: *const c_char) -> *mut context_d
     if !context.is_null() {
         (*context).name = name;
         (*context).next = ptr::null_mut();
-        *contextEnd = context;
-        contextEnd = ptr::addr_of_mut!((*context).next);
+        *CONTEXT_END = context;
+        CONTEXT_END = ptr::addr_of_mut!((*context).next);
     }
     context
 }
@@ -105,12 +103,12 @@ pub unsafe extern "C" fn DestroyContext(context: *mut context_desc) -> BOOLEAN {
     }
     #[cfg(feature = "debug-process")]
     {
-        let mut link = ptr::addr_of_mut!(firstContext);
+        let mut link = ptr::addr_of_mut!(FIRST_CONTEXT);
         while !(*link).is_null() && *link != context {
             link = ptr::addr_of_mut!((**link).next);
         }
-        if contextEnd == ptr::addr_of_mut!((*context).next) {
-            contextEnd = link;
+        if CONTEXT_END == ptr::addr_of_mut!((*context).next) {
+            CONTEXT_END = link;
         }
         *link = (*context).next;
     }
@@ -357,7 +355,7 @@ pub unsafe extern "C" fn GetContextName(context: *mut context_desc) -> *const c_
 #[cfg(feature = "debug-process")]
 #[no_mangle]
 pub unsafe extern "C" fn GetFirstContext() -> *mut context_desc {
-    firstContext
+    FIRST_CONTEXT
 }
 /// # Safety
 /// Context must be live on the serialized graphics thread.
