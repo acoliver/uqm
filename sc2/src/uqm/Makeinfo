@@ -3,7 +3,7 @@ uqm_CFILES="   cleanup.c
 		cnctdlg.c comm_variadic.c  credits.c
 		   fmv.c
 		gameinp.c gameopt.c
-		cons_res.c init.c intro.c
+		init.c intro.c
 		 outfit.c
 		 restart.c  setup.c setupmenu.c
 		  shipyard.c  starbase.c starcon.c

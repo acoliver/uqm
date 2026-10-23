@@ -9,3 +9,5 @@ pub mod setup;
 pub use init::*;
 pub use master::*;
 pub use setup::*;
+
+pub mod world_resources;
