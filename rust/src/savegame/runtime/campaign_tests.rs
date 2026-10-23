@@ -148,6 +148,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-vault-open" => (7, 6, 2156, 29, 5141, 115, 4),
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
+            "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
             "bomb-refueled" => (26, 6, 2156, 32, 21000, 1175, 0),
             "utwig-bomb" => (5, 6, 2156, 32, 6192, 1175, 0),
             "bomb-preguard" => (3, 6, 2156, 32, 6244, 115, 4),
