@@ -17,7 +17,9 @@ pub mod abi {
 pub mod events;
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 pub mod globals;
+pub mod groups;
 pub mod initial_state;
+pub mod interplanetary;
 
 #[cfg(any(not(test), feature = "linked_c_archive"))]
 fn get(name: &str) -> u8 {
