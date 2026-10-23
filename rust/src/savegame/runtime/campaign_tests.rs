@@ -149,6 +149,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "portal-sol" => (27, 2, 2157, 8, 16230, 1175, 0),
             "portal-staging" => (26, 1, 2157, 8, 16877, 1175, 0),
             "southeast-staging" => (4, 1, 2157, 14, 20256, 1175, 0),
             "bomb-refueled" => (26, 6, 2156, 32, 21000, 1175, 0),
