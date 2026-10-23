@@ -79,29 +79,9 @@ pub mod abi {
         CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
     };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyComputer(context: *mut ComputerInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyComputer"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyHuman(context: *mut HumanInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyHuman"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
-    #[cfg(any(not(test), feature = "linked_c_archive"))]
-    pub unsafe fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
-        extern "C" {
-            #[link_name = "battleEndReadyNetwork"]
-            fn legacy(context: *mut std::ffi::c_void) -> bool;
-        }
-        legacy(context.cast())
-    }
+    pub use crate::battle::tactrans_native::{
+        battleEndReadyComputer, battleEndReadyHuman, battleEndReadyNetwork,
+    };
     #[cfg(any(not(test), feature = "linked_c_archive"))]
     pub use crate::battle::world_elements::do_damage;
     pub use crate::math::TFB_SeedRandom;

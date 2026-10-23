@@ -27,6 +27,7 @@ pub mod ship_runtime;
 pub mod sounds;
 pub mod status_native;
 pub mod tactical;
+pub mod tactrans_native;
 pub mod velocity;
 pub mod weapon;
 pub mod weapon_native;
