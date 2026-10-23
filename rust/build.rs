@@ -324,6 +324,9 @@ fn generate_graphics_abi_bindings() -> Result<(), String> {
         println!("cargo:rerun-if-changed={header}");
         builder = builder.header(header);
     }
+    if env::var_os("CARGO_FEATURE_DEBUG_PROCESS").is_some() {
+        builder = builder.clang_arg("-DDEBUG");
+    }
     let bindings = builder
         .clang_arg("-I../sc2").clang_arg("-I../sc2/src")
         .allowlist_type("(frame_desc|drawable_desc|font_desc|FontPage|tfb_char|context_desc|PRIMITIVE|RESOURCE_DATA)")

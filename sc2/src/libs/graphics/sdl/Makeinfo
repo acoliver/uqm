@@ -1,4 +1,4 @@
-uqm_CFILES="primitives.c sdl2_pure.c
+uqm_CFILES="sdl2_pure.c
 		sdl_common.c sdl2_common.c
 		canvas.c"
 uqm_HFILES="opengl.h palette.h

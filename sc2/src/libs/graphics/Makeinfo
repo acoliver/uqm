@@ -2,7 +2,7 @@ if [ "$uqm_GFXMODULE" = "sdl" ]; then
 	uqm_SUBDIRS="sdl"
 fi
 
-uqm_CFILES="context.c drawable.c
+uqm_CFILES="
 		dcqueue.c
 		gfx_common.c
 		tfb_draw.c tfb_prim.c widgets.c"
