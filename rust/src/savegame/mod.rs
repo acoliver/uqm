@@ -1,15 +1,18 @@
-//! UQM Save version 1 ("UMS\x01") persistence.
+//! Campaign persistence for modern UMS and legacy compressed saves.
 //!
-//! This module owns the on-disk format and the slot files of the Starbase
-//! Save/Load menu. [`runtime`] captures and restores the part of a save that
-//! lives in `GlobData`, the game-state singleton and the clock's event queue;
-//! the other sections need the live queues and state files and are not ported.
+//! The menu ABI captures and restores live runtime sections; the codecs own
+//! the wire layouts, and slots owns resource-file storage.
 
+pub mod abi;
 pub mod decode;
 pub mod encode;
 pub mod error;
 pub mod format;
+#[cfg(not(test))]
+mod live;
 pub mod lzh;
+#[cfg(not(test))]
+mod problem;
 pub mod runtime;
 pub mod slots;
 pub mod types;
