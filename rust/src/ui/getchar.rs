@@ -79,7 +79,7 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
             if lower_len < (*pTES).JoyRegLength {
                 (*pTES).JoyRegLength = lower_len;
             }
-            log_add(
+            crate::log_abi::game_log!(
                 log_Level_log_Warning,
                 c"Warning: Joystick upper-lower registers size mismatch; using the smallest subset (%d)".as_ptr(),
                 (*pTES).JoyRegLength,

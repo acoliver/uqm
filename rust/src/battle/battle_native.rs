@@ -93,7 +93,6 @@ pub(crate) mod engine {
         fn RedrawQueue(clear: BOOLEAN);
         fn getGameState(state: *const BYTE, start: i32, end: i32) -> BYTE;
         fn setGameState(state: *mut BYTE, start: i32, end: i32, value: BYTE);
-        pub fn log_add(level: i32, format: *const std::ffi::c_char, ...);
     }
 
     /// # Safety
@@ -299,7 +298,7 @@ pub(crate) mod engine {
     }
 
     unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
-        log_add(
+        crate::log_abi::game_log!(
             5,
             c"BATTLE_DEBUG: DoBattle called, first_time=%d, CHECK_ABORT=%d".as_ptr(),
             (*bs).first_time,
@@ -389,7 +388,7 @@ pub(crate) mod engine {
             return GetNextStarShip(ptr::null_mut(), 0);
         }
         if player_control(0) & NETWORK_CONTROL != 0 && player_control(1) & NETWORK_CONTROL != 0 {
-            log_add(
+            crate::log_abi::game_log!(
                 2,
                 c"Only one side at a time can be network controlled.\n".as_ptr(),
             );
@@ -432,7 +431,7 @@ pub(crate) mod engine {
             battleFrameCount = 0;
             ResetWinnerStarShip();
             setBattleStateConnections(&mut bs);
-            log_add(
+            crate::log_abi::game_log!(
                 5,
                 c"BATTLE_DEBUG: About to call selectAllShips, CHECK_ABORT=%d, IN_BATTLE=%d"
                     .as_ptr(),
@@ -442,7 +441,7 @@ pub(crate) mod engine {
             if selectAllShips(count) == 0 {
                 set_activity(activity() | CHECK_ABORT as u16);
             } else {
-                log_add(
+                crate::log_abi::game_log!(
                     5,
                     c"BATTLE_DEBUG: selectAllShips returned TRUE, calling BattleSong".as_ptr(),
                 );
@@ -455,12 +454,12 @@ pub(crate) mod engine {
                     bs.InputFunc = Some(DoBattle);
                     bs.frame_cb = callback;
                     bs.first_time = inHQSpace();
-                    log_add(
+                    crate::log_abi::game_log!(
                         5,
                         c"BATTLE_DEBUG: About to call DoInput for battle loop".as_ptr(),
                     );
                     DoInput((&mut bs as *mut battlestate_struct).cast(), 0);
-                    log_add(
+                    crate::log_abi::game_log!(
                         5,
                         c"BATTLE_DEBUG: DoInput returned, CHECK_ABORT=%d".as_ptr(),
                         (activity() & CHECK_ABORT as u16 != 0) as i32,

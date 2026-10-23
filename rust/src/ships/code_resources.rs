@@ -44,7 +44,6 @@ mod engine {
         fn init_samatra() -> *mut RACE_DESC;
         fn init_sis() -> *mut RACE_DESC;
         fn init_probe() -> *mut RACE_DESC;
-        fn log_add(level: c_int, fmt: *const c_char, ...);
     }
     // Resource IDs follow uqm.rmp's SHIP values, not SPECIES_ID ordering.
     const INITIALIZERS: [Initializer; 28] = [
@@ -84,7 +83,7 @@ mod engine {
         let desc = if let Some(init) = INITIALIZERS.get(which as usize) {
             init()
         } else {
-            log_add(
+            crate::log_abi::game_log!(
                 3,
                 c"Unknown SHIP identifier '%d'".as_ptr(),
                 c_int::from(which),
@@ -132,7 +131,7 @@ mod engine {
         out: *mut *mut c_void,
     ) -> *mut c_void {
         if code.is_null() {
-            log_add(1, c"dummy.c::CaptureCodeRes() hCode==NULL! FATAL!".as_ptr());
+            crate::log_abi::game_log!(1, c"dummy.c::CaptureCodeRes() hCode==NULL! FATAL!".as_ptr());
             return ptr::null_mut();
         }
         // CODERES_STRUCT contains only its aligned RACE_DESC, at offset zero.

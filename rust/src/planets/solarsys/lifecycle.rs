@@ -111,7 +111,6 @@ mod ffi {
         pub(super) fn StarMap() -> i32;
         pub(super) fn SleepThreadUntil(time: u32);
         pub(super) fn GetTimeCounter() -> u32;
-        pub(super) fn log_add(level: i32, format: *const c_char, ...);
     }
 }
 
@@ -491,7 +490,7 @@ pub unsafe extern "C" fn ExploreSolarSys() {
         ffi::CurStarDescPtr =
             FindStar(ptr::null_mut(), ptr::addr_of_mut!(universe).cast(), 1, 1).cast();
         if ffi::CurStarDescPtr.is_null() {
-            ffi::log_add(1, c"ExploreSolarSys(): do not know where you are!".as_ptr());
+            crate::log_abi::game_log!(1, c"ExploreSolarSys(): do not know where you are!".as_ptr());
             #[cfg(feature = "debug-process")]
             libc::abort();
             #[cfg(not(feature = "debug-process"))]

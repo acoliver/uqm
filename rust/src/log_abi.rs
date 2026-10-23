@@ -1,28 +1,15 @@
-//! C ABI for the game log (`libs/log/uqmlog.h`).
-//!
-//! `log_add` and `log_add_nothread` are C variadics, which stable Rust cannot
-//! define; they remain as thin wrappers in `sc2/src/libs/log/uqmlog.c` that
-//! forward their `va_list` to [`log_addV`] and [`log_add_nothreadV`] here.
-//!
-//! The C implementation also kept a ring buffer of recent messages that was
-//! only ever read to fill the fatal-error message box. This platform has no
-//! message box (`msgbox_stub.c` printed a notice and discarded the text), so
-//! the buffer is not kept; `log_setLevel` (which only gated that buffer), `log_captureLines` and `log_initThreads` remain
-//! only because C callers still invoke them.
+//! Game logging with Rust-owned entry points and printf-compatible formatting.
 
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, CStr};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use libc::FILE;
 
 pub const LOG_WARNING: i32 = 3;
 const LOG_DEBUG: i32 = 5;
-const MAX_LOG_ENTRY_SIZE: usize = 256;
+pub(crate) const MAX_LOG_ENTRY_SIZE: usize = 256;
 
 extern "C" {
-    // `va_list` is passed through opaquely; it is pointer-sized on every
-    // supported target.
-    fn vsnprintf(buf: *mut c_char, size: usize, fmt: *const c_char, args: *mut c_void) -> c_int;
     fn atexit(callback: extern "C" fn()) -> c_int;
     #[cfg(target_os = "macos")]
     #[link_name = "__stderrp"]
@@ -75,15 +62,24 @@ pub extern "C" fn log_showBox(show: bool, err: bool) {
 #[no_mangle]
 pub extern "C" fn log_captureLines(_num: c_int) {}
 
-/// Formats `fmt` with `args` and echoes it to the output stream when `level`
-/// is within the stream threshold.
-///
-/// # Safety
-/// `fmt` must be a valid printf format and `args` the matching `va_list`.
-#[no_mangle]
-pub unsafe extern "C" fn log_addV(level: c_int, fmt: *const c_char, args: *mut c_void) {
-    let mut message = [0 as c_char; MAX_LOG_ENTRY_SIZE];
-    vsnprintf(message.as_mut_ptr(), MAX_LOG_ENTRY_SIZE - 1, fmt, args);
+// Keep printf's byte formatting and 254-byte payload limit without a C
+// variadic forwarding function or a va_list crossing the Rust boundary.
+macro_rules! game_log {
+    ($level:expr, $format:expr $(, $argument:expr)* $(,)?) => {{
+        let level = $level as i32;
+        let mut message = [0 as ::std::ffi::c_char; $crate::log_abi::MAX_LOG_ENTRY_SIZE];
+        ::libc::snprintf(
+            message.as_mut_ptr(),
+            $crate::log_abi::MAX_LOG_ENTRY_SIZE - 1,
+            $format,
+            $($argument),*
+        );
+        $crate::log_abi::log_cstr(level, ::std::ffi::CStr::from_ptr(message.as_ptr()));
+    }};
+}
+pub(crate) use game_log;
+
+pub(crate) fn log_cstr(level: i32, message: &CStr) {
     echo(level, message.as_ptr());
 }
 
@@ -102,7 +98,7 @@ fn echo(level: c_int, message: *const c_char) {
 }
 
 /// Logs a message already formatted by Rust code, with the same filtering as
-/// [`log_addV`]. Messages are dropped until `log_init` has set the stream.
+/// the printf entry points. Messages are dropped until `log_init` has set the stream.
 pub fn log_message(level: c_int, message: &str) {
     if STREAM_OUT.load(Ordering::Relaxed).is_null() {
         return;
@@ -115,16 +111,6 @@ pub fn log_message(level: c_int, message: &str) {
         *slot = byte as c_char;
     }
     echo(level, text.as_ptr());
-}
-
-/// Same as [`log_addV`]; the C version differed only in how it queued the
-/// message for the (absent) message box.
-///
-/// # Safety
-/// As for [`log_addV`].
-#[no_mangle]
-pub unsafe extern "C" fn log_add_nothreadV(level: c_int, fmt: *const c_char, args: *mut c_void) {
-    log_addV(level, fmt, args);
 }
 
 extern "C" fn exit_callback() {
@@ -144,5 +130,32 @@ fn display_log(is_error: bool) {
             c"Do not know how to display %s box\n".as_ptr(),
             kind.as_ptr(),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rust_log_calls_preserve_printf_bytes_limit_and_level_filter() {
+        unsafe {
+            let stream = libc::tmpfile();
+            assert!(!stream.is_null());
+            let previous = log_setOutput(stream);
+            crate::log_abi::game_log!(3, c"value=%d text=%s %%".as_ptr(), -17, c"raw\xff".as_ptr());
+            crate::log_abi::game_log!(6, c"filtered".as_ptr());
+            let long = std::ffi::CString::new(vec![b'x'; 300]).unwrap();
+            crate::log_abi::game_log!(5, c"%s".as_ptr(), long.as_ptr());
+            log_setOutput(previous);
+            libc::rewind(stream);
+            let mut bytes = [0; 512];
+            let count = libc::fread(bytes.as_mut_ptr().cast(), 1, bytes.len(), stream);
+            assert_eq!(libc::fclose(stream), 0);
+            let mut expected = b"value=-17 text=raw\xff %\n".to_vec();
+            expected.extend([b'x'; 254]);
+            expected.push(b'\n');
+            assert_eq!(&bytes[..count], expected);
+        }
     }
 }

@@ -47,7 +47,7 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     rect.extent.width += 1;
     DrawFilledRectangle(rect);
     if i16::from(count) * ITEM_HEIGHT > rect.extent.height {
-        log_add(
+        crate::log_abi::game_log!(
             log_Level_log_Error,
             c"Warning, no room for all menu items!".as_ptr(),
         );
@@ -121,7 +121,7 @@ unsafe fn alternate(base: &mut u8, current: &mut u8) -> bool {
                 true
             }
             _ => {
-                log_add(
+                crate::log_abi::game_log!(
                     log_Level_log_Error,
                     c"Unknown state combination: %d, %d".as_ptr(),
                     *base as i32,

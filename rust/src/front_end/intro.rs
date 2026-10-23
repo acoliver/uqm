@@ -64,10 +64,6 @@ mod runtime {
     };
     use std::ffi::{c_void, CStr};
 
-    // libs/log.h is not included in navigation's generated ABI yet.
-    extern "C" {
-        fn log_add(level: c_int, format: *const c_char, ...);
-    }
     const LOG_WARNING: c_int = 3;
     const MAX_FONTS: usize = 5;
     const MAX_TEXT_LINES: usize = 15;
@@ -306,7 +302,11 @@ mod runtime {
                         || index < 0
                         || index >= MAX_FONTS as c_int
                     {
-                        log_add(LOG_WARNING, c"Bad FONT command '%s'".as_ptr(), src);
+                        crate::log_abi::game_log!(
+                            LOG_WARNING,
+                            c"Bad FONT command '%s'".as_ptr(),
+                            src
+                        );
                         continue;
                     }
                     let font = &mut state.Fonts[index as usize];
@@ -511,7 +511,11 @@ mod runtime {
                         )
                     };
                     if cargs < 1 {
-                        log_add(LOG_WARNING, c"Bad DRAW command '%s'".as_ptr(), src);
+                        crate::log_abi::game_log!(
+                            LOG_WARNING,
+                            c"Bad DRAW command '%s'".as_ptr(),
+                            src
+                        );
                         continue;
                     }
                     if cargs < 5 {
@@ -603,7 +607,11 @@ mod runtime {
                         SetContextForeGroundColor(state.TextColor);
                         DrawLine(&mut line);
                     } else {
-                        log_add(LOG_WARNING, c"Bad LINE command '%s'".as_ptr(), src);
+                        crate::log_abi::game_log!(
+                            LOG_WARNING,
+                            c"Bad LINE command '%s'".as_ptr(),
+                            src
+                        );
                     }
                 }
                 b"MOVIE" => {
@@ -628,7 +636,11 @@ mod runtime {
                         state.TimeOutOnSkip = 1;
                         return 1;
                     } else {
-                        log_add(LOG_WARNING, c"Bad MOVIE command '%s'".as_ptr(), src);
+                        crate::log_abi::game_log!(
+                            LOG_WARNING,
+                            c"Bad MOVIE command '%s'".as_ptr(),
+                            src
+                        );
                     }
                 }
                 b"NOOP" => (),
@@ -757,7 +769,7 @@ mod runtime {
                 result
             }
             _ => {
-                log_add(
+                crate::log_abi::game_log!(
                     LOG_WARNING,
                     c"Tried to present '%s', of non-presentable type '%s'".as_ptr(),
                     presentation,
