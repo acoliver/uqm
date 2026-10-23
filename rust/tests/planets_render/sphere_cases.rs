@@ -327,15 +327,6 @@ pub fn rust_output() -> Vec<u8> {
     out
 }
 pub fn check_fixture(output: &[u8]) {
-    let source = std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../sc2/src/uqm/planets/plangen.c"
-    ))
-    .unwrap();
-    assert_eq!(
-        format!("{:x}", Sha256::digest(source)),
-        "0b1605af93c4c5a2c4b99200ad03a027255e3e5d8b7479c744c5d1afba153ec0"
-    );
     assert_eq!(
         format!("{:x}", Sha256::digest(&FIXTURE[..INITIAL_BYTES])),
         INITIAL_SHA

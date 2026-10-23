@@ -1,4 +1,4 @@
-//! Planet oval ABI and unwired topography adapter over the existing context renderer.
+//! Planet oval ABI and topography adapter over the existing context renderer.
 
 use crate::c_bindings::{assert_c_layout, global_state as c};
 use crate::comm::locdata::{CPoint, CRect};
@@ -224,8 +224,7 @@ pub fn topography_primitives(
     primitives
 }
 
-/// Unwired checkpoint adapter for the current solar-system resources.
-/// `GeneratePlanetSurface` continues to call the complete C provider.
+/// Render the current solar-system resources into a native frame.
 ///
 /// # Safety
 /// Game thread, active context, live destination and system/orbital descriptor.

@@ -32,5 +32,6 @@ pub mod report;
 pub mod roster;
 
 pub mod orbit;
+pub mod plangen;
 pub mod scan;
 pub mod sphere;
