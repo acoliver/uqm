@@ -148,3 +148,11 @@ win, `fly_to_star` reopens the real map and selects the original destination;
 it preserves the action's tick count and original fuel baseline. The refit run
 proved a fleet win followed by destination reselection and arrival. This fixes
 #429 without writing the autopilot target or position.
+
+`campaign-s06c-utwig-bomb` loads the preserved pre-guard save, approaches
+Zeta Hyades VI-b, challenges the Druuge and defeats their five-ship fleet with
+normal-speed Cyborg combat. The lander then collects the Precursor bomb through
+a surface collision. Native run `pt-p6-17` passed and saved slot 1 with
+`BOMB_UNPROTECTED=1`, `UTWIG_BOMB=1` and `UTWIG_BOMB_ON_SHIP=1`. The earned
+`utwig-bomb.sav` retains the returned Ultron, 32 crew and 6192 fuel, with no
+escorts remaining. `load-utwig-bomb-v1` independently reloads that checkpoint.
