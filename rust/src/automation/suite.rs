@@ -130,6 +130,32 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::PlanetSideResults,
         ],
     ),
+    row(
+        "campaign-s06c-utwig-bomb",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+            Domain::PlanetSideResults,
+        ],
+    ),
+    row(
+        "campaign-s06b-bomb-approach",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+        ],
+    ),
+    row(
+        "campaign-s06a-utwig-alliance",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+        ],
+    ),
     row("load-repaired-ultron-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s05b-repaired-ultron",
