@@ -19,7 +19,6 @@ sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/confirm.c
 sc2/src/uqm/cons_res.c
 sc2/src/uqm/credits.c
-sc2/src/uqm/flash.c
 sc2/src/uqm/fmv.c
 sc2/src/uqm/gameinp.c
 sc2/src/uqm/gameopt.c
