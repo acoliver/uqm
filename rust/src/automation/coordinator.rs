@@ -1594,10 +1594,11 @@ impl Coordinator {
                     inner,
                     RecordKind::SemanticAssertion,
                     format!(
-                        "flight_encounter_started:crew={:?}:activity={}:escape_generation={}",
+                        "flight_encounter_started:crew={:?}:activity={}:escape_generation={}:position={:?}",
                         observation.flagship_crew,
                         observation.activity,
-                        observation.escape_generation
+                        observation.escape_generation,
+                        input_ffi::star_flight_observation(flight.target).position
                     ),
                 );
             }

@@ -103,11 +103,24 @@ fn scenario_for(root: &Path, path: String) -> Result<Scenario, String> {
     let bytes = std::fs::read(&full).map_err(|error| format!("read {path}: {error}"))?;
     let document = parse_script(&bytes, &full).map_err(|error| format!("{path}: {error}"))?;
     let script = validate_script(document, &full).map_err(|error| format!("{path}: {error}"))?;
-    let wall_ms = script.budgets().max_wallclock_seconds.saturating_mul(1000);
+    let wall_ms = script
+        .budgets()
+        .max_wallclock_seconds
+        .checked_mul(1000)
+        .ok_or_else(|| format!("{path}: wall budget overflows milliseconds"))?;
+    let outer_child_timeout_ms = if wall_ms > RUNTIME_CONTRACT.outer_child_timeout_ms {
+        // Let the child report its own deadline and finish a pending observation.
+        let deadline = wall_ms
+            .checked_add(RUNTIME_CONTRACT.acknowledgement_timeout_ms)
+            .and_then(|value| value.checked_add(RUNTIME_CONTRACT.outer_child_kill_grace_ms))
+            .ok_or_else(|| format!("{path}: outer deadline overflows milliseconds"))?;
+        Some(deadline.max(LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS))
+    } else {
+        None
+    };
     Ok(Scenario {
         path,
-        outer_child_timeout_ms: (wall_ms > RUNTIME_CONTRACT.outer_child_timeout_ms)
-            .then_some(LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS),
+        outer_child_timeout_ms,
     })
 }
 
@@ -211,6 +224,22 @@ mod tests {
             LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS
         );
         assert!(long.runtime_contract().has_valid_deadline_order());
+    }
+
+    #[test]
+    fn outer_deadline_covers_the_scripts_declared_wall_budget() {
+        let scenario = scenario_for(
+            &root(),
+            "rust/scripts/campaign-s07-taalo-protected.json".into(),
+        )
+        .expect("campaign scenario exists");
+        let bytes = std::fs::read(root().join(&scenario.path)).unwrap();
+        let document = parse_script(&bytes, Path::new(&scenario.path)).unwrap();
+        let script = validate_script(document, Path::new(&scenario.path)).unwrap();
+        assert!(
+            scenario.runtime_contract().outer_child_timeout_ms
+                > script.budgets().max_wallclock_seconds * 1000
+        );
     }
 
     #[test]
