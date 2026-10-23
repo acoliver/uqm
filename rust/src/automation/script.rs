@@ -4075,21 +4075,38 @@ mod tests {
             matches!(step, Action::WaitForCommunicationEnd(_))
         });
 
-        // A Cancel outside a conversation opens the flagship menu, so the
-        // exploration route lets the probe broadcast end by itself and pulses
-        // no Cancel before it reaches the planet menu.
+        // The opening presentation is skipped before gameplay. Once in flight,
+        // Cancel opens the flagship menu, so the probe broadcast must end itself.
         let explore = checked_in_steps("explore-planet-v1");
-        let orbit_flight = step_index(&explore, 0, |step| {
+        assert!(matches!(
+            explore[2],
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Cancel,
+                ..
+            })
+        ));
+        let flight_started = step_index(&explore, 3, |step| {
+            matches!(
+                step,
+                Action::AssertActivity(ActivityAssertion {
+                    mask: 255,
+                    equals: 4
+                })
+            )
+        });
+        let orbit_flight = step_index(&explore, flight_started, |step| {
             matches!(step, Action::NavigateToOrbit(_))
         });
         assert!(
-            !explore[..orbit_flight].iter().any(|step| matches!(
-                step,
-                Action::TapMenuKey(TapMenuKeyStep {
-                    key: MenuKey::Cancel,
-                    ..
-                })
-            )),
+            !explore[flight_started..orbit_flight]
+                .iter()
+                .any(|step| matches!(
+                    step,
+                    Action::TapMenuKey(TapMenuKeyStep {
+                        key: MenuKey::Cancel,
+                        ..
+                    })
+                )),
             "explore-planet-v1 must not pulse Cancel before the orbit flight"
         );
     }

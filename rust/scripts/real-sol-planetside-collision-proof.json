@@ -15,9 +15,9 @@
       "key": "select",
       "value": 1,
       "hold": 3,
-      "settle": 15
+      "settle": 10
     },
-    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 30},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 3, "settle": 1},
     {
       "action": "wait_input_ticks",
       "count": 20

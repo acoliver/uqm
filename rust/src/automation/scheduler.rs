@@ -1802,8 +1802,12 @@ mod tests {
                 (32, MenuKey::Select, 1),
                 (33, MenuKey::Select, 1),
                 (34, MenuKey::Select, 0),
+                (45, MenuKey::Cancel, 1),
+                (46, MenuKey::Cancel, 1),
+                (47, MenuKey::Cancel, 1),
+                (48, MenuKey::Cancel, 0),
             ],
-            "no key may be written before the restart menu reports ready"
+            "new-game selection and intro-skip input must follow restart readiness"
         );
     }
 
