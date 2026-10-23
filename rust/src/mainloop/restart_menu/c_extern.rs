@@ -76,35 +76,238 @@ pub struct Point {
 // ===========================================================================
 
 extern "C" {
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_utwig_bomb_on_ship() -> u8;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_utwig_bomb_on_ship(v: u8);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_utwig_bomb() -> u8;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_player_control(player: u8, control: u16);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_pulsed_menu_key(key_index: u8) -> c_int;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_mouse_button_down() -> c_int;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_time_counter() -> u32;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_sleep_thread_until(time: u32);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_sleep_thread(duration: u32);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_game_paused(val: c_int);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_reinit_race_queues();
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_assign_star_planet_globals();
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_do_popup_window_msg(string_id: u16);
 
     // --- Menu state lifecycle (rust_bridge_restart.c) ---
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_initialized(pms: *mut c_void, val: i16);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_cur_state(pms: *mut c_void, state: u8);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_cur_frame(pms: *mut c_void, frame: usize);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_h_music(pms: *mut c_void, handle: usize);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_create_menu_state() -> *mut c_void;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_destroy_menu_state(pms: *mut c_void);
 
     // --- Menu drawing (de-staticized in restart.c under USE_RUST_RESTART) ---
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn DrawRestartMenuGraphic(pms: *mut c_void);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn DrawRestartMenu(pms: *mut c_void, new_state: u8, frame: *mut c_void);
+}
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_utwig_bomb_on_ship() -> u8 {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_utwig_bomb_on_ship(v: u8) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship(v as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_utwig_bomb() -> u8 {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_player_control(player: u8, control: u16) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_player_control(player as _, control as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_pulsed_menu_key(key_index: u8) -> c_int {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_pulsed_menu_key(key_index as _)) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_mouse_button_down() -> c_int {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_mouse_button_down()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_time_counter() -> u32 {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_time_counter()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_sleep_thread_until(time: u32) {
+    crate::mainloop::restart_menu::menu_abi::uqm_sleep_thread_until(time as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_sleep_thread(duration: u32) {
+    crate::mainloop::restart_menu::menu_abi::uqm_sleep_thread(duration as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_game_paused(val: c_int) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_game_paused(val as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_reinit_race_queues() {
+    crate::mainloop::restart_menu::menu_abi::uqm_reinit_race_queues();
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_assign_star_planet_globals() {
+    crate::mainloop::restart_menu::menu_abi::uqm_assign_star_planet_globals();
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_do_popup_window_msg(string_id: u16) {
+    crate::mainloop::restart_menu::menu_abi::uqm_do_popup_window_msg(string_id as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_menu_cur_frame(pms: *mut c_void) -> usize {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_menu_cur_frame(pms as _)) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_menu_priv_data(pms: *mut c_void) -> *mut c_void {
+    (crate::mainloop::restart_menu::menu_abi::uqm_get_menu_priv_data(pms as _)) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_flash_context(pms: *mut c_void, ctx: usize) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_flash_context(pms as _, ctx as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_initialized(pms: *mut c_void, val: i16) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_initialized(pms as _, val as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_cur_state(pms: *mut c_void, state: u8) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_cur_state(pms as _, state as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_cur_frame(pms: *mut c_void, frame: usize) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_cur_frame(pms as _, frame as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_h_music(pms: *mut c_void, handle: usize) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_h_music(pms as _, handle as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_create_menu_state() -> *mut c_void {
+    (crate::mainloop::restart_menu::menu_abi::uqm_create_menu_state()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_set_menu_priv_data(pms: *mut c_void, data: *mut c_void) {
+    crate::mainloop::restart_menu::menu_abi::uqm_set_menu_priv_data(pms as _, data as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_destroy_menu_state(pms: *mut c_void) {
+    crate::mainloop::restart_menu::menu_abi::uqm_destroy_menu_state(pms as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn draw_restart_menu_graphic(pms: *mut c_void) {
+    crate::mainloop::restart_menu::render_abi::DrawRestartMenuGraphic(pms as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn draw_restart_menu(pms: *mut c_void, new_state: u8, frame: *mut c_void) {
+    crate::mainloop::restart_menu::render_abi::DrawRestartMenu(
+        pms as _,
+        new_state as _,
+        frame as _,
+    );
 }
 
 // ===========================================================================
@@ -113,12 +316,59 @@ extern "C" {
 
 extern "C" {
     pub fn get_current_activity() -> u16;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn set_current_activity(v: u16);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn get_last_activity() -> u16;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn set_last_activity(v: u16);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn set_next_activity(v: u16);
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn uqm_get_crew_enlisted() -> u16;
+    #[cfg(all(test, not(feature = "linked_c_archive")))]
     pub fn set_main_exited(b: c_int);
+}
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn set_current_activity(v: u16) {
+    crate::mainloop::state_abi::set_current_activity(v as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn get_last_activity() -> u16 {
+    (crate::mainloop::state_abi::get_last_activity()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn set_last_activity(v: u16) {
+    crate::mainloop::state_abi::set_last_activity(v as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn set_next_activity(v: u16) {
+    crate::mainloop::state_abi::set_next_activity(v as _);
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn uqm_get_crew_enlisted() -> u16 {
+    (crate::mainloop::state_abi::uqm_get_crew_enlisted()) as _
+}
+
+/// # Safety
+/// Called on the game thread with the live resources required by the Rust provider.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub unsafe fn set_main_exited(b: c_int) {
+    crate::mainloop::state_abi::set_main_exited(b as _);
 }
 
 // ===========================================================================
@@ -223,3 +473,9 @@ extern "C" {
     pub fn SplashScreen(callback: Option<extern "C" fn(u32)>);
     pub fn DoPopupWindow(string: *const c_char);
 }
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub use draw_restart_menu_graphic as DrawRestartMenuGraphic;
+
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub use draw_restart_menu as DrawRestartMenu;

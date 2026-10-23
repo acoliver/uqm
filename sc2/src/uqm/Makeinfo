@@ -20,7 +20,7 @@ uqm_CFILES="$uqm_CFILES "
 
 # Restart-menu wrapper functions (game-state, input, time, globals).
 # Always compiled -- references extern globals and public-header macros only.
-uqm_CFILES="$uqm_CFILES rust_bridge_restart.c"
+uqm_CFILES="$uqm_CFILES "
 
 # Binary-inversion bridge: global setters, config/dir wrappers for Rust main.
 uqm_CFILES="$uqm_CFILES rust_bridge_main2.c"
@@ -37,5 +37,5 @@ uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		starmap.h rust_comm.h
 		units.h uqmdebug.h util.h velocity.h weapon.h
 
-		rust_bridge_restart.h"
+		"
 
