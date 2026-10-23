@@ -3,7 +3,7 @@ if [ "$uqm_GFXMODULE" = "sdl" ]; then
 fi
 
 uqm_CFILES="context.c drawable.c filegfx.c
-		dcqueue.c gfxload.c
+		dcqueue.c
 		font.c frame.c gfx_common.c loaddisp.c
 		resgfx.c tfb_draw.c tfb_prim.c widgets.c"
 
