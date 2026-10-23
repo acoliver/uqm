@@ -25,3 +25,5 @@ pub mod starmap_cursor;
 pub mod devices;
 
 pub mod cargo;
+
+pub mod report;
