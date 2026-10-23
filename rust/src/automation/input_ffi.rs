@@ -213,6 +213,26 @@ pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
     None
 }
 
+/// The flight velocity published by `sis_hyper_postprocess` has stopped.
+/// Unavailable outside hyperspace flight or while a conversation is active.
+#[cfg(not(test))]
+pub(crate) fn hyperspace_stopped() -> Option<bool> {
+    if crate::mainloop::ffi::get_current_activity().kind()
+        != crate::mainloop::types::ActivityKind::InHyperspace
+        || super::ui_observation::conversation_snapshot().active
+    {
+        return None;
+    }
+    // SAFETY: the input hook runs synchronously on the game thread.
+    let velocity = unsafe { std::ptr::addr_of!(GLOB_DATA.game_state.velocity).read() };
+    Some(velocity.get_current_components() == (0, 0))
+}
+
+#[cfg(test)]
+pub(crate) fn hyperspace_stopped() -> Option<bool> {
+    None
+}
+
 /// The hyperspace flagship's own `ShipFacing`, read from the player's
 /// `STARSHIP` as `SaveSisHyperState` finds it. `None` when no flagship is in
 /// flight or its queues are inconsistent. Nothing is written.

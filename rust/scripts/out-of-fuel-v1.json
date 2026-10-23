@@ -270,8 +270,22 @@
       "label": "hyperspace-fuel-exhausted"
     },
     {
-      "action": "wait_input_ticks",
-      "count": 400
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "sis:fuel",
+            "op": "eq",
+            "value": 0
+          },
+          {
+            "key": "hyper:stopped",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 400
     },
     {
       "action": "record_hyperspace_position"
