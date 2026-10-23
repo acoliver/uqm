@@ -1,5 +1,4 @@
 sc2/src/libs/graphics/dcqueue.c
-sc2/src/libs/graphics/drawable.c
 sc2/src/libs/graphics/gfx_common.c
 sc2/src/libs/graphics/sdl/canvas.c
 sc2/src/libs/graphics/sdl/primitives.c

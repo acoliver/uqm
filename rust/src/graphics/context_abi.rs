@@ -1,7 +1,11 @@
 //! Graphics context ownership and API, ported from context.c (GPL-2.0-or-later).
+use super::drawable_abi::{CopyFrameRect, SetFrameHot};
+use super::loaddisp::LoadDisplayPixmap;
 use super::native_abi::*;
 use crate::memory::{rust_hcalloc, rust_hfree};
-use std::{ffi::c_char, ptr};
+#[cfg(feature = "debug-process")]
+use std::ffi::c_char;
+use std::ptr;
 
 const FORE: Color = Color {
     r: 255,
@@ -34,12 +38,6 @@ pub static mut firstContext: *mut context_desc = ptr::null_mut();
 #[cfg(feature = "debug-process")]
 #[no_mangle]
 pub static mut contextEnd: *mut *mut context_desc = ptr::addr_of_mut!(firstContext);
-
-extern "C" {
-    fn SetFrameHot(frame: *mut frame_desc, hot: HOT_SPOT) -> HOT_SPOT;
-    fn LoadDisplayPixmap(area: *const RECT, frame: *mut frame_desc) -> *mut drawable_desc;
-    fn CopyFrameRect(frame: *mut frame_desc, area: *const RECT) -> *mut drawable_desc;
-}
 
 /// # Safety
 /// Context must be null or live, and context operations must be serialized.

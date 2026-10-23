@@ -94,3 +94,5 @@ pub mod font_abi;
 pub mod loaddisp;
 
 pub mod context_abi;
+
+pub mod drawable_abi;
