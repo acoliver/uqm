@@ -84,6 +84,17 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
     pursue_heading(dx, dy, observation.ship_facing)
 }
 
+/// Recover the target's inner system before applying inertial orbital steering.
+#[must_use]
+pub fn steer_planet_orbit(mut observation: NavigationObservation, planet: u8) -> NavigationControl {
+    if observation.inner_planet == Some(planet) {
+        observation.inner_planet = None;
+        steer_moon_navigation(observation)
+    } else {
+        steer_toward_target(observation)
+    }
+}
+
 /// Turn toward a display-space direction and thrust once roughly aligned.
 fn pursue_heading(dx: f64, dy: f64, ship_facing: u8) -> NavigationControl {
     let full_circle = std::f64::consts::TAU;
@@ -332,6 +343,24 @@ mod tests {
             view_center_y: 113,
             target_guard_active: false,
         }
+    }
+
+    #[test]
+    fn orbit_reapproaches_from_outer_flight_after_an_encounter() {
+        let mut outer = observation(120, 160, 0, 100, 100);
+        outer.velocity_x = 30;
+        assert_eq!(steer_planet_orbit(outer, 0), steer_toward_target(outer));
+        let mut wrong_inner = outer;
+        wrong_inner.inner_planet = Some(1);
+        assert_eq!(
+            steer_planet_orbit(wrong_inner, 0),
+            steer_toward_target(wrong_inner)
+        );
+        let mut inner = outer;
+        inner.inner_planet = Some(0);
+        let mut orbital = inner;
+        orbital.inner_planet = None;
+        assert_eq!(steer_planet_orbit(inner, 0), steer_moon_navigation(orbital));
     }
 
     #[test]

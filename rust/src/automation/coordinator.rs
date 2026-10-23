@@ -1717,12 +1717,27 @@ impl Coordinator {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
+        use super::script::PatrolPolicy;
+        let policy = match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::NavigateToPlanet(step)) => step.patrol_policy,
+            Some(Action::NavigateToOrbit(step)) => step.patrol_policy,
+            _ => PatrolPolicy::Fight,
+        };
         let transit_budget = match self.actions.get(inner.sched_state.step_index) {
             Some(Action::NavigateToHyperspace(step)) if step.encounter_response.is_none() => {
                 Some(step.max_ticks)
             }
             Some(Action::NavigateToMoon(step))
                 if crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(0) =>
+            {
+                Some(step.max_ticks)
+            }
+            Some(Action::NavigateToPlanet(step)) if step.patrol_policy != PatrolPolicy::Stop => {
+                Some(step.max_ticks)
+            }
+            Some(Action::NavigateToOrbit(step))
+                if step.patrol_policy != PatrolPolicy::Stop
+                    && crate::state::ffi::named_state_value("GLOBAL_FLAGS_AND_DATA") == Some(0) =>
             {
                 Some(step.max_ticks)
             }
@@ -1736,9 +1751,12 @@ impl Coordinator {
                 inner.star_encounter_active = true;
             }
             if inner.star_encounter_active {
-                if self.service_fleet_fight(inner, max_ticks, scheduler_event)
-                    == SchedulerEvent::NavigationReached
-                {
+                let result = if policy == PatrolPolicy::Retreat {
+                    self.service_fleet_retreat(inner, max_ticks, scheduler_event)
+                } else {
+                    self.service_fleet_fight(inner, max_ticks, scheduler_event)
+                };
+                if result == SchedulerEvent::NavigationReached {
                     inner.star_encounter_active = false;
                 }
                 return scheduler_event;
@@ -1871,10 +1889,10 @@ impl Coordinator {
             // aiming the nose alone accumulates drift and circles the planet
             // without touching it. Drive the velocity toward the planet, which
             // the snapshot reports at the view centre.
-            let control = crate::automation::navigation::steer_moon_navigation(
+            let control = crate::automation::navigation::steer_planet_orbit(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
-                    inner_planet: None,
+                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
                     in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
@@ -1888,6 +1906,7 @@ impl Coordinator {
                     target_guard_active: snapshot.wait_intersect
                         == crate::automation::navigation::planet_wait_intersect(navigation.planet),
                 },
+                navigation.planet,
             );
             if reached || contact {
                 if !Self::set_navigation_controls(

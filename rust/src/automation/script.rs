@@ -449,6 +449,16 @@ pub struct ActivityAssertion {
     pub equals: u16,
 }
 
+/// Policy for an incidental fleet encountered while approaching a body.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PatrolPolicy {
+    #[default]
+    Stop,
+    Retreat,
+    Fight,
+}
+
 /// A `navigate_to_planet` step drives the real flagship via player controls.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -458,6 +468,8 @@ pub struct NavigateToPlanetStep {
     /// Hail an interrupting patrol and leave using this offered phrase.
     #[serde(default)]
     pub encounter_response: Option<String>,
+    #[serde(default)]
+    pub patrol_policy: PatrolPolicy,
 }
 
 /// Pursue a live interplanetary group using ordinary flight controls.
@@ -489,6 +501,8 @@ pub struct NavigateToOrbitStep {
     /// Hail an interrupting patrol and leave using this offered phrase.
     #[serde(default)]
     pub encounter_response: Option<String>,
+    #[serde(default)]
+    pub patrol_policy: PatrolPolicy,
 }
 
 /// A `navigate_to_hyperspace` step flies the real flagship out of the current
@@ -2123,6 +2137,15 @@ fn validate_navigation_step(
                     "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
                 )));
             }
+            if navigation.patrol_policy != PatrolPolicy::Stop
+                && navigation.encounter_response.is_some()
+            {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_orbit must choose patrol_policy or encounter_response",
+                )));
+            }
             navigation.max_ticks
         }
         Action::UseDevice(step) => {
@@ -2221,6 +2244,15 @@ fn validate_navigation_step(
                     path,
                     index,
                     "navigate_to_planet max_ticks must be positive",
+                )));
+            }
+            if navigation.patrol_policy != PatrolPolicy::Stop
+                && navigation.encounter_response.is_some()
+            {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_planet must choose patrol_policy or encounter_response",
                 )));
             }
             navigation.max_ticks
@@ -2507,6 +2539,40 @@ mod tests {
         ).unwrap();
         let encoded = serde_json::to_value(&script.steps()[0]).unwrap();
         assert_eq!(encoded["encounter_response"], "bye_before_space");
+    }
+
+    #[test]
+    fn body_patrol_policy_is_explicit_and_rejects_conflicting_responses() {
+        for action in ["navigate_to_planet", "navigate_to_orbit"] {
+            for (name, policy) in [
+                ("stop", PatrolPolicy::Stop),
+                ("fight", PatrolPolicy::Fight),
+                ("retreat", PatrolPolicy::Retreat),
+            ] {
+                let source = format!(
+                    r#"{{"action":"{action}","planet":0,"max_ticks":100,"patrol_policy":"{name}"}}"#
+                );
+                let script = validated_steps(&source).unwrap();
+                let actual = match &script.steps()[0] {
+                    Action::NavigateToPlanet(step) => step.patrol_policy,
+                    Action::NavigateToOrbit(step) => step.patrol_policy,
+                    _ => unreachable!(),
+                };
+                assert_eq!(actual, policy);
+                if policy != PatrolPolicy::Stop {
+                    let conflict = format!(
+                        r#"{{"action":"{action}","planet":0,"max_ticks":100,"patrol_policy":"{name}","encounter_response":"bye"}}"#
+                    );
+                    assert!(validated_steps(&conflict).is_err());
+                }
+            }
+            let source = format!(r#"{{"action":"{action}","planet":0,"max_ticks":100}}"#);
+            let script = validated_steps(&source).unwrap();
+            assert_eq!(
+                serde_json::to_value(&script.steps()[0]).unwrap()["patrol_policy"],
+                "stop"
+            );
+        }
     }
 
     #[test]
@@ -2915,6 +2981,7 @@ mod tests {
                     max_ticks: 10,
                     stop_at_encounter: false,
                     encounter_response: None,
+                    patrol_policy: PatrolPolicy::Stop,
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
                 Action::PickBattleShip(PickBattleShipStep { max_ticks: 10 }),

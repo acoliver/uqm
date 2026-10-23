@@ -248,3 +248,16 @@ remaining earned Melnorme credits. Native `pt-p7-6` saved the connected
 `west-bomb-refueled` checkpoint with 20 crew, 21000 raw fuel, 1175 RU and
 no escorts. The combat losses are retained. `load-west-bomb-refueled-v1`
 independently checks its date, resources and inherited story state.
+
+### Incidental patrols during a body approach
+
+`navigate_to_planet` and `navigate_to_orbit` accept `patrol_policy`:
+`stop` (the default), `retreat`, or `fight`. Retreat uses the real battle
+Escape command; fight uses normal rendered Cyborg combat. Neither an escape
+nor a battle win substitutes for reaching the requested body. Interruption
+callbacks count against the original navigation action's `max_ticks`.
+The policy cannot be combined with an `encounter_response` phrase.
+Orbital patrol handling excludes homeworld dialogue, so a
+`stop_at_encounter` homeworld approach still exposes its actual responses.
+If a patrol returns the ship to outer-system flight, orbital navigation
+reapproaches the target planet before applying inner-system steering.
