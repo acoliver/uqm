@@ -1033,12 +1033,8 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
 ///
 /// # Safety
 /// Initialized fleets and SIS must be exclusively owned by the game thread.
-#[cfg(feature = "linked_c_archive")]
+#[cfg(not(test))]
 pub(crate) unsafe fn prepare_samatra_dev_fixture() -> Result<(), &'static str> {
-    assert!(
-        cfg!(any(debug_assertions, feature = "debug-process")),
-        "boss fixture requires a debug or debug-process build"
-    );
     let queue = built_ship_queue();
     ReinitQueue(queue);
     if crate::battle::build_native::AddEscortShips(4, 12) != 12 {

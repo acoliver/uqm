@@ -725,10 +725,10 @@ mod engine {
     }
 }
 
-#[cfg(any(not(test), feature = "linked_c_archive"))]
+#[cfg(not(test))]
 pub(super) use engine::snapshot;
 
-#[cfg(all(test, not(feature = "linked_c_archive")))]
+#[cfg(test)]
 pub(super) fn snapshot() -> Option<super::observation::Snapshot> {
     None
 }
