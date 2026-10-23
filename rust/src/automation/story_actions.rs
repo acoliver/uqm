@@ -62,6 +62,7 @@ pub struct CollectEnergyNodeStep {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct DeviceObservation {
     pub in_orbit: bool,
+    pub pc_menu: bool,
     pub list: Option<Vec<u8>>,
     pub selected: usize,
     /// Successful invocation published by the device owner, with actual state effects.
@@ -140,6 +141,8 @@ impl DeviceTracker {
             1 => Some(MenuKey::Cancel),
             13 => Some(MenuKey::Down),
             25 => Some(MenuKey::Select),
+            37 if obs.pc_menu => Some(MenuKey::Down),
+            49 if obs.pc_menu => Some(MenuKey::Select),
             _ => None,
         };
         DeviceProgress::Input(key)
@@ -439,6 +442,37 @@ mod tests {
     }
 
     #[test]
+    fn pc_devices_open_through_manifest_in_flight_and_orbit() {
+        for in_orbit in [false, true] {
+            let mut tracker = DeviceTracker::default();
+            let observation = DeviceObservation {
+                in_orbit,
+                pc_menu: true,
+                ..Default::default()
+            };
+            for tick in 1..=49 {
+                let expected = match tick {
+                    1 if in_orbit => Some(MenuKey::Down),
+                    1 => Some(MenuKey::Cancel),
+                    13 | 37 => Some(MenuKey::Down),
+                    25 | 49 => Some(MenuKey::Select),
+                    _ => None,
+                };
+                assert_eq!(
+                    tracker.observe(
+                        UseDeviceStep {
+                            device: Device::BurvixeseCaster,
+                            max_ticks: 100,
+                        },
+                        observation.clone()
+                    ),
+                    DeviceProgress::Input(expected)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn device_selects_live_identity_and_requires_fresh_activation() {
         let step = UseDeviceStep {
             device: Device::ClearSpindle,
@@ -447,6 +481,7 @@ mod tests {
         let mut tracker = DeviceTracker::default();
         let mut obs = DeviceObservation {
             in_orbit: false,
+            pc_menu: false,
             list: Some(vec![4, 6, 7]),
             selected: 0,
             activation: Some((9, 6, "old".into(), true)),
