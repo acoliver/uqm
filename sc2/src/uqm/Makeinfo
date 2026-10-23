@@ -1,5 +1,5 @@
 uqm_SUBDIRS="comm planets ships supermelee"
-uqm_CFILES="cnctdlg.c comm_variadic.c gameinp.c gameopt.c
+uqm_CFILES="cnctdlg.c comm_variadic.c gameinp.c
 		 restart.c  setup.c setupmenu.c
 		     starcon.c
 		  uqmdebug.c "
