@@ -35,8 +35,13 @@ pub mod init_sequence;
 pub mod init_wrappers;
 pub mod input_frame;
 pub mod logging;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod main2_abi;
 pub mod options;
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod options_abi;
 pub mod restart_menu;
+pub mod startup;
 pub mod state_machine;
 pub mod teardown;
 pub mod types;
