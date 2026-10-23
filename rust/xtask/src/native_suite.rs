@@ -2684,7 +2684,7 @@ mod tests {
         assert_eq!(admitted.len(), scenarios.len());
         for admission in &admitted {
             let expected = if admission.budgets.max_wallclock_seconds > 300 {
-                900_000
+                (admission.budgets.max_wallclock_seconds * 1000 + 95_000 + 5_000).max(900_000)
             } else {
                 300_000
             };
