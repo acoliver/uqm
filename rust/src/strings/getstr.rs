@@ -319,7 +319,7 @@ unsafe fn load_conversation_table<T: LineSource>(
         copy_pool(table, first, count, &extra.timestamps);
     }
 
-    let index = string_new(None, None, None, None, None, 0, 0.85, 0.9);
+    let index = string_new(0, 0.85, 0.9);
     let names = (*table).strings.add(count);
     for i in 0..count {
         let entry = names.add(i);

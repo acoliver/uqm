@@ -1,29 +1,13 @@
-//! C-compatible string-key hash tables retained by the transitional native ABI.
+//! String-key tables used by the resource loader.
 //!
-//! The two exported families intentionally share the historical bucket layout
-//! and resizing algorithm. `CharHashTable` owns a libc-allocated copy of each
-//! key, while `StringHashTable` borrows key pointers from its caller. Values are
-//! always caller-owned in both specializations. The callback fields are retained
-//! only for ABI layout compatibility: these two historical macro specializations
-//! ignore every supplied callback, including `free_value_function`.
+//! The copied-key and borrowed-key variants share the original bucket hashing,
+//! iteration order and resize policy. Values remain caller-owned.
 
 use std::ffi::{c_char, c_int, c_void};
 use std::mem;
 use std::ptr;
 
-type HashFunction = Option<unsafe extern "C" fn(*const c_char) -> u32>;
-type EqualFunction = Option<unsafe extern "C" fn(*const c_char, *const c_char) -> bool>;
-type CopyFunction = Option<unsafe extern "C" fn(*const c_char) -> *mut c_void>;
-type FreeKeyFunction = Option<unsafe extern "C" fn(*mut c_char)>;
-type FreeValueFunction = Option<unsafe extern "C" fn(*mut c_void)>;
-
-#[repr(C)]
 pub struct HashTable {
-    pub hash_function: HashFunction,
-    pub equal_function: EqualFunction,
-    pub copy_function: CopyFunction,
-    pub free_key_function: FreeKeyFunction,
-    pub free_value_function: FreeValueFunction,
     pub min_fill_quotient: f64,
     pub max_fill_quotient: f64,
     pub min_size: u32,
@@ -35,7 +19,6 @@ pub struct HashTable {
     pub num_collisions: u32,
 }
 
-#[repr(C)]
 pub struct HashEntry {
     pub hash: u32,
     pub key: *mut c_char,
@@ -43,7 +26,6 @@ pub struct HashEntry {
     pub next: *mut HashEntry,
 }
 
-#[repr(C)]
 pub struct HashIterator {
     pub hash_table: *const HashTable,
     pub bucket_nr: u32,
@@ -54,15 +36,6 @@ pub struct HashIterator {
 enum KeyOwnership {
     Copied,
     Borrowed,
-}
-
-#[derive(Clone, Copy)]
-struct Callbacks {
-    hash: HashFunction,
-    equal: EqualFunction,
-    copy: CopyFunction,
-    free_key: FreeKeyFunction,
-    free_value: FreeValueFunction,
 }
 
 unsafe fn allocate<T>() -> *mut T {
@@ -160,7 +133,6 @@ unsafe fn setup(table: *mut HashTable, initial_size: u32) {
 }
 
 unsafe fn new_table(
-    callbacks: Callbacks,
     initial_size: u32,
     min_fill_quotient: f64,
     max_fill_quotient: f64,
@@ -173,11 +145,6 @@ unsafe fn new_table(
         ptr::write(
             table,
             HashTable {
-                hash_function: callbacks.hash,
-                equal_function: callbacks.equal,
-                copy_function: callbacks.copy,
-                free_key_function: callbacks.free_key,
-                free_value_function: callbacks.free_value,
                 min_fill_quotient,
                 max_fill_quotient,
                 min_size: 0,
@@ -426,63 +393,38 @@ unsafe fn iterator_next(iterator: *mut HashIterator) -> *mut HashIterator {
     iterator
 }
 
-macro_rules! export_hash_table {
+macro_rules! define_hash_table {
     (
         $ownership:expr,
-        $new_fn:ident => $new_symbol:literal,
-        $add_fn:ident => $add_symbol:literal,
-        $remove_fn:ident => $remove_symbol:literal,
-        $find_fn:ident => $find_symbol:literal,
-        $count_fn:ident => $count_symbol:literal,
-        $delete_fn:ident => $delete_symbol:literal,
-        $get_iterator_fn:ident => $get_iterator_symbol:literal,
-        $iterator_done_fn:ident => $iterator_done_symbol:literal,
-        $iterator_key_fn:ident => $iterator_key_symbol:literal,
-        $iterator_value_fn:ident => $iterator_value_symbol:literal,
-        $iterator_next_fn:ident => $iterator_next_symbol:literal,
-        $free_iterator_fn:ident => $free_iterator_symbol:literal
+        $new_fn:ident,
+        $add_fn:ident,
+        $remove_fn:ident,
+        $find_fn:ident,
+        $count_fn:ident,
+        $delete_fn:ident,
+        $get_iterator_fn:ident,
+        $iterator_done_fn:ident,
+        $iterator_key_fn:ident,
+        $iterator_value_fn:ident,
+        $iterator_next_fn:ident,
+        $free_iterator_fn:ident
     ) => {
-        /// Creates a hash table with the historical C layout and resize policy.
+        /// Creates a string-key table with the original resize policy.
         ///
-        /// # Safety
-        /// **All callbacks, including `free_value`, are ignored.** They are retained solely for
-        /// generic-header ABI layout parity and are never invoked by these historical macro
-        /// specializations. Fill quotients must be finite,
-        /// ordered, and in the supported `0.0 <= min <= max <= 1.0` range; the requested bucket
-        /// count must fit the target allocation size. Violating constructor preconditions aborts.
-        #[export_name = $new_symbol]
-        pub unsafe extern "C" fn $new_fn(
-            hash: HashFunction,
-            equal: EqualFunction,
-            copy: CopyFunction,
-            free_key_callback: FreeKeyFunction,
-            free_value: FreeValueFunction,
+        /// Invalid fill quotients or allocation sizes abort.
+        pub fn $new_fn(
             initial_size: u32,
             min_fill_quotient: f64,
             max_fill_quotient: f64,
         ) -> *mut HashTable {
-            unsafe {
-                new_table(
-                    Callbacks {
-                        hash,
-                        equal,
-                        copy,
-                        free_key: free_key_callback,
-                        free_value,
-                    },
-                    initial_size,
-                    min_fill_quotient,
-                    max_fill_quotient,
-                )
-            }
+            unsafe { new_table(initial_size, min_fill_quotient, max_fill_quotient) }
         }
 
         /// Adds a key and caller-owned value if the key is absent.
         ///
         /// # Safety
         /// `table` must be live and `key` must point to a readable NUL-terminated string.
-        #[export_name = $add_symbol]
-        pub unsafe extern "C" fn $add_fn(
+        pub unsafe fn $add_fn(
             table: *mut HashTable,
             key: *const c_char,
             value: *mut c_void,
@@ -494,8 +436,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `table` must be live and `key` must point to a readable NUL-terminated string.
-        #[export_name = $remove_symbol]
-        pub unsafe extern "C" fn $remove_fn(table: *mut HashTable, key: *const c_char) -> bool {
+        pub unsafe fn $remove_fn(table: *mut HashTable, key: *const c_char) -> bool {
             unsafe { remove(table, key, $ownership) }
         }
 
@@ -503,11 +444,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `table` must be live and `key` must point to a readable NUL-terminated string.
-        #[export_name = $find_symbol]
-        pub unsafe extern "C" fn $find_fn(
-            table: *mut HashTable,
-            key: *const c_char,
-        ) -> *mut c_void {
+        pub unsafe fn $find_fn(table: *mut HashTable, key: *const c_char) -> *mut c_void {
             unsafe { find(table, key) }
         }
 
@@ -515,8 +452,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `table` must point to a live table.
-        #[export_name = $count_symbol]
-        pub unsafe extern "C" fn $count_fn(table: *const HashTable) -> u32 {
+        pub unsafe fn $count_fn(table: *const HashTable) -> u32 {
             unsafe { (*table).num_entries }
         }
 
@@ -524,8 +460,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `table` must be live and must not be used again.
-        #[export_name = $delete_symbol]
-        pub unsafe extern "C" fn $delete_fn(table: *mut HashTable) {
+        pub unsafe fn $delete_fn(table: *mut HashTable) {
             unsafe { delete_table(table, $ownership) }
         }
 
@@ -533,8 +468,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `table` must remain live and unmodified while the iterator is used.
-        #[export_name = $get_iterator_symbol]
-        pub unsafe extern "C" fn $get_iterator_fn(table: *const HashTable) -> *mut HashIterator {
+        pub unsafe fn $get_iterator_fn(table: *const HashTable) -> *mut HashIterator {
             unsafe { get_iterator(table) }
         }
 
@@ -542,8 +476,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `iterator` and its table must remain live.
-        #[export_name = $iterator_done_symbol]
-        pub unsafe extern "C" fn $iterator_done_fn(iterator: *const HashIterator) -> c_int {
+        pub unsafe fn $iterator_done_fn(iterator: *const HashIterator) -> c_int {
             unsafe { ((*iterator).bucket_nr >= (*(*iterator).hash_table).size).into() }
         }
 
@@ -551,8 +484,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `iterator` must be live and not past the final entry.
-        #[export_name = $iterator_key_symbol]
-        pub unsafe extern "C" fn $iterator_key_fn(iterator: *mut HashIterator) -> *mut c_char {
+        pub unsafe fn $iterator_key_fn(iterator: *mut HashIterator) -> *mut c_char {
             unsafe { (*(*iterator).entry).key }
         }
 
@@ -560,8 +492,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `iterator` must be live and not past the final entry.
-        #[export_name = $iterator_value_symbol]
-        pub unsafe extern "C" fn $iterator_value_fn(iterator: *mut HashIterator) -> *mut c_void {
+        pub unsafe fn $iterator_value_fn(iterator: *mut HashIterator) -> *mut c_void {
             unsafe { (*(*iterator).entry).value }
         }
 
@@ -569,10 +500,7 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `iterator` must be live and not already past the final entry.
-        #[export_name = $iterator_next_symbol]
-        pub unsafe extern "C" fn $iterator_next_fn(
-            iterator: *mut HashIterator,
-        ) -> *mut HashIterator {
+        pub unsafe fn $iterator_next_fn(iterator: *mut HashIterator) -> *mut HashIterator {
             unsafe { iterator_next(iterator) }
         }
 
@@ -580,43 +508,42 @@ macro_rules! export_hash_table {
         ///
         /// # Safety
         /// `iterator` must be a live iterator and must not be used again.
-        #[export_name = $free_iterator_symbol]
-        pub unsafe extern "C" fn $free_iterator_fn(iterator: *mut HashIterator) {
+        pub unsafe fn $free_iterator_fn(iterator: *mut HashIterator) {
             unsafe { libc::free(iterator.cast()) };
         }
     };
 }
 
-export_hash_table!(
+define_hash_table!(
     KeyOwnership::Copied,
-    char_new => "CharHashTable_newHashTable",
-    char_add => "CharHashTable_add",
-    char_remove => "CharHashTable_remove",
-    char_find => "CharHashTable_find",
-    char_count => "CharHashTable_count",
-    char_delete => "CharHashTable_deleteHashTable",
-    char_get_iterator => "CharHashTable_getIterator",
-    char_iterator_done => "CharHashTable_iteratorDone",
-    char_iterator_key => "CharHashTable_iteratorKey",
-    char_iterator_value => "CharHashTable_iteratorValue",
-    char_iterator_next => "CharHashTable_iteratorNext",
-    char_free_iterator => "CharHashTable_freeIterator"
+    char_new,
+    char_add,
+    char_remove,
+    char_find,
+    char_count,
+    char_delete,
+    char_get_iterator,
+    char_iterator_done,
+    char_iterator_key,
+    char_iterator_value,
+    char_iterator_next,
+    char_free_iterator
 );
 
-export_hash_table!(
+define_hash_table!(
     KeyOwnership::Borrowed,
-    string_new => "StringHashTable_newHashTable",
-    string_add => "StringHashTable_add",
-    string_remove => "StringHashTable_remove",
-    string_find => "StringHashTable_find",
-    string_count => "StringHashTable_count",
-    string_delete => "StringHashTable_deleteHashTable",
-    string_get_iterator => "StringHashTable_getIterator",
-    string_iterator_done => "StringHashTable_iteratorDone",
-    string_iterator_key => "StringHashTable_iteratorKey",
-    string_iterator_value => "StringHashTable_iteratorValue",
-    string_iterator_next => "StringHashTable_iteratorNext",
-    string_free_iterator => "StringHashTable_freeIterator"
+    string_new,
+    string_add,
+    string_remove,
+    string_find,
+    string_count,
+    string_delete,
+    string_get_iterator,
+    string_iterator_done,
+    string_iterator_key,
+    string_iterator_value,
+    string_iterator_next,
+    string_free_iterator
 );
 
 #[cfg(test)]
@@ -625,25 +552,6 @@ mod tests {
     use proptest::prelude::*;
     use std::collections::BTreeMap;
     use std::ffi::{CStr, CString};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    static CALLBACK_CALLS: AtomicUsize = AtomicUsize::new(0);
-
-    unsafe extern "C" fn unexpected_hash(_key: *const c_char) -> u32 {
-        CALLBACK_CALLS.fetch_add(1, Ordering::Relaxed);
-        0
-    }
-
-    fn callbacks() -> Callbacks {
-        Callbacks {
-            hash: Some(unexpected_hash),
-            equal: None,
-            copy: None,
-            free_key: None,
-            free_value: None,
-        }
-    }
-
     #[test]
     fn historical_hash_preserves_target_c_char_promotion() {
         let key = [0x80_u8 as c_char, 0xff_u8 as c_char, 0];
@@ -687,12 +595,11 @@ mod tests {
     }
 
     #[test]
-    fn exported_specializations_preserve_key_ownership_and_ignore_generic_callbacks() {
-        CALLBACK_CALLS.store(0, Ordering::Relaxed);
+    fn specializations_preserve_key_ownership_and_values() {
         let key = CString::new("alpha").unwrap();
         let value = 17_usize as *mut c_void;
         unsafe {
-            let copied = char_new(Some(unexpected_hash), None, None, None, None, 0, 0.85, 0.9);
+            let copied = char_new(0, 0.85, 0.9);
             assert!(char_add(copied, key.as_ptr(), value));
             let iterator = char_get_iterator(copied);
             assert_ne!(char_iterator_key(iterator), key.as_ptr().cast_mut());
@@ -701,7 +608,7 @@ mod tests {
             char_free_iterator(iterator);
             char_delete(copied);
 
-            let borrowed = string_new(Some(unexpected_hash), None, None, None, None, 0, 0.85, 0.9);
+            let borrowed = string_new(0, 0.85, 0.9);
             assert!(string_add(borrowed, key.as_ptr(), value));
             let iterator = string_get_iterator(borrowed);
             assert_eq!(string_iterator_key(iterator), key.as_ptr().cast_mut());
@@ -709,7 +616,6 @@ mod tests {
             string_free_iterator(iterator);
             string_delete(borrowed);
         }
-        assert_eq!(CALLBACK_CALLS.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -718,7 +624,7 @@ mod tests {
             .map(|index| CString::new(format!("key-{index}")).unwrap())
             .collect();
         unsafe {
-            let table = new_table(callbacks(), 0, 0.85, 0.9);
+            let table = new_table(0, 0.85, 0.9);
             for (index, key) in keys.iter().enumerate() {
                 assert!(add(
                     table,
@@ -764,7 +670,7 @@ mod tests {
                 .map(|(key, _, _)| CString::new(key.as_str()).unwrap())
                 .collect();
             unsafe {
-                let table = new_table(callbacks(), 0, 0.85, 0.9);
+                let table = new_table(0, 0.85, 0.9);
                 for ((key, value, insert), c_key) in operations.iter().zip(&keys) {
                     if *insert {
                         let inserted = !expected.contains_key(key);
