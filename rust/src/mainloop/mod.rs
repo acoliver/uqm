@@ -69,3 +69,5 @@ pub enum MainLoopError {
     #[error("starbase: {0}")]
     Starbase(#[from] crate::starbase::StarbaseError),
 }
+
+pub mod platform_abi;
