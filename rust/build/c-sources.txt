@@ -1,5 +1,4 @@
 sc2/src/libs/log/uqmlog.c
-sc2/src/uqm.c
 sc2/src/uqm/cnctdlg.c
 sc2/src/uqm/comm_variadic.c
 sc2/src/uqm/rust_bridge_main2.c
