@@ -722,9 +722,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 4, 0, (56, 56), (70, 70));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -746,7 +746,7 @@ mod live {
             });
         }
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -754,7 +754,7 @@ mod live {
             )
         });
     }
-    extern "C" fn buy(r: u32) {
+    fn buy(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Buy,
@@ -762,7 +762,7 @@ mod live {
             )
         });
     }
-    extern "C" fn trade(r: u32) {
+    fn trade(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Trade,
@@ -770,7 +770,7 @@ mod live {
             )
         });
     }
-    extern "C" fn sell(r: u32) {
+    fn sell(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Sell,
@@ -778,7 +778,7 @@ mod live {
             )
         });
     }
-    extern "C" fn explain_slave_trade(r: u32) {
+    fn explain_slave_trade(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExplainSlaveTrade,
@@ -786,7 +786,7 @@ mod live {
             )
         });
     }
-    extern "C" fn trade_world(r: u32) {
+    fn trade_world(r: u32) {
         run(|s| {
             s.handle(
                 Handler::TradeWorld,
@@ -794,7 +794,7 @@ mod live {
             )
         });
     }
-    extern "C" fn bomb_ambush(r: u32) {
+    fn bomb_ambush(r: u32) {
         run(|s| {
             s.handle(
                 Handler::BombAmbush,
@@ -802,7 +802,7 @@ mod live {
             )
         });
     }
-    extern "C" fn space(r: u32) {
+    fn space(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Space,
@@ -810,7 +810,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::Buy => buy,
@@ -822,13 +822,13 @@ mod live {
             Handler::Space => space,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_druuge_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize this encounter on the game thread.

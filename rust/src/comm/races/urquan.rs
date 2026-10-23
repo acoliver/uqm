@@ -152,9 +152,9 @@ fn descriptor(screen_width: i32) -> CLocData {
     d.alien_talk_desc = animation(2, 5, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -169,29 +169,29 @@ mod live {
         f(&mut dialogue::Dialogue { api: &mut api });
     }
 
-    extern "C" fn combat(response: u32) {
+    fn combat(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
     }
-    extern "C" fn normal(response: u32) {
+    fn normal(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Normal, response as i32));
     }
-    extern "C" fn hypno(response: u32) {
+    fn hypno(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Hypno, response as i32));
     }
-    extern "C" fn mention_compulsion(response: u32) {
+    fn mention_compulsion(response: u32) {
         run(|dialogue| dialogue.handle(Handler::MentionCompulsion, response as i32));
     }
-    extern "C" fn describe_pet(response: u32) {
+    fn describe_pet(response: u32) {
         run(|dialogue| dialogue.handle(Handler::DescribePet, response as i32));
     }
-    extern "C" fn describe_compulsion(response: u32) {
+    fn describe_compulsion(response: u32) {
         run(|dialogue| dialogue.handle(Handler::DescribeCompulsion, response as i32));
     }
-    extern "C" fn loser(response: u32) {
+    fn loser(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Loser, response as i32));
     }
 
-    fn callback(handler: Handler) -> extern "C" fn(u32) {
+    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
         match handler {
             Handler::Combat => combat,
             Handler::Normal => normal,
@@ -203,13 +203,13 @@ mod live {
         }
     }
 
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|dialogue| dialogue.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|dialogue| dialogue.post());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
 

@@ -655,9 +655,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 4, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -669,7 +669,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn friendly_exit(r: u32) {
+    fn friendly_exit(r: u32) {
         run(|s| {
             s.handle(
                 Handler::FriendlyExit,
@@ -677,10 +677,10 @@ mod live {
             )
         });
     }
-    extern "C" fn sex(r: u32) {
+    fn sex(r: u32) {
         run(|s| s.handle(Handler::Sex, i32::try_from(r).expect("invalid response")));
     }
-    extern "C" fn foreplay(r: u32) {
+    fn foreplay(r: u32) {
         run(|s| {
             s.handle(
                 Handler::Foreplay,
@@ -688,7 +688,7 @@ mod live {
             )
         });
     }
-    extern "C" fn after_ambush(r: u32) {
+    fn after_ambush(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AfterAmbush,
@@ -696,7 +696,7 @@ mod live {
             )
         });
     }
-    extern "C" fn ambush_ready(r: u32) {
+    fn ambush_ready(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AmbushReady,
@@ -704,7 +704,7 @@ mod live {
             )
         });
     }
-    extern "C" fn syreen_shuttle(r: u32) {
+    fn syreen_shuttle(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SyreenShuttle,
@@ -712,7 +712,7 @@ mod live {
             )
         });
     }
-    extern "C" fn normal_syreen(r: u32) {
+    fn normal_syreen(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NormalSyreen,
@@ -720,7 +720,7 @@ mod live {
             )
         });
     }
-    extern "C" fn initial_syreen(r: u32) {
+    fn initial_syreen(r: u32) {
         run(|s| {
             s.handle(
                 Handler::InitialSyreen,
@@ -728,7 +728,7 @@ mod live {
             )
         });
     }
-    extern "C" fn syreen_vault(r: u32) {
+    fn syreen_vault(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SyreenVault,
@@ -736,7 +736,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::FriendlyExit => friendly_exit,
             Handler::Sex => sex,
@@ -749,13 +749,13 @@ mod live {
             Handler::SyreenVault => syreen_vault,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_syreen_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

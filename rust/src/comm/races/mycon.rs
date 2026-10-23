@@ -550,9 +550,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -570,7 +570,7 @@ mod live {
             });
         }
     }
-    extern "C" fn combat_is_inevitable(r: u32) {
+    fn combat_is_inevitable(r: u32) {
         run(|s| {
             s.handle(
                 Handler::CombatIsInevitable,
@@ -578,7 +578,7 @@ mod live {
             )
         });
     }
-    extern "C" fn sun_device(r: u32) {
+    fn sun_device(r: u32) {
         run(|s| {
             s.handle(
                 Handler::SunDevice,
@@ -586,7 +586,7 @@ mod live {
             )
         });
     }
-    extern "C" fn trick_mycon(r: u32) {
+    fn trick_mycon(r: u32) {
         run(|s| {
             s.handle(
                 Handler::TrickMycon,
@@ -594,7 +594,7 @@ mod live {
             )
         });
     }
-    extern "C" fn normal_mycon(r: u32) {
+    fn normal_mycon(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NormalMycon,
@@ -602,7 +602,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::CombatIsInevitable => combat_is_inevitable,
             Handler::SunDevice => sun_device,
@@ -610,13 +610,13 @@ mod live {
             Handler::NormalMycon => normal_mycon,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_mycon_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

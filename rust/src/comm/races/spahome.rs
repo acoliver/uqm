@@ -632,37 +632,37 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit(r: u32) {
+    fn exit(r: u32) {
         run(|s| s.handle(Handler::Exit, r as i32));
     }
-    extern "C" fn password(r: u32) {
+    fn password(r: u32) {
         run(|s| s.handle(Handler::Password, r as i32));
     }
-    extern "C" fn council(r: u32) {
+    fn council(r: u32) {
         run(|s| s.handle(Handler::Council, r as i32));
     }
-    extern "C" fn angry(r: u32) {
+    fn angry(r: u32) {
         run(|s| s.handle(Handler::Angry, r as i32));
     }
-    extern "C" fn alliance(r: u32) {
+    fn alliance(r: u32) {
         run(|s| s.handle(Handler::Alliance, r as i32));
     }
-    extern "C" fn learn(r: u32) {
+    fn learn(r: u32) {
         run(|s| s.handle(Handler::Learn, r as i32));
     }
-    extern "C" fn quest(r: u32) {
+    fn quest(r: u32) {
         run(|s| s.handle(Handler::Quest, r as i32));
     }
-    extern "C" fn party(r: u32) {
+    fn party(r: u32) {
         run(|s| s.handle(Handler::Party, r as i32));
     }
-    extern "C" fn allies(r: u32) {
+    fn allies(r: u32) {
         run(|s| s.handle(Handler::Allies, r as i32));
     }
-    extern "C" fn info(r: u32) {
+    fn info(r: u32) {
         run(|s| s.handle(Handler::Info, r as i32));
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::Exit => exit,
             Handler::Password => password,
@@ -676,13 +676,13 @@ mod live {
             Handler::Info => info,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     #[no_mangle]

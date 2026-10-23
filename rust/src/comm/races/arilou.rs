@@ -673,9 +673,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 3, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -687,7 +687,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -695,7 +695,7 @@ mod live {
             )
         });
     }
-    extern "C" fn arilou_home(r: u32) {
+    fn arilou_home(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ArilouHome,
@@ -703,7 +703,7 @@ mod live {
             )
         });
     }
-    extern "C" fn angry_home_arilou(r: u32) {
+    fn angry_home_arilou(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AngryHomeArilou,
@@ -711,7 +711,7 @@ mod live {
             )
         });
     }
-    extern "C" fn angry_space_arilou(r: u32) {
+    fn angry_space_arilou(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AngrySpaceArilou,
@@ -719,7 +719,7 @@ mod live {
             )
         });
     }
-    extern "C" fn friendly_space_arilou(r: u32) {
+    fn friendly_space_arilou(r: u32) {
         run(|s| {
             s.handle(
                 Handler::FriendlySpaceArilou,
@@ -727,7 +727,7 @@ mod live {
             )
         });
     }
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::ArilouHome => arilou_home,
@@ -736,13 +736,13 @@ mod live {
             Handler::FriendlySpaceArilou => friendly_space_arilou,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {
+    pub(super) fn post() {
         run(|s| s.post_arilou_enc());
     }
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize this encounter on the game thread.

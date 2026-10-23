@@ -754,9 +754,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(1, 3, 0, (42, 42), (98, 420));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -770,7 +770,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn allied_home(r: u32) {
+    fn allied_home(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AlliedHome,
@@ -778,7 +778,7 @@ mod live {
             )
         });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -786,7 +786,7 @@ mod live {
             )
         });
     }
-    extern "C" fn before_kohr_ah(r: u32) {
+    fn before_kohr_ah(r: u32) {
         run(|s| {
             s.handle(
                 Handler::BeforeKohrAh,
@@ -794,7 +794,7 @@ mod live {
             )
         });
     }
-    extern "C" fn after_kohr_ah(r: u32) {
+    fn after_kohr_ah(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AfterKohrAh,
@@ -802,7 +802,7 @@ mod live {
             )
         });
     }
-    extern "C" fn neutral_utwig(r: u32) {
+    fn neutral_utwig(r: u32) {
         run(|s| {
             s.handle(
                 Handler::NeutralUtwig,
@@ -810,7 +810,7 @@ mod live {
             )
         });
     }
-    extern "C" fn bomb_world(r: u32) {
+    fn bomb_world(r: u32) {
         run(|s| {
             s.handle(
                 Handler::BombWorld,
@@ -819,7 +819,7 @@ mod live {
         });
     }
 
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::AlliedHome => allied_home,
             Handler::ExitConversation => exit_conversation,
@@ -829,11 +829,11 @@ mod live {
             Handler::BombWorld => bomb_world,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

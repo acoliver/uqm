@@ -13,7 +13,7 @@ use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
 use crate::collections::queue::{AllocLink, CountLinks, HLink, PutQueue, Queue, ReinitQueue};
-use crate::comm::locdata::rust_sync_comm_data;
+use crate::comm::locdata::{read_locdata, set_comm_data};
 use crate::mainloop::c_extern;
 use crate::state::game_state_keys;
 
@@ -401,6 +401,7 @@ pub const RACE_SHIP_FOR_COMM: [u8; 27] = [
 #[allow(dead_code)]
 mod ffi {
     use super::*;
+    pub use crate::comm::locdata::COMM_DATA as CommData;
     use std::os::raw::{c_char, c_void};
 
     #[cfg(not(test))]
@@ -435,9 +436,6 @@ mod ffi {
 
         // TFB_Random for PickCaptainName (libs/misc.h)
         pub fn TFB_Random() -> u32;
-
-        // CommData global for direct encounter function pointer calls
-        pub static mut CommData: crate::comm::locdata::CLocData;
 
         // FindStar (starmap.c): the star within the bounds of a universe point
         pub fn FindStar(
@@ -500,15 +498,6 @@ mod ffi {
 #[inline]
 unsafe fn pick_captain_name() -> u8 {
     ((ffi::TFB_Random() & 0x0F) + 5) as u8
-}
-
-/// Call a CommData function pointer (init/post/uninit encounter func).
-unsafe fn call_encounter_func(func_ptr: *const c_void) {
-    if func_ptr.is_null() {
-        return;
-    }
-    let func: extern "C" fn() = std::mem::transmute(func_ptr);
-    func();
 }
 
 /// C: `LOBYTE(x)` — extract low byte of a u16.
@@ -880,7 +869,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
             &raw mut ffi::CommData,
             1,
         );
-        rust_sync_comm_data(descriptor);
+        set_comm_data(read_locdata(&*descriptor.cast()));
     }
     let mut status;
     if get_game_state("BATTLE_SEGUE") == 0 {
@@ -900,9 +889,13 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         crate::comm::ffi::rust_HailAlien();
     } else if !descriptor.is_null() {
         if crate::mainloop::ffi::get_current_activity().0 & (CHECK_ABORT | CHECK_LOAD) == 0 {
-            call_encounter_func(ffi::CommData.post_encounter_func);
+            if let Some(callback) = ffi::CommData.post_encounter_func {
+                callback();
+            }
         }
-        call_encounter_func(ffi::CommData.uninit_encounter_func);
+        if let Some(callback) = ffi::CommData.uninit_encounter_func {
+            callback();
+        }
     }
     status = 0;
     let activity = crate::mainloop::ffi::get_current_activity().0;

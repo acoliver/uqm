@@ -2961,9 +2961,9 @@ pub type LDAS_FLAGS = DWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LOCDATA {
-    pub init_encounter_func: ::std::option::Option<unsafe extern "C" fn()>,
-    pub post_encounter_func: ::std::option::Option<unsafe extern "C" fn()>,
-    pub uninit_encounter_func: ::std::option::Option<unsafe extern "C" fn() -> COUNT>,
+    pub init_encounter_func: ::std::option::Option<fn()>,
+    pub post_encounter_func: ::std::option::Option<fn()>,
+    pub uninit_encounter_func: ::std::option::Option<fn() -> COUNT>,
     pub AlienFrameRes: RESOURCE,
     pub AlienFontRes: RESOURCE,
     pub AlienTextFColor: Color,
@@ -5882,9 +5882,7 @@ pub const CONVERSATION_URQUAN_DRONE_CONVERSATION: CONVERSATION = 24;
 pub const CONVERSATION_YEHAT_REBEL_CONVERSATION: CONVERSATION = 25;
 pub const CONVERSATION_INVALID_CONVERSATION: CONVERSATION = 26;
 pub type CONVERSATION = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut CommData: LOCDATA;
-}
+
 extern "C" {
     pub static mut shared_phrase_buf: [UNICODE; 2048usize];
 }
@@ -5971,13 +5969,6 @@ extern "C" {
 }
 extern "C" {
     pub fn rust_AreSubtitlesEnabled() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn rust_DoResponsePhrase(
-        response_ref: ::std::os::raw::c_uint,
-        text: *const ::std::os::raw::c_char,
-        func: ::std::option::Option<unsafe extern "C" fn(arg1: ::std::os::raw::c_uint)>,
-    ) -> ::std::os::raw::c_int;
 }
 extern "C" {
     pub fn rust_DisplayResponses();

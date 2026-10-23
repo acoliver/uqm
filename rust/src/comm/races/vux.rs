@@ -191,9 +191,9 @@ fn descriptor(screen_width: i32) -> CLocData {
     desc.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        desc.init_encounter_func = live::intro as *const () as *const _;
-        desc.post_encounter_func = live::post as *const () as *const _;
-        desc.uninit_encounter_func = live::uninit as *const () as *const _;
+        desc.init_encounter_func = Some(live::intro);
+        desc.post_encounter_func = Some(live::post);
+        desc.uninit_encounter_func = Some(live::uninit);
     }
     desc
 }
@@ -208,17 +208,17 @@ mod live {
         f(&mut dialogue::Dialogue { api: &mut api });
     }
 
-    extern "C" fn combat(response: u32) {
+    fn combat(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Combat, response as i32));
     }
-    extern "C" fn menagerie(response: u32) {
+    fn menagerie(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Menagerie, response as i32));
     }
-    extern "C" fn normal(response: u32) {
+    fn normal(response: u32) {
         run(|dialogue| dialogue.handle(Handler::Normal, response as i32));
     }
 
-    fn callback(handler: Handler) -> extern "C" fn(u32) {
+    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
         match handler {
             Handler::Combat => combat,
             Handler::Menagerie => menagerie,
@@ -226,11 +226,11 @@ mod live {
         }
     }
 
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|dialogue| dialogue.intro());
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
 

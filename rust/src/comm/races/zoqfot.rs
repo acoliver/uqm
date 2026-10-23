@@ -720,9 +720,9 @@ fn descriptor() -> CLocData {
     d.alien_talk_desc = animation(18, 5, 0, (56, 0), (70, 0));
     #[cfg(not(test))]
     {
-        d.init_encounter_func = live::intro as *const () as *const _;
-        d.post_encounter_func = live::post as *const () as *const _;
-        d.uninit_encounter_func = live::uninit as *const () as *const _;
+        d.init_encounter_func = Some(live::intro);
+        d.post_encounter_func = Some(live::post);
+        d.uninit_encounter_func = Some(live::uninit);
     }
     d
 }
@@ -736,7 +736,7 @@ mod live {
         let mut api = LiveScript { callback };
         f(&mut Dialogue { api: &mut api });
     }
-    extern "C" fn exit_conversation(r: u32) {
+    fn exit_conversation(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ExitConversation,
@@ -744,7 +744,7 @@ mod live {
             )
         });
     }
-    extern "C" fn zoq_fot_intro(r: u32) {
+    fn zoq_fot_intro(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ZoqFotIntro,
@@ -752,7 +752,7 @@ mod live {
             )
         });
     }
-    extern "C" fn form_alliance(r: u32) {
+    fn form_alliance(r: u32) {
         run(|s| {
             s.handle(
                 Handler::FormAlliance,
@@ -760,7 +760,7 @@ mod live {
             )
         });
     }
-    extern "C" fn aquaint_zoq_fot(r: u32) {
+    fn aquaint_zoq_fot(r: u32) {
         run(|s| {
             s.handle(
                 Handler::AquaintZoqFot,
@@ -768,7 +768,7 @@ mod live {
             )
         });
     }
-    extern "C" fn zoq_fot_info(r: u32) {
+    fn zoq_fot_info(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ZoqFotInfo,
@@ -776,7 +776,7 @@ mod live {
             )
         });
     }
-    extern "C" fn zoq_fot_home(r: u32) {
+    fn zoq_fot_home(r: u32) {
         run(|s| {
             s.handle(
                 Handler::ZoqFotHome,
@@ -785,7 +785,7 @@ mod live {
         });
     }
 
-    fn callback(h: Handler) -> extern "C" fn(u32) {
+    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
         match h {
             Handler::ExitConversation => exit_conversation,
             Handler::ZoqFotIntro => zoq_fot_intro,
@@ -795,11 +795,11 @@ mod live {
             Handler::ZoqFotHome => zoq_fot_home,
         }
     }
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         run(|s| s.intro());
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
     /// Initialize the encounter on the game thread.

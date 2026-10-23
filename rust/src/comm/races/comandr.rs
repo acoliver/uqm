@@ -557,9 +557,9 @@ fn descriptor() -> CLocData {
     );
     #[cfg(not(test))]
     {
-        desc.init_encounter_func = live::intro as *const () as *const std::ffi::c_void;
-        desc.post_encounter_func = live::post as *const () as *const std::ffi::c_void;
-        desc.uninit_encounter_func = live::uninit as *const () as *const std::ffi::c_void;
+        desc.init_encounter_func = Some(live::intro);
+        desc.post_encounter_func = Some(live::post);
+        desc.uninit_encounter_func = Some(live::uninit);
     }
     desc
 }
@@ -586,8 +586,8 @@ mod live {
 
     macro_rules! callbacks {
         ($($handler:ident => $name:ident),* $(,)?) => {
-            $(extern "C" fn $name(r: u32) { Commander(&mut api()).handle(Handler::$handler, u16::try_from(r).expect("response reference exceeds COUNT")); })*
-            fn callback(handler: Handler) -> extern "C" fn(u32) {
+            $(fn $name(r: u32) { Commander(&mut api()).handle(Handler::$handler, u16::try_from(r).expect("response reference exceeds COUNT")); })*
+            fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
                 match handler { $(Handler::$handler => $name,)* }
             }
         };
@@ -603,11 +603,11 @@ mod live {
         GiveRadios => give_radios,
     }
 
-    pub(super) extern "C" fn intro() {
+    pub(super) fn intro() {
         Commander(&mut api()).intro();
     }
-    pub(super) extern "C" fn post() {}
-    pub(super) extern "C" fn uninit() -> u16 {
+    pub(super) fn post() {}
+    pub(super) fn uninit() -> u16 {
         0
     }
 

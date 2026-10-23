@@ -13,13 +13,10 @@
 
 #[cfg(not(test))]
 pub(super) mod c_bridge {
-    use super::super::locdata::{CGlobData, CLocData, CRect};
+    use super::super::locdata::{CGlobData, CRect};
     use std::ffi::{c_char, c_int, c_uint};
 
-    // The C global CommData (LOCDATA struct) — accessed directly without bridge functions
-    extern "C" {
-        pub static mut CommData: CLocData;
-    }
+    pub use crate::comm::locdata::COMM_DATA as CommData;
 
     pub use crate::ui::border::DrawSISFrame;
     pub use crate::ui::settings::StopMusic;
@@ -100,9 +97,6 @@ pub(super) mod c_bridge {
         pub static mut Screen: *mut std::ffi::c_void;
         pub static mut SpaceContext: *mut std::ffi::c_void;
 
-        // Encounter functions — now called directly via call_encounter_func()
-        // using CommData.init_encounter_func / post_encounter_func / uninit_encounter_func
-
         // Comm-internal static variable accessors
         pub fn c_SetTalkingFinished(finished: c_int);
         pub fn c_SetupSubtitleTextFromCommData();
@@ -165,17 +159,6 @@ impl super::player_font::FontRelease for CFontRelease {
         // SAFETY: `font` is the conversation font, released exactly once.
         unsafe { c_bridge::DestroyFont(font) };
     }
-}
-
-/// Call a CommData function pointer (init/post/uninit encounter func).
-/// The pointer is stored as *const c_void in CLocData — cast to extern fn and call.
-#[cfg(not(test))]
-unsafe fn call_encounter_func(func_ptr: *const std::ffi::c_void) {
-    if func_ptr.is_null() {
-        return;
-    }
-    let func: extern "C" fn() = std::mem::transmute(func_ptr);
-    func();
 }
 
 /// Check if this is a starbase conversation by reading C game state.
@@ -437,7 +420,9 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // LastActivity |= CHECK_LOAD (0x1000)
         LastActivity |= 0x1000;
-        call_encounter_func(c_bridge::CommData.init_encounter_func);
+        if let Some(callback) = c_bridge::CommData.init_encounter_func {
+            callback();
+        }
 
         // Run the encounter loop: DoInput with rust_DoCommunication as InputFunc.
         // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
@@ -495,9 +480,13 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         let activity = crate::mainloop::ffi::get_current_activity().0;
         if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
-            call_encounter_func(c_bridge::CommData.post_encounter_func);
+            if let Some(callback) = c_bridge::CommData.post_encounter_func {
+                callback();
+            }
         }
-        call_encounter_func(c_bridge::CommData.uninit_encounter_func);
+        if let Some(callback) = c_bridge::CommData.uninit_encounter_func {
+            callback();
+        }
 
         // ----------------------------------------------------------------
         // Step 17: Restore context and font
