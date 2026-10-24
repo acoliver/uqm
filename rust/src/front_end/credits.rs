@@ -145,7 +145,7 @@ mod runtime {
         }
         line = line.add(scanned as usize);
         let mut buffer = [0 as c_char; 2048];
-        utf8StringCopy(buffer.as_mut_ptr(), buffer.len(), line);
+        utf8StringCopy((buffer.as_mut_ptr()).cast(), buffer.len(), (line).cast());
         let mut lines: [TEXT; MAX_TEXT_LINES] = std::mem::zeroed();
         let rows = parse_text_lines(lines.as_mut_ptr(), MAX_TEXT_LINES, buffer.as_mut_ptr());
         if rows == 0 {

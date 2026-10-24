@@ -58,11 +58,12 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
         (*pTES).Initialized = 1;
         (*pTES).JoystickMode = 0;
         (*pTES).UpperRegister = 1;
-        let chars = utf8StringCount((*pTES).BaseStr);
+        let chars = utf8StringCount(((*pTES).BaseStr).cast());
         if (*pTES).CursorPos as usize > chars {
             (*pTES).CursorPos = chars as i32;
         }
-        (*pTES).InsPt = skipUTF8Chars((*pTES).BaseStr, (*pTES).CursorPos as usize);
+        (*pTES).InsPt =
+            (skipUTF8Chars(((*pTES).BaseStr).cast(), (*pTES).CursorPos as usize)).cast();
         (*pTES).JoyAlphaString = CaptureStringTable(LoadStringTableInstance(
             JOYSTICK_ALPHA_STRTAB.as_ptr().cast(),
         ));
@@ -114,7 +115,11 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
     while ch != 0 {
         let mut encoded = [0 as UNICODE; 8];
         (*pTES).JoystickMode = 0;
-        let size = getStringFromChar(encoded.as_mut_ptr(), mem::size_of_val(&encoded), ch);
+        let size = getStringFromChar(
+            (encoded.as_mut_ptr()).cast(),
+            mem::size_of_val(&encoded),
+            ch,
+        );
         if UniChar_isPrint(ch) != 0 && size > 0 {
             let offset = string.offset_from((*pTES).BaseStr);
             if offset + len as isize + (size as isize) < (*pTES).MaxSize as isize {
@@ -142,16 +147,18 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
         }
     } else if PulsedInputState.menu[KEY_MENU_BACKSPACE as usize] != 0 {
         if string > (*pTES).BaseStr {
-            let previous = skipUTF8Chars((*pTES).BaseStr, ((*pTES).CursorPos - 1) as usize);
-            ptr::copy(string, previous, len as usize + 1);
-            string = previous;
+            let previous =
+                skipUTF8Chars(((*pTES).BaseStr).cast(), ((*pTES).CursorPos - 1) as usize);
+            ptr::copy(string, (previous).cast(), len as usize + 1);
+            string = (previous).cast();
             (*pTES).CursorPos -= 1;
             changed = true;
         }
     } else if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0 {
         if string > (*pTES).BaseStr {
-            let previous = skipUTF8Chars((*pTES).BaseStr, ((*pTES).CursorPos - 1) as usize);
-            string = previous;
+            let previous =
+                skipUTF8Chars(((*pTES).BaseStr).cast(), ((*pTES).CursorPos - 1) as usize);
+            string = (previous).cast();
             // The C code subtracts prev after assigning pStr to prev, so len is unchanged.
             (*pTES).CursorPos -= 1;
             changed = true;
@@ -172,7 +179,7 @@ pub unsafe extern "C" fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN {
             changed = true;
         }
     } else if PulsedInputState.menu[KEY_MENU_END as usize] != 0 && len > 0 {
-        (*pTES).CursorPos += utf8StringCount(string) as i32;
+        (*pTES).CursorPos += utf8StringCount((string).cast()) as i32;
         string = string.add(len as usize);
         len = 0;
         changed = true;
@@ -220,7 +227,7 @@ unsafe fn load_alpha(string: STRING, count: *mut i32) -> *mut JoyChar {
     if source.is_null() {
         return ptr::null_mut();
     }
-    let total = utf8StringCount(source) as i32;
+    let total = utf8StringCount((source).cast()) as i32;
     let chars = HMalloc(total as usize * mem::size_of::<JoyChar>()).cast::<JoyChar>();
     if chars.is_null() {
         return ptr::null_mut();

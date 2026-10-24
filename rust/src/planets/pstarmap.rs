@@ -810,7 +810,7 @@ pub unsafe extern "C" fn UpdateCursorInfo(previous: *mut c_char) {
         };
         if ux(p.x) == screen.x && uy(p.y) == screen.y {
             cursorLoc = p;
-            unicode::utf8StringCopy(
+            unicode::utf8_string_copy(
                 text.as_mut_ptr().cast(),
                 text.len(),
                 game_string(132).cast(),

@@ -31,7 +31,8 @@ mod live {
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Gfx, Point, Rgba, Stamp};
     use crate::strings::unicode::{
-        getCharFromString, utf8StringCount, utf8StringCountN, UniChar_isGraph,
+        get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
+        utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
     };
     use std::ffi::{c_void, CString};
 

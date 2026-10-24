@@ -337,14 +337,14 @@ mod runtime {
         1
     }
     unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
-        (*widget).cursor_pos = utf8StringCount((*widget).value.as_ptr()) as c_int;
+        (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
         (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
         redraw_menu();
         let mut revert_buf = [0; 256];
         utf8StringCopy(
             revert_buf.as_mut_ptr(),
             mem::size_of_val(&revert_buf),
-            (*widget).value.as_ptr(),
+            ((*widget).value.as_ptr()).cast(),
         );
         let mut state: TEXTENTRY_STATE = mem::zeroed();
         state.Initialized = 0;
@@ -358,7 +358,7 @@ mod runtime {
         SetMenuSounds(0, MENU_SOUND_SELECT);
         if DoTextEntry(&mut state) == 0 {
             utf8StringCopy(
-                (*widget).value.as_mut_ptr(),
+                ((*widget).value.as_mut_ptr()).cast(),
                 (*widget).maxlen as usize,
                 revert_buf.as_ptr(),
             );

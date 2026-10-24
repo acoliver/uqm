@@ -137,9 +137,7 @@ extern "C" {
     pub fn res_GetResourceType(res: RESOURCE) -> *const ::std::os::raw::c_char;
 }
 pub type UniChar = uint32;
-extern "C" {
-    pub fn getCharFromString(ptr: *mut *const ::std::os::raw::c_char) -> UniChar;
-}
+pub use crate::strings::unicode::get_char_from_string as getCharFromString;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct string_table_entry {

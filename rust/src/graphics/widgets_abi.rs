@@ -129,7 +129,7 @@ pub unsafe extern "C" fn DrawLabelAsWindow(label: *mut WIDGET_LABEL, window_rect
     let mut win_w = 0;
     for i in 0..(*label).line_count {
         let len =
-            crate::strings::unicode::utf8StringCount((*(*label).lines.offset(i as isize)).cast());
+            crate::strings::unicode::utf8_string_count((*(*label).lines.offset(i as isize)).cast());
         if len as i32 > win_w {
             win_w = len as i32;
         }
@@ -418,7 +418,7 @@ pub unsafe extern "C" fn Widget_DrawTextEntry(base: *mut WIDGET, x: i32, y: i32)
     draw_text(&mut t);
     (*s).value[49] = 0;
     t.baseline.y = y as i16;
-    t.CharCount = crate::strings::unicode::utf8StringCount((*s).value.as_ptr().cast()) as u16;
+    t.CharCount = crate::strings::unicode::utf8_string_count((*s).value.as_ptr().cast()) as u16;
     t.pStr = (*s).value.as_ptr() as *const _;
     if (*s).state & WTE_EDITING == 0 {
         t.baseline.x = 160;

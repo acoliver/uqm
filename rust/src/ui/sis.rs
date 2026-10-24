@@ -340,7 +340,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
             for d in &deltas[..ex_pos as usize] {
                 t.baseline.x = (i32::from(t.baseline.x) + i32::from(*d)) as SIZE;
             }
-            t.pStr = skipUTF8Chars(t.pStr, ex_pos as usize);
+            t.pStr = (skipUTF8Chars((t.pStr).cast(), ex_pos as usize)).cast();
             t.CharCount = !0;
             font_DrawText(&mut t);
         } else {

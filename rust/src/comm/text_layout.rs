@@ -20,7 +20,7 @@ pub(super) unsafe fn fit_line(
             if *ptr == 0 {
                 break (true, true);
             }
-            let ch = crate::strings::unicode::getCharFromString(&mut ptr);
+            let ch = crate::strings::unicode::get_char_from_string(&mut ptr);
             let eol = ch == 0 || ch == u32::from(b'\n') || ch == u32::from(b'\r');
             let done = eol || count >= max_chars;
             if done || ch == u32::from(b' ') {

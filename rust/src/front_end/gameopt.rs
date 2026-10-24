@@ -247,7 +247,11 @@ mod runtime {
                 );
             }
             CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                utf8StringCopy(buf.as_mut_ptr(), buf.len(), game_string(NAMING_STRING_BASE));
+                utf8StringCopy(
+                    (buf.as_mut_ptr()).cast(),
+                    buf.len(),
+                    (game_string(NAMING_STRING_BASE)).cast(),
+                );
             }
             _ => {}
         }
@@ -366,9 +370,13 @@ mod runtime {
         tes.ChangeCallback = Some(OnNameChange);
         tes.FrameCallback = None;
         if DoTextEntry(&mut tes) != 0 {
-            utf8StringCopy(Setting, tes.MaxSize as usize, buf.as_ptr());
+            utf8StringCopy(
+                (Setting).cast(),
+                tes.MaxSize as usize,
+                (buf.as_ptr()).cast(),
+            );
         } else {
-            utf8StringCopy(buf.as_mut_ptr(), buf.len(), Setting);
+            utf8StringCopy((buf.as_mut_ptr()).cast(), buf.len(), (Setting).cast());
         }
         SetFlashRect(SFR_MENU_3DO);
         DrawNameString(nameCaptain, buf.as_mut_ptr(), 0, DDSHS_NORMAL);
@@ -845,16 +853,16 @@ mod runtime {
                 }
                 IN_HYPERSPACE => {
                     utf8StringCopy(
-                        buf.as_mut_ptr(),
+                        (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        game_string(NAVIGATION_STRING_BASE),
+                        (game_string(NAVIGATION_STRING_BASE)).cast(),
                     );
                 }
                 IN_QUASISPACE => {
                     utf8StringCopy(
-                        buf.as_mut_ptr(),
+                        (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        game_string(NAVIGATION_STRING_BASE + 1),
+                        (game_string(NAVIGATION_STRING_BASE + 1)).cast(),
                     );
                 }
                 _ => {
@@ -871,21 +879,21 @@ mod runtime {
             match (*pSD).Activity as u32 {
                 IN_STARBASE => {
                     utf8StringCopy(
-                        buf.as_mut_ptr(),
+                        (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        game_string(STARBASE_STRING_BASE),
+                        (game_string(STARBASE_STRING_BASE)).cast(),
                     );
                 }
                 IN_LAST_BATTLE => {
                     utf8StringCopy(
-                        buf.as_mut_ptr(),
+                        (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        game_string(PLANET_NUMBER_BASE + 32),
+                        (game_string(PLANET_NUMBER_BASE + 32)).cast(),
                     );
                 }
                 IN_PLANET_ORBIT => {
                     utf8StringCopy(
-                        buf.as_mut_ptr(),
+                        (buf.as_mut_ptr()).cast(),
                         buf.len(),
                         ptr::addr_of!((*pSD).SS.PlanetName).cast(),
                     );
@@ -969,9 +977,9 @@ mod runtime {
             t.baseline.x = r.corner.x + 3;
             if (*desc).year_index == 0 {
                 utf8StringCopy(
-                    buf.as_mut_ptr(),
+                    (buf.as_mut_ptr()).cast(),
                     buf.len(),
-                    game_string(SAVEGAME_STRING_BASE + 3),
+                    (game_string(SAVEGAME_STRING_BASE + 3)).cast(),
                 );
             } else {
                 DateToString(

@@ -171,20 +171,22 @@ pub unsafe extern "C" fn InitGameStructures() -> BOOLEAN {
     (*state).CurrentActivity = (IN_INTERPLANETARY | START_INTERPLANETARY) as u16;
     super::initial_state::prices(&mut *sis, &mut *state);
     utf8StringCopy(
-        (*sis).ShipName.as_mut_ptr(),
+        ((*sis).ShipName.as_mut_ptr()).cast(),
         mem::size_of_val(&(*sis).ShipName),
-        GetStringAddress(SetAbsStringTableIndex(
+        (GetStringAddress(SetAbsStringTableIndex(
             GameStrings,
             (NAMING_STRING_BASE + 2) as u16,
-        )),
+        )))
+        .cast(),
     );
     utf8StringCopy(
-        (*sis).CommanderName.as_mut_ptr(),
+        ((*sis).CommanderName.as_mut_ptr()).cast(),
         mem::size_of_val(&(*sis).CommanderName),
-        GetStringAddress(SetAbsStringTableIndex(
+        (GetStringAddress(SetAbsStringTableIndex(
             GameStrings,
             (NAMING_STRING_BASE + 3) as u16,
-        )),
+        )))
+        .cast(),
     );
     SetRaceAllied(HUMAN_SHIP as u16, 1);
     CloneShipFragment(HUMAN_SHIP as u16, &mut (*state).built_ship_q, 0);

@@ -323,14 +323,22 @@ mod runtime {
                     SetContextFont(*font);
                 }
                 b"ANI" => {
-                    utf8StringCopy(state.Buffer.as_mut_ptr(), state.Buffer.len(), src);
+                    utf8StringCopy(
+                        (state.Buffer.as_mut_ptr()).cast(),
+                        state.Buffer.len(),
+                        (src).cast(),
+                    );
                     if !state.Frame.is_null() {
                         DestroyDrawable(ReleaseDrawable(state.Frame));
                     }
                     state.Frame = CaptureDrawable(LoadGraphicFile(state.Buffer.as_ptr()));
                 }
                 b"MUSIC" => {
-                    utf8StringCopy(state.Buffer.as_mut_ptr(), state.Buffer.len(), src);
+                    utf8StringCopy(
+                        (state.Buffer.as_mut_ptr()).cast(),
+                        state.Buffer.len(),
+                        (src).cast(),
+                    );
                     if !state.MusicRef.is_null() {
                         StopMusic();
                         DestroyMusic(state.MusicRef);
@@ -408,7 +416,11 @@ mod runtime {
                     }
                 }
                 b"TFI" => {
-                    utf8StringCopy(state.Buffer.as_mut_ptr(), state.Buffer.len(), src);
+                    utf8StringCopy(
+                        (state.Buffer.as_mut_ptr()).cast(),
+                        state.Buffer.len(),
+                        (src).cast(),
+                    );
                     state.LinesCount = parse_text_lines(
                         state.TextLines.as_mut_ptr(),
                         MAX_TEXT_LINES,
@@ -586,7 +598,11 @@ mod runtime {
                 }
                 b"CALL" => {
                     unbatch(state, true);
-                    utf8StringCopy(state.Buffer.as_mut_ptr(), state.Buffer.len(), src);
+                    utf8StringCopy(
+                        (state.Buffer.as_mut_ptr()).cast(),
+                        state.Buffer.len(),
+                        (src).cast(),
+                    );
                     show_file(state.Buffer.as_ptr());
                 }
                 b"LINE" => {
