@@ -232,6 +232,15 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row(
+        "campaign-s10g-connected-lure",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+        ],
+    ),
+    row(
         "campaign-s10h-connected-lure-prep",
         &[
             Domain::SaveLoad,
@@ -255,6 +264,7 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::CommunicationChoices,
         ],
     ),
+    row("load-connected-lure-v1", &[Domain::SaveLoad]),
     row("load-connected-jugger-prep-v1", &[Domain::SaveLoad]),
     row("load-connected-combat-prep-v1", &[Domain::SaveLoad]),
     row("load-connected-lure-prep-v1", &[Domain::SaveLoad]),
