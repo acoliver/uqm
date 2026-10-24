@@ -264,7 +264,16 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::CommunicationChoices,
         ],
     ),
+    row("load-connected-chmmr-bomb-v1", &[Domain::SaveLoad]),
     row("load-connected-sun-device-v1", &[Domain::SaveLoad]),
+    row(
+        "campaign-s11a-connected-chmmr",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+        ],
+    ),
     row("load-connected-lure-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s10l-connected-sun-device",
