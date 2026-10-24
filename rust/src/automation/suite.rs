@@ -281,6 +281,15 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::BattleOutcomes,
         ],
     ),
+    row(
+        "campaign-s13-connected-ending",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+        ],
+    ),
     row("load-connected-samatra-remnants-v1", &[Domain::SaveLoad]),
     row("load-connected-samatra-distraction-v1", &[Domain::SaveLoad]),
     row("load-connected-final-fleet-v1", &[Domain::SaveLoad]),
