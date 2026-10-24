@@ -353,7 +353,7 @@ unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
         UpdateFuelRequirement();
     }
     flashCurrentLocation(ptr::null());
-    SleepThread((ONE_SECOND / 30) as i32);
+    SleepThread(ONE_SECOND / 30);
     1
 }
 

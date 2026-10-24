@@ -36,9 +36,7 @@ pub static mut TransitionClipRect: RECT = RECT {
 };
 static mut GSCALE: i32 = 256;
 static mut GSCALE_MODE: i32 = 1;
-extern "C" {
-    fn SleepThread(ticks: i32);
-}
+use crate::threading::pacing::linked::sleep_thread as SleepThread;
 /// # Safety
 /// Optional rectangle must be live on the serialized graphics thread.
 #[no_mangle]

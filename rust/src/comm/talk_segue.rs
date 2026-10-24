@@ -121,10 +121,10 @@ pub(super) mod c_bridge {
         pub fn DrawAlienFrame(sequences: *const c_void, num: u16, full_redraw: c_int) -> c_int;
         pub fn InitCommAnimations();
         pub fn UpdateInputState();
-        pub fn SleepThread(duration: c_int);
         pub fn ScreenTransition(which: c_int, rect: *const c_void);
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+    pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
     extern "C" {
         static mut LastActivity: u32;
@@ -281,9 +281,9 @@ pub mod dinput {
     const CHECK_ABORT: u32 = 0x4000;
 
     extern "C" {
-        fn SleepThreadUntil(wake_time: u32);
         static mut usingSpeech: c_int;
     }
+    use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     use crate::comm::ffi::rust_update_speech_graphics;
 

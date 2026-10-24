@@ -202,7 +202,6 @@ mod c_bridge {
 
         // Input
         pub fn DoInput(state: *mut std::ffi::c_void, reset: std::ffi::c_int);
-        pub fn SleepThread(ticks: std::ffi::c_int);
 
         // Game strings — GAME_STRING(i) macro = GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
         pub static mut GameStrings: *mut std::ffi::c_void;
@@ -220,6 +219,7 @@ mod c_bridge {
         pub fn comm_ClearSubtitles();
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+    pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 }
 
 /// C `INPUT_STATE` struct — just the menu array we need.
@@ -383,7 +383,7 @@ unsafe fn copy_cstr(src: *const std::ffi::c_char, buf: &mut [u8; 80], offset: us
     offset + i
 }
 
-const ONE_SECOND: std::ffi::c_int = 840;
+const ONE_SECOND: u32 = 840;
 
 /// Convert 5-bit color component to 8-bit (matches C CC5TO8 macro).
 const fn cc5to8(c: u8) -> u8 {

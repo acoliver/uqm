@@ -60,7 +60,6 @@ extern "C" {
     fn DrawSISMessageEx(text: *const c_char, cursor: i16, extent: i16, flags: u16) -> u32;
     fn LoadIntoExtraScreen(rect: *mut CRect);
     fn RepairBackRect(rect: *mut CRect);
-    fn SleepThread(ticks: i32);
     fn SetTransitionSource(rect: *mut c_void);
     fn ScreenTransition(kind: i32, rect: *const c_void);
     fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
@@ -79,6 +78,7 @@ extern "C" {
     fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -703,7 +703,7 @@ pub unsafe fn ZoomStarMap(direction: i16) {
         zoomLevel += 1;
         mapOrigin = cursorLoc;
         DrawStarMap(0, ptr::null_mut());
-        SleepThread((ONE_SECOND / 8) as i32);
+        SleepThread(ONE_SECOND / 8);
     } else if direction < 0 && zoomLevel > 0 {
         mapOrigin = if zoomLevel > 1 {
             cursorLoc
@@ -712,7 +712,7 @@ pub unsafe fn ZoomStarMap(direction: i16) {
         };
         zoomLevel -= 1;
         DrawStarMap(0, ptr::null_mut());
-        SleepThread((ONE_SECOND / 8) as i32);
+        SleepThread(ONE_SECOND / 8);
     }
 }
 

@@ -306,7 +306,7 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
     }
 
     // SAFETY: plain call.
-    unsafe { crate::battle::c_bridge::SleepThread((ONE_SECOND / 30) as c_int) };
+    unsafe { crate::battle::c_bridge::SleepThread(ONE_SECOND / 30) };
     1
 }
 

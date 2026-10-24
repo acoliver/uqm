@@ -1001,12 +1001,8 @@ pub const SYNC_CLASS_AUDIO: _bindgen_ty_1 = 2;
 pub const SYNC_CLASS_VIDEO: _bindgen_ty_1 = 4;
 pub const SYNC_CLASS_RESOURCE: _bindgen_ty_1 = 8;
 pub type _bindgen_ty_1 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn SleepThread(timePeriod: TimePeriod);
-}
-extern "C" {
-    pub fn SleepThreadUntil(wakeTime: TimeCount);
-}
+pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
+pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 extern "C" {
     pub fn TaskSwitch();
 }

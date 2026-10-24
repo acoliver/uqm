@@ -45,8 +45,8 @@ extern "C" {
     fn SetMenuRepeatDelay(min: u32, max: u32, step: u32, gestalt: i32);
     fn SetMenuSounds(move_sound: u16, select_sound: u16);
     fn PlayMenuSound(sound: i32);
-    fn SleepThreadUntil(time: u32);
 }
+use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
 /// Copy the active cursor on its owning game thread.
 ///
