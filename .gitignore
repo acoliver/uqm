@@ -37,3 +37,5 @@ rust/src/graphics/font
 
 # Local build output
 sc2/.llxprt/
+/artifacts/
+/scripts/release/__pycache__/

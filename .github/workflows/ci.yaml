@@ -134,3 +134,15 @@ jobs:
           name: failure-${{ matrix.scenario }}
           path: tmp/failure-scenarios/${{ matrix.scenario }}
           retention-days: 3
+
+  release-tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test package and PE import validation
+        run: python -m unittest discover -s scripts/release -p 'test_*.py'
+      - name: Check tap script syntax
+        run: bash -n scripts/release/update_homebrew_tap.sh
