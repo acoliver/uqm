@@ -49,22 +49,20 @@ extern "C" {
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
     fn LoadMusic(res_id: *const c_void) -> *mut c_void;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn DestroyMusic(music: *mut c_void) -> i32;
 
     fn LoadSound(res_id: *const c_void) -> *mut c_void;
     fn CaptureSound(sound: *mut c_void) -> *mut c_void;
     fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
-    fn DestroySound(sound: *mut c_void);
 
     fn LoadStringTable(res_id: *const c_void) -> *mut c_void;
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
     fn DestroyStringTable(table: *mut c_void) -> i32;
 }
+#[cfg(not(test))]
+use crate::sound::heart_ffi::DestroyMusic;
+#[cfg(not(test))]
+use crate::sound::heart_ffi::DestroySound;
 
 // ---------------------------------------------------------------------------
 // Safe Rust wrappers for resource loading

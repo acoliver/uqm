@@ -25,9 +25,7 @@ mod engine {
         fn ReleaseStringTable(string: *mut c_void) -> *mut c_void;
         fn DestroyStringTable(table: *mut c_void) -> c_int;
         fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
-        fn DestroyMusic(music: *mut c_void);
         fn LoadSoundInstance(res: *const c_char) -> *mut c_void;
-        fn DestroySound(sound: *mut c_void);
         fn load_animation(
             frames: *mut c_void,
             big: *const c_char,
@@ -36,6 +34,8 @@ mod engine {
         ) -> u32;
         fn free_image(frames: *mut c_void) -> u32;
     }
+    use crate::sound::heart_ffi::DestroyMusic;
+    use crate::sound::heart_ffi::DestroySound;
 
     const CODE_RESOURCES: [Option<&std::ffi::CStr>; SPECIES_ID_NUM_SPECIES_ID as usize] = [
         None,

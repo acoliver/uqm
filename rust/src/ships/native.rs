@@ -100,7 +100,6 @@ mod engine {
         fn DrawFilledRectangle(rect: *mut crate::comm::locdata::CRect);
         fn font_DrawText(text: *mut crate::comm::sis_graphics::CText);
         fn SetContextFont(font: *mut c_void) -> *mut c_void;
-        fn DestroySound(sound: *mut c_void);
         fn inHyperSpace() -> i32;
         fn SetFlashRect(rect: *const c_void);
         fn DrawSISTitle(title: *const std::ffi::c_char);
@@ -111,6 +110,7 @@ mod engine {
         #[link_name = "rust_bridge_OBJECT_CLOAKED"]
         fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int;
     }
+    use crate::sound::heart_ffi::DestroySound;
     /// # Safety
     /// Called on the game thread with the live resources required by the Rust provider.
     #[cfg(not(test))]

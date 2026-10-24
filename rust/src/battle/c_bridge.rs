@@ -168,9 +168,6 @@ extern "C" {
     /// Load a music resource
     pub fn LoadMusic(music_file: *const u8) -> MusicRef;
 
-    /// Destroy a music resource
-    pub fn DestroyMusic(music: MusicRef);
-
     // --- Ship/Race Integration ---
 
     /// Get the starship associated with an element
@@ -214,6 +211,7 @@ pub use crate::graphics::gfx_common_abi::BatchGraphics;
 pub use crate::graphics::gfx_common_abi::SetGraphicScale;
 /// End batched graphics mode
 pub use crate::graphics::gfx_common_abi::UnbatchGraphics;
+pub use crate::sound::heart_ffi::DestroyMusic;
 pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 

@@ -31,8 +31,9 @@ extern "C" {
     fn DestroyDrawable(handle: *mut std::ffi::c_void) -> u32;
     fn DestroyFont(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
     fn DestroyStringTable(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
-    fn DestroyMusic(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
 }
+#[cfg(not(test))]
+use crate::sound::heart_ffi::DestroyMusic;
 
 // ============================================================================
 // Callback tracking

@@ -444,12 +444,6 @@ extern "C" {
 
     // --- Music ---
 
-    /// `BOOLEAN DestroyMusic(MUSIC_REF)` — returns c_int.
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn DestroyMusic(handle: *mut c_void) -> c_int;
     #[allow(
         clashing_extern_declarations,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
@@ -482,6 +476,7 @@ extern "C" {
     pub fn DoPopupWindow(string: *const c_char);
 }
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+pub use crate::sound::heart_ffi::DestroyMusic;
 
 #[cfg(not(test))]
 pub use draw_restart_menu_graphic as DrawRestartMenuGraphic;
