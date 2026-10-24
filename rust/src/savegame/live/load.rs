@@ -58,6 +58,7 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
         game,
         &statefiles::StateFileSections {
             scan: save.scan,
+            canned_nodes: save.canned_nodes,
             group_list: save.group_list,
             battle_groups: save.battle_groups,
         },

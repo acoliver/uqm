@@ -126,6 +126,9 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             // Select the drawable life frame (and therefore its collision mask)
             // from the typed entity frame, never a hardcoded zero.  The
             // lifecycle frame is normalized to the four-frame life animation.
+            SurfaceEntityKind::CannedCreature { frame_index, .. } => {
+                (self.canister_frame()?, frame_index)
+            }
             SurfaceEntityKind::LiveCreature {
                 kind, frame_index, ..
             } => (

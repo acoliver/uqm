@@ -229,6 +229,15 @@ mod production {
                 element.mass_points = MAX_SCROUNGED;
                 primitive.stamp.frame = (*solar).PlanetSideFrame[1].cast();
             }
+            super::super::generation::GeneratedNodeKind::CannedBiological { value } => {
+                element.current.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast();
+                element.next.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast();
+                element.mass_points = value as u8;
+                element.crew_or_hp = 0;
+                primitive.stamp.frame = (*solar).PlanetSideFrame[0].cast();
+            }
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
                 hit_points,

@@ -623,6 +623,7 @@ fn minimal_expected() -> SaveFile {
         events: vec![],
         encounters: vec![],
         scan: None,
+        canned_nodes: Vec::new(),
         group_list: None,
         battle_groups: vec![],
         star: star(),
@@ -1563,4 +1564,32 @@ fn c_written_save_summary_alone_matches_the_full_decode() {
     let full = decode_save(C_WRITTEN_SAVE).unwrap();
     let only = decode_summary_from(&C_WRITTEN_SAVE[..172], 172).unwrap();
     assert_eq!(only, full.summary);
+}
+
+#[test]
+fn uncollected_canisters_round_trip_in_optional_save_chunk() {
+    let mut bytes = minimal_file(&[]);
+    let body = [1, 0, 2, 1, 31, 3, 0xc7, 3, 0x2b, 1];
+    bytes.extend(chunk(b"Cans", [10, 0, 0, 0], &body));
+    let decoded = decode_save(&bytes).unwrap();
+    let encoded = encode_save(&decoded).unwrap();
+    assert!(encoded.windows(4).any(|tag| tag == b"Cans"));
+    assert_eq!(decode_save(&encoded).unwrap(), decoded);
+}
+
+#[test]
+fn malformed_canister_records_are_rejected_and_old_saves_remain_unchanged() {
+    let old = minimal_file(&[]);
+    let decoded = decode_save(&old).unwrap();
+    assert!(decoded.canned_nodes.is_empty());
+    assert_eq!(encode_save(&decoded).unwrap(), old);
+    for body in [vec![0; 9], vec![0; 10], vec![1, 0, 2, 1, 32, 3, 0, 0, 0, 0]] {
+        let mut bytes = old.clone();
+        bytes.extend(chunk(b"Cans", (body.len() as u32).to_le_bytes(), &body));
+        assert!(decode_save(&bytes).is_err());
+    }
+    let body = [1, 0, 2, 1, 31, 3, 0, 0, 0, 0];
+    let mut bytes = old;
+    bytes.extend(chunk(b"Cans", [20, 0, 0, 0], &[body, body].concat()));
+    assert!(decode_save(&bytes).is_err());
 }

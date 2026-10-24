@@ -91,6 +91,7 @@ fn seed_sections() -> StateFileSections {
     let save = seed();
     StateFileSections {
         scan: save.scan,
+        canned_nodes: save.canned_nodes,
         group_list: save.group_list,
         battle_groups: save.battle_groups,
     }
@@ -465,6 +466,7 @@ fn repeated_loads_start_from_the_initial_group_files() {
     let mut random = random_group(3);
     random.current = true; // LoadBattleGroup forces this off for the random group
     let second = StateFileSections {
+        canned_nodes: Vec::new(),
         scan: Some(vec![0xdead_beef]),
         group_list: None,
         battle_groups: vec![random],
@@ -523,6 +525,7 @@ fn several_defined_groups_get_their_own_offsets() {
     last.encounter_id = 14;
     let sections = StateFileSections {
         scan: None,
+        canned_nodes: Vec::new(),
         group_list: None,
         battle_groups: vec![random_group(0), last.clone(), first.clone()],
     };
@@ -583,4 +586,51 @@ fn deleted_files_capture_as_empty_storage() {
     let captured = capture_state_files(&game).unwrap();
     assert_eq!(captured.scan, Some(Vec::new()));
     assert!(captured.group_list.is_none() && captured.battle_groups.is_empty());
+}
+
+#[test]
+#[serial]
+fn canned_nodes_capture_restore_and_old_save_clear_are_atomic() {
+    let mut game = fresh_game();
+    let node = crate::state::planet_info::CannedNode {
+        star: 1,
+        planet: 2,
+        moon: 1,
+        node: 31,
+        value: 15,
+        x: 967,
+        y: 299,
+    };
+    with_state_files(|files| files.can_node(node)).unwrap();
+    let captured = capture_state_files(&game).unwrap();
+    assert_eq!(captured.canned_nodes, [node]);
+    with_state_files(|files| files.remove_canned_node(node.key())).unwrap();
+    restore_state_files(&mut game, &captured).unwrap();
+    assert_eq!(
+        with_state_files(|files| files.canned_node(node.key())).unwrap(),
+        Some(node)
+    );
+    let mut invalid_group = probe_group(false);
+    invalid_group.fleets[0].ships[0].crew_level = 256;
+    assert!(restore_state_files(
+        &mut game,
+        &StateFileSections {
+            battle_groups: vec![invalid_group],
+            ..Default::default()
+        }
+    )
+    .is_err());
+    assert_eq!(
+        with_state_files(|files| files.canned_node(node.key())).unwrap(),
+        Some(node)
+    );
+    restore_state_files(&mut game, &StateFileSections::default()).unwrap();
+    assert!(with_state_files(|files| files.canned_node(node.key()))
+        .unwrap()
+        .is_none());
+    with_state_files(|files| files.can_node(node)).unwrap();
+    unsafe { rust_init_game_state() };
+    assert!(with_state_files(|files| files.canned_node(node.key()))
+        .unwrap()
+        .is_none());
 }

@@ -309,6 +309,8 @@ pub struct SaveFile {
     /// The "Scan" chunk: STARINFO as 32-bit words. `Some(vec![])` is a
     /// present, empty chunk.
     pub scan: Option<Vec<u32>>,
+    /// Optional "Cans" records. Absent in older saves.
+    pub canned_nodes: Vec<crate::state::planet_info::CannedNode>,
     pub group_list: Option<GroupList>,
     pub battle_groups: Vec<BattleGroup>,
     pub star: StarDesc,

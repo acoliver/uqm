@@ -196,6 +196,7 @@ impl From<StateSectionError> for RuntimeError {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StateFileSections {
     pub scan: Option<Vec<u32>>,
+    pub canned_nodes: Vec<crate::state::planet_info::CannedNode>,
     pub group_list: Option<GroupList>,
     pub battle_groups: Vec<BattleGroup>,
 }
@@ -505,13 +506,15 @@ pub fn capture_state_files(game: &CGameState) -> Result<StateFileSections, State
                 .expect("the three state files always exist")
                 .contents()
         };
-        capture_from_images(
+        let mut sections = capture_from_images(
             contents(STARINFO_FILE),
             contents(RANDGRPINFO_FILE),
             contents(DEFGRPINFO_FILE),
             state.as_bytes(),
             game.battle_group_ref,
-        )
+        )?;
+        sections.canned_nodes = files.canned_nodes.clone();
+        Ok(sections)
     })?
 }
 
@@ -741,6 +744,7 @@ pub fn restore_state_files(
     let plan = with_state_owners(|state, files| {
         let plan = plan_restore(sections, state.as_bytes())?;
         commit(&plan, state, files);
+        files.canned_nodes.clone_from(&sections.canned_nodes);
         Ok::<_, StateSectionError>(plan)
     })??;
     game.game_state_bytes = plan.game_state;

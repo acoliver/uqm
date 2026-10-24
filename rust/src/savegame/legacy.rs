@@ -276,6 +276,7 @@ mod live {
                 },
             )?;
             crate::state::ffi::with_state_files(|files| {
+                files.canned_nodes.clear();
                 for (index, image) in [0, 2, 1].into_iter().zip(&legacy.state_files) {
                     files
                         .replace_contents(index, image)

@@ -506,6 +506,15 @@ mod tests {
     }
 
     impl super::super::generation::SurfaceGenerator for RecordingGenerator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(&mut self, _scan: ScanType) -> Result<u8, AdapterError> {
             Ok(0)
         }

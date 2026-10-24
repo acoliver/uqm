@@ -99,6 +99,13 @@ impl CffiSurfaceGenerator {
         Self::with_role(solar_system, world, GeneratorRole::OrbitScan)
     }
 
+    #[cfg(not(test))]
+    fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
+        let (star, planet, moon) =
+            unsafe { crate::state::c_api::planets::location(self.solar_system.cast()) };
+        (star as u16, planet as u8, moon as u8, node.get())
+    }
+
     fn with_role(
         solar_system: *mut c_void,
         world: *mut c_void,
@@ -143,6 +150,15 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
     ) -> Result<GeneratedNode, AdapterError> {
         #[cfg(not(test))]
         unsafe {
+            if scan == ScanType::Biological {
+                let key = self.node_key(node);
+                if let Some(canned) =
+                    crate::state::ffi::with_state_files(|files| files.canned_node(key))
+                        .map_err(|_| AdapterError::new("canned_node_state"))?
+                {
+                    return Ok(GeneratedNode::from_canister(canned));
+                }
+            }
             let mut info: NODE_INFO = std::mem::zeroed();
             let _ = callGenerateForScanType(
                 self.solar_system.cast(),
@@ -194,6 +210,37 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         }
     }
 
+    #[cfg(not(test))]
+    fn can_node(
+        &mut self,
+        node: ScanNodeId,
+        position: SurfacePoint,
+        value: u16,
+    ) -> Result<(), AdapterError> {
+        let (star, planet, moon, node) = self.node_key(node);
+        let canned = crate::state::planet_info::CannedNode {
+            star,
+            planet,
+            moon,
+            node,
+            value: value as u8,
+            x: position.x as i16,
+            y: position.y as i16,
+        };
+        crate::state::ffi::with_state_files(|files| files.can_node(canned))
+            .map_err(|_| AdapterError::new("canned_node_state"))
+    }
+
+    #[cfg(test)]
+    fn can_node(
+        &mut self,
+        _: ScanNodeId,
+        _: super::model::SurfacePoint,
+        _: u16,
+    ) -> Result<(), AdapterError> {
+        Err(AdapterError::new("surface_generator_unlinked"))
+    }
+
     fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
         {
             // A pickup callback may present a discovery report, and the native
@@ -228,6 +275,12 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                         scan as u8,
                         node.get(),
                     );
+                }
+                #[cfg(not(test))]
+                if scan == ScanType::Biological {
+                    let key = self.node_key(node);
+                    crate::state::ffi::with_state_files(|files| files.remove_canned_node(key))
+                        .map_err(|_| AdapterError::new("canned_node_state"))?;
                 }
                 crate::state::game_state_keys::set_game_state("PLANETARY_CHANGE", 1);
             }
