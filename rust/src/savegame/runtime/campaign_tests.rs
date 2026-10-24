@@ -5,6 +5,31 @@ use crate::state::game_state_keys::STATE_KEYS;
 use serial_test::serial;
 
 #[test]
+fn final_fleet_has_eleven_crewed_avatars_and_the_restored_jugger() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
+    let saved =
+        decode_save(&std::fs::read(root.join("connected-final-fleet.sav")).unwrap()).unwrap();
+    assert_eq!(saved.ship_queue.len(), 12);
+    for ship in &saved.ship_queue {
+        let expected = if ship.index == 8 {
+            (9, 20, 20)
+        } else {
+            (1, 42, 42)
+        };
+        assert_eq!((ship.race_index, ship.crew_level, ship.max_crew), expected);
+    }
+    assert_eq!(
+        saved
+            .race_queue
+            .iter()
+            .find(|race| race.index == 1)
+            .unwrap()
+            .allied_state,
+        1
+    );
+}
+
+#[test]
 fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
     use crate::state::game_state::get_state_bits_raw;
     use crate::state::game_state_keys::bit_range;
@@ -210,6 +235,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-final-fleet" => (12, 5, 2158, 50, 11000, 960491, 12),
             "connected-chmmr-bomb" => (11, 5, 2158, 50, 11000, 994850, 1),
             "connected-sun-device" => (28, 3, 2158, 32, 5770, 3729, 2),
             "connected-lure" => (25, 3, 2158, 35, 6110, 2419, 3),
