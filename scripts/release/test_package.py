@@ -44,6 +44,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_windows_allows_os_dlls_for_each_machine(self):
         self.audit("KERNEL32.dll")
+        self.audit("bcryptprimitives.dll")
         self.audit("api-ms-win-core-synch-l1-2-0.dll", 0xAA64, "aarch64-pc-windows-msvc")
 
     def test_windows_rejects_unbundled_sdl_and_vc_runtime(self):

@@ -37,7 +37,7 @@ def smoke(binary, cwd, version, content):
         raise RuntimeError(f"unexpected version: {output!r}, expected {version}")
     run(binary, "--help", **kwargs)
     output = run(binary, "--check-content", **kwargs).stdout.strip()
-    if not output.startswith("Content OK: ") or Path(output.removeprefix("Content OK: ")).resolve() != content.resolve():
+    if not output.startswith("Content OK: ") or not Path(output.removeprefix("Content OK: ")).samefile(content):
         raise RuntimeError(f"packaged content was not used: {output!r}")
     result = subprocess.run([str(binary), "--check-content", "--contentdir=missing"], **kwargs)
     if result.returncode == 0:
@@ -75,10 +75,12 @@ def windows_imports(binary, target):
         name = offset(struct.unpack_from("<I", data, imports + 12)[0])
         names.append(data[name:data.index(0, name)].decode("ascii").lower())
         imports += 20
-    system = set("kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 shell32 version advapi32 setupapi hid ws2_32 comdlg32 rpcrt4 dwmapi shlwapi avrt propsys cfgmgr32 dinput8 d3d9 d3d11 dxgi crypt32 bcrypt ntdll ucrtbase msvcrt userenv dbghelp combase winhttp dnsapi powrprof secur32 msimg32 opengl32".split())
-    for name in names:
-        if name.removesuffix(".dll") not in system and not name.startswith(("api-ms-win-", "ext-ms-win-")):
-            raise RuntimeError(f"non-system Windows DLL dependency: {name}")
+    system = set("kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 shell32 version advapi32 setupapi hid ws2_32 comdlg32 rpcrt4 dwmapi shlwapi avrt propsys cfgmgr32 dinput8 d3d9 d3d11 dxgi crypt32 bcrypt bcryptprimitives ntdll ucrtbase msvcrt userenv dbghelp combase winhttp dnsapi powrprof secur32 msimg32 opengl32".split())
+    unexpected = [name for name in names
+                  if name.removesuffix(".dll") not in system
+                  and not name.startswith(("api-ms-win-", "ext-ms-win-"))]
+    if unexpected:
+        raise RuntimeError(f"non-system Windows DLL dependencies: {', '.join(unexpected)}")
     print(f"PE {target} system imports: {', '.join(names)}", flush=True)
 
 
