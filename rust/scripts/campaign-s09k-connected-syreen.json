@@ -779,6 +779,19 @@
       "max_ticks": 120000
     },
     {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "activity",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "max_ticks": 3000
+    },
+    {
       "action": "assert_state",
       "all": [
         {
