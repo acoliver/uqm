@@ -1168,7 +1168,7 @@ pub unsafe extern "C" fn uio_transplantDir(
 }
 
 // =============================================================================
-// uio_fgets / uio_fgetc / uio_ungetc / uio_vfprintf / uio_fputc / uio_fputs
+// uio_fgets / uio_fgetc / uio_ungetc / uio_fputc / uio_fputs
 // uio_fflush / uio_feof / uio_ferror / uio_clearerr / uio_streamHandle
 // =============================================================================
 
@@ -1323,63 +1323,6 @@ pub unsafe fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
     drop(guard);
     set_stream_status(stream, UIO_STREAM_STATUS_OK);
     wanted as c_int
-}
-
-// libc vasprintf(3): formats a va_list into a malloc'd, NUL-terminated buffer
-// in a single call (internal-only, not an exported uio_* symbol).
-extern "C" {
-    fn vasprintf(strp: *mut *mut c_char, fmt: *const c_char, ap: *mut libc::c_void) -> c_int;
-}
-
-/// @plan PLAN-20260314-FILE-IO.P04
-/// @requirement REQ-FIO-STREAM-WRITE
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_vfprintf(
-    stream: *mut uio_Stream,
-    format: *const c_char,
-    args: *mut libc::c_void,
-) -> c_int {
-    log_marker("uio_vfprintf called");
-
-    if stream.is_null() || format.is_null() {
-        set_errno(libc::EINVAL);
-        return -1;
-    }
-
-    // Format the va_list into a malloc'd buffer; vasprintf performs the
-    // sizing and the allocation in one call, so no retry loop is needed.
-    let mut formatted_buf: *mut c_char = ptr::null_mut();
-    // SAFETY: `format` is a valid NUL-terminated string and `args` a valid
-    // va_list (both validated by the C caller); `strp` points to our local
-    // out-parameter. On success vasprintf stores a malloc'd, NUL-terminated
-    // buffer and returns its length; on failure it returns -1 and the
-    // pointer is left null with nothing to free.
-    let format_result = unsafe { vasprintf(&mut formatted_buf, format, args) };
-    if format_result < 0 || formatted_buf.is_null() {
-        set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-        return -1;
-    }
-
-    // Get the length of the formatted string
-    let c_str = std::ffi::CStr::from_ptr(formatted_buf);
-    let bytes = c_str.to_bytes();
-    let len = bytes.len();
-
-    // Write the formatted string to the stream using uio_fwrite
-    let written = uio_fwrite(formatted_buf as *const libc::c_void, 1, len, stream);
-
-    // Free the formatted buffer
-    libc::free(formatted_buf as *mut libc::c_void);
-
-    if written != len {
-        set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-        return -1;
-    }
-
-    len as c_int
 }
 
 ///

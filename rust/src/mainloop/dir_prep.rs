@@ -222,15 +222,21 @@ unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle 
 // Public API: prepare_config_dir
 // ---------------------------------------------------------------------------
 
-/// Prepare the config directory.
-///
+/// Resolve the same config directory for reading defaults and startup mounting.
+pub(crate) fn config_path(explicit: Option<&str>) -> Result<PathBuf, DirPrepError> {
+    let override_path = explicit
+        .map(str::to_owned)
+        .or_else(|| std::env::var("UQM_CONFIG_DIR").ok());
+    match override_path.as_deref() {
+        Some(raw) => expand_path(raw),
+        None => Ok(crate::platform::default_config_dir()),
+    }
+}
+
 /// Resolves the path (default `~/.uqm/`), creates it if needed, mounts
 /// it at "/" in the uio repository, and sets the C `configDir` global.
 pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> {
-    let path = match config_dir {
-        Some(raw) => expand_path(raw)?,
-        None => crate::platform::default_config_dir(),
-    };
+    let path = config_path(config_dir)?;
     let path_str = path.to_string_lossy().to_string();
 
     // Set env var so UQM_SAVE_DIR / UQM_MELEE_DIR can reference it

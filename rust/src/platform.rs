@@ -122,6 +122,11 @@ pub fn default_config_dir() -> PathBuf {
     }
     #[cfg(unix)]
     {
-        PathBuf::from(std::env::var_os("HOME").expect("HOME must be set")).join(".uqm/")
+        use std::os::unix::ffi::OsStrExt;
+        let home = crate::io::legacy_dirs::get_home_dir();
+        assert!(!home.is_null(), "OS home directory unavailable");
+        // SAFETY: get_home_dir returns a libc-owned NUL-terminated environment/passwd path.
+        let home = unsafe { std::ffi::CStr::from_ptr(home) };
+        PathBuf::from(std::ffi::OsStr::from_bytes(home.to_bytes())).join(".uqm/")
     }
 }
