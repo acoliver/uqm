@@ -38,10 +38,10 @@ impl Mixer {
 
     fn start_with_flags(flags: c_uint) -> Self {
         let lease = ENGINE_TEST_LOCK.lock();
-        unsafe {
-            rust_mixer_uninit();
-            assert_eq!(rust_mixer_init(RATE, C_STEREO16, 1, flags), 1);
-        }
+
+        rust_mixer_uninit();
+        assert_eq!(rust_mixer_init(RATE, C_STEREO16, 1, flags), 1);
+
         Mixer { _lease: lease }
     }
 }
@@ -125,11 +125,10 @@ fn c_formats_decode_to_the_matching_mixer_format() {
 #[test]
 fn init_reports_the_negotiated_frequency_and_format() {
     let _mixer = Mixer::start();
-    unsafe {
-        assert_eq!(rust_mixer_get_frequency(), RATE);
-        assert_eq!(rust_mixer_get_format(), MixerFormat::Stereo16 as c_uint);
-        assert_eq!(rust_mixer_get_error(), 0);
-    }
+
+    assert_eq!(rust_mixer_get_frequency(), RATE);
+    assert_eq!(rust_mixer_get_format(), MixerFormat::Stereo16 as c_uint);
+    assert_eq!(rust_mixer_get_error(), 0);
 }
 
 #[test]
@@ -158,7 +157,7 @@ pub(crate) fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_proce
     queue(source, buffer);
     assert_eq!(state_of(source, QUEUED), 1);
 
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     assert_eq!(state_of(source, STATE), STATE_PLAYING);
 
     let out = render(4);
@@ -200,14 +199,14 @@ fn the_looping_flag_is_kept_on_the_source_and_stopping_clears_the_queue() {
     let buffer = buffer_with(C_STEREO16, &[40, 80, 120, 160]);
     let source = source();
     queue(source, buffer);
-    unsafe {
-        rust_mixer_sourcei(source, LOOPING, 1);
-        rust_mixer_source_play(source);
-    }
+
+    rust_mixer_sourcei(source, LOOPING, 1);
+    rust_mixer_source_play(source);
+
     assert_eq!(state_of(source, LOOPING), 1);
     assert_eq!(render(2), [30, 60, 90, 120]);
 
-    unsafe { rust_mixer_source_stop(source) };
+    rust_mixer_source_stop(source);
     assert_eq!(state_of(source, STATE), STATE_STOPPED);
     assert_eq!(state_of(source, QUEUED), 0, "stopping unqueues everything");
     assert_eq!(render(2), [0, 0, 0, 0]);
@@ -219,14 +218,14 @@ fn pausing_silences_the_source_and_resuming_continues_where_it_left_off() {
     let buffer = buffer_with(C_STEREO16, &[40, 80, 120, 160, 200, 240, 280, 320]);
     let source = source();
     queue(source, buffer);
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     assert_eq!(render(1), [30, 60]);
 
-    unsafe { rust_mixer_source_pause(source) };
+    rust_mixer_source_pause(source);
     assert_eq!(state_of(source, STATE), STATE_PAUSED);
     assert_eq!(render(1), [0, 0]);
 
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     assert_eq!(render(1), [90, 120]);
 }
 
@@ -236,13 +235,13 @@ fn rewinding_restarts_the_queue_from_the_first_sample() {
     let buffer = buffer_with(C_STEREO16, &[44, 48, 52, 56]);
     let source = source();
     queue(source, buffer);
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     render(1);
-    unsafe {
-        rust_mixer_source_rewind(source);
-        assert_eq!(state_of(source, STATE), STATE_INITIAL);
-        rust_mixer_source_play(source);
-    }
+
+    rust_mixer_source_rewind(source);
+    assert_eq!(state_of(source, STATE), STATE_INITIAL);
+    rust_mixer_source_play(source);
+
     assert_eq!(render(1), [33, 36]);
 }
 
@@ -253,10 +252,10 @@ fn two_sources_are_summed_into_the_stream() {
     let second = source();
     queue(first, buffer_with(C_STEREO16, &[400, 800]));
     queue(second, buffer_with(C_STEREO16, &[40, 80]));
-    unsafe {
-        rust_mixer_source_play(first);
-        rust_mixer_source_play(second);
-    }
+
+    rust_mixer_source_play(first);
+    rust_mixer_source_play(second);
+
     assert_eq!(render(1), [330, 660]);
 }
 
@@ -270,7 +269,7 @@ fn queued_buffers_play_back_to_back() {
     ];
     unsafe { rust_mixer_source_queue_buffers(source, 2, buffers.as_mut_ptr()) };
     assert_eq!(state_of(source, QUEUED), 2);
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     assert_eq!(render(2), [30, 30, 60, 60]);
     assert_eq!(state_of(source, PROCESSED), 2);
 }
@@ -357,7 +356,7 @@ fn mono_buffers_are_accepted_by_a_stereo_mixer() {
 fn fake_mode_renders_without_real_buffers() {
     let _mixer = Mixer::start_with_flags(1);
     let source = source();
-    unsafe { rust_mixer_source_play(source) };
+    rust_mixer_source_play(source);
     let mut stream = [0u8; 16];
     unsafe { rust_mixer_mix_fake(ptr::null_mut(), stream.as_mut_ptr(), 16) };
 }
