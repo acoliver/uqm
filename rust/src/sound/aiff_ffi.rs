@@ -17,33 +17,7 @@ use super::formats::{AudioFormat, DecoderFormats};
 
 use super::ffi::{uio_DirHandle, TFB_DecoderFormats, TFB_SoundDecoder, TFB_SoundDecoderFuncs};
 
-extern "C" {
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_open(
-        dir: *mut uio_DirHandle,
-        path: *const c_char,
-        flags: c_int,
-        mode: c_int,
-    ) -> *mut c_void;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_read(handle: *mut c_void, buf: *mut u8, count: usize) -> isize;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_close(handle: *mut c_void) -> c_int;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_fstat(handle: *mut c_void, stat_buf: *mut libc::stat) -> c_int;
-}
+use crate::io::uio_bridge::{uio_close, uio_fstat, uio_open, uio_read};
 
 // =============================================================================
 // FFI wrapper struct
