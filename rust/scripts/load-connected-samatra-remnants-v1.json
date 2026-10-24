@@ -43,7 +43,7 @@
           {
             "key": "activity",
             "op": "eq",
-            "value": 1
+            "value": 1025
           }
         ]
       },
