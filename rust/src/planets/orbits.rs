@@ -37,6 +37,52 @@ fn distribution(star_color: u8) -> Option<&'static [u8; NUMBER_OF_PLANET_TYPES]>
     }
 }
 
+const ORBIT_BUCKET: u16 = 5 << 6;
+
+fn has_available_orbit(prior: &[PLANET_DESC], minimum: u16) -> bool {
+    (minimum / ORBIT_BUCKET..=(MAX_PLANET_RADIUS - 1) / ORBIT_BUCKET).any(|bucket| {
+        prior
+            .iter()
+            .all(|planet| (planet.radius / ORBIT_BUCKET as i16 - bucket as i16).abs() > 1)
+    })
+}
+
+fn position_orbit(planet: &mut PLANET_DESC, angle: u16) {
+    let radius = i32::from(planet.radius);
+    let x = cosine(angle, radius) as i16;
+    let y = sine(angle, radius) as i16;
+    planet.location.x = x;
+    planet.location.y = y;
+    planet.rand_seed = (u32::from(y as u16) << 16) | u32::from(x as u16);
+}
+
+fn pack_orbits(planets: &mut [PLANET_DESC], angles: &[u16], sun: (u16, u16)) {
+    let minimum = |planet: &PLANET_DESC| {
+        if planet.data_index < FIRST_GAS_GIANT {
+            sun.0
+        } else {
+            sun.1
+        }
+    };
+    let mut order: Vec<_> = (0..planets.len()).collect();
+    order.sort_by_key(|&i| (minimum(&planets[i]), planets[i].radius));
+    let mut next_bucket = 0;
+    for i in order {
+        let min_radius = minimum(&planets[i]);
+        let bucket = next_bucket.max(min_radius / ORBIT_BUCKET);
+        let radius = min_radius.max(bucket * ORBIT_BUCKET);
+        assert!(
+            radius < MAX_PLANET_RADIUS,
+            "too many planets for legal orbits"
+        );
+        planets[i].radius = radius as i16;
+        if let Some(&angle) = angles.get(i) {
+            position_orbit(&mut planets[i], angle);
+        }
+        next_bucket = bucket + 2;
+    }
+}
+
 /// How `FillOrbits` is being used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OrbitRequest {
@@ -81,6 +127,7 @@ pub fn fill_orbits(
         NUMBER_OF_PLANET_TYPES as u8
     };
     let planet_count = num_planets;
+    let mut angles = vec![0; usize::from(planet_count)];
 
     for index in 0..usize::from(planet_count) {
         loop {
@@ -104,8 +151,18 @@ pub fn fill_orbits(
             sun.1
         };
 
+        // C retries forever if earlier placements cover every legal bucket.
+        // Leave its draw sequence untouched unless no draw can succeed.
+        let repacked =
+            !request.generating_moons && !has_available_orbit(&descs[..index], min_radius);
+        if repacked {
+            pack_orbits(&mut descs[..=index], &angles[..index], sun);
+        }
         loop {
             let rand_val = rng.next_random() as u16;
+            if repacked {
+                break;
+            }
             if request.generating_moons {
                 let radius = (MIN_MOON_RADIUS + (rand_val % MAX_MOONS) * MOON_DELTA) as i16;
                 descs[index].radius = radius;
@@ -128,12 +185,8 @@ pub fn fill_orbits(
         }
 
         let angle = (rng.next_random() as u16) & 63;
-        let radius = i32::from(descs[index].radius);
-        let x = cosine(angle, radius) as i16;
-        let y = sine(angle, radius) as i16;
-        descs[index].location.x = x;
-        descs[index].location.y = y;
-        descs[index].rand_seed = (u32::from(y as u16) << 16) | u32::from(x as u16);
+        angles[index] = angle;
+        position_orbit(&mut descs[index], angle);
     }
 
     let count = usize::from(planet_count);
@@ -146,4 +199,58 @@ pub fn fill_orbits(
     }
 
     generated_count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supergiant_drawn_planets_complete_with_legal_orbits() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for color in 0..6 {
+                for seed in 0..60 {
+                    let seed = seed * 7919 + 1;
+                    let mut rng = RandomContext::with_seed(seed);
+                    let mut planets: [PLANET_DESC; 9] = unsafe { std::mem::zeroed() };
+                    let count = fill_orbits(
+                        &mut rng,
+                        OrbitRequest {
+                            star_size: 2,
+                            star_color: color,
+                            num_planets: !0,
+                            generating_moons: false,
+                            types_defined: false,
+                        },
+                        &mut planets,
+                    )
+                    .unwrap();
+                    for (i, planet) in planets[..usize::from(count)].iter().enumerate() {
+                        let minimum = if planet.data_index < FIRST_GAS_GIANT {
+                            SUN_MIN_DISTANCES[2].0
+                        } else {
+                            SUN_MIN_DISTANCES[2].1
+                        };
+                        assert!((minimum..MAX_PLANET_RADIUS).contains(&(planet.radius as u16)));
+                        for prior in &planets[..i] {
+                            assert!((prior.radius / 320 - planet.radius / 320).abs() > 1);
+                        }
+                        assert_eq!(
+                            planet.rand_seed,
+                            (u32::from(planet.location.y as u16) << 16)
+                                | u32::from(planet.location.x as u16)
+                        );
+                    }
+                    tx.send((color, seed)).unwrap();
+                }
+            }
+        });
+        for _ in 0..360 {
+            // A test deadline detects the inherited infinite loop; production
+            // generation must terminate by proving that a legal radius exists.
+            rx.recv_timeout(std::time::Duration::from_secs(2))
+                .expect("supergiant orbit generation did not finish");
+        }
+    }
 }
