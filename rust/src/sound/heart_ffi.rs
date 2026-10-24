@@ -422,12 +422,7 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
 // Stream FFI (18 functions)
 // =============================================================================
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn InitStreamDecoder() -> c_int {
+pub fn init_stream_decoder() -> c_int {
     match stream::init_stream_decoder() {
         Ok(()) => 0,
         Err(e) => {
@@ -437,12 +432,7 @@ pub unsafe extern "C" fn InitStreamDecoder() -> c_int {
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn UninitStreamDecoder() {
+pub fn uninit_stream_decoder() {
     let _ = stream::uninit_stream_decoder();
 }
 
@@ -583,50 +573,25 @@ pub unsafe extern "C" fn PlayStream(
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn StopStream(source: u32) {
+pub fn stop_stream(source: u32) {
     let _ = ffi_catch(|| {
         let _ = stream::stop_stream(source as usize);
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PauseStream(source: u32) {
+pub fn pause_stream(source: u32) {
     let _ = stream::pause_stream(source as usize);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn ResumeStream(source: u32) {
+pub fn resume_stream(source: u32) {
     let _ = stream::resume_stream(source as usize);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SeekStream(source: u32, pos: u32) {
+pub fn seek_stream(source: u32, pos: u32) {
     let _ = stream::seek_stream(source as usize, pos);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PlayingStream(source: u32) -> u8 {
+pub fn playing_stream(source: u32) -> u8 {
     if stream::playing_stream(source as usize) {
         1
     } else {
@@ -689,12 +654,7 @@ pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
     stream::clear_buffer_tag(tag);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetMusicStreamFade(how_long: i32, end_volume: c_int) -> bool {
+pub fn set_music_stream_fade(how_long: i32, end_volume: c_int) -> bool {
     stream::set_music_stream_fade(how_long.max(0) as u32, end_volume)
 }
 
@@ -1005,30 +965,15 @@ pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
     let _ = music::snd_play_speech(&music_ref);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn snd_StopSpeech() {
+pub fn snd_stop_speech() {
     let _ = music::snd_stop_speech();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetMusicVolume(volume: c_int) {
+pub fn set_music_volume(volume: c_int) {
     music::set_music_volume(volume);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
+pub fn fade_music(end_vol: u8, how_long: i16) -> u32 {
     let interval = if how_long < 0 { 0u32 } else { how_long as u32 };
     if crate::sound::types::quit_posted() {
         // Don't make users wait for fades on quit
@@ -1087,21 +1032,11 @@ pub unsafe extern "C" fn PlayChannel(
     });
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn StopChannel(channel: c_uint, priority: c_int) {
+pub fn stop_channel(channel: c_uint, priority: c_int) {
     let _ = ffi_catch(|| sfx::stop_channel(channel as usize, priority));
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
+pub fn channel_playing(channel: c_uint) -> c_int {
     ffi_catch(|| {
         if sfx::channel_playing(channel as usize) {
             1
@@ -1112,12 +1047,7 @@ pub unsafe extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
     .unwrap_or(0)
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetChannelVolume(channel: c_uint, volume: c_int, priority: c_int) {
+pub fn set_channel_volume(channel: c_uint, volume: c_int, priority: c_int) {
     let _ = ffi_catch(|| sfx::set_channel_volume(channel as usize, volume, priority));
 }
 
@@ -1205,30 +1135,15 @@ pub unsafe extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) ->
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn UninitSound() {
+pub fn uninit_sound() {
     control::uninit_sound();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn StopSound() {
+pub fn stop_sound() {
     control::stop_sound();
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SoundPlaying() -> c_int {
+pub fn sound_playing() -> c_int {
     if control::sound_playing() {
         1
     } else {
@@ -1236,12 +1151,7 @@ pub unsafe extern "C" fn SoundPlaying() -> c_int {
     }
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn WaitForSoundEnd(channel: u16) {
+pub fn wait_for_sound_end(channel: u16) {
     // COUNT is u16; TFBSOUND_WAIT_ALL is (COUNT)~0 = 0xFFFF
     let ch = if channel == 0xFFFF {
         None
@@ -1251,21 +1161,11 @@ pub unsafe extern "C" fn WaitForSoundEnd(channel: u16) {
     control::wait_for_sound_end(ch);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetSFXVolume(volume: f32) {
+pub fn set_sfx_volume(volume: f32) {
     control::set_sfx_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetSpeechVolume(volume: f32) {
+pub fn set_speech_volume(volume: f32) {
     control::set_speech_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
@@ -1687,13 +1587,13 @@ mod tests {
 
     fn test_init_stream_decoder_return_type() {
         // Verify FFI function signature returns c_int
-        let f: unsafe extern "C" fn() -> c_int = InitStreamDecoder;
+        let f: fn() -> c_int = init_stream_decoder;
         let _ = f; // type-check only; calling mutates global state
     }
 
     #[test]
     fn test_playing_stream_returns_int() {
-        let result = unsafe { PlayingStream(0) };
+        let result = playing_stream(0);
         assert!(result == 0 || result == 1);
     }
 
@@ -1707,7 +1607,7 @@ mod tests {
     #[test]
 
     fn test_sound_playing_returns_int() {
-        let result = unsafe { SoundPlaying() };
+        let result = sound_playing();
         assert!(result == 0 || result == 1);
     }
 

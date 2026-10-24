@@ -1201,7 +1201,7 @@ mod runtime {
         musicVolumeScale = opts.musicvol as f32 / 100.0;
         sfxVolumeScale = opts.sfxvol as f32 / 100.0;
         speechVolumeScale = opts.speechvol as f32 / 100.0;
-        SetMusicVolume(musicVolume as COUNT);
+        SetMusicVolume(i32::from(musicVolume as COUNT));
         SetSpeechVolume(speechVolumeScale);
         for (i, key) in [
             c"keys.1.name",

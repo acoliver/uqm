@@ -11,8 +11,8 @@ use std::ptr;
 static mut CURRENT_VIDEO: *mut TFB_VideoClip = ptr::null_mut();
 static mut CURRENT_SPEECH: *mut c_void = ptr::null_mut();
 
+use crate::sound::heart_ffi::snd_stop_speech as snd_StopSpeech;
 extern "C" {
-    fn snd_StopSpeech();
     fn DestroyMusic(music: *mut c_void);
     fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> *mut c_void;
     fn DestroyMutex(mutex: *mut c_void);

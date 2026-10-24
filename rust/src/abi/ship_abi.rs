@@ -1123,9 +1123,7 @@ pub struct tfb_soundsample {
 }
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-unsafe extern "C" {
-    pub fn ChannelPlaying(Channel: COUNT) -> BOOLEAN;
-}
+pub use crate::sound::heart_ffi::{channel_playing as ChannelPlaying};
 unsafe extern "C" {
     pub fn GetPositionalObject(channel: COUNT) -> *mut ::std::os::raw::c_void;
 }
@@ -1135,12 +1133,8 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn UpdateSoundPosition(channel: COUNT, pos: SoundPosition);
 }
-unsafe extern "C" {
-    pub fn StopSound();
-}
-unsafe extern "C" {
-    pub fn WaitForSoundEnd(Channel: COUNT);
-}
+pub use crate::sound::heart_ffi::{stop_sound as StopSound};
+pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
 pub use crate::time::counter_abi::GetTimeCounter;

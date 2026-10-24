@@ -61,6 +61,7 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
 pub use crate::time::counter_abi::GetTimeCounter;
 extern "C" {
     // --- Graphics Integration ---
@@ -144,7 +145,6 @@ extern "C" {
     pub fn PLRPlaying(music: MusicRef) -> c_int;
 
     /// Stop all sounds
-    pub fn StopSound();
 
     /// Stop ditty playback
     pub fn StopDitty();

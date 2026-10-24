@@ -386,6 +386,7 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
+pub use crate::sound::heart_ffi::fade_music as FadeMusic;
 extern "C" {
     // --- Graphics ---
     /// The whole-screen drawing context created during graphics startup.
@@ -457,8 +458,6 @@ extern "C" {
     )]
     pub fn PlayMusic(handle: *mut c_void, do_loop: c_int, volume: u8);
     /// `DWORD FadeMusic(BYTE end_vol, SIZE TimeInterval)` — returns a TimeCount.
-    pub fn FadeMusic(end_vol: u8, time_interval: c_short) -> u32;
-
     // --- Flash ---
     pub fn Flash_createOverlay(context: *mut c_void, a: *mut c_void, b: *mut c_void)
         -> *mut c_void;

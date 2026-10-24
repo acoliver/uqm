@@ -68,8 +68,9 @@ pub(super) mod c_bridge {
         CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
     };
     use crate::comm::locdata::COMM_DATA;
-    use std::ffi::{c_int, c_uint, c_void};
+    use std::ffi::{c_int, c_void};
 
+    pub use crate::sound::heart_ffi::fade_music as FadeMusic;
     pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
     pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
     pub use crate::sound::heart_ffi::fast_reverse_page as FastReverse_Page;
@@ -82,7 +83,6 @@ pub(super) mod c_bridge {
     extern "C" {
         pub fn comm_CheckSubtitles();
         pub fn comm_ClearSubtitles();
-        pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
         pub fn SetSliderImage(frame: *mut c_void);
 
         // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
@@ -283,7 +283,6 @@ pub mod dinput {
 
     extern "C" {
         fn SleepThreadUntil(wake_time: u32);
-        fn StopSound();
         static mut usingSpeech: c_int;
     }
 
@@ -1213,9 +1212,7 @@ pub fn run_last_replay_bridge(timeout: i32) {
 /// Fade music to background volume (no lock needed).
 #[cfg(not(test))]
 pub fn fade_music_to_background_bridge() {
-    unsafe {
-        c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
-    }
+    c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
 }
 
 // Test stubs for lock-free external functions (prod versions are cfg(not(test)))
@@ -1660,7 +1657,7 @@ fn play_alien_music(state: &mut CommState) {
 
 fn set_music_background_vol(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
     }
@@ -1672,7 +1669,7 @@ fn set_music_background_vol(state: &mut CommState) {
 
 fn fade_music_to_foreground(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::FadeMusic(
             c_bridge::music_volume::FOREGROUND as u8,
@@ -1687,7 +1684,7 @@ fn fade_music_to_foreground(state: &mut CommState) {
 
 fn fade_music_to_background(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::FadeMusic(
             c_bridge::music_volume::BACKGROUND as u8,

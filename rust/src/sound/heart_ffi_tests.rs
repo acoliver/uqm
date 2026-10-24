@@ -26,20 +26,19 @@ struct Engine {
 impl Engine {
     fn start() -> Self {
         let guard = ENGINE_TEST_LOCK.lock();
-        unsafe {
-            UninitStreamDecoder();
-            assert_eq!(InitStreamDecoder(), 0);
-        }
+
+        uninit_stream_decoder();
+        assert_eq!(init_stream_decoder(), 0);
+
         Engine { _guard: guard }
     }
 
     /// Stops the engine and retires any fade a test left pending, which nothing
     /// else would ever complete once the decoder thread is gone.
     fn shut_down(&self) {
-        unsafe {
-            StopStream(SOURCE);
-            UninitStreamDecoder();
-        }
+        stop_stream(SOURCE);
+        uninit_stream_decoder();
+
         stream::clear_music_fade();
     }
 }
@@ -107,14 +106,13 @@ fn callbacks_table() -> Box<CTfbSoundCallbacks> {
 #[test]
 fn the_stream_engine_starts_once_and_can_be_restarted() {
     let _guard = ENGINE_TEST_LOCK.lock();
-    unsafe {
-        UninitStreamDecoder();
-        assert_eq!(InitStreamDecoder(), 0);
-        assert_eq!(InitStreamDecoder(), -1, "already running");
-        UninitStreamDecoder();
-        assert_eq!(InitStreamDecoder(), 0, "a stopped engine starts again");
-        UninitStreamDecoder();
-    }
+
+    uninit_stream_decoder();
+    assert_eq!(init_stream_decoder(), 0);
+    assert_eq!(init_stream_decoder(), -1, "already running");
+    uninit_stream_decoder();
+    assert_eq!(init_stream_decoder(), 0, "a stopped engine starts again");
+    uninit_stream_decoder();
 }
 
 #[test]
@@ -148,7 +146,7 @@ fn sample_calls_with_no_sample_do_nothing() {
         assert_eq!(TFB_TagBuffer(ptr::null_mut(), 0, 7), 0);
         TFB_ClearBufferTag(ptr::null_mut());
         PlayStream(ptr::null_mut(), SOURCE, false, false, true);
-        assert_eq!(PlayingStream(SOURCE), 0);
+        assert_eq!(playing_stream(SOURCE), 0);
     }
 }
 
@@ -200,11 +198,11 @@ fn a_started_stream_plays_until_stopped() {
     let _engine = Engine::start();
     let sample = sample(6, 4, ptr::null_mut());
     unsafe {
-        assert_eq!(PlayingStream(SOURCE), 0);
+        assert_eq!(playing_stream(SOURCE), 0);
         PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(PlayingStream(SOURCE), 1);
-        StopStream(SOURCE);
-        assert_eq!(PlayingStream(SOURCE), 0);
+        assert_eq!(playing_stream(SOURCE), 1);
+        stop_stream(SOURCE);
+        assert_eq!(playing_stream(SOURCE), 0);
         TFB_DestroySoundSample(sample);
     }
 }
@@ -215,14 +213,14 @@ fn pausing_halts_a_stream_and_resuming_restarts_it() {
     let sample = sample(6, 4, ptr::null_mut());
     unsafe {
         PlayStream(sample, SOURCE, false, false, true);
-        assert_eq!(PlayingStream(SOURCE), 1);
-        PauseStream(SOURCE);
-        assert_eq!(PlayingStream(SOURCE), 0, "paused");
-        ResumeStream(SOURCE);
-        assert_eq!(PlayingStream(SOURCE), 1);
-        SeekStream(SOURCE, 0);
-        assert_eq!(PlayingStream(SOURCE), 1);
-        StopStream(SOURCE);
+        assert_eq!(playing_stream(SOURCE), 1);
+        pause_stream(SOURCE);
+        assert_eq!(playing_stream(SOURCE), 0, "paused");
+        resume_stream(SOURCE);
+        assert_eq!(playing_stream(SOURCE), 1);
+        seek_stream(SOURCE, 0);
+        assert_eq!(playing_stream(SOURCE), 1);
+        stop_stream(SOURCE);
         TFB_DestroySoundSample(sample);
     }
 }
@@ -230,13 +228,12 @@ fn pausing_halts_a_stream_and_resuming_restarts_it() {
 #[test]
 fn stream_controls_on_an_unknown_source_are_ignored() {
     let _engine = Engine::start();
-    unsafe {
-        StopStream(9999);
-        PauseStream(9999);
-        ResumeStream(9999);
-        SeekStream(9999, 5);
-        assert_eq!(PlayingStream(9999), 0);
-    }
+
+    stop_stream(9999);
+    pause_stream(9999);
+    resume_stream(9999);
+    seek_stream(9999, 5);
+    assert_eq!(playing_stream(9999), 0);
 }
 
 #[test]
@@ -249,12 +246,12 @@ fn the_c_callbacks_are_told_when_a_stream_starts_and_queues_buffers() {
     unsafe {
         PlayStream(sample, SOURCE, false, false, true);
         assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        assert_eq!(PlayingStream(SOURCE), 1);
+        assert_eq!(playing_stream(SOURCE), 1);
         assert!(
             QUEUED.load(Ordering::SeqCst) >= 1,
             "prefilled buffers are announced"
         );
-        StopStream(SOURCE);
+        stop_stream(SOURCE);
         TFB_DestroySoundSample(sample);
     }
 }
@@ -269,7 +266,7 @@ fn a_c_callback_can_refuse_to_start_a_stream() {
     unsafe {
         PlayStream(sample, SOURCE, false, false, true);
         assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        assert_eq!(PlayingStream(SOURCE), 0, "refused");
+        assert_eq!(playing_stream(SOURCE), 0, "refused");
         TFB_DestroySoundSample(sample);
     }
 }
@@ -285,11 +282,11 @@ fn callbacks_can_be_replaced_after_the_sample_exists() {
         TFB_SetSoundSampleCallbacks(sample, table_ptr);
         PlayStream(sample, SOURCE, false, false, true);
         assert_eq!(STARTS.load(Ordering::SeqCst), 1);
-        StopStream(SOURCE);
+        stop_stream(SOURCE);
         TFB_SetSoundSampleCallbacks(sample, ptr::null_mut());
         PlayStream(sample, SOURCE, false, false, true);
         assert_eq!(STARTS.load(Ordering::SeqCst), 1, "no callbacks any more");
-        StopStream(SOURCE);
+        stop_stream(SOURCE);
         TFB_DestroySoundSample(sample);
     }
 }
@@ -313,25 +310,24 @@ fn the_oscilloscope_reads_nothing_without_arguments_or_a_stream() {
 #[test]
 fn music_fades_are_scheduled_only_when_they_take_time() {
     let _engine = Engine::start();
-    unsafe {
-        assert!(
-            !SetMusicStreamFade(0, 10),
-            "a zero-length fade is not scheduled"
-        );
-        assert!(SetMusicStreamFade(100, 10));
-        assert!(
-            !SetMusicStreamFade(-5, 10),
-            "a negative length counts as zero"
-        );
-    }
+
+    assert!(
+        !set_music_stream_fade(0, 10),
+        "a zero-length fade is not scheduled"
+    );
+    assert!(set_music_stream_fade(100, 10));
+    assert!(
+        !set_music_stream_fade(-5, 10),
+        "a negative length counts as zero"
+    );
 }
 
 #[test]
 fn shutting_the_engine_down_retires_the_fade_a_test_scheduled() {
     let engine = Engine::start();
-    unsafe {
-        assert!(SetMusicStreamFade(100, 10));
-    }
+
+    assert!(set_music_stream_fade(100, 10));
+
     assert_eq!(stream::music_fade_interval(), 100);
 
     engine.shut_down();
@@ -346,17 +342,16 @@ fn shutting_the_engine_down_retires_the_fade_a_test_scheduled() {
 #[test]
 fn fading_music_with_no_time_sets_the_volume_straight_away() {
     let _engine = Engine::start();
-    unsafe {
-        let now = crate::sound::types::get_time_counter();
-        let until = FadeMusic(40, 0);
-        assert!(until >= now);
-        assert_eq!(crate::sound::music::current_music_volume(), 40);
-        let until = FadeMusic(60, -5);
-        assert!(until >= now, "a negative duration is an immediate change");
-        assert_eq!(crate::sound::music::current_music_volume(), 60);
-        SetMusicVolume(25);
-        assert_eq!(crate::sound::music::current_music_volume(), 25);
-    }
+
+    let now = crate::sound::types::get_time_counter();
+    let until = fade_music(40, 0);
+    assert!(until >= now);
+    assert_eq!(crate::sound::music::current_music_volume(), 40);
+    let until = fade_music(60, -5);
+    assert!(until >= now, "a negative duration is an immediate change");
+    assert_eq!(crate::sound::music::current_music_volume(), 60);
+    set_music_volume(25);
+    assert_eq!(crate::sound::music::current_music_volume(), 25);
 }
 
 #[test]
@@ -376,7 +371,7 @@ fn music_calls_without_music_do_nothing() {
         PLRResume(ptr::null_mut());
         snd_PlaySpeech(ptr::null_mut());
         snd_PlaySpeech(sentinel);
-        snd_StopSpeech();
+        snd_stop_speech();
     }
 }
 
@@ -390,9 +385,9 @@ fn channel_calls_ignore_missing_sounds_and_idle_channels() {
     };
     unsafe {
         PlayChannel(0, ptr::null_mut(), pos, ptr::null_mut(), 1);
-        assert_eq!(ChannelPlaying(0), 0);
-        StopChannel(0, 1);
-        SetChannelVolume(0, 100, 1);
+        assert_eq!(channel_playing(0), 0);
+        stop_channel(0, 1);
+        set_channel_volume(0, 100, 1);
         UpdateSoundPosition(0, ptr::null());
     }
 }
@@ -419,13 +414,13 @@ fn stopping_all_sound_stops_effect_sources() {
     let _engine = Engine::start();
     let sample = sample(6, 4, ptr::null_mut());
     unsafe {
-        SetSFXVolume(0.5);
-        SetSpeechVolume(0.25);
+        set_sfx_volume(0.5);
+        set_speech_volume(0.25);
         PlayStream(sample, 0, false, false, true);
-        assert_eq!(PlayingStream(0), 1);
-        StopSound();
+        assert_eq!(playing_stream(0), 1);
+        stop_sound();
         assert_eq!(
-            PlayingStream(0),
+            playing_stream(0),
             0,
             "stopping all sound stops effect sources"
         );
@@ -486,4 +481,28 @@ fn speech_controls_have_safe_rust_signatures() {
     let _: fn() -> *const std::ffi::c_char = get_track_subtitle;
     let _: fn() -> *mut c_void = get_first_track_subtitle;
     let _: Option<unsafe fn()> = None::<super::types::PhraseCallback>;
+}
+
+#[test]
+fn audio_controls_have_safe_rust_signatures() {
+    let _: fn() -> c_int = init_stream_decoder;
+    let _: fn() = uninit_stream_decoder;
+    let _: fn(source: u32) = stop_stream;
+    let _: fn(source: u32) = pause_stream;
+    let _: fn(source: u32) = resume_stream;
+    let _: fn(source: u32, pos: u32) = seek_stream;
+    let _: fn(source: u32) -> u8 = playing_stream;
+    let _: fn(how_long: i32, end_volume: c_int) -> bool = set_music_stream_fade;
+    let _: fn() = snd_stop_speech;
+    let _: fn(volume: c_int) = set_music_volume;
+    let _: fn(end_vol: u8, how_long: i16) -> u32 = fade_music;
+    let _: fn(channel: c_uint, priority: c_int) = stop_channel;
+    let _: fn(channel: c_uint) -> c_int = channel_playing;
+    let _: fn(channel: c_uint, volume: c_int, priority: c_int) = set_channel_volume;
+    let _: fn() = uninit_sound;
+    let _: fn() = stop_sound;
+    let _: fn() -> c_int = sound_playing;
+    let _: fn(channel: u16) = wait_for_sound_end;
+    let _: fn(volume: f32) = set_sfx_volume;
+    let _: fn(volume: f32) = set_speech_volume;
 }
