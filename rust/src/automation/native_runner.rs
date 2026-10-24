@@ -3219,30 +3219,7 @@ fn validate_linked_build_receipt(
         .cargo_command
         .get(1..)
         .ok_or_else(|| "linked-build Cargo command is empty".to_string())?;
-    let required = [
-        "build",
-        "--locked",
-        "--manifest-path",
-        "rust/Cargo.toml",
-        "--release",
-        "--no-default-features",
-        "--features",
-        "audio_heart,debug-process",
-        "--bin",
-        "uqm",
-        "--message-format=json-render-diagnostics",
-    ];
-    let target_is_valid = arguments.len() == required.len()
-        || (arguments.len() == required.len() + 2
-            && arguments[required.len()] == "--target-dir"
-            && Path::new(&arguments[required.len() + 1]).is_absolute());
-    if !target_is_valid
-        || !arguments
-            .iter()
-            .take(required.len())
-            .map(String::as_str)
-            .eq(required)
-    {
+    if !super::native_window::native_linked_build_arguments_match(arguments) {
         return Err("linked-build Cargo command is not the strict linked-test build".to_string());
     }
     let expected_paths = [
