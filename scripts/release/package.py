@@ -21,6 +21,8 @@ OUT = ROOT / "artifacts/release"
 
 
 def run(*args, **kwargs):
+    if kwargs.get("text"):
+        kwargs.setdefault("encoding", "utf-8")
     return subprocess.run([str(arg) for arg in args], check=True, **kwargs)
 
 
@@ -29,7 +31,7 @@ def smoke(binary, cwd, version, content):
     user_state = cwd / "unused-user-state"
     for name in ["HOME", "APPDATA", "USERPROFILE", "UQM_CONFIG_DIR"]:
         env[name] = str(user_state)
-    kwargs = dict(cwd=cwd, env=env, timeout=30, capture_output=True, text=True)
+    kwargs = dict(cwd=cwd, env=env, timeout=30, capture_output=True, text=True, encoding="utf-8")
     output = run(binary, "--version", **kwargs).stdout.strip()
     if output != version:
         raise RuntimeError(f"unexpected version: {output!r}, expected {version}")
