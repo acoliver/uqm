@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 /// An explicit directory is authoritative, even if it is invalid.
 pub fn locate(explicit: Option<&str>) -> anyhow::Result<PathBuf> {
     let cwd = std::env::current_dir()?;
-    let exe = std::env::current_exe()?;
+    let exe = std::env::current_exe()?.canonicalize()?;
     let expanded = explicit
         .map(super::dir_prep::expand_path)
         .transpose()
