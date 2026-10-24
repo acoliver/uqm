@@ -43,8 +43,6 @@ use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 
 extern "C" {
     static SDL_Screen: *mut SDL_Surface;
-    static ScreenWidthActual: c_int;
-    static ScreenHeightActual: c_int;
 }
 
 // Minimal SDL types needed for direct pixel writes.
@@ -1165,7 +1163,7 @@ pub unsafe extern "C" fn tfb_uninit_video_player() {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, _x: u32, _y: u32) -> bool {
+pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, x: u32, y: u32) -> bool {
     if vid.is_null() {
         return false;
     }
@@ -1188,28 +1186,15 @@ pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, _x: u32, _y: u3
 
     rust_bridge_log_msg(&format!("RUST_VIDEO: TFB_PlayVideo {}", filename_str));
 
-    let actual_width = ScreenWidthActual as u32;
-    let actual_height = ScreenHeightActual as u32;
-
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: Using direct window presentation (actual {}x{})",
-        actual_width, actual_height
-    ));
-
-    let ok = rust_play_video_direct_window(
+    // Like vidplayer.c, retain movie pixels on TFB_SCREEN_MAIN. Input, pacing
+    // and expose swaps must composite the movie, not the cleared game surface.
+    if !rust_play_video(
         dec.dir,
         dec.filename,
-        actual_width,
-        actual_height,
+        x as i32,
+        y as i32,
         clip.loop_frame != VID_NO_LOOP,
-    );
-
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: rust_play_video_direct_window returned {}",
-        ok as i32
-    ));
-
-    if !ok {
+    ) {
         return false;
     }
 
