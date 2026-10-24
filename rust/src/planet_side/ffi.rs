@@ -275,7 +275,16 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             PlanetSideController::new(session, adapters, context.tick_period, context.frame_budget);
         let outcome = controller.run();
         if outcome.is_ok() {
-            context.retrieval_masks = controller.adapters.collision.persistence.to_masks();
+            // Pickup callbacks can also change other scan categories. Read the
+            // live planet rather than replacing it with the trip's initial copy.
+            context.retrieval_masks = unsafe {
+                (*context
+                    .solar_system
+                    .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>())
+                .SysInfo
+                .PlanetInfo
+                .ScanRetrieveMask
+            };
         } else {
             let crew = controller.session.lander.crew.get();
             controller.adapters.ship.apply(&super::session::ShipDelta {

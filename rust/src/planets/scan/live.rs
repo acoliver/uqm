@@ -417,7 +417,13 @@ unsafe fn scanned_stuff(y: u16, scan: u16) {
         let element = handle as *mut Element;
         handle = (*element).succ as usize;
         let mut dy = (i32::from(y) - i32::from((*element).current.location.y)) as i16;
-        if (*element).life_span as u8 != scan as u8 || dy < 0 {
+        if (*element).life_span as u8 != scan as u8
+            || dy < 0
+            || crate::planet_side::orbit_scan::node_retrieved(
+                &*element,
+                &(*solar_system::current()).SysInfo.PlanetInfo,
+            )
+        {
             continue;
         }
         (*element).state_flags |= ElementFlags::APPEARING;

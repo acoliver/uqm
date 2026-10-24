@@ -149,7 +149,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
         #[cfg(not(test))]
         unsafe {
-            if self.last_scan_position != Some(snapshot.lander.position) {
+            {
                 let scan_position = CPoint {
                     x: snapshot.lander.position.x as i16,
                     y: snapshot.lander.position.y as i16,
