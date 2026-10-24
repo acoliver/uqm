@@ -556,6 +556,11 @@
     },
     {
       "action": "select_response",
+      "phrase": "done_buying_fuel",
+      "max_ticks": 6000
+    },
+    {
+      "action": "select_response",
       "phrase": "be_leaving_now",
       "max_ticks": 6000
     },
