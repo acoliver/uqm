@@ -1124,15 +1124,6 @@ pub struct tfb_soundsample {
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
 pub use crate::sound::heart_ffi::{channel_playing as ChannelPlaying};
-unsafe extern "C" {
-    pub fn GetPositionalObject(channel: COUNT) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    pub fn SetPositionalObject(channel: COUNT, positional_object: *mut ::std::os::raw::c_void);
-}
-unsafe extern "C" {
-    pub fn UpdateSoundPosition(channel: COUNT, pos: SoundPosition);
-}
 pub use crate::sound::heart_ffi::{stop_sound as StopSound};
 pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
 pub type TimeCount = DWORD;

@@ -1051,36 +1051,16 @@ pub fn set_channel_volume(channel: c_uint, volume: c_int, priority: c_int) {
     let _ = ffi_catch(|| sfx::set_channel_volume(channel as usize, volume, priority));
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn UpdateSoundPosition(source_index: c_uint, pos_ptr: *const SoundPosition) {
-    let _ = ffi_catch(|| {
-        if pos_ptr.is_null() {
-            return;
-        }
-        sfx::update_sound_position(source_index as usize, *pos_ptr);
-    });
+pub fn update_sound_position(source_index: c_uint, pos: SoundPosition) {
+    sfx::update_sound_position(source_index as usize, pos);
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn GetPositionalObject(source_index: c_uint) -> c_uint {
-    sfx::get_positional_object(source_index as usize) as c_uint
+pub fn get_positional_object(source_index: c_uint) -> usize {
+    sfx::get_positional_object(source_index as usize)
 }
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uint) {
-    sfx::set_positional_object(source_index as usize, object as usize);
+pub fn set_positional_object(source_index: c_uint, object: usize) {
+    sfx::set_positional_object(source_index as usize, object);
 }
 
 /// Free a SOUND_REF (STRING_TABLE containing SoundSample pointers).

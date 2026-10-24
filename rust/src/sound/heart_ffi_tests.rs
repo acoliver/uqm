@@ -388,25 +388,69 @@ fn channel_calls_ignore_missing_sounds_and_idle_channels() {
         assert_eq!(channel_playing(0), 0);
         stop_channel(0, 1);
         set_channel_volume(0, 100, 1);
-        UpdateSoundPosition(0, ptr::null());
     }
 }
 
 #[test]
-fn a_channel_remembers_its_positional_object() {
+fn positional_audio_has_typed_rust_signatures() {
+    let _: fn(u32) -> usize = get_positional_object;
+    let _: fn(u32, usize) = set_positional_object;
+    let _: fn(u32, SoundPosition) = update_sound_position;
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn positional_object_preserves_a_64_bit_element_address() {
     let _engine = Engine::start();
-    unsafe {
-        SetPositionalObject(1, 0xABCD);
-        assert_eq!(GetPositionalObject(1), 0xABCD);
-        SetPositionalObject(1, 0);
-        assert_eq!(GetPositionalObject(1), 0);
-        let pos = SoundPosition {
+    let object = u32::MAX as usize + 0xABCD;
+    set_positional_object(1, object);
+    assert_eq!(get_positional_object(1), object);
+    set_positional_object(1, 0);
+    assert_eq!(get_positional_object(1), 0);
+}
+
+#[test]
+fn positional_update_changes_the_selected_mixer_source() {
+    use super::mixer::source::mixer_get_source_f;
+    use super::mixer::SourceProp;
+
+    let _engine = Engine::start();
+    let handle = stream::with_source(1, |source| source.handle).unwrap();
+    let other = stream::with_source(2, |source| source.handle).unwrap();
+    let position = || {
+        [
+            SourceProp::PositionX,
+            SourceProp::PositionY,
+            SourceProp::PositionZ,
+        ]
+        .map(|prop| mixer_get_source_f(handle, prop).unwrap())
+    };
+    update_sound_position(
+        1,
+        SoundPosition {
             positional: true,
-            x: 3,
-            y: -4,
-        };
-        UpdateSoundPosition(1, &pos);
-    }
+            x: 320,
+            y: -160,
+        },
+    );
+    assert_eq!(position(), [2.0, 0.0, -1.0]);
+    assert_eq!(
+        mixer_get_source_f(other, SourceProp::PositionX).unwrap(),
+        0.0
+    );
+
+    update_sound_position(
+        1,
+        SoundPosition {
+            positional: true,
+            x: 48,
+            y: 64,
+        },
+    );
+    assert_eq!(position(), [0.3, 0.0, 0.4]);
+
+    update_sound_position(1, SoundPosition::non_positional());
+    assert_eq!(position(), [0.0, 0.0, -1.0]);
 }
 
 #[test]

@@ -65,6 +65,9 @@ impl Channels {
 mod engine {
     use super::*;
     use crate::ships::native::abi::*;
+    use crate::sound::heart_ffi::{
+        get_positional_object, set_positional_object, update_sound_position,
+    };
 
     #[no_mangle]
     pub static mut MenuSounds: SOUND = ptr::null_mut();
@@ -160,11 +163,18 @@ mod engine {
             if ChannelPlaying(i) == 0 {
                 continue;
             }
-            let object = GetPositionalObject(i as u16).cast::<ELEMENT>();
+            let object = get_positional_object(i) as *mut ELEMENT;
             if !object.is_null() {
                 let pos = CalcSoundPosition(object);
                 if pos.positional != 0 {
-                    UpdateSoundPosition(i as u16, pos);
+                    update_sound_position(
+                        i,
+                        crate::sound::types::SoundPosition {
+                            positional: true,
+                            x: pos.x,
+                            y: pos.y,
+                        },
+                    );
                 }
             }
         }
@@ -194,8 +204,8 @@ mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn RemoveSoundsForObject(object: *mut ELEMENT) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if GetPositionalObject(i as u16) == object.cast() {
-                SetPositionalObject(i as u16, ptr::null_mut());
+            if get_positional_object(i) == object as usize {
+                set_positional_object(i, 0);
             }
         }
         let queue_ptr = &raw mut QUEUE;
