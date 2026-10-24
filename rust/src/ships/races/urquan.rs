@@ -1,5 +1,5 @@
 #[path = "urquan_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Ur-Quan Dreadnought - Fusion blast + autonomous fighters
 // @plan PLAN-20260314-SHIPS.P11

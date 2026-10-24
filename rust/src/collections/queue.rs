@@ -20,6 +20,7 @@ pub struct Link {
 /// C: `typedef struct queue { HLINK head; HLINK tail; BYTE *pq_tab;
 ///      HLINK free_list; COUNT object_size; BYTE num_objects; } QUEUE;`
 #[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Queue {
     pub head: HLink,
     pub tail: HLink,

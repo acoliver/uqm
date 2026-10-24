@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::super::intro::ShowPresentation;
     use crate::navigation::abi::*;
     use crate::navigation::globals::GlobData;

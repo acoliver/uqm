@@ -6,7 +6,7 @@ use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
 use std::{mem, ptr};
 
-mod capacity;
+pub(crate) mod capacity;
 use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
 
 static mut CUR_MSG_MODE: StatMsgMode = StatMsgMode_SMM_DEFAULT;
@@ -190,7 +190,7 @@ pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
 /// # Safety
 /// pStr must be a valid NUL-terminated UTF-8 string and graphics state initialized.
 #[no_mangle]
-pub unsafe extern "C" fn DrawSISTitle(pStr: *mut UNICODE) {
+pub unsafe extern "C" fn DrawSISTitle(pStr: *const UNICODE) {
     let mut t: TEXT = mem::zeroed();
     t.baseline.x = SIS_TITLE_WIDTH >> 1;
     t.baseline.y = SIS_TITLE_HEIGHT - 2;

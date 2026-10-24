@@ -12,17 +12,19 @@ fn map_light(value: u8, diffuse: u32, variance: i32) -> u8 {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::{map_light, shield_level};
     use crate::c_bindings::{global_state as c, solar_system};
     use crate::comm::locdata::{CPoint, CRect};
+    use crate::graphics::context_abi::SetContextClipRect;
+    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::{cmap::Color, drawable::Point};
     use crate::memory::{rust_hcalloc, rust_hmalloc};
     use crate::planets::render::{
         c_api::render_system_topography, sphere_geometry as sphere, topo_gen,
         topo_scale::TopoScaler,
     };
-    use std::ffi::{c_char, c_void};
+
     use std::ptr::{addr_of_mut, null_mut};
     use std::sync::Mutex;
 
@@ -33,50 +35,56 @@ mod live {
         weights: [0; 4],
     }; sphere::DIAMETER]; sphere::DIAMETER];
 
+    #[cfg(feature = "debug-process")]
+    use crate::graphics::context_abi::CreateContextAux;
+
+    #[cfg(not(feature = "debug-process"))]
+    use crate::graphics::context_abi::CreateContextAux;
+
+    use crate::graphics::context_abi::SetContext;
+
+    use crate::graphics::context_abi::DestroyContext;
+
+    use crate::graphics::pixmap_abi::CaptureDrawable;
+
+    use crate::graphics::drawable_abi::CreateDrawable;
+
+    use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+    use crate::graphics::drawable_abi::DestroyDrawable;
+
+    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    use crate::graphics::pixmap_abi::GetFrameCount;
+
+    use crate::graphics::drawable_abi::RescaleFrame;
+
+    use crate::graphics::drawable_abi::ReadFramePixelIndexes;
+
+    use crate::graphics::drawable_abi::ReadFramePixelColors;
+
+    use crate::graphics::drawable_abi::WriteFramePixelColors;
+
+    use crate::graphics::drawable_abi::SetFrameHot;
+
+    use crate::strings::string_table::CaptureStringTable;
+
+    use crate::strings::sresins::LoadStringTableInstance;
+
+    use crate::strings::string_table::SetAbsStringTableIndex;
+
+    use crate::strings::string_table::GetStringAddress;
+
+    use crate::planets::sphere::live::InitSphereRotation;
+
+    use crate::graphics::context_abi::SetContextDrawMode;
+
+    use crate::graphics::context_abi::SetContextForeGroundColor;
+
+    use crate::graphics::frame_abi::DrawFilledRectangle;
+
     extern "C" {
         static ScreenWidth: i32;
-        #[cfg(feature = "debug-process")]
-        fn CreateContextAux(name: *const c_char) -> *mut c_void;
-        #[cfg(not(feature = "debug-process"))]
-        fn CreateContextAux() -> *mut c_void;
-        fn SetContext(context: *mut c_void) -> *mut c_void;
-        fn DestroyContext(context: *mut c_void) -> i32;
-        fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-        fn CreateDrawable(flags: u8, width: i16, height: i16, frames: u16) -> *mut c_void;
-        fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-        fn DestroyDrawable(drawable: *mut c_void) -> u32;
-        fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn GetFrameCount(frame: *mut c_void) -> u16;
-        fn RescaleFrame(frame: *mut c_void, width: i32, height: i32) -> *mut c_void;
-        fn ReadFramePixelIndexes(
-            frame: *mut c_void,
-            pixels: *mut u8,
-            width: i32,
-            height: i32,
-        ) -> u32;
-        fn ReadFramePixelColors(
-            frame: *mut c::FRAME_DESC,
-            pixels: *mut c::Color,
-            width: i32,
-            height: i32,
-        ) -> u32;
-        fn WriteFramePixelColors(
-            frame: *mut c::FRAME_DESC,
-            pixels: *const c::Color,
-            width: i32,
-            height: i32,
-        ) -> u32;
-        fn SetFrameHot(frame: *mut c_void, hot: CPoint) -> CPoint;
-        fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
-        fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
-        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-        fn GetStringAddress(table: *mut c_void) -> *const c_char;
-        fn InitSphereRotation(direction: i32, shielded: u32);
-        fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        fn SetContextClipRect(rect: *mut CRect);
-        fn SetContextDrawMode(mode: c::DrawMode) -> c::DrawMode;
-        fn SetContextForeGroundColor(color: c::Color) -> c::Color;
-        fn DrawFilledRectangle(rect: *mut CRect);
     }
 
     unsafe fn frame(flags: u8, width: usize, height: usize, count: u16) -> *mut c::FRAME_DESC {
@@ -133,7 +141,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn SetShieldThrobEffect(
+    pub unsafe extern "C" fn SetShieldThrobEffect(
         shield: *mut c::FRAME_DESC,
         offset: i32,
         throb: *mut c::FRAME_DESC,
@@ -167,7 +175,11 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn RenderPlanetSphere(target: *mut c::FRAME_DESC, offset: i32, throb: u32) {
+    pub unsafe extern "C" fn RenderPlanetSphere(
+        target: *mut c::FRAME_DESC,
+        offset: i32,
+        throb: u32,
+    ) {
         let system = solar_system::current();
         let orbit = addr_of_mut!((*system).Orbit);
         let width = (ScreenWidth - 78) as usize;
@@ -246,7 +258,10 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn GeneratePlanetSurface(
+    /// # Safety
+    /// Planet and definition must be live records from the current solar system;
+    /// the graphics resources and generation context must be initialized on the game thread.
+    pub unsafe extern "C" fn GeneratePlanetSurface(
         planet: *mut c::PLANET_DESC,
         mut definition: *mut c::FRAME_DESC,
     ) {
@@ -360,7 +375,7 @@ mod live {
                     SetAbsStringTableIndex((*system).OrbitalCMap.cast(), index).cast();
                 (*system).XlatRef = SetAbsStringTableIndex((*system).XlatRef.cast(), index).cast();
             }
-            (*system).XlatPtr = GetStringAddress((*system).XlatRef.cast()).cast_mut().cast();
+            (*system).XlatPtr = GetStringAddress((*system).XlatRef.cast()).cast();
             render_system_topography(system, (*system).TopoFrame, depth, width as i32, 75)
                 .expect("render planet topography");
         }

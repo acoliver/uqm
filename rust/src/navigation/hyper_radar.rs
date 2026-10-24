@@ -81,7 +81,7 @@ pub unsafe fn SeedUniverse() {
             break;
         }
         let point = (*star).star_pt;
-        let mut kind = ((*star).Type >> 3) & 3;
+        let mut kind = ((*star).star_type >> 3) & 3;
         if side >= 2 && point.x == ARILOU_HOME_X as i16 && point.y == ARILOU_HOME_Y as i16 {
             kind = SUPER_GIANT_STAR as u8;
         }
@@ -180,7 +180,7 @@ pub unsafe fn SeedUniverse() {
             continue;
         }
         let element = handle.cast::<ELEMENT>();
-        let kind = (*star).Type;
+        let kind = (*star).star_type;
         (*element).current.image.frame = SetAbsFrameIndex(
             HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
             (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,

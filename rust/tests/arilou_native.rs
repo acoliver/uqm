@@ -642,7 +642,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
         let _battle = Battle::begin();
         let mut skiff = Skiff::new();
         let ship = skiff.ship;
-        (*ship).velocity.TravelAngle = 37;
+        (*ship).velocity.travel_angle = 37;
         DeltaVelocityComponents(&raw mut (*ship).velocity, 640, -320);
         skiff.fleet.starship.cur_status_flags = (SHIP_AT_MAX_SPEED | THRUST) as u16;
 
@@ -660,7 +660,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
         (*ship).__bindgen_anon_5.thrust_wait = 0;
         skiff.preprocess();
         let velocity = (*ship).velocity;
-        assert_eq!(velocity.TravelAngle, 0);
+        assert_eq!(velocity.travel_angle, 0);
         assert_eq!((velocity.vector.width, velocity.vector.height), (0, 0));
         assert_eq!((velocity.fract.width, velocity.fract.height), (0, 0));
         assert_eq!((velocity.error.width, velocity.error.height), (0, 0));
@@ -675,7 +675,7 @@ fn special_key_starts_the_teleport() {
         let _battle = Battle::begin();
         let mut skiff = Skiff::new();
         let ship = skiff.ship;
-        (*ship).velocity.TravelAngle = 37;
+        (*ship).velocity.travel_angle = 37;
         DeltaVelocityComponents(&raw mut (*ship).velocity, 640, -320);
         (*ship).__bindgen_anon_5.thrust_wait = 3;
         skiff.fleet.starship.cur_status_flags =
@@ -687,7 +687,7 @@ fn special_key_starts_the_teleport() {
         assert_eq!(skiff.fleet.starship.special_counter, 2);
         assert_eq!(skiff.fleet.starship.cur_status_flags, SPECIAL as u16);
         assert_eq!(velocity_of(ship), (0, 0));
-        assert_eq!((*ship).velocity.TravelAngle, 0);
+        assert_eq!((*ship).velocity.travel_angle, 0);
         assert_eq!(
             (*ship).state_flags,
             PLAYER_SHIP as u16 | (NONSOLID | FINITE_LIFE | CHANGING) as u16

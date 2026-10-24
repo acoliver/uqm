@@ -8,8 +8,8 @@ use super::transparency::TFB_DrawCanvas_IsPaletted;
 use super::{DRAW_ALPHA, DRAW_REPLACE, GSCALE_IDENTITY, TFB_SCALE_BILINEAR, TFB_SCALE_TRILINEAR};
 use crate::graphics::cmap_abi::TFB_ReturnColorMap;
 use crate::graphics::native_abi::{
-    Color, DrawMode, Mutex, TFB_Canvas, TFB_Char, TFB_ColorMap, TFB_DrawImage_FixScaling,
-    TFB_Image, POINT, RECT,
+    Color, DrawMode, TFB_Canvas, TFB_Char, TFB_ColorMap, TFB_DrawImage_FixScaling, TFB_Image,
+    POINT, RECT,
 };
 use crate::graphics::software_primitives::{blt_prim, fillrect_prim, line_prim, renderpixel_for};
 use sdl2_sys::{
@@ -19,10 +19,9 @@ use sdl2_sys::{
 use std::ffi::c_int;
 use std::ptr;
 
-extern "C" {
-    fn LockMutex(mutex: Mutex);
-    fn UnlockMutex(mutex: Mutex);
-}
+use crate::threading::legacy_abi::LockMutex;
+
+use crate::threading::legacy_abi::UnlockMutex;
 
 const SDL_SWSURFACE: u32 = 0;
 

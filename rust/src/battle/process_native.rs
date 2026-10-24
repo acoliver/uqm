@@ -248,7 +248,7 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{cosine, frame_index, sine};
     use std::{mem, ptr};
@@ -391,9 +391,9 @@ mod engine {
             ((i32::from(impact_a) + HALF_CIRCLE as i32) & (FULL_CIRCLE as i32 - 1)) as SIZE;
         let (mut dx0, mut dy0, mut dx1, mut dy1) = (0, 0, 0, 0);
         GetCurrentVelocityComponents(&mut (*a).velocity, &mut dx0, &mut dy0);
-        let travel_a = (*a).velocity.TravelAngle as SIZE;
+        let travel_a = (*a).velocity.travel_angle as SIZE;
         GetCurrentVelocityComponents(&mut (*b).velocity, &mut dx1, &mut dy1);
-        let travel_b = (*b).velocity.TravelAngle as SIZE;
+        let travel_b = (*b).velocity.travel_angle as SIZE;
         let rel_x = dx0.wrapping_sub(dx1);
         let rel_y = dy0.wrapping_sub(dy1);
         let relative_angle = ARCTAN(rel_x, rel_y) as SIZE;

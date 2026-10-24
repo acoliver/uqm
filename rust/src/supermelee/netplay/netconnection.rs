@@ -27,8 +27,8 @@ unsafe fn go(conn: *mut NetConnection) -> i32 {
     data.isServer = is_server;
     if is_server {
         let flags = ListenFlags {
-            familyDemand: ProtocolFamily_PF_unspec,
-            familyPrefer: ProtocolFamily_PF_unspec,
+            family_demand: ProtocolFamily_PF_unspec,
+            family_prefer: ProtocolFamily_PF_unspec,
             backlog: NETPLAY_LISTEN_BACKLOG as i32,
         };
         let state = listenPort(
@@ -45,10 +45,10 @@ unsafe fn go(conn: *mut NetConnection) -> i32 {
         data.state.listenState = state;
     } else {
         let flags = ConnectFlags {
-            familyDemand: ProtocolFamily_PF_unspec,
-            familyPrefer: ProtocolFamily_PF_unspec,
+            family_demand: ProtocolFamily_PF_unspec,
+            family_prefer: ProtocolFamily_PF_unspec,
             timeout: NETPLAY_CONNECTTIMEOUT as i32,
-            retryDelayMs: NETPLAY_RETRYDELAY as i32,
+            retry_delay_ms: NETPLAY_RETRYDELAY as i32,
         };
         let state = connectHostByName(
             (*(*conn).options).host,
@@ -230,71 +230,111 @@ pub unsafe extern "C" fn NetConnection_doErrorCallback(conn: *mut NetConnection,
     (*conn).errorCallback.expect("error callback")(conn, &error);
 }
 
-macro_rules! getter {
-    ($name:ident, $ty:ty, $($field:ident).+) => {
-        /// # Safety
-        /// `conn` points to a live connection on the game thread.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(conn: *const NetConnection) -> $ty { (*conn).$($field).+ }
-    };
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getStateData(
+    conn: *const NetConnection,
+) -> *mut NetConnectionStateData {
+    (*conn).stateData
 }
-macro_rules! setter {
-    ($name:ident, $ty:ty, $field:ident) => {
-        /// # Safety
-        /// `conn` points to a live connection on the game thread.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(conn: *mut NetConnection, value: $ty) {
-            (*conn).$field = value;
-        }
-    };
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_setStateData(
+    conn: *mut NetConnection,
+    value: *mut NetConnectionStateData,
+) {
+    (*conn).stateData = value;
 }
-getter!(
-    NetConnection_getStateData,
-    *mut NetConnectionStateData,
-    stateData
-);
-setter!(
-    NetConnection_setStateData,
-    *mut NetConnectionStateData,
-    stateData
-);
-getter!(NetConnection_getExtra, *mut c_void, extra);
-setter!(NetConnection_setExtra, *mut c_void, extra);
-getter!(NetConnection_getState, NetState, state);
-getter!(NetConnection_getDiscriminant, bool, stateFlags.discriminant);
-getter!(NetConnection_isConnected, bool, stateFlags.connected);
-getter!(
-    NetConnection_getPeerOptions,
-    *const NetplayPeerOptions,
-    options
-);
-getter!(NetConnection_getPlayerNr, i32, player);
-getter!(NetConnection_getInputDelay, usize, stateFlags.inputDelay);
-getter!(
-    NetConnection_getChecksumInterval,
-    usize,
-    stateFlags.checksumInterval
-);
-getter!(
-    NetConnection_getReadyCallback,
-    NetConnection_ReadyCallback,
-    readyCallback
-);
-getter!(
-    NetConnection_getReadyCallbackArg,
-    *mut c_void,
-    readyCallbackArg
-);
-getter!(
-    NetConnection_getResetCallback,
-    NetConnection_ResetCallback,
-    resetCallback
-);
-getter!(
-    NetConnection_getResetCallbackArg,
-    *mut c_void,
-    resetCallbackArg
-);
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getExtra(conn: *const NetConnection) -> *mut c_void {
+    (*conn).extra
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_setExtra(conn: *mut NetConnection, value: *mut c_void) {
+    (*conn).extra = value;
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getState(conn: *const NetConnection) -> NetState {
+    (*conn).state
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getDiscriminant(conn: *const NetConnection) -> bool {
+    (*conn).stateFlags.discriminant
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_isConnected(conn: *const NetConnection) -> bool {
+    (*conn).stateFlags.connected
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getPeerOptions(
+    conn: *const NetConnection,
+) -> *const NetplayPeerOptions {
+    (*conn).options
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getPlayerNr(conn: *const NetConnection) -> i32 {
+    (*conn).player
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getInputDelay(conn: *const NetConnection) -> usize {
+    (*conn).stateFlags.inputDelay
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getChecksumInterval(conn: *const NetConnection) -> usize {
+    (*conn).stateFlags.checksumInterval
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getReadyCallback(
+    conn: *const NetConnection,
+) -> NetConnection_ReadyCallback {
+    (*conn).readyCallback
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getReadyCallbackArg(
+    conn: *const NetConnection,
+) -> *mut c_void {
+    (*conn).readyCallbackArg
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getResetCallback(
+    conn: *const NetConnection,
+) -> NetConnection_ResetCallback {
+    (*conn).resetCallback
+}
+/// # Safety
+/// `conn` points to a live connection on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_getResetCallbackArg(
+    conn: *const NetConnection,
+) -> *mut c_void {
+    (*conn).resetCallbackArg
+}
 
 /// # Safety
 /// `conn` points to a live connection and state is a valid NetState.
@@ -311,29 +351,28 @@ pub unsafe extern "C" fn NetConnection_setState(conn: *mut NetConnection, state:
     (*conn).state = state;
 }
 
-macro_rules! callback_setter {
-    ($name:ident, $ty:ty, $callback:ident, $arg:ident) => {
-        /// # Safety
-        /// The callback argument remains valid until invoked or cleared on the game thread.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(conn: *mut NetConnection, callback: $ty, arg: *mut c_void) {
-            (*conn).$callback = callback;
-            (*conn).$arg = arg;
-        }
-    };
+/// # Safety
+/// The callback argument remains valid until invoked or cleared on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_setReadyCallback(
+    conn: *mut NetConnection,
+    callback: NetConnection_ReadyCallback,
+    arg: *mut c_void,
+) {
+    (*conn).readyCallback = callback;
+    (*conn).readyCallbackArg = arg;
 }
-callback_setter!(
-    NetConnection_setReadyCallback,
-    NetConnection_ReadyCallback,
-    readyCallback,
-    readyCallbackArg
-);
-callback_setter!(
-    NetConnection_setResetCallback,
-    NetConnection_ResetCallback,
-    resetCallback,
-    resetCallbackArg
-);
+/// # Safety
+/// The callback argument remains valid until invoked or cleared on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn NetConnection_setResetCallback(
+    conn: *mut NetConnection,
+    callback: NetConnection_ResetCallback,
+    arg: *mut c_void,
+) {
+    (*conn).resetCallback = callback;
+    (*conn).resetCallbackArg = arg;
+}
 
 /// # Safety
 /// `conn` is a live exclusively owned connection.

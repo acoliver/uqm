@@ -1,5 +1,5 @@
 #[path = "probe_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Ur-Quan Probe - Minimal autonomous probe with no combat capability
 // @plan PLAN-20260314-SHIPS.P13

@@ -194,22 +194,23 @@ fn frame_index(d: &CAnimationDesc, from: u16, random: &mut impl FnMut() -> u32) 
 }
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::*;
     use crate::comm::locdata::{CPoint, CStamp, COMM_DATA};
-    use std::ffi::c_void;
 
-    use crate::time::counter_abi::GetTimeCounter;
-    #[allow(clashing_extern_declarations)]
-    extern "C" {
-        fn XFormColorMap_step() -> i32;
-        fn XFormColorMap(map: *mut c_void, ticks: i16) -> u32;
-        fn SetAbsStringTableIndex(map: *mut c_void, index: u16) -> *mut c_void;
-        fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
-        fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn DrawStamp(stamp: *mut CStamp);
-    }
+    use crate::graphics::cmap_abi::GetColorMapAddress;
+
+    use crate::graphics::cmap_abi::XFormColorMap;
+
+    use crate::graphics::cmap_abi::XFormColorMap_step;
+
+    use crate::graphics::frame_abi::DrawStamp;
     use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+
+    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    use crate::strings::string_table::SetAbsStringTableIndex;
+    use crate::time::counter_abi::GetTimeCounter;
 
     static mut LAST_TIME: u32 = 0;
     static mut SEQUENCES: [Sequence; 22] = [Sequence::EMPTY; 22];
@@ -347,7 +348,7 @@ mod runtime {
             }
             XFormColorMap(
                 GetColorMapAddress(SetAbsStringTableIndex(
-                    COMM_DATA.alien_colormap,
+                    (COMM_DATA.alien_colormap).cast(),
                     d.start_index.wrapping_add(s.current),
                 )),
                 s.alarm.wrapping_sub(1) as i16,
@@ -386,7 +387,7 @@ mod runtime {
             frame: COMM_DATA.alien_frame,
         };
         if full != 0 {
-            DrawStamp(&raw mut stamp);
+            DrawStamp((&raw mut stamp).cast());
             for i in (0..usize::from(COMM_DATA.num_animations)).rev() {
                 let descriptor = &raw mut COMM_DATA.alien_ambient_array[i];
                 let d = &mut *descriptor;
@@ -395,8 +396,9 @@ mod runtime {
                 }
                 d.anim_flags |= DISABLED;
                 if d.anim_flags & COLOR == 0 {
-                    stamp.frame = SetAbsFrameIndex(COMM_DATA.alien_frame, d.start_index);
-                    DrawStamp(&raw mut stamp);
+                    stamp.frame =
+                        (SetAbsFrameIndex((COMM_DATA.alien_frame).cast(), d.start_index)).cast();
+                    DrawStamp((&raw mut stamp).cast());
                 }
             }
         }
@@ -410,9 +412,12 @@ mod runtime {
                 if full == 0 && s.change == 0 {
                     continue;
                 }
-                stamp.frame =
-                    SetAbsFrameIndex(COMM_DATA.alien_frame, d.start_index.wrapping_add(s.current));
-                DrawStamp(&raw mut stamp);
+                stamp.frame = (SetAbsFrameIndex(
+                    (COMM_DATA.alien_frame).cast(),
+                    d.start_index.wrapping_add(s.current),
+                ))
+                .cast();
+                DrawStamp((&raw mut stamp).cast());
                 s.change = 0;
                 change = 1;
             }

@@ -1,6 +1,6 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         normalize_facing, put_element, sine, starship, wrap_delta,
@@ -228,7 +228,7 @@ mod engine {
                 (*fighter).state_flags &= !(PRE_PROCESS as u16);
                 (*fighter).state_flags |= CHANGING as u16;
                 (*fighter).next = (*fighter).current;
-                let mut travel = (*fighter).velocity.TravelAngle;
+                let mut travel = (*fighter).velocity.travel_angle;
                 let delta = normalize_angle(
                     i32::from(ARCTAN(
                         (*pb).x.wrapping_sub((*pa).x),

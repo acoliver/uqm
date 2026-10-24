@@ -21,16 +21,17 @@ unsafe fn find(mut head: HMASTERSHIP, species: SPECIES_ID) -> (HMASTERSHIP, i32)
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use std::{mem, ptr};
 
-    extern "C" {
-        fn AllocLink(queue: *mut std::ffi::c_void) -> HLINK;
-        fn InsertQueue(queue: *mut std::ffi::c_void, handle: HLINK, before: HLINK);
-        fn c_load_ship(species: SPECIES_ID, battle: BOOLEAN) -> *mut RACE_DESC;
-        fn c_free_ship(desc: *mut RACE_DESC, icons: BOOLEAN, battle: BOOLEAN);
-    }
+    use crate::collections::queue::AllocLink;
+
+    use crate::collections::queue::InsertQueue;
+
+    use crate::ships::loader_native::engine::c_load_ship;
+
+    use crate::ships::loader_native::engine::c_free_ship;
 
     #[no_mangle]
     pub static mut master_q: QUEUE = unsafe { mem::zeroed() };

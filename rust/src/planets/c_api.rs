@@ -35,68 +35,90 @@ extern "C" {
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
+
+pub use crate::log_abi::log_init;
+
+use crate::navigation::groups::live::GetGroupInfo;
+
+use crate::navigation::groups::live::PutGroupInfo;
+
+pub use crate::navigation::groups::live::InitGroupInfo;
+
+pub use crate::navigation::groups::live::UninitGroupInfo;
+
+use crate::navigation::groups::live::BuildGroups;
+
+use crate::planets::orbit::live::LoadPlanet;
+
+pub use crate::planets::orbit::live::FreePlanet;
+
+pub use crate::planets::plangen::live::GeneratePlanetSurface;
+
+use crate::planets::orbit::live::LoadStdLanderFont;
+
+use crate::planets::orbit::live::FreeLanderFont;
+
+use crate::strings::string_table::GetStringTableCount;
+
+use crate::strings::string_table::SetRelStringTableIndex;
+
+use crate::strings::string_table::ReleaseStringTable;
+
+use crate::strings::string_table::DestroyStringTable;
+
+use crate::graphics::resgfx::LoadGraphicInstance;
+
+pub use crate::strings::sresins::LoadStringTableInstance;
+
+use crate::graphics::pixmap_abi::CaptureDrawable;
+
+use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+use crate::graphics::drawable_abi::DestroyDrawable;
+
+use crate::graphics::drawable_abi::RescaleFrame;
+
+use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
+
+use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
+
+pub use crate::graphics::drawable_abi::ReadFramePixelIndexes;
+
+use crate::graphics::pixmap_abi::GetFrameCount;
+
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+use crate::graphics::drawable_abi::CreateDrawable;
+
+pub use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
+
+pub use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
+
+pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
+
+pub use crate::strings::string_table::CaptureStringTable;
+
+use crate::strings::string_table::SetAbsStringTableIndex;
+
+use crate::battle::build_native::engine::StartSphereTracking;
+
+use crate::navigation::interplanetary::live::NotifyOthers;
+
+use crate::ui::sis::DeltaSISGauges;
+
+use crate::ui::sis::DrawSISMessage;
+
+use crate::ui::sis::DrawHyperCoords;
+
 extern "C" {
-    pub fn log_init(max_lines: i32);
     #[link_name = "GlobData"]
     pub static mut GLOB_DATA: CGlobData;
-    fn GetGroupInfo(offset: u32, which_group: u8) -> u32;
-    fn PutGroupInfo(offset: u32, which_group: u8) -> u32;
-    pub fn InitGroupInfo(first_time: u32);
-    pub fn UninitGroupInfo();
-    fn BuildGroups();
-    fn LoadPlanet(surf_def_frame: *mut c_void);
-    pub fn FreePlanet();
-    pub fn GeneratePlanetSurface(
-        world: *mut crate::c_bindings::global_state::PLANET_DESC,
-        definition: *mut crate::c_bindings::global_state::FRAME_DESC,
-    );
-    fn LoadStdLanderFont(info: *mut c_void);
-    fn FreeLanderFont(info: *mut c_void);
-    fn GetStringTableCount(table: *mut c_void) -> u16;
-    fn SetRelStringTableIndex(table: *mut c_void, offset: i16) -> *mut c_void;
-    fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
-    fn DestroyStringTable(table: *mut c_void) -> i32;
-    fn LoadGraphicInstance(res: *const std::ffi::c_char) -> *mut c_void;
-    pub fn LoadStringTableInstance(res: *const std::ffi::c_char) -> *mut c_void;
     #[link_name = "GameStrings"]
     pub static mut GAME_STRINGS: *mut c_void;
-    fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-    fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(drawable: *mut c_void) -> u32;
-    fn RescaleFrame(frame: *mut c_void, width: i32, height: i32) -> *mut c_void;
-    fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut crate::c_bindings::global_state::TFB_Image;
-    fn TFB_DrawCanvas_Rescale_Nearest(
-        source: *mut c_void,
-        target: *mut c_void,
-        scale: i32,
-        source_hotspot: *mut c_void,
-        extent: *mut c_void,
-        target_hotspot: *mut c_void,
-    );
-    pub fn ReadFramePixelIndexes(
-        frame: *mut c_void,
-        indexes: *mut u8,
-        width: i32,
-        height: i32,
-    ) -> u32;
-    fn GetFrameCount(frame: *mut c_void) -> u16;
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn CreateDrawable(flags: u8, width: i16, height: i16, frames: u16) -> *mut c_void;
     #[link_name = "format_conv_surf"]
     pub static mut FORMAT_CONV_SURF: *mut sdl2::sys::SDL_Surface;
     #[link_name = "SDL_Screen"]
     pub static mut SDL_SCREEN: *mut sdl2::sys::SDL_Surface;
-    pub fn Init_DrawCommandQueue();
-    pub fn Uninit_DrawCommandQueue();
-    pub fn TFB_FlushGraphicsEx(skip_swap: u32);
-    pub fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
-    fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-    fn StartSphereTracking(race: u16) -> u16;
-    fn NotifyOthers(which_race: u16, target_loc: u8);
-
-    fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
-    fn DrawSISMessage(message: *const std::ffi::c_char);
-    fn DrawHyperCoords(origin: CPoint);
     #[link_name = "star_array"]
     pub static mut STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
@@ -139,7 +161,9 @@ pub unsafe fn rebel_escort_feasible() -> bool {
 /// # Safety
 /// `system` is the live system, with no outstanding references into it.
 pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    LoadStdLanderFont(
+        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+    );
     (*system).PlanetSideFrame[1] = std::ptr::null_mut();
     (*system).SysInfo.PlanetInfo.DiscoveryString =
         CaptureStringTable(LoadStringTableInstance(c"text.vuxbeast".as_ptr())).cast();
@@ -259,8 +283,11 @@ pub unsafe fn load_lander_scene(
     strtab: &std::ffi::CStr,
     first_report: u16,
 ) {
-    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
-    (*system).PlanetSideFrame[1] = CaptureDrawable(LoadGraphicInstance(graphics.as_ptr())).cast();
+    LoadStdLanderFont(
+        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+    );
+    (*system).PlanetSideFrame[1] =
+        CaptureDrawable((LoadGraphicInstance(graphics.as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(strtab.as_ptr()));
     (*system).SysInfo.PlanetInfo.DiscoveryString = if first_report == 0 {
         table.cast()
@@ -279,9 +306,11 @@ pub unsafe fn load_ruins_story(
     system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
     visits: u32,
 ) {
-    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    LoadStdLanderFont(
+        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+    );
     (*system).PlanetSideFrame[1] =
-        CaptureDrawable(LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast();
+        CaptureDrawable((LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(c"text.androsynthruins".as_ptr()));
     (*system).SysInfo.PlanetInfo.DiscoveryString = table.cast();
     if visits >= u32::from(GetStringTableCount(table)) {
@@ -299,7 +328,9 @@ pub unsafe fn load_ruins_story(
 /// # Safety
 /// `system` must be the live solar system state, on the game thread.
 pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    LoadStdLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    LoadStdLanderFont(
+        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+    );
     (*system).SysInfo.PlanetInfo.DiscoveryString =
         CaptureStringTable(LoadStringTableInstance(c"text.chmmrbase".as_ptr())).cast();
 }
@@ -309,7 +340,7 @@ pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state:
 /// # Safety
 /// `system` must be the live solar system state, on the game thread.
 pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>());
+    FreeLanderFont((std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast());
 }
 
 /// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), 1)` and, when a

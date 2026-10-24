@@ -30,39 +30,33 @@ pub const NULL_RESOURCE: u32 = 0;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-extern "C" {
-    fn LoadGraphic(res_id: *const c_void) -> *mut c_void;
-    fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn ReleaseDrawable(drawable: *mut c_void) -> *mut c_void;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn DestroyDrawable(drawable: *mut c_void) -> u32;
-
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn LoadMusic(res_id: *const c_void) -> *mut c_void;
-
-    fn LoadSound(res_id: *const c_void) -> *mut c_void;
-    fn CaptureSound(sound: *mut c_void) -> *mut c_void;
-    fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
-
-    fn LoadStringTable(res_id: *const c_void) -> *mut c_void;
-    fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
-    fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
-    fn DestroyStringTable(table: *mut c_void) -> i32;
-}
+use crate::game_init::macro_abi::CaptureSound;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::LoadGraphic;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::LoadMusic;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::LoadSound;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::LoadStringTable;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::ReleaseSound;
+#[cfg(not(test))]
+use crate::graphics::drawable_abi::DestroyDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::CaptureDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::ReleaseDrawable;
 #[cfg(not(test))]
 use crate::sound::heart_ffi::DestroyMusic;
 #[cfg(not(test))]
 use crate::sound::heart_ffi::DestroySound;
+#[cfg(not(test))]
+use crate::strings::string_table::CaptureStringTable;
+#[cfg(not(test))]
+use crate::strings::string_table::DestroyStringTable;
+#[cfg(not(test))]
+use crate::strings::string_table::ReleaseStringTable;
 
 // ---------------------------------------------------------------------------
 // Safe Rust wrappers for resource loading
@@ -82,7 +76,7 @@ pub fn load_graphic(res_id: u32) -> Result<DrawableHandle, ShipsError> {
 
     unsafe {
         let res_ptr = res_id as *const c_void;
-        let drawable = LoadGraphic(res_ptr);
+        let drawable = LoadGraphic((res_ptr).cast());
         if drawable.is_null() {
             return Err(ShipsError::LoadFailed(format!(
                 "LoadGraphic failed for resource ID {}",
@@ -114,7 +108,7 @@ pub fn load_music(res_id: u32) -> Result<MusicHandle, ShipsError> {
 
     unsafe {
         let res_ptr = res_id as *const c_void;
-        let music = LoadMusic(res_ptr);
+        let music = LoadMusic((res_ptr).cast());
         if music.is_null() {
             return Err(ShipsError::LoadFailed(format!(
                 "LoadMusic failed for resource ID {}",
@@ -139,14 +133,14 @@ pub fn load_sound(res_id: u32) -> Result<SoundHandle, ShipsError> {
 
     unsafe {
         let res_ptr = res_id as *const c_void;
-        let sound = LoadSound(res_ptr);
+        let sound = LoadSound((res_ptr).cast());
         if sound.is_null() {
             return Err(ShipsError::LoadFailed(format!(
                 "LoadSound failed for resource ID {}",
                 res_id
             )));
         }
-        let captured = CaptureSound(sound);
+        let captured = CaptureSound((sound).cast());
         if captured.is_null() {
             return Err(ShipsError::LoadFailed(format!(
                 "CaptureSound failed for resource ID {}",
@@ -171,7 +165,7 @@ pub fn load_string_table(res_id: u32) -> Result<StringTableHandle, ShipsError> {
 
     unsafe {
         let res_ptr = res_id as *const c_void;
-        let table = LoadStringTable(res_ptr);
+        let table = LoadStringTable((res_ptr).cast());
         if table.is_null() {
             return Err(ShipsError::LoadFailed(format!(
                 "LoadStringTable failed for resource ID {}",
@@ -200,7 +194,7 @@ pub fn free_graphic(handle: DrawableHandle) {
 
     unsafe {
         let drawable = handle as *mut c_void;
-        let released = ReleaseDrawable(drawable);
+        let released = ReleaseDrawable((drawable).cast());
         DestroyDrawable(released);
     }
 }
@@ -231,8 +225,8 @@ pub fn free_sound(handle: SoundHandle) {
 
     unsafe {
         let sound = handle as *mut c_void;
-        let released = ReleaseSound(sound);
-        DestroySound(released);
+        let released = ReleaseSound((sound).cast());
+        DestroySound((released).cast());
     }
 }
 
@@ -247,7 +241,7 @@ pub fn free_string_table(handle: StringTableHandle) {
 
     unsafe {
         let table = handle as *mut c_void;
-        let released = ReleaseStringTable(table);
+        let released = ReleaseStringTable((table).cast());
         DestroyStringTable(released);
     }
 }

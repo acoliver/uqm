@@ -38,6 +38,30 @@ use crate::navigation::hyper_transition::SaveSisHyperState;
 extern "C" {
     fn SaveSisHyperState();
 }
+
+use crate::battle::build_native::engine::StartSphereTracking;
+
+use crate::battle::sounds::engine::PlayMenuSound;
+
+use crate::mainloop::input_abi::live::SetMenuSounds;
+
+use crate::navigation::globals::inHQSpace;
+
+use crate::navigation::globals::inHyperSpace;
+
+use crate::navigation::groups::live::PutGroupInfo;
+
+use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
+
+use crate::planets::solarsys::matchWorld;
+
+use crate::planets::solarsys::playerInPlanetOrbit;
+
+use crate::planets::solarsys::playerInSolarSystem;
+
+use crate::ui::sis::ClearSISRect;
+
+use crate::ui::util::live::DrawStarConBox;
 #[allow(non_snake_case)]
 extern "C" {
     static mut GlobData: CGlobData;
@@ -45,33 +69,6 @@ extern "C" {
     static CurStarDescPtr: *const CStarDesc;
     static pSolarSysState: *mut crate::c_bindings::global_state::SOLARSYS_STATE;
     static MiscDataFrame: *mut c_void;
-
-    fn SetMenuSounds(move_sound: u16, select_sound: u16);
-    fn PlayMenuSound(sound: i32);
-
-    fn ClearSISRect(flags: u16);
-    fn DrawStarConBox(
-        rect: *mut CRect,
-        border: i16,
-        medium: CColor,
-        dark: CColor,
-        fill: i32,
-        background: CColor,
-    );
-    fn playerInSolarSystem() -> bool;
-    fn playerInPlanetOrbit() -> bool;
-    fn matchWorld(
-        system: *const crate::c_bindings::global_state::SOLARSYS_STATE,
-        world: *const crate::c_bindings::global_state::PLANET_DESC,
-        planet: u8,
-        moon: u8,
-    ) -> bool;
-    fn StartSphereTracking(race: u16) -> u16;
-    fn PutGroupInfo(offset: u32, group: u8) -> u32;
-    fn SaveSolarSysLocation();
-
-    fn inHQSpace() -> i32;
-    fn inHyperSpace() -> i32;
 }
 
 #[repr(C)]
@@ -136,7 +133,7 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
             height: 109,
         };
         DrawStarConBox(
-            &mut rect,
+            std::ptr::from_mut(&mut rect).cast(),
             1,
             color(16, 16, 16),
             color(8, 8, 8),

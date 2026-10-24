@@ -37,7 +37,7 @@ const fn crew_color(high: bool) -> Color {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::weapon_native::TrackShip;
@@ -286,7 +286,7 @@ mod engine {
         let mut intersect = (*ship).IntersectControl;
         let mut rect: RECT = mem::zeroed();
         GetFrameRect(intersect.IntersectStamp.frame, &mut rect);
-        let direction = (*ship).velocity.TravelAngle;
+        let direction = (*ship).velocity.travel_angle;
         let (dx, dy) = if direction == FULL_CIRCLE as u16 {
             (0, 0)
         } else {

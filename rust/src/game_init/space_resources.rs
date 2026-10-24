@@ -23,7 +23,7 @@ fn release_images(
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
     use crate::graphics::{

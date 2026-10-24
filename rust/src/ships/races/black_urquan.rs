@@ -1,5 +1,5 @@
 #[path = "blackurq_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Kohr-Ah Marauder - Spinning buzzsaw + F.R.I.E.D. gas cloud
 // @plan PLAN-20260314-SHIPS.P11

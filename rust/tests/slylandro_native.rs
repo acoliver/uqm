@@ -173,7 +173,7 @@ fn rgba(c: Color) -> (u8, u8, u8, u8) {
 }
 fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),
@@ -567,7 +567,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
         ] {
             enemy.at(4000 + dx, 4000 + dy);
             cached.desc.ship_info.crew_level = 0;
-            (*parent).velocity.TravelAngle = angle;
+            (*parent).velocity.travel_angle = angle;
             (*parent).hTarget = ptr::null_mut();
             let (random, _) = randoms(77);
             let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || {
@@ -592,7 +592,7 @@ fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_
         // A child with a cached target uses that target even if a nearer ship exists.
         cached.desc.ship_info.crew_level = 12;
         enemy.at(4000, 3999);
-        (*parent).velocity.TravelAngle = 1;
+        (*parent).velocity.travel_angle = 1;
         (*parent).hTarget = cached.handle;
         let (random, _) = randoms(99);
         let child_h = with_rng(99, 1, || ship.fire_from(parent));

@@ -1,11 +1,7 @@
 // Shared engine records used by the Rust runtime.
 
 pub use crate::math::{
-    RandomContext,
-    arctan as ARCTAN,
-    random as TFB_Random,
-    sinetab,
-    square_root,
+    arctan as ARCTAN, random as TFB_Random, sinetab, square_root, RandomContext,
 };
 
 pub const CONTENTDIR: &[u8; 13] = b"/uqm/content\0";
@@ -872,9 +868,8 @@ pub const FADE_FULL_INTENSITY: u32 = 510;
 pub const ROM_DRAWABLE: u32 = 0;
 pub const RAM_DRAWABLE: u32 = 1;
 pub const SCREEN_DRAWABLE: u32 = 2;
-unsafe extern "C" {
-    pub fn strupr(str_: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
+
+pub use crate::mainloop::platform_abi::strupr;
 pub type uint8 = ::std::os::raw::c_uchar;
 pub type sint8 = ::std::os::raw::c_schar;
 pub type uint16 = ::std::os::raw::c_ushort;
@@ -894,12 +889,8 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
+pub use crate::graphics::native_abi::uio_DirHandle;
 pub use crate::graphics::native_abi::Color;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_DirHandle {
-    _unused: [u8; 0],
-}
 pub const match_MatchType_match_MATCH_LITERAL: match_MatchType = 0;
 pub const match_MatchType_match_MATCH_PREFIX: match_MatchType = 1;
 pub const match_MatchType_match_MATCH_SUFFIX: match_MatchType = 2;
@@ -925,43 +916,33 @@ pub struct resource_index_desc {
 pub type RESOURCE_INDEX_DESC = resource_index_desc;
 pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table_entry {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::string_table_entry;
 pub type STRING_TABLE_ENTRY_DESC = string_table_entry;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::string_table;
 pub type STRING_TABLE_DESC = string_table;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-unsafe extern "C" {
-    pub fn LoadDirEntryTable(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        pattern: *const ::std::os::raw::c_char,
-        matchType: match_MatchType,
-    ) -> DIRENTRY_REF;
+pub unsafe fn LoadDirEntryTable(
+    dirHandle: *mut uio_DirHandle,
+    path: *const ::std::os::raw::c_char,
+    pattern: *const ::std::os::raw::c_char,
+    matchType: match_MatchType,
+) -> DIRENTRY_REF {
+    crate::resource::direct::LoadDirEntryTable(
+        dirHandle.cast(),
+        path,
+        pattern,
+        matchType as ::std::os::raw::c_int,
+    )
+    .cast()
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct context_desc {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::context_desc;
 pub type CONTEXT_DESC = context_desc;
 pub type FRAME_DESC = frame_desc;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct font_desc {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::font_desc;
 pub type FONT_DESC = font_desc;
 pub type DRAWABLE_DESC = drawable_desc;
 pub type CONTEXT = *mut CONTEXT_DESC;
@@ -971,40 +952,15 @@ pub type DRAWABLE = *mut DRAWABLE_DESC;
 pub type TIME_VALUE = UWORD;
 pub type COORD = SWORD;
 pub type CREATE_FLAGS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct extent {
-    pub width: COORD,
-    pub height: COORD,
-}
+pub use crate::graphics::native_abi::extent;
 pub type EXTENT = extent;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct point {
-    pub x: COORD,
-    pub y: COORD,
-}
+pub use crate::graphics::native_abi::point;
 pub type POINT = point;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct stamp {
-    pub origin: POINT,
-    pub frame: FRAME,
-}
+pub use crate::graphics::native_abi::stamp;
 pub type STAMP = stamp;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct rect {
-    pub corner: POINT,
-    pub extent: EXTENT,
-}
+pub use crate::graphics::native_abi::rect;
 pub type RECT = rect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct line {
-    pub first: POINT,
-    pub second: POINT,
-}
+pub use crate::graphics::native_abi::line;
 pub type LINE = line;
 pub const TEXT_ALIGN_ALIGN_LEFT: TEXT_ALIGN = 0;
 pub const TEXT_ALIGN_ALIGN_CENTER: TEXT_ALIGN = 1;
@@ -1014,14 +970,7 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct text {
-    pub baseline: POINT,
-    pub pStr: *const UNICODE,
-    pub align: TEXT_ALIGN,
-    pub CharCount: COUNT,
-}
+pub use crate::graphics::native_abi::text;
 pub type TEXT = text;
 pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
@@ -1034,24 +983,9 @@ pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
 pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union PRIM_DESC {
-    pub Point: POINT,
-    pub Stamp: STAMP,
-    pub Line: LINE,
-    pub Text: TEXT,
-    pub Rect: RECT,
-}
+pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PRIMITIVE {
-    pub Links: PRIM_LINKS,
-    pub Type: GRAPHICS_PRIM,
-    pub color: Color,
-    pub Object: PRIM_DESC,
-}
+pub use crate::graphics::native_abi::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1068,31 +1002,26 @@ pub const ScreenFadeType_FadeAllToColor: ScreenFadeType = 253;
 pub const ScreenFadeType_FadeSomeToBlack: ScreenFadeType = 254;
 pub const ScreenFadeType_FadeSomeToColor: ScreenFadeType = 255;
 pub type ScreenFadeType = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn SetContextForeGroundColor(Color: Color) -> Color;
-}
-unsafe extern "C" {
-    pub fn SetContextBackGroundColor(Color: Color) -> Color;
-}
+
+pub use crate::graphics::context_abi::SetContextForeGroundColor;
+
+pub use crate::graphics::context_abi::SetContextBackGroundColor;
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-unsafe extern "C" {
-    pub fn ClearDrawable();
-}
-unsafe extern "C" {
-    pub fn FadeScreen(fadeType: ScreenFadeType, TimeInterval: SIZE) -> DWORD;
-}
-unsafe extern "C" {
-    pub fn FlushColorXForms();
-}
+
+pub use crate::graphics::frame_abi::ClearDrawable;
+
+pub use crate::graphics::cmap_abi::FadeScreen;
+
+pub use crate::graphics::cmap_abi::FlushColorXForms;
 unsafe extern "C" {
     pub static mut stars_in_space: FRAME;
 }
-unsafe extern "C" {
-    pub fn InitShips() -> SIZE;
-}
-unsafe extern "C" {
-    pub fn UninitShips();
-}
+
+#[cfg(not(test))]
+pub use crate::game_init::space_resources::live::InitShips;
+
+#[cfg(not(test))]
+pub use crate::game_init::space_resources::live::UninitShips;
 
 pub type SOUND_REF = STRING_TABLE;
 pub type SOUND = STRING;
@@ -1111,9 +1040,9 @@ pub struct tfb_soundsample {
 }
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-pub use crate::sound::heart_ffi::{channel_playing as ChannelPlaying};
-pub use crate::sound::heart_ffi::{stop_sound as StopSound};
-pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
+pub use crate::sound::heart_ffi::channel_playing as ChannelPlaying;
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
+pub use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
 pub use crate::time::counter_abi::GetTimeCounter;
@@ -1121,11 +1050,7 @@ pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
 pub type NetplayResetReason = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetConnection {
-    _unused: [u8; 0],
-}
+pub use crate::supermelee::netplay::abi::NetConnection;
 pub const NetState_NetState_unconnected: NetState = 0;
 pub const NetState_NetState_connecting: NetState = 1;
 pub const NetState_NetState_init: NetState = 2;
@@ -1254,22 +1179,22 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut battleFrameCount: BattleFrameCounter;
 }
-unsafe extern "C" {
-    pub fn GetPlayerOrder(i: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn Battle(arg1: BattleFrameCallback) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn BattleSong(DoPlay: BOOLEAN);
-}
-unsafe extern "C" {
-    pub fn FreeBattleSong();
-}
+
+#[cfg(not(test))]
+pub use crate::battle::battle_native::engine::GetPlayerOrder;
+
+#[cfg(not(test))]
+pub use crate::battle::battle_native::engine::Battle;
+
+#[cfg(not(test))]
+pub use crate::battle::battle_native::engine::BattleSong;
+
+#[cfg(not(test))]
+pub use crate::battle::battle_native::engine::FreeBattleSong;
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
-pub use crate::supermelee::netplay::crc::crc_init as crc_init;
-pub use crate::supermelee::netplay::crc::crc_finish as crc_finish;
+pub use crate::supermelee::netplay::crc::crc_finish;
+pub use crate::supermelee::netplay::crc::crc_init;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type OBJ_SIZE = UWORD;
 pub type HLINK = QUEUE_HANDLE;
@@ -1280,33 +1205,28 @@ pub struct link {
     pub succ: HLINK,
 }
 pub type LINK = link;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct QUEUE {
-    pub head: HLINK,
-    pub tail: HLINK,
-    pub pq_tab: *mut BYTE,
-    pub free_list: HLINK,
-    pub object_size: COUNT,
-    pub num_objects: BYTE,
+pub use crate::collections::queue::Queue as QUEUE;
+pub unsafe fn FreeLink(pq: *mut QUEUE, hLink: HLINK) {
+    crate::collections::queue::FreeLink(pq.cast(), hLink);
 }
-unsafe extern "C" {
-    pub fn FreeLink(pq: *mut QUEUE, hLink: HLINK);
+pub unsafe fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN {
+    BOOLEAN::from(crate::collections::queue::InitQueue(
+        pq.cast(),
+        num_elements,
+        size,
+    ))
 }
-unsafe extern "C" {
-    pub fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN;
+pub unsafe fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN {
+    BOOLEAN::from(crate::collections::queue::UninitQueue(pq.cast()))
 }
-unsafe extern "C" {
-    pub fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN;
+pub unsafe fn ReinitQueue(pq: *mut QUEUE) {
+    crate::collections::queue::ReinitQueue(pq.cast());
 }
-unsafe extern "C" {
-    pub fn ReinitQueue(pq: *mut QUEUE);
+pub unsafe fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK) {
+    crate::collections::queue::RemoveQueue(pq.cast(), hLink);
 }
-unsafe extern "C" {
-    pub fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK);
-}
-unsafe extern "C" {
-    pub fn CountLinks(pq: *mut QUEUE) -> COUNT;
+pub unsafe fn CountLinks(pq: *const QUEUE) -> COUNT {
+    crate::collections::queue::CountLinks(pq.cast())
 }
 unsafe extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
@@ -1315,36 +1235,28 @@ unsafe extern "C" {
     pub static mut ScreenHeight: ::std::os::raw::c_int;
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct velocity_desc {
-    pub TravelAngle: COUNT,
-    pub vector: EXTENT,
-    pub fract: EXTENT,
-    pub error: EXTENT,
-    pub incr: EXTENT,
-}
+pub use crate::battle::velocity::VelocityDesc as velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
-unsafe extern "C" {
-    pub fn GetCurrentVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-    );
+pub unsafe fn GetCurrentVelocityComponents(
+    velocityptr: *mut VELOCITY_DESC,
+    pdx: *mut SIZE,
+    pdy: *mut SIZE,
+) {
+    crate::battle::velocity::GetCurrentVelocityComponents(velocityptr.cast(), pdx, pdy);
 }
-unsafe extern "C" {
-    pub fn GetNextVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-        num_frames: COUNT,
-    );
+pub unsafe fn GetNextVelocityComponents(
+    velocityptr: *mut VELOCITY_DESC,
+    pdx: *mut SIZE,
+    pdy: *mut SIZE,
+    num_frames: COUNT,
+) {
+    crate::battle::velocity::GetNextVelocityComponents(velocityptr.cast(), pdx, pdy, num_frames);
 }
-unsafe extern "C" {
-    pub fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
+pub unsafe fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
+    crate::battle::velocity::SetVelocityComponents(velocityptr.cast(), dx, dy);
 }
-unsafe extern "C" {
-    pub fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
+pub unsafe fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
+    crate::battle::velocity::DeltaVelocityComponents(velocityptr.cast(), dx, dy);
 }
 pub type HELEMENT = HLINK;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
@@ -1366,6 +1278,27 @@ pub struct state__bindgen_ty_1 {
 }
 pub type STATE = state;
 pub type ELEMENT = element;
+const _: () = {
+    use crate::battle::element::{Element, ElementVisualState};
+    assert!(size_of::<ELEMENT>() == size_of::<Element>());
+    assert!(align_of::<ELEMENT>() == align_of::<Element>());
+    assert!(std::mem::offset_of!(ELEMENT, succ) == std::mem::offset_of!(Element, succ));
+    assert!(
+        std::mem::offset_of!(ELEMENT, state_flags) == std::mem::offset_of!(Element, state_flags)
+    );
+    assert!(std::mem::offset_of!(ELEMENT, current) == std::mem::offset_of!(Element, current));
+    assert!(
+        std::mem::offset_of!(STATE, location) == std::mem::offset_of!(ElementVisualState, location)
+    );
+    assert!(
+        std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frame)
+            == std::mem::offset_of!(ElementVisualState, frame)
+    );
+    assert!(
+        std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, farray)
+            == std::mem::offset_of!(ElementVisualState, farray)
+    );
+};
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type ElementCollisionFunc = ::std::option::Option<
     unsafe extern "C" fn(
@@ -1441,37 +1374,31 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut DisplayArray: [PRIMITIVE; 330usize];
 }
-unsafe extern "C" {
-    pub fn RemoveElement(hLink: HLINK);
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::RemoveElement;
+pub unsafe fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN {
+    // Gravity reads the shared flags/current-state fields, not the differently
+    // ordered intersection-control fields. Their offsets are checked above.
+    crate::battle::gravity::TimeSpaceMatterConflict(ElementPtr.cast()) as BOOLEAN
 }
-unsafe extern "C" {
-    pub fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn PlotIntercept(
-        ElementPtr0: *mut ELEMENT,
-        ElementPtr1: *mut ELEMENT,
-        max_turns: COUNT,
-        margin_of_error: COUNT,
-    ) -> COUNT;
-}
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::PlotIntercept;
+pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
 pub use crate::supermelee::netplay::checksum::init_checksum_buffers as initChecksumBuffers;
 pub use crate::supermelee::netplay::checksum::uninit_checksum_buffers as uninitChecksumBuffers;
-pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
 pub use crate::supermelee::netplay::checksum::verify_checksums as verifyChecksums;
-unsafe extern "C" {
-    pub fn NetConnection_getStateData(conn: *const NetConnection) -> *mut NetConnectionStateData;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getStateData;
+pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
+    crate::supermelee::netplay::abi::NetConnection_setState(conn.cast(), state);
 }
-unsafe extern "C" {
-    pub fn NetConnection_setState(conn: *mut NetConnection, state: NetState);
-}
-unsafe extern "C" {
-    pub fn NetConnection_getState(conn: *const NetConnection) -> NetState;
-}
-unsafe extern "C" {
-    pub fn NetConnection_getDiscriminant(conn: *const NetConnection) -> bool;
-}
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
 pub type PacketHandler = ::std::option::Option<
     unsafe extern "C" fn(
         conn: *mut NetConnection,
@@ -1566,45 +1493,45 @@ pub struct melee_state {
     pub LastInputTime: TimeCount,
     pub hMusic: MUSIC_REF,
 }
-unsafe extern "C" {
-    pub fn DoMelee(pMS: *mut MELEE_STATE) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn DrawMeleeIcon(which_icon: COUNT);
-}
-unsafe extern "C" {
-    pub fn GetShipBox(pRect: *mut RECT, side: COUNT, row: COUNT, col: COUNT);
-}
-unsafe extern "C" {
-    pub fn RepairMeleeFrame(pRect: *const RECT);
-}
-unsafe extern "C" {
-    pub fn DrawMeleeShipStrings(pMS: *mut MELEE_STATE, NewStarShip: MeleeShip);
-}
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::DoMelee;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::GetShipBox;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::RepairMeleeFrame;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::DrawMeleeShipStrings;
 unsafe extern "C" {
     pub static mut MeleeFrame: FRAME;
 }
-unsafe extern "C" {
-    pub fn Melee_flashSelection(pMS: *mut MELEE_STATE);
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
+
+pub use crate::navigation::abi::FlashContext;
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+#[cfg(not(test))]
+pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
+    crate::ui::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
-unsafe extern "C" {
-    pub fn Melee_LocalChange_team(
-        pMS: *mut MELEE_STATE,
-        teamNr: usize,
-        team: *const MeleeTeam,
-    ) -> bool;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_createHighlight;
+#[cfg(not(test))]
+pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
+    crate::ui::flash::Flash_setRect(context.cast(), rect.cast());
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext {
-    _unused: [u8; 0],
-}
-unsafe extern "C" {
-    pub fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext;
-}
-unsafe extern "C" {
-    pub fn Flash_setRect(context: *mut FlashContext, rect: *const RECT);
-}
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setRect;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct BattleStateData {
@@ -1665,9 +1592,9 @@ pub struct _controller_input_state {
 }
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
-unsafe extern "C" {
-    pub fn PulsedInputToBattleInput(player: COUNT) -> BATTLE_INPUT_STATE;
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 unsafe extern "C" {
     pub static mut CurrentInputState: CONTROLLER_INPUT_STATE;
 }
@@ -1680,22 +1607,18 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut PlayerControls: [CONTROL_TEMPLATE; 0usize];
 }
-unsafe extern "C" {
-    pub fn FlushInput();
-}
-unsafe extern "C" {
-    pub fn SetDefaultMenuRepeatDelay();
-}
-unsafe extern "C" {
-    pub fn ConfirmExit() -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn WaitForAnyButton(
-        newButton: BOOLEAN,
-        duration: TimePeriod,
-        resetInput: BOOLEAN,
-    ) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::FlushInput;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::ConfirmExit;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::WaitForAnyButton;
 unsafe extern "C" {
     pub static mut GamePaused: BOOLEAN;
 }
@@ -1958,15 +1881,15 @@ pub const URQUAN_DRONE_SHIP: _bindgen_ty_4 = 23;
 pub const SAMATRA_SHIP: _bindgen_ty_4 = 23;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn MeleeShipDeath(arg1: *mut STARSHIP);
-}
-unsafe extern "C" {
-    pub fn MeleeGameOver();
-}
-unsafe extern "C" {
-    pub fn GetInitialMeleeStarShips(result: *mut HSTARSHIP) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::MeleeShipDeath;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::MeleeGameOver;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct getmelee_struct {
@@ -2044,83 +1967,80 @@ pub const ENEMY_WEAPON_INDEX: _bindgen_ty_5 = 2;
 pub const GRAVITY_MASS_INDEX: _bindgen_ty_5 = 3;
 pub const FIRST_EMPTY_INDEX: _bindgen_ty_5 = 4;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn tactical_intelligence(
-        context: *mut ComputerInputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE;
-}
-unsafe extern "C" {
-    pub fn ship_intelligence(
-        ShipPtr: *mut ELEMENT,
-        ObjectsOfConcern: *mut EVALUATE_DESC,
-        ConcernCounter: COUNT,
-    );
-}
-unsafe extern "C" {
-    pub fn ship_weapons(
-        ShipPtr: *mut ELEMENT,
-        OtherPtr: *mut ELEMENT,
-        margin_of_error: COUNT,
-    ) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn Pursue(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-unsafe extern "C" {
-    pub fn Entice(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-unsafe extern "C" {
-    pub fn Avoid(ShipPtr: *mut ELEMENT, EvalDescPtr: *mut EVALUATE_DESC);
-}
-unsafe extern "C" {
-    pub fn TurnShip(ShipPtr: *mut ELEMENT, angle: COUNT) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn ThrustShip(ShipPtr: *mut ELEMENT, angle: COUNT) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::tactical_intelligence;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::ship_intelligence;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::ship_weapons;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::Pursue;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::Entice;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::Avoid;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::TurnShip;
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::ThrustShip;
 unsafe extern "C" {
     pub static mut status_y_offsets: [COORD; 0usize];
 }
-unsafe extern "C" {
-    pub fn InitStatusOffsets();
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::InitStatusOffsets;
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::DrawCrewFuelString;
+#[cfg(not(test))]
+pub unsafe fn InitShipStatus(
+    ShipInfoPtr: *mut SHIP_INFO,
+    StarShipPtr: *mut STARSHIP,
+    pClipRect: *mut RECT,
+) {
+    crate::ui::shipstat::InitShipStatus(ShipInfoPtr.cast(), StarShipPtr.cast(), pClipRect.cast());
 }
-unsafe extern "C" {
-    pub fn DrawCrewFuelString(y: COORD, state: SIZE);
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::shipstat::InitShipStatus;
+#[cfg(not(test))]
+pub unsafe fn DeltaStatistics(
+    ShipInfoPtr: *mut SHIP_INFO,
+    y_offs: COORD,
+    crew_delta: SIZE,
+    energy_delta: SIZE,
+) {
+    crate::ui::shipstat::DeltaStatistics(ShipInfoPtr.cast(), y_offs, crew_delta, energy_delta);
 }
-unsafe extern "C" {
-    pub fn InitShipStatus(
-        ShipInfoPtr: *mut SHIP_INFO,
-        StarShipPtr: *mut STARSHIP,
-        pClipRect: *mut RECT,
-    );
-}
-unsafe extern "C" {
-    pub fn DeltaStatistics(
-        ShipInfoPtr: *mut SHIP_INFO,
-        y_offs: COORD,
-        crew_delta: SIZE,
-        energy_delta: SIZE,
-    );
-}
-unsafe extern "C" {
-    pub fn DrawBattleCrewAmount(ShipInfoPtr: *mut SHIP_INFO, y_offs: COORD);
-}
-unsafe extern "C" {
-    pub fn DrawCaptainsWindow(StarShipPtr: *mut STARSHIP);
-}
-unsafe extern "C" {
-    pub fn DeltaEnergy(ElementPtr: *mut ELEMENT, energy_delta: SIZE) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn DeltaCrew(ElementPtr: *mut ELEMENT, crew_delta: SIZE) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn PreProcessStatus(ShipPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn PostProcessStatus(ShipPtr: *mut ELEMENT);
-}
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::shipstat::DeltaStatistics;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DrawCaptainsWindow;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DeltaEnergy;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DeltaCrew;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::PreProcessStatus;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::PostProcessStatus;
 unsafe extern "C" {
     pub static mut MenuSounds: SOUND;
 }
@@ -2128,15 +2048,15 @@ unsafe extern "C" {
     pub static mut GameSounds: SOUND;
 }
 pub type MENU_SOUND_FLAGS = UWORD;
-unsafe extern "C" {
-    pub fn SetMenuSounds(sound_0: MENU_SOUND_FLAGS, sound_1: MENU_SOUND_FLAGS);
-}
-unsafe extern "C" {
-    pub fn UpdateSoundPositions();
-}
-unsafe extern "C" {
-    pub fn FlushSounds();
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetMenuSounds;
+
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::UpdateSoundPositions;
+
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::FlushSounds;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct LASER_BLOCK {
@@ -2168,100 +2088,87 @@ pub struct MISSILE_BLOCK {
     pub preprocess_func: ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>,
     pub blast_offs: SIZE,
 }
-unsafe extern "C" {
-    pub fn Untarget(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn GetNextStarShip(LastStarShipPtr: *mut STARSHIP, which_side: COUNT) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn GetInitialStarShips() -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn animation_preprocess(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn ship_preprocess(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn ship_postprocess(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn collision(
-        ElementPtr0: *mut ELEMENT,
-        pPt0: *mut POINT,
-        ElementPtr1: *mut ELEMENT,
-        pPt1: *mut POINT,
-    );
-}
-unsafe extern "C" {
-    pub fn inertial_thrust(ElementPtr: *mut ELEMENT) -> STATUS_FLAGS;
-}
-unsafe extern "C" {
-    pub fn Build(pQueue: *mut QUEUE, SpeciesID: SPECIES_ID) -> HLINK;
-}
-unsafe extern "C" {
-    pub fn CloneShipFragment(
-        shipIndex: COUNT,
-        pDstQueue: *mut QUEUE,
-        crew_level: COUNT,
-    ) -> HSHIPFRAG;
-}
-unsafe extern "C" {
-    pub fn GetStarShipFromIndex(pShipQ: *mut QUEUE, Index: COUNT) -> HLINK;
-}
-unsafe extern "C" {
-    pub fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG;
-}
-unsafe extern "C" {
-    pub fn NameCaptain(pQueue: *mut QUEUE, SpeciesID: SPECIES_ID) -> BYTE;
-}
-unsafe extern "C" {
-    pub fn GetIndexFromStarShip(pShipQ: *mut QUEUE, hStarShip: HLINK) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn SetEscortCrewComplement(
-        which_ship: COUNT,
-        crew_level: COUNT,
-        captain: BYTE,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn CalculateEscortsWorth() -> COUNT;
-}
-unsafe extern "C" {
-    pub fn SetRaceAllied(race: COUNT, flag: BOOLEAN) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn StartSphereTracking(race: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn CountEscortShips(race: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn HaveEscortShip(race: COUNT) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn EscortFeasibilityStudy(race: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn CheckAlliance(race: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn RemoveSomeEscortShips(race: COUNT, count: COUNT) -> COUNT;
-}
-unsafe extern "C" {
-    pub fn RemoveEscortShips(race: COUNT);
-}
-unsafe extern "C" {
-    pub fn load_ship(SpeciesID: SPECIES_ID, LoadBattleData: BOOLEAN) -> *mut RACE_DESC;
-}
-unsafe extern "C" {
-    pub fn free_ship(RaceDescPtr: *mut RACE_DESC, FreeIconData: BOOLEAN, FreeBattleData: BOOLEAN);
-}
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::Untarget;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::GetNextStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::GetInitialStarShips;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::animation_preprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::ship_preprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::ship_postprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::collision;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::inertial_thrust;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::Build;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CloneShipFragment;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetStarShipFromIndex;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetEscortByStarShipIndex;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::NameCaptain;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetIndexFromStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::SetEscortCrewComplement;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::AddEscortShips;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CalculateEscortsWorth;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::SetRaceAllied;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::StartSphereTracking;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CountEscortShips;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::HaveEscortShip;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::EscortFeasibilityStudy;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CheckAlliance;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::RemoveSomeEscortShips;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::RemoveEscortShips;
+
+#[cfg(not(test))]
+pub use crate::ships::loader_native::engine::load_ship;
+
+#[cfg(not(test))]
+pub use crate::ships::loader_native::engine::free_ship;
 pub type HMASTERSHIP = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2281,26 +2188,39 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
-unsafe extern "C" {
-    pub fn PlaySoundEffect(
-        S: SOUND,
-        Channel: COUNT,
-        Pos: SoundPosition,
-        PositionalObject: *mut ::std::os::raw::c_void,
-        Priority: BYTE,
+#[cfg(not(test))]
+pub unsafe fn PlaySoundEffect(
+    S: SOUND,
+    Channel: COUNT,
+    Pos: SoundPosition,
+    PositionalObject: *mut ::std::os::raw::c_void,
+    Priority: BYTE,
+) {
+    crate::ui::settings::PlaySoundEffect(
+        S.cast(),
+        Channel,
+        crate::navigation::abi::SoundPosition {
+            positional: Pos.positional,
+            x: Pos.x,
+            y: Pos.y,
+        },
+        PositionalObject,
+        Priority,
     );
 }
-pub type Mutex = *mut ::std::os::raw::c_void;
-pub type CondVar = *mut ::std::os::raw::c_void;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::settings::PlaySoundEffect;
+pub type Mutex = *mut crate::threading::RustMutex;
+pub type CondVar = *mut crate::threading::RustCondVar;
 pub const SYNC_CLASS_TOPLEVEL: _bindgen_ty_6 = 1;
 pub const SYNC_CLASS_AUDIO: _bindgen_ty_6 = 2;
 pub const SYNC_CLASS_VIDEO: _bindgen_ty_6 = 4;
 pub const SYNC_CLASS_RESOURCE: _bindgen_ty_6 = 8;
 pub type _bindgen_ty_6 = ::std::os::raw::c_uint;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-extern "C" {
-    pub fn TaskSwitch();
-}
+
+pub use crate::threading::legacy_abi::TaskSwitch;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CLOCK_STATE {
@@ -2518,24 +2438,31 @@ pub use crate::ui::border::DrawSISFrame;
 extern "C" {
     pub fn DrawSISFrame();
 }
-unsafe extern "C" {
-    pub fn DrawHyperCoords(puniverse: POINT);
+#[cfg(not(test))]
+pub unsafe fn DrawHyperCoords(puniverse: POINT) {
+    crate::ui::sis::DrawHyperCoords(crate::navigation::abi::POINT {
+        x: puniverse.x,
+        y: puniverse.y,
+    });
 }
-unsafe extern "C" {
-    pub fn DrawSISMessage(pStr: *const UNICODE);
-}
-unsafe extern "C" {
-    pub fn DrawStatusMessage(pStr: *const UNICODE);
-}
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawHyperCoords;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawSISMessage;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawStatusMessage;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
 pub const StatMsgMode_SMM_RES_UNITS: StatMsgMode = 2;
 pub const StatMsgMode_SMM_CREDITS: StatMsgMode = 3;
 pub const StatMsgMode_SMM_DEFAULT: StatMsgMode = 1;
 pub type StatMsgMode = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: ::std::os::raw::c_int);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DeltaSISGauges;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ANIMATION_DESC {
@@ -3598,9 +3525,9 @@ pub const DEFGRP_COLONY: _bindgen_ty_14 = 13;
 pub const DEFGRP_SAMATRA: _bindgen_ty_14 = 14;
 pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn inQuasiSpace() -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::inQuasiSpace;
 unsafe extern "C" {
     pub static mut hResIndex: RESOURCE_INDEX;
 }
@@ -3661,24 +3588,24 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut usingSpeech: BOOLEAN;
 }
-unsafe extern "C" {
-    pub fn SetPlayerInput(playerI: COUNT) -> bool;
-}
-unsafe extern "C" {
-    pub fn ClearPlayerInput(playerI: COUNT);
-}
-unsafe extern "C" {
-    pub fn RedrawQueue(clear: BOOLEAN);
-}
-unsafe extern "C" {
-    pub fn InitDisplayList();
-}
-unsafe extern "C" {
-    pub fn SetUpElement(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn InsertPrim(pLinks: *mut PRIM_LINKS, primIndex: COUNT, iPI: COUNT);
-}
+
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::SetPlayerInput;
+
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::ClearPlayerInput;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::RedrawQueue;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::InitDisplayList;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::SetUpElement;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::InsertPrim;
 pub const TFB_GFXDRIVER_SDL_OPENGL: _bindgen_ty_15 = 0;
 pub const TFB_GFXDRIVER_SDL_PURE: _bindgen_ty_15 = 1;
 pub type _bindgen_ty_15 = ::std::os::raw::c_uint;
@@ -3700,60 +3627,64 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
 }
-unsafe extern "C" {
-    pub fn MoveSIS(pdx: *mut SIZE, pdy: *mut SIZE);
-}
-unsafe extern "C" {
-    pub fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN;
+
+#[cfg(not(test))]
+pub use crate::navigation::hyperspace::live::MoveSIS;
+#[cfg(not(test))]
+pub unsafe fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN {
+    crate::navigation::hyper_transition::hyper_transition(ElementPtr.cast())
 }
 #[cfg(not(test))]
 pub use crate::navigation::hyper_menu::HyperspaceMenu;
 #[cfg(test)]
+#[cfg(not(test))]
+pub use crate::navigation::hyper_transition::hyper_transition;
+#[cfg(test)]
 extern "C" {
     pub fn HyperspaceMenu();
 }
-unsafe extern "C" {
-    pub fn ship_transition(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn OpponentAlive(TestStarShipPtr: *mut STARSHIP) -> BOOLEAN;
-}
-unsafe extern "C" {
-    pub fn new_ship(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn ship_death(ShipPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn spawn_ion_trail(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn flee_preprocess(ElementPtr: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn StopDitty();
-}
-unsafe extern "C" {
-    pub fn ResetWinnerStarShip();
-}
-unsafe extern "C" {
-    pub fn StopAllBattleMusic();
-}
-unsafe extern "C" {
-    pub fn FindAliveStarShip(deadShip: *mut ELEMENT) -> *mut STARSHIP;
-}
-unsafe extern "C" {
-    pub fn GetWinnerStarShip() -> *mut STARSHIP;
-}
-unsafe extern "C" {
-    pub fn SetWinnerStarShip(winner: *mut STARSHIP);
-}
-unsafe extern "C" {
-    pub fn RecordShipDeath(deadShip: *mut ELEMENT);
-}
-unsafe extern "C" {
-    pub fn StartShipExplosion(ShipPtr: *mut ELEMENT, playSound: bool);
-}
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::ship_transition;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::OpponentAlive;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::new_ship;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::ship_death;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::spawn_ion_trail;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::flee_preprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::StopDitty;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::ResetWinnerStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::StopAllBattleMusic;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::FindAliveStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::GetWinnerStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::SetWinnerStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::RecordShipDeath;
+
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::StartShipExplosion;
 
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_17 = -999999;
@@ -3931,9 +3862,9 @@ pub const PM_ALT_ASCAN: _bindgen_ty_19 = 51;
 pub const PM_ALT_DISPATCH: _bindgen_ty_19 = 52;
 pub const PM_ALT_EXIT_SCAN: _bindgen_ty_19 = 53;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn DrawMenuStateStrings(beg_index: BYTE, NewState: SWORD);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::menu::DrawMenuStateStrings;
 pub const SMALL_ROCKY_WORLD: _bindgen_ty_20 = 0;
 pub const LARGE_ROCKY_WORLD: _bindgen_ty_20 = 1;
 pub const GAS_GIANT: _bindgen_ty_20 = 2;
@@ -4153,9 +4084,9 @@ pub struct solarsys_state {
 pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn UpdateShipFragCrew(arg1: *mut STARSHIP);
-}
+
+#[cfg(not(test))]
+pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 unsafe extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -4186,141 +4117,90 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub static mut GameStrings: STRING;
 }
-unsafe extern "C" {
-    pub fn ConfirmSaveLoad(MsgStamp: *mut STAMP);
+#[cfg(not(test))]
+pub unsafe fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
+    crate::front_end::gameopt::ConfirmSaveLoad(MsgStamp.cast());
 }
-unsafe extern "C" {
-    pub fn GameOptions() -> BOOLEAN;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
+
+#[cfg(not(test))]
+pub use crate::front_end::gameopt::runtime::GameOptions;
+#[cfg(not(test))]
+pub unsafe fn GetEncounterStarShip(
+    LastStarShipPtr: *mut STARSHIP,
+    which_player: COUNT,
+) -> HSTARSHIP {
+    crate::pickship::ffi::get_encounter_star_ship(LastStarShipPtr.cast(), which_player)
 }
-unsafe extern "C" {
-    pub fn GetEncounterStarShip(LastStarShipPtr: *mut STARSHIP, which_player: COUNT) -> HSTARSHIP;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::pickship::ffi::get_encounter_star_ship as GetEncounterStarShip;
+#[cfg(not(test))]
+pub unsafe fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT) {
+    crate::pickship::ffi::draw_armada_pick_ship(
+        draw_salvage_frame as ::std::os::raw::c_int,
+        pPickRect.cast(),
+    );
 }
-unsafe extern "C" {
-    pub fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT);
-}
-unsafe extern "C" {
-    pub fn load_gravity_well(selector: BYTE);
-}
-unsafe extern "C" {
-    pub fn free_gravity_well();
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputBuffer {
-    pub buf: *mut BATTLE_INPUT_STATE,
-    pub maxSize: usize,
-    pub first: usize,
-    pub size: usize,
-}
-unsafe extern "C" {
-    pub fn getBattleInputDelay() -> usize;
-}
-unsafe extern "C" {
-    pub fn initBattleInputBuffers();
-}
-unsafe extern "C" {
-    pub fn uninitBattleInputBuffers();
-}
-unsafe extern "C" {
-    pub fn BattleInputBuffer_push(bib: *mut BattleInputBuffer, input: BATTLE_INPUT_STATE) -> bool;
-}
-unsafe extern "C" {
-    pub fn BattleInputBuffer_pop(
-        bib: *mut BattleInputBuffer,
-        input: *mut BATTLE_INPUT_STATE,
-    ) -> bool;
-}
-unsafe extern "C" {
-    pub fn getBattleInputBuffer(player: usize) -> *mut BattleInputBuffer;
-}
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::pickship::ffi::draw_armada_pick_ship as DrawArmadaPickShip;
+
+#[cfg(not(test))]
+pub use crate::game_init::world_resources::live::load_gravity_well;
+
+#[cfg(not(test))]
+pub use crate::game_init::world_resources::live::free_gravity_well;
+pub use crate::supermelee::netplay::abi::BattleInputBuffer;
+
+pub use crate::supermelee::netplay::netinput::getBattleInputDelay;
+
+pub use crate::supermelee::netplay::netinput::initBattleInputBuffers;
+
+pub use crate::supermelee::netplay::abi::BattleInputBuffer_push;
+pub use crate::supermelee::netplay::netinput::uninitBattleInputBuffers;
+
+pub use crate::supermelee::netplay::abi::getBattleInputBuffer;
+pub use crate::supermelee::netplay::netinput::BattleInputBuffer_pop;
 unsafe extern "C" {
     pub static mut netConnections: [*mut NetConnection; 0usize];
 }
-unsafe extern "C" {
-    pub fn getNumNetConnections() -> usize;
-}
-unsafe extern "C" {
-    pub fn netInput();
-}
-unsafe extern "C" {
-    pub fn flushPacketQueues();
-}
-unsafe extern "C" {
-    pub fn allConnected() -> bool;
-}
-unsafe extern "C" {
-    pub fn initBattleStateDataConnections();
-}
-unsafe extern "C" {
-    pub fn setBattleStateConnections(bs: *mut battlestate_struct);
-}
-unsafe extern "C" {
-    pub fn setStateConnections(state: NetState) -> bool;
-}
-unsafe extern "C" {
-    pub fn resetConnections(reason: NetplayResetReason) -> bool;
-}
-unsafe extern "C" {
-    pub fn negotiateReady(
-        conn: *mut NetConnection,
-        notifyRemote: bool,
-        nextState: NetState,
-    ) -> bool;
-}
-unsafe extern "C" {
-    pub fn negotiateReadyConnections(notifyRemote: bool, nextState: NetState) -> bool;
-}
-unsafe extern "C" {
-    pub fn waitReady(conn: *mut NetConnection) -> bool;
-}
-unsafe extern "C" {
-    pub fn waitResetConnections(nextState: NetState) -> bool;
-}
-unsafe extern "C" {
-    pub fn Netplay_NotifyAll_checksum(frameNr: BattleFrameCounter, checksum: Checksum);
-}
-unsafe extern "C" {
-    pub fn Netplay_NotifyAll_battleInput(input: BATTLE_INPUT_STATE);
-}
+
+pub use crate::supermelee::netplay::netmelee::getNumNetConnections;
+
+pub use crate::supermelee::netplay::netmelee::netInput;
+
+pub use crate::supermelee::netplay::netmelee::flushPacketQueues;
+
+pub use crate::supermelee::netplay::netmelee::allConnected;
+
+pub use crate::supermelee::netplay::netmelee::initBattleStateDataConnections;
+
+pub use crate::supermelee::netplay::netmelee::setBattleStateConnections;
+
+pub use crate::supermelee::netplay::netmelee::setStateConnections;
+
+pub use crate::supermelee::netplay::netmelee::resetConnections;
+
+pub use crate::supermelee::netplay::netmelee::negotiateReady;
+
+pub use crate::supermelee::netplay::netmelee::negotiateReadyConnections;
+
+pub use crate::supermelee::netplay::netmelee::waitReady;
+
+pub use crate::supermelee::netplay::netmelee::waitResetConnections;
+
+pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_checksum;
+
+pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_battleInput;
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_image {
-    pub NormalImg: TFB_Canvas,
-    pub ScaledImg: TFB_Canvas,
-    pub MipmapImg: TFB_Canvas,
-    pub FilledImg: TFB_Canvas,
-    pub colormap_index: ::std::os::raw::c_int,
-    pub colormap_version: ::std::os::raw::c_int,
-    pub NormalHs: HOT_SPOT,
-    pub MipmapHs: HOT_SPOT,
-    pub last_scale_hs: HOT_SPOT,
-    pub last_scale: ::std::os::raw::c_int,
-    pub last_scale_type: ::std::os::raw::c_int,
-    pub last_fill: Color,
-    pub extent: EXTENT,
-    pub mutex: Mutex,
-    pub dirty: BOOLEAN,
-}
+pub use crate::graphics::native_abi::tfb_image;
 pub type TFB_Image = tfb_image;
 pub type DRAWABLE_TYPE = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct frame_desc {
-    pub Type: DRAWABLE_TYPE,
-    pub Index: UWORD,
-    pub HotSpot: HOT_SPOT,
-    pub Bounds: EXTENT,
-    pub image: *mut TFB_Image,
-    pub parent: *mut drawable_desc,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct drawable_desc {
-    pub Flags: CREATE_FLAGS,
-    pub MaxIndex: UWORD,
-    pub Frame: *mut FRAME_DESC,
-}
+pub use crate::graphics::native_abi::drawable_desc;
+pub use crate::graphics::native_abi::frame_desc;
 pub const TFB_DRAWCOMMANDTYPE_LINE: _bindgen_ty_28 = 0;
 pub const TFB_DRAWCOMMANDTYPE_RECTANGLE: _bindgen_ty_28 = 1;
 pub const TFB_DRAWCOMMANDTYPE_IMAGE: _bindgen_ty_28 = 2;
@@ -4337,15 +4217,50 @@ pub const TFB_DRAWCOMMANDTYPE_SENDSIGNAL: _bindgen_ty_28 = 12;
 pub const TFB_DRAWCOMMANDTYPE_REINITVIDEO: _bindgen_ty_28 = 13;
 pub const TFB_DRAWCOMMANDTYPE_CALLBACK: _bindgen_ty_28 = 14;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_drawcommandqueue {
-    pub Front: ::std::os::raw::c_int,
-    pub Back: ::std::os::raw::c_int,
-    pub InsertionPoint: ::std::os::raw::c_int,
-    pub Batching: ::std::os::raw::c_int,
-    pub FullSize: ::std::os::raw::c_int,
-    pub Size: ::std::os::raw::c_int,
-}
+pub use crate::graphics::native_abi::tfb_drawcommandqueue;
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
 pub use crate::callback::ffi::Async_process;
+
+#[cfg(test)]
+mod ship_abi_tests {
+    use super::*;
+
+    #[test]
+    fn queue_adapters_preserve_handles_and_boolean_results() {
+        unsafe {
+            let mut queue: QUEUE = std::mem::zeroed();
+            assert_eq!(
+                InitQueue(&mut queue, 2, size_of::<LINK>() as OBJ_SIZE),
+                BOOLEAN_TRUE
+            );
+            let handle = crate::collections::queue::AllocLink((&raw mut queue).cast());
+            assert!(!handle.is_null());
+            crate::collections::queue::PutQueue((&raw mut queue).cast(), handle);
+            assert_eq!(CountLinks(&queue), 1);
+            RemoveQueue(&mut queue, handle);
+            assert_eq!(CountLinks(&queue), 0);
+            FreeLink(&mut queue, handle);
+            assert_eq!(queue.free_list, handle);
+            ReinitQueue(&mut queue);
+            assert_eq!(CountLinks(&queue), 0);
+            assert_eq!(UninitQueue(&mut queue), BOOLEAN_TRUE);
+            assert!(queue.pq_tab.is_null());
+        }
+    }
+
+    #[test]
+    fn velocity_adapters_preserve_signed_components_and_frame_steps() {
+        unsafe {
+            let mut velocity: VELOCITY_DESC = std::mem::zeroed();
+            SetVelocityComponents(&mut velocity, 96, -64);
+            let (mut dx, mut dy) = (0, 0);
+            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            assert_eq!((dx, dy), (96, -64));
+            DeltaVelocityComponents(&mut velocity, 32, -32);
+            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            assert_eq!((dx, dy), (128, -96));
+            GetNextVelocityComponents(&mut velocity, &mut dx, &mut dy, 2);
+            assert_eq!((dx, dy), (8, -6));
+        }
+    }
+}

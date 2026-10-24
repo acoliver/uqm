@@ -74,7 +74,7 @@ fn transfer_crew(crew: &mut u16, maximum: u16, delta: i16) -> bool {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::{navigate, transfer_crew, SHIP_POS};
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
@@ -84,17 +84,24 @@ mod live {
     use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
-    use std::ffi::{c_char, c_void, CString};
+    use std::ffi::{c_void, CString};
 
     use crate::time::counter_abi::GetTimeCounter;
+
+    use crate::ui::sis::capacity::GetCrewPodCapacity;
+
+    use crate::ui::sis::GetStatusMessageRect;
+
+    use crate::ui::sis::DrawStatusMessage;
+
+    use crate::ui::sis::DeltaSISGauges;
+
+    use crate::mainloop::input_abi::live::SetMenuSounds;
+
+    use crate::battle::sounds::engine::PlayMenuSound;
+
     extern "C" {
         static mut GlobData: CGlobData;
-        fn GetCrewPodCapacity() -> u16;
-        fn GetStatusMessageRect(rect: *mut CRect);
-        fn DrawStatusMessage(message: *const c_char);
-        fn DeltaSISGauges(crew: i16, fuel: i16, units: i32);
-        fn SetMenuSounds(move_sound: u16, select_sound: u16);
-        fn PlayMenuSound(sound: i32);
     }
 
     #[repr(C)]
@@ -142,7 +149,7 @@ mod live {
     unsafe fn flash_crew() {
         CffiPlatform.set_context(ContextId::Status);
         let mut r = CRect::default();
-        GetStatusMessageRect(&mut r);
+        GetStatusMessageRect(std::ptr::from_mut(&mut r).cast());
         CffiPlatform.set_flash(FlashTarget::Rect(Rect {
             corner: Point {
                 x: r.corner.x,
@@ -273,7 +280,9 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn RosterMenu() -> i32 {
+    /// # Safety
+    /// Call on the game thread with campaign globals and screen resources initialized.
+    pub unsafe extern "C" fn RosterMenu() -> i32 {
         let count = CountLinks(std::ptr::addr_of!(GlobData.game_state.built_ship_q).cast::<Queue>())
             as usize;
         if count == 0 {

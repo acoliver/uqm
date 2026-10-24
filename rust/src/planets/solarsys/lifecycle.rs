@@ -68,49 +68,69 @@ static mut NEXT_TIME: u32 = 0;
 mod ffi {
     use super::*;
 
+    pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
     pub(super) use crate::ui::border::DrawSISFrame;
     pub(super) use crate::ui::settings::StopMusic;
     pub(super) use crate::ui::sis::RepairSISBorder;
+
+    pub(super) use crate::graphics::drawable_abi::DestroyDrawable;
+
+    pub(super) use crate::graphics::context_abi::SetContext;
+
+    pub(super) use crate::graphics::context_abi::SetContextBackGroundColor;
+
+    pub(super) use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+    pub(super) use crate::battle::process_native::engine::RedrawQueue;
+
+    pub(super) use crate::graphics::gfx_common_abi::ScreenTransition;
+
+    pub(super) use crate::graphics::cmap_abi::FadeScreen;
+
+    pub(super) use crate::ui::sis::SetFlashRect;
+
+    pub(super) use crate::ui::menu::DrawMenuStateStrings;
+
+    pub(super) use crate::ui::sis::DrawSISMessage;
+
+    pub(super) use crate::ui::sis::DrawStatusMessage;
+
+    pub(super) use crate::battle::process_native::engine::InitDisplayList;
+
+    pub(super) use crate::navigation::interplanetary::live::DoMissions;
+
+    pub(super) use crate::state::c_api::planets::GetPlanetInfo;
+
+    pub(super) use crate::state::c_api::planets::PutPlanetInfo;
+
+    pub(super) use crate::planets::orbit::live::PlanetOrbitMenu;
+
+    pub(super) use crate::planets::orbit::live::FreePlanet;
+
+    pub(super) use crate::navigation::groups::live::GetGroupInfo;
+
+    pub(super) use crate::mainloop::input_abi::live::SetMenuSounds;
+
+    pub(super) use crate::ui::menu::DoMenuChooser;
+
+    pub(super) use crate::planets::cargo::live::CargoMenu;
+
+    pub(super) use crate::planets::roster::live::RosterMenu;
+
+    pub(super) use crate::front_end::gameopt::runtime::GameOptions;
+
+    pub(super) use crate::planets::pstarmap::StarMap;
+
     extern "C" {
         pub(super) static mut GlobData: CGlobData;
         pub(super) static mut CurStarDescPtr: *mut c::STAR_DESC;
         pub(super) static mut LastActivity: c::ACTIVITY;
         pub(super) static mut NextActivity: c::ACTIVITY;
-        pub(super) static mut SpaceContext: *mut c_void;
+        pub(super) static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         pub(super) static mut Screen: *mut c::FRAME_DESC;
         pub(super) static mut GameStrings: c::STRING;
         pub(super) static optWhichMenu: i32;
-
-        pub(super) fn DestroyDrawable(drawable: *mut c_void) -> c::BOOLEAN;
-        pub(super) fn SetContext(context: *mut c_void) -> *mut c_void;
-        pub(super) fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        pub(super) fn SetContextBackGroundColor(color: c::Color) -> c::Color;
-        pub(super) fn SetTransitionSource(rect: *mut c_void);
-        pub(super) fn RedrawQueue(force: c::BOOLEAN);
-        pub(super) fn ScreenTransition(kind: i32, rect: *const c_void);
-        pub(super) fn FadeScreen(kind: u32, interval: c::SIZE) -> c::DWORD;
-        pub(super) fn SetFlashRect(rect: *const c_void);
-        pub(super) fn DrawMenuStateStrings(base: c::BYTE, state: c::SWORD);
-
-        pub(super) fn DrawSISMessage(text: *const c_char);
-        pub(super) fn DrawStatusMessage(text: *const c_char);
-
-        pub(super) fn InitDisplayList();
-        pub(super) fn DoMissions();
-
-        pub(super) fn GetPlanetInfo();
-        pub(super) fn PutPlanetInfo();
-        pub(super) fn PlanetOrbitMenu();
-        pub(super) fn FreePlanet();
-        pub(super) fn GetGroupInfo(offset: c::DWORD, group: c::BYTE) -> c::BOOLEAN;
-        pub(super) fn SetMenuSounds(sound0: u16, sound1: u16);
-        pub(super) fn DoMenuChooser(menu: *mut c::MENU_STATE, base: c::BYTE) -> c::BOOLEAN;
-        pub(super) fn CargoMenu();
-        pub(super) fn RosterMenu() -> i32;
-        pub(super) fn GameOptions() -> u32;
-        pub(super) fn StarMap() -> i32;
-
     }
     pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub(super) use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -310,7 +330,7 @@ pub(super) unsafe fn reset_solar_sys() {
     if PLRPlaying(usize::MAX as *mut c_void) == 0
         && (ffi::LastActivity != CHECK_LOAD || ffi::NextActivity != 0)
     {
-        PlayMusic(SpaceMusic, 1, 1);
+        PlayMusic((SpaceMusic).cast(), 1, 1);
     }
 }
 
@@ -481,6 +501,9 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 }
 
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with campaign and solar-system globals initialized;
+/// their pointers must remain valid through any input or generator callbacks.
 pub unsafe extern "C" fn ExploreSolarSys() {
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
     if ffi::CurStarDescPtr.is_null() {
@@ -558,6 +581,9 @@ pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
 }
 
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with campaign and solar-system globals initialized;
+/// their pointers must remain valid through any input or generator callbacks.
 pub unsafe extern "C" fn SaveSolarSysLocation() {
     assert!(playerInSolarSystem());
     if !playerInPlanetOrbit() {
@@ -628,7 +654,7 @@ pub(super) unsafe extern "C" fn do_solar_sys_menu(menu: *mut c::MENU_STATE) -> c
             }
             ffi::DrawMenuStateStrings(PM_STARMAP, i16::from((*menu).CurState));
         }
-        ffi::SetFlashRect(usize::MAX as *const c_void);
+        ffi::SetFlashRect((usize::MAX as *const c_void).cast());
     }
     1
 }
@@ -642,7 +668,7 @@ pub(super) unsafe fn solar_sys_menu() {
         menu.CurState = STARMAP;
     }
     ffi::DrawStatusMessage(ptr::null());
-    ffi::SetFlashRect(usize::MAX as *const c_void);
+    ffi::SetFlashRect((usize::MAX as *const c_void).cast());
     ffi::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
     menu.InputFunc = Some(do_solar_sys_menu);
     DoInput(ptr::addr_of_mut!(menu).cast(), 1);

@@ -21,13 +21,13 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::{character_delay, needs_page_marker};
     use crate::c_bindings::solar_system;
-    use crate::comm::locdata::{CGlobData, CRect, CStamp};
+    use crate::comm::locdata::{CGlobData, CRect};
     use crate::comm::sis_graphics::CText;
     use crate::mainloop::restart_menu::c_extern::SetContext;
-    use crate::sound::types::CSoundPosition;
+
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Gfx, Point, Rgba, Stamp};
     use crate::strings::unicode::{
@@ -37,39 +37,56 @@ mod live {
     use std::ffi::{c_void, CString};
 
     use crate::time::counter_abi::GetTimeCounter;
+
+    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    use crate::graphics::drawable_abi::GetFrameRect;
+
+    use crate::planets::scan::live::GetScanContext;
+
+    use crate::planets::scan::live::DestroyScanContext;
+
+    use crate::ui::util::live::SaveContextFrame;
+
+    use crate::graphics::font_abi::SetContextFont;
+
+    use crate::graphics::context_abi::SetContextFontEffect;
+
+    use crate::strings::string_table::GetStringAddress;
+
+    use crate::strings::string_table::GetStringLength;
+
+    use crate::graphics::font_abi::font_DrawText;
+
+    use crate::mainloop::input_abi::live::FlushInput;
+
+    use crate::ui::util::live::WaitForAnyButtonUntil;
+
+    use crate::ui::util::live::WaitForAnyButton;
+
+    use crate::ui::util::live::WaitForNoInput;
+
+    use crate::battle::sounds::engine::PlaySound;
+
+    use crate::battle::sounds::engine::NotPositional;
+
+    use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+    use crate::graphics::drawable_abi::DestroyDrawable;
+
     extern "C" {
         static SpaceJunkFrame: *mut c_void;
         static optWhichFonts: i32;
         static ScreenWidth: i32;
         static GlobData: CGlobData;
-        fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
-        fn GetScanContext(owner: *mut i32) -> *mut c_void;
-        fn DestroyScanContext();
-        fn SaveContextFrame(rect: *mut c_void) -> CStamp;
-        fn SetContextFont(font: *mut c_void) -> *mut c_void;
-        fn SetContextFontEffect(frame: *mut c_void) -> *mut c_void;
-        fn GetStringAddress(string: *mut c_void) -> *const std::ffi::c_char;
-        fn GetStringLength(string: *mut c_void) -> u16;
-        fn font_DrawText(text: *mut CText);
-        fn FlushInput();
-        fn WaitForAnyButtonUntil(new_button: u32, timeout: u32, reset: u32) -> u32;
-        fn WaitForAnyButton(new_button: u32, duration: u32, reset: u32) -> u32;
-        fn WaitForNoInput(duration: u32, reset: u32) -> u32;
-        fn PlaySound(
-            sound: *mut c_void,
-            position: CSoundPosition,
-            object: *mut c_void,
-            priority: u8,
-        );
-        fn NotPositional() -> CSoundPosition;
-        fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-        fn DestroyDrawable(drawable: *mut c_void) -> u32;
     }
 
     unsafe fn clear() {
         let g = CffiPlatform;
-        let frame = SetAbsFrameIndex(SpaceJunkFrame, if optWhichFonts == 2 { 21 } else { 18 });
+        let frame = SetAbsFrameIndex(
+            (SpaceJunkFrame).cast(),
+            if optWhichFonts == 2 { 21 } else { 18 },
+        );
         let mut r = CRect::default();
         GetFrameRect(frame, (&mut r as *mut CRect).cast());
         g.batch();
@@ -103,7 +120,7 @@ mod live {
         let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
         let mut r = CRect::default();
         GetFrameRect(
-            SetAbsFrameIndex(SpaceJunkFrame, 18),
+            SetAbsFrameIndex((SpaceJunkFrame).cast(), 18),
             (&mut r as *mut CRect).cast(),
         );
         let columns = (ScreenWidth - 78) / 6;
@@ -150,9 +167,9 @@ mod live {
                         word_chars -= 1;
                         next = t.p_str.cast();
                         let c = getCharFromString(&mut next);
-                        font_DrawText(&mut t);
+                        font_DrawText(std::ptr::from_mut(&mut t).cast());
                         if sleepy && GlobData.game_state.current_activity & (1 << 14) == 0 {
-                            PlaySound(sounds, NotPositional(), std::ptr::null_mut(), 2);
+                            PlaySound((sounds).cast(), NotPositional(), std::ptr::null_mut(), 2);
                             timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                             if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
                                 sleepy = false;
@@ -196,14 +213,14 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn DoDiscoveryReport(sounds: *mut c_void) {
+    pub unsafe extern "C" fn DoDiscoveryReport(sounds: *mut c_void) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
         let mut own_context = 0;
         let context = GetScanContext(&mut own_context);
-        let old_context = SetContext(context);
+        let old_context = SetContext((context).cast());
         let saved = SaveContextFrame(std::ptr::null_mut());
         let info = std::ptr::addr_of!((*solar_system::current()).SysInfo.PlanetInfo);
         let old_font = SetContextFont((*info).LanderFont.cast());

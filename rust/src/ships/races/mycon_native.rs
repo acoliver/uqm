@@ -1,7 +1,7 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, element, normalize_facing, starship};
     use std::{mem, ptr};
 
@@ -106,7 +106,7 @@ mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            let mut face = normalize_facing(angle_to_facing(i32::from((*e).velocity.TravelAngle)));
+            let mut face = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
             if TrackShip(e, &mut face) > 0 {
                 SetVelocityVector(&raw mut (*e).velocity, MISSILE_SPEED as SIZE, face);
             }
@@ -192,7 +192,7 @@ mod engine {
                 || (*ship).__bindgen_anon_2.crew_level == (*(*ss).RaceDescPtr).ship_info.max_crew)
         {
             let travel = normalize_facing(angle_to_facing(
-                i32::from((*ship).velocity.TravelAngle) + HALF_CIRCLE as i32,
+                i32::from((*ship).velocity.travel_angle) + HALF_CIRCLE as i32,
             ));
             let target = (*enemy).ObjectPtr;
             let dx = (i32::from((*target).current.location.x)

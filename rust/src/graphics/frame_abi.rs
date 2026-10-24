@@ -109,24 +109,55 @@ pub unsafe extern "C" fn ClearDrawable() {
         clear_background(&rect);
     }
 }
-macro_rules! draw {
-    ($name:ident, $ty:ty, $prim:ident) => {
-        /// # Safety
-        /// Argument must be live; caller must obey the graphics-thread context contract.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(value: *mut $ty) {
-            let mut origin = std::mem::zeroed();
-            if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
-                $prim(value, _locPrim.color, (*_pCurContext).Mode, origin);
-            }
-        }
-    };
+/// # Safety
+/// Point and graphics context must be live on the graphics thread.
+#[no_mangle]
+pub unsafe extern "C" fn DrawPoint(point: *mut POINT) {
+    let mut origin = std::mem::zeroed();
+    if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
+        TFB_Prim_Point(point, _locPrim.color, (*_pCurContext).Mode, origin);
+    }
 }
-draw!(DrawPoint, POINT, TFB_Prim_Point);
-draw!(DrawRectangle, RECT, TFB_Prim_Rect);
-draw!(DrawFilledRectangle, RECT, TFB_Prim_FillRect);
-draw!(DrawLine, LINE, TFB_Prim_Line);
-draw!(DrawFilledStamp, STAMP, TFB_Prim_StampFill);
+
+/// # Safety
+/// Rectangle and graphics context must be live on the graphics thread.
+#[no_mangle]
+pub unsafe extern "C" fn DrawRectangle(rect: *mut RECT) {
+    let mut origin = std::mem::zeroed();
+    if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
+        TFB_Prim_Rect(rect, _locPrim.color, (*_pCurContext).Mode, origin);
+    }
+}
+
+/// # Safety
+/// Rectangle and graphics context must be live on the graphics thread.
+#[no_mangle]
+pub unsafe extern "C" fn DrawFilledRectangle(rect: *mut RECT) {
+    let mut origin = std::mem::zeroed();
+    if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
+        TFB_Prim_FillRect(rect, _locPrim.color, (*_pCurContext).Mode, origin);
+    }
+}
+
+/// # Safety
+/// Line and graphics context must be live on the graphics thread.
+#[no_mangle]
+pub unsafe extern "C" fn DrawLine(line: *mut LINE) {
+    let mut origin = std::mem::zeroed();
+    if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
+        TFB_Prim_Line(line, _locPrim.color, (*_pCurContext).Mode, origin);
+    }
+}
+
+/// # Safety
+/// Stamp and graphics context must be live on the graphics thread.
+#[no_mangle]
+pub unsafe extern "C" fn DrawFilledStamp(stamp: *mut STAMP) {
+    let mut origin = std::mem::zeroed();
+    if graphics_active() && GetContextValidRect(ptr::null_mut(), &mut origin) != 0 {
+        TFB_Prim_StampFill(stamp, _locPrim.color, (*_pCurContext).Mode, origin);
+    }
+}
 /// # Safety
 /// Stamp and graphics context must be live on the graphics thread.
 #[no_mangle]

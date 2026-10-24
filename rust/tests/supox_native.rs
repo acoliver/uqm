@@ -75,7 +75,7 @@ impl Ship {
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),

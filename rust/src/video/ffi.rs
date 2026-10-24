@@ -35,19 +35,14 @@ fn log_msg(msg: &str) {
 // Unit tests never call the C canvas lock (see `tfb_drawcanvas_lock`), so the
 // declarations exist only outside them.
 #[cfg(not(test))]
-extern "C" {
-    fn TFB_DrawCanvas_Lock(canvas: *mut c_void);
-    fn TFB_DrawCanvas_Unlock(canvas: *mut c_void);
-}
+use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
+#[cfg(not(test))]
+use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
+
+use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 
 extern "C" {
-    // SDL screen surfaces managed by C graphics backend.
-    fn TFB_SwapBuffers(force_full_redraw: c_int);
-
-    // Provided by C SDL backend.
     static SDL_Screen: *mut SDL_Surface;
-
-    // Actual window dimensions for direct presentation
     static ScreenWidthActual: c_int;
     static ScreenHeightActual: c_int;
 }

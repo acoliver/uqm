@@ -214,7 +214,7 @@ fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{rel_frame_index, starship};
 

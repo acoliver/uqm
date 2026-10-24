@@ -22,21 +22,31 @@ const HALF_CIRCLE: c::COUNT = 32;
 const QUADRANT: c::COUNT = 16;
 const SIN_SHIFT: u32 = 14;
 
+use crate::graphics::pixmap_abi::DecFrameIndex;
+
+use crate::graphics::pixmap_abi::GetFrameIndex;
+
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+use crate::graphics::context_abi::SetContext;
+
+use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+use crate::battle::process_native::engine::RedrawQueue;
+
+use crate::graphics::gfx_common_abi::ScreenTransition;
+
+use crate::graphics::frame_abi::DrawStamp;
+
+use crate::time::clock_abi::live::GameClockTick;
+
+use crate::ui::sis::DrawAutoPilotMessage;
+
 extern "C" {
     static mut GlobData: CGlobData;
     static mut CurrentInputState: input::CONTROLLER_INPUT_STATE;
-    static mut SpaceContext: *mut c_void;
+    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut stars_in_space: *mut c_void;
-    fn DecFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn GetFrameIndex(frame: *mut c_void) -> u16;
-    fn SetAbsFrameIndex(frame: *mut c_void, index: c::COUNT) -> *mut c_void;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn SetTransitionSource(rect: *mut c_void);
-    fn RedrawQueue(clear: c::BOOLEAN);
-    fn ScreenTransition(kind: std::ffi::c_int, rect: *const c_void);
-    fn DrawStamp(stamp: *mut crate::comm::locdata::CStamp);
-    fn GameClockTick();
-    fn DrawAutoPilotMessage(reset: i32);
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -104,7 +114,7 @@ pub(super) unsafe fn get_collision_frame(
 ) -> c::FRAME {
     let state = system();
     if (*state).WaitIntersect != c::COUNT::MAX && (*state).WaitIntersect != wait_planet {
-        DecFrameIndex(stars_in_space).cast()
+        DecFrameIndex((stars_in_space).cast()).cast()
     } else {
         (*planet).image.frame
     }
@@ -272,7 +282,7 @@ pub(super) unsafe fn process_ship_controls() {
         dy = 0;
     }
 
-    let mut index = GetFrameIndex((*game).ship_stamp.frame);
+    let mut index = GetFrameIndex(((*game).ship_stamp.frame).cast());
     if (*state).turn_counter != 0 {
         (*state).turn_counter -= 1;
     } else if dx != 0 {
@@ -281,7 +291,8 @@ pub(super) unsafe fn process_ship_controls() {
         } else {
             index = normalize_facing(index.wrapping_add(1));
         }
-        (*game).ship_stamp.frame = SetAbsFrameIndex((*game).ship_stamp.frame, index);
+        (*game).ship_stamp.frame =
+            (SetAbsFrameIndex(((*game).ship_stamp.frame).cast(), index)).cast();
         (*state).turn_counter = (*state).turn_wait;
     }
     if (*state).thrust_counter != 0 {
@@ -295,7 +306,8 @@ pub(super) unsafe fn process_ship_controls() {
 pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     let state = system();
     let game = ptr::addr_of_mut!((*glob()).game_state);
-    let angle = facing_to_angle(GetFrameIndex((*game).ship_stamp.frame)).wrapping_add(HALF_CIRCLE);
+    let angle =
+        facing_to_angle(GetFrameIndex(((*game).ship_stamp.frame).cast())).wrapping_add(HALF_CIRCLE);
     let (width, height) = sis_dimensions();
     (*game).ship_stamp.origin.x =
         ((width >> 1) + i32::from(cosine(angle, INNER_ENTRY_DISTANCE))) as _;

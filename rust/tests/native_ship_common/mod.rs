@@ -190,7 +190,7 @@ pub unsafe fn queued() -> Vec<HELEMENT> {
 }
 pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),

@@ -12,9 +12,14 @@
 use std::os::raw::c_void;
 
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::collections::queue::{AllocLink, CountLinks, HLink, PutQueue, Queue, ReinitQueue};
+#[cfg(not(test))]
+use crate::collections::queue::CountLinks;
+use crate::collections::queue::{AllocLink, HLink, PutQueue, Queue, ReinitQueue};
+#[cfg(not(test))]
 use crate::comm::locdata::{read_locdata, set_comm_data};
+#[cfg(not(test))]
 use crate::mainloop::c_extern;
+#[cfg(not(test))]
 use crate::state::game_state_keys;
 
 // ---------------------------------------------------------------------------
@@ -23,12 +28,7 @@ use crate::state::game_state_keys;
 
 /// C: `typedef struct point { COORD x, y; } POINT;`
 /// COORD is `SIZE` which is `SWORD` = `i16`.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CPoint {
-    pub x: i16,
-    pub y: i16,
-}
+pub use crate::graphics::native_abi::point as CPoint;
 
 /// C `SPECIES_ID` is an enum and therefore has C `int` layout.
 pub type CSpeciesId = i32;
@@ -400,9 +400,9 @@ pub const RACE_SHIP_FOR_COMM: [u8; 27] = [
 
 #[allow(dead_code)]
 mod ffi {
-    use super::*;
+
+    #[cfg(not(test))]
     pub use crate::comm::locdata::COMM_DATA as CommData;
-    use std::os::raw::{c_char, c_void};
 
     #[cfg(not(test))]
     pub use crate::ui::border::DrawSISFrame;
@@ -416,73 +416,122 @@ mod ffi {
     extern "C" {
         pub fn RepairSISBorder();
     }
+
+    #[cfg(not(test))]
+    pub use crate::battle::encount_native::engine::BuildBattle;
+
+    #[cfg(not(test))]
+    pub use crate::battle::encount_native::engine::InitEncounter;
+
+    #[cfg(not(test))]
+    pub use crate::battle::encount_native::engine::UninitEncounter;
+
+    #[cfg(not(test))]
+    pub use crate::battle::encount_native::engine::EncounterBattle;
+
+    #[cfg(not(test))]
+    pub use crate::ui::sis::ClearSISRect;
+
+    #[cfg(not(test))]
+    pub use crate::ui::sis::DrawSISMessage;
+
+    #[cfg(not(test))]
+    pub use crate::ui::sis::DrawHyperCoords;
+
+    #[cfg(not(test))]
+    pub use crate::ui::sis::DrawSISTitle;
+
+    pub use crate::planets::starmap::FindStar;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::arilou::live::init_arilou_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::blackur::live::init_blackurq_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::chmmr::live::init_chmmr_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::comandr::live::init_commander_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::starbas::live::init_starbase_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::druuge::live::init_druuge_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::ilwrath::live::init_ilwrath_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::melnorm::live::init_melnorme_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::mycon::live::init_mycon_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::orz::live::init_orz_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::pkunk::live::init_pkunk_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::shofixt::live::init_shofixti_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::slyland::live::init_slyland_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::slyhome::live::init_slylandro_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::spathi::live::init_spathi_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::spahome::live::init_spahome_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::supox::live::init_supox_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::syreen::live::init_syreen_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::talkpet::live::init_talkpet_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::thradd::live::init_thradd_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::umgah::live::init_umgah_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::urquan::live::init_urquan_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::utwig::live::init_utwig_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::vux::live::init_vux_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::rebel::live::init_rebel_yehat_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::yehat::live::init_yehat_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::zoqfot::live::init_zoqfot_comm;
+
+    #[cfg(not(test))]
+    pub use crate::comm::races::rust_init_race_dialogue;
+
     extern "C" {
-        // init_race dispatch (commglue.c) — returns LOCDATA* or NULL
-        pub fn init_race(comm_id: u32) -> *mut c_void;
-
-        // Encounter/battle (encount.h)
-        pub fn BuildBattle(which_player: u16);
-        pub fn InitEncounter() -> u16;
-        pub fn UninitEncounter() -> u16;
-        pub fn EncounterBattle();
-
-        // SIS rendering (comm.c / sis_ship.c)
-
-        pub fn ClearSISRect(flags: u16);
-
-        pub fn DrawSISMessage(msg: *const c_char);
-        pub fn DrawHyperCoords(origin: CPoint);
-        pub fn DrawSISTitle(title: *const c_char);
-
-        // FindStar (starmap.c): the star within the bounds of a universe point
-        pub fn FindStar(
-            last_star: *mut c_void,
-            universe: *mut CPoint,
-            x_bounds: i16,
-            y_bounds: i16,
-        ) -> *mut c_void;
-
-        // CurStarDescPtr global (starmap.h: extern STAR_DESC *CurStarDescPtr)
         #[link_name = "CurStarDescPtr"]
         pub static mut CurStarDescPtr: *mut std::ffi::c_void;
-
-        // GlobData global for direct queue/activity access
         #[link_name = "GlobData"]
         pub static mut GLOB_DATA: crate::comm::locdata::CGlobData;
-
-        // Race-specific init_*_comm functions (C, from comm/*/racec.c)
-        // These return LOCDATA* and are called directly to bypass
-        // the broken C init_race dispatch in commglue.c.
-        pub fn init_arilou_comm() -> *mut c_void;
-        pub fn init_blackurq_comm() -> *mut c_void;
-        pub fn init_chmmr_comm() -> *mut c_void;
-        pub fn init_commander_comm() -> *mut c_void;
-        pub fn init_starbase_comm() -> *mut c_void;
-        pub fn init_druuge_comm() -> *mut c_void;
-        pub fn init_ilwrath_comm() -> *mut c_void;
-        pub fn init_melnorme_comm() -> *mut c_void;
-        pub fn init_mycon_comm() -> *mut c_void;
-        pub fn init_orz_comm() -> *mut c_void;
-        pub fn init_pkunk_comm() -> *mut c_void;
-        pub fn init_shofixti_comm() -> *mut c_void;
-        pub fn init_slyland_comm() -> *mut c_void;
-        pub fn init_slylandro_comm() -> *mut c_void;
-        pub fn init_spathi_comm() -> *mut c_void;
-        pub fn init_spahome_comm() -> *mut c_void;
-        pub fn init_supox_comm() -> *mut c_void;
-        pub fn init_syreen_comm() -> *mut c_void;
-        pub fn init_talkpet_comm() -> *mut c_void;
-        pub fn init_thradd_comm() -> *mut c_void;
-        pub fn init_umgah_comm() -> *mut c_void;
-        pub fn init_urquan_comm() -> *mut c_void;
-        pub fn init_utwig_comm() -> *mut c_void;
-        pub fn init_vux_comm() -> *mut c_void;
-        pub fn init_rebel_yehat_comm() -> *mut c_void;
-        pub fn init_yehat_comm() -> *mut c_void;
-        pub fn init_zoqfot_comm() -> *mut c_void;
-
-        // Rust dialogue initialization (rust_comm.c → rust_init_race_dialogue)
-        pub fn rust_init_race_dialogue(comm_id: i32) -> i32;
     }
 }
 
@@ -503,6 +552,7 @@ fn lobyte(x: u16) -> u16 {
     x & 0xFF
 }
 
+#[cfg(not(test))]
 /// C: `inHQSpace()` — checks if CurrentActivity is IN_HYPERSPACE (also true for QuasiSpace).
 ///
 /// # Safety
@@ -539,6 +589,7 @@ fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(test)]
     std::ptr::null_mut()
 }
+#[cfg(not(test))]
 #[inline]
 fn encounter_queue() -> *mut Queue {
     #[cfg(not(test))]
@@ -594,6 +645,7 @@ unsafe fn lock_fleet_info(_pq: *const Queue, h: HLink) -> *mut CFleetInfo {
     h as *mut CFleetInfo
 }
 
+#[cfg(not(test))]
 /// C: `GetHeadEncounter()` = `GetHeadLink(&GLOBAL(encounter_q))`
 #[inline]
 unsafe fn get_head_encounter() -> HLink {
@@ -601,6 +653,7 @@ unsafe fn get_head_encounter() -> HLink {
     get_head_link(enc_q)
 }
 
+#[cfg(not(test))]
 /// C: `LockEncounter(h, &ptr)` = `*(ppe) = (ENCOUNTER*)LockLink(...)`
 #[inline]
 unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
@@ -612,10 +665,12 @@ unsafe fn lock_encounter(_h: HLink) -> *mut CEncounter {
 // Pure helper: get game state bit (C: GET_GAME_STATE)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 fn get_game_state(key: &str) -> u32 {
     game_state_keys::get_game_state(key)
 }
 
+#[cfg(not(test))]
 fn set_game_state(key: &str, value: u32) {
     game_state_keys::set_game_state(key, value)
 }
@@ -624,6 +679,7 @@ fn set_game_state(key: &str, value: u32) {
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 /// Port of C `RaceCommunication()`. Determines which alien to talk to,
 /// prepares the npc ship queue, and calls InitCommunication.
 ///
@@ -792,6 +848,7 @@ fn conversation_setup(conversation: u32) -> (u32, u16) {
     }
 }
 
+#[cfg(not(test))]
 /// Map the conversation to a ship, run the dialogue or attack selection, and
 /// return whether combat was selected before EncounterBattle runs.
 ///
@@ -813,7 +870,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
             if lobyte(last_activity) == 0 {
                 ffi::DrawSISFrame();
             } else {
-                ffi::ClearSISRect(DRAW_SIS_DISPLAY);
+                ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
                 ffi::RepairSISBorder();
             }
             ffi::DrawSISMessage(std::ptr::null());
@@ -839,6 +896,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
     init_communication_inner(conversation, ship_type)
 }
 
+#[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
 unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
@@ -1066,7 +1124,7 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
     if star.is_null() {
         return Err("no star at the scene location");
     }
-    ffi::CurStarDescPtr = star;
+    ffi::CurStarDescPtr = (star).cast();
     Ok(())
 }
 
@@ -1111,6 +1169,7 @@ unsafe fn name_captain(
 // StartSphereTracking — ported from build.c:355
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 /// Port of C `StartSphereTracking(race)`. Reads/modifies FLEET_INFO to
 /// initialize sphere-of-influence tracking for the given race.
 /// Rust-side replacement for C's `init_race()`.
@@ -1137,46 +1196,47 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
 
     // Dispatch to the correct C init_*_comm function
     match comm_id {
-        conv::ARILOU => ffi::init_arilou_comm(),
-        conv::BLACKURQ => ffi::init_blackurq_comm(),
-        conv::CHMMR => ffi::init_chmmr_comm(),
+        conv::ARILOU => (ffi::init_arilou_comm()).cast(),
+        conv::BLACKURQ => ffi::init_blackurq_comm().cast(),
+        conv::CHMMR => ffi::init_chmmr_comm().cast(),
         conv::COMMANDER => {
             if get_game_state("STARBASE_AVAILABLE") == 0 {
-                ffi::init_commander_comm()
+                (ffi::init_commander_comm()).cast()
             } else {
-                ffi::init_starbase_comm()
+                (ffi::init_starbase_comm()).cast()
             }
         }
-        conv::DRUUGE => ffi::init_druuge_comm(),
-        conv::ILWRATH => ffi::init_ilwrath_comm(),
-        conv::MELNORME => ffi::init_melnorme_comm(),
-        conv::MYCON => ffi::init_mycon_comm(),
-        conv::ORZ => ffi::init_orz_comm(),
-        conv::PKUNK => ffi::init_pkunk_comm(),
-        conv::SHOFIXTI => ffi::init_shofixti_comm(),
-        conv::SLYLANDRO => ffi::init_slyland_comm(),
-        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(),
+        conv::DRUUGE => ffi::init_druuge_comm().cast(),
+        conv::ILWRATH => ffi::init_ilwrath_comm().cast(),
+        conv::MELNORME => ffi::init_melnorme_comm().cast(),
+        conv::MYCON => ffi::init_mycon_comm().cast(),
+        conv::ORZ => ffi::init_orz_comm().cast(),
+        conv::PKUNK => ffi::init_pkunk_comm().cast(),
+        conv::SHOFIXTI => ffi::init_shofixti_comm().cast(),
+        conv::SLYLANDRO => ffi::init_slyland_comm().cast(),
+        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm().cast(),
         conv::SPATHI => {
             if (get_game_state("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) == 0 {
-                ffi::init_spathi_comm()
+                (ffi::init_spathi_comm()).cast()
             } else {
-                ffi::init_spahome_comm()
+                (ffi::init_spahome_comm()).cast()
             }
         }
-        conv::SUPOX => ffi::init_supox_comm(),
-        conv::SYREEN => ffi::init_syreen_comm(),
-        conv::TALKING_PET => ffi::init_talkpet_comm(),
-        conv::THRADD => ffi::init_thradd_comm(),
-        conv::UMGAH => ffi::init_umgah_comm(),
-        conv::URQUAN => ffi::init_urquan_comm(),
-        conv::UTWIG => ffi::init_utwig_comm(),
-        conv::VUX => ffi::init_vux_comm(),
-        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(),
-        conv::YEHAT => ffi::init_yehat_comm(),
-        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(),
-        _ => ffi::init_chmmr_comm(),
+        conv::SUPOX => ffi::init_supox_comm().cast(),
+        conv::SYREEN => ffi::init_syreen_comm().cast(),
+        conv::TALKING_PET => ffi::init_talkpet_comm().cast(),
+        conv::THRADD => ffi::init_thradd_comm().cast(),
+        conv::UMGAH => ffi::init_umgah_comm().cast(),
+        conv::URQUAN => ffi::init_urquan_comm().cast(),
+        conv::UTWIG => ffi::init_utwig_comm().cast(),
+        conv::VUX => ffi::init_vux_comm().cast(),
+        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm().cast(),
+        conv::YEHAT => ffi::init_yehat_comm().cast(),
+        conv::ZOQFOTPIK => ffi::init_zoqfot_comm().cast(),
+        _ => ffi::init_chmmr_comm().cast(),
     }
 }
+#[cfg(not(test))]
 ///
 /// Returns `race` if tracking started, 0 if race is extinct or not found.
 unsafe fn start_sphere_tracking(race: u8) -> u16 {
@@ -1233,6 +1293,7 @@ pub const ONE_SECOND: u32 = 840;
 // ExploreSolarSys — ported from solarsys.c:1713
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 /// Port of C `ExploreSolarSys()`. Initializes solar system exploration.
 ///
 /// The heavy lifting (InitSolarSys, DoIpFlight, UninitSolarSys) stays in C

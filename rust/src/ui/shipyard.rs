@@ -7,9 +7,8 @@ use crate::navigation::abi::*;
 use crate::navigation::globals::GlobData;
 use crate::state::game_state_keys::{get_game_state, set_game_state};
 use std::{mem, ptr};
-extern "C" {
-    fn DoShipSpin(index: COUNT, music: MUSIC_REF);
-}
+
+use crate::front_end::fmv::runtime::DoShipSpin;
 
 use super::shipyard_layout::{
     DMS_GetEscortShipRect, DMS_MoveCursor, HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y,
@@ -926,7 +925,7 @@ pub unsafe extern "C" fn DoShipyard(menu: *mut MENU_STATE) -> BOOLEAN {
             CaptureDrawable(LoadGraphicInstance(c"graphics.shipyard".as_ptr()).cast());
         (*menu).CurString =
             CaptureStringTable(LoadStringTableInstance(c"colortable.hangar".as_ptr()));
-        (*menu).hMusic = LoadMusicInstance(c"music.shipyard".as_ptr());
+        (*menu).hMusic = (LoadMusicInstance(c"music.shipyard".as_ptr())).cast();
         SetTransitionSource(ptr::null());
         BatchGraphics();
         DrawSISFrame();

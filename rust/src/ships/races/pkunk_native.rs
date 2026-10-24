@@ -7,7 +7,7 @@
 //! those arguments.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::battle::gravity::{CalculateGravity, TimeSpaceMatterConflict};
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
@@ -93,15 +93,12 @@ mod engine {
 
     // Engine entry points the shared race ABI does not export. The generated
     // ABI types are used so these resolve to the same C symbols.
-    extern "C" {
-        fn InsertQueue(
-            queue: *mut std::ffi::c_void,
-            handle: *mut std::ffi::c_void,
-            reference: *mut std::ffi::c_void,
-        );
-        fn StopAllBattleMusic();
-        fn StartShipExplosion(ship: *mut ELEMENT, play_sound: bool);
-    }
+
+    use crate::collections::queue::InsertQueue;
+
+    use crate::battle::tactrans_native::engine::StopAllBattleMusic;
+
+    use crate::battle::tactrans_native::engine::StartShipExplosion;
 
     // Private per-instance ship data
     #[repr(C)]

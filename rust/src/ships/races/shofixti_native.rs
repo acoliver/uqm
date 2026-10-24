@@ -1,6 +1,6 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
     use std::{mem, ptr};
 
@@ -16,17 +16,23 @@ mod engine {
 
     use crate::battle::sounds::{CalcSoundPosition, PlaySound};
 
-    unsafe extern "C" {
-        fn getGameState(state: *const BYTE, start: i32, end: i32) -> BYTE;
-        fn StopAllBattleMusic();
-        fn StartShipExplosion(ship: *mut ELEMENT, play_sound: bool);
-        fn GetWinnerStarShip() -> *mut STARSHIP;
-        fn FindAliveStarShip(dead_ship: *mut ELEMENT) -> *mut STARSHIP;
-        fn SetWinnerStarShip(winner: *mut STARSHIP);
-        fn RecordShipDeath(dead_ship: *mut ELEMENT);
-        fn intruder_preprocess(marine: *mut ELEMENT);
-        fn marine_collision(a: *mut ELEMENT, pa: *mut POINT, b: *mut ELEMENT, pb: *mut POINT);
-    }
+    use crate::navigation::globals::getGameState;
+
+    use crate::battle::tactrans_native::engine::StopAllBattleMusic;
+
+    use crate::battle::tactrans_native::engine::StartShipExplosion;
+
+    use crate::battle::tactrans_native::engine::GetWinnerStarShip;
+
+    use crate::battle::tactrans_native::engine::FindAliveStarShip;
+
+    use crate::battle::tactrans_native::engine::SetWinnerStarShip;
+
+    use crate::battle::tactrans_native::engine::RecordShipDeath;
+
+    use crate::ships::races::orz::native::engine::intruder_preprocess;
+
+    use crate::ships::races::orz::native::engine::marine_collision;
 
     // BUILD_COLOR ignores the palette index; MAKE_RGB15 expands each channel.
     const fn rgb15(r: u8, g: u8, b: u8) -> Color {

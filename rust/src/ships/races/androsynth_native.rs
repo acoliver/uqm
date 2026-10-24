@@ -4,7 +4,7 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{abi::*, element, starship};
     use std::{mem, ptr};
@@ -211,7 +211,7 @@ mod engine {
             turn_wait -= 1;
         } else {
             let mut facing =
-                (angle_to_facing(i32::from((*missile).velocity.TravelAngle)) & FACING_MASK) as u16;
+                (angle_to_facing(i32::from((*missile).velocity.travel_angle)) & FACING_MASK) as u16;
             let delta_facing = TrackShip(missile, &mut facing);
             if delta_facing == -1 {
                 facing = TFB_Random() as u16;

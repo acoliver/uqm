@@ -1,5 +1,5 @@
 #[path = "chenjesu_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Chenjesu Broodhome - Photon crystal shard + D.O.G.I. (de-energizer)
 // @plan PLAN-20260314-SHIPS.P11

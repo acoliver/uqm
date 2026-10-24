@@ -78,27 +78,53 @@ pub unsafe extern "C" fn NetManager_removeDesc(nd: *mut NetDescriptor) {
     }
 }
 
-macro_rules! activation {
-    ($name:ident, $field:ident, $op:ident) => {
-        /// # Safety
-        /// `nd` must be registered with an open socket.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(nd: *mut NetDescriptor) {
-            let fd = (*(*nd).socket).fd;
-            libc::$op(fd, &mut MANAGER.lock().$field);
-        }
-    };
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_activateReadCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_SET(fd, &mut MANAGER.lock().read_set);
 }
-activation!(NetManager_activateReadCallback, read_set, FD_SET);
-activation!(NetManager_deactivateReadCallback, read_set, FD_CLR);
-activation!(NetManager_activateWriteCallback, write_set, FD_SET);
-activation!(NetManager_deactivateWriteCallback, write_set, FD_CLR);
-activation!(NetManager_activateExceptionCallback, exception_set, FD_SET);
-activation!(
-    NetManager_deactivateExceptionCallback,
-    exception_set,
-    FD_CLR
-);
+
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_deactivateReadCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_CLR(fd, &mut MANAGER.lock().read_set);
+}
+
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_activateWriteCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_SET(fd, &mut MANAGER.lock().write_set);
+}
+
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_deactivateWriteCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_CLR(fd, &mut MANAGER.lock().write_set);
+}
+
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_activateExceptionCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_SET(fd, &mut MANAGER.lock().exception_set);
+}
+
+/// # Safety
+/// `nd` must be registered with an open socket.
+#[no_mangle]
+pub unsafe extern "C" fn NetManager_deactivateExceptionCallback(nd: *mut NetDescriptor) {
+    let fd = (*(*nd).socket).fd;
+    libc::FD_CLR(fd, &mut MANAGER.lock().exception_set);
+}
 
 /// # Safety
 /// `timeout_ms` must be writable. Calls must be serialized on the network event thread;

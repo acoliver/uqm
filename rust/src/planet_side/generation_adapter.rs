@@ -19,30 +19,14 @@ use super::runtime::AdapterError;
 const GENERATE_ALL: u16 = u16::MAX;
 
 #[cfg(not(test))]
-#[repr(C)]
-#[derive(Default)]
-struct CNodeInfo {
-    x: i16,
-    y: i16,
-    density: u16,
-    node_type: u16,
-}
+use crate::navigation::abi::NODE_INFO;
 
 #[cfg(not(test))]
+use crate::planets::scan::callGenerateForScanType;
+#[cfg(not(test))]
+use crate::planets::scan::callPickupForScanType;
+#[cfg(not(test))]
 extern "C" {
-    fn callGenerateForScanType(
-        solar_system: *const c_void,
-        world: *const c_void,
-        node: u16,
-        scan_type: u8,
-        info: *mut CNodeInfo,
-    ) -> u16;
-    fn callPickupForScanType(
-        solar_system: *mut c_void,
-        world: *mut c_void,
-        node: u16,
-        scan_type: u8,
-    ) -> bool;
     static Elements: *const u8;
 }
 
@@ -138,8 +122,8 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         #[cfg(not(test))]
         unsafe {
             let count = callGenerateForScanType(
-                self.solar_system,
-                self.world,
+                self.solar_system.cast(),
+                self.world.cast(),
                 GENERATE_ALL,
                 scan as u8,
                 std::ptr::null_mut(),
@@ -160,10 +144,10 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
     ) -> Result<GeneratedNode, AdapterError> {
         #[cfg(not(test))]
         unsafe {
-            let mut info = CNodeInfo::default();
+            let mut info: NODE_INFO = std::mem::zeroed();
             let _ = callGenerateForScanType(
-                self.solar_system,
-                self.world,
+                self.solar_system.cast(),
+                self.world.cast(),
                 u16::from(node.get()),
                 scan as u8,
                 &mut info,
@@ -174,15 +158,15 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                         return Err(AdapterError::new("element_catalog"));
                     }
                     GeneratedNodeKind::Mineral {
-                        category: usize::from(*Elements.add(usize::from(info.node_type)) & 0x07),
+                        category: usize::from(*Elements.add(usize::from(info.type_)) & 0x07),
                         gross_size: info.density & 0x07,
                         fine_quantity: info.density >> 8,
                     }
                 }
                 ScanType::Energy => GeneratedNodeKind::Energy,
                 ScanType::Biological => {
-                    let creature_index = u8::try_from(info.node_type)
-                        .map_err(|_| AdapterError::new("creature_type"))?;
+                    let creature_index =
+                        u8::try_from(info.type_).map_err(|_| AdapterError::new("creature_type"))?;
                     let creature = CreatureKind::new(creature_index)
                         .ok_or(AdapterError::new("creature_type"))?;
                     // Legacy `generateBioNode` is only embedded in a real
@@ -198,8 +182,8 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             };
             Ok(GeneratedNode {
                 position: SurfacePoint {
-                    x: i32::from(info.x) << 2,
-                    y: i32::from(info.y) << 2,
+                    x: i32::from(info.loc_pt.x) << 2,
+                    y: i32::from(info.loc_pt.y) << 2,
                 },
                 kind,
             })
@@ -226,7 +210,12 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 // and exclusively ours for the duration of the call; the
                 // callback runs synchronously on this thread.
                 unsafe {
-                    callPickupForScanType(solar_system, world, u16::from(node.get()), scan as u8)
+                    callPickupForScanType(
+                        solar_system.cast(),
+                        world.cast(),
+                        u16::from(node.get()),
+                        scan as u8,
+                    )
                 }
             })
         }

@@ -151,13 +151,15 @@ pub struct CffiResourcePort {
 }
 
 #[cfg(not(test))]
-extern "C" {
-    fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-    fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(drawable: *mut c_void) -> u32;
-    fn CaptureSound(sound: *mut c_void) -> *mut c_void;
-    fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
-}
+use crate::game_init::macro_abi::CaptureSound;
+#[cfg(not(test))]
+use crate::game_init::macro_abi::ReleaseSound;
+#[cfg(not(test))]
+use crate::graphics::drawable_abi::DestroyDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::CaptureDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::ReleaseDrawable;
 
 impl ResourcePort for CffiResourcePort {
     fn load(&mut self, key: &'static str) -> Result<*mut c_void, AdapterError> {
@@ -175,9 +177,9 @@ impl ResourcePort for CffiResourcePort {
         #[cfg(not(test))]
         let captured = unsafe {
             if key == SOUND_KEY {
-                CaptureSound(detached)
+                CaptureSound((detached).cast()).cast::<c_void>()
             } else {
-                CaptureDrawable(detached)
+                CaptureDrawable((detached).cast()).cast::<c_void>()
             }
         };
         #[cfg(test)]
@@ -187,9 +189,9 @@ impl ResourcePort for CffiResourcePort {
             #[cfg(not(test))]
             unsafe {
                 if key == SOUND_KEY {
-                    crate::sound::heart_ffi::DestroySound(ReleaseSound(detached));
+                    crate::sound::heart_ffi::DestroySound((ReleaseSound((detached).cast())).cast());
                 } else {
-                    DestroyDrawable(ReleaseDrawable(detached));
+                    DestroyDrawable(ReleaseDrawable((detached).cast()));
                 }
             }
             return Err(AdapterError::new("capture_resource"));
@@ -205,9 +207,9 @@ impl ResourcePort for CffiResourcePort {
         #[cfg(not(test))]
         unsafe {
             if key == SOUND_KEY {
-                crate::sound::heart_ffi::DestroySound(ReleaseSound(handle));
+                crate::sound::heart_ffi::DestroySound((ReleaseSound((handle).cast())).cast());
             } else {
-                DestroyDrawable(ReleaseDrawable(handle));
+                DestroyDrawable(ReleaseDrawable((handle).cast()));
             }
         }
         #[cfg(test)]

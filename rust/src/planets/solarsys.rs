@@ -5,13 +5,13 @@
 //! through `solar_system::current()`.
 
 #[path = "solarsys/drawing.rs"]
-mod drawing;
+pub(crate) mod drawing;
 #[path = "solarsys/flight.rs"]
 mod flight;
 #[path = "solarsys/lifecycle.rs"]
-mod lifecycle;
+pub(crate) mod lifecycle;
 #[path = "solarsys/resources.rs"]
-mod resources;
+pub(crate) mod resources;
 
 static mut SCALE_RECT: c::RECT = unsafe { std::mem::zeroed() };
 

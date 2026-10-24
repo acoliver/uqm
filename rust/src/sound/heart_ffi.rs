@@ -8,7 +8,9 @@
 
 pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
 
-use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr, CString};
+#[cfg(test)]
+use std::ffi::c_long;
+use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
 use std::ptr::{self, null_mut};
@@ -57,24 +59,22 @@ use super::types::*;
 // =============================================================================
 
 #[cfg(not(test))]
+use crate::io::uio_bridge::uio_fclose;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fopen;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fread;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fseek;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_ftell;
+#[cfg(not(test))]
+use crate::strings::string_table::AllocStringTable;
+#[cfg(not(test))]
+use crate::strings::string_table::FreeStringTable;
+#[cfg(not(test))]
 extern "C" {
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uio_fclose(fp: *mut c_void) -> c_int;
-    fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
-    fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int;
-    fn uio_ftell(fp: *mut c_void) -> c_long;
     static contentDir: *mut c_void;
-
-    fn AllocStringTable(num_entries: c_int, flags: c_int) -> *mut c_void;
-    fn FreeStringTable(strtab: *mut c_void);
 }
 
 #[allow(
@@ -150,7 +150,7 @@ struct CStringTable {
 /// Read a file via UIO into a byte vector.
 unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
     let mode = c"rb".as_ptr() as *const c_char;
-    let fp = uio_fopen(contentDir, path, mode);
+    let fp = uio_fopen((contentDir).cast(), path, mode);
     if fp.is_null() {
         return None;
     }
@@ -1081,7 +1081,7 @@ pub unsafe fn destroy_sound(bank_ptr: *mut c_void) {
             entry.data = null_mut();
         }
     }
-    FreeStringTable(bank_ptr);
+    FreeStringTable((bank_ptr).cast());
 }
 
 // =============================================================================
@@ -1314,7 +1314,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
     }
 
     eprintln!("LoadSoundFile({}): loaded {} sounds", name, snd_ct);
-    strtab_ptr
+    (strtab_ptr).cast()
 }
 
 /// Load a music file. Returns a MUSIC_REF (double pointer: `*mut *mut Arc<Mutex<SoundSample>>`).

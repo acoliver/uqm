@@ -510,7 +510,7 @@ use descriptor::descriptor;
 
 /// Slyhome race dialogue implementation.
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::super::script::live::LiveScript;
     use super::*;
     fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {

@@ -1,52 +1,36 @@
 //! UTF-8 incremental star search and text-entry callbacks from pstarmap.c.
 
 use super::*;
+#[cfg(not(test))]
 use crate::memory::{rust_hfree, rust_hmalloc};
 
 use crate::strings::unicode::get_char_from_string as getCharFromString;
+#[cfg(not(test))]
 use crate::strings::unicode::skip_utf8_chars as skipUTF8Chars;
 use crate::strings::unicode::uni_char_to_upper as UniChar_toUpper;
 use crate::strings::unicode::utf8_string_compare as utf8StringCompare;
 use crate::strings::unicode::utf8_string_count as utf8StringCount;
 use crate::strings::unicode::utf8_string_count_n as utf8StringCountN;
+
+#[cfg(not(test))]
+use crate::ui::getchar::DoTextEntry;
+
 extern "C" {
+    #[cfg(not(test))]
     pub(super) fn strcmp(a: *const c_char, b: *const c_char) -> i32;
     pub(super) fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
+    #[cfg(not(test))]
     fn qsort(
         base: *mut c_void,
         count: usize,
         size: usize,
         compare: unsafe extern "C" fn(*const c_void, *const c_void) -> i32,
     );
-
-    fn DoTextEntry(entry: *mut TextEntryState) -> u32;
 }
 
 // controls.h is not part of the global-state bindgen input. This is the whole
 // textentry_state, including the private fields DoTextEntry initializes.
-#[repr(C)]
-struct TextEntryState {
-    InputFunc: Option<unsafe extern "C" fn(*mut TextEntryState) -> u32>,
-    Initialized: u32,
-    NextTime: u32,
-    Success: u32,
-    CacheStr: *mut c_char,
-    JoyAlphaString: STRING,
-    JoystickMode: u32,
-    UpperRegister: u32,
-    JoyAlpha: *mut c_void,
-    JoyAlphaLength: i32,
-    JoyUpper: *mut c_void,
-    JoyLower: *mut c_void,
-    JoyRegLength: i32,
-    InsPt: *mut c_char,
-    BaseStr: *mut c_char,
-    CursorPos: i32,
-    MaxSize: i32,
-    ChangeCallback: Option<unsafe extern "C" fn(*mut TextEntryState) -> u32>,
-    FrameCallback: Option<unsafe extern "C" fn(*mut TextEntryState) -> u32>,
-    CbParam: *mut c_void,
-}
+use crate::navigation::abi::TEXTENTRY_STATE as TextEntryState;
 
 #[repr(C)]
 struct StarSearchState {
@@ -84,6 +68,7 @@ unsafe fn compare_star_names(
         0
     }
 }
+#[cfg(not(test))]
 unsafe extern "C" fn comp_star_name(a: *const c_void, b: *const c_void) -> i32 {
     compare_star_names(
         *star_array.add(*a.cast::<i32>() as usize),
@@ -91,6 +76,7 @@ unsafe extern "C" fn comp_star_name(a: *const c_void, b: *const c_void) -> i32 {
         |postfix| game_string(u16::from(postfix)),
     )
 }
+#[cfg(not(test))]
 unsafe fn sort_stars_on_name(state: *mut StarSearchState) {
     for i in 0..NUM_SOLAR_SYSTEMS {
         (*state).SortedStars[i] = i as i32;
@@ -222,6 +208,7 @@ unsafe fn find_next_index(
         -1
     }
 }
+#[cfg(not(test))]
 unsafe fn find_next_star_index(state: *const StarSearchState, from: i32, within: bool) -> i32 {
     find_next_index(
         state,
@@ -233,6 +220,7 @@ unsafe fn find_next_star_index(state: *const StarSearchState, from: i32, within:
     )
 }
 
+#[cfg(not(test))]
 unsafe fn draw_matched_star_name(entry: *mut TextEntryState) {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     let mut buf = [0 as c_char; 256];
@@ -292,12 +280,14 @@ unsafe fn match_next_with(
         }
     }
 }
+#[cfg(not(test))]
 unsafe fn match_next_star(state: *mut StarSearchState, reset: bool) {
     match_next_with(state, reset, |s, from, within| {
         find_next_star_index(s, from, within)
     });
 }
 
+#[cfg(not(test))]
 unsafe extern "C" fn on_star_name_change(entry: *mut TextEntryState) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     if strcmp(
@@ -329,6 +319,7 @@ unsafe extern "C" fn on_star_name_change(entry: *mut TextEntryState) -> u32 {
         1
     }
 }
+#[cfg(not(test))]
 unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
     let state = (*entry).CbParam.cast::<StarSearchState>();
     if ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
@@ -357,6 +348,7 @@ unsafe extern "C" fn on_star_name_frame(entry: *mut TextEntryState) -> u32 {
     1
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only; `menu` is the live map menu. DoTextEntry owns the nested
 /// input loop and invokes the callbacks only until it returns.

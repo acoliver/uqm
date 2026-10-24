@@ -230,7 +230,7 @@ unsafe fn exhaust_queue() -> Vec<HELEMENT> {
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),
@@ -615,7 +615,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
             let index = usize::from(level) * 5;
             ship.weapon_frames.frames[index].bounds[0] = width;
             (*e).next.image.frame = ship.weapon_frames.frame(index);
-            (*e).velocity.TravelAngle = 0;
+            (*e).velocity.travel_angle = 0;
             let mut obstacle: ELEMENT = mem::zeroed();
             let mut point = POINT { x: 20, y: 30 };
             let old_tail = disp_q.tail;

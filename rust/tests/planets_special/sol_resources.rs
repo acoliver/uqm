@@ -143,7 +143,7 @@ unsafe fn names(h: &mut Harness) {
         c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
     assert!(!strings.is_null());
     let saved = std::ptr::addr_of!(c_api::GAME_STRINGS).read();
-    std::ptr::addr_of_mut!(c_api::GAME_STRINGS).write(strings);
+    std::ptr::addr_of_mut!(c_api::GAME_STRINGS).write(strings.cast());
     let system = &raw mut *h.state;
     for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
         let parent = &raw mut (*system).PlanetDesc[index];

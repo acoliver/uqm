@@ -22,6 +22,9 @@ pub(super) unsafe fn text(x: i16, y: i16, align: u32, s: *const c_char) -> TEXT 
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the graphics thread with loaded melee resources. Pointer arguments
+/// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeIcon(index: u16) {
     let mut s = STAMP {
         origin: POINT { x: 0, y: 0 },
@@ -30,6 +33,9 @@ pub unsafe extern "C" fn DrawMeleeIcon(index: u16) {
     DrawStamp(&mut s);
 }
 #[no_mangle]
+/// # Safety
+/// Call on the graphics thread with loaded melee resources. Pointer arguments
+/// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn GetShipBox(r: *mut RECT, side: u16, row: u16, col: u16) {
     *r = RECT {
         corner: POINT {
@@ -99,6 +105,9 @@ pub(super) unsafe fn teams() {
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the graphics thread with loaded melee resources. Pointer arguments
+/// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     let mut r = *rect;
     r.corner.x += SAFE_X as i16;
@@ -360,6 +369,9 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the graphics thread with loaded melee resources. Pointer arguments
+/// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn Melee_flashSelection(state: *mut MELEE_STATE) {
     static mut NEXT: u32 = 0;
     static mut SELECT: bool = false;
@@ -392,6 +404,9 @@ pub(super) unsafe fn init_screen() {
     redraw();
 }
 #[no_mangle]
+/// # Safety
+/// Call on the graphics thread with loaded melee resources. Pointer arguments
+/// must be valid for the call, and player, row, column and ship indices must be in range.
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
     let old = SetContext(StatusContext);
     let mut clip = mem::zeroed();

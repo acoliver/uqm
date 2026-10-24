@@ -23,7 +23,7 @@ pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Color {
     pub r: BYTE,
     pub g: BYTE,
@@ -91,30 +91,22 @@ pub type ResourceStringFun = ::std::option::Option<
 pub type ResourceLoadFileFun = ::std::option::Option<
     unsafe extern "C" fn(fp: *mut uio_Stream, len: DWORD) -> *mut ::std::os::raw::c_void,
 >;
-pub use crate::resource::ffi_bridge::LoadResourceFromPath;
-pub use crate::resource::ffi_bridge::res_OpenResFile;
-pub use crate::resource::ffi_bridge::LengthResFile;
 pub use crate::resource::ffi_bridge::res_CloseResFile;
-pub use crate::resource::ffi_bridge::InstallResTypeVectors;
-pub use crate::resource::ffi_bridge::res_GetResource;
 pub use crate::resource::ffi_bridge::res_DetachResource;
 pub use crate::resource::ffi_bridge::res_FreeResource;
-pub use crate::resource::ffi_bridge::res_GetIntResource;
 pub use crate::resource::ffi_bridge::res_GetBooleanResource;
+pub use crate::resource::ffi_bridge::res_GetIntResource;
+pub use crate::resource::ffi_bridge::res_GetResource;
 pub use crate::resource::ffi_bridge::res_GetResourceType;
+pub use crate::resource::ffi_bridge::res_OpenResFile;
+pub use crate::resource::ffi_bridge::InstallResTypeVectors;
+pub use crate::resource::ffi_bridge::LengthResFile;
+pub use crate::resource::ffi_bridge::LoadResourceFromPath;
 pub type UniChar = uint32;
+pub use crate::strings::string_table::StringTableEntry as string_table_entry;
 pub use crate::strings::unicode::get_char_from_string as getCharFromString;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table_entry {
-    _unused: [u8; 0],
-}
 pub type STRING_TABLE_ENTRY_DESC = string_table_entry;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table {
-    _unused: [u8; 0],
-}
+pub use crate::strings::string_table::StringTable as string_table;
 pub type STRING_TABLE_DESC = string_table;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
@@ -122,19 +114,19 @@ pub type STRINGPTR = *mut ::std::os::raw::c_char;
 pub use crate::strings::string_table::GetStringAddress;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub use crate::resource::direct::LoadDirEntryTable;
-pub use crate::resource::ffi_bridge::res_HasKey;
-pub use crate::resource::ffi_bridge::res_IsString;
-pub use crate::resource::ffi_bridge::res_GetString;
-pub use crate::resource::ffi_bridge::res_PutString;
-pub use crate::resource::ffi_bridge::res_IsInteger;
-pub use crate::resource::ffi_bridge::res_GetInteger;
-pub use crate::resource::ffi_bridge::res_PutInteger;
-pub use crate::resource::ffi_bridge::res_IsBoolean;
 pub use crate::resource::ffi_bridge::res_GetBoolean;
-pub use crate::resource::ffi_bridge::res_PutBoolean;
-pub use crate::resource::ffi_bridge::res_IsColor;
 pub use crate::resource::ffi_bridge::res_GetColor;
+pub use crate::resource::ffi_bridge::res_GetInteger;
+pub use crate::resource::ffi_bridge::res_GetString;
+pub use crate::resource::ffi_bridge::res_HasKey;
+pub use crate::resource::ffi_bridge::res_IsBoolean;
+pub use crate::resource::ffi_bridge::res_IsColor;
+pub use crate::resource::ffi_bridge::res_IsInteger;
+pub use crate::resource::ffi_bridge::res_IsString;
+pub use crate::resource::ffi_bridge::res_PutBoolean;
 pub use crate::resource::ffi_bridge::res_PutColor;
+pub use crate::resource::ffi_bridge::res_PutInteger;
+pub use crate::resource::ffi_bridge::res_PutString;
 pub use crate::resource::ffi_bridge::res_Remove;
 pub type CONTEXT_DESC = context_desc;
 pub type FRAME_DESC = frame_desc;
@@ -223,9 +215,9 @@ pub struct DrawMode {
     pub factor: SWORD,
 }
 pub use crate::graphics::context_abi::SetContextForeGroundColor;
-pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::graphics::drawable_abi::CreateDrawable;
-pub type Mutex = *mut ::std::os::raw::c_void;
+pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+pub type Mutex = *mut crate::threading::RustMutex;
 pub type Semaphore = *mut ::std::os::raw::c_void;
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub const SCREEN_TFB_SCREEN_MAIN: SCREEN = 0;
@@ -233,17 +225,17 @@ pub const SCREEN_TFB_SCREEN_EXTRA: SCREEN = 1;
 pub const SCREEN_TFB_SCREEN_TRANSITION: SCREEN = 2;
 pub const SCREEN_TFB_GFX_NUMSCREENS: SCREEN = 3;
 pub type SCREEN = ::std::os::raw::c_uint;
-pub use crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics;
-pub use crate::graphics::sdl::platform_abi::TFB_ReInitGraphics;
-pub use crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics;
-pub use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
-pub use crate::graphics::sdl::platform_abi::TFB_SetGamma;
-pub use crate::graphics::sdl::lifecycle_abi::TFB_UploadTransitionScreen;
-pub use crate::graphics::sdl::platform_abi::TFB_SupportsHardwareScaling;
-pub use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 pub use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
 pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
 pub use crate::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_UploadTransitionScreen;
+pub use crate::graphics::sdl::platform_abi::TFB_ReInitGraphics;
+pub use crate::graphics::sdl::platform_abi::TFB_SetGamma;
+pub use crate::graphics::sdl::platform_abi::TFB_SupportsHardwareScaling;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NativePalette {
@@ -310,74 +302,74 @@ pub struct tfb_pixelformat {
     pub Aloss: DWORD,
 }
 pub type TFB_PixelFormat = tfb_pixelformat;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Line;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Rect;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Image;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Copy;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FilledImage;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FontChar;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_CopyToImage;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteImage;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteData;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_WaitForSignal;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Callback;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CreateForScreen;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_New_Rotated;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_SetMipmap;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Delete;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FixScaling;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Intersect;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CopyRect;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Line;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Rect;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Image;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FilledImage;
-pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FontChar;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_LoadFromFile;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_TrueColor;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ForScreen;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_Paletted;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ScaleTarget;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_RotationTarget;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_ToScreenFormat;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_IsPaletted;
-pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Bilinear;
-pub use crate::graphics::native_canvas::trilinear::TFB_DrawCanvas_Rescale_Trilinear;
-pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetScaledExtent;
-pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_Rotate;
-pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_GetRotatedExtent;
-pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetExtent;
-pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_SetClipRect;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Delete;
-pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Line;
-pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Rect;
-pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Image;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_CopyRect;
 pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_FilledImage;
 pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_FontChar;
-pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_CopyRect;
-pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetFontCharData;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_ExtractPalette;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetPalette;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentIndex;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentIndex;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentColor;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentColor;
-pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_CopyTransparencyInfo;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Initialize;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Image;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Line;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Rect;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_SetClipRect;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Delete;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetLine;
 pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetScreenFormat;
 pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetStride;
-pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetLine;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Initialize;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_LoadFromFile;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ForScreen;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_Paletted;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_RotationTarget;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ScaleTarget;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_TrueColor;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_ToScreenFormat;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetFontCharData;
 pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixel;
-pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_Intersect;
 pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixelColors;
-pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_SetPixelColors;
 pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixelIndexes;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_Intersect;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_SetPixelColors;
 pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_SetPixelIndexes;
+pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_GetRotatedExtent;
+pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_Rotate;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetExtent;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetScaledExtent;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Bilinear;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_CopyTransparencyInfo;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_ExtractPalette;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentColor;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentIndex;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_IsPaletted;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetPalette;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentColor;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentIndex;
+pub use crate::graphics::native_canvas::trilinear::TFB_DrawCanvas_Rescale_Trilinear;
 pub use crate::graphics::sdl::lifecycle_abi::TFB_GetScreenCanvas;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CopyRect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CreateForScreen;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Delete;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FilledImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FixScaling;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FontChar;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Image;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Intersect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Line;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_New_Rotated;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Rect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_SetMipmap;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Callback;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Copy;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_CopyToImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteData;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FilledImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FontChar;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Image;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Line;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Rect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_WaitForSignal;
 pub type FBK_FLAGS = UWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -455,8 +447,8 @@ pub type GRAPHICS_STATUS = BYTE;
 extern "C" {
     pub static mut _GraphicsStatusFlags: GRAPHICS_STATUS;
 }
-pub use crate::graphics::frame_abi::GetContextValidRect;
 pub use crate::graphics::context_abi::FixContextFontEffect;
+pub use crate::graphics::frame_abi::GetContextValidRect;
 pub type DRAWABLE_TYPE = UWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -499,13 +491,13 @@ pub struct font_desc {
 extern "C" {
     pub static mut _CurFontPtr: FONT;
 }
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_FillRect;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_FontChar;
 pub use crate::graphics::tfb_prim_abi::TFB_Prim_Line;
 pub use crate::graphics::tfb_prim_abi::TFB_Prim_Point;
 pub use crate::graphics::tfb_prim_abi::TFB_Prim_Rect;
-pub use crate::graphics::tfb_prim_abi::TFB_Prim_FillRect;
 pub use crate::graphics::tfb_prim_abi::TFB_Prim_Stamp;
 pub use crate::graphics::tfb_prim_abi::TFB_Prim_StampFill;
-pub use crate::graphics::tfb_prim_abi::TFB_Prim_FontChar;
 pub const TFB_DRAWCOMMANDTYPE_LINE: _bindgen_ty_4 = 0;
 pub const TFB_DRAWCOMMANDTYPE_RECTANGLE: _bindgen_ty_4 = 1;
 pub const TFB_DRAWCOMMANDTYPE_IMAGE: _bindgen_ty_4 = 2;
@@ -681,10 +673,12 @@ pub struct tfb_drawcommandqueue {
     pub Size: ::std::os::raw::c_int,
 }
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
-pub use crate::graphics::dcqueue_abi::{TFB_BatchGraphics, TFB_BatchReset, TFB_GetBatchDepth, TFB_UnbatchGraphics};
-pub use crate::graphics::dcqueue_abi::TFB_DrawCommandQueue_Push;
 pub use crate::graphics::dcqueue_abi::TFB_DrawCommandQueue_Pop;
+pub use crate::graphics::dcqueue_abi::TFB_DrawCommandQueue_Push;
 pub use crate::graphics::dcqueue_abi::TFB_EnqueueDrawCommand;
+pub use crate::graphics::dcqueue_abi::{
+    TFB_BatchGraphics, TFB_BatchReset, TFB_GetBatchDepth, TFB_UnbatchGraphics,
+};
 pub const WIDGET_EVENT_UP: _bindgen_ty_5 = 0;
 pub const WIDGET_EVENT_DOWN: _bindgen_ty_5 = 1;
 pub const WIDGET_EVENT_LEFT: _bindgen_ty_5 = 2;

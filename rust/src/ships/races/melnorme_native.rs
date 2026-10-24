@@ -2,19 +2,13 @@
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine, starship,
     };
     use std::mem;
 
-    extern "C" {
-        fn InsertQueue(
-            queue: *mut std::ffi::c_void,
-            handle: *mut std::ffi::c_void,
-            before: *mut std::ffi::c_void,
-        );
-    }
+    use crate::collections::queue::InsertQueue;
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 42;

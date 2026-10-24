@@ -337,11 +337,15 @@ mod cffi {
         }
 
         fn init_game_structures(&self) {
-            unsafe { c_extern::InitGameStructures() }
+            unsafe {
+                c_extern::InitGameStructures();
+            }
         }
 
         fn init_game_clock(&self) {
-            unsafe { c_extern::InitGameClock() }
+            unsafe {
+                c_extern::InitGameClock();
+            }
         }
 
         fn add_initial_game_events(&self) {
@@ -358,7 +362,7 @@ mod cffi {
 
         fn set_status_message_mode_default(&self) {
             unsafe {
-                c_extern::SetStatusMessageMode(SMM_DEFAULT);
+                c_extern::SetStatusMessageMode((SMM_DEFAULT) as u32);
             }
         }
 
@@ -406,7 +410,9 @@ mod cffi {
         }
 
         fn uninit_game_clock(&self) {
-            unsafe { c_extern::UninitGameClock() }
+            unsafe {
+                c_extern::UninitGameClock();
+            }
         }
 
         fn uninit_game_structures(&self) {
@@ -440,7 +446,7 @@ mod cffi {
         }
 
         fn log_show_box(&self, b: bool, c: bool) {
-            unsafe { c_extern::log_showBox(if b { 1 } else { 0 }, if c { 1 } else { 0 }) }
+            c_extern::log_showBox(b, c)
         }
     }
 }

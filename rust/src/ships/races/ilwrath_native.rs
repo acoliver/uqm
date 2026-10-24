@@ -64,7 +64,7 @@ const fn decloak_step(color: Color) -> Option<Color> {
 }
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{abi::*, element, starship};
 

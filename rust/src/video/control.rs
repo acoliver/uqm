@@ -3,7 +3,7 @@
 
 use super::ffi::*;
 use super::registry::*;
-use crate::io::ffi::uio_DirHandle;
+
 use crate::memory::{rust_hcalloc, rust_hfree};
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
@@ -12,10 +12,14 @@ static mut CURRENT_VIDEO: *mut TFB_VideoClip = ptr::null_mut();
 static mut CURRENT_SPEECH: *mut c_void = ptr::null_mut();
 
 use crate::sound::heart_ffi::snd_stop_speech as snd_StopSpeech;
+
+use crate::threading::legacy_abi::CreateMutex_Core;
+
+use crate::threading::legacy_abi::DestroyMutex;
+
 extern "C" {
-    fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> *mut c_void;
-    fn DestroyMutex(mutex: *mut c_void);
-    static contentDir: *mut uio_DirHandle;
+    static contentDir: *mut c_void;
+
     static ScreenWidth: c_int;
     static ScreenHeight: c_int;
 }
@@ -146,7 +150,7 @@ pub unsafe extern "C" fn VidPlay(video: *mut TFB_VideoClip) -> c_int {
 /// `path` is a terminated content pathname; graphics and video are initialized.
 #[no_mangle]
 pub unsafe extern "C" fn _init_video_file(path: *const c_char) -> *mut TFB_VideoClip {
-    let decoder = VideoDecoder_Load(contentDir, path);
+    let decoder = VideoDecoder_Load(contentDir.cast(), path);
     if decoder.is_null() {
         return ptr::null_mut();
     }
@@ -155,7 +159,7 @@ pub unsafe extern "C" fn _init_video_file(path: *const c_char) -> *mut TFB_Video
     (*video).length = (*decoder).length;
     (*video).w = (*decoder).w;
     (*video).h = (*decoder).h;
-    (*video).guard = CreateMutex_Core(c"video guard".as_ptr(), 1 << 2);
+    (*video).guard = (CreateMutex_Core(c"video guard".as_ptr(), 1 << 2)).cast();
     video
 }
 
@@ -168,7 +172,7 @@ pub unsafe extern "C" fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int {
     }
     tfb_stop_video(video);
     VideoDecoder_Free((*video).decoder);
-    DestroyMutex((*video).guard);
+    DestroyMutex(((*video).guard).cast());
     rust_hfree(video.cast());
     1
 }

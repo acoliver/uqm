@@ -37,22 +37,13 @@ struct CFrameDesc {
 }
 
 #[cfg(not(test))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct CColor {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
-
+use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
 #[cfg(not(test))]
-extern "C" {
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn TFB_DrawCanvas_Lock(canvas: *mut c_void);
-    fn TFB_DrawCanvas_Unlock(canvas: *mut c_void);
-    fn TFB_DrawCanvas_GetPixel(canvas: *mut c_void, x: i32, y: i32) -> CColor;
-}
+use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
+#[cfg(not(test))]
+use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixel;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
 #[cfg(not(test))]
 struct CanvasLock(*mut c_void);
@@ -133,8 +124,8 @@ pub unsafe fn extract_lander_masks(base: *mut c_void) -> Result<Vec<CollisionMas
         }
         let mut masks = Vec::with_capacity(16);
         for index in 0..16 {
-            let frame = SetAbsFrameIndex(base, index);
-            masks.push(extract_frame_mask(frame)?);
+            let frame = SetAbsFrameIndex((base).cast(), index);
+            masks.push(extract_frame_mask((frame).cast())?);
         }
         Ok(masks)
     }

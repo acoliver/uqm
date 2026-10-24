@@ -18,13 +18,13 @@ const SYNC_CLASS_RESOURCE: u32 = 1 << 3;
 
 const LOG_DEBUG: c_int = 5;
 
-extern "C" {
-    fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> *mut c_void;
-    fn DestroyMutex(mutex: *mut c_void);
-    fn LockMutex(mutex: *mut c_void);
-    fn UnlockMutex(mutex: *mut c_void);
+use crate::threading::legacy_abi::CreateMutex_Core;
 
-}
+use crate::threading::legacy_abi::DestroyMutex;
+
+use crate::threading::legacy_abi::LockMutex;
+
+use crate::threading::legacy_abi::UnlockMutex;
 
 /// Mirror of `struct taskstruct`.
 #[repr(C)]
@@ -52,11 +52,11 @@ impl TaskStruct {
     fn update_state(&self, mask: u32, update: impl FnOnce(u32) -> u32) -> u32 {
         let mutex = self.state_mutex.load(Ordering::Relaxed);
         // SAFETY: the mutex was created by InitTaskSystem.
-        unsafe { LockMutex(mutex) };
+        unsafe { LockMutex((mutex).cast()) };
         let old = self.state.load(Ordering::Relaxed);
         self.state.store(update(old), Ordering::Release);
         // SAFETY: locked above.
-        unsafe { UnlockMutex(mutex) };
+        unsafe { UnlockMutex((mutex).cast()) };
         old & mask
     }
 }
@@ -78,7 +78,7 @@ pub extern "C" fn InitTaskSystem() {
                 SYNC_CLASS_TOPLEVEL | SYNC_CLASS_RESOURCE,
             )
         };
-        task.state_mutex.store(mutex, Ordering::Relaxed);
+        task.state_mutex.store((mutex).cast(), Ordering::Relaxed);
     }
 }
 
@@ -87,7 +87,7 @@ pub extern "C" fn CleanupTaskSystem() {
     for task in &TASKS.0 {
         let mutex = task.state_mutex.swap(ptr::null_mut(), Ordering::Relaxed);
         // SAFETY: the mutex came from InitTaskSystem.
-        unsafe { DestroyMutex(mutex) };
+        unsafe { DestroyMutex((mutex).cast()) };
     }
 }
 

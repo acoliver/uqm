@@ -1,7 +1,7 @@
 //! Descriptor for the noncombat Ur-Quan drone.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::abi::RACE_DESC;
     use std::mem;
 

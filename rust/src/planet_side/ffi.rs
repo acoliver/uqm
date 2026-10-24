@@ -143,9 +143,7 @@ fn dispatch(request: PlanetSideRequest) -> PlanetSideReply {
     }
 }
 #[cfg(not(test))]
-extern "C" {
-    fn GetFrameCount(frame: *mut c_void) -> u16;
-}
+use crate::graphics::pixmap_abi::GetFrameCount;
 
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
@@ -250,9 +248,11 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             persistence,
             world_visuals,
             earthquake_frame_count: unsafe {
-                GetFrameCount(assets.graphic(LanderGraphic::Earthquake))
+                GetFrameCount((assets.graphic(LanderGraphic::Earthquake)).cast())
             },
-            lava_frame_count: unsafe { GetFrameCount(assets.graphic(LanderGraphic::Lava)) },
+            lava_frame_count: unsafe {
+                GetFrameCount((assets.graphic(LanderGraphic::Lava)).cast())
+            },
         };
         let graphics = CffiPlanetSideGraphics {
             surface,

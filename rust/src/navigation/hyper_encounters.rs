@@ -236,7 +236,7 @@ unsafe fn process(
         if (*element).__bindgen_anon_5.thrust_wait != 0 {
             (*element).__bindgen_anon_5.thrust_wait -= 1;
         } else if (*element).hTarget.is_null() {
-            let mut facing = ((*element).velocity.TravelAngle + 2) >> 2;
+            let mut facing = ((*element).velocity.travel_angle + 2) >> 2;
             let target = (ARCTAN(
                 universe.x.wrapping_sub((*encounter).loc_pt.x),
                 universe.y.wrapping_sub((*encounter).loc_pt.y),

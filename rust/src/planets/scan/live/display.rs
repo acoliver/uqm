@@ -4,10 +4,9 @@ use crate::comm::sis_graphics::CText;
 use crate::starbase::gfx::{Align, TextDraw};
 use std::ffi::CStr;
 
-extern "C" {
-    fn GetNamedPlanetaryBody() -> *const c_char;
-    fn TextRect(text: *mut CText, rect: *mut CRect, deltas: *mut u8) -> i32;
-}
+use crate::planets::solarsys::lifecycle::GetNamedPlanetaryBody;
+
+use crate::graphics::font_abi::TextRect;
 
 pub(super) fn text(x: i16, y: i16, align: Align, text: String) {
     CffiPlatform.draw_text(&TextDraw {
@@ -45,7 +44,11 @@ unsafe fn pc_value(x: i16, y: i16, label: i32, value: String) {
     ctext.p_str = string.as_ptr();
     ctext.char_count = u16::MAX;
     let mut rect = CRect::default();
-    TextRect(&mut ctext, &mut rect, std::ptr::null_mut());
+    TextRect(
+        std::ptr::from_mut(&mut ctext).cast(),
+        std::ptr::from_mut(&mut rect).cast(),
+        std::ptr::null_mut(),
+    );
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
     text(x + rect.width, y, Align::Left, value);
 }
@@ -63,9 +66,9 @@ unsafe fn pc() {
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
-    SetContextFont(MicroFont);
+    SetContextFont((MicroFont).cast());
     text(width() >> 1, 13, Align::Center, title());
-    SetContextFont(TinyFont);
+    SetContextFont((TinyFont).cast());
     let orbit = (i64::from(info.PlanetToSunDist) * 100 + 256) / 512;
     pc_value(5, 40, 0, scan_value(orbit, &g.game_string(487)));
     let atmosphere = if info.AtmoDensity == u16::MAX {
@@ -144,10 +147,10 @@ unsafe fn three_do() {
     let g = CffiPlatform;
     SetContext(PlanetContext);
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
-    SetContextFont(MicroFont);
+    SetContextFont((MicroFont).cast());
     text(width() >> 1, 13, Align::Center, title());
     draw(
-        base::SetAbsFrameIndex(SpaceJunkFrame, 20),
+        (base::SetAbsFrameIndex((SpaceJunkFrame).cast(), 20)).cast(),
         CPoint { x: 16, y: 0 },
         false,
     );

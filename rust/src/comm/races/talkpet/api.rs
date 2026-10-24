@@ -22,9 +22,7 @@ impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
         unsafe { !GlobData.game_state.npc_built_ship_q.head.is_null() }
     }
     fn umgah_alive(&mut self) -> bool {
-        extern "C" {
-            fn StartSphereTracking(race: u16) -> u16;
-        }
+        use crate::battle::build_native::engine::StartSphereTracking;
         unsafe { StartSphereTracking(crate::comm::dispatch::ship::UMGAH_SHIP as u16) != 0 }
     }
     fn strobe(&mut self) {

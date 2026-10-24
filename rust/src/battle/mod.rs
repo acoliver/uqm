@@ -330,6 +330,7 @@ mod integration_tests {
         let _state = ElementVisualState::new();
         // IntersectControl (use element version)
         let _intersect = element::IntersectControl {
+            last_time_val: 0,
             intersect_stamp: Stamp {
                 origin: Point::new(0, 0),
                 frame: std::ptr::null_mut(),

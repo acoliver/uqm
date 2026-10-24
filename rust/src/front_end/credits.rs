@@ -27,7 +27,7 @@ fn scroll_step(rate: c_int) -> (c_int, c_int, TimePeriod) {
 }
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
     use crate::navigation::globals::GlobData;
@@ -35,10 +35,13 @@ mod runtime {
     use std::ptr;
 
     // uqm/comm.h is not included in navigation's generated ABI yet.
+
+    use crate::comm::comm_abi::InitCommunication;
+
+    use crate::comm::comm_abi::SetCommIntroMode;
+
     extern "C" {
         static mut CommWndRect: RECT;
-        fn InitCommunication(conversation: CONVERSATION) -> COUNT;
-        fn SetCommIntroMode(mode: c_int, duration: TimeCount);
     }
     const CIM_CROSSFADE_WINDOW: c_int = 1;
     const TRANS_COLOR: Color = rgb15(0, 0, 31);
@@ -512,7 +515,7 @@ mod runtime {
         while i < CONVERSATIONS.len()
             && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
         {
-            SetCommIntroMode(CIM_CROSSFADE_WINDOW, 0);
+            SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0);
             InitCommunication(CONVERSATIONS[i]);
             i += 1;
         }
@@ -607,7 +610,7 @@ mod runtime {
                 crate::automation::ending::credits_controls_ready();
             }
             if !music.is_null() {
-                PlayMusic(music, 1, 1);
+                PlayMusic((music).cast(), 1, 1);
             }
             let mut state = CreditsInputState {
                 InputFunc: Some(credits_input),
@@ -630,7 +633,7 @@ mod runtime {
         FlushColorXForms();
         if !music.is_null() {
             StopMusic();
-            DestroyMusic(music);
+            DestroyMusic((music).cast());
         }
         FadeMusic(NORMAL_VOLUME as BYTE, 0);
         free_credits();

@@ -87,7 +87,7 @@ pub unsafe extern "C" fn SeekStateFile(
 }
 
 #[cfg(not(test))]
-mod planets {
+pub(crate) mod planets {
     use super::*;
     use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
     use crate::savegame::runtime::star::CStarDesc;

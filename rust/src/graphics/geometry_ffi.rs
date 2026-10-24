@@ -155,9 +155,8 @@ pub unsafe extern "C" fn TFB_BBox_RegisterRect(r: *const Rect) {
         i32::from(r.corner.y) + i32::from(r.extent.height) - 1,
     );
 }
-extern "C" {
-    fn TFB_DrawCanvas_GetExtent(canvas: *mut c_void, size: *mut Extent);
-}
+
+use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetExtent;
 /// # Safety
 /// Pointer arguments must be valid for the duration of the call; graphics ABI
 /// callers must obey the single graphics-thread access contract.
@@ -434,36 +433,14 @@ pub unsafe extern "C" fn _clip_line(clip: *const Rect, line: *mut BresenhamLine)
     code
 }
 
-#[repr(C)]
-pub struct FrameDesc {
-    kind: u16,
-    index: u16,
-    hot_spot: Point,
-    bounds: Extent,
-    image: *mut c_void,
-    parent: *mut c_void,
-}
-#[repr(C)]
-pub struct Stamp {
-    origin: Point,
-    frame: *mut FrameDesc,
-}
-#[repr(C)]
-pub struct IntersectControl {
-    last_time_val: u16,
-    end_point: Point,
-    stamp: Stamp,
-}
+pub use super::native_abi::frame_desc as FrameDesc;
+pub use super::native_abi::stamp as Stamp;
+pub use crate::ships::native::abi::INTERSECT_CONTROL as IntersectControl;
+
+use crate::graphics::tfb_draw_abi::TFB_DrawImage_Intersect;
 
 extern "C" {
     static mut _GraphicsStatusFlags: u8;
-    fn TFB_DrawImage_Intersect(
-        img1: *mut c_void,
-        img1org: Point,
-        img2: *mut c_void,
-        img2org: Point,
-        rect: *const Rect,
-    ) -> u8;
 }
 
 #[path = "intersection.rs"]

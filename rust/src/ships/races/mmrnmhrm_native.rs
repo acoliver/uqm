@@ -1,7 +1,7 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine, starship,
@@ -172,7 +172,7 @@ mod engine {
                 dy = ((*enemy).current.location.y as i32 - (*ship).current.location.y as i32)
                     as SIZE;
                 direction_angle = ARCTAN(-i32::from(dx) as _, -i32::from(dy) as _);
-                travel_angle = (*enemy).velocity.TravelAngle;
+                travel_angle = (*enemy).velocity.travel_angle;
             }
 
             if (*ship).next.image.farray == (*(*ss).RaceDescPtr).ship_data.ship.as_mut_ptr() {

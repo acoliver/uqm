@@ -28,70 +28,34 @@ unsafe fn cstr_to_string(c_str: *const c_char) -> Option<String> {
 
 // Opaque representation of uio_DirHandle from C
 // We only use it as a pointer, never dereference it
-#[repr(C)]
-pub struct uio_DirHandle {
-    _private: [u8; 0],
-}
+pub use crate::io::uio_bridge::uio_DirHandle;
 
 // Opaque representation of uio_Stream from C (used by uio_fopen/fclose)
-#[repr(C)]
-pub struct uio_Stream {
-    _private: [u8; 0],
-}
+pub use crate::io::uio_bridge::uio_Stream;
 
 // Opaque representation of uio_Handle from C (used by uio_open/close/read/write/fstat)
-#[repr(C)]
-pub struct uio_Handle {
-    _private: [u8; 0],
-}
+pub use crate::io::uio_bridge::uio_Handle;
 
 // stat struct for uio_fstat
-#[repr(C)]
-pub struct stat {
-    pub st_dev: u64,
-    pub st_mode: u32,
-    pub st_nlink: u32,
-    pub st_ino: u64,
-    pub st_uid: u32,
-    pub st_gid: u32,
-    pub st_rdev: u64,
-    pub st_size: i64,
-    pub st_atime: i64,
-    pub st_mtime: i64,
-    pub st_ctime: i64,
-    pub st_blksize: i64,
-    pub st_blocks: i64,
-}
+pub use libc::stat;
 
 // FFI bindings to C uio_* functions
-extern "C" {
-    // uio_fopen/uio_fclose - for fileExists2
-    pub fn uio_fopen(
-        dir: *mut uio_DirHandle,
-        path: *const c_char,
-        mode: *const c_char,
-    ) -> *mut uio_Stream;
-    pub fn uio_fclose(stream: *mut uio_Stream) -> c_int;
 
-    // uio_open/uio_close - for copy_file
-    pub fn uio_open(
-        dir: *mut uio_DirHandle,
-        path: *const c_char,
-        flags: c_int,
-        mode: c_int,
-    ) -> *mut uio_Handle;
-    pub fn uio_close(handle: *mut uio_Handle) -> c_int;
+pub use crate::io::uio_bridge::uio_fopen;
 
-    // uio_read/uio_write - for copy_file
-    pub fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: usize) -> isize;
-    pub fn uio_write(handle: *mut uio_Handle, buf: *const u8, count: usize) -> isize;
+pub use crate::io::uio_bridge::uio_fclose;
 
-    // uio_fstat - for copy_file (to get file permissions)
-    pub fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int;
+pub use crate::io::uio_bridge::uio_open;
 
-    // uio_unlink - for copy_file (to clean up on error)
-    pub fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int;
-}
+pub use crate::io::uio_bridge::uio_close;
+
+pub use crate::io::uio_bridge::uio_read;
+
+pub use crate::io::uio_bridge::uio_write;
+
+pub use crate::io::uio_bridge::uio_fstat;
+
+pub use crate::io::uio_bridge::uio_unlink;
 
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
 fn current_errno() -> c_int {

@@ -18,7 +18,7 @@ pub unsafe extern "C" fn LoadDisplayPixmap(
         }
         0
     } else {
-        GetFrameIndex(frame)
+        GetFrameIndex(frame.cast())
     };
     frame = SetAbsFrameIndex(CaptureDrawable(buffer), index);
     if (*_CurFramePtr).Type != SCREEN_DRAWABLE as u16

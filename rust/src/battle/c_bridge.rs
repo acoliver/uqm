@@ -1,25 +1,16 @@
-//! C Bridge — Rust→C FFI wrappers for battle engine
+//! Runtime bridge helpers for the battle model.
 //!
-//! Provides safe Rust wrappers around C functions that the ported battle
-//! engine needs to call. These are the "deferred bridge operations" from
-//! the Phase 1 integration traits, plus additional helpers used by P03–P12.
+//! Rust-owned operations are imported from their implementation modules. Opaque
+//! resource handles are converted at the model boundary, not redeclared as
+//! foreign functions.
 //!
 //! @plan PLAN-20260320-BATTLEPT2.P06
 //! @requirement REQ-FFI-SAFETY, REQ-CALLBACK-SAFETY, REQ-BUILD-COEXISTENCE
-//!
-//! # Safety Model
-//! - Rust→C calls: null/validity checks on pointer arguments before crossing FFI
-//! - C→Rust calls: handled in `ffi.rs` with catch_unwind at boundaries
-//! - All `extern "C"` blocks link to C symbols available when USE_RUST_BATTLE_LOOP is defined
-//!
-//! # C Reference
-//! `sc2/src/uqm/process.c`, `sc2/src/libs/graphics/*.c`, `sc2/src/libs/sound/*.c`
 
 pub use crate::math::seed_random as TFB_SeedRandom;
 use std::os::raw::{c_int, c_void};
 
-use super::element::{Element, Point};
-use super::process_loop::TimeValue;
+use super::element::Element;
 
 pub use crate::c_bindings::global_state::DrawBatch;
 
@@ -52,9 +43,8 @@ pub use crate::game_init::macro_abi::get_current_activity;
 extern "C" {
     pub fn get_current_activity() -> u16;
 }
-extern "C" {
-    pub fn TaskSwitch();
-}
+
+pub use crate::threading::legacy_abi::TaskSwitch;
 #[cfg(not(test))]
 pub use crate::ui::settings::StopMusic;
 #[cfg(test)]
@@ -63,148 +53,89 @@ extern "C" {
 }
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 pub use crate::time::counter_abi::GetTimeCounter;
-extern "C" {
-    // --- Graphics Integration ---
 
-    /// Set the current drawing context
-    pub fn SetContext(context: Context) -> Context;
+pub use crate::graphics::context_abi::SetContext;
 
-    /// Clear the current drawable
-    pub fn ClearDrawable();
+pub use crate::graphics::frame_abi::ClearDrawable;
 
-    /// Perform screen transition effect
-    pub fn ScreenTransition(which: c_int, rect: *const c_void);
+pub use crate::graphics::gfx_common_abi::ScreenTransition;
 
-    /// Test intersection of two drawable elements.
-    /// Returns: 0 = no collision, 1 = stuck sentinel, >1 = collision time.
-    pub fn DrawablesIntersect(
-        element1: *mut Element,
-        element2: *mut Element,
-        min_time: TimeValue,
-    ) -> TimeValue;
+pub use crate::graphics::geometry_ffi::DrawablesIntersect;
 
-    /// Initialize intersection start point for an element
-    pub fn InitIntersectStartPoint(element: *mut Element);
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::InitIntersectStartPoint;
 
-    /// Initialize intersection end point for an element
-    pub fn InitIntersectEndPoint(element: *mut Element);
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::InitIntersectEndPoint;
 
-    /// Get the equivalent frame index for a given frame
-    pub fn SetEquFrameIndex(target_array: Frame, source_frame: Frame) -> Frame;
+pub use crate::graphics::pixmap_abi::SetEquFrameIndex;
 
-    /// Get a frame at an absolute index
-    pub fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
+pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    /// Increment frame index
-    pub fn IncFrameIndex(frame: Frame) -> Frame;
+pub use crate::graphics::pixmap_abi::IncFrameIndex;
 
-    /// Get the hot spot of a frame
-    pub fn GetFrameHot(frame: Frame) -> Point;
+pub use crate::graphics::drawable_abi::GetFrameHot;
 
-    /// Get bounding rectangle of a frame
-    pub fn GetFrameRect(frame: Frame, rect: *mut c_void);
+pub use crate::graphics::drawable_abi::GetFrameRect;
 
-    /// Get the number of frames in a frame array
-    pub fn GetFrameCount(frame: Frame) -> u16;
+pub use crate::graphics::pixmap_abi::GetFrameCount;
 
-    /// Set trilinear mipmap for a frame
-    pub fn TFB_DrawScreen_SetMipmap(
-        image: *mut c_void,
-        mipmap_image: *mut c_void,
-        hot_x: c_int,
-        hot_y: c_int,
-    );
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
 
-    // --- Audio Integration ---
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::ProcessSound;
 
-    /// Process a sound event
-    pub fn ProcessSound(sound: Sound, source: *mut c_void);
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::FlushSounds;
 
-    /// Flush all pending sounds
-    pub fn FlushSounds();
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::UpdateSoundPositions;
 
-    /// Update stereo sound positions based on ship locations
-    pub fn UpdateSoundPositions();
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::RemoveSoundsForObject;
 
-    /// Remove all sounds associated with an object
-    pub fn RemoveSoundsForObject(element: *mut Element);
+#[cfg(not(test))]
+pub use crate::ui::settings::PlayMusic;
 
-    /// Play music track
-    pub fn PlayMusic(music: MusicRef, looping: u32, priority: u8);
+pub use crate::sound::heart_ffi::PLRPlaying;
 
-    /// Check if music is playing
-    pub fn PLRPlaying(music: MusicRef) -> c_int;
+#[cfg(not(test))]
+pub use crate::battle::tactrans_native::engine::StopDitty;
 
-    /// Stop all sounds
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
 
-    /// Stop ditty playback
-    pub fn StopDitty();
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::DoInput;
 
-    // --- Threading Integration ---
+pub use crate::graphics::pixmap_abi::CaptureDrawable;
 
-    /// Suspend current thread for a duration
+pub use crate::graphics::pixmap_abi::ReleaseDrawable;
 
-    /// Suspend current thread until a specific time
+pub use crate::graphics::drawable_abi::DestroyDrawable;
 
-    // --- Input Integration ---
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::LoadMusic;
 
-    /// Convert current input state to battle input flags
-    pub fn CurrentInputToBattleInput(player_nr: u16) -> u8;
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::GetElementStarShip;
 
-    /// Process input events
-    pub fn DoInput(input_state: *mut c_void, exclusive: u32);
+#[cfg(not(test))]
+pub use crate::navigation::globals::inHQSpace;
 
-    // --- Resource Integration ---
+#[cfg(not(test))]
+pub use crate::battle::world_elements::engine::do_damage;
 
-    /// Capture a drawable resource (increment ref count)
-    pub fn CaptureDrawable(drawable: Drawable) -> Drawable;
+pub use crate::battle::collision::collide;
 
-    /// Release a drawable resource (decrement ref count, returns raw handle)
-    pub fn ReleaseDrawable(drawable: Drawable) -> Drawable;
+pub use crate::battle::gravity::CalculateGravity;
 
-    /// Destroy a drawable resource
-    pub fn DestroyDrawable(drawable: Drawable) -> u32;
+#[cfg(not(test))]
+pub use crate::navigation::hyperspace::live::MoveSIS;
 
-    /// Load a music resource
-    pub fn LoadMusic(music_file: *const u8) -> MusicRef;
+#[cfg(not(test))]
+pub use crate::battle::galaxy::engine::MoveGalaxy;
 
-    // --- Ship/Race Integration ---
-
-    /// Get the starship associated with an element
-    pub fn GetElementStarShip(element: *const Element, starship: *mut StarShipPtr);
-
-    // --- Global State Integration ---
-
-    /// Check if in HyperSpace/QuasiSpace
-    pub fn inHQSpace() -> c_int;
-
-    // --- Combat Helpers ---
-
-    /// Apply damage to an element
-    pub fn do_damage(element: *mut Element, damage: u16);
-
-    /// Perform elastic collision between two elements
-    pub fn collide(element1: *mut Element, element2: *mut Element);
-
-    /// Calculate gravity effect on an element
-    pub fn CalculateGravity(element: *mut Element);
-
-    // --- Space/Galaxy ---
-
-    /// Move the SIS ship in hyperspace
-    pub fn MoveSIS(dx: *mut i16, dy: *mut i16);
-
-    /// Move galaxy background for parallax
-    pub fn MoveGalaxy(view_state: c_int, dx: c_int, dy: c_int);
-
-    // --- Display Prim Management ---
-
-    /// Allocate a display primitive slot
-    pub fn AllocDisplayPrim() -> c_int;
-
-    /// Free a display primitive slot
-    pub fn FreeDisplayPrim(prim_index: c_int);
-}
 /// Begin batched graphics mode
 pub use crate::graphics::gfx_common_abi::BatchGraphics;
 /// Set the graphics scale factor (0 = reset)
@@ -219,54 +150,6 @@ pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil
 // Safe Rust wrappers
 // ---------------------------------------------------------------------------
 
-/// Safe wrapper: test intersection of two elements.
-///
-/// Returns 0 (no collision), STUCK_SENTINEL (1), or collision time (>1).
-///
-/// # Safety
-/// Both element pointers must be valid.
-pub unsafe fn drawables_intersect(
-    a: *mut Element,
-    b: *mut Element,
-    min_time: TimeValue,
-) -> TimeValue {
-    if a.is_null() || b.is_null() {
-        return 0;
-    }
-    DrawablesIntersect(a, b, min_time)
-}
-
-/// Safe wrapper: initialize intersection start point.
-#[allow(
-    clippy::missing_safety_doc,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub unsafe fn init_intersect_start(element: *mut Element) {
-    if !element.is_null() {
-        InitIntersectStartPoint(element);
-    }
-}
-
-/// Safe wrapper: initialize intersection end point.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn init_intersect_end(element: *mut Element) {
-    if !element.is_null() {
-        InitIntersectEndPoint(element);
-    }
-}
-
-/// Safe wrapper: apply damage to an element.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn apply_damage(element: *mut Element, damage: u16) {
-    if !element.is_null() {
-        do_damage(element, damage);
-    }
-}
-
 /// Safe wrapper: elastic collision.
 /// # Safety
 ///
@@ -277,6 +160,7 @@ pub unsafe fn elastic_collide_c(a: *mut Element, b: *mut Element) {
     }
 }
 
+#[cfg(not(test))]
 /// Safe wrapper: process and flush sounds.
 /// # Safety
 ///
@@ -285,22 +169,13 @@ pub unsafe fn flush_all_sounds() {
     FlushSounds();
 }
 
+#[cfg(not(test))]
 /// Safe wrapper: update stereo sound positions.
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn update_sound_positions() {
     UpdateSoundPositions();
-}
-
-/// Safe wrapper: remove sounds for an element being destroyed.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn remove_sounds_for(element: *mut Element) {
-    if !element.is_null() {
-        RemoveSoundsForObject(element);
-    }
 }
 
 /// Safe wrapper: set graphics scale.
@@ -319,21 +194,7 @@ pub unsafe fn clear_drawable() {
     ClearDrawable();
 }
 
-/// Safe wrapper: get starship from element.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-///
-/// Returns null if element is null.
-pub unsafe fn get_element_starship(element: *const Element) -> StarShipPtr {
-    if element.is_null() {
-        return std::ptr::null_mut();
-    }
-    let mut result: StarShipPtr = std::ptr::null_mut();
-    GetElementStarShip(element, &mut result);
-    result
-}
-
+#[cfg(not(test))]
 /// Safe wrapper: check if in HyperSpace/QuasiSpace.
 /// # Safety
 ///

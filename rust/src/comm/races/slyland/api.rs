@@ -14,14 +14,16 @@ mod live {
     use super::*;
     use crate::comm::locdata::CGlobData;
     use crate::comm::races::script::live::LiveScript;
-    use std::ffi::c_char;
+
     // Like the original response references, these belong to the game thread.
     static mut CHOICES: [u16; 5] = [0; 5];
+
+    use crate::comm::commglue_abi::runtime::NPCNumber;
+
     extern "C" {
         static GlobData: CGlobData;
         static ScreenWidth: i32;
         static ScreenHeight: i32;
-        fn NPCNumber(number: i32, format: *const c_char);
     }
     impl SlylandApi for LiveScript<Handler> {
         fn choices(&self) -> [u16; 5] {

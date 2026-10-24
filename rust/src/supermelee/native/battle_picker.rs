@@ -28,15 +28,13 @@ mod tests {
 }
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-pub(super) mod live {
+pub(crate) mod live {
     use super::move_cursor;
+    use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::mainloop::restart_menu::c_extern as flash;
     use crate::supermelee::c_bridge::PlayerControl;
     const FADE_ALL_TO_COLOR: u32 = 253;
-    extern "C" {
-        fn PlayMenuSound(sound: i32);
-    }
     unsafe fn Flash_process(context: *mut FlashContext) {
         flash::Flash_process(context.cast());
     }
@@ -431,10 +429,10 @@ pub(super) mod live {
         SetContext(old);
         value(frame, (*ship).playerNr as usize);
     }
-    extern "C" {
-        fn rust_automation_service_boundary() -> i32;
-        fn UpdateInputState();
-    }
+
+    use crate::automation::input_ffi::rust_automation_service_boundary;
+
+    use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
     /// Called at the end of a live melee battle on the game thread.
     #[no_mangle]

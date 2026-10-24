@@ -173,10 +173,10 @@ pub(crate) mod linked {
     static SLEEP_TIMER: OnceLock<CriticalTimer> = OnceLock::new();
 
     use crate::time::counter_abi::GetTimeCounter;
-    extern "C" {
-        fn TFB_ProcessEvents();
-        fn TFB_FlushGraphics();
-    }
+
+    use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
+
+    use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
 
     struct GameThread {
         stats: MutexGuard<'static, PacingStats>,

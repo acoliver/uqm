@@ -3,7 +3,7 @@
 //! @plan PLAN-20260707-RESTARTMENU.P05
 //! @requirement REQ-RM-004
 
-use std::os::raw::{c_char, c_int, c_short, c_void};
+use std::os::raw::{c_int, c_void};
 
 // ===========================================================================
 //  Constants (from C headers, verified against source)
@@ -40,14 +40,7 @@ pub const MENU_SOUND_DOWN: u16 = 1 << 1;
 pub const MENU_SOUND_SELECT: u16 = 1 << 4;
 
 /// C `Color` struct (gfxlib.h:26) — four `BYTE` fields, `#[repr(C)]`.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-}
+pub use crate::graphics::native_abi::Color;
 
 impl Color {
     /// `BUILD_COLOR(MAKE_RGB15(0x1F, 0x1F, 0x1F), 0x0F)` — the gray
@@ -64,12 +57,7 @@ impl Color {
 }
 
 /// C `POINT` struct (gfxlib.h:157) — two `COORD` (`SWORD` = i16) fields.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct Point {
-    pub x: i16,
-    pub y: i16,
-}
+pub use crate::graphics::native_abi::point as Point;
 
 // ===========================================================================
 //  C wrappers from rust_bridge_restart.c
@@ -387,93 +375,102 @@ extern "C" {
     pub fn StopMusic();
 }
 pub use crate::sound::heart_ffi::fade_music as FadeMusic;
+
+pub use crate::graphics::cmap_abi::FadeScreen;
+
+pub use crate::graphics::context_abi::SetContext;
+
+pub use crate::graphics::frame_abi::ClearDrawable;
+
+pub use crate::graphics::cmap_abi::FlushColorXForms;
+
+pub use crate::graphics::gfx_common_abi::ScreenTransition;
+
+pub use crate::graphics::context_abi::SetContextBackGroundColor;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::SeedRandomNumbers;
+
+pub use crate::graphics::resgfx::LoadGraphicInstance;
+
+pub use crate::sound::resource_types::LoadMusicInstance;
+
+pub use crate::graphics::pixmap_abi::CaptureDrawable;
+
+pub use crate::graphics::drawable_abi::DestroyDrawable;
+
+pub use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetMenuSounds;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::DoInput;
+
+pub use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+#[cfg(not(test))]
+pub use crate::ui::settings::PlayMusic;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_createOverlay;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_process;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_pause;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_continue;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_start;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_terminate;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setMergeFactors;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setSpeed;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setFrameTime;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setState;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setOverlay;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::Melee;
+
+#[cfg(not(test))]
+pub use crate::front_end::setupmenu::runtime::SetupMenu;
+
+#[cfg(not(test))]
+pub use crate::front_end::credits::runtime::Credits;
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::Victory;
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::SplashScreen;
+
+#[cfg(not(test))]
+pub use crate::ui::confirm::DoPopupWindow;
+
 extern "C" {
-    // --- Graphics ---
     /// The whole-screen drawing context created during graphics startup.
-    pub static ScreenContext: *mut c_void;
-    /// `DWORD FadeScreen(ScreenFadeType, SIZE)` — SIZE = SWORD = i16.
-    pub fn FadeScreen(fade_type: u32, time_interval: c_short) -> u32;
-    /// `CONTEXT SetContext(CONTEXT)` — returns the previous context.
-    pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
-    pub fn ClearDrawable();
-    pub fn FlushColorXForms();
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn ScreenTransition(a: c_int, b: *mut c_void);
-    /// `Color SetContextBackGroundColor(Color)` — Color is a 4-byte struct.
-    #[allow(clashing_extern_declarations)]
-    pub fn SetContextBackGroundColor(color: Color) -> Color;
-    /// `DWORD SeedRandomNumbers(void)` — returns a seed value.
-    pub fn SeedRandomNumbers() -> u32;
-
-    // --- Resources ---
-    // LoadGraphic and LoadMusic are macros that expand to LoadXXXInstance,
-    // which take RESOURCE = const char* and return a handle.
-    pub fn LoadGraphicInstance(res: *const c_char) -> *mut c_void;
-    pub fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
-    pub fn CaptureDrawable(load_result: *mut c_void) -> *mut c_void;
-    /// `BOOLEAN DestroyDrawable(DRAWABLE)` returns an unsigned int.
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn DestroyDrawable(handle: *mut c_void) -> u32;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn ReleaseDrawable(handle: *mut c_void) -> *mut c_void;
-    /// `FRAME SetAbsFrameIndex(FRAME, COUNT)` — COUNT = u16.
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-
-    // --- Menu ---
-    pub fn SetMenuSounds(s0: u16, s1: u16);
-    pub fn SetDefaultMenuRepeatDelay();
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn DoInput(p_input_state: *mut c_void, reset_input: c_int);
-    pub fn SetTransitionSource(src: *mut c_void);
-
-    // --- Music ---
-
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn PlayMusic(handle: *mut c_void, do_loop: c_int, volume: u8);
-    /// `DWORD FadeMusic(BYTE end_vol, SIZE TimeInterval)` — returns a TimeCount.
-    // --- Flash ---
-    pub fn Flash_createOverlay(context: *mut c_void, a: *mut c_void, b: *mut c_void)
-        -> *mut c_void;
-    pub fn Flash_process(ctx: *mut c_void);
-    pub fn Flash_pause(ctx: *mut c_void);
-    pub fn Flash_continue(ctx: *mut c_void);
-    pub fn Flash_start(ctx: *mut c_void);
-    pub fn Flash_terminate(ctx: *mut c_void);
-    pub fn Flash_setMergeFactors(ctx: *mut c_void, a: c_int, b: c_int, c: c_int);
-    pub fn Flash_setSpeed(ctx: *mut c_void, a: u32, b: u32, c: u32, d: u32);
-    pub fn Flash_setFrameTime(ctx: *mut c_void, t: u32);
-    pub fn Flash_setState(ctx: *mut c_void, state: u32, t: u32);
-    /// `void Flash_setOverlay(FlashContext*, const POINT*, FRAME)` — POINT must be valid.
-    pub fn Flash_setOverlay(ctx: *mut c_void, origin: *const Point, frame: *mut c_void);
-
-    // --- Lifecycle ---
-    pub fn Melee();
-    pub fn SetupMenu();
-
-    pub fn Credits(victory: c_int);
-    pub fn Victory();
-    /// `void SplashScreen(void (*DoProcessing)(DWORD TimeOut))` — function pointer.
-    pub fn SplashScreen(callback: Option<extern "C" fn(u32)>);
-    pub fn DoPopupWindow(string: *const c_char);
+    pub static ScreenContext: *mut crate::graphics::native_abi::context_desc;
 }
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::sound::heart_ffi::DestroyMusic;

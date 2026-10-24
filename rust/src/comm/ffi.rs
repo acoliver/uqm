@@ -1180,13 +1180,15 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 #[cfg(not(test))]
 use crate::sound::heart_ffi::splice_track as SpliceTrack;
 #[cfg(not(test))]
+use crate::strings::string_table::GetStringAddress;
+#[cfg(not(test))]
+use crate::strings::string_table::GetStringSoundClip;
+#[cfg(not(test))]
+use crate::strings::string_table::GetStringTimeStamp;
+#[cfg(not(test))]
+use crate::strings::string_table::SetAbsStringTableIndex;
+#[cfg(not(test))]
 extern "C" {
-    // Direct C functions for phrase access (replacing c_get_* wrappers)
-    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
-    fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
-    fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    // C globals for direct access
     pub static mut GlobData: crate::comm::locdata::CGlobData;
 }
 
@@ -1203,7 +1205,7 @@ pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
     if phrases.is_null() {
         return std::ptr::null();
     }
-    let s = SetAbsStringTableIndex(phrases, (index + i) as u16);
+    let s = SetAbsStringTableIndex((phrases).cast(), (index + i) as u16);
     GetStringAddress(s).cast::<u8>()
 }
 
@@ -1222,7 +1224,7 @@ unsafe fn get_alliance_name_full(
     }
 
     let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
-    let s = SetAbsStringTableIndex(phrases, ((adjusted_index - 1) + i) as u16);
+    let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
         return std::ptr::null();

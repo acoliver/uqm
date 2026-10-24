@@ -62,7 +62,7 @@ impl Channels {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::abi::*;
     use crate::sound::heart_ffi::{

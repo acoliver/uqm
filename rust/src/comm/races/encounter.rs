@@ -17,15 +17,16 @@ pub(super) trait EncounterApi<H>: ScriptApi<H> {
 mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    use std::ffi::c_void;
 
-    extern "C" {
-        fn CheckAlliance(race: u16) -> u16;
-        fn EscortFeasibilityStudy(race: u16) -> u16;
-        fn AddEscortShips(race: u16, count: i16) -> u16;
-        fn SetEscortCrewComplement(race: u16, crew: u16, captain: u8) -> i32;
-        fn AddEvent(kind: i32, month: u16, day: u16, year: u16, selector: u8) -> *mut c_void;
-    }
+    use crate::battle::build_native::engine::CheckAlliance;
+
+    use crate::battle::build_native::engine::EscortFeasibilityStudy;
+
+    use crate::battle::build_native::engine::AddEscortShips;
+
+    use crate::battle::build_native::engine::SetEscortCrewComplement;
+
+    use crate::time::clock_abi::live::AddEvent;
 
     impl<H> EncounterApi<H> for LiveScript<H> {
         fn segue(&mut self, segue: u32) {

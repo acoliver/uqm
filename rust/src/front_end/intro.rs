@@ -54,7 +54,7 @@ pub(super) unsafe fn parse_text_lines(
 }
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::*;
     use crate::navigation::globals::GlobData;
     use crate::video::control::{VidGetPosition, VidProcessFrame, VidSeek};
@@ -223,7 +223,7 @@ mod runtime {
     }
 
     unsafe fn show_file(name: *const c_char) -> BOOLEAN {
-        let table = CaptureStringTable(LoadStringTableFile(contentDir, name));
+        let table = CaptureStringTable(LoadStringTableFile((contentDir).cast(), name));
         let result = show_slides(table, false);
         DestroyStringTable(ReleaseStringTable(table));
         result
@@ -343,7 +343,7 @@ mod runtime {
                         StopMusic();
                         DestroyMusic(state.MusicRef);
                     }
-                    state.MusicRef = LoadMusicFile(state.Buffer.as_ptr());
+                    state.MusicRef = (LoadMusicFile(state.Buffer.as_ptr())).cast();
                     PlayMusic(state.MusicRef, 0, 1);
                 }
                 b"WAIT" | b"SYNC" | b"DSYNC" => {

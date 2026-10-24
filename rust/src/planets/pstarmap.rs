@@ -5,79 +5,154 @@
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
-use crate::c_bindings::global_state::{
-    Color, DrawFilledOval, DrawOval, EXTENT, FLEET_INFO, FONT, FRAME, GLOBDATA, MENU_STATE, POINT,
-    QUEUE, RECT, STAMP, STRING, TEXT,
-};
-use crate::comm::locdata::CRect;
-use crate::graphics::{font_abi, frame_abi, pixmap_abi};
+use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
+#[cfg(not(test))]
+use crate::c_bindings::global_state::{FLEET_INFO, FONT, GLOBDATA, QUEUE, STRING, TEXT};
+#[cfg(not(test))]
+use crate::graphics::context_abi::SetContextClipRect;
+#[cfg(not(test))]
+use crate::graphics::font_abi;
+use crate::graphics::{frame_abi, pixmap_abi};
+#[cfg(not(test))]
+use crate::planets::render::c_api::{draw_filled_oval as DrawFilledOval, draw_oval as DrawOval};
+#[cfg(not(test))]
 use crate::planets::starmap::FindStar;
 use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
-use crate::strings::{string_table, unicode};
-use std::ffi::{c_char, c_long, c_void};
+#[cfg(not(test))]
+use crate::strings::string_table;
+#[cfg(not(test))]
+use crate::strings::unicode;
+#[cfg(not(test))]
+use std::ffi::c_void;
+use std::ffi::{c_char, c_long};
 use std::ptr;
 
 #[path = "pstarmap/search.rs"]
-mod search;
+pub(crate) mod search;
+#[cfg(not(test))]
 pub use search::DoStarSearch;
 
+#[cfg(not(test))]
 const MAX_X_UNIVERSE: i32 = 9999;
+#[cfg(not(test))]
 const MAX_Y_UNIVERSE: i32 = 9999;
 const ONE_SECOND: u32 = 840;
+#[cfg(not(test))]
 const MAX_ZOOM_SHIFT: i32 = 4;
+#[cfg(not(test))]
 const ARILOU_SPACE: POINT = POINT { x: 438, y: 6372 };
+#[cfg(not(test))]
 const QUASI_SPACE: POINT = POINT { x: 5000, y: 5000 };
 const ARILOU_HOME: POINT = POINT { x: 6134, y: 5900 };
 
 static mut mapOrigin: POINT = POINT { x: 0, y: 0 };
 static mut zoomLevel: i32 = 0;
 static mut StarMapFrame: FRAME = ptr::null_mut();
+#[cfg(not(test))]
 static mut transition_pending: bool = false;
 
 use crate::time::counter_abi::GetTimeCounter;
+
+use crate::graphics::context_abi::SetContext;
+
+use crate::graphics::context_abi::SetContextForeGroundColor;
+
+#[cfg(not(test))]
+use crate::graphics::context_abi::SetContextBackGroundColor;
+
+#[cfg(not(test))]
+use crate::graphics::context_abi::GetContextClipRect;
+
+#[cfg(not(test))]
+use crate::graphics::context_abi::SetContextOrigin;
+
+#[cfg(not(test))]
+use crate::graphics::frame_abi::ClearDrawable;
+
+#[cfg(not(test))]
+use crate::ui::sis::DrawHyperCoords;
+
+#[cfg(not(test))]
+use crate::ui::sis::DrawSISMessage;
+
+#[cfg(not(test))]
+use crate::ui::sis::DrawStatusMessage;
+
+#[cfg(not(test))]
+use crate::ui::sis::DrawSISMessageEx;
+
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
+
+#[cfg(not(test))]
+use crate::planets::scan::live::RepairBackRect;
+
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::ScreenTransition;
+
+#[cfg(not(test))]
+use crate::graphics::drawable_abi::GetFrameRect;
+
+#[cfg(not(test))]
+use crate::planets::starmap::naming::GetClusterName;
+
+#[cfg(not(test))]
+use crate::navigation::globals::inHQSpace;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::FlushInput;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::AnyButtonPress;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::SetMenuSounds;
+
+#[cfg(not(test))]
+use crate::battle::sounds::engine::PlayMenuSound;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::SetMenuRepeatDelay;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
+
+#[cfg(not(test))]
+use crate::mainloop::input_abi::live::DoInput;
+
+#[cfg(not(test))]
+use crate::planets::starmap_cursor::DoMoveCursor;
+
+#[cfg(not(test))]
+use crate::navigation::globals::getGameState;
+
 extern "C" {
+    #[cfg(not(test))]
     static mut cursorLoc: POINT;
+    #[cfg(not(test))]
     static mut star_array: *mut CStarDesc;
+    #[cfg(not(test))]
     static mut CurStarDescPtr: *mut CStarDesc;
+    #[cfg(not(test))]
     static mut GlobData: GLOBDATA;
-    static mut SpaceContext: *mut c_void;
+    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
+    #[cfg(not(test))]
     static mut MiscDataFrame: FRAME;
+    #[cfg(not(test))]
     static mut TinyFont: FONT;
+    #[cfg(not(test))]
     static mut GameStrings: STRING;
     static ScreenWidth: i32;
     static ScreenHeight: i32;
-
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn SetContextForeGroundColor(color: Color) -> Color;
-    fn SetContextBackGroundColor(color: Color) -> Color;
-    fn SetContextClipRect(rect: *mut CRect);
-    fn GetContextClipRect(rect: *mut RECT) -> u32;
-    fn SetContextOrigin(point: POINT) -> POINT;
-    fn ClearDrawable();
-    fn DrawHyperCoords(point: POINT);
-    fn DrawSISMessage(text: *const c_char);
-    fn DrawStatusMessage(text: *const c_char);
-    fn DrawSISMessageEx(text: *const c_char, cursor: i16, extent: i16, flags: u16) -> u32;
-    fn LoadIntoExtraScreen(rect: *mut CRect);
-    fn RepairBackRect(rect: *mut CRect);
-    fn SetTransitionSource(rect: *mut c_void);
-    fn ScreenTransition(kind: i32, rect: *const c_void);
-    fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
-    fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char);
-    fn inHQSpace() -> i32;
-
-    fn FlushInput();
-    fn AnyButtonPress(check_special: u32) -> u32;
-    fn SetMenuSounds(move_sound: u16, select_sound: u16);
-    fn PlayMenuSound(sound: i32);
-    fn SetMenuRepeatDelay(min: u32, max: u32, step: u32, gestalt: i32);
-    fn SetDefaultMenuRepeatDelay();
-    fn DoInput(state: *mut c_void, reset: u32);
-    fn DoMoveCursor(menu: *mut MENU_STATE) -> u32;
-    fn getGameState(state: *const u8, start: i32, end: i32) -> u8;
+    #[cfg(not(test))]
     fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
 }
+#[cfg(not(test))]
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+#[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -121,6 +196,7 @@ unsafe fn width() -> i32 {
 unsafe fn height() -> i32 {
     ScreenHeight - 13
 }
+#[cfg(not(test))]
 unsafe fn which_space() -> u8 {
     getGameState(
         ptr::addr_of_mut!(GlobData.Game_state.GameState).cast(),
@@ -128,6 +204,7 @@ unsafe fn which_space() -> u8 {
         43,
     )
 }
+#[cfg(not(test))]
 unsafe fn portal_open() -> bool {
     getGameState(
         ptr::addr_of_mut!(GlobData.Game_state.GameState).cast(),
@@ -135,12 +212,14 @@ unsafe fn portal_open() -> bool {
         41,
     ) != 0
 }
+#[cfg(not(test))]
 unsafe fn game_string(index: u16) -> *const c_char {
     string_table::GetStringAddress(string_table::SetAbsStringTableIndex(
         GameStrings.cast(),
         index,
     ))
 }
+#[cfg(not(test))]
 fn point(p: crate::comm::dispatch::CPoint) -> POINT {
     POINT { x: p.x, y: p.y }
 }
@@ -229,6 +308,7 @@ unsafe fn uy(y: i16) -> i16 {
     universeToDispy(c_long::from(y))
 }
 
+#[cfg(not(test))]
 unsafe fn current_location() -> POINT {
     if inHQSpace() == 0 {
         point((*CurStarDescPtr).star_pt)
@@ -273,6 +353,7 @@ pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
         SetContext(old_context);
     }
 }
+#[cfg(not(test))]
 unsafe fn draw_cursor(x: i16, y: i16) {
     let mut stamp = STAMP {
         origin: POINT { x, y },
@@ -333,6 +414,7 @@ impl LineWalk {
         }
     }
 }
+#[cfg(not(test))]
 unsafe fn draw_autopilot(destination: POINT) {
     let mut p = current_location();
     p = POINT {
@@ -376,9 +458,11 @@ fn box_union(a: RECT, b: RECT) -> RECT {
         },
     }
 }
+#[cfg(not(test))]
 unsafe fn fleet_queue() -> *mut QUEUE {
     ptr::addr_of_mut!(GlobData.Game_state.avail_race_q)
 }
+#[cfg(not(test))]
 unsafe fn lock_fleet(handle: *mut c_void) -> *mut FLEET_INFO {
     let q = fleet_queue();
     debug_assert_eq!(
@@ -388,6 +472,7 @@ unsafe fn lock_fleet(handle: *mut c_void) -> *mut FLEET_INFO {
     check_fleet_link(q, handle);
     handle.cast()
 }
+#[cfg(not(test))]
 unsafe fn check_fleet_link(q: *const QUEUE, handle: *mut c_void) {
     debug_assert!(
         !(*q).pq_tab.is_null()
@@ -397,9 +482,11 @@ unsafe fn check_fleet_link(q: *const QUEUE, handle: *mut c_void) {
                     + usize::from((*q).object_size) * usize::from((*q).num_objects)
     );
 }
+#[cfg(not(test))]
 unsafe fn unlock_fleet(handle: *mut c_void) {
     check_fleet_link(fleet_queue(), handle);
 }
+#[cfg(not(test))]
 unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
     font_abi::SetContextFont(TinyFont.cast());
     let string = string_table::SetAbsStringTableIndex((*fleet).race_strings.cast(), 1);
@@ -416,6 +503,7 @@ unsafe fn sphere_text(fleet: *const FLEET_INFO, r: RECT) -> TEXT {
         pStr: string_table::GetStringAddress(string),
     }
 }
+#[cfg(not(test))]
 unsafe fn get_sphere_rect(fleet: *const FLEET_INFO) -> (RECT, RECT) {
     let diameter = c_long::from(i32::from((*fleet).known_strength) * 11);
     let mut w = universeToDispx(diameter).wrapping_sub(ux(0));
@@ -469,6 +557,7 @@ fn intersects(a: RECT, b: RECT) -> bool {
         && i32::from(a.corner.y) + i32::from(a.extent.height) > i32::from(b.corner.y)
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only. `clip` is null, the sentinel `(RECT*)-1`, or a live RECT.
 #[no_mangle]
@@ -676,6 +765,7 @@ pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
     }
 }
 
+#[cfg(not(test))]
 unsafe fn erase_cursor(x: i16, y: i16) {
     let mut r = zero_rect();
     GetFrameRect(StarMapFrame.cast(), ptr::from_mut(&mut r).cast());
@@ -696,6 +786,7 @@ unsafe fn erase_cursor(x: i16, y: i16) {
     RepairBackRect(ptr::from_mut(&mut r).cast());
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map UI active.
 pub unsafe fn ZoomStarMap(direction: i16) {
@@ -716,6 +807,7 @@ pub unsafe fn ZoomStarMap(direction: i16) {
     }
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only. `newpt` is null or points to an absolute universe location.
 #[no_mangle]
@@ -768,6 +860,7 @@ pub unsafe extern "C" fn UpdateCursorLocation(mut sx: i32, mut sy: i32, newpt: *
     }
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only. `previous` points to a writable 256-byte C string buffer.
 #[no_mangle]
@@ -834,6 +927,7 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
     }
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with the star-map status UI active.
 pub unsafe fn UpdateFuelRequirement() {
@@ -892,11 +986,13 @@ fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) -> RECT {
     r.corner.y &= !1;
     r
 }
+#[cfg(not(test))]
 unsafe fn repair_map(race: u16, last: &mut RECT, next: RECT) {
     let mut r = repair_rectangle(*last, next, width(), height());
     *last = next;
     DrawStarMap(race, &mut r);
 }
+#[cfg(not(test))]
 unsafe fn interrupted(button: &mut bool, interrupted: &mut bool, drawn: &mut bool) -> bool {
     if *button {
         if AnyButtonPress(1) == 0 {
@@ -911,11 +1007,13 @@ unsafe fn interrupted(button: &mut bool, interrupted: &mut bool, drawn: &mut boo
     }
     false
 }
+#[cfg(not(test))]
 fn enlarge(r: &mut RECT) {
     r.extent.width = r.extent.width.wrapping_add(1);
     r.extent.height = r.extent.height.wrapping_add(1);
 }
 
+#[cfg(not(test))]
 unsafe fn update_map() {
     FlushInput();
     let mut button = true;
@@ -1035,6 +1133,7 @@ unsafe fn update_map() {
     }
 }
 
+#[cfg(not(test))]
 /// # Safety
 /// Game-thread only, with game globals and native UI resources initialized.
 #[no_mangle]

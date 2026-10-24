@@ -1,5 +1,5 @@
 #[path = "slylandro_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Slylandro Probe - Lightning weapon + space junk harvester
 // @plan PLAN-20260314-SHIPS.P11

@@ -1,6 +1,7 @@
 // Clock Bridge - Rust implementations of C game clock functions
 // These functions bridge to the existing C GameClock state
 
+#[cfg(not(test))]
 use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
@@ -68,13 +69,14 @@ assert_c_layout!(
 );
 
 // Access the C GameClock global variable via GetGameClock() function
-extern "C" {
-    #[link_name = "GetGameClock"]
-    fn get_game_clock() -> *mut ClockState;
-}
+
+#[cfg(not(test))]
+use crate::time::clock_abi::live::GetGameClock as get_game_clock;
 
 // Constants from clock.h
+#[cfg(not(test))]
 const CLOCK_BASE_FRAMERATE: usize = 24;
+#[cfg(not(test))]
 const START_YEAR: u16 = 2155;
 
 // Event type constants
@@ -106,6 +108,7 @@ pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
 }
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
+#[cfg(not(test))]
 fn next_clock_day_internal(clock: &mut ClockState) {
     clock.day_index += 1;
 
@@ -121,6 +124,7 @@ fn next_clock_day_internal(clock: &mut ClockState) {
 }
 
 // Helper: Access the GameClock safely
+#[cfg(not(test))]
 fn with_game_clock<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ClockState) -> R,
@@ -132,6 +136,7 @@ where
 }
 
 // Initialize the game clock
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
@@ -152,6 +157,7 @@ pub unsafe extern "C" fn rust_clock_init() -> c_int {
 }
 
 // Uninitialize the game clock
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
@@ -168,6 +174,7 @@ pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
 }
 
 // Set game clock rate (seconds per day)
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
@@ -198,6 +205,7 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 }
 
 // Tick the game clock forward one tick
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
@@ -223,6 +231,7 @@ pub unsafe extern "C" fn rust_clock_tick() {
 }
 
 // Move game clock forward by specific number of days
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
@@ -256,6 +265,7 @@ pub unsafe extern "C" fn rust_clock_unlock() {
 }
 
 // Check if game clock is running
+#[cfg(not(test))]
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.

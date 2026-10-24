@@ -34,7 +34,7 @@ impl Repeat {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
     use crate::c_bindings::controller_input::{

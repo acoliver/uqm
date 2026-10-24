@@ -33,16 +33,23 @@ pub use isolated::*;
 #[cfg(test)]
 mod isolated {
     pub use crate::time::counter_abi::UnInitTimeSystem;
+
+    pub use crate::input::sdl_input::TFB_UninitInput;
+
+    pub use crate::sound::audio_init::unInitAudio;
+
+    pub use crate::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics;
+
+    pub use crate::graphics::cmap_abi::UninitColorMaps;
+
+    pub use crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics;
+
+    pub use crate::threading::task_abi::CleanupTaskSystem;
+
     extern "C" {
         pub fn initialize(argc: i32, argv: *mut *mut std::ffi::c_char) -> i32;
-        pub fn TFB_UninitInput();
-        pub fn unInitAudio();
-        pub fn TFB_PurgeDanglingGraphics();
-        pub fn UninitColorMaps();
-        pub fn TFB_UninitGraphics();
         pub fn uqm_callback_uninit();
         pub fn uqm_alarm_uninit();
-        pub fn CleanupTaskSystem();
         pub fn uqm_unprepare_all_dirs();
         pub fn uninitIO();
         pub fn UnInitThreadSystem();

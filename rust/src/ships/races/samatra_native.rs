@@ -1,16 +1,15 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,
         starship, wrap_delta,
     };
     use crate::state::game_state_keys::get_game_state;
-    use std::{ffi::c_void, mem};
-    extern "C" {
-        fn InsertQueue(q: *mut c_void, h: *mut c_void, before: *mut c_void);
-    }
+    use std::mem;
+
     use super::super::observation;
+    use crate::collections::queue::InsertQueue;
     const COMET_SPEED: SIZE = 12 << ONE_SHIFT;
     const SENTINEL_SPEED: SIZE = 8 << ONE_SHIFT;
     const RECOIL: i32 = (10 << ONE_SHIFT) << VELOCITY_SHIFT;
@@ -154,7 +153,7 @@ mod engine {
             } else {
                 (*c).velocity = (*e).velocity;
                 (*c).__bindgen_anon_2.hit_points = (*e).__bindgen_anon_2.hit_points;
-                facing = angle_to_facing((*c).velocity.TravelAngle as i32) as COUNT;
+                facing = angle_to_facing((*c).velocity.travel_angle as i32) as COUNT;
             }
             if (*c).__bindgen_anon_4.turn_wait != 0 {
                 (*c).__bindgen_anon_4.turn_wait -= 1;
@@ -317,7 +316,7 @@ mod engine {
         } else {
             let mut facing;
             if (*e).state_flags & NONSOLID as u16 == 0 {
-                facing = angle_to_facing((*e).velocity.TravelAngle as i32) as COUNT;
+                facing = angle_to_facing((*e).velocity.travel_angle as i32) as COUNT;
             } else {
                 (*e).state_flags &= !(NONSOLID as u16);
                 facing = TFB_Random() as COUNT;
@@ -467,7 +466,7 @@ mod engine {
                 if (*o).__bindgen_anon_5.thrust_wait < COLLISION_THRUST_WAIT as u8 {
                     (*o).__bindgen_anon_5.thrust_wait += COLLISION_THRUST_WAIT as u8;
                 }
-                let angle = (*e).velocity.TravelAngle;
+                let angle = (*e).velocity.travel_angle;
                 DeltaVelocityComponents(
                     &raw mut (*o).velocity,
                     cosine(i32::from(angle), RECOIL),

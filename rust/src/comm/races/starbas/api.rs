@@ -46,16 +46,22 @@ mod live {
     use crate::comm::races::script::live::LiveScript;
 
     use crate::threading::legacy_abi::TaskSwitch;
+
+    use crate::battle::build_native::engine::CalculateEscortsWorth;
+
+    use crate::comm::comm_abi::EnableTalkingAnim;
+
+    use crate::planets::cargo::live::DrawCargoStrings;
+
+    use crate::planets::cargo::live::ShowRemainingCapacity;
+
+    use crate::ui::sis::ClearSISRect;
+
+    use crate::mainloop::input_abi::live::AnyButtonPress;
+
     extern "C" {
         static mut GlobData: CGlobData;
         static usingSpeech: u8;
-        fn CalculateEscortsWorth() -> u16;
-        fn EnableTalkingAnim(enabled: u8);
-        fn DrawCargoStrings(old: u8, new: u8);
-        fn ShowRemainingCapacity();
-        fn ClearSISRect(flags: u16);
-        fn AnyButtonPress(detect_special: u32) -> u32;
-
     }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -97,7 +103,7 @@ mod live {
         }
         fn talking_animation(&mut self, enabled: bool) {
             unsafe {
-                EnableTalkingAnim(u8::from(enabled));
+                EnableTalkingAnim((u8::from(enabled)) as i32);
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {

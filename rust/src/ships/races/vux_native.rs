@@ -1,6 +1,6 @@
 //! Live vux callbacks translated from ships/vux/vux.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, init_intersect_points,
         normalize_facing, put_element, sine, starship,
@@ -64,7 +64,7 @@ mod engine {
         &raw mut DESC
     }
     unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
-        let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.TravelAngle)));
+        let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
         let mut face = original;
         let delta = TrackShip(e, &mut face);
         if delta > 0 {

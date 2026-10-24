@@ -60,20 +60,14 @@ mod c_globals {
 
 #[cfg(not(test))]
 mod c_ffi {
-    use std::ffi::c_void;
+
+    pub use crate::ui::sis::SetFlashRect;
+
+    pub use crate::game_init::kernel_abi::SetPlayerInputAll;
+
+    pub use crate::sound::audio_init::initAudio;
+
     extern "C" {
-        // sis.h: extern void SetFlashRect(const RECT *pRect);
-        #[allow(non_snake_case)]
-        pub fn SetFlashRect(p_rect: *const c_void);
-        // Returns BOOLEAN (0 = failure, non-zero = success).
-        #[allow(non_snake_case)]
-        pub fn SetPlayerInputAll() -> i32;
-
-        // setup.c: extern sint32 initAudio(sint32 driver, sint32 flags)
-        #[allow(non_snake_case)]
-        pub fn initAudio(driver: i32, flags: i32) -> i32;
-
-        // C globals from setup.c/options.c
         #[link_name = "snddriver"]
         #[allow(non_upper_case_globals)]
         pub static mut snddriver: i32;
@@ -351,10 +345,9 @@ pub fn set_flash_rect_null() {
 pub fn set_player_input_all_or_explode() {
     #[cfg(not(test))]
     {
-        // SAFETY: SetPlayerInputAll is in the C archive. On failure, it calls
-        // log_add(log_Fatal, ...) then explode() (process abort).
+        // SAFETY: Kernel input state is initialized and accessed on the game thread.
         let ok = unsafe { c_ffi::SetPlayerInputAll() };
-        if ok == 0 {
+        if !ok {
             unsafe {
                 crate::logging::log_add(
                     crate::logging::LogLevel::Fatal,
@@ -427,6 +420,7 @@ pub fn battle_with_frame_callback() {
 // LoadKernel
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 /// Load the UQM kernel.
 ///
 /// C signature: `BOOLEAN LoadKernel(int argc, char *argv[])`.

@@ -179,7 +179,7 @@ const fn color(r: u8, g: u8, b: u8) -> Color {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{abi::*, frame_index};
     use std::ptr;

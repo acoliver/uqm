@@ -13,15 +13,7 @@ pub(super) trait ShofixtApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl ShofixtApi for super::super::script::live::LiveScript<Handler> {
     fn schedule_return(&mut self) {
-        extern "C" {
-            fn AddEvent(
-                kind: i32,
-                month: u16,
-                day: u16,
-                year: u16,
-                selector: u8,
-            ) -> *mut std::ffi::c_void;
-        }
+        use crate::time::clock_abi::live::AddEvent;
         unsafe {
             AddEvent(1, 2, 0, 0, 8);
         }

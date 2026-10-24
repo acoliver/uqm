@@ -19,7 +19,7 @@ pub fn crc_process_extent(state: &mut CrcState, value: &EXTENT) {
 }
 
 pub fn crc_process_velocity(state: &mut CrcState, value: &VELOCITY_DESC) {
-    crc_process_u16(state, value.TravelAngle);
+    crc_process_u16(state, value.travel_angle);
     crc_process_extent(state, &value.vector);
     crc_process_extent(state, &value.fract);
     crc_process_extent(state, &value.error);
@@ -159,7 +159,7 @@ mod tests {
             element.__bindgen_anon_3.mass_points = 255;
             element.__bindgen_anon_4.turn_wait = 17;
             element.__bindgen_anon_5.thrust_wait = 33;
-            element.velocity.TravelAngle = 42;
+            element.velocity.travel_angle = 42;
             element.velocity.vector = EXTENT {
                 width: -123,
                 height: 456,

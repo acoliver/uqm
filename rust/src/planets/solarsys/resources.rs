@@ -7,12 +7,10 @@ use crate::sound::{heart_ffi::DestroyMusic, resource_types::LoadMusicInstance};
 use crate::strings::sresins::LoadStringTableInstance;
 use crate::strings::string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable};
 
-extern "C" {
-    fn DestroyDrawable(drawable: *mut c_void) -> u32;
-}
+use crate::graphics::drawable_abi::DestroyDrawable;
 
 #[no_mangle]
-unsafe extern "C" fn FreeIPData() {
+pub unsafe extern "C" fn FreeIPData() {
     DestroyDrawable(ReleaseDrawable(SISIPFRAME.cast()).cast());
     SISIPFRAME = ptr::null_mut();
     DestroyDrawable(ReleaseDrawable(SUN_FRAME.cast()).cast());

@@ -276,7 +276,7 @@ unsafe fn seed_for_byte(byte: BYTE) -> u32 {
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),
@@ -1427,7 +1427,7 @@ fn ai_entice_coasting_clears_hull_turn_only_at_c_angle_boundaries() {
             (32, 23, true, true, false),
             (32, 23, false, false, false),
         ] {
-            (*ship.ptr()).velocity.TravelAngle =
+            (*ship.ptr()).velocity.travel_angle =
                 ((u32::from(direction) + difference) & 63) as COUNT;
             ship.ss.cur_status_flags = if fast { SHIP_AT_MAX_SPEED as u16 } else { 0 };
             ship.ss.ship_input_state = (LEFT | if thrust { THRUST } else { 0 }) as BYTE;

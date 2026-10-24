@@ -2,7 +2,7 @@
 // @plan PLAN-20260314-SHIPS.P11
 
 #[path = "ilwrath_native.rs"]
-mod native;
+pub(crate) mod native;
 
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};

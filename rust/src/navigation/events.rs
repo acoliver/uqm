@@ -40,7 +40,7 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod live {
+pub(crate) mod live {
     use super::*;
     use crate::navigation::globals::{inHyperSpace, GlobData};
     use crate::navigation::{get, set};

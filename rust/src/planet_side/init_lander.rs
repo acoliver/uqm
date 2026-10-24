@@ -72,18 +72,28 @@ const BLACK_COLOR: CColor = CColor {
 };
 
 #[cfg(not(test))]
+use crate::game_init::macro_abi::ReleaseSound;
+#[cfg(not(test))]
+use crate::graphics::context_abi::SetContext;
+#[cfg(not(test))]
+use crate::graphics::context_abi::SetContextForeGroundColor;
+#[cfg(not(test))]
+use crate::graphics::drawable_abi::DestroyDrawable;
+#[cfg(not(test))]
+use crate::graphics::frame_abi::DrawFilledRectangle;
+#[cfg(not(test))]
+use crate::graphics::frame_abi::DrawStamp;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::IncFrameIndex;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::ReleaseDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+#[cfg(not(test))]
+use crate::ui::sis::capacity::GetStorageBayCapacity;
+#[cfg(not(test))]
 extern "C" {
-    static mut RadarContext: *mut c_void;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn DrawFilledRectangle(rect: *mut CRect);
-    fn SetContextForeGroundColor(color: CColor) -> CColor;
-    fn DrawStamp(stamp: *mut CStamp);
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(drawable: *mut c_void) -> u32;
-    fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
-    fn GetStorageBayCapacity() -> u16;
+    static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
 }
 #[cfg(not(test))]
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
@@ -158,12 +168,12 @@ pub fn free_lander_frames() {
         unsafe {
             for frame in state.frames.iter_mut() {
                 if !frame.is_null() {
-                    DestroyDrawable(ReleaseDrawable(*frame));
+                    DestroyDrawable(ReleaseDrawable((*frame).cast()));
                     *frame = std::ptr::null_mut();
                 }
             }
             if !state.sounds.is_null() {
-                crate::sound::heart_ffi::DestroySound(ReleaseSound(state.sounds));
+                crate::sound::heart_ffi::DestroySound((ReleaseSound((state.sounds).cast())).cast());
                 state.sounds = std::ptr::null_mut();
             }
         }
@@ -242,7 +252,7 @@ pub extern "C" fn InitLander(lander_flags: u8) {
             height: RADAR_HEIGHT,
         };
         SetContextForeGroundColor(BLACK_COLOR);
-        DrawFilledRectangle(&mut r);
+        DrawFilledRectangle(std::ptr::from_mut(&mut r).cast());
 
         let num_landers = sis_num_landers();
         if num_landers != 0 || lander_flags != 0 {
@@ -264,9 +274,9 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let mut s = CStamp {
         origin: CPoint { x: 0, y: 0 },
-        frame: SetAbsFrameIndex(lander_frame_0, facing),
+        frame: (SetAbsFrameIndex((lander_frame_0).cast(), facing)).cast(),
     };
-    DrawStamp(&mut s);
+    DrawStamp(std::ptr::from_mut(&mut s).cast());
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
@@ -278,29 +288,29 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
                 | (1 << BIOLOGICAL_DISASTER)
                 | (1 << LIGHTNING_DISASTER)
                 | (1 << LAVASPOT_DISASTER));
-        s.frame = IncFrameIndex(s.frame);
-        DrawStamp(&mut s);
+        s.frame = (IncFrameIndex((s.frame).cast())).cast();
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
         if lander_flags & (1 << 4) != 0 {
-            s.frame = SetAbsFrameIndex(s.frame, 57);
+            s.frame = (SetAbsFrameIndex((s.frame).cast(), 57)).cast();
         } else {
-            s.frame = SetAbsFrameIndex(s.frame, facing + 3);
-            DrawStamp(&mut s);
-            s.frame = IncFrameIndex(s.frame);
+            s.frame = (SetAbsFrameIndex((s.frame).cast(), facing + 3)).cast();
+            DrawStamp(std::ptr::from_mut(&mut s).cast());
+            s.frame = (IncFrameIndex((s.frame).cast())).cast();
         }
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
         if lander_flags & (1 << 5) == 0 {
             capacity_shift = 0;
         } else {
             capacity_shift = 1;
-            s.frame = SetAbsFrameIndex(s.frame, 59);
-            DrawStamp(&mut s);
+            s.frame = (SetAbsFrameIndex((s.frame).cast(), 59)).cast();
+            DrawStamp(std::ptr::from_mut(&mut s).cast());
         }
         if lander_flags & (1 << 6) != 0 {
-            s.frame = SetAbsFrameIndex(s.frame, 58);
+            s.frame = (SetAbsFrameIndex((s.frame).cast(), 58)).cast();
         } else {
-            s.frame = SetAbsFrameIndex(s.frame, facing + 2);
+            s.frame = (SetAbsFrameIndex((s.frame).cast(), facing + 2)).cast();
         }
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
 
     let free_space = GetStorageBayCapacity().wrapping_sub(sis_total_element_mass());
@@ -317,24 +327,24 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
             height: black_height as i16,
         };
         SetContextForeGroundColor(BLACK_COLOR);
-        DrawFilledRectangle(&mut cargo_rect);
+        DrawFilledRectangle(std::ptr::from_mut(&mut cargo_rect).cast());
     }
 
-    s.frame = SetAbsFrameIndex(lander_frame_0, 37);
+    s.frame = (SetAbsFrameIndex((lander_frame_0).cast(), 37)).cast();
     if shield_flags & (1 << EARTHQUAKE_DISASTER) != 0 {
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
-    s.frame = IncFrameIndex(s.frame);
+    s.frame = (IncFrameIndex((s.frame).cast())).cast();
     if shield_flags & (1 << BIOLOGICAL_DISASTER) != 0 {
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
-    s.frame = IncFrameIndex(s.frame);
+    s.frame = (IncFrameIndex((s.frame).cast())).cast();
     if shield_flags & (1 << LIGHTNING_DISASTER) != 0 {
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
-    s.frame = IncFrameIndex(s.frame);
+    s.frame = (IncFrameIndex((s.frame).cast())).cast();
     if shield_flags & (1 << LAVASPOT_DISASTER) != 0 {
-        DrawStamp(&mut s);
+        DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
 }
 

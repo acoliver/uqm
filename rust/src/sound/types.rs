@@ -338,16 +338,6 @@ impl FadeState {
     }
 }
 
-/// Position passed by value through the engine sound ABI.
-#[cfg(not(test))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub(crate) struct CSoundPosition {
-    pub positional: i32,
-    pub x: i32,
-    pub y: i32,
-}
-
 /// 3D position for sound effects.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

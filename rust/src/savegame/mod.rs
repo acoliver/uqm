@@ -10,10 +10,10 @@ pub mod error;
 pub mod format;
 pub mod legacy;
 #[cfg(not(test))]
-mod live;
+pub(crate) mod live;
 pub mod lzh;
 #[cfg(not(test))]
-mod problem;
+pub(crate) mod problem;
 pub mod runtime;
 pub mod slots;
 pub mod types;

@@ -2,24 +2,22 @@
 use super::native_abi::*;
 use super::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
-use std::{ffi::c_void, ptr};
+use std::ptr;
 
 #[no_mangle]
 pub static mut _CurFramePtr: *mut frame_desc = ptr::null_mut();
+
+use crate::threading::legacy_abi::LockMutex;
+
+use crate::threading::legacy_abi::UnlockMutex;
+
+use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
+
+use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
+
 extern "C" {
     static ScreenWidth: i32;
     static ScreenHeight: i32;
-    fn LockMutex(mutex: *mut c_void);
-    fn UnlockMutex(mutex: *mut c_void);
-    fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut crate::c_bindings::global_state::TFB_Image;
-    fn TFB_DrawCanvas_Rescale_Nearest(
-        src: *mut c_void,
-        dst: *mut c_void,
-        scale: i32,
-        src_hot: *mut c_void,
-        extent: *mut c_void,
-        dst_hot: *mut c_void,
-    );
 }
 /// # Safety
 /// Frame must be null or live, and graphics operations must be serialized.
@@ -351,45 +349,69 @@ pub unsafe extern "C" fn RescaleFrame(
     UnlockMutex(image.mutex.cast());
     ReleaseDrawable(new)
 }
-macro_rules! pixels {
-    ($name:ident, $ty:ty, $function:ident) => {
-        /// # Safety
-        /// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(
-            frame: *mut frame_desc,
-            pixels: $ty,
-            width: i32,
-            height: i32,
-        ) -> BOOLEAN {
-            if frame.is_null() {
-                return 0;
-            }
-            assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
-            $function((*(*frame).image).NormalImg, pixels, width, height)
-        }
-    };
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn ReadFramePixelColors(
+    frame: *mut frame_desc,
+    pixels: *mut Color,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_GetPixelColors((*(*frame).image).NormalImg, pixels, width, height)
 }
-pixels!(
-    ReadFramePixelColors,
-    *mut Color,
-    TFB_DrawCanvas_GetPixelColors
-);
-pixels!(
-    WriteFramePixelColors,
-    *const Color,
-    TFB_DrawCanvas_SetPixelColors
-);
-pixels!(
-    ReadFramePixelIndexes,
-    *mut u8,
-    TFB_DrawCanvas_GetPixelIndexes
-);
-pixels!(
-    WriteFramePixelIndexes,
-    *const u8,
-    TFB_DrawCanvas_SetPixelIndexes
-);
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn WriteFramePixelColors(
+    frame: *mut frame_desc,
+    pixels: *const Color,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_SetPixelColors((*(*frame).image).NormalImg, pixels, width, height)
+}
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn ReadFramePixelIndexes(
+    frame: *mut frame_desc,
+    pixels: *mut u8,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_GetPixelIndexes((*(*frame).image).NormalImg, pixels, width, height)
+}
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn WriteFramePixelIndexes(
+    frame: *mut frame_desc,
+    pixels: *const u8,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_SetPixelIndexes((*(*frame).image).NormalImg, pixels, width, height)
+}
 
 #[cfg(test)]
 mod tests {

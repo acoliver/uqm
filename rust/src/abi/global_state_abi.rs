@@ -28,99 +28,32 @@ pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct QUEUE {
-    pub head: HLINK,
-    pub tail: HLINK,
-    pub pq_tab: *mut BYTE,
-    pub free_list: HLINK,
-    pub object_size: COUNT,
-    pub num_objects: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CLOCK_STATE {
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub tick_count: SIZE,
-    pub day_in_ticks: SIZE,
-    pub event_q: QUEUE,
-}
+pub use crate::ships::native::abi::CLOCK_STATE;
+pub use crate::ships::native::abi::QUEUE;
 pub type HEVENT = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct event {
-    pub pred: HEVENT,
-    pub succ: HEVENT,
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub func_index: BYTE,
-}
+pub use crate::navigation::abi::event;
 pub type EVENT = event;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Color {
-    pub r: BYTE,
-    pub g: BYTE,
-    pub b: BYTE,
-    pub a: BYTE,
-}
+pub use crate::graphics::native_abi::Color;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table_entry {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::string_table_entry;
 pub type STRING_TABLE_ENTRY_DESC = string_table_entry;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type FRAME_DESC = frame_desc;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct font_desc {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::font_desc;
 pub type FONT_DESC = font_desc;
 pub type FRAME = *mut FRAME_DESC;
 pub type FONT = *mut FONT_DESC;
 pub type TIME_VALUE = UWORD;
 pub type COORD = SWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct extent {
-    pub width: COORD,
-    pub height: COORD,
-}
+pub use crate::graphics::native_abi::extent;
 pub type EXTENT = extent;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct point {
-    pub x: COORD,
-    pub y: COORD,
-}
+pub use crate::graphics::native_abi::point;
 pub type POINT = point;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct stamp {
-    pub origin: POINT,
-    pub frame: FRAME,
-}
+pub use crate::graphics::native_abi::stamp;
 pub type STAMP = stamp;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct rect {
-    pub corner: POINT,
-    pub extent: EXTENT,
-}
+pub use crate::graphics::native_abi::rect;
 pub type RECT = rect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct line {
-    pub first: POINT,
-    pub second: POINT,
-}
+pub use crate::graphics::native_abi::line;
 pub type LINE = line;
 pub const TEXT_ALIGN_ALIGN_LEFT: TEXT_ALIGN = 0;
 pub const TEXT_ALIGN_ALIGN_CENTER: TEXT_ALIGN = 1;
@@ -130,14 +63,7 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct text {
-    pub baseline: POINT,
-    pub pStr: *const UNICODE,
-    pub align: TEXT_ALIGN,
-    pub CharCount: COUNT,
-}
+pub use crate::graphics::native_abi::text;
 pub type TEXT = text;
 pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
@@ -150,193 +76,35 @@ pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
 pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union PRIM_DESC {
-    pub Point: POINT,
-    pub Stamp: STAMP,
-    pub Line: LINE,
-    pub Text: TEXT,
-    pub Rect: RECT,
-}
+pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PRIMITIVE {
-    pub Links: PRIM_LINKS,
-    pub Type: GRAPHICS_PRIM,
-    pub color: Color,
-    pub Object: PRIM_DESC,
-}
+pub use crate::graphics::native_abi::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct INTERSECT_CONTROL {
-    pub last_time_val: TIME_VALUE,
-    pub EndPoint: POINT,
-    pub IntersectStamp: STAMP,
-}
+pub use crate::ships::native::abi::INTERSECT_CONTROL;
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct DrawMode {
-    pub kind: BYTE,
-    pub factor: SWORD,
-}
-extern "C" {
-    pub fn GetContextForeGroundColor() -> Color;
-}
-extern "C" {
-    pub fn GetContextFGFrame() -> FRAME;
-}
-extern "C" {
-    pub fn GetContextClipRect(pRect: *mut RECT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetContextDrawMode() -> DrawMode;
-}
-extern "C" {
-    pub fn DrawLine(pLine: *mut LINE);
-}
-extern "C" {
-    pub fn DrawBatch(pBasePrim: *mut PRIMITIVE, PrimLinks: PRIM_LINKS, BatchFlags: BATCH_FLAGS);
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_soundsample {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::context_abi::{
+    GetContextClipRect, GetContextDrawMode, GetContextForeGroundColor,
+};
+pub use crate::graphics::drawable_abi::GetContextFGFrame;
+pub use crate::graphics::frame_abi::{DrawBatch, DrawLine};
+pub use crate::graphics::native_abi::DrawMode;
+pub use crate::ships::native::abi::tfb_soundsample;
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SIS_STATE {
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-    pub ResUnits: DWORD,
-    pub FuelOnBoard: DWORD,
-    pub CrewEnlisted: COUNT,
-    pub TotalElementMass: COUNT,
-    pub TotalBioMass: COUNT,
-    pub ModuleSlots: [BYTE; 16usize],
-    pub DriveSlots: [BYTE; 11usize],
-    pub JetSlots: [BYTE; 8usize],
-    pub NumLanders: BYTE,
-    pub ElementAmounts: [COUNT; 8usize],
-    pub ShipName: [UNICODE; 16usize],
-    pub CommanderName: [UNICODE; 16usize],
-    pub PlanetName: [UNICODE; 16usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct velocity_desc {
-    pub TravelAngle: COUNT,
-    pub vector: EXTENT,
-    pub fract: EXTENT,
-    pub error: EXTENT,
-    pub incr: EXTENT,
-}
+pub use crate::ships::native::abi::velocity_desc;
+pub use crate::ships::native::abi::SIS_STATE;
 pub type VELOCITY_DESC = velocity_desc;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ANIMATION_DESC {
-    pub StartIndex: COUNT,
-    pub NumFrames: BYTE,
-    pub AnimFlags: BYTE,
-    pub BaseFrameRate: COUNT,
-    pub RandomFrameRate: COUNT,
-    pub BaseRestartRate: COUNT,
-    pub RandomRestartRate: COUNT,
-    pub BlockMask: DWORD,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SPEECH_DIGITNAME {
-    pub Divider: ::std::os::raw::c_int,
-    pub MaxRemainder: ::std::os::raw::c_int,
-    pub StrIndex: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SPEECH_DIGIT {
-    pub Divider: ::std::os::raw::c_int,
-    pub Subtrahend: ::std::os::raw::c_int,
-    pub StrDigits: *mut COUNT,
-    pub Names: *mut SPEECH_DIGITNAME,
-    pub CommonNameIndex: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NUMBER_SPEECH_DESC {
-    pub NumDigits: COUNT,
-    pub Digits: [SPEECH_DIGIT; 7usize],
-}
+pub use crate::ships::native::abi::ANIMATION_DESC;
+pub use crate::ships::native::abi::NUMBER_SPEECH_DESC;
+pub use crate::ships::native::abi::SPEECH_DIGIT;
+pub use crate::ships::native::abi::SPEECH_DIGITNAME;
 pub type NUMBER_SPEECH = *const NUMBER_SPEECH_DESC;
 pub type LDAS_FLAGS = DWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct LOCDATA {
-    pub init_encounter_func: ::std::option::Option<fn()>,
-    pub post_encounter_func: ::std::option::Option<fn()>,
-    pub uninit_encounter_func: ::std::option::Option<fn() -> COUNT>,
-    pub AlienFrameRes: RESOURCE,
-    pub AlienFontRes: RESOURCE,
-    pub AlienTextFColor: Color,
-    pub AlienTextBColor: Color,
-    pub AlienTextBaseline: POINT,
-    pub AlienTextWidth: COUNT,
-    pub AlienTextAlign: TEXT_ALIGN,
-    pub AlienTextValign: TEXT_VALIGN,
-    pub AlienColorMapRes: RESOURCE,
-    pub AlienSongRes: RESOURCE,
-    pub AlienAltSongRes: RESOURCE,
-    pub AlienSongFlags: LDAS_FLAGS,
-    pub ConversationPhrasesRes: RESOURCE,
-    pub NumAnimations: COUNT,
-    pub AlienAmbientArray: [ANIMATION_DESC; 20usize],
-    pub AlienTransitionDesc: ANIMATION_DESC,
-    pub AlienTalkDesc: ANIMATION_DESC,
-    pub AlienNumberSpeech: NUMBER_SPEECH,
-    pub AlienFrame: FRAME,
-    pub AlienFont: FONT,
-    pub AlienColorMap: COLORMAP,
-    pub AlienSong: MUSIC_REF,
-    pub ConversationPhrases: STRING,
-}
+pub use crate::ships::native::abi::LOCDATA;
 pub type ACTIVITY = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GAME_STATE {
-    pub glob_flags: BYTE,
-    pub CrewCost: BYTE,
-    pub FuelCost: BYTE,
-    pub ModuleCost: [BYTE; 20usize],
-    pub ElementWorth: [BYTE; 8usize],
-    pub DisplayArray: *mut PRIMITIVE,
-    pub CurrentActivity: ACTIVITY,
-    pub GameClock: CLOCK_STATE,
-    pub autopilot: POINT,
-    pub ip_location: POINT,
-    pub ShipStamp: STAMP,
-    pub ShipFacing: UWORD,
-    pub ip_planet: BYTE,
-    pub in_orbit: BYTE,
-    pub velocity: VELOCITY_DESC,
-    pub BattleGroupRef: DWORD,
-    pub avail_race_q: QUEUE,
-    pub npc_built_ship_q: QUEUE,
-    pub ip_group_q: QUEUE,
-    pub encounter_q: QUEUE,
-    pub built_ship_q: QUEUE,
-    pub GameState: [BYTE; 155usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GLOBDATA {
-    pub SIS_state: SIS_STATE,
-    pub Game_state: GAME_STATE,
-}
+pub use crate::ships::native::abi::GAME_STATE;
+pub use crate::ships::native::abi::GLOBDATA;
 pub const ARILOU_ENTRANCE_EVENT: _bindgen_ty_10 = 0;
 pub const ARILOU_EXIT_EVENT: _bindgen_ty_10 = 1;
 pub const HYPERSPACE_ENCOUNTER_EVENT: _bindgen_ty_10 = 2;
@@ -365,18 +133,8 @@ extern "C" {
 }
 pub type HELEMENT = HLINK;
 pub type ELEMENT_FLAGS = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct state {
-    pub location: POINT,
-    pub image: state__bindgen_ty_1,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct state__bindgen_ty_1 {
-    pub frame: FRAME,
-    pub farray: *mut FRAME,
-}
+pub use crate::ships::native::abi::state;
+pub use crate::ships::native::abi::state__bindgen_ty_1;
 pub type STATE = state;
 pub type ELEMENT = element;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
@@ -388,63 +146,12 @@ pub type ElementCollisionFunc = ::std::option::Option<
         pPt1: *mut POINT,
     ),
 >;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct element {
-    pub pred: HELEMENT,
-    pub succ: HELEMENT,
-    pub preprocess_func: ElementProcessFunc,
-    pub postprocess_func: ElementProcessFunc,
-    pub collision_func: ElementCollisionFunc,
-    pub death_func: ElementProcessFunc,
-    pub playerNr: SIZE,
-    pub state_flags: ELEMENT_FLAGS,
-    pub __bindgen_anon_1: element__bindgen_ty_1,
-    pub __bindgen_anon_2: element__bindgen_ty_2,
-    pub __bindgen_anon_3: element__bindgen_ty_3,
-    pub __bindgen_anon_4: element__bindgen_ty_4,
-    pub __bindgen_anon_5: element__bindgen_ty_5,
-    pub colorCycleIndex: BYTE,
-    pub velocity: VELOCITY_DESC,
-    pub IntersectControl: INTERSECT_CONTROL,
-    pub PrimIndex: COUNT,
-    pub current: STATE,
-    pub next: STATE,
-    pub pParent: *mut ::std::os::raw::c_void,
-    pub hTarget: HELEMENT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_1 {
-    pub life_span: COUNT,
-    pub scan_node: COUNT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_2 {
-    pub crew_level: COUNT,
-    pub hit_points: COUNT,
-    pub facing: COUNT,
-    pub cycle: COUNT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_3 {
-    pub mass_points: BYTE,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_4 {
-    pub turn_wait: BYTE,
-    pub sys_loc: BYTE,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_5 {
-    pub thrust_wait: BYTE,
-    pub blast_offset: BYTE,
-    pub next_turn: BYTE,
-}
+pub use crate::ships::native::abi::element;
+pub use crate::ships::native::abi::element__bindgen_ty_1;
+pub use crate::ships::native::abi::element__bindgen_ty_2;
+pub use crate::ships::native::abi::element__bindgen_ty_3;
+pub use crate::ships::native::abi::element__bindgen_ty_4;
+pub use crate::ships::native::abi::element__bindgen_ty_5;
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -479,90 +186,12 @@ pub const SPECIES_ID_UR_QUAN_PROBE_ID: SPECIES_ID = 28;
 pub const SPECIES_ID_NUM_SPECIES_ID: SPECIES_ID = 29;
 pub type SPECIES_ID = ::std::os::raw::c_uint;
 pub type RACE_DESC = [u128; 24usize];
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct STARSHIP {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-    pub RaceDescPtr: *mut RACE_DESC,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub ship_cost: BYTE,
-    pub index: COUNT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub weapon_counter: BYTE,
-    pub special_counter: BYTE,
-    pub energy_counter: BYTE,
-    pub ship_input_state: BYTE,
-    pub cur_status_flags: STATUS_FLAGS,
-    pub old_status_flags: STATUS_FLAGS,
-    pub hShip: HELEMENT,
-    pub ShipFacing: COUNT,
-    pub playerNr: SIZE,
-    pub control: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_FRAGMENT {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-    pub race_id: BYTE,
-    pub index: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub energy_level: BYTE,
-    pub max_energy: BYTE,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-}
+pub use crate::ships::native::abi::SHIP_FRAGMENT;
+pub use crate::ships::native::abi::STARSHIP;
 pub type HFLEETINFO = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FLEET_INFO {
-    pub pred: HFLEETINFO,
-    pub succ: HFLEETINFO,
-    pub SpeciesID: SPECIES_ID,
-    pub allied_state: UWORD,
-    pub days_left: BYTE,
-    pub growth_fract: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub growth: BYTE,
-    pub max_energy: BYTE,
-    pub loc: POINT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-    pub actual_strength: COUNT,
-    pub known_strength: COUNT,
-    pub known_loc: POINT,
-    pub growth_err_term: BYTE,
-    pub func_index: BYTE,
-    pub dest_loc: POINT,
-}
+pub use crate::ships::native::abi::FLEET_INFO;
 pub type HIPGROUP = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct IP_GROUP {
-    pub pred: HIPGROUP,
-    pub succ: HIPGROUP,
-    pub group_counter: UWORD,
-    pub race_id: BYTE,
-    pub sys_loc: BYTE,
-    pub task: BYTE,
-    pub in_system: BYTE,
-    pub dest_loc: BYTE,
-    pub orbit_pos: BYTE,
-    pub group_id: BYTE,
-    pub loc: POINT,
-    pub melee_icon: FRAME,
-}
+pub use crate::navigation::abi::IP_GROUP;
 pub type BRIEF_SHIP_INFO = brief_ship_info;
 pub type ENCOUNTER = encounter;
 pub type PLANET_DESC = planet_desc;
@@ -632,205 +261,44 @@ pub type PickupLifeFunction = ::std::option::Option<
         whichNode: COUNT,
     ) -> bool,
 >;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GenerateFunctions {
-    pub initNpcs: InitNpcsFunction,
-    pub reinitNpcs: ReinitNpcsFunction,
-    pub uninitNpcs: UninitNpcsFunction,
-    pub generatePlanets: GeneratePlanetsFunction,
-    pub generateMoons: GenerateMoonsFunction,
-    pub generateName: GenerateNameFunction,
-    pub generateOrbital: GenerateOrbitalFunction,
-    pub generateMinerals: GenerateMineralsFunction,
-    pub generateEnergy: GenerateEnergyFunction,
-    pub generateLife: GenerateLifeFunction,
-    pub pickupMinerals: PickupMineralsFunction,
-    pub pickupEnergy: PickupEnergyFunction,
-    pub pickupLife: PickupLifeFunction,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe extern "C" fn(pMS: *mut menu_state) -> BOOLEAN>,
-    pub Initialized: SIZE,
-    pub CurState: BYTE,
-    pub CurFrame: FRAME,
-    pub CurString: STRING,
-    pub first_item: POINT,
-    pub delta_item: SIZE,
-    pub ModuleFrame: FRAME,
-    pub flash_rect0: RECT,
-    pub flash_rect1: RECT,
-    pub flash_frame0: FRAME,
-    pub flash_frame1: FRAME,
-    pub flashContext: *mut FlashContext,
-    pub hMusic: MUSIC_REF,
-    pub privData: *mut ::std::os::raw::c_void,
-}
+pub use crate::navigation::abi::FlashContext;
+pub use crate::ships::native::abi::menu_state;
+pub use crate::ships::native::abi::GenerateFunctions;
 pub type MENU_STATE = menu_state;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ELEMENT_ENTRY {
-    pub ElementType: BYTE,
-    pub Density: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PlanetFrame {
-    pub Type: BYTE,
-    pub BaseTectonics: BYTE,
-    pub AtmoAndDensity: BYTE,
-    pub UsefulElements: [ELEMENT_ENTRY; 8usize],
-    pub CMapInstance: RESOURCE,
-    pub XlatTabInstance: RESOURCE,
-    pub num_faults: COUNT,
-    pub fault_depth: SIZE,
-    pub num_blemishes: COUNT,
-    pub base_elevation: SIZE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PLANET_INFO {
-    pub AxialTilt: SIZE,
-    pub Tectonics: UWORD,
-    pub Weather: UWORD,
-    pub PlanetDensity: UWORD,
-    pub PlanetRadius: UWORD,
-    pub SurfaceGravity: UWORD,
-    pub SurfaceTemperature: SIZE,
-    pub RotationPeriod: UWORD,
-    pub AtmoDensity: UWORD,
-    pub LifeChance: SIZE,
-    pub PlanetToSunDist: UWORD,
-    pub PlanDataPtr: *const PlanetFrame,
-    pub ScanSeed: [DWORD; 3usize],
-    pub ScanRetrieveMask: [DWORD; 3usize],
-    pub DiscoveryString: STRING,
-    pub LanderFont: FONT,
-    pub LanderFontEff: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SYSTEM_INFO {
-    pub StarSize: BYTE,
-    pub StarIntensity: BYTE,
-    pub StarEnergy: UWORD,
-    pub PlanetInfo: PLANET_INFO,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_desc {
-    pub rand_seed: DWORD,
-    pub data_index: BYTE,
-    pub NumPlanets: BYTE,
-    pub radius: SIZE,
-    pub location: POINT,
-    pub temp_color: Color,
-    pub NextIndex: COUNT,
-    pub image: STAMP,
-    pub pPrevDesc: *mut PLANET_DESC,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct star_desc {
-    pub star_pt: POINT,
-    pub Type: BYTE,
-    pub Index: BYTE,
-    pub Prefix: BYTE,
-    pub Postfix: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct node_info {
-    pub loc_pt: POINT,
-    pub density: COUNT,
-    pub type_: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_orbit {
-    pub TopoZoomFrame: FRAME,
-    pub lpTopoData: *mut SBYTE,
-    pub SphereFrame: FRAME,
-    pub ObjectFrame: FRAME,
-    pub TintFrame: FRAME,
-    pub TintColor: Color,
-    pub TopoColors: *mut Color,
-    pub ScratchArray: *mut Color,
-    pub WorkFrame: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct solarsys_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *mut solarsys_state) -> BOOLEAN>,
-    pub InIpFlight: BOOLEAN,
-    pub WaitIntersect: COUNT,
-    pub SunDesc: [PLANET_DESC; 1usize],
-    pub PlanetDesc: [PLANET_DESC; 16usize],
-    pub MoonDesc: [PLANET_DESC; 4usize],
-    pub pBaseDesc: *mut PLANET_DESC,
-    pub pOrbitalDesc: *mut PLANET_DESC,
-    pub FirstPlanetIndex: SIZE,
-    pub LastPlanetIndex: SIZE,
-    pub turn_counter: BYTE,
-    pub turn_wait: BYTE,
-    pub thrust_counter: BYTE,
-    pub max_ship_speed: BYTE,
-    pub XlatRef: STRING,
-    pub XlatPtr: *const ::std::os::raw::c_void,
-    pub OrbitalCMap: COLORMAP,
-    pub SysInfo: SYSTEM_INFO,
-    pub genFuncs: *const GenerateFunctions,
-    pub PlanetSideFrame: [FRAME; 6usize],
-    pub TopoFrame: FRAME,
-    pub Orbit: PLANET_ORBIT,
-    pub InOrbit: BOOLEAN,
-}
-extern "C" {
-    pub fn planetOuterLocation(planetI: COUNT) -> POINT;
-}
-extern "C" {
-    pub fn XFormIPLoc(pIn: *mut POINT, pOut: *mut POINT, ToDisplay: BOOLEAN);
-}
-extern "C" {
-    pub fn DrawOval(pRect: *mut RECT, num_off_pixels: BYTE);
-}
-extern "C" {
-    pub fn DrawFilledOval(pRect: *mut RECT);
-}
+pub use crate::navigation::abi::star_desc;
+#[cfg(not(test))]
+pub use crate::planets::render::c_api::{
+    draw_filled_oval as DrawFilledOval, draw_oval as DrawOval,
+};
+#[cfg(not(test))]
+pub use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
+pub use crate::ships::native::abi::node_info;
+pub use crate::ships::native::abi::planet_desc;
+pub use crate::ships::native::abi::planet_orbit;
+pub use crate::ships::native::abi::solarsys_state;
+pub use crate::ships::native::abi::PlanetFrame;
+pub use crate::ships::native::abi::ELEMENT_ENTRY;
+pub use crate::ships::native::abi::PLANET_INFO;
+pub use crate::ships::native::abi::SYSTEM_INFO;
+// The runtime providers are excluded from the isolated unit-test build.
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::EscortFeasibilityStudy;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::planets::render::c_api::draw_filled_oval as DrawFilledOval;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::planets::render::c_api::draw_oval as DrawOval;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::planets::solarsys::planetOuterLocation;
+#[cfg(test)]
+#[cfg(not(test))]
+pub use crate::planets::solarsys::XFormIPLoc;
 pub type HENCOUNTER = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct brief_ship_info {
-    pub race_id: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub max_energy: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct encounter {
-    pub pred: HENCOUNTER,
-    pub succ: HENCOUNTER,
-    pub hElement: HELEMENT,
-    pub transition_state: SIZE,
-    pub origin: POINT,
-    pub radius: COUNT,
-    pub race_id: BYTE,
-    pub num_ships: BYTE,
-    pub flags: BYTE,
-    pub loc_pt: POINT,
-    pub ShipList: [BRIEF_SHIP_INFO; 7usize],
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-}
+pub use crate::navigation::abi::brief_ship_info;
+pub use crate::navigation::abi::encounter;
 extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -907,62 +375,37 @@ pub const ILWRATH_DEFINED: _bindgen_ty_25 = 43;
 pub const ANDROSYNTH_DEFINED: _bindgen_ty_25 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_25 = 45;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[repr(align(8))]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_image {
-    pub _bindgen_opaque_blob: [u64; 11usize],
-}
+pub use crate::graphics::native_abi::tfb_image;
 pub type TFB_Image = tfb_image;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct bresenham_line {
-    pub first: POINT,
-    pub second: POINT,
-    pub abs_delta_x: SIZE,
-    pub abs_delta_y: SIZE,
-    pub error_term: SIZE,
-    pub end_points_exchanged: BOOLEAN,
-    pub intersect_code: INTERSECT_CODE,
-}
+pub use crate::graphics::geometry_ffi::BresenhamLine as bresenham_line;
 pub type BRESENHAM_LINE = bresenham_line;
 pub type DRAWABLE_TYPE = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct frame_desc {
-    pub Type: DRAWABLE_TYPE,
-    pub Index: UWORD,
-    pub HotSpot: HOT_SPOT,
-    pub Bounds: EXTENT,
-    pub image: *mut TFB_Image,
-    pub parent: *mut drawable_desc,
-}
-#[repr(C)]
-#[repr(align(8))]
-#[derive(Debug, Copy, Clone)]
-pub struct drawable_desc {
-    pub _bindgen_opaque_blob: [u64; 2usize],
-}
-extern "C" {
-    pub fn _clip_line(pClipRect: *const RECT, pLine: *mut BRESENHAM_LINE) -> INTERSECT_CODE;
-}
-extern "C" {
-    pub fn EscortFeasibilityStudy(race: COUNT) -> COUNT;
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SUMMARY_DESC {
-    pub SS: SIS_STATE,
-    pub Activity: BYTE,
-    pub Flags: BYTE,
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub MCreditLo: BYTE,
-    pub MCreditHi: BYTE,
-    pub NumShips: BYTE,
-    pub NumDevices: BYTE,
-    pub ShipList: [BYTE; 12usize],
-    pub DeviceList: [BYTE; 16usize],
-    pub SaveName: [UNICODE; 64usize],
+#[cfg(not(test))]
+pub use crate::battle::build_native::EscortFeasibilityStudy;
+pub use crate::graphics::geometry_ffi::_clip_line;
+pub use crate::graphics::native_abi::drawable_desc;
+pub use crate::graphics::native_abi::frame_desc;
+pub use crate::navigation::abi::SUMMARY_DESC;
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+    use crate::graphics::{geometry_ffi::BresenhamLine, native_abi as gfx};
+
+    const _: unsafe extern "C" fn() -> gfx::Color = GetContextForeGroundColor;
+    const _: unsafe extern "C" fn() -> gfx::FRAME = GetContextFGFrame;
+    const _: unsafe extern "C" fn(*mut gfx::RECT) -> BOOLEAN = GetContextClipRect;
+    const _: unsafe extern "C" fn() -> gfx::DrawMode = GetContextDrawMode;
+    const _: unsafe extern "C" fn(*mut gfx::PRIMITIVE, PRIM_LINKS, BATCH_FLAGS) = DrawBatch;
+    const _: unsafe extern "C" fn(*mut gfx::LINE) = DrawLine;
+    const _: unsafe extern "C" fn(*const gfx::RECT, *mut BresenhamLine) -> INTERSECT_CODE =
+        _clip_line;
+
+    const _: () = {
+        assert!(std::mem::size_of::<BRESENHAM_LINE>() == std::mem::size_of::<BresenhamLine>());
+        assert!(
+            std::mem::offset_of!(BRESENHAM_LINE, intersect_code)
+                == std::mem::offset_of!(BresenhamLine, intersect_code)
+        );
+    };
 }

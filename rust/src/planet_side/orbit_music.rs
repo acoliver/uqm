@@ -18,9 +18,7 @@ static ORBIT_MUSIC: Mutex<[MusicHandle; NUM_ORBIT_THEMES]> =
 pub static mut LANDER_MUSIC: *mut c_void = std::ptr::null_mut();
 
 #[cfg(not(test))]
-extern "C" {
-    fn load_orbit_theme(selector: u8) -> *mut c_void;
-}
+use crate::game_init::world_resources::live::load_orbit_theme;
 
 /// Load the orbit themes once. Active PlanetSide assets are session-scoped and
 /// are deliberately not kept in global C state.

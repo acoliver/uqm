@@ -754,7 +754,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             assert_eq!(battle_counter[0], 9);
             assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 36);
             assert_eq!(ship.desc.ship_info.energy_level, 0);
-            assert_eq!((*ship.ptr()).velocity.TravelAngle, 0);
+            assert_eq!((*ship.ptr()).velocity.travel_angle, 0);
             assert!(
                 (*ship.ptr()).preprocess_func.is_some()
                     && (*ship.ptr()).postprocess_func.is_some()

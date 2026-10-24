@@ -24,7 +24,7 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::world_elements::do_damage;
@@ -167,7 +167,7 @@ mod engine {
                 (*primitive(b)).Type = gfx_object_STAMP_PRIM as u8;
                 (*b).current.location.x = (i32::from((*wp).x) << ONE_SHIFT) as i16;
                 (*b).current.location.y = (i32::from((*wp).y) << ONE_SHIFT) as i16;
-                let angle = (*w).velocity.TravelAngle;
+                let angle = (*w).velocity.travel_angle;
                 let offset = (*w).__bindgen_anon_5.blast_offset as i16;
                 if offset > 0 {
                     (*b).current.location.x = (*b)

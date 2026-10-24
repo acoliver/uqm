@@ -77,7 +77,7 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::gravity_keys;
     use crate::graphics::native_abi::frame_desc;
     use crate::graphics::{

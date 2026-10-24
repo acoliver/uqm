@@ -920,54 +920,166 @@ pub extern "C" fn rust_options_get_addon(index: c_int) -> *mut c_char {
 
 // --- Bool getters ---
 
-macro_rules! bool_getter {
-    ($name:ident, $field:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> c_int {
-            if parsed().$field {
-                1
-            } else {
-                0
-            }
-        }
-    };
+#[no_mangle]
+pub extern "C" fn rust_options_opengl() -> c_int {
+    if parsed().opengl {
+        1
+    } else {
+        0
+    }
 }
 
-bool_getter!(rust_options_opengl, opengl);
-bool_getter!(rust_options_fullscreen, fullscreen);
-bool_getter!(rust_options_scanlines, scanlines);
-bool_getter!(rust_options_show_fps, show_fps);
-bool_getter!(rust_options_keep_aspect_ratio, keep_aspect_ratio);
-bool_getter!(rust_options_use_3do_music, use_3do_music);
-bool_getter!(rust_options_use_remix_music, use_remix_music);
-bool_getter!(rust_options_use_speech, use_speech);
-bool_getter!(rust_options_subtitles, subtitles);
-bool_getter!(rust_options_stereo_sfx, stereo_sfx);
-bool_getter!(rust_options_safe_mode, safe_mode);
+#[no_mangle]
+pub extern "C" fn rust_options_fullscreen() -> c_int {
+    if parsed().fullscreen {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_scanlines() -> c_int {
+    if parsed().scanlines {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_show_fps() -> c_int {
+    if parsed().show_fps {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_keep_aspect_ratio() -> c_int {
+    if parsed().keep_aspect_ratio {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_use_3do_music() -> c_int {
+    if parsed().use_3do_music {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_use_remix_music() -> c_int {
+    if parsed().use_remix_music {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_use_speech() -> c_int {
+    if parsed().use_speech {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_subtitles() -> c_int {
+    if parsed().subtitles {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_stereo_sfx() -> c_int {
+    if parsed().stereo_sfx {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_safe_mode() -> c_int {
+    if parsed().safe_mode {
+        1
+    } else {
+        0
+    }
+}
 
 // --- Int getters ---
 
-macro_rules! int_getter {
-    ($name:ident, $field:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> c_int {
-            parsed().$field
-        }
-    };
+#[no_mangle]
+pub extern "C" fn rust_options_scaler() -> c_int {
+    parsed().scaler
 }
 
-int_getter!(rust_options_scaler, scaler);
-int_getter!(rust_options_sound_driver, sound_driver);
-int_getter!(rust_options_sound_quality, sound_quality);
-int_getter!(rust_options_which_coarse_scan, which_coarse_scan);
-int_getter!(rust_options_which_menu, which_menu);
-int_getter!(rust_options_which_fonts, which_fonts);
-int_getter!(rust_options_which_intro, which_intro);
-int_getter!(rust_options_which_shield, which_shield);
-int_getter!(rust_options_smooth_scroll, smooth_scroll);
-int_getter!(rust_options_melee_scale, melee_scale);
-int_getter!(rust_options_resolution_width, resolution_width);
-int_getter!(rust_options_resolution_height, resolution_height);
+#[no_mangle]
+pub extern "C" fn rust_options_sound_driver() -> c_int {
+    parsed().sound_driver
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_sound_quality() -> c_int {
+    parsed().sound_quality
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_which_coarse_scan() -> c_int {
+    parsed().which_coarse_scan
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_which_menu() -> c_int {
+    parsed().which_menu
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_which_fonts() -> c_int {
+    parsed().which_fonts
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_which_intro() -> c_int {
+    parsed().which_intro
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_which_shield() -> c_int {
+    parsed().which_shield
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_smooth_scroll() -> c_int {
+    parsed().smooth_scroll
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_melee_scale() -> c_int {
+    parsed().melee_scale
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_resolution_width() -> c_int {
+    parsed().resolution_width
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_resolution_height() -> c_int {
+    parsed().resolution_height
+}
 
 /// Player control overrides from config file. Returns -1 if not set.
 pub extern "C" fn rust_options_player1_control() -> c_int {
@@ -981,19 +1093,25 @@ pub extern "C" fn rust_options_player2_control() -> c_int {
 
 // --- Float getters ---
 
-macro_rules! float_getter {
-    ($name:ident, $field:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> f32 {
-            parsed().$field
-        }
-    };
+#[no_mangle]
+pub extern "C" fn rust_options_gamma() -> f32 {
+    parsed().gamma
 }
 
-float_getter!(rust_options_gamma, gamma);
-float_getter!(rust_options_music_volume_scale, music_volume_scale);
-float_getter!(rust_options_sfx_volume_scale, sfx_volume_scale);
-float_getter!(rust_options_speech_volume_scale, speech_volume_scale);
+#[no_mangle]
+pub extern "C" fn rust_options_music_volume_scale() -> f32 {
+    parsed().music_volume_scale
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_sfx_volume_scale() -> f32 {
+    parsed().sfx_volume_scale
+}
+
+#[no_mangle]
+pub extern "C" fn rust_options_speech_volume_scale() -> f32 {
+    parsed().speech_volume_scale
+}
 
 // ===========================================================================
 //  Tests

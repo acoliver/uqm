@@ -97,7 +97,7 @@ unsafe fn arilou() {
 }
 unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
     (*element).state_flags |= CHANGING as u16;
-    let mut index = GetFrameIndex((*element).current.image.frame);
+    let mut index = GetFrameIndex((*element).current.image.frame.cast());
     if index == 0 {
         index += 16;
     } else if index < 16 {
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             );
         }
     } else {
-        let old = GetFrameIndex((*element).current.image.frame);
+        let old = GetFrameIndex((*element).current.image.frame.cast());
         let mut index = old.wrapping_sub(1);
         if old <= 16 {
             if index == 15 {

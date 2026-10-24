@@ -530,7 +530,8 @@ mod runtime {
                 / universe_y;
         }
         if get_game_state("ARILOU_SPACE_SIDE") <= 1 {
-            CurStarDescPtr = FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0);
+            CurStarDescPtr =
+                (FindStar(ptr::null_mut(), ptr::addr_of_mut!((*game).autopilot), 0, 0)).cast();
             if !CurStarDescPtr.is_null() {
                 set_game_state("USED_BROADCASTER", 0);
                 (*game).CurrentActivity &= !(IN_BATTLE as ACTIVITY);
@@ -660,7 +661,7 @@ mod runtime {
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
             >> STAR_TYPE_SHIFT) as BYTE;
         system.SunDesc[0].location = POINT { x: 0, y: 0 };
-        system.genFuncs = getGenerateFunctions((*star).Index);
+        system.genFuncs = (getGenerateFunctions((*star).Index)).cast();
         pSolarSysState = &mut system;
         ((*system.genFuncs).generatePlanets.unwrap())(&mut system);
         if let Some(cb) = recurse.systemFuncPre {
@@ -789,7 +790,7 @@ mod runtime {
     ) {
         let mut name = [0 as c_char; 256];
         let mut buffer = [0 as c_char; 40];
-        GetClusterName(star, name.as_mut_ptr());
+        GetClusterName((star).cast(), name.as_mut_ptr());
         libc::snprintf(
             buffer.as_mut_ptr(),
             buffer.len(),
@@ -1105,7 +1106,7 @@ mod runtime {
     ) {
         let context = arg;
         let mut name = [0 as c_char; 256];
-        GetClusterName(star, name.as_mut_ptr());
+        GetClusterName((star).cast(), name.as_mut_ptr());
         libc::fprintf(
             context.out,
             c"%s\t%d\t%d\n".as_ptr(),

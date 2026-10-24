@@ -19,15 +19,21 @@ mod live {
     use super::*;
     use crate::comm::locdata::CGlobData;
     use crate::comm::races::script::live::LiveScript;
-    use std::ffi::c_char;
+
+    use crate::comm::commglue_abi::runtime::NPCNumber;
+
+    use crate::ui::sis::SetStatusMessageMode;
+
+    use crate::ui::sis::DrawStatusMessage;
+
+    use crate::planets::cargo::live::DrawCargoStrings;
+
+    use crate::mainloop::input_abi::live::AnyButtonPress;
+
+    use crate::ui::sis::ClearSISRect;
+
     extern "C" {
         static mut GlobData: CGlobData;
-        fn NPCNumber(number: i32, fmt: *const c_char);
-        fn SetStatusMessageMode(mode: i32) -> i32;
-        fn DrawStatusMessage(message: *const c_char);
-        fn DrawCargoStrings(old: u8, new: u8);
-        fn AnyButtonPress(special: u32) -> u32;
-        fn ClearSISRect(flags: u16);
     }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
@@ -53,7 +59,7 @@ mod live {
             }
         }
         fn status_mode(&mut self, mode: i32) -> i32 {
-            unsafe { SetStatusMessageMode(mode) }
+            unsafe { SetStatusMessageMode(mode as u32) as i32 }
         }
         fn draw_status(&mut self) {
             unsafe {

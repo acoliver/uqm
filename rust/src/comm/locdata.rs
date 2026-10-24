@@ -19,22 +19,10 @@ pub static mut COMM_DATA: CLocData = unsafe { std::mem::zeroed() };
 // ===========================================================================
 
 /// C `Color` struct: { BYTE r, g, b, a } — 4 bytes.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CColor {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-}
+pub use crate::graphics::native_abi::Color as CColor;
 
 /// C `POINT` struct: { COORD x, y } where COORD = SIZE = SWORD = i16.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CPoint {
-    pub x: i16,
-    pub y: i16,
-}
+pub use crate::graphics::native_abi::point as CPoint;
 
 /// C `STAMP` struct: a screen origin and an opaque `FRAME` pointer.
 #[repr(C)]
@@ -52,6 +40,21 @@ pub struct CRect {
     pub width: i16,
     pub height: i16,
 }
+
+const _: () = {
+    use crate::graphics::native_abi::{EXTENT, RECT};
+    assert!(std::mem::size_of::<CRect>() == std::mem::size_of::<RECT>());
+    assert!(std::mem::align_of::<CRect>() == std::mem::align_of::<RECT>());
+    assert!(std::mem::offset_of!(CRect, corner) == std::mem::offset_of!(RECT, corner));
+    assert!(
+        std::mem::offset_of!(CRect, width)
+            == std::mem::offset_of!(RECT, extent) + std::mem::offset_of!(EXTENT, width)
+    );
+    assert!(
+        std::mem::offset_of!(CRect, height)
+            == std::mem::offset_of!(RECT, extent) + std::mem::offset_of!(EXTENT, height)
+    );
+};
 
 /// C `SIS_STATE` struct (sis.h) — full repr(C) mirror.
 /// Layout verified via offsetof: total size 124 bytes.
@@ -208,7 +211,7 @@ assert_c_layout!(
 assert_c_layout!(
     VelocityDesc,
     global_state::VELOCITY_DESC {
-        travel_angle: TravelAngle,
+        travel_angle: travel_angle,
         vector: vector,
         fract: fract,
         error: error,
@@ -388,6 +391,7 @@ pub fn has_comm_data() -> bool {
 // Public API
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 /// Dispatch to the C-owned `init_race` switch and return the raw LOCDATA pointer.
 ///
 /// Returns null if the conversation ID is unrecognized.

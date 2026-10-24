@@ -1,14 +1,8 @@
 // Shared engine records used by the Rust runtime.
 
 pub use crate::math::{
-    RandomContext,
-    arctan as ARCTAN,
-    delete_context as RandomContext_Delete,
-    new_context as RandomContext_New,
-    random as TFB_Random,
-    seed_random as TFB_SeedRandom,
-    sinetab,
-    square_root,
+    arctan as ARCTAN, delete_context as RandomContext_Delete, new_context as RandomContext_New,
+    random as TFB_Random, seed_random as TFB_SeedRandom, sinetab, square_root, RandomContext,
 };
 
 #[repr(C)]
@@ -977,19 +971,19 @@ pub type PSWORDFUNC = ::std::option::Option<unsafe extern "C" fn() -> SWORD>;
 pub type PDWORDFUNC = ::std::option::Option<unsafe extern "C" fn() -> DWORD>;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
-pub use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::InitThreadSystem;
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::UnInitThreadSystem;
+pub use crate::time::counter_abi::GetTimeCounter;
 pub type ThreadFunction = ::std::option::Option<
     unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void) -> ::std::os::raw::c_int,
 >;
 pub type Thread = *mut ::std::os::raw::c_void;
-pub type Mutex = *mut ::std::os::raw::c_void;
+pub type Mutex = *mut crate::threading::RustMutex;
 pub type Semaphore = *mut ::std::os::raw::c_void;
-pub type RecursiveMutex = *mut ::std::os::raw::c_void;
-pub type CondVar = *mut ::std::os::raw::c_void;
+pub type RecursiveMutex = *mut crate::threading::RustMutex;
+pub type CondVar = *mut crate::threading::RustCondVar;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _threadLocal {
@@ -1003,11 +997,10 @@ pub const SYNC_CLASS_RESOURCE: _bindgen_ty_1 = 8;
 pub type _bindgen_ty_1 = ::std::os::raw::c_uint;
 pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-extern "C" {
-    pub fn TaskSwitch();
-}
+
 #[cfg(not(test))]
 pub use crate::threading::legacy_abi::ProcessThreadLifecycles;
+pub use crate::threading::legacy_abi::TaskSwitch;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct taskstruct {
@@ -1028,61 +1021,29 @@ pub use crate::memory::rust_mem_uninit;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type OBJ_SIZE = UWORD;
 pub type HLINK = QUEUE_HANDLE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct link {
-    pub pred: HLINK,
-    pub succ: HLINK,
-}
+pub use crate::ships::native::abi::link;
 pub type LINK = link;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct QUEUE {
-    pub head: HLINK,
-    pub tail: HLINK,
-    pub pq_tab: *mut BYTE,
-    pub free_list: HLINK,
-    pub object_size: COUNT,
-    pub num_objects: BYTE,
-}
-extern "C" {
-    pub fn AllocLink(pq: *mut QUEUE) -> HLINK;
-}
-extern "C" {
-    pub fn FreeLink(pq: *mut QUEUE, hLink: HLINK);
-}
-extern "C" {
-    pub fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn ReinitQueue(pq: *mut QUEUE);
-}
-extern "C" {
-    pub fn PutQueue(pq: *mut QUEUE, hLink: HLINK);
-}
-extern "C" {
-    pub fn InsertQueue(pq: *mut QUEUE, hLink: HLINK, hRefLink: HLINK);
-}
-extern "C" {
-    pub fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK);
-}
-extern "C" {
-    pub fn CountLinks(pq: *mut QUEUE) -> COUNT;
-}
+pub use crate::ships::native::abi::QUEUE;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CLOCK_STATE {
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub year_index: COUNT,
-    pub tick_count: SIZE,
-    pub day_in_ticks: SIZE,
-    pub event_q: QUEUE,
-}
+pub use crate::collections::queue::AllocLink;
+
+pub use crate::collections::queue::FreeLink;
+
+pub use crate::collections::queue::InitQueue;
+
+pub use crate::collections::queue::UninitQueue;
+
+pub use crate::collections::queue::ReinitQueue;
+
+pub use crate::collections::queue::PutQueue;
+
+pub use crate::collections::queue::InsertQueue;
+
+pub use crate::collections::queue::RemoveQueue;
+
+pub use crate::collections::queue::CountLinks;
+
+pub use crate::ships::native::abi::CLOCK_STATE;
 pub type HEVENT = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1098,54 +1059,35 @@ pub type EVENT = event;
 pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn ValidateEvent(
-        type_: EVENT_TYPE,
-        pmonth_index: *mut COUNT,
-        pday_index: *mut COUNT,
-        pyear_index: *mut COUNT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn AddEvent(
-        type_: EVENT_TYPE,
-        month_index: COUNT,
-        day_index: COUNT,
-        year_index: COUNT,
-        func_index: BYTE,
-    ) -> HEVENT;
-}
-extern "C" {
-    pub fn EventHandler(selector: BYTE);
-}
-extern "C" {
-    pub fn MoveGameClockDays(days: COUNT);
-}
-extern "C" {
-    pub fn LockGameClock();
-}
-extern "C" {
-    pub fn UnlockGameClock();
-}
-extern "C" {
-    pub fn GameClockRunning() -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::ValidateEvent;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::AddEvent;
+
+#[cfg(not(test))]
+pub use crate::navigation::events::live::EventHandler;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::MoveGameClockDays;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::LockGameClock;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::UnlockGameClock;
+
 pub use crate::graphics::native_abi::Color;
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::GameClockRunning;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_Handle {
     _unused: [u8; 0],
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_DirHandle {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_MountHandle {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::uio_DirHandle;
+pub use crate::graphics::native_abi::uio_MountHandle;
 pub const uio_MountLocation_uio_MOUNT_BOTTOM: uio_MountLocation = 0;
 pub const uio_MountLocation_uio_MOUNT_TOP: uio_MountLocation = 4;
 pub const uio_MountLocation_uio_MOUNT_BELOW: uio_MountLocation = 8;
@@ -1189,30 +1131,15 @@ pub struct match_RegexContext {
     _unused: [u8; 0],
 }
 pub type uio_FileSystemID = ::std::os::raw::c_int;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_Repository {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::uio_Repository;
 pub type FILE = libc::FILE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_Stream {
-    _unused: [u8; 0],
-}
-extern "C" {
-    pub fn uio_fopen(
-        dir: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        mode: *const ::std::os::raw::c_char,
-    ) -> *mut uio_Stream;
-}
-extern "C" {
-    pub fn uio_fclose(stream: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_Handle;
-}
+pub use crate::graphics::native_abi::uio_Stream;
+
+pub use crate::io::uio_bridge::uio_fopen;
+
+pub use crate::io::uio_bridge::uio_fclose;
+
+pub use crate::io::uio_bridge::uio_streamHandle;
 pub type uio_bool = bool;
 pub type uio_uint8 = ::std::os::raw::c_uchar;
 pub type uio_sint8 = ::std::os::raw::c_schar;
@@ -1221,14 +1148,7 @@ pub type uio_sint16 = ::std::os::raw::c_short;
 pub type uio_uint32 = ::std::os::raw::c_uint;
 pub type uio_sint32 = ::std::os::raw::c_int;
 pub type uio_uintptr = ::std::os::raw::c_ulong;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct uio_AutoMount {
-    pub pattern: *const ::std::os::raw::c_char,
-    pub matchType: match_MatchType,
-    pub fileSystemID: uio_FileSystemID,
-    pub mountFlags: ::std::os::raw::c_int,
-}
+pub use crate::graphics::native_abi::uio_AutoMount;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_DirList {
@@ -1236,24 +1156,13 @@ pub struct uio_DirList {
     pub numNames: ::std::os::raw::c_int,
 }
 pub use crate::io::uio_bridge::uio_init;
-extern "C" {
-    pub fn uio_fstat(handle: *mut uio_Handle, statBuf: *mut stat) -> ::std::os::raw::c_int;
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct resource_index_desc {
-    _unused: [u8; 0],
-}
+
+pub use crate::io::uio_bridge::uio_fstat;
+pub use crate::ships::native::abi::resource_index_desc;
 pub type RESOURCE_INDEX_DESC = resource_index_desc;
 pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
 pub type RESOURCE = *const ::std::os::raw::c_char;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union RESOURCE_DATA {
-    pub num: DWORD,
-    pub ptr: *mut ::std::os::raw::c_void,
-    pub str_: *const ::std::os::raw::c_char,
-}
+pub use crate::graphics::native_abi::RESOURCE_DATA;
 pub type ResourceLoadFun = ::std::option::Option<
     unsafe extern "C" fn(pathname: *const ::std::os::raw::c_char, resdata: *mut RESOURCE_DATA),
 >;
@@ -1269,113 +1178,64 @@ pub type ResourceStringFun = ::std::option::Option<
 pub type ResourceLoadFileFun = ::std::option::Option<
     unsafe extern "C" fn(fp: *mut uio_Stream, len: DWORD) -> *mut ::std::os::raw::c_void,
 >;
-extern "C" {
-    pub fn res_OpenResFile(
-        dir: *mut uio_DirHandle,
-        filename: *const ::std::os::raw::c_char,
-        mode: *const ::std::os::raw::c_char,
-    ) -> *mut uio_Stream;
-}
-extern "C" {
-    pub fn GetResFileChar(fp: *mut uio_Stream) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn PutResFileChar(ch: ::std::os::raw::c_char, fp: *mut uio_Stream)
-        -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn res_CloseResFile(fp: *mut uio_Stream) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DeleteResFile(
-        dir: *mut uio_DirHandle,
-        filename: *const ::std::os::raw::c_char,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetResourceType(res: RESOURCE) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn SaveResourceIndex(
-        dir: *mut uio_DirHandle,
-        rmpfile: *const ::std::os::raw::c_char,
-        root: *const ::std::os::raw::c_char,
-        strip_root: BOOLEAN,
-    );
-}
+
+pub use crate::resource::ffi_bridge::res_OpenResFile;
+
+pub use crate::resource::ffi_bridge::GetResFileChar;
+
+pub use crate::resource::ffi_bridge::PutResFileChar;
+
+pub use crate::resource::ffi_bridge::res_CloseResFile;
+
+pub use crate::resource::ffi_bridge::DeleteResFile;
+
+pub use crate::resource::ffi_bridge::res_GetResourceType;
+
+pub use crate::resource::ffi_bridge::SaveResourceIndex;
 pub type UniChar = uint32;
-pub use crate::strings::unicode::utf8_string_count as utf8StringCount;
-pub use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
-pub use crate::strings::unicode::skip_utf8_chars as skipUTF8Chars;
+pub use crate::graphics::native_abi::string_table_entry;
 pub use crate::strings::unicode::get_string_from_char as getStringFromChar;
+pub use crate::strings::unicode::skip_utf8_chars as skipUTF8Chars;
 pub use crate::strings::unicode::uni_char_is_print as UniChar_isPrint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table_entry {
-    _unused: [u8; 0],
-}
+pub use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
+pub use crate::strings::unicode::utf8_string_count as utf8StringCount;
 pub type STRING_TABLE_ENTRY_DESC = string_table_entry;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct string_table {
-    _unused: [u8; 0],
-}
+pub use crate::graphics::native_abi::string_table;
 pub type STRING_TABLE_DESC = string_table;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
-extern "C" {
-    pub fn LoadStringTableInstance(res: RESOURCE) -> STRING_TABLE;
-}
-extern "C" {
-    pub fn LoadStringTableFile(
-        dir: *mut uio_DirHandle,
-        fileName: *const ::std::os::raw::c_char,
-    ) -> STRING_TABLE;
-}
-extern "C" {
-    pub fn DestroyStringTable(StringTable: STRING_TABLE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn CaptureStringTable(StringTable: STRING_TABLE) -> STRING;
-}
-extern "C" {
-    pub fn ReleaseStringTable(String: STRING) -> STRING_TABLE;
-}
-extern "C" {
-    pub fn GetStringTableCount(String: STRING) -> COUNT;
-}
-extern "C" {
-    pub fn SetAbsStringTableIndex(String: STRING, StringTableIndex: COUNT) -> STRING;
-}
-extern "C" {
-    pub fn SetRelStringTableIndex(String: STRING, StringTableOffs: SIZE) -> STRING;
-}
-extern "C" {
-    pub fn GetStringLength(String: STRING) -> COUNT;
-}
-extern "C" {
-    pub fn GetStringAddress(String: STRING) -> STRINGPTR;
-}
+
+pub use crate::strings::sresins::LoadStringTableInstance;
+
+pub use crate::strings::sfileins::LoadStringTableFile;
+
+pub use crate::strings::string_table::DestroyStringTable;
+
+pub use crate::strings::string_table::CaptureStringTable;
+
+pub use crate::strings::string_table::ReleaseStringTable;
+
+pub use crate::strings::string_table::GetStringTableCount;
+
+pub use crate::strings::string_table::SetAbsStringTableIndex;
+
+pub use crate::strings::string_table::SetRelStringTableIndex;
+
+pub use crate::strings::string_table::GetStringLength;
+
+pub use crate::strings::string_table::GetStringAddress;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-pub use crate::resource::ffi_bridge::res_PutString;
-pub use crate::resource::ffi_bridge::res_PutInteger;
-pub use crate::resource::ffi_bridge::res_IsBoolean;
 pub use crate::resource::ffi_bridge::res_GetBoolean;
+pub use crate::resource::ffi_bridge::res_IsBoolean;
 pub use crate::resource::ffi_bridge::res_PutBoolean;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct context_desc {
-    _unused: [u8; 0],
-}
+pub use crate::resource::ffi_bridge::res_PutInteger;
+pub use crate::resource::ffi_bridge::res_PutString;
+pub use crate::ships::native::abi::context_desc;
 pub type CONTEXT_DESC = context_desc;
 pub type FRAME_DESC = frame_desc;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct font_desc {
-    _unused: [u8; 0],
-}
+pub use crate::ships::native::abi::font_desc;
 pub type FONT_DESC = font_desc;
 pub type DRAWABLE_DESC = drawable_desc;
 pub type CONTEXT = *mut CONTEXT_DESC;
@@ -1385,40 +1245,15 @@ pub type DRAWABLE = *mut DRAWABLE_DESC;
 pub type TIME_VALUE = UWORD;
 pub type COORD = SWORD;
 pub type CREATE_FLAGS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct extent {
-    pub width: COORD,
-    pub height: COORD,
-}
+pub use crate::graphics::native_abi::extent;
 pub type EXTENT = extent;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct point {
-    pub x: COORD,
-    pub y: COORD,
-}
+pub use crate::graphics::native_abi::point;
 pub type POINT = point;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct stamp {
-    pub origin: POINT,
-    pub frame: FRAME,
-}
+pub use crate::graphics::native_abi::stamp;
 pub type STAMP = stamp;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct rect {
-    pub corner: POINT,
-    pub extent: EXTENT,
-}
+pub use crate::graphics::native_abi::rect;
 pub type RECT = rect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct line {
-    pub first: POINT,
-    pub second: POINT,
-}
+pub use crate::graphics::native_abi::line;
 pub type LINE = line;
 pub const TEXT_ALIGN_ALIGN_LEFT: TEXT_ALIGN = 0;
 pub const TEXT_ALIGN_ALIGN_CENTER: TEXT_ALIGN = 1;
@@ -1428,14 +1263,7 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct text {
-    pub baseline: POINT,
-    pub pStr: *const UNICODE,
-    pub align: TEXT_ALIGN,
-    pub CharCount: COUNT,
-}
+pub use crate::graphics::native_abi::text;
 pub type TEXT = text;
 pub type COLORMAP_REF = STRING_TABLE;
 pub type COLORMAP = STRING;
@@ -1450,32 +1278,11 @@ pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
 pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union PRIM_DESC {
-    pub Point: POINT,
-    pub Stamp: STAMP,
-    pub Line: LINE,
-    pub Text: TEXT,
-    pub Rect: RECT,
-}
+pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PRIMITIVE {
-    pub Links: PRIM_LINKS,
-    pub Type: GRAPHICS_PRIM,
-    pub color: Color,
-    pub Object: PRIM_DESC,
-}
+pub use crate::graphics::native_abi::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct INTERSECT_CONTROL {
-    pub last_time_val: TIME_VALUE,
-    pub EndPoint: POINT,
-    pub IntersectStamp: STAMP,
-}
+pub use crate::ships::native::abi::INTERSECT_CONTROL;
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
 pub const ScreenFadeType_FadeAllToWhite: ScreenFadeType = 250;
@@ -1490,228 +1297,152 @@ pub const DrawKind_DRAW_ADDITIVE: DrawKind = 1;
 pub const DrawKind_DRAW_ALPHA: DrawKind = 2;
 pub const DrawKind_DRAW_DEFAULT: DrawKind = 0;
 pub type DrawKind = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct DrawMode {
-    pub kind: BYTE,
-    pub factor: SWORD,
-}
-extern "C" {
-    pub fn SetContext(Context: CONTEXT) -> CONTEXT;
-}
-extern "C" {
-    pub fn SetContextForeGroundColor(Color: Color) -> Color;
-}
-extern "C" {
-    pub fn SetContextBackGroundColor(Color: Color) -> Color;
-}
-extern "C" {
-    pub fn SetContextFGFrame(Frame: FRAME) -> FRAME;
-}
-extern "C" {
-    pub fn GetContextFGFrame() -> FRAME;
-}
-extern "C" {
-    pub fn SetContextClipRect(pRect: *mut RECT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetContextClipRect(pRect: *mut RECT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn SetContextOrigin(orgOffset: POINT) -> POINT;
-}
-extern "C" {
-    pub fn SetContextDrawMode(arg1: DrawMode) -> DrawMode;
-}
-extern "C" {
-    pub fn CopyContextRect(area: *const RECT) -> DRAWABLE;
-}
-extern "C" {
-    pub fn DrawStamp(pStamp: *mut STAMP);
-}
-extern "C" {
-    pub fn DrawFilledStamp(pStamp: *mut STAMP);
-}
-extern "C" {
-    pub fn DrawPoint(pPoint: *mut POINT);
-}
-extern "C" {
-    pub fn DrawRectangle(pRect: *mut RECT);
-}
-extern "C" {
-    pub fn DrawFilledRectangle(pRect: *mut RECT);
-}
-extern "C" {
-    pub fn DrawLine(pLine: *mut LINE);
-}
-extern "C" {
-    pub fn font_DrawText(pText: *mut TEXT);
-}
-extern "C" {
-    pub fn font_DrawTracedText(pText: *mut TEXT, text: Color, trace: Color);
-}
+pub use crate::graphics::native_abi::DrawMode;
+
+pub use crate::graphics::context_abi::SetContext;
+
+pub use crate::graphics::context_abi::SetContextForeGroundColor;
+
+pub use crate::graphics::context_abi::SetContextBackGroundColor;
+
+pub use crate::graphics::drawable_abi::SetContextFGFrame;
+
+pub use crate::graphics::drawable_abi::GetContextFGFrame;
+
+pub use crate::graphics::context_abi::SetContextClipRect;
+
+pub use crate::graphics::context_abi::GetContextClipRect;
+
+pub use crate::graphics::context_abi::SetContextOrigin;
+
+pub use crate::graphics::context_abi::SetContextDrawMode;
+
+pub use crate::graphics::context_abi::CopyContextRect;
+
+pub use crate::graphics::frame_abi::DrawStamp;
+
+pub use crate::graphics::frame_abi::DrawFilledStamp;
+
+pub use crate::graphics::frame_abi::DrawPoint;
+
+pub use crate::graphics::frame_abi::DrawRectangle;
+
+pub use crate::graphics::frame_abi::DrawFilledRectangle;
+
+pub use crate::graphics::frame_abi::DrawLine;
+
+pub use crate::graphics::font_abi::font_DrawText;
+
+pub use crate::graphics::font_abi::font_DrawTracedText;
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, FlushGraphics, UnbatchGraphics};
-extern "C" {
-    pub fn ClearDrawable();
-}
-extern "C" {
-    pub fn CreateContextAux(
-        #[cfg(feature = "debug-process")] name: *const ::std::os::raw::c_char,
-    ) -> CONTEXT;
-}
-extern "C" {
-    pub fn DestroyContext(ContextRef: CONTEXT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn CreateDrawable(
-        CreateFlags: CREATE_FLAGS,
-        width: SIZE,
-        height: SIZE,
-        num_frames: COUNT,
-    ) -> DRAWABLE;
-}
-extern "C" {
-    pub fn DestroyDrawable(Drawable: DRAWABLE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetFrameRect(Frame: FRAME, pRect: *mut RECT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetContextName(context: CONTEXT) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn GetFirstContext() -> CONTEXT;
-}
-extern "C" {
-    pub fn GetNextContext(context: CONTEXT) -> CONTEXT;
-}
-extern "C" {
-    pub fn SetFrameHot(Frame: FRAME, HotSpot: HOT_SPOT) -> HOT_SPOT;
-}
-extern "C" {
-    pub fn GetFrameHot(Frame: FRAME) -> HOT_SPOT;
-}
-extern "C" {
-    pub fn LoadGraphicFile(pStr: *const ::std::os::raw::c_char) -> DRAWABLE;
-}
-extern "C" {
-    pub fn LoadFontFile(pStr: *const ::std::os::raw::c_char) -> FONT;
-}
-extern "C" {
-    pub fn LoadGraphicInstance(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn LoadDisplayPixmap(area: *const RECT, frame: FRAME) -> DRAWABLE;
-}
-extern "C" {
-    pub fn SetContextFontEffect(EffectFrame: FRAME) -> FRAME;
-}
-extern "C" {
-    pub fn SetContextFont(Font: FONT) -> FONT;
-}
-extern "C" {
-    pub fn DestroyFont(FontRef: FONT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TextRect(pText: *mut TEXT, pRect: *mut RECT, pdelta: *mut BYTE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetContextFontLeading(pheight: *mut SIZE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetFrameCount(Frame: FRAME) -> COUNT;
-}
-extern "C" {
-    pub fn GetFrameIndex(Frame: FRAME) -> COUNT;
-}
-extern "C" {
-    pub fn SetAbsFrameIndex(Frame: FRAME, FrameIndex: COUNT) -> FRAME;
-}
-extern "C" {
-    pub fn SetRelFrameIndex(Frame: FRAME, FrameOffs: SIZE) -> FRAME;
-}
-extern "C" {
-    pub fn IncFrameIndex(Frame: FRAME) -> FRAME;
-}
-extern "C" {
-    pub fn DecFrameIndex(Frame: FRAME) -> FRAME;
-}
-extern "C" {
-    pub fn CloneFrame(Frame: FRAME) -> DRAWABLE;
-}
-extern "C" {
-    pub fn RotateFrame(Frame: FRAME, angle_deg: ::std::os::raw::c_int) -> DRAWABLE;
-}
-extern "C" {
-    pub fn SetFrameTransparentColor(arg1: FRAME, arg2: Color);
-}
-extern "C" {
-    pub fn CaptureDrawable(Drawable: DRAWABLE) -> FRAME;
-}
-extern "C" {
-    pub fn ReleaseDrawable(Frame: FRAME) -> DRAWABLE;
-}
-extern "C" {
-    pub fn SetColorMap(ColorMapPtr: COLORMAPPTR) -> BOOLEAN;
-}
-extern "C" {
-    pub fn FadeScreen(fadeType: ScreenFadeType, TimeInterval: SIZE) -> DWORD;
-}
-extern "C" {
-    pub fn FlushColorXForms();
-}
-extern "C" {
-    pub fn GetColorMapAddress(arg1: COLORMAP) -> COLORMAPPTR;
-}
-extern "C" {
-    pub fn SetSystemRect(pRect: *const RECT);
-}
-extern "C" {
-    pub fn ClearSystemRect();
-}
+
+pub use crate::graphics::frame_abi::ClearDrawable;
+
+pub use crate::graphics::context_abi::CreateContextAux;
+
+pub use crate::graphics::context_abi::DestroyContext;
+
+pub use crate::graphics::drawable_abi::CreateDrawable;
+
+pub use crate::graphics::drawable_abi::DestroyDrawable;
+
+pub use crate::graphics::drawable_abi::GetFrameRect;
+
+#[cfg(feature = "debug-process")]
+pub use crate::graphics::context_abi::GetContextName;
+
+#[cfg(feature = "debug-process")]
+pub use crate::graphics::context_abi::GetFirstContext;
+
+#[cfg(feature = "debug-process")]
+pub use crate::graphics::context_abi::GetNextContext;
+
+pub use crate::graphics::drawable_abi::SetFrameHot;
+
+pub use crate::graphics::drawable_abi::GetFrameHot;
+
+pub use crate::graphics::filegfx::LoadGraphicFile;
+
+pub use crate::graphics::filegfx::LoadFontFile;
+
+pub use crate::graphics::resgfx::LoadGraphicInstance;
+
+pub use crate::graphics::loaddisp::LoadDisplayPixmap;
+
+pub use crate::graphics::context_abi::SetContextFontEffect;
+
+pub use crate::graphics::font_abi::SetContextFont;
+
+pub use crate::graphics::font_abi::DestroyFont;
+
+pub use crate::graphics::font_abi::TextRect;
+
+pub use crate::graphics::font_abi::GetContextFontLeading;
+
+pub use crate::graphics::pixmap_abi::GetFrameCount;
+
+pub use crate::graphics::pixmap_abi::GetFrameIndex;
+
+pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+pub use crate::graphics::pixmap_abi::SetRelFrameIndex;
+
+pub use crate::graphics::pixmap_abi::IncFrameIndex;
+
+pub use crate::graphics::pixmap_abi::DecFrameIndex;
+
+pub use crate::graphics::drawable_abi::CloneFrame;
+
+pub use crate::graphics::drawable_abi::RotateFrame;
+
+pub use crate::graphics::drawable_abi::SetFrameTransparentColor;
+
+pub use crate::graphics::pixmap_abi::CaptureDrawable;
+
+pub use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+pub use crate::graphics::cmap_abi::SetColorMap;
+
+pub use crate::graphics::cmap_abi::FadeScreen;
+
+pub use crate::graphics::cmap_abi::FlushColorXForms;
+
+pub use crate::graphics::cmap_abi::GetColorMapAddress;
+
+pub use crate::graphics::sdl::lifecycle_abi::SetSystemRect;
+
+pub use crate::graphics::sdl::lifecycle_abi::ClearSystemRect;
 pub type SOUND_REF = STRING_TABLE;
 pub type SOUND = STRING;
 pub type SOUNDPTR = *mut ::std::os::raw::c_void;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct soundposition {
-    pub positional: BOOLEAN,
-    pub x: ::std::os::raw::c_int,
-    pub y: ::std::os::raw::c_int,
-}
+pub use crate::ships::native::abi::soundposition;
 pub type SoundPosition = soundposition;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_soundsample {
-    _unused: [u8; 0],
-}
+pub use crate::ships::native::abi::tfb_soundsample;
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-extern "C" {
-    pub fn LoadMusicFile(pStr: *const ::std::os::raw::c_char) -> MUSIC_REF;
+
+pub use crate::sound::heart_ffi::LoadMusicFile;
+
+pub use crate::sound::resource_types::LoadMusicInstance;
+pub unsafe fn DestroySound(sound: SOUND_REF) {
+    crate::sound::heart_ffi::destroy_sound(sound.cast());
 }
-extern "C" {
-    pub fn LoadMusicInstance(res: RESOURCE) -> MUSIC_REF;
+pub unsafe fn DestroyMusic(music: MUSIC_REF) {
+    crate::sound::heart_ffi::destroy_music(music.cast());
 }
-pub unsafe fn DestroySound(sound: SOUND_REF) { crate::sound::heart_ffi::destroy_sound(sound.cast()); }
-pub unsafe fn DestroyMusic(music: MUSIC_REF) { crate::sound::heart_ffi::destroy_music(music.cast()); }
-extern "C" {
-    pub fn PLRPlaySong(MusicRef: MUSIC_REF, Continuous: BOOLEAN, Priority: BYTE);
-}
-extern "C" {
-    pub fn PLRStop(MusicRef: MUSIC_REF);
-}
-extern "C" {
-    pub fn PLRPause(MusicRef: MUSIC_REF);
-}
-extern "C" {
-    pub fn PLRResume(MusicRef: MUSIC_REF);
-}
-pub use crate::sound::heart_ffi::{set_music_volume as SetMusicVolume};
-pub use crate::sound::heart_ffi::{set_channel_volume as SetChannelVolume};
-pub use crate::sound::heart_ffi::{stop_sound as StopSound};
-pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
-pub use crate::sound::heart_ffi::{fade_music as FadeMusic};
+
+pub use crate::sound::heart_ffi::PLRPlaySong;
+
+pub use crate::sound::heart_ffi::PLRStop;
+
+pub use crate::sound::heart_ffi::PLRPause;
+
+pub use crate::sound::heart_ffi::fade_music as FadeMusic;
+pub use crate::sound::heart_ffi::set_channel_volume as SetChannelVolume;
+pub use crate::sound::heart_ffi::set_music_volume as SetMusicVolume;
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
+pub use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+pub use crate::sound::heart_ffi::PLRResume;
 pub const COMMON: _bindgen_ty_2 = 0;
 pub const CORROSIVE: _bindgen_ty_2 = 1;
 pub const BASE_METAL: _bindgen_ty_2 = 2;
@@ -1888,25 +1619,7 @@ pub const BOMB_MODULE_4: _bindgen_ty_5 = 18;
 pub const BOMB_MODULE_5: _bindgen_ty_5 = 19;
 pub const NUM_MODULES: _bindgen_ty_5 = 20;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SIS_STATE {
-    pub log_x: SDWORD,
-    pub log_y: SDWORD,
-    pub ResUnits: DWORD,
-    pub FuelOnBoard: DWORD,
-    pub CrewEnlisted: COUNT,
-    pub TotalElementMass: COUNT,
-    pub TotalBioMass: COUNT,
-    pub ModuleSlots: [BYTE; 16usize],
-    pub DriveSlots: [BYTE; 11usize],
-    pub JetSlots: [BYTE; 8usize],
-    pub NumLanders: BYTE,
-    pub ElementAmounts: [COUNT; 8usize],
-    pub ShipName: [UNICODE; 16usize],
-    pub CommanderName: [UNICODE; 16usize],
-    pub PlanetName: [UNICODE; 16usize],
-}
+pub use crate::ships::native::abi::SIS_STATE;
 #[cfg(not(test))]
 pub use crate::ui::sis::RepairSISBorder;
 #[cfg(test)]
@@ -1925,14 +1638,14 @@ pub use crate::ui::border::DrawSISFrame;
 extern "C" {
     pub fn DrawSISFrame();
 }
-extern "C" {
-    pub fn ClearSISRect(ClearFlags: BYTE);
-}
-extern "C" {
-    pub fn SetFlashRect(pRect: *const RECT);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::sis::ClearSISRect;
+
 #[cfg(not(test))]
 pub use crate::ui::sis::PreUpdateFlashRect;
+#[cfg(not(test))]
+pub use crate::ui::sis::SetFlashRect;
 #[cfg(test)]
 extern "C" {
     pub fn PreUpdateFlashRect();
@@ -1955,212 +1668,122 @@ pub use crate::ui::sis::ContinueFlash;
 extern "C" {
     pub fn ContinueFlash();
 }
-extern "C" {
-    pub fn DrawHyperCoords(puniverse: POINT);
-}
-extern "C" {
-    pub fn DrawSISTitle(pStr: *mut UNICODE);
-}
-extern "C" {
-    pub fn DrawSISMessageEx(
-        pStr: *const UNICODE,
-        CurPos: SIZE,
-        ExPos: SIZE,
-        flags: COUNT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DrawSISMessage(pStr: *const UNICODE);
-}
-extern "C" {
-    pub fn DateToString(
-        buf: *mut ::std::os::raw::c_char,
-        bufLen: usize,
-        month_index: BYTE,
-        day_index: BYTE,
-        year_index: COUNT,
-    );
-}
-extern "C" {
-    pub fn GetStatusMessageRect(r: *mut RECT);
-}
-extern "C" {
-    pub fn DrawStatusMessage(pStr: *const UNICODE);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawHyperCoords;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawSISTitle;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawSISMessageEx;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawSISMessage;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DateToString;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::GetStatusMessageRect;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawStatusMessage;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
 pub const StatMsgMode_SMM_RES_UNITS: StatMsgMode = 2;
 pub const StatMsgMode_SMM_CREDITS: StatMsgMode = 3;
 pub const StatMsgMode_SMM_DEFAULT: StatMsgMode = 1;
 pub type StatMsgMode = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn SetStatusMessageMode(arg1: StatMsgMode) -> StatMsgMode;
-}
+
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawLanders;
+#[cfg(not(test))]
+pub use crate::ui::sis::SetStatusMessageMode;
 #[cfg(test)]
 extern "C" {
     pub fn DrawLanders();
 }
-extern "C" {
-    pub fn DrawStorageBays(Refresh: BOOLEAN);
-}
-extern "C" {
-    pub fn GetGaugeRect(pRect: *mut RECT, IsCrewRect: BOOLEAN);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawStorageBays;
+
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawFlagshipStats;
+#[cfg(not(test))]
+pub use crate::ui::sis::GetGaugeRect;
 #[cfg(test)]
 extern "C" {
     pub fn DrawFlagshipStats();
 }
-extern "C" {
-    pub fn DrawAutoPilotMessage(Reset: BOOLEAN);
-}
-extern "C" {
-    pub fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn GetCrewCount() -> COUNT;
-}
-extern "C" {
-    pub fn GetModuleCrewCapacity(moduleType: BYTE) -> COUNT;
-}
-extern "C" {
-    pub fn GetCrewPodCapacity() -> COUNT;
-}
-extern "C" {
-    pub fn GetCPodCapacity(ppt: *mut POINT) -> COUNT;
-}
-extern "C" {
-    pub fn GetModuleStorageCapacity(moduleType: BYTE) -> COUNT;
-}
-extern "C" {
-    pub fn GetStorageBayCapacity() -> COUNT;
-}
-extern "C" {
-    pub fn GetSBayCapacity(ppt: *mut POINT) -> COUNT;
-}
-extern "C" {
-    pub fn GetModuleFuelCapacity(moduleType: BYTE) -> DWORD;
-}
-extern "C" {
-    pub fn GetFuelTankCapacity() -> DWORD;
-}
-extern "C" {
-    pub fn GetFTankCapacity(ppt: *mut POINT) -> DWORD;
-}
-extern "C" {
-    pub fn CountSISPieces(piece_type: BYTE) -> COUNT;
-}
-extern "C" {
-    pub fn DrawFlagshipName(InStatusArea: BOOLEAN);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawAutoPilotMessage;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DeltaSISGauges;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetCrewCount;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetModuleCrewCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetCrewPodCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetCPodCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetModuleStorageCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetStorageBayCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetSBayCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetModuleFuelCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetFuelTankCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::GetFTankCapacity;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::capacity::CountSISPieces;
+
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawCaptainsName;
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawFlagshipName;
 #[cfg(test)]
 extern "C" {
     pub fn DrawCaptainsName();
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct velocity_desc {
-    pub TravelAngle: COUNT,
-    pub vector: EXTENT,
-    pub fract: EXTENT,
-    pub error: EXTENT,
-    pub incr: EXTENT,
-}
+pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
-extern "C" {
-    pub fn GetCurrentVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-    );
-}
-extern "C" {
-    pub fn GetNextVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-        num_frames: COUNT,
-    );
-}
-extern "C" {
-    pub fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ANIMATION_DESC {
-    pub StartIndex: COUNT,
-    pub NumFrames: BYTE,
-    pub AnimFlags: BYTE,
-    pub BaseFrameRate: COUNT,
-    pub RandomFrameRate: COUNT,
-    pub BaseRestartRate: COUNT,
-    pub RandomRestartRate: COUNT,
-    pub BlockMask: DWORD,
-}
+
+pub use crate::battle::velocity::GetCurrentVelocityComponents;
+
+pub use crate::battle::velocity::GetNextVelocityComponents;
+
+pub use crate::battle::velocity::SetVelocityComponents;
+pub use crate::ships::native::abi::ANIMATION_DESC;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SEQUENCE {
     _unused: [u8; 0],
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SPEECH_DIGITNAME {
-    pub Divider: ::std::os::raw::c_int,
-    pub MaxRemainder: ::std::os::raw::c_int,
-    pub StrIndex: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SPEECH_DIGIT {
-    pub Divider: ::std::os::raw::c_int,
-    pub Subtrahend: ::std::os::raw::c_int,
-    pub StrDigits: *mut COUNT,
-    pub Names: *mut SPEECH_DIGITNAME,
-    pub CommonNameIndex: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NUMBER_SPEECH_DESC {
-    pub NumDigits: COUNT,
-    pub Digits: [SPEECH_DIGIT; 7usize],
-}
+pub use crate::ships::native::abi::NUMBER_SPEECH_DESC;
+pub use crate::ships::native::abi::SPEECH_DIGIT;
+pub use crate::ships::native::abi::SPEECH_DIGITNAME;
 pub type NUMBER_SPEECH = *const NUMBER_SPEECH_DESC;
 pub type LDAS_FLAGS = DWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct LOCDATA {
-    pub init_encounter_func: ::std::option::Option<fn()>,
-    pub post_encounter_func: ::std::option::Option<fn()>,
-    pub uninit_encounter_func: ::std::option::Option<fn() -> COUNT>,
-    pub AlienFrameRes: RESOURCE,
-    pub AlienFontRes: RESOURCE,
-    pub AlienTextFColor: Color,
-    pub AlienTextBColor: Color,
-    pub AlienTextBaseline: POINT,
-    pub AlienTextWidth: COUNT,
-    pub AlienTextAlign: TEXT_ALIGN,
-    pub AlienTextValign: TEXT_VALIGN,
-    pub AlienColorMapRes: RESOURCE,
-    pub AlienSongRes: RESOURCE,
-    pub AlienAltSongRes: RESOURCE,
-    pub AlienSongFlags: LDAS_FLAGS,
-    pub ConversationPhrasesRes: RESOURCE,
-    pub NumAnimations: COUNT,
-    pub AlienAmbientArray: [ANIMATION_DESC; 20usize],
-    pub AlienTransitionDesc: ANIMATION_DESC,
-    pub AlienTalkDesc: ANIMATION_DESC,
-    pub AlienNumberSpeech: NUMBER_SPEECH,
-    pub AlienFrame: FRAME,
-    pub AlienFont: FONT,
-    pub AlienColorMap: COLORMAP,
-    pub AlienSong: MUSIC_REF,
-    pub ConversationPhrases: STRING,
-}
+pub use crate::ships::native::abi::LOCDATA;
 pub const PORTAL_SPAWNER_DEVICE: _bindgen_ty_6 = 0;
 pub const TALKING_PET_DEVICE: _bindgen_ty_6 = 1;
 pub const UTWIG_BOMB_DEVICE: _bindgen_ty_6 = 2;
@@ -3105,38 +2728,8 @@ pub const CHECK_RESTART: _bindgen_ty_8 = 8192;
 pub const CHECK_ABORT: _bindgen_ty_8 = 16384;
 pub type _bindgen_ty_8 = ::std::os::raw::c_uint;
 pub type ACTIVITY = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GAME_STATE {
-    pub glob_flags: BYTE,
-    pub CrewCost: BYTE,
-    pub FuelCost: BYTE,
-    pub ModuleCost: [BYTE; 20usize],
-    pub ElementWorth: [BYTE; 8usize],
-    pub DisplayArray: *mut PRIMITIVE,
-    pub CurrentActivity: ACTIVITY,
-    pub GameClock: CLOCK_STATE,
-    pub autopilot: POINT,
-    pub ip_location: POINT,
-    pub ShipStamp: STAMP,
-    pub ShipFacing: UWORD,
-    pub ip_planet: BYTE,
-    pub in_orbit: BYTE,
-    pub velocity: VELOCITY_DESC,
-    pub BattleGroupRef: DWORD,
-    pub avail_race_q: QUEUE,
-    pub npc_built_ship_q: QUEUE,
-    pub ip_group_q: QUEUE,
-    pub encounter_q: QUEUE,
-    pub built_ship_q: QUEUE,
-    pub GameState: [BYTE; 155usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GLOBDATA {
-    pub SIS_state: SIS_STATE,
-    pub Game_state: GAME_STATE,
-}
+pub use crate::ships::native::abi::GAME_STATE;
+pub use crate::ships::native::abi::GLOBDATA;
 extern "C" {
     pub static mut GlobData: GLOBDATA;
 }
@@ -3157,21 +2750,12 @@ pub const DEFGRP_COLONY: _bindgen_ty_9 = 13;
 pub const DEFGRP_SAMATRA: _bindgen_ty_9 = 14;
 pub const NUM_DEFGRPS: _bindgen_ty_9 = 15;
 pub type _bindgen_ty_9 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn getGameState(
-        state: *mut BYTE,
-        startBit: ::std::os::raw::c_int,
-        endBit: ::std::os::raw::c_int,
-    ) -> BYTE;
-}
-extern "C" {
-    pub fn setGameState(
-        state: *mut BYTE,
-        startBit: ::std::os::raw::c_int,
-        endBit: ::std::os::raw::c_int,
-        val: BYTE,
-    );
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::getGameState;
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::setGameState;
 extern "C" {
     pub static mut RadarContext: CONTEXT;
 }
@@ -3181,51 +2765,51 @@ pub use crate::navigation::globals::FreeSC2Data;
 extern "C" {
     pub fn FreeSC2Data();
 }
-extern "C" {
-    pub fn LoadSC2Data() -> BOOLEAN;
-}
+
 #[cfg(not(test))]
 pub use crate::navigation::globals::InitGlobData;
+#[cfg(not(test))]
+pub use crate::navigation::globals::LoadSC2Data;
 #[cfg(test)]
 extern "C" {
     pub fn InitGlobData();
 }
-extern "C" {
-    pub fn inHQSpace() -> BOOLEAN;
-}
-extern "C" {
-    pub fn inHyperSpace() -> BOOLEAN;
-}
-extern "C" {
-    pub fn inQuasiSpace() -> BOOLEAN;
-}
-extern "C" {
-    pub fn InitGameStructures() -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::inHQSpace;
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::inHyperSpace;
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::inQuasiSpace;
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::InitGameStructures;
 #[cfg(not(test))]
 pub use crate::navigation::globals::UninitGameStructures;
 #[cfg(test)]
 extern "C" {
     pub fn UninitGameStructures();
 }
-extern "C" {
-    pub fn SplashScreen(DoProcessing: ::std::option::Option<unsafe extern "C" fn(TimeOut: DWORD)>);
-}
-extern "C" {
-    pub fn Introduction();
-}
-extern "C" {
-    pub fn Victory();
-}
-extern "C" {
-    pub fn DoShipSpin(index: COUNT, hMusic: MUSIC_REF);
-}
-extern "C" {
-    pub fn ShowPresentation(presentation: RESOURCE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn Credits(WithOuttakes: BOOLEAN);
-}
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::SplashScreen;
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::Introduction;
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::Victory;
+
+#[cfg(not(test))]
+pub use crate::front_end::fmv::runtime::DoShipSpin;
+
+#[cfg(not(test))]
+pub use crate::front_end::intro::runtime::ShowPresentation;
+
+#[cfg(not(test))]
+pub use crate::front_end::credits::runtime::Credits;
 pub const KEY_UP: _bindgen_ty_10 = 0;
 pub const KEY_DOWN: _bindgen_ty_10 = 1;
 pub const KEY_LEFT: _bindgen_ty_10 = 2;
@@ -3269,20 +2853,15 @@ pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_2: CONTROL_TEMPLATE = 4;
 pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_3: CONTROL_TEMPLATE = 5;
 pub const CONTROL_TEMPLATE_NUM_TEMPLATES: CONTROL_TEMPLATE = 6;
 pub type CONTROL_TEMPLATE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _controller_input_state {
-    pub key: [[::std::os::raw::c_int; 7usize]; 6usize],
-    pub menu: [::std::os::raw::c_int; 24usize],
-}
+pub use crate::ships::native::abi::_controller_input_state;
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
-extern "C" {
-    pub fn CurrentInputToBattleInput(player: COUNT) -> BATTLE_INPUT_STATE;
-}
-extern "C" {
-    pub fn PulsedInputToBattleInput(player: COUNT) -> BATTLE_INPUT_STATE;
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 extern "C" {
     pub static mut CurrentInputState: CONTROLLER_INPUT_STATE;
 }
@@ -3295,63 +2874,55 @@ extern "C" {
 extern "C" {
     pub static mut PlayerControls: [CONTROL_TEMPLATE; 0usize];
 }
-extern "C" {
-    pub fn UpdateInputState();
-}
-extern "C" {
-    pub fn FlushInput();
-}
-extern "C" {
-    pub fn SetMenuRepeatDelay(min: DWORD, max: DWORD, step: DWORD, gestalt: BOOLEAN);
-}
-extern "C" {
-    pub fn SetDefaultMenuRepeatDelay();
-}
-extern "C" {
-    pub fn ResetKeyRepeat();
-}
-extern "C" {
-    pub fn PauseGame() -> BOOLEAN;
-}
-extern "C" {
-    pub fn SleepGame();
-}
-extern "C" {
-    pub fn DoConfirmExit() -> BOOLEAN;
-}
-extern "C" {
-    pub fn ConfirmExit() -> BOOLEAN;
-}
-extern "C" {
-    pub fn WaitForAnyButton(
-        newButton: BOOLEAN,
-        duration: TimePeriod,
-        resetInput: BOOLEAN,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn WaitForAnyButtonUntil(
-        newButton: BOOLEAN,
-        timeOut: TimeCount,
-        resetInput: BOOLEAN,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn WaitForNoInput(duration: TimePeriod, resetInput: BOOLEAN) -> BOOLEAN;
-}
-extern "C" {
-    pub fn WaitForNoInputUntil(timeOut: TimeCount, resetInput: BOOLEAN) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DoPopupWindow(msg: *const ::std::os::raw::c_char);
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::UpdateInputState;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::FlushInput;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetMenuRepeatDelay;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::ResetKeyRepeat;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::PauseGame;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::SleepGame;
+
+#[cfg(not(test))]
+pub use crate::ui::confirm::DoConfirmExit;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::ConfirmExit;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::WaitForAnyButton;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::WaitForAnyButtonUntil;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::WaitForNoInput;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::WaitForNoInputUntil;
+
+#[cfg(not(test))]
+pub use crate::ui::confirm::DoPopupWindow;
 pub type InputFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-extern "C" {
-    pub fn SetInputCallback(arg1: InputFrameCallback) -> InputFrameCallback;
-}
-extern "C" {
-    pub fn DoInput(pInputState: *mut ::std::os::raw::c_void, resetInput: BOOLEAN);
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetInputCallback;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::DoInput;
 extern "C" {
     pub static mut GamePaused: BOOLEAN;
 }
@@ -3392,9 +2963,9 @@ pub struct textentry_state {
     pub CbParam: *mut ::std::os::raw::c_void,
 }
 pub type TEXTENTRY_STATE = textentry_state;
-extern "C" {
-    pub fn DoTextEntry(pTES: *mut TEXTENTRY_STATE) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::ui::getchar::DoTextEntry;
 pub const OPT_ENABLABLE_OPTVAL_DISABLED: OPT_ENABLABLE = 0;
 pub const OPT_ENABLABLE_OPTVAL_ENABLED: OPT_ENABLABLE = 1;
 pub type OPT_ENABLABLE = ::std::os::raw::c_uint;
@@ -3457,15 +3028,15 @@ pub struct globalopts_struct {
     pub gamma: ::std::os::raw::c_int,
 }
 pub type GLOBALOPTS = globalopts_struct;
-extern "C" {
-    pub fn SetupMenu();
-}
-extern "C" {
-    pub fn GetGlobalOptions(opts: *mut GLOBALOPTS);
-}
-extern "C" {
-    pub fn SetGlobalOptions(opts: *mut GLOBALOPTS);
-}
+
+#[cfg(not(test))]
+pub use crate::front_end::setupmenu::runtime::SetupMenu;
+
+#[cfg(not(test))]
+pub use crate::front_end::setupmenu::runtime::GetGlobalOptions;
+
+#[cfg(not(test))]
+pub use crate::front_end::setupmenu::runtime::SetGlobalOptions;
 
 pub const PlanetScanTypes_MINERAL_SCAN: PlanetScanTypes = 0;
 pub const PlanetScanTypes_ENERGY_SCAN: PlanetScanTypes = 1;
@@ -3553,23 +3124,7 @@ pub type PickupLifeFunction = ::std::option::Option<
         whichNode: COUNT,
     ) -> bool,
 >;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GenerateFunctions {
-    pub initNpcs: InitNpcsFunction,
-    pub reinitNpcs: ReinitNpcsFunction,
-    pub uninitNpcs: UninitNpcsFunction,
-    pub generatePlanets: GeneratePlanetsFunction,
-    pub generateMoons: GenerateMoonsFunction,
-    pub generateName: GenerateNameFunction,
-    pub generateOrbital: GenerateOrbitalFunction,
-    pub generateMinerals: GenerateMineralsFunction,
-    pub generateEnergy: GenerateEnergyFunction,
-    pub generateLife: GenerateLifeFunction,
-    pub pickupMinerals: PickupMineralsFunction,
-    pub pickupEnergy: PickupEnergyFunction,
-    pub pickupLife: PickupLifeFunction,
-}
+pub use crate::ships::native::abi::GenerateFunctions;
 pub const FlashState_FlashState_fadeIn: FlashState = 0;
 pub const FlashState_FlashState_on: FlashState = 1;
 pub const FlashState_FlashState_fadeOut: FlashState = 2;
@@ -3621,92 +3176,55 @@ pub struct FlashContext__bindgen_ty_1__bindgen_ty_1 {
 pub struct FlashContext__bindgen_ty_1__bindgen_ty_2 {
     pub frame: FRAME,
 }
-extern "C" {
-    pub fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext;
-}
-extern "C" {
-    pub fn Flash_createOverlay(
-        gfxContext: CONTEXT,
-        origin: *const POINT,
-        overlay: FRAME,
-    ) -> *mut FlashContext;
-}
-extern "C" {
-    pub fn Flash_setState(
-        context: *mut FlashContext,
-        state: FlashState,
-        timeSpentInState: TimeCount,
-    );
-}
-extern "C" {
-    pub fn Flash_start(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_terminate(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_pause(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_continue(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_process(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_setSpeed(
-        context: *mut FlashContext,
-        fadeInTime: TimeCount,
-        onTime: TimeCount,
-        fadeOutTime: TimeCount,
-        offTime: TimeCount,
-    );
-}
-extern "C" {
-    pub fn Flash_setMergeFactors(
-        context: *mut FlashContext,
-        startNumer: ::std::os::raw::c_int,
-        endNumer: ::std::os::raw::c_int,
-        denom: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Flash_setFrameTime(context: *mut FlashContext, frameTime: TimeCount);
-}
-extern "C" {
-    pub fn Flash_nextTime(context: *mut FlashContext) -> TimeCount;
-}
-extern "C" {
-    pub fn Flash_setRect(context: *mut FlashContext, rect: *const RECT);
-}
-extern "C" {
-    pub fn Flash_setOverlay(context: *mut FlashContext, origin: *const POINT, overlay: FRAME);
-}
-extern "C" {
-    pub fn Flash_preUpdate(context: *mut FlashContext);
-}
-extern "C" {
-    pub fn Flash_postUpdate(context: *mut FlashContext);
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe extern "C" fn(pMS: *mut menu_state) -> BOOLEAN>,
-    pub Initialized: SIZE,
-    pub CurState: BYTE,
-    pub CurFrame: FRAME,
-    pub CurString: STRING,
-    pub first_item: POINT,
-    pub delta_item: SIZE,
-    pub ModuleFrame: FRAME,
-    pub flash_rect0: RECT,
-    pub flash_rect1: RECT,
-    pub flash_frame0: FRAME,
-    pub flash_frame1: FRAME,
-    pub flashContext: *mut FlashContext,
-    pub hMusic: MUSIC_REF,
-    pub privData: *mut ::std::os::raw::c_void,
-}
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_createHighlight;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_createOverlay;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setState;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_start;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_terminate;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_pause;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_continue;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_process;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setSpeed;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setMergeFactors;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setFrameTime;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_nextTime;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setRect;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_setOverlay;
+
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_preUpdate;
+
+pub use crate::ships::native::abi::menu_state;
+#[cfg(not(test))]
+pub use crate::ui::flash::Flash_postUpdate;
 pub type MENU_STATE = menu_state;
 pub const PM_SCAN: _bindgen_ty_13 = 0;
 pub const PM_STARMAP: _bindgen_ty_13 = 1;
@@ -3763,12 +3281,12 @@ pub const PM_ALT_ASCAN: _bindgen_ty_13 = 51;
 pub const PM_ALT_DISPATCH: _bindgen_ty_13 = 52;
 pub const PM_ALT_EXIT_SCAN: _bindgen_ty_13 = 53;
 pub type _bindgen_ty_13 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn DoMenuChooser(pMS: *mut MENU_STATE, BaseState: BYTE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DrawMenuStateStrings(beg_index: BYTE, NewState: SWORD);
-}
+
+#[cfg(not(test))]
+pub use crate::ui::menu::DoMenuChooser;
+
+#[cfg(not(test))]
+pub use crate::ui::menu::DrawMenuStateStrings;
 extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
 }
@@ -3782,9 +3300,8 @@ pub struct LIFEFORM_DESC {
     pub Attributes: BYTE,
     pub ValueAndHitPoints: BYTE,
 }
-extern "C" {
-    pub fn rust_creature_bio_value(creature_type: BYTE) -> ::std::os::raw::c_int;
-}
+
+pub use crate::planet_side::creatures::rust_creature_bio_value;
 pub const SMALL_ROCKY_WORLD: _bindgen_ty_14 = 0;
 pub const LARGE_ROCKY_WORLD: _bindgen_ty_14 = 1;
 pub const GAS_GIANT: _bindgen_ty_14 = 2;
@@ -3890,47 +3407,9 @@ pub struct XLAT_DESC {
     pub level_tab: [SIZE; 3usize],
     pub xlat_tab: [BYTE; 256usize],
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ELEMENT_ENTRY {
-    pub ElementType: BYTE,
-    pub Density: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PlanetFrame {
-    pub Type: BYTE,
-    pub BaseTectonics: BYTE,
-    pub AtmoAndDensity: BYTE,
-    pub UsefulElements: [ELEMENT_ENTRY; 8usize],
-    pub CMapInstance: RESOURCE,
-    pub XlatTabInstance: RESOURCE,
-    pub num_faults: COUNT,
-    pub fault_depth: SIZE,
-    pub num_blemishes: COUNT,
-    pub base_elevation: SIZE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PLANET_INFO {
-    pub AxialTilt: SIZE,
-    pub Tectonics: UWORD,
-    pub Weather: UWORD,
-    pub PlanetDensity: UWORD,
-    pub PlanetRadius: UWORD,
-    pub SurfaceGravity: UWORD,
-    pub SurfaceTemperature: SIZE,
-    pub RotationPeriod: UWORD,
-    pub AtmoDensity: UWORD,
-    pub LifeChance: SIZE,
-    pub PlanetToSunDist: UWORD,
-    pub PlanDataPtr: *const PlanetFrame,
-    pub ScanSeed: [DWORD; 3usize],
-    pub ScanRetrieveMask: [DWORD; 3usize],
-    pub DiscoveryString: STRING,
-    pub LanderFont: FONT,
-    pub LanderFontEff: FRAME,
-}
+pub use crate::ships::native::abi::PlanetFrame;
+pub use crate::ships::native::abi::ELEMENT_ENTRY;
+pub use crate::ships::native::abi::PLANET_INFO;
 pub const GAS_DENSITY: _bindgen_ty_19 = 0;
 pub const LIGHT_DENSITY: _bindgen_ty_19 = 1;
 pub const LOW_DENSITY: _bindgen_ty_19 = 2;
@@ -3938,30 +3417,11 @@ pub const NORMAL_DENSITY: _bindgen_ty_19 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SYSTEM_INFO {
-    pub StarSize: BYTE,
-    pub StarIntensity: BYTE,
-    pub StarEnergy: UWORD,
-    pub PlanetInfo: PLANET_INFO,
-}
-extern "C" {
-    pub fn DoPlanetaryAnalysis(SysInfoPtr: *mut SYSTEM_INFO, pPlanetDesc: *mut PLANET_DESC);
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_desc {
-    pub rand_seed: DWORD,
-    pub data_index: BYTE,
-    pub NumPlanets: BYTE,
-    pub radius: SIZE,
-    pub location: POINT,
-    pub temp_color: Color,
-    pub NextIndex: COUNT,
-    pub image: STAMP,
-    pub pPrevDesc: *mut PLANET_DESC,
-}
+pub use crate::ships::native::abi::SYSTEM_INFO;
+
+#[cfg(not(test))]
+pub use crate::planets::ffi::do_planetary_analysis_c as DoPlanetaryAnalysis;
+pub use crate::ships::native::abi::planet_desc;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct star_desc {
@@ -3971,98 +3431,47 @@ pub struct star_desc {
     pub Prefix: BYTE,
     pub Postfix: BYTE,
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct node_info {
-    pub loc_pt: POINT,
-    pub density: COUNT,
-    pub type_: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_orbit {
-    pub TopoZoomFrame: FRAME,
-    pub lpTopoData: *mut SBYTE,
-    pub SphereFrame: FRAME,
-    pub ObjectFrame: FRAME,
-    pub TintFrame: FRAME,
-    pub TintColor: Color,
-    pub TopoColors: *mut Color,
-    pub ScratchArray: *mut Color,
-    pub WorkFrame: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct solarsys_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *mut solarsys_state) -> BOOLEAN>,
-    pub InIpFlight: BOOLEAN,
-    pub WaitIntersect: COUNT,
-    pub SunDesc: [PLANET_DESC; 1usize],
-    pub PlanetDesc: [PLANET_DESC; 16usize],
-    pub MoonDesc: [PLANET_DESC; 4usize],
-    pub pBaseDesc: *mut PLANET_DESC,
-    pub pOrbitalDesc: *mut PLANET_DESC,
-    pub FirstPlanetIndex: SIZE,
-    pub LastPlanetIndex: SIZE,
-    pub turn_counter: BYTE,
-    pub turn_wait: BYTE,
-    pub thrust_counter: BYTE,
-    pub max_ship_speed: BYTE,
-    pub XlatRef: STRING,
-    pub XlatPtr: *const ::std::os::raw::c_void,
-    pub OrbitalCMap: COLORMAP,
-    pub SysInfo: SYSTEM_INFO,
-    pub genFuncs: *const GenerateFunctions,
-    pub PlanetSideFrame: [FRAME; 6usize],
-    pub TopoFrame: FRAME,
-    pub Orbit: PLANET_ORBIT,
-    pub InOrbit: BOOLEAN,
-}
+pub use crate::ships::native::abi::node_info;
+pub use crate::ships::native::abi::planet_orbit;
+pub use crate::ships::native::abi::solarsys_state;
 extern "C" {
     pub static mut pSolarSysState: *mut SOLARSYS_STATE;
 }
 extern "C" {
     pub static mut SysGenRNG: *mut RandomContext;
 }
-extern "C" {
-    pub fn playerInSolarSystem() -> bool;
-}
-extern "C" {
-    pub fn playerInPlanetOrbit() -> bool;
-}
-extern "C" {
-    pub fn playerInInnerSystem() -> bool;
-}
-extern "C" {
-    pub fn planetIndex(solarSys: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> COUNT;
-}
-extern "C" {
-    pub fn matchWorld(
-        solarSys: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
-        planetI: BYTE,
-        moonI: BYTE,
-    ) -> bool;
-}
-extern "C" {
-    pub fn GetRandomSeedForStar(star: *const STAR_DESC) -> DWORD;
-}
-extern "C" {
-    pub fn locationToDisplay(pt: POINT, scaleRadius: SIZE) -> POINT;
-}
-extern "C" {
-    pub fn displayToLocation(pt: POINT, scaleRadius: SIZE) -> POINT;
-}
-extern "C" {
-    pub fn planetOuterLocation(planetI: COUNT) -> POINT;
-}
-extern "C" {
-    pub fn InitLander(LanderFlags: BYTE);
-}
-extern "C" {
-    pub fn SaveSolarSysLocation();
-}
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::playerInSolarSystem;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::playerInPlanetOrbit;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::playerInInnerSystem;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::planetIndex;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::matchWorld;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::GetRandomSeedForStar;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::locationToDisplay;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::displayToLocation;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::planetOuterLocation;
+
+pub use crate::planet_side::init_lander::InitLander;
+
+#[cfg(not(test))]
+pub use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 pub type HSTARSHIP = HLINK;
 pub type HELEMENT = HLINK;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
@@ -4070,18 +3479,8 @@ pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct state {
-    pub location: POINT,
-    pub image: state__bindgen_ty_1,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct state__bindgen_ty_1 {
-    pub frame: FRAME,
-    pub farray: *mut FRAME,
-}
+pub use crate::ships::native::abi::state;
+pub use crate::ships::native::abi::state__bindgen_ty_1;
 pub type STATE = state;
 pub type ELEMENT = element;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
@@ -4093,90 +3492,37 @@ pub type ElementCollisionFunc = ::std::option::Option<
         pPt1: *mut POINT,
     ),
 >;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct element {
-    pub pred: HELEMENT,
-    pub succ: HELEMENT,
-    pub preprocess_func: ElementProcessFunc,
-    pub postprocess_func: ElementProcessFunc,
-    pub collision_func: ElementCollisionFunc,
-    pub death_func: ElementProcessFunc,
-    pub playerNr: SIZE,
-    pub state_flags: ELEMENT_FLAGS,
-    pub __bindgen_anon_1: element__bindgen_ty_1,
-    pub __bindgen_anon_2: element__bindgen_ty_2,
-    pub __bindgen_anon_3: element__bindgen_ty_3,
-    pub __bindgen_anon_4: element__bindgen_ty_4,
-    pub __bindgen_anon_5: element__bindgen_ty_5,
-    pub colorCycleIndex: BYTE,
-    pub velocity: VELOCITY_DESC,
-    pub IntersectControl: INTERSECT_CONTROL,
-    pub PrimIndex: COUNT,
-    pub current: STATE,
-    pub next: STATE,
-    pub pParent: *mut ::std::os::raw::c_void,
-    pub hTarget: HELEMENT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_1 {
-    pub life_span: COUNT,
-    pub scan_node: COUNT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_2 {
-    pub crew_level: COUNT,
-    pub hit_points: COUNT,
-    pub facing: COUNT,
-    pub cycle: COUNT,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_3 {
-    pub mass_points: BYTE,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_4 {
-    pub turn_wait: BYTE,
-    pub sys_loc: BYTE,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union element__bindgen_ty_5 {
-    pub thrust_wait: BYTE,
-    pub blast_offset: BYTE,
-    pub next_turn: BYTE,
-}
+pub use crate::ships::native::abi::element;
+pub use crate::ships::native::abi::element__bindgen_ty_1;
+pub use crate::ships::native::abi::element__bindgen_ty_2;
+pub use crate::ships::native::abi::element__bindgen_ty_3;
+pub use crate::ships::native::abi::element__bindgen_ty_4;
+pub use crate::ships::native::abi::element__bindgen_ty_5;
 extern "C" {
     pub static mut disp_q: QUEUE;
 }
 extern "C" {
     pub static mut DisplayArray: [PRIMITIVE; 330usize];
 }
-extern "C" {
-    pub fn AllocElement() -> HELEMENT;
-}
-extern "C" {
-    pub fn RemoveElement(hLink: HLINK);
-}
-extern "C" {
-    pub fn spawn_planet();
-}
-extern "C" {
-    pub fn spawn_asteroid(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn InitGalaxy();
-}
-extern "C" {
-    pub fn CalculateGravity(ElementPtr: *mut ELEMENT) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::AllocElement;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::RemoveElement;
+
+#[cfg(not(test))]
+pub use crate::battle::world_elements::engine::spawn_planet;
+
+#[cfg(not(test))]
+pub use crate::battle::world_elements::engine::spawn_asteroid;
+
+pub use crate::battle::gravity::TimeSpaceMatterConflict;
+
+#[cfg(not(test))]
+pub use crate::battle::galaxy::engine::InitGalaxy;
+
+pub use crate::battle::gravity::CalculateGravity;
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -4210,30 +3556,14 @@ pub const SPECIES_ID_SA_MATRA_ID: SPECIES_ID = 27;
 pub const SPECIES_ID_UR_QUAN_PROBE_ID: SPECIES_ID = 28;
 pub const SPECIES_ID_NUM_SPECIES_ID: SPECIES_ID = 29;
 pub type SPECIES_ID = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct captain_stuff {
-    pub captain_rsc: RESOURCE,
-    pub background: FRAME,
-    pub turn: FRAME,
-    pub thrust: FRAME,
-    pub weapon: FRAME,
-    pub special: FRAME,
-}
+pub use crate::ships::native::abi::captain_stuff;
 pub type CAPTAIN_STUFF = captain_stuff;
 pub const MOVEMENT_STATE_PURSUE: MOVEMENT_STATE = 0;
 pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
 pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
 pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct EVALUATE_DESC {
-    pub ObjectPtr: *mut ELEMENT,
-    pub facing: COUNT,
-    pub which_turn: COUNT,
-    pub MoveState: MOVEMENT_STATE,
-}
+pub use crate::ships::native::abi::EVALUATE_DESC;
 pub type IntelligenceFunc = ::std::option::Option<
     unsafe extern "C" fn(
         ShipPtr: *mut ELEMENT,
@@ -4241,65 +3571,11 @@ pub type IntelligenceFunc = ::std::option::Option<
         ConcernCounter: COUNT,
     ),
 >;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct INTEL_STUFF {
-    pub ManeuverabilityIndex: COUNT,
-    pub WeaponRange: COUNT,
-    pub intelligence_func: IntelligenceFunc,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CHARACTERISTIC_STUFF {
-    pub max_thrust: COUNT,
-    pub thrust_increment: COUNT,
-    pub energy_regeneration: BYTE,
-    pub weapon_energy_cost: BYTE,
-    pub special_energy_cost: BYTE,
-    pub energy_wait: BYTE,
-    pub turn_wait: BYTE,
-    pub thrust_wait: BYTE,
-    pub weapon_wait: BYTE,
-    pub special_wait: BYTE,
-    pub ship_mass: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_INFO {
-    pub ship_flags: UWORD,
-    pub ship_cost: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub energy_level: BYTE,
-    pub max_energy: BYTE,
-    pub race_strings_rsc: RESOURCE,
-    pub icons_rsc: RESOURCE,
-    pub melee_icon_rsc: RESOURCE,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FLEET_STUFF {
-    pub strength: COUNT,
-    pub known_loc: POINT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct DATA_STUFF {
-    pub ship_rsc: [RESOURCE; 3usize],
-    pub weapon_rsc: [RESOURCE; 3usize],
-    pub special_rsc: [RESOURCE; 3usize],
-    pub captain_control: CAPTAIN_STUFF,
-    pub victory_ditty_rsc: RESOURCE,
-    pub ship_sounds_rsc: RESOURCE,
-    pub ship: [FRAME; 3usize],
-    pub weapon: [FRAME; 3usize],
-    pub special: [FRAME; 3usize],
-    pub victory_ditty: MUSIC_REF,
-    pub ship_sounds: SOUND,
-}
+pub use crate::ships::native::abi::CHARACTERISTIC_STUFF;
+pub use crate::ships::native::abi::DATA_STUFF;
+pub use crate::ships::native::abi::FLEET_STUFF;
+pub use crate::ships::native::abi::INTEL_STUFF;
+pub use crate::ships::native::abi::SHIP_INFO;
 pub type RACE_DESC = race_desc;
 pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
@@ -4307,99 +3583,13 @@ pub type INIT_WEAPON_FUNC = ::std::option::Option<
     unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT,
 >;
 pub type UNINIT_FUNC = ::std::option::Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
-#[repr(C)]
-#[repr(align(16))]
-#[derive(Debug, Copy, Clone)]
-pub struct race_desc {
-    pub ship_info: SHIP_INFO,
-    pub fleet: FLEET_STUFF,
-    pub __bindgen_padding_0: [u16; 5usize],
-    pub characteristics: CHARACTERISTIC_STUFF,
-    pub ship_data: DATA_STUFF,
-    pub cyborg_control: INTEL_STUFF,
-    pub uninit_func: UNINIT_FUNC,
-    pub preprocess_func: PREPROCESS_FUNC,
-    pub postprocess_func: POSTPROCESS_FUNC,
-    pub init_weapon_func: INIT_WEAPON_FUNC,
-    pub data: *mut ::std::os::raw::c_void,
-    pub CodeRef: *mut ::std::os::raw::c_void,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_BASE {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct STARSHIP {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-    pub RaceDescPtr: *mut RACE_DESC,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub ship_cost: BYTE,
-    pub index: COUNT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub weapon_counter: BYTE,
-    pub special_counter: BYTE,
-    pub energy_counter: BYTE,
-    pub ship_input_state: BYTE,
-    pub cur_status_flags: STATUS_FLAGS,
-    pub old_status_flags: STATUS_FLAGS,
-    pub hShip: HELEMENT,
-    pub ShipFacing: COUNT,
-    pub playerNr: SIZE,
-    pub control: BYTE,
-}
+pub use crate::ships::native::abi::race_desc;
+pub use crate::ships::native::abi::SHIP_BASE;
+pub use crate::ships::native::abi::STARSHIP;
 pub type HSHIPFRAG = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_FRAGMENT {
-    pub pred: HLINK,
-    pub succ: HLINK,
-    pub SpeciesID: SPECIES_ID,
-    pub captains_name_index: BYTE,
-    pub race_id: BYTE,
-    pub index: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub energy_level: BYTE,
-    pub max_energy: BYTE,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-}
+pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub type HFLEETINFO = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FLEET_INFO {
-    pub pred: HFLEETINFO,
-    pub succ: HFLEETINFO,
-    pub SpeciesID: SPECIES_ID,
-    pub allied_state: UWORD,
-    pub days_left: BYTE,
-    pub growth_fract: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub growth: BYTE,
-    pub max_energy: BYTE,
-    pub loc: POINT,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-    pub actual_strength: COUNT,
-    pub known_strength: COUNT,
-    pub known_loc: POINT,
-    pub growth_err_term: BYTE,
-    pub func_index: BYTE,
-    pub dest_loc: POINT,
-}
+pub use crate::ships::native::abi::FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_20 = 0;
 pub const GOOD_GUY: _bindgen_ty_20 = 1;
 pub const BAD_GUY: _bindgen_ty_20 = 2;
@@ -4432,106 +3622,106 @@ pub const SAMATRA_SHIP: _bindgen_ty_21 = 23;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_21 = 24;
 pub type _bindgen_ty_21 = ::std::os::raw::c_uint;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+pub use crate::front_end::uqmdebug::activateAllShips;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DEBUG_HOOK;
+pub use crate::front_end::uqmdebug::atmosphereString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::bodyColorString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::calculateBioValue;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::calculateMineralValue;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::clearEscorts;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::debugContexts;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::debugKeyPressed;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::debugKeyPressedSynchronous;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forwardToNextEvent;
+pub use crate::front_end::uqmdebug::densityString;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpEvents;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpEvent;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::eventName;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::equipShip;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::giveDevices;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::clearEscorts;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::showSpheres;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::activateAllShips;
+pub use crate::front_end::uqmdebug::depositQualityString;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::doInstantMove;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllStars;
+pub use crate::front_end::uqmdebug::dumpEvent;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllPlanets;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllMoons;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::UniverseRecurse;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpUniverse;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpUniverseToFile;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpSystem;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::bodyColorString;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::starTypeString;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::starPresenceString;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpPlanet;
+pub use crate::front_end::uqmdebug::dumpEvents;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::dumpMoon;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculateMineralValue;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generateMineralIndex;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculateBioValue;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generateBioIndex;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tallyResources;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tallyResourcesToFile;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forAllPlanetTypes;
+pub use crate::front_end::uqmdebug::dumpPlanet;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::dumpPlanetType;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::dumpPlanetTypes;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::planetTypeString;
+pub use crate::front_end::uqmdebug::dumpStrings;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::worldSizeString;
+pub use crate::front_end::uqmdebug::dumpSystem;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::worldGenAlgoString;
+pub use crate::front_end::uqmdebug::dumpUniverse;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tectonicsString;
+pub use crate::front_end::uqmdebug::dumpUniverseToFile;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::atmosphereString;
+pub use crate::front_end::uqmdebug::equipShip;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::densityString;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::depositQualityString;
+pub use crate::front_end::uqmdebug::eventName;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::findPlayerShip;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllMoons;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllPlanetTypes;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllPlanets;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forAllStars;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::forwardToNextEvent;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::generateBioIndex;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::generateMineralIndex;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::giveDevices;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::planetTypeString;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::resetCrewBattle;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::resetEnergyBattle;
 #[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::showSpheres;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::starPresenceString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::starTypeString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tallyResources;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tallyResourcesToFile;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::tectonicsString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::worldGenAlgoString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::worldSizeString;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::UniverseRecurse;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DEBUG_HOOK;
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+#[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::INSTANT_MOVE;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dumpStrings;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debugContexts;
-extern "C" {
-    pub fn MeleeConnectDialog(side: ::std::os::raw::c_int) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::front_end::cnctdlg::MeleeConnectDialog;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SUMMARY_DESC {
@@ -4552,19 +3742,15 @@ pub struct SUMMARY_DESC {
 extern "C" {
     pub static mut NextActivity: ACTIVITY;
 }
-extern "C" {
-    pub fn LoadGame(which_game: COUNT, summary_desc: *mut SUMMARY_DESC) -> BOOLEAN;
-}
-extern "C" {
-    pub fn SaveProblem();
-}
-extern "C" {
-    pub fn SaveGame(
-        which_game: COUNT,
-        summary_desc: *mut SUMMARY_DESC,
-        name: *const ::std::os::raw::c_char,
-    ) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::savegame::live::load::LoadGame;
+
+#[cfg(not(test))]
+pub use crate::savegame::problem::SaveProblem;
+
+#[cfg(not(test))]
+pub use crate::savegame::live::save::SaveGame;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CODE_REF {
@@ -4575,15 +3761,15 @@ pub type ENCOUNTER = encounter;
 pub type CallbackID = *mut ::std::os::raw::c_void;
 pub type CallbackArg = *mut ::std::os::raw::c_void;
 pub type CallbackFunction = ::std::option::Option<unsafe extern "C" fn(arg: CallbackArg)>;
-pub use crate::callback::ffi::Callback_init;
-pub use crate::callback::ffi::Callback_uninit;
 pub use crate::callback::ffi::Callback_add;
-pub use crate::callback::ffi::Callback_remove;
-pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_haveMore;
+pub use crate::callback::ffi::Callback_init;
+pub use crate::callback::ffi::Callback_process;
+pub use crate::callback::ffi::Callback_remove;
+pub use crate::callback::ffi::Callback_uninit;
 pub use crate::sound::heart_ffi::pause_track as PauseTrack;
-pub use crate::sound::heart_ffi::resume_track as ResumeTrack;
 pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
+pub use crate::sound::heart_ffi::resume_track as ResumeTrack;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_soundchunk {
@@ -4665,12 +3851,12 @@ pub struct encounter {
 pub const HAIL: _bindgen_ty_23 = 0;
 pub const ATTACK: _bindgen_ty_23 = 1;
 pub type _bindgen_ty_23 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn FleetIsInfinite(playerNr: COUNT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn UpdateShipFragCrew(arg1: *mut STARSHIP);
-}
+
+#[cfg(not(test))]
+pub use crate::battle::encount_native::engine::FleetIsInfinite;
+
+#[cfg(not(test))]
+pub use crate::battle::encount_native::engine::UpdateShipFragCrew;
 extern "C" {
     pub static mut EncounterRace: SIZE;
 }
@@ -4683,39 +3869,25 @@ extern "C" {
 extern "C" {
     pub static mut star_array: *mut STAR_DESC;
 }
-extern "C" {
-    pub fn FindStar(
-        pLastStar: *mut STAR_DESC,
-        puniverse: *mut POINT,
-        xbounds: SIZE,
-        ybounds: SIZE,
-    ) -> *mut STAR_DESC;
-}
-extern "C" {
-    pub fn GetClusterName(pSD: *const STAR_DESC, buf: *mut UNICODE);
-}
+
+pub use crate::planets::starmap::FindStar;
+
+#[cfg(not(test))]
+pub use crate::planets::starmap::naming::GetClusterName;
 pub type HMASTERSHIP = HLINK;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MASTER_SHIP_INFO {
-    pub pred: HMASTERSHIP,
-    pub succ: HMASTERSHIP,
-    pub SpeciesID: SPECIES_ID,
-    pub ShipInfo: SHIP_INFO,
-    pub Fleet: FLEET_STUFF,
-}
+pub use crate::ships::native::abi::MASTER_SHIP_INFO;
 extern "C" {
     pub static mut master_q: QUEUE;
 }
-extern "C" {
-    pub fn FindMasterShip(ship_ref: SPECIES_ID) -> HMASTERSHIP;
-}
-extern "C" {
-    pub fn FindMasterShipIndex(ship_ref: SPECIES_ID) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn GetShipMeleeIconsFromIndex(Index: ::std::os::raw::c_uint) -> FRAME;
-}
+
+#[cfg(not(test))]
+pub use crate::ships::master_native::engine::FindMasterShip;
+
+#[cfg(not(test))]
+pub use crate::ships::master_native::engine::FindMasterShipIndex;
+
+#[cfg(not(test))]
+pub use crate::ships::master_native::engine::GetShipMeleeIconsFromIndex;
 extern "C" {
     pub static mut Screen: FRAME;
 }
@@ -4765,51 +3937,51 @@ extern "C" {
     pub static mut PlayerControl: [BYTE; 0usize];
 }
 #[cfg(not(test))]
-pub use crate::game_init::kernel_abi::UninitPlayerInput;
+pub use crate::game_init::cleanup::FreeKernel;
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::UninitGameKernel;
 #[cfg(not(test))]
-pub use crate::game_init::cleanup::FreeKernel;
-#[cfg(not(test))]
 pub use crate::game_init::kernel_abi::uninitIO;
-extern "C" {
-    pub fn SetPlayerInputAll() -> bool;
-}
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::UninitPlayerInput;
+
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::SetPlayerInputAll;
 #[cfg(test)]
 extern "C" {
     pub fn ClearPlayerInputAll();
 }
-extern "C" {
-    pub fn LoadHyperspace() -> BOOLEAN;
-}
-extern "C" {
-    pub fn FreeHyperspace() -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::hyper_data::LoadHyperspace;
+
+#[cfg(not(test))]
+pub use crate::navigation::hyper_data::FreeHyperspace;
 #[cfg(not(test))]
 pub use crate::navigation::hyper_radar::SeedUniverse;
 #[cfg(test)]
 extern "C" {
     pub fn SeedUniverse();
 }
-extern "C" {
-    pub fn MoveSIS(pdx: *mut SIZE, pdy: *mut SIZE);
-}
+
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::FreeHyperData;
+#[cfg(not(test))]
+pub use crate::navigation::hyperspace::live::MoveSIS;
 #[cfg(test)]
 extern "C" {
     pub fn FreeHyperData();
 }
-extern "C" {
-    pub fn check_hyperspace_encounter();
-}
-extern "C" {
-    pub fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::hyperspace::live::check_hyperspace_encounter;
+
 #[cfg(not(test))]
 pub use crate::navigation::hyper_menu::HyperspaceMenu;
+#[cfg(not(test))]
+pub use crate::navigation::hyper_transition::hyper_transition;
 #[cfg(test)]
 extern "C" {
     pub fn HyperspaceMenu();
@@ -4820,67 +3992,63 @@ pub use crate::navigation::hyper_transition::SaveSisHyperState;
 extern "C" {
     pub fn SaveSisHyperState();
 }
-extern "C" {
-    pub fn Build(pQueue: *mut QUEUE, SpeciesID: SPECIES_ID) -> HLINK;
-}
-extern "C" {
-    pub fn CloneShipFragment(
-        shipIndex: COUNT,
-        pDstQueue: *mut QUEUE,
-        crew_level: COUNT,
-    ) -> HSHIPFRAG;
-}
-extern "C" {
-    pub fn GetStarShipFromIndex(pShipQ: *mut QUEUE, Index: COUNT) -> HLINK;
-}
-extern "C" {
-    pub fn GetEscortByStarShipIndex(index: COUNT) -> HSHIPFRAG;
-}
-extern "C" {
-    pub fn GetIndexFromStarShip(pShipQ: *mut QUEUE, hStarShip: HLINK) -> COUNT;
-}
-extern "C" {
-    pub fn AddEscortShips(race: COUNT, count: SIZE) -> COUNT;
-}
-extern "C" {
-    pub fn SetRaceAllied(race: COUNT, flag: BOOLEAN) -> COUNT;
-}
-extern "C" {
-    pub fn StartSphereTracking(race: COUNT) -> COUNT;
-}
-extern "C" {
-    pub fn CheckAlliance(race: COUNT) -> COUNT;
-}
-extern "C" {
-    pub fn free_ship(RaceDescPtr: *mut RACE_DESC, FreeIconData: BOOLEAN, FreeBattleData: BOOLEAN);
-}
-extern "C" {
-    pub fn c_load_ship(SpeciesID: SPECIES_ID, LoadBattleData: BOOLEAN) -> *mut RACE_DESC;
-}
-extern "C" {
-    pub fn c_free_ship(RaceDescPtr: *mut RACE_DESC, FreeIconData: BOOLEAN, FreeBattleData: BOOLEAN);
-}
-extern "C" {
-    pub fn InitPlanetInfo();
-}
-extern "C" {
-    pub fn UninitPlanetInfo();
-}
-extern "C" {
-    pub fn InitGroupInfo(FirstTime: BOOLEAN);
-}
-extern "C" {
-    pub fn UninitGroupInfo();
-}
-extern "C" {
-    pub fn GetGroupInfo(offset: DWORD, which_group: BYTE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn PutGroupInfo(offset: DWORD, which_group: BYTE) -> DWORD;
-}
-extern "C" {
-    pub fn BuildGroups();
-}
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::Build;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CloneShipFragment;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetStarShipFromIndex;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetEscortByStarShipIndex;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::GetIndexFromStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::AddEscortShips;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::SetRaceAllied;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::StartSphereTracking;
+
+#[cfg(not(test))]
+pub use crate::battle::build_native::engine::CheckAlliance;
+
+#[cfg(not(test))]
+pub use crate::ships::loader_native::engine::free_ship;
+
+#[cfg(not(test))]
+pub use crate::ships::loader_native::engine::c_load_ship;
+
+#[cfg(not(test))]
+pub use crate::ships::loader_native::engine::c_free_ship;
+
+#[cfg(not(test))]
+pub use crate::state::c_api::planets::InitPlanetInfo;
+
+#[cfg(not(test))]
+pub use crate::state::c_api::planets::UninitPlanetInfo;
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::InitGroupInfo;
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::UninitGroupInfo;
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::GetGroupInfo;
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::PutGroupInfo;
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::BuildGroups;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GAME_STATE_FILE {
@@ -4890,44 +4058,20 @@ pub const INFO_TYPE_STARINFO: INFO_TYPE = 0;
 pub const INFO_TYPE_RANDGRPINFO: INFO_TYPE = 1;
 pub const INFO_TYPE_DEFGRPINFO: INFO_TYPE = 2;
 pub type INFO_TYPE = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn OpenStateFile(
-        stateFile: ::std::os::raw::c_int,
-        mode: *const ::std::os::raw::c_char,
-    ) -> *mut GAME_STATE_FILE;
-}
-extern "C" {
-    pub fn CloseStateFile(fp: *mut GAME_STATE_FILE);
-}
-extern "C" {
-    pub fn DeleteStateFile(stateFile: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn LengthStateFile(fp: *mut GAME_STATE_FILE) -> DWORD;
-}
-extern "C" {
-    pub fn ReadStateFile(
-        lpBuf: *mut ::std::os::raw::c_void,
-        size: COUNT,
-        count: COUNT,
-        fp: *mut GAME_STATE_FILE,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn WriteStateFile(
-        lpBuf: *const ::std::os::raw::c_void,
-        size: COUNT,
-        count: COUNT,
-        fp: *mut GAME_STATE_FILE,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn SeekStateFile(
-        fp: *mut GAME_STATE_FILE,
-        offset: ::std::os::raw::c_long,
-        whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
+
+pub use crate::state::c_api::OpenStateFile;
+
+pub use crate::state::c_api::CloseStateFile;
+
+pub use crate::state::c_api::DeleteStateFile;
+
+pub use crate::state::c_api::LengthStateFile;
+
+pub use crate::state::c_api::ReadStateFile;
+
+pub use crate::state::c_api::WriteStateFile;
+
+pub use crate::state::c_api::SeekStateFile;
 pub type HIPGROUP = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -4952,9 +4096,9 @@ pub const ON_STATION: _bindgen_ty_24 = 3;
 pub const IGNORE_FLAGSHIP: _bindgen_ty_24 = 4;
 pub const REFORM_GROUP: _bindgen_ty_24 = 8;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn BuildGroup(pDstQueue: *mut QUEUE, race_id: BYTE) -> HIPGROUP;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::groups::live::BuildGroup;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct GROUP_HEADER {
@@ -4965,24 +4109,18 @@ pub struct GROUP_HEADER {
     pub year_index: COUNT,
     pub GroupOffset: [DWORD; 65usize],
 }
-extern "C" {
-    pub fn ReadGroupHeader(fp: *mut GAME_STATE_FILE, pGH: *mut GROUP_HEADER);
-}
-extern "C" {
-    pub fn WriteGroupHeader(fp: *mut GAME_STATE_FILE, pGH: *const GROUP_HEADER);
-}
-extern "C" {
-    pub fn ReadShipFragment(fp: *mut GAME_STATE_FILE, FragPtr: *mut SHIP_FRAGMENT);
-}
-extern "C" {
-    pub fn WriteShipFragment(fp: *mut GAME_STATE_FILE, FragPtr: *const SHIP_FRAGMENT);
-}
-extern "C" {
-    pub fn ReadIpGroup(fp: *mut GAME_STATE_FILE, GroupPtr: *mut IP_GROUP);
-}
-extern "C" {
-    pub fn WriteIpGroup(fp: *mut GAME_STATE_FILE, GroupPtr: *const IP_GROUP);
-}
+
+pub use crate::navigation::groups::ReadGroupHeader;
+
+pub use crate::navigation::groups::WriteGroupHeader;
+
+pub use crate::navigation::groups::ReadShipFragment;
+
+pub use crate::navigation::groups::WriteShipFragment;
+
+pub use crate::navigation::groups::ReadIpGroup;
+
+pub use crate::navigation::groups::WriteIpGroup;
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_25 = 162;
@@ -5033,15 +4171,15 @@ pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 pub const ARILOU_GATE_STATE_CLOSING: ARILOU_GATE_STATE = 0;
 pub const ARILOU_GATE_STATE_OPENING: ARILOU_GATE_STATE = 1;
 pub type ARILOU_GATE_STATE = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn AddInitialGameEvents();
-}
-extern "C" {
-    pub fn SetRaceDest(which_race: BYTE, x: COORD, y: COORD, days_left: BYTE, func_index: BYTE);
-}
-extern "C" {
-    pub fn getGenerateFunctions(Index: BYTE) -> *const GenerateFunctions;
-}
+
+#[cfg(not(test))]
+pub use crate::navigation::events::live::AddInitialGameEvents;
+
+#[cfg(not(test))]
+pub use crate::navigation::events::live::SetRaceDest;
+
+#[cfg(not(test))]
+pub use crate::battle::gendef::getGenerateFunctions;
 pub const SOL_DEFINED: _bindgen_ty_27 = 1;
 pub const SHOFIXTI_DEFINED: _bindgen_ty_27 = 2;
 pub const MAIDENS_DEFINED: _bindgen_ty_27 = 3;
@@ -5088,32 +4226,20 @@ pub const ILWRATH_DEFINED: _bindgen_ty_27 = 43;
 pub const ANDROSYNTH_DEFINED: _bindgen_ty_27 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_27 = 45;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct getmelee_struct {
-    _unused: [u8; 0],
-}
+pub use crate::ships::native::abi::getmelee_struct;
 pub type GETMELEE_STATE = getmelee_struct;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeTeam {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeSetup {
-    _unused: [u8; 0],
-}
+pub use crate::ships::native::abi::MeleeSetup;
+pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
 extern "C" {
     pub static mut stars_in_space: FRAME;
 }
-extern "C" {
-    pub fn InitSpace() -> BOOLEAN;
-}
-extern "C" {
-    pub fn UninitSpace();
-}
+
+#[cfg(not(test))]
+pub use crate::game_init::space_resources::live::InitSpace;
+
+#[cfg(not(test))]
+pub use crate::game_init::space_resources::live::UninitSpace;
 pub const PacketType_PACKET_INIT: PacketType = 0;
 pub const PacketType_PACKET_PING: PacketType = 1;
 pub const PacketType_PACKET_ACK: PacketType = 2;
@@ -5143,16 +4269,8 @@ pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
 pub type NetplayResetReason = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetConnection {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ConnectStateData {
-    _unused: [u8; 0],
-}
+pub use crate::ships::native::abi::NetConnection;
+pub use crate::supermelee::netplay::abi::ConnectStateData;
 pub type NetConnection_ConnectCallback =
     ::std::option::Option<unsafe extern "C" fn(nd: *mut NetConnection)>;
 pub type NetConnection_CloseCallback =
@@ -5179,33 +4297,12 @@ pub const NetState_NetState_inBattle: NetState = 7;
 pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetStateData {
-    pub name: *const ::std::os::raw::c_char,
-}
+pub use crate::ships::native::abi::NetStateData;
 pub type NetConnectionStateData_ReleaseFunction =
     ::std::option::Option<unsafe extern "C" fn(stateData: *mut NetConnectionStateData)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetConnectionStateData {
-    pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetplayPeerOptions {
-    pub isServer: bool,
-    pub host: *const ::std::os::raw::c_char,
-    pub port: *const ::std::os::raw::c_char,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetplayOptions {
-    pub metaServer: *const ::std::os::raw::c_char,
-    pub metaPort: *const ::std::os::raw::c_char,
-    pub peer: [NetplayPeerOptions; 2usize],
-    pub inputDelay: usize,
-}
+pub use crate::ships::native::abi::NetConnectionStateData;
+pub use crate::ships::native::abi::NetplayOptions;
+pub use crate::ships::native::abi::NetplayPeerOptions;
 extern "C" {
     pub static mut netplayOptions: NetplayOptions;
 }
@@ -5266,39 +4363,26 @@ extern "C" {
 extern "C" {
     pub static mut baseContentPath: [::std::os::raw::c_char; 1024usize];
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _input_template {
-    pub name: [::std::os::raw::c_char; 30usize],
-}
+pub use crate::ships::native::abi::_input_template;
 pub type INPUT_TEMPLATE = _input_template;
 extern "C" {
     pub static mut input_templates: [INPUT_TEMPLATE; 6usize];
 }
 #[cfg(not(test))]
-pub use crate::mainloop::options_abi::unprepareAllDirs;
-#[cfg(not(test))]
 pub use crate::mainloop::options_abi::setGammaCorrection;
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::unprepareAllDirs;
 #[cfg(test)]
 extern "C" {
     pub fn setGammaCorrection(gamma: f32) -> bool;
 }
 pub type BattleFrameCounter = DWORD;
 pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct battlestate_struct {
-    pub InputFunc: ::std::option::Option<
-        unsafe extern "C" fn(pInputState: *mut battlestate_struct) -> BOOLEAN,
-    >,
-    pub first_time: BOOLEAN,
-    pub NextTime: DWORD,
-    pub frame_cb: BattleFrameCallback,
-}
+pub use crate::ships::native::abi::battlestate_struct;
 pub type BATTLE_STATE = battlestate_struct;
-extern "C" {
-    pub fn Battle(arg1: BattleFrameCallback) -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::battle::battle_native::engine::Battle;
 pub type Checksum = uint32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5327,8 +4411,8 @@ pub struct NetConnectionError {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union NetConnectionError__bindgen_ty_1 {
-    pub listenError: *mut ListenError,
-    pub connectError: *mut ConnectError,
+    pub listenError: *const ListenError,
+    pub connectError: *const ConnectError,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5338,34 +4422,23 @@ pub struct NetStatistics {
     pub packetsSent: usize,
     pub packetTypeSent: [usize; 18usize],
 }
-extern "C" {
-    pub fn NetConnection_isConnected(conn: *const NetConnection) -> bool;
-}
-extern "C" {
-    pub fn NetConnection_getState(conn: *const NetConnection) -> NetState;
-}
-extern "C" {
-    pub fn NetConnection_getDiscriminant(conn: *const NetConnection) -> bool;
-}
-extern "C" {
-    pub fn NetConnection_getPeerOptions(conn: *const NetConnection) -> *const NetplayPeerOptions;
-}
-extern "C" {
-    pub fn NetConnection_getPlayerNr(conn: *const NetConnection) -> ::std::os::raw::c_int;
-}
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_isConnected;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getPeerOptions;
+
+pub use crate::supermelee::netplay::netconnection::NetConnection_getPlayerNr;
 pub type PacketHandler = ::std::option::Option<
     unsafe extern "C" fn(
         conn: *mut NetConnection,
         packet: *const ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int,
 >;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PacketTypeData {
-    pub len: usize,
-    pub handler: PacketHandler,
-    pub name: *const ::std::os::raw::c_char,
-}
+pub use crate::ships::native::abi::PacketTypeData;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PacketHeader {
@@ -5518,35 +4591,22 @@ pub struct Packet_Reset {
 }
 pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct melee_load_state {
-    pub preBuiltList: *mut *mut MeleeTeam,
-    pub preBuiltCount: COUNT,
-    pub dirEntries: DIRENTRY,
-    pub entryIndices: *mut COUNT,
-    pub numIndices: COUNT,
-    pub view: [*mut MeleeTeam; 5usize],
-    pub top: COUNT,
-    pub bot: COUNT,
-    pub cur: COUNT,
-    pub viewSize: COUNT,
-}
-extern "C" {
-    pub fn InitMeleeLoadState(pMS: *mut MELEE_STATE);
-}
-extern "C" {
-    pub fn UninitMeleeLoadState(pMS: *mut MELEE_STATE);
-}
-extern "C" {
-    pub fn DoLoadTeam(pMS: *mut MELEE_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DoSaveTeam(pMS: *mut MELEE_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn LoadTeamList(pMS: *mut MELEE_STATE);
-}
+pub use crate::ships::native::abi::melee_load_state;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::load_teams::live::InitMeleeLoadState;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::load_teams::live::UninitMeleeLoadState;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::load_teams::live::DoLoadTeam;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::load_teams::live::DoSaveTeam;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::load_teams::live::LoadTeamList;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
 pub const MeleeShip_MELEE_CHENJESU: MeleeShip = 2;
@@ -5575,214 +4635,112 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct melee_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pInputState: *mut melee_state) -> BOOLEAN>,
-    pub Initialized: BOOLEAN,
-    pub meleeStarted: BOOLEAN,
-    pub MeleeOption: MELEE_OPTIONS,
-    pub side: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub meleeSetup: *mut MeleeSetup,
-    pub load: melee_load_state,
-    pub currentShip: MeleeShip,
-    pub CurIndex: COUNT,
-    pub buildPickConfirmed: BOOLEAN,
-    pub randomContext: *mut RandomContext,
-    pub LastInputTime: TimeCount,
-    pub hMusic: MUSIC_REF,
-}
-extern "C" {
-    pub fn Melee();
-}
-extern "C" {
-    pub fn DoMelee(pMS: *mut MELEE_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DrawMeleeIcon(which_icon: COUNT);
-}
-extern "C" {
-    pub fn GetShipBox(pRect: *mut RECT, side: COUNT, row: COUNT, col: COUNT);
-}
-extern "C" {
-    pub fn RepairMeleeFrame(pRect: *const RECT);
-}
-extern "C" {
-    pub fn DrawMeleeShipStrings(pMS: *mut MELEE_STATE, NewStarShip: MeleeShip);
-}
+pub use crate::ships::native::abi::melee_state;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::Melee;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::DoMelee;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::GetShipBox;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::RepairMeleeFrame;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::DrawMeleeShipStrings;
 extern "C" {
     pub static mut MeleeFrame: FRAME;
 }
-extern "C" {
-    pub fn Melee_flashSelection(pMS: *mut MELEE_STATE);
-}
-extern "C" {
-    pub fn updateRandomSeed(pMS: *mut MELEE_STATE, side: COUNT, seed: DWORD);
-}
-extern "C" {
-    pub fn confirmationCancelled(pMS: *mut MELEE_STATE, side: COUNT);
-}
-extern "C" {
-    pub fn connectedFeedback(conn: *mut NetConnection);
-}
-extern "C" {
-    pub fn abortFeedback(conn: *mut NetConnection, reason: NetplayAbortReason);
-}
-extern "C" {
-    pub fn resetFeedback(conn: *mut NetConnection, reason: NetplayResetReason, byRemote: bool);
-}
-extern "C" {
-    pub fn errorFeedback(conn: *mut NetConnection);
-}
-extern "C" {
-    pub fn closeFeedback(conn: *mut NetConnection);
-}
-extern "C" {
-    pub fn Melee_LocalChange_ship(
-        pMS: *mut MELEE_STATE,
-        side: COUNT,
-        index: FleetShipIndex,
-        ship: MeleeShip,
-    ) -> bool;
-}
-extern "C" {
-    pub fn Melee_LocalChange_teamName(
-        pMS: *mut MELEE_STATE,
-        side: COUNT,
-        name: *const ::std::os::raw::c_char,
-    ) -> bool;
-}
-extern "C" {
-    pub fn Melee_LocalChange_fleet(
-        pMS: *mut MELEE_STATE,
-        teamNr: usize,
-        fleet: *const MeleeShip,
-    ) -> bool;
-}
-extern "C" {
-    pub fn Melee_LocalChange_team(
-        pMS: *mut MELEE_STATE,
-        teamNr: usize,
-        team: *const MeleeTeam,
-    ) -> bool;
-}
-extern "C" {
-    pub fn Melee_bootstrapSyncTeam(pMS: *mut MELEE_STATE, teamNr: usize);
-}
-extern "C" {
-    pub fn Melee_RemoteChange_ship(
-        pMS: *mut MELEE_STATE,
-        conn: *mut NetConnection,
-        side: COUNT,
-        index: FleetShipIndex,
-        ship: MeleeShip,
-    );
-}
-extern "C" {
-    pub fn Melee_RemoteChange_teamName(
-        pMS: *mut MELEE_STATE,
-        conn: *mut NetConnection,
-        side: COUNT,
-        name: *const ::std::os::raw::c_char,
-    );
-}
-extern "C" {
-    pub fn MeleeTeam_getFleet(team: *const MeleeTeam) -> *const MeleeShip;
-}
-extern "C" {
-    pub fn MeleeTeam_getTeamName(team: *const MeleeTeam) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn MeleeSetup_getSentShip(
-        setup: *const MeleeSetup,
-        teamNr: usize,
-        slotNr: FleetShipIndex,
-    ) -> MeleeShip;
-}
-extern "C" {
-    pub fn MeleeSetup_getSentTeamName(
-        setup: *const MeleeSetup,
-        teamNr: usize,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn MeleeSetup_setSentShip(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        slotNr: FleetShipIndex,
-        ship: MeleeShip,
-    ) -> bool;
-}
-extern "C" {
-    pub fn MeleeSetup_setSentTeamName(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        name: *const ::std::os::raw::c_char,
-    ) -> bool;
-}
-extern "C" {
-    pub fn MeleeSetup_new() -> *mut MeleeSetup;
-}
-extern "C" {
-    pub fn MeleeSetup_delete(setup: *mut MeleeSetup);
-}
-extern "C" {
-    pub fn MeleeSetup_setShip(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        slotNr: FleetShipIndex,
-        ship: MeleeShip,
-    ) -> bool;
-}
-extern "C" {
-    pub fn MeleeSetup_getShip(
-        setup: *const MeleeSetup,
-        teamNr: usize,
-        slotNr: FleetShipIndex,
-    ) -> MeleeShip;
-}
-extern "C" {
-    pub fn MeleeSetup_setTeamName(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        name: *const ::std::os::raw::c_char,
-    ) -> bool;
-}
-extern "C" {
-    pub fn MeleeSetup_getTeamName(
-        setup: *const MeleeSetup,
-        teamNr: usize,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn MeleeSetup_getFleetValue(setup: *const MeleeSetup, teamNr: usize) -> COUNT;
-}
-extern "C" {
-    pub fn MeleeSetup_deserializeTeam(
-        setup: *mut MeleeSetup,
-        teamNr: usize,
-        stream: *mut uio_Stream,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn MeleeSetup_serializeTeam(
-        setup: *const MeleeSetup,
-        teamNr: usize,
-        stream: *mut uio_Stream,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn BuildPickMeleeFrame();
-}
-extern "C" {
-    pub fn DestroyPickMeleeFrame();
-}
-extern "C" {
-    pub fn FillPickMeleeFrame(setup: *mut MeleeSetup);
-}
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::updateRandomSeed;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::confirmationCancelled;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::connectedFeedback;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::abortFeedback;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::resetFeedback;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::errorFeedback;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::closeFeedback;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_ship;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_teamName;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_fleet;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_bootstrapSyncTeam;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_RemoteChange_ship;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::menu::live::changes::Melee_RemoteChange_teamName;
+
+pub use crate::supermelee::native::teams::MeleeTeam_getFleet;
+
+pub use crate::supermelee::native::teams::MeleeTeam_getTeamName;
+
+pub use crate::supermelee::native::teams::MeleeSetup_getSentShip;
+
+pub use crate::supermelee::native::teams::MeleeSetup_getSentTeamName;
+
+pub use crate::supermelee::native::teams::MeleeSetup_setSentShip;
+
+pub use crate::supermelee::native::teams::MeleeSetup_setSentTeamName;
+
+pub use crate::supermelee::native::teams::MeleeSetup_new;
+
+pub use crate::supermelee::native::teams::MeleeSetup_delete;
+
+pub use crate::supermelee::native::teams::MeleeSetup_setShip;
+
+pub use crate::supermelee::native::teams::MeleeSetup_getShip;
+
+pub use crate::supermelee::native::teams::MeleeSetup_setTeamName;
+
+pub use crate::supermelee::native::teams::MeleeSetup_getTeamName;
+
+pub use crate::supermelee::native::teams::MeleeSetup_getFleetValue;
+
+pub use crate::supermelee::native::teams::MeleeSetup_deserializeTeam;
+
+pub use crate::supermelee::native::teams::MeleeSetup_serializeTeam;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
+
+#[cfg(not(test))]
+pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
 pub type BattleFrameInputFunction = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut InputContext,
@@ -5796,63 +4754,32 @@ pub type BattleEndReadyFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext) -> bool>;
 pub type DeleteInputContextFunction =
     ::std::option::Option<unsafe extern "C" fn(context: *mut InputContext)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputHandlers {
-    pub frameInput: BattleFrameInputFunction,
-    pub selectShip: SelectShipFunction,
-    pub battleEndReady: BattleEndReadyFunction,
-    pub deleteContext: DeleteInputContextFunction,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct InputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ComputerInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct HumanInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetworkInputContext {
-    pub handlers: *mut BattleInputHandlers,
-    pub playerNr: COUNT,
-}
+pub use crate::ships::native::abi::BattleInputHandlers;
+pub use crate::ships::native::abi::ComputerInputContext;
+pub use crate::ships::native::abi::HumanInputContext;
+pub use crate::ships::native::abi::InputContext;
+pub use crate::ships::native::abi::NetworkInputContext;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;
 pub const GRAVITY_MASS_INDEX: _bindgen_ty_28 = 3;
 pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn ship_intelligence(
-        ShipPtr: *mut ELEMENT,
-        ObjectsOfConcern: *mut EVALUATE_DESC,
-        ConcernCounter: COUNT,
-    );
-}
-extern "C" {
-    pub fn NotifyOthers(which_race: COUNT, target_loc: BYTE);
-}
-extern "C" {
-    pub fn DoMissions();
-}
-extern "C" {
-    pub fn InitDisplayList();
-}
-extern "C" {
-    pub fn SetUpElement(ElementPtr: *mut ELEMENT);
-}
+
+#[cfg(not(test))]
+pub use crate::battle::cyborg_native::engine::ship_intelligence;
+
+#[cfg(not(test))]
+pub use crate::navigation::interplanetary::live::NotifyOthers;
+
+#[cfg(not(test))]
+pub use crate::navigation::interplanetary::live::DoMissions;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::InitDisplayList;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::SetUpElement;
 pub const SOUND_EFFECTS_GRAB_CREW: SOUND_EFFECTS = 0;
 pub const SOUND_EFFECTS_SHIP_EXPLODES: SOUND_EFFECTS = 1;
 pub const SOUND_EFFECTS_TARGET_DAMAGED_FOR_1_PT: SOUND_EFFECTS = 2;
@@ -5872,18 +4799,18 @@ extern "C" {
     pub static mut GameSounds: SOUND;
 }
 pub type MENU_SOUND_FLAGS = UWORD;
-extern "C" {
-    pub fn SetMenuSounds(sound_0: MENU_SOUND_FLAGS, sound_1: MENU_SOUND_FLAGS);
-}
-extern "C" {
-    pub fn GetMenuSounds(sound_0: *mut MENU_SOUND_FLAGS, sound_1: *mut MENU_SOUND_FLAGS);
-}
-extern "C" {
-    pub fn PlayMenuSound(S: MENU_SOUND_EFFECT);
-}
-extern "C" {
-    pub fn ProcessSound(Sound: SOUND, PositionalObject: *mut ELEMENT);
-}
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::SetMenuSounds;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::GetMenuSounds;
+
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::PlayMenuSound;
+
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::ProcessSound;
 pub const TALK_COMMANDER: _bindgen_ty_29 = 0;
 pub const OUTFIT_STARSHIP: _bindgen_ty_29 = 1;
 pub const SHIPYARD: _bindgen_ty_29 = 2;
@@ -5902,119 +4829,93 @@ pub use crate::ui::starbase::VisitStarBase;
 extern "C" {
     pub fn VisitStarBase();
 }
-extern "C" {
-    pub fn DoStarBase(pMS: *mut MENU_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DoOutfit(pMS: *mut MENU_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DoShipyard(pMS: *mut MENU_STATE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DrawShipPiece(
-        ModuleFrame: FRAME,
-        which_piece: COUNT,
-        which_slot: COUNT,
-        DrawBluePrint: BOOLEAN,
-    );
-}
+
+#[cfg(not(test))]
+pub use crate::ui::starbase::DoStarBase;
+
+#[cfg(not(test))]
+pub use crate::ui::outfit::DoOutfit;
+
+#[cfg(not(test))]
+pub use crate::ui::shipyard::DoShipyard;
+
+#[cfg(not(test))]
+pub use crate::ui::starbase::DrawShipPiece;
 extern "C" {
     pub static mut status_y_offsets: [COORD; 0usize];
 }
-extern "C" {
-    pub fn DrawCrewFuelString(y: COORD, state: SIZE);
-}
-extern "C" {
-    pub fn ClearShipStatus(y: COORD);
-}
-extern "C" {
-    pub fn OutlineShipStatus(y: COORD);
-}
-extern "C" {
-    pub fn InitShipStatus(
-        ShipInfoPtr: *mut SHIP_INFO,
-        StarShipPtr: *mut STARSHIP,
-        pClipRect: *mut RECT,
-    );
-}
-extern "C" {
-    pub fn DeltaStatistics(
-        ShipInfoPtr: *mut SHIP_INFO,
-        y_offs: COORD,
-        crew_delta: SIZE,
-        energy_delta: SIZE,
-    );
-}
-extern "C" {
-    pub fn DrawBattleCrewAmount(ShipInfoPtr: *mut SHIP_INFO, y_offs: COORD);
-}
-extern "C" {
-    pub fn DeltaEnergy(ElementPtr: *mut ELEMENT, energy_delta: SIZE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DeltaCrew(ElementPtr: *mut ELEMENT, crew_delta: SIZE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn animation_preprocess(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn ship_preprocess(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn ship_postprocess(ElementPtr: *mut ELEMENT);
-}
-extern "C" {
-    pub fn collision(
-        ElementPtr0: *mut ELEMENT,
-        pPt0: *mut POINT,
-        ElementPtr1: *mut ELEMENT,
-        pPt1: *mut POINT,
-    );
-}
-extern "C" {
-    pub fn ConfirmSaveLoad(MsgStamp: *mut STAMP);
-}
-extern "C" {
-    pub fn GameOptions() -> BOOLEAN;
-}
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::DrawCrewFuelString;
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::ClearShipStatus;
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::OutlineShipStatus;
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::InitShipStatus;
+
+#[cfg(not(test))]
+pub use crate::ui::shipstat::DeltaStatistics;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DrawBattleCrewAmount;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DeltaEnergy;
+
+#[cfg(not(test))]
+pub use crate::battle::status_native::engine::DeltaCrew;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::animation_preprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::ship_preprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::ship_postprocess;
+
+#[cfg(not(test))]
+pub use crate::battle::ship_native::engine::collision;
+
+#[cfg(not(test))]
+pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
+
+#[cfg(not(test))]
+pub use crate::front_end::gameopt::runtime::GameOptions;
 pub type NamingCallback = ::std::option::Option<unsafe extern "C" fn()>;
-extern "C" {
-    pub fn SetNamingCallback(arg1: NamingCallback);
-}
-extern "C" {
-    pub fn CargoMenu();
-}
-extern "C" {
-    pub fn RosterMenu() -> BOOLEAN;
-}
-extern "C" {
-    pub fn DevicesMenu() -> BOOLEAN;
-}
-extern "C" {
-    pub fn StarMap() -> BOOLEAN;
-}
-extern "C" {
-    pub fn InventoryDevices(pDeviceMap: *mut BYTE, Size: COUNT) -> SIZE;
-}
-extern "C" {
-    pub fn DrawStarConBox(
-        pRect: *mut RECT,
-        BorderWidth: SIZE,
-        TopLeftColor: Color,
-        BottomRightColor: Color,
-        FillInterior: BOOLEAN,
-        InteriorColor: Color,
-    );
-}
-extern "C" {
-    pub fn SeedRandomNumbers() -> DWORD;
-}
-extern "C" {
-    pub fn SaveContextFrame(saveRect: *const RECT) -> STAMP;
-}
+
+#[cfg(not(test))]
+pub use crate::front_end::gameopt::runtime::SetNamingCallback;
+
+#[cfg(not(test))]
+pub use crate::planets::cargo::live::CargoMenu;
+
+#[cfg(not(test))]
+pub use crate::planets::roster::live::RosterMenu;
+
+#[cfg(not(test))]
+pub use crate::planets::devices::DevicesMenu;
+
+#[cfg(not(test))]
+pub use crate::planets::pstarmap::StarMap;
+
+#[cfg(not(test))]
+pub use crate::planets::devices::InventoryDevices;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::DrawStarConBox;
+
+#[cfg(not(test))]
+pub use crate::ui::util::live::SeedRandomNumbers;
+
 #[cfg(not(test))]
 pub use crate::ui::settings::ToggleMusic;
+#[cfg(not(test))]
+pub use crate::ui::util::live::SaveContextFrame;
 #[cfg(test)]
 extern "C" {
     pub fn ToggleMusic();
@@ -6043,18 +4944,12 @@ pub use crate::ui::settings::ToggleSoundEffect;
 extern "C" {
     pub fn ToggleSoundEffect();
 }
-extern "C" {
-    pub fn PlayMusic(MusicRef: MUSIC_REF, Continuous: BOOLEAN, Priority: BYTE);
-}
-extern "C" {
-    pub fn PlaySoundEffect(
-        S: SOUND,
-        Channel: COUNT,
-        Pos: SoundPosition,
-        PositionalObject: *mut ::std::os::raw::c_void,
-        Priority: BYTE,
-    );
-}
+
+#[cfg(not(test))]
+pub use crate::ui::settings::PlayMusic;
+
+#[cfg(not(test))]
+pub use crate::ui::settings::PlaySoundEffect;
 pub const log_Level_log_Nothing: log_Level = 0;
 pub const log_Level_log_User: log_Level = 1;
 pub const log_Level_log_Fatal: log_Level = 1;
@@ -6082,451 +4977,85 @@ pub const WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY: WIDGET_TYPE = 5;
 pub const WIDGET_TYPE_WIDGET_TYPE_CONTROLENTRY: WIDGET_TYPE = 6;
 pub const WIDGET_TYPE_NUM_WIDGET_TYPES: WIDGET_TYPE = 7;
 pub type WIDGET_TYPE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-}
+pub use crate::graphics::native_abi::_widget;
 pub type WIDGET = _widget;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_menu_screen {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub title: *const ::std::os::raw::c_char,
-    pub subtitle: *const ::std::os::raw::c_char,
-    pub bgStamp: STAMP,
-    pub num_children: ::std::os::raw::c_int,
-    pub child: *mut *mut _widget,
-    pub highlighted: ::std::os::raw::c_int,
-}
+pub use crate::graphics::native_abi::_widget_menu_screen;
 pub type WIDGET_MENU_SCREEN = _widget_menu_screen;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CHOICE_OPTION {
-    pub optname: *const ::std::os::raw::c_char,
-    pub tooltip: [*const ::std::os::raw::c_char; 3usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_choice {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub category: *const ::std::os::raw::c_char,
-    pub numopts: ::std::os::raw::c_int,
-    pub maxcolumns: ::std::os::raw::c_int,
-    pub options: *mut CHOICE_OPTION,
-    pub selected: ::std::os::raw::c_int,
-    pub highlighted: ::std::os::raw::c_int,
-    pub onChange: ::std::option::Option<
-        unsafe extern "C" fn(self_: *mut _widget_choice, oldval: ::std::os::raw::c_int),
-    >,
-}
+pub use crate::graphics::native_abi::_widget_choice;
+pub use crate::graphics::native_abi::CHOICE_OPTION;
 pub type WIDGET_CHOICE = _widget_choice;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_button {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub name: *const ::std::os::raw::c_char,
-    pub tooltip: [*const ::std::os::raw::c_char; 3usize],
-}
+pub use crate::graphics::native_abi::_widget_button;
 pub type WIDGET_BUTTON = _widget_button;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_label {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub line_count: ::std::os::raw::c_int,
-    pub lines: *mut *const ::std::os::raw::c_char,
-}
+pub use crate::graphics::native_abi::_widget_label;
 pub type WIDGET_LABEL = _widget_label;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_slider {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub draw_value: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget_slider,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub min: ::std::os::raw::c_int,
-    pub max: ::std::os::raw::c_int,
-    pub step: ::std::os::raw::c_int,
-    pub value: ::std::os::raw::c_int,
-    pub category: *const ::std::os::raw::c_char,
-    pub tooltip: [*const ::std::os::raw::c_char; 3usize],
-}
+pub use crate::graphics::native_abi::_widget_slider;
 pub type WIDGET_SLIDER = _widget_slider;
 pub const WIDGET_TEXTENTRY_STATE_WTE_NORMAL: WIDGET_TEXTENTRY_STATE = 0;
 pub const WIDGET_TEXTENTRY_STATE_WTE_EDITING: WIDGET_TEXTENTRY_STATE = 1;
 pub const WIDGET_TEXTENTRY_STATE_WTE_BLOCKCUR: WIDGET_TEXTENTRY_STATE = 2;
 pub type WIDGET_TEXTENTRY_STATE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_textentry {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub handleEventSelect: ::std::option::Option<
-        unsafe extern "C" fn(self_: *mut _widget_textentry) -> ::std::os::raw::c_int,
-    >,
-    pub onChange: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_textentry)>,
-    pub category: *const ::std::os::raw::c_char,
-    pub value: [::std::os::raw::c_char; 50usize],
-    pub maxlen: ::std::os::raw::c_int,
-    pub state: WIDGET_TEXTENTRY_STATE,
-    pub cursor_pos: ::std::os::raw::c_int,
-}
+pub use crate::graphics::native_abi::_widget_textentry;
 pub type WIDGET_TEXTENTRY = _widget_textentry;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _widget_controlentry {
-    pub tag: WIDGET_TYPE,
-    pub parent: *mut _widget,
-    pub handleEvent: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub receiveFocus: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            event: ::std::os::raw::c_int,
-        ) -> ::std::os::raw::c_int,
-    >,
-    pub draw: ::std::option::Option<
-        unsafe extern "C" fn(
-            self_: *mut _widget,
-            x: ::std::os::raw::c_int,
-            y: ::std::os::raw::c_int,
-        ),
-    >,
-    pub height:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub width:
-        ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub onChange: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_controlentry)>,
-    pub onDelete: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_controlentry)>,
-    pub category: *const ::std::os::raw::c_char,
-    pub controlindex: ::std::os::raw::c_int,
-    pub highlighted: ::std::os::raw::c_int,
-    pub controlname: [[::std::os::raw::c_char; 16usize]; 2usize],
-}
+pub use crate::graphics::native_abi::_widget_controlentry;
 pub type WIDGET_CONTROLENTRY = _widget_controlentry;
-extern "C" {
-    pub fn DrawShadowedBox(r: *mut RECT, bg: Color, dark: Color, medium: Color);
-}
-extern "C" {
-    pub fn DrawLabelAsWindow(label: *mut WIDGET_LABEL, windowRect: *mut RECT);
-}
-extern "C" {
-    pub fn Widget_SetWindowColors(bg: Color, dark: Color, medium: Color);
-}
-extern "C" {
-    pub fn Widget_SetFont(newFont: FONT) -> FONT;
-}
-extern "C" {
-    pub fn Widget_Event(event: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_ReceiveFocusMenuScreen(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_ReceiveFocusChoice(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_ReceiveFocusSimple(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_ReceiveFocusControlEntry(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_ReceiveFocusRefuseFocus(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventMenuScreen(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventChoice(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventSlider(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventTextEntry(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventControlEntry(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HandleEventIgnoreAll(
-        _self: *mut WIDGET,
-        event: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HeightChoice(_self: *mut WIDGET) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HeightFullScreen(_self: *mut WIDGET) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HeightOneLine(_self: *mut WIDGET) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_HeightLabel(_self: *mut WIDGET) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_WidthFullScreen(_self: *mut WIDGET) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Widget_DrawMenuScreen(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_DrawChoice(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_DrawButton(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_DrawLabel(_self: *mut WIDGET, x: ::std::os::raw::c_int, y: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn Widget_DrawSlider(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_DrawTextEntry(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_DrawControlEntry(
-        _self: *mut WIDGET,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn Widget_Slider_DrawValue(
-        self_: *mut WIDGET_SLIDER,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    );
-}
+
+pub use crate::graphics::widgets_abi::DrawShadowedBox;
+
+pub use crate::graphics::widgets_abi::DrawLabelAsWindow;
+
+pub use crate::graphics::widgets_abi::Widget_SetWindowColors;
+
+pub use crate::graphics::widgets_abi::Widget_SetFont;
+
+pub use crate::graphics::widgets_abi::Widget_Event;
+
+pub use crate::graphics::widgets_abi::Widget_ReceiveFocusMenuScreen;
+
+pub use crate::graphics::widgets_abi::Widget_ReceiveFocusChoice;
+
+pub use crate::graphics::widgets_abi::Widget_ReceiveFocusSimple;
+
+pub use crate::graphics::widgets_abi::Widget_ReceiveFocusControlEntry;
+
+pub use crate::graphics::widgets_abi::Widget_ReceiveFocusRefuseFocus;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventMenuScreen;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventChoice;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventSlider;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventTextEntry;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventControlEntry;
+
+pub use crate::graphics::widgets_abi::Widget_HandleEventIgnoreAll;
+
+pub use crate::graphics::widgets_abi::Widget_HeightChoice;
+
+pub use crate::graphics::widgets_abi::Widget_HeightFullScreen;
+
+pub use crate::graphics::widgets_abi::Widget_HeightOneLine;
+
+pub use crate::graphics::widgets_abi::Widget_HeightLabel;
+
+pub use crate::graphics::widgets_abi::Widget_WidthFullScreen;
+
+pub use crate::graphics::widgets_abi::Widget_DrawMenuScreen;
+
+pub use crate::graphics::widgets_abi::Widget_DrawChoice;
+
+pub use crate::graphics::widgets_abi::Widget_DrawButton;
+
+pub use crate::graphics::widgets_abi::Widget_DrawLabel;
+
+pub use crate::graphics::widgets_abi::Widget_DrawSlider;
+
+pub use crate::graphics::widgets_abi::Widget_DrawTextEntry;
+
+pub use crate::graphics::widgets_abi::Widget_DrawControlEntry;
+
+pub use crate::graphics::widgets_abi::Widget_Slider_DrawValue;
 extern "C" {
     pub static mut widget_focus: *mut WIDGET;
 }
@@ -6547,33 +5076,26 @@ pub type _bindgen_ty_32 = ::std::os::raw::c_uint;
 extern "C" {
     pub static mut GfxFlags: ::std::os::raw::c_int;
 }
-extern "C" {
-    pub fn TFB_ProcessEvents();
-}
-extern "C" {
-    pub fn TFB_SetGamma(gamma: f32) -> bool;
-}
-extern "C" {
-    pub fn TFB_SupportsHardwareScaling() -> ::std::os::raw::c_int;
-}
+
+pub use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
+
+pub use crate::graphics::sdl::platform_abi::TFB_SetGamma;
+
+pub use crate::graphics::sdl::platform_abi::TFB_SupportsHardwareScaling;
 pub const SCALE_TFB_SCALE_STEP: SCALE = 0;
 pub const SCALE_TFB_SCALE_NEAREST: SCALE = 1;
 pub const SCALE_TFB_SCALE_BILINEAR: SCALE = 2;
 pub const SCALE_TFB_SCALE_TRILINEAR: SCALE = 3;
 pub type SCALE = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn LoadIntoExtraScreen(r: *mut RECT);
-}
-extern "C" {
-    pub fn DrawFromExtraScreen(r: *mut RECT);
-}
+
+pub use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
+
+pub use crate::graphics::gfx_common_abi::DrawFromExtraScreen;
 pub use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
-extern "C" {
-    pub fn SetTransitionSource(pRect: *const RECT);
-}
-extern "C" {
-    pub fn ScreenTransition(transition: ::std::os::raw::c_int, pRect: *const RECT);
-}
+
+pub use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+pub use crate::graphics::gfx_common_abi::ScreenTransition;
 extern "C" {
     pub static mut ScreenWidthActual: ::std::os::raw::c_int;
 }
@@ -6583,81 +5105,19 @@ extern "C" {
 extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NativePalette {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_colormap {
-    pub index: ::std::os::raw::c_int,
-    pub version: ::std::os::raw::c_int,
-    pub refcount: ::std::os::raw::c_int,
-    pub next: *mut tfb_colormap,
-    pub palette: *mut NativePalette,
-}
+pub use crate::graphics::native_abi::tfb_colormap;
+pub use crate::graphics::native_abi::NativePalette;
 pub type TFB_ColorMap = tfb_colormap;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_image {
-    pub NormalImg: TFB_Canvas,
-    pub ScaledImg: TFB_Canvas,
-    pub MipmapImg: TFB_Canvas,
-    pub FilledImg: TFB_Canvas,
-    pub colormap_index: ::std::os::raw::c_int,
-    pub colormap_version: ::std::os::raw::c_int,
-    pub NormalHs: HOT_SPOT,
-    pub MipmapHs: HOT_SPOT,
-    pub last_scale_hs: HOT_SPOT,
-    pub last_scale: ::std::os::raw::c_int,
-    pub last_scale_type: ::std::os::raw::c_int,
-    pub last_fill: Color,
-    pub extent: EXTENT,
-    pub mutex: Mutex,
-    pub dirty: BOOLEAN,
-}
+pub use crate::graphics::native_abi::tfb_image;
 pub type TFB_Image = tfb_image;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_char {
-    pub extent: EXTENT,
-    pub disp: EXTENT,
-    pub HotSpot: HOT_SPOT,
-    pub data: *mut BYTE,
-    pub pitch: DWORD,
-}
+pub use crate::graphics::native_abi::tfb_char;
 pub type TFB_Char = tfb_char;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_pixelformat {
-    pub BitsPerPixel: ::std::os::raw::c_int,
-    pub BytesPerPixel: ::std::os::raw::c_int,
-    pub Rmask: DWORD,
-    pub Gmask: DWORD,
-    pub Bmask: DWORD,
-    pub Amask: DWORD,
-    pub Rshift: DWORD,
-    pub Gshift: DWORD,
-    pub Bshift: DWORD,
-    pub Ashift: DWORD,
-    pub Rloss: DWORD,
-    pub Gloss: DWORD,
-    pub Bloss: DWORD,
-    pub Aloss: DWORD,
-}
+pub use crate::graphics::native_abi::tfb_pixelformat;
 pub type TFB_PixelFormat = tfb_pixelformat;
-extern "C" {
-    pub fn TFB_DrawScreen_Copy(r: *const RECT, src: SCREEN, dest: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_ReinitVideo(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    );
-}
+
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Copy;
+
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct bresenham_line {
@@ -6671,58 +5131,24 @@ pub struct bresenham_line {
 }
 pub type BRESENHAM_LINE = bresenham_line;
 pub type DRAWABLE_TYPE = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct frame_desc {
-    pub Type: DRAWABLE_TYPE,
-    pub Index: UWORD,
-    pub HotSpot: HOT_SPOT,
-    pub Bounds: EXTENT,
-    pub image: *mut TFB_Image,
-    pub parent: *mut drawable_desc,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct drawable_desc {
-    pub Flags: CREATE_FLAGS,
-    pub MaxIndex: UWORD,
-    pub Frame: *mut FRAME_DESC,
-}
+pub use crate::graphics::native_abi::drawable_desc;
+pub use crate::graphics::native_abi::frame_desc;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct IMAGE_BOX {
     pub Box: RECT,
     pub FramePtr: FRAME,
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _stringbank_chunk {
-    pub data: [::std::os::raw::c_char; 1012usize],
-    pub len: ::std::os::raw::c_int,
-    pub next: *mut _stringbank_chunk,
-}
+pub use crate::resource::stringbank::StringBank as _stringbank_chunk;
 pub type stringbank = _stringbank_chunk;
-extern "C" {
-    pub fn StringBank_Create() -> *mut stringbank;
-}
-extern "C" {
-    pub fn StringBank_Free(bank: *mut stringbank);
-}
-extern "C" {
-    pub fn StringBank_AddOrFindString(
-        bank: *mut stringbank,
-        str_: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn SplitString(
-        s: *const ::std::os::raw::c_char,
-        splitchar: ::std::os::raw::c_char,
-        n: ::std::os::raw::c_int,
-        result: *mut *const ::std::os::raw::c_char,
-        bank: *mut stringbank,
-    ) -> ::std::os::raw::c_int;
-}
+
+pub use crate::resource::stringbank::StringBank_Create;
+
+pub use crate::resource::stringbank::StringBank_Free;
+
+pub use crate::resource::stringbank::StringBank_AddOrFindString;
+
+pub use crate::resource::stringbank::SplitString;
 pub const audio_DRIVER_MIXSDL: _bindgen_ty_33 = 0;
 pub const audio_DRIVER_NOSOUND: _bindgen_ty_33 = 1;
 pub const audio_DRIVER_OPENAL: _bindgen_ty_33 = 2;
@@ -6828,9 +5254,8 @@ pub struct audio_Driver {
         ),
     >,
 }
-extern "C" {
-    pub fn initAudio(driver: sint32, flags: sint32) -> sint32;
-}
+
+pub use crate::sound::audio_init::initAudio;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_decoderformats {
@@ -6943,67 +5368,35 @@ extern "C" {
 extern "C" {
     pub static mut speechVolumeScale: f32;
 }
-pub use crate::sound::heart_ffi::{set_speech_volume as SetSpeechVolume};
-extern "C" {
-    pub fn AnyButtonPress(DetectSpecial: BOOLEAN) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_ResetControls();
-}
+pub use crate::sound::heart_ffi::set_speech_volume as SetSpeechVolume;
+
+#[cfg(not(test))]
+pub use crate::mainloop::input_abi::live::AnyButtonPress;
+
+pub use crate::input::sdl_input::TFB_ResetControls;
 extern "C" {
     pub static mut QuitPosted: ::std::os::raw::c_int;
 }
 extern "C" {
     pub static mut GameActive: ::std::os::raw::c_int;
 }
-extern "C" {
-    pub fn EnterCharacterMode();
-}
-extern "C" {
-    pub fn ExitCharacterMode();
-}
-extern "C" {
-    pub fn GetNextCharacter() -> UniChar;
-}
-extern "C" {
-    pub fn GetLastCharacter() -> UniChar;
-}
-extern "C" {
-    pub fn InterrogateInputState(
-        templat: ::std::os::raw::c_int,
-        control: ::std::os::raw::c_int,
-        index: ::std::os::raw::c_int,
-        buffer: *mut ::std::os::raw::c_char,
-        maxlen: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn RemoveInputState(
-        templat: ::std::os::raw::c_int,
-        control: ::std::os::raw::c_int,
-        index: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn RebindInputState(
-        templat: ::std::os::raw::c_int,
-        control: ::std::os::raw::c_int,
-        index: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn SaveKeyConfiguration(path: *mut uio_DirHandle, fname: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn BeginInputFrame();
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ListenError {
-    pub _address: u8,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ConnectError {
-    pub _address: u8,
-}
+
+pub use crate::input::sdl_input::EnterCharacterMode;
+
+pub use crate::input::sdl_input::ExitCharacterMode;
+
+pub use crate::input::sdl_input::GetNextCharacter;
+
+pub use crate::input::sdl_input::GetLastCharacter;
+
+pub use crate::input::sdl_input::InterrogateInputState;
+
+pub use crate::input::sdl_input::RemoveInputState;
+
+pub use crate::input::sdl_input::RebindInputState;
+
+pub use crate::input::sdl_input::SaveKeyConfiguration;
+
+pub use crate::input::sdl_input::BeginInputFrame;
+pub use crate::network::connect::ConnectError;
+pub use crate::network::listen::ListenError;

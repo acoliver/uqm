@@ -1,6 +1,6 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine, starship};
     use std::{mem, ptr};
     const fn descriptor() -> RACE_DESC {

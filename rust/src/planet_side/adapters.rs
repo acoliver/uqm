@@ -49,18 +49,21 @@ impl PlanetSideInput for CffiPlanetSideInput {
 }
 
 #[cfg(not(test))]
+use crate::mainloop::input_abi::live::UpdateInputState;
+#[cfg(not(test))]
 use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
+use crate::ui::sis::capacity::GetStorageBayCapacity;
+#[cfg(not(test))]
+use crate::ui::sis::DeltaSISGauges;
+#[cfg(not(test))]
 use crate::ui::sis::DrawLanders;
+#[cfg(not(test))]
+use crate::ui::sis::DrawStorageBays;
 #[cfg(not(test))]
 extern "C" {
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
-    fn UpdateInputState();
-    fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
-
-    fn DrawStorageBays(refresh: i32);
-    fn GetStorageBayCapacity() -> u16;
 }
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;

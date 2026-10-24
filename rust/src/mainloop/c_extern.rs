@@ -25,9 +25,6 @@
 //! @plan PLAN-20260707-MAINLOOP.P03
 //! @requirement REQ-ML-003
 
-use std::ffi::c_char;
-use std::os::raw::c_int;
-
 #[cfg(test)]
 use std::sync::atomic::{AtomicU16, Ordering};
 
@@ -278,51 +275,22 @@ pub use crate::ui::starbase::VisitStarBase;
 extern "C" {
     pub fn VisitStarBase();
 }
-extern "C" {
 
-    /// `extern void ExploreSolarSys(void)` — interplanetary exploration.
-    ///
-    /// Defined in `sc2/src/uqm/planets/` (declared in `planets/planets.h:284`).
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P05
-    /// @requirement REQ-ML-004
-    pub fn ExploreSolarSys();
+#[cfg(not(test))]
+pub use crate::planets::solarsys::lifecycle::ExploreSolarSys;
 
-    /// `extern void RaceCommunication(void)` — alien conversation.
-    ///
-    /// Defined in `sc2/src/uqm/comm/` (declared in `comm.h:116`).
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P05
-    /// @requirement REQ-ML-004
-    pub fn RaceCommunication();
+#[cfg(not(test))]
+pub use crate::comm::comm_abi::RaceCommunication;
 
-    /// `extern COUNT InitCommunication(CONVERSATION which_comm)`.
-    ///
-    /// Begins the named conversation. `which_comm` is a `CONVERSATION`
-    /// enum value (COUNT / unsigned). Returns a COUNT status.
-    ///
-    /// Used for the `KOHR_AH_KILLED_ALL` → `BLACKURQ_CONVERSATION` path
-    /// in the combined win/loss check (starcon.c:315-316).
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P05
-    /// @requirement REQ-ML-004
-    pub fn InitCommunication(which_comm: u32) -> u16;
-}
+#[cfg(not(test))]
+pub use crate::comm::comm_abi::InitCommunication;
 
 // ---------------------------------------------------------------------------
 // LoadKernel — kernel initialization
 // ---------------------------------------------------------------------------
 
-extern "C" {
-    /// Load the UQM kernel.
-    ///
-    /// C signature: `BOOLEAN LoadKernel(int argc, char *argv[])`.
-    ///
-    /// Returns `TRUE` (non-zero `CBoolean`) on success, `FALSE` on failure.
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn LoadKernel(argc: c_int, argv: *mut *mut c_char) -> CBoolean;
-}
+#[cfg(not(test))]
+pub use crate::game_init::kernel_abi::LoadKernel;
 
 // ---------------------------------------------------------------------------
 // Game-loop lifecycle functions (P06)
@@ -359,6 +327,33 @@ extern "C" {
     pub fn UninitGameStructures();
 }
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
+
+#[cfg(not(test))]
+pub use crate::navigation::globals::InitGameStructures;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::InitGameClock;
+
+#[cfg(not(test))]
+pub use crate::navigation::events::live::AddInitialGameEvents;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::SetStatusMessageMode;
+
+#[cfg(not(test))]
+pub use crate::ui::sis::DrawAutoPilotMessage;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::SetGameClockRate;
+
+#[cfg(not(test))]
+pub use crate::time::clock_abi::live::UninitGameClock;
+
+#[cfg(not(test))]
+pub use crate::ships::master_native::engine::FreeMasterShipList;
+
+pub use crate::log_abi::log_showBox;
+
 extern "C" {
     /// `BOOLEAN StartGame(void)` — outer-loop controller.
     ///
@@ -366,48 +361,6 @@ extern "C" {
     /// @plan PLAN-20260707-MAINLOOP.P06
     #[cfg(test)]
     pub fn StartGame() -> CBoolean;
-
-    /// `void InitGameStructures(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn InitGameStructures();
-
-    /// `void InitGameClock(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn InitGameClock();
-
-    /// `void AddInitialGameEvents(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn AddInitialGameEvents();
-
-    /// `StatMsgMode SetStatusMessageMode(StatMsgMode mode)` — pass `SMM_DEFAULT`
-    /// (1). Returns the mode that was in effect.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn SetStatusMessageMode(mode: c_int) -> c_int;
-
-    /// `void DrawAutoPilotMessage(BOOLEAN tf)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn DrawAutoPilotMessage(tf: CBoolean);
-
-    /// `void SetGameClockRate(COUNT rate)` — `COUNT` = `u16`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn SetGameClockRate(rate: u16);
-
-    /// `void StopSound(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-
-    /// `void UninitGameClock(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn UninitGameClock();
-
-    /// `void FreeMasterShipList(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    /// @requirement REQ-ML-008
-    pub fn FreeMasterShipList();
-
-    /// `void log_showBox(BOOLEAN b, BOOLEAN c)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    /// @requirement REQ-ML-008
-    pub fn log_showBox(b: CBoolean, c: CBoolean);
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.

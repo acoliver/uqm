@@ -32,7 +32,7 @@ unsafe fn escort_window(queue: *const QUEUE, window: &mut BYTE) -> HLINK {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use std::ptr;
 

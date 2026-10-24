@@ -22,10 +22,10 @@ pub const MENU_SOUND_NONE: u16 = 0;
 /// enforced by keeping [`MenuSoundSilence`] `!Send`.
 #[cfg(not(test))]
 mod policy {
-    extern "C" {
-        fn GetMenuSounds(sound_0: *mut u16, sound_1: *mut u16);
-        fn SetMenuSounds(sound_0: u16, sound_1: u16);
-    }
+
+    use crate::mainloop::input_abi::live::GetMenuSounds;
+
+    use crate::mainloop::input_abi::live::SetMenuSounds;
 
     pub(super) fn get() -> (u16, u16) {
         let mut sound_0 = 0u16;

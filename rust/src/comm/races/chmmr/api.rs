@@ -90,12 +90,8 @@ impl ChmmrApi for super::super::script::live::LiveScript<Handler> {
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {
-        extern "C" {
-            fn SetCommIntroMode(mode: i32, duration: u32);
-        }
-        unsafe {
-            SetCommIntroMode(mode, duration as u32);
-        }
+        use crate::comm::comm_abi::SetCommIntroMode;
+        SetCommIntroMode(mode as u32, duration as u32);
     }
 }
 #[cfg(test)]

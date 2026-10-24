@@ -18,6 +18,7 @@ use uqm_rust::automation::{
     NativeLinkedBuildReceipt, NativeRetainedInput, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
 };
 
+mod abi_check;
 mod display_awake;
 mod evidence;
 pub mod native_cli;
@@ -99,12 +100,13 @@ fn run() -> Result<(), String> {
         "debug" => build(&root, false),
         "release" => build(&root, true),
         "test" => test_linked(&root),
+        "abi-check" => abi_check::run(&root),
         _ => Err(format!("unknown command '{command}'\n{}", usage())),
     }
 }
 
 fn usage() -> String {
-    "usage: cargo run --release --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native>".into()
+    "usage: cargo run --release --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|abi-check|native>".into()
 }
 
 fn repository_root() -> Result<PathBuf, String> {

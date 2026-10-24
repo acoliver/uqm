@@ -63,19 +63,25 @@ pub(super) fn animation(
 pub(super) mod live {
     use super::*;
     use crate::comm::locdata::{CGlobData, COMM_DATA};
-    use std::ffi::{c_char, c_void, CStr};
+    use std::ffi::{c_char, CStr};
 
     use crate::ui::sis::DrawLanders;
+
+    use crate::strings::string_table::SetAbsStringTableIndex;
+
+    use crate::strings::string_table::GetStringAddress;
+
+    use crate::graphics::cmap_abi::GetColorMapAddress;
+
+    use crate::graphics::cmap_abi::XFormColorMap;
+
+    use crate::ui::sis::DeltaSISGauges;
+
+    use crate::comm::comm_abi::AlienTalkSegue;
+
     extern "C" {
         static mut GlobData: CGlobData;
         static mut shared_phrase_buf: [c_char; 2048];
-        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-        fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-        fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
-        fn XFormColorMap(map: *mut c_void, duration: i16) -> u32;
-
-        fn DeltaSISGauges(crew: i16, fuel: i16, units: i32);
-        fn AlienTalkSegue(track: u16);
     }
 
     // Callbacks and live globals belong to the game thread, as in the C scripts.
@@ -104,7 +110,7 @@ pub(super) mod live {
             unsafe {
                 let text = if fragments.is_empty() {
                     GetStringAddress(SetAbsStringTableIndex(
-                        COMM_DATA.conversation_phrases,
+                        (COMM_DATA.conversation_phrases).cast(),
                         phrase - 1,
                     ))
                 } else {
@@ -123,7 +129,7 @@ pub(super) mod live {
                                 let index =
                                     u16::try_from(fragment - 1).expect("invalid response fragment");
                                 GetStringAddress(SetAbsStringTableIndex(
-                                    COMM_DATA.conversation_phrases,
+                                    (COMM_DATA.conversation_phrases).cast(),
                                     index,
                                 ))
                             }
@@ -178,7 +184,8 @@ pub(super) mod live {
 
         fn palette(&mut self, index: u16) {
             unsafe {
-                COMM_DATA.alien_colormap = SetAbsStringTableIndex(COMM_DATA.alien_colormap, index)
+                COMM_DATA.alien_colormap =
+                    (SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index)).cast()
             }
         }
 
@@ -192,7 +199,7 @@ pub(super) mod live {
 
         fn fade_palette(&mut self, index: u16, duration: i16) {
             unsafe {
-                let map = SetAbsStringTableIndex(COMM_DATA.alien_colormap, index);
+                let map = SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index);
                 XFormColorMap(GetColorMapAddress(map), duration);
             }
         }

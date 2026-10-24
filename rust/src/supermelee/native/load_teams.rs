@@ -34,13 +34,12 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-pub(super) mod live {
+pub(crate) mod live {
     use super::page;
-    extern "C" {
-        fn SaveProblem();
-    }
+
     use crate::io::uio_bridge::{uio_fclose, uio_fopen, uio_unlink};
     use crate::memory::{rust_hfree, rust_hmalloc};
+    use crate::savegame::problem::SaveProblem;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::teams::*;
     use std::{

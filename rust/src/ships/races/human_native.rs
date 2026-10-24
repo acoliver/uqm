@@ -17,7 +17,7 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 }
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use super::{in_defense_range, nuke_speed, use_defense};
     use crate::ships::native::{
         abi::*, element, frame_index, object_cloaked, put_element, starship,

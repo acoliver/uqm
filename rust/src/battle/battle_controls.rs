@@ -1,21 +1,19 @@
 // Battle input controls — port of C battlecontrols.c
 // Defines BattleInputHandlers vtables, InputContext base struct, and
-// context constructors. Handler functions (computer_intelligence,
-// frameInputHuman, selectShip*, battleEndReady*) live in other C files
-// (intel.c, battle.c, tactrans.c, pickmele.c) and are referenced via
-// extern C function pointers.
+// context constructors. Rust handler functions are referenced through the
+// C ABI.
 
 use crate::memory::{rust_hfree, rust_hmalloc};
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_void;
 
 /// COUNT = u16
 pub type Count = u16;
 
-/// BATTLE_INPUT_STATE = DWORD = u32
-pub type BattleInputState = u32;
+/// BATTLE_INPUT_STATE = UBYTE = u8
+pub type BattleInputState = u8;
 
-/// BOOLEAN = c_int
-pub type Boolean = c_int;
+/// BOOLEAN = unsigned int = u32
+pub type Boolean = u32;
 
 // NUM_PLAYERS is a C constant (#define or enum)
 pub const NUM_PLAYERS: usize = 2;
@@ -81,21 +79,13 @@ pub struct NetworkInputContext {
 }
 
 // ---------------------------------------------------------------------------
-// Extern C handler functions (defined in other C files)
+// The battle-picker Rust implementations are private to their native module.
 // ---------------------------------------------------------------------------
 
-extern "C" {
-    fn computer_intelligence(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
-
-    fn frameInputHuman(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
-
-    fn battleEndReadyComputer(context: *mut c_void) -> bool;
-    fn battleEndReadyHuman(context: *mut c_void) -> bool;
-
-    // selectShipComputer/Human/Network are in supermelee/pickmele.c
-    fn selectShipComputer(context: *mut c_void, gms: *mut c_void) -> Boolean;
-    fn selectShipHuman(context: *mut c_void, gms: *mut c_void) -> Boolean;
-}
+#[cfg(not(test))]
+use crate::supermelee::native::battle_picker::live::selectShipComputer;
+#[cfg(not(test))]
+use crate::supermelee::native::battle_picker::live::selectShipHuman;
 
 // ---------------------------------------------------------------------------
 // Static vtables — matching C's global BattleInputHandlers structs
@@ -132,33 +122,107 @@ unsafe extern "C" fn unsafe_frame_input_computer(
     ctx: *mut InputContext,
     ship: *mut c_void,
 ) -> BattleInputState {
-    computer_intelligence(ctx as *mut c_void, ship)
+    #[cfg(not(test))]
+    {
+        crate::battle::ai_entry::computer_intelligence(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::computer_intelligence(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+        )
+    }
 }
 
 unsafe extern "C" fn unsafe_frame_input_human(
     ctx: *mut InputContext,
     ship: *mut c_void,
 ) -> BattleInputState {
-    frameInputHuman(ctx as *mut c_void, ship)
+    #[cfg(not(test))]
+    {
+        crate::battle::battle_native::frameInputHuman(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::frame_input_human(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+            ship.cast::<crate::ships::native::abi::STARSHIP>(),
+        )
+    }
 }
 
 unsafe extern "C" fn unsafe_select_ship_computer(
     ctx: *mut InputContext,
     gms: *mut c_void,
 ) -> Boolean {
-    selectShipComputer(ctx as *mut c_void, gms)
+    #[cfg(not(test))]
+    {
+        selectShipComputer(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::select_ship_computer(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+        )
+    }
 }
 
 unsafe extern "C" fn unsafe_select_ship_human(ctx: *mut InputContext, gms: *mut c_void) -> Boolean {
-    selectShipHuman(ctx as *mut c_void, gms)
+    #[cfg(not(test))]
+    {
+        selectShipHuman(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::select_ship_human(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+            gms.cast::<crate::ships::native::abi::GETMELEE_STATE>(),
+        )
+    }
 }
 
 unsafe extern "C" fn unsafe_battle_end_ready_computer(ctx: *mut InputContext) -> bool {
-    battleEndReadyComputer(ctx as *mut c_void)
+    #[cfg(not(test))]
+    {
+        crate::battle::tactrans_native::battleEndReadyComputer(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::battle_end_ready_computer(
+            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
+        )
+    }
 }
 
 unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bool {
-    battleEndReadyHuman(ctx as *mut c_void)
+    #[cfg(not(test))]
+    {
+        crate::battle::tactrans_native::battleEndReadyHuman(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+        )
+    }
+    #[cfg(test)]
+    {
+        handler_stubs::battle_end_ready_human(
+            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +234,13 @@ unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bo
 pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
     [std::ptr::null_mut(), std::ptr::null_mut()];
 
-extern "C" {
+use crate::supermelee::netplay::netmelee::networkBattleInput;
 
-    fn networkBattleInput(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
-    fn selectShipNetwork(context: *mut c_void, gms: *mut c_void) -> Boolean;
-    fn battleEndReadyNetwork(context: *mut c_void) -> bool;
-}
+#[cfg(not(test))]
+use crate::supermelee::native::battle_picker::live::selectShipNetwork;
+
+#[cfg(not(test))]
+use crate::battle::tactrans_native::engine::battleEndReadyNetwork;
 
 /// C: `void InputContext_init(InputContext *context, BattleInputHandlers *handlers, COUNT playerNr)`
 #[no_mangle]
@@ -259,21 +324,83 @@ unsafe extern "C" fn unsafe_frame_input_network(
     ctx: *mut InputContext,
     ship: *mut c_void,
 ) -> BattleInputState {
-    networkBattleInput(ctx as *mut c_void, ship)
+    networkBattleInput(ctx.cast(), ship.cast())
 }
 
 unsafe extern "C" fn unsafe_select_ship_network(
     ctx: *mut InputContext,
     gms: *mut c_void,
 ) -> Boolean {
-    selectShipNetwork(ctx as *mut c_void, gms)
+    #[cfg(not(test))]
+    {
+        selectShipNetwork(ctx.cast(), gms.cast())
+    }
+    #[cfg(test)]
+    {
+        let _ = (ctx, gms);
+        panic!("unit test entered live network ship selection")
+    }
 }
 
 unsafe extern "C" fn unsafe_battle_end_ready_network(ctx: *mut InputContext) -> bool {
-    battleEndReadyNetwork(ctx as *mut c_void)
+    #[cfg(not(test))]
+    {
+        battleEndReadyNetwork(ctx.cast())
+    }
+    #[cfg(test)]
+    {
+        let _ = ctx;
+        panic!("unit test entered live network battle completion")
+    }
 }
 
 // ---------------------------------------------------------------------------
+#[cfg(test)]
+mod handler_stubs {
+    use super::{BattleInputState, Boolean};
+    use crate::ships::native::abi::{
+        ComputerInputContext, HumanInputContext, GETMELEE_STATE, STARSHIP,
+    };
+
+    pub unsafe extern "C" fn computer_intelligence(
+        _context: *mut ComputerInputContext,
+        _ship: *mut STARSHIP,
+    ) -> BattleInputState {
+        0
+    }
+
+    pub unsafe extern "C" fn frame_input_human(
+        _context: *mut HumanInputContext,
+        _ship: *mut STARSHIP,
+    ) -> BattleInputState {
+        0
+    }
+
+    pub unsafe extern "C" fn select_ship_computer(
+        _context: *mut ComputerInputContext,
+        _gms: *mut GETMELEE_STATE,
+    ) -> Boolean {
+        0
+    }
+
+    pub unsafe extern "C" fn select_ship_human(
+        _context: *mut HumanInputContext,
+        _gms: *mut GETMELEE_STATE,
+    ) -> Boolean {
+        0
+    }
+
+    pub unsafe extern "C" fn battle_end_ready_computer(
+        _context: *mut ComputerInputContext,
+    ) -> bool {
+        true
+    }
+
+    pub unsafe extern "C" fn battle_end_ready_human(_context: *mut HumanInputContext) -> bool {
+        true
+    }
+}
+
 // Tests
 // ---------------------------------------------------------------------------
 

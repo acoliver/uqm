@@ -4,6 +4,7 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, live_queu
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect};
+use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
 };
@@ -14,11 +15,11 @@ use crate::planet_side::ffi::{
 };
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{FlashTarget, Gfx, Point, Rgba, Stamp};
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{c_void, CString};
 
 mod display;
 
-static mut SCAN_CONTEXT: *mut c_void = std::ptr::null_mut();
+static mut SCAN_CONTEXT: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
 static mut PLANET_LOCATION: CPoint = CPoint { x: 0, y: 0 };
 static mut CURSOR_RECT: CRect = CRect {
     corner: CPoint { x: 0, y: 0 },
@@ -28,11 +29,64 @@ static mut CURSOR_RECT: CRect = CRect {
 static mut ERASE_FRAME: *mut c_void = std::ptr::null_mut();
 
 use crate::time::counter_abi::GetTimeCounter;
+
+use crate::graphics::drawable_abi::GetFrameRect;
+
+use crate::graphics::drawable_abi::GetFrameHot;
+
+use crate::graphics::drawable_abi::SetFrameHot;
+
+use crate::graphics::context_abi::CopyContextRect;
+
+use crate::graphics::gfx_common_abi::DrawFromExtraScreen;
+
+use crate::planets::solarsys::drawing::DrawStarBackGround;
+
+use crate::planets::sphere::live::DrawDefaultPlanetSphere;
+
+use crate::planets::sphere::live::DrawPlanet;
+
+use crate::planets::orbit::live::DrawScannedObjects;
+
+use crate::planets::orbit::live::RedrawPlanetOrbitDisplay;
+
+use crate::ui::sis::DeltaSISGauges;
+
+use crate::ui::sis::DrawStatusMessage;
+
+use crate::battle::sounds::engine::PlayMenuSound;
+
+use crate::mainloop::input_abi::live::SetInputCallback;
+
+use crate::navigation::groups::live::PutGroupInfo;
+
+use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
+
+use crate::planet_side::init_lander::InitLander;
+
+use crate::ui::util::live::WaitForAnyButtonUntil;
+
+use crate::mainloop::input_abi::live::FlushInput;
+
+use crate::ui::menu::DoMenuChooser;
+
+use crate::ui::menu::DrawMenuStateStrings;
+
+#[cfg(feature = "debug-process")]
+use crate::graphics::context_abi::CreateContextAux;
+
+#[cfg(not(feature = "debug-process"))]
+use crate::graphics::context_abi::CreateContextAux;
+
+use crate::graphics::context_abi::DestroyContext;
+
+use crate::graphics::font_abi::SetContextFont;
+
 extern "C" {
     static mut GlobData: CGlobData;
     static mut NextActivity: u16;
-    static SpaceContext: *mut c_void;
-    static PlanetContext: *mut c_void;
+    static SpaceContext: *mut crate::graphics::native_abi::context_desc;
+    static PlanetContext: *mut crate::graphics::native_abi::context_desc;
     static Screen: *mut c_void;
     static MiscDataFrame: *mut c_void;
     static SpaceJunkFrame: *mut c_void;
@@ -42,36 +96,6 @@ extern "C" {
     static TinyFont: *mut c_void;
     static ScreenWidth: i32;
     static ScreenHeight: i32;
-    fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
-    fn GetFrameHot(frame: *mut c_void) -> CPoint;
-    fn SetFrameHot(frame: *mut c_void, hot: CPoint) -> CPoint;
-    fn CopyContextRect(rect: *mut CRect) -> *mut c_void;
-    fn DrawFromExtraScreen(rect: *mut CRect);
-    fn DrawStarBackGround();
-    fn DrawDefaultPlanetSphere();
-    fn DrawPlanet(y: i32, color: CColor);
-    fn DrawScannedObjects(reversed: u32);
-    fn RedrawPlanetOrbitDisplay();
-    fn DeltaSISGauges(crew: i16, fuel: i16, units: i32);
-    fn DrawStatusMessage(message: *const c_char);
-    fn PlayMenuSound(sound: i32);
-    fn SetInputCallback(callback: Option<unsafe extern "C" fn()>)
-        -> Option<unsafe extern "C" fn()>;
-
-    fn PutGroupInfo(offset: u32, which: u8) -> u32;
-    fn SaveSolarSysLocation();
-    fn InitLander(flags: u8);
-    fn WaitForAnyButtonUntil(new_button: u32, timeout: u32, reset: u32) -> u32;
-    fn FlushInput();
-    fn DoMenuChooser(menu: *mut MENU_STATE, first: u8) -> u32;
-    fn DrawMenuStateStrings(first: u8, state: i16);
-    #[cfg(feature = "debug-process")]
-    fn CreateContextAux(name: *const c_char) -> *mut c_void;
-    #[cfg(not(feature = "debug-process"))]
-    fn CreateContextAux() -> *mut c_void;
-    fn DestroyContext(context: *mut c_void) -> i32;
-    fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-    fn SetContextFont(font: *mut c_void) -> *mut c_void;
 }
 
 fn color(rgb: Rgba) -> CColor {
@@ -104,22 +128,22 @@ fn draw(frame: *mut c_void, point: CPoint, filled: bool) {
 }
 unsafe fn bounds(frame: *mut c_void) -> CRect {
     let mut rect = CRect::default();
-    GetFrameRect(frame, (&mut rect as *mut CRect).cast());
+    GetFrameRect((frame).cast(), (&mut rect as *mut CRect).cast());
     rect
 }
 unsafe fn cursor_frame() -> *mut c_void {
-    base::SetAbsFrameIndex(MiscDataFrame, 105)
+    (base::SetAbsFrameIndex((MiscDataFrame).cast(), 105)).cast()
 }
 
 #[no_mangle]
-unsafe extern "C" fn RepairBackRect(rect: *mut CRect) {
+pub unsafe extern "C" fn RepairBackRect(rect: *mut CRect) {
     let old = CffiPlatform.context_clip_rect();
     let mut new = *rect;
     new.corner.x += old.corner.x;
     new.corner.y += old.corner.y;
     new.height += new.corner.y & 1;
     new.corner.y &= !1;
-    DrawFromExtraScreen(&mut new);
+    DrawFromExtraScreen(std::ptr::from_mut(&mut new).cast());
 }
 
 unsafe fn erase_coarse() {
@@ -131,13 +155,14 @@ unsafe fn erase_coarse() {
 }
 
 unsafe fn save_location_image() {
-    let hot = GetFrameHot(cursor_frame());
-    base::DestroyDrawable(base::ReleaseDrawable(ERASE_FRAME));
+    let hot = GetFrameHot((cursor_frame()).cast());
+    base::DestroyDrawable(base::ReleaseDrawable((ERASE_FRAME).cast()));
     let mut rect = CURSOR_RECT;
     rect.corner.x -= hot.x;
     rect.corner.y -= hot.y;
-    ERASE_FRAME = base::CaptureDrawable(CopyContextRect(&mut rect));
-    SetFrameHot(ERASE_FRAME, hot);
+    ERASE_FRAME =
+        (base::CaptureDrawable(CopyContextRect(std::ptr::from_mut(&mut rect).cast()))).cast();
+    SetFrameHot((ERASE_FRAME).cast(), hot);
 }
 unsafe fn restore_location_image() {
     draw(ERASE_FRAME, CURSOR_RECT.corner, false);
@@ -193,7 +218,7 @@ unsafe fn flash_location() {
 }
 
 #[no_mangle]
-unsafe extern "C" fn RedrawSurfaceScan(location: *const CPoint) {
+pub unsafe extern "C" fn RedrawSurfaceScan(location: *const CPoint) {
     let old = SetContext(SCAN_CONTEXT);
     CffiPlatform.batch();
     DrawPlanet(0, black());
@@ -349,9 +374,8 @@ unsafe fn pick_side() -> bool {
     let mut state = PickState { success: false };
     menu.privData = (&mut state as *mut PickState).cast();
     let fuel = fuel();
-    extern "C" {
-        fn ClearSISRect(flags: u16);
-    }
+
+    use crate::ui::sis::ClearSISRect;
     ClearSISRect(1 << 2);
     SetContext(SCAN_CONTEXT);
     CffiPlatform.batch();
@@ -458,7 +482,7 @@ unsafe fn scan_planet(scan_type: u16) {
             height: 11,
         };
         RepairBackRect(&mut repair);
-        SetContextFont(MicroFont);
+        SetContextFont((MicroFont).cast());
         CffiPlatform.set_fg_color(text_colors[usize::from(scan)]);
         display::text(
             width() >> 1,
@@ -554,7 +578,7 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
 }
 
 #[no_mangle]
-unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
+pub unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
     if !SCAN_CONTEXT.is_null() {
         if !owner.is_null() {
             *owner = 0;
@@ -566,21 +590,21 @@ unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
         let old = SetContext(SpaceContext);
         let mut rect = CffiPlatform.context_clip_rect();
         let context = new_context(c"ScanContext".as_ptr());
-        SetContext(context);
-        SetContextFGFrame(Screen);
+        SetContext((context).cast());
+        SetContextFGFrame(Screen.cast());
         rect.corner.x += rect.width - width();
         rect.corner.y += rect.height - 75;
         rect.width = width();
         rect.height = 75;
         CffiPlatform.set_context_clip_rect(rect);
         SetContext(old);
-        SCAN_CONTEXT = context;
+        SCAN_CONTEXT = (context).cast();
     }
-    SCAN_CONTEXT
+    (SCAN_CONTEXT).cast()
 }
 
 #[no_mangle]
-unsafe extern "C" fn DestroyScanContext() {
+pub unsafe extern "C" fn DestroyScanContext() {
     if !SCAN_CONTEXT.is_null() {
         DestroyContext(SCAN_CONTEXT);
         SCAN_CONTEXT = std::ptr::null_mut();
@@ -588,7 +612,7 @@ unsafe extern "C" fn DestroyScanContext() {
 }
 
 #[no_mangle]
-unsafe extern "C" fn ScanSystem() {
+pub unsafe extern "C" fn ScanSystem() {
     let mut menu: MENU_STATE = std::mem::zeroed();
     GetScanContext(std::ptr::null_mut());
     if optWhichMenu == 1 && unavailable() {
@@ -619,7 +643,7 @@ unsafe extern "C" fn ScanSystem() {
     DrawPlanet(0, black());
     erase_coarse();
     CffiPlatform.unbatch();
-    base::DestroyDrawable(base::ReleaseDrawable(ERASE_FRAME));
+    base::DestroyDrawable(base::ReleaseDrawable((ERASE_FRAME).cast()));
     ERASE_FRAME = std::ptr::null_mut();
 }
 
@@ -627,11 +651,11 @@ unsafe extern "C" fn ScanSystem() {
 unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
     #[cfg(feature = "debug-process")]
     {
-        CreateContextAux(name)
+        (CreateContextAux(name)).cast()
     }
     #[cfg(not(feature = "debug-process"))]
     {
         let _ = name;
-        CreateContextAux()
+        CreateContextAux().cast()
     }
 }

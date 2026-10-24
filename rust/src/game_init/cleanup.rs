@@ -11,11 +11,10 @@ use crate::game_init::kernel_abi::UninitPlayerInput;
 extern "C" {
     fn UninitPlayerInput();
 }
-extern "C" {
 
-    fn UninitSpace();
-    fn FreeIPData();
-}
+use crate::game_init::space_resources::live::UninitSpace;
+
+use crate::planets::solarsys::resources::FreeIPData;
 
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.

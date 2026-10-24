@@ -7,11 +7,11 @@ use super::super::{SaveFile, SaveSlots};
 use crate::mainloop::dir_prep::saveDir;
 use crate::planets::c_api::GLOB_DATA;
 
-extern "C" {
-    fn inHQSpace() -> i32;
-    fn playerInSolarSystem() -> bool;
-    fn PutGroupInfo(offset: u32, group: u8) -> u32;
-}
+use crate::navigation::globals::inHQSpace;
+
+use crate::planets::solarsys::playerInSolarSystem;
+
+use crate::navigation::groups::live::PutGroupInfo;
 
 unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;

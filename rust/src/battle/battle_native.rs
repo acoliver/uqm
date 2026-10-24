@@ -84,15 +84,20 @@ pub(crate) mod engine {
     pub static mut battleFrameCount: BattleFrameCounter = 0;
     static mut BATTLE_REF: MUSIC_REF = ptr::null_mut();
 
+    use crate::automation::battle_observer::rust_battle_frame_reset;
+
+    use crate::automation::battle_observer::rust_battle_frame_advance;
+
+    use crate::automation::coordinator::rust_automation_seed_value;
+
+    use crate::battle::process_native::engine::RedrawQueue;
+
+    use crate::navigation::globals::getGameState;
+
+    use crate::navigation::globals::setGameState;
+
     extern "C" {
         pub static mut nth_frame: UWORD;
-        fn rust_battle_frame_reset();
-        fn rust_battle_frame_advance();
-        fn rust_automation_seed_value(domain: DWORD, fallback: DWORD) -> DWORD;
-        fn RedrawQueue(clear: BOOLEAN);
-        fn getGameState(state: *const BYTE, start: i32, end: i32) -> BYTE;
-        fn setGameState(state: *mut BYTE, start: i32, end: i32, value: BYTE);
-
     }
 
     /// # Safety

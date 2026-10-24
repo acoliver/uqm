@@ -16,7 +16,7 @@ pub static mut PlayFrame: FRAME = ptr::null_mut();
 /// # Safety
 /// Game-thread access to the initialized state singleton.
 #[no_mangle]
-pub unsafe extern "C" fn getGameState(_shadow: *mut u8, start: i32, end: i32) -> u8 {
+pub unsafe extern "C" fn getGameState(_shadow: *const u8, start: i32, end: i32) -> u8 {
     ffi::rust_get_game_state_bits(start, end)
 }
 /// # Safety

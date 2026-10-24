@@ -32,14 +32,12 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 #[allow(non_snake_case)]
 pub(super) mod live {
     use super::navigate;
+    use crate::front_end::fmv::DoShipSpin;
     use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
     use crate::ships::native::abi::*;
     use std::{mem, ptr};
 
     static mut BUILD_PICK_FRAME: FRAME = ptr::null_mut();
-    extern "C" {
-        fn DoShipSpin(index: u16, music: MUSIC_REF);
-    }
 
     unsafe fn hot(frame: FRAME, x: i16, y: i16) {
         drawable_abi::SetFrameHot(frame.cast(), native_abi::HOT_SPOT { x, y });

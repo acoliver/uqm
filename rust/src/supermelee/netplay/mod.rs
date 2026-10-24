@@ -29,9 +29,9 @@ mod netstate;
 
 mod netoptions;
 
-mod netinput;
+pub(crate) mod netinput;
 
-mod netconnection;
+pub(crate) mod netconnection;
 
 mod netrcv;
 
@@ -39,11 +39,11 @@ mod netsend;
 
 mod netmisc;
 
-mod notify;
+pub(crate) mod notify;
 
-mod notifyall;
+pub(crate) mod notifyall;
 
-mod netmelee;
+pub(crate) mod netmelee;
 
 #[cfg(not(test))]
 pub(crate) use netconnection::NetConnection_isConnected;
@@ -65,3 +65,6 @@ pub(crate) use notifyall::{
     Netplay_NotifyAll_inputDelay, Netplay_NotifyAll_setFleet, Netplay_NotifyAll_setShip,
     Netplay_NotifyAll_setTeamName,
 };
+
+#[cfg(test)]
+mod test_runtime;
