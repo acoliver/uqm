@@ -212,6 +212,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row("load-connected-syreen-v1", &[Domain::SaveLoad]),
+    row("load-connected-vault-v1", &[Domain::SaveLoad]),
     row("load-connected-umgah-fleet-v1", &[Domain::SaveLoad]),
     row("load-connected-rainbow-funded-v1", &[Domain::SaveLoad]),
     row(
