@@ -719,30 +719,11 @@ fn mount_handle_key(handle: *mut uio_MountHandle) -> usize {
 }
 
 fn normalize_mount_point(path: &Path) -> String {
-    let raw = path.to_string_lossy();
-    if raw.is_empty() || raw == "/" {
-        return "/".to_string();
-    }
-
-    let trimmed = raw.trim_matches('/');
-    if trimmed.is_empty() {
-        "/".to_string()
-    } else {
-        format!("/{}", trimmed)
-    }
+    normalize_virtual_path(path).to_string_lossy().into_owned()
 }
 
 fn normalize_virtual_path(path: &Path) -> PathBuf {
-    if path.as_os_str().is_empty() {
-        return PathBuf::from("/");
-    }
-
-    if path.is_absolute() {
-        let mount = normalize_mount_point(path);
-        return PathBuf::from(mount);
-    }
-
-    PathBuf::from(format!("/{}", path.to_string_lossy().trim_matches('/')))
+    normalize_virtual_path_full(Path::new("/"), path)
 }
 /// @plan PLAN-20260314-FILE-IO.P06
 /// @requirement REQ-FIO-MOUNT-ORDER
@@ -3040,7 +3021,7 @@ pub unsafe extern "C" fn uio_openDir(
     // Create directory handle (don't fail if it doesn't exist - may be created later)
     let handle = Box::new(uio_DirHandle {
         path: resolved.clone(),
-        virtual_path: c_path.clone(),
+        virtual_path: normalize_virtual_path(&c_path),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: _repository,
         root_end: resolved.clone(), // For now, root_end = full path
