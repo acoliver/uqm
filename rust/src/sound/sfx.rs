@@ -174,7 +174,7 @@ pub fn stop_channel(channel: usize, _priority: i32) -> AudioResult<()> {
 pub fn channel_playing(channel: usize) -> bool {
     stream::with_source(channel, |source| {
         mixer_source::mixer_get_source_i(source.handle, SourceProp::SourceState)
-            .map(|s| s == 0x1012) // Playing state
+            .map(|s| s == super::mixer::types::SourceState::Playing as i32)
             .unwrap_or(false)
     })
     .unwrap_or(false)
@@ -195,7 +195,7 @@ pub fn check_finished_channels() {
     for i in FIRST_SFX_SOURCE..=LAST_SFX_SOURCE {
         let stopped = stream::with_source(i, |source| {
             mixer_source::mixer_get_source_i(source.handle, SourceProp::SourceState)
-                .map(|s| s == 0x1014) // Stopped state
+                .map(|s| s == super::mixer::types::SourceState::Stopped as i32)
                 .unwrap_or(false)
         })
         .unwrap_or(false);

@@ -80,6 +80,16 @@ pub unsafe extern "C" fn PlaySoundEffect(
             (MAX_VOLUME >> 1) as i32,
             i32::from(priority),
         );
-        PlayChannel(channel, sound, position, positional_object, priority);
+        crate::sound::heart_ffi::play_channel(
+            u32::from(channel),
+            sound.cast(),
+            crate::sound::types::SoundPosition {
+                positional: position.positional != 0,
+                x: position.x,
+                y: position.y,
+            },
+            positional_object as usize,
+            priority,
+        );
     }
 }

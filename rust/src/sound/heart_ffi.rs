@@ -991,45 +991,36 @@ pub fn fade_music(end_vol: u8, how_long: i16) -> u32 {
 // SFX FFI (8 functions)
 // =============================================================================
 
-/// C signature: `PlayChannel(COUNT channel, SOUND snd, SoundPosition pos, void *obj, BYTE pri)`
-/// SOUND is a `STRING` = `STRING_TABLE_ENTRY_DESC*`. The `.data` field is an
-/// HMalloc'd slot containing a `*mut SoundSample`.
+/// Play a sound entry whose data holds a pointer to a decoded sample.
 ///
 /// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn PlayChannel(
+/// A non-null entry and its sample-pointer slot must be readable. The sample
+/// must remain live for the call, and the audio subsystem must be initialized.
+pub unsafe fn play_channel(
     channel: c_uint,
-    snd_ptr: *mut c_void, // SOUND (STRING_TABLE_ENTRY_DESC*)
-    pos: SoundPosition,   // passed by value in C
-    positional_object: *mut c_void,
-    priority: c_uint,
+    snd_ptr: *mut crate::strings::string_table::StringTableEntry,
+    pos: SoundPosition,
+    positional_object: usize,
+    priority: u8,
 ) {
-    let _ = ffi_catch(|| {
-        if snd_ptr.is_null() {
-            return;
-        }
-        // snd_ptr is a STRING_TABLE_ENTRY_DESC*. First field is `data` (a char*).
-        let entry = &*(snd_ptr as *const CStringTableEntry);
-        if entry.data.is_null() {
-            return;
-        }
-        // entry.data points to an HMalloc'd slot containing *mut SoundSample
-        let sample_ptr = *(entry.data as *const *const SoundSample);
-        if sample_ptr.is_null() {
-            return;
-        }
-        let sample = &*sample_ptr;
-
-        let _ = sfx::play_sample(
-            channel as usize,
-            sample,
-            pos,
-            positional_object as usize,
-            priority as i32,
-        );
-    });
+    if snd_ptr.is_null() {
+        return;
+    }
+    let entry = &*snd_ptr;
+    if entry.data.is_null() {
+        return;
+    }
+    let sample_ptr = *(entry.data as *const *const SoundSample);
+    if sample_ptr.is_null() {
+        return;
+    }
+    let _ = sfx::play_sample(
+        channel as usize,
+        &*sample_ptr,
+        pos,
+        positional_object,
+        i32::from(priority),
+    );
 }
 
 pub fn stop_channel(channel: c_uint, priority: c_int) {

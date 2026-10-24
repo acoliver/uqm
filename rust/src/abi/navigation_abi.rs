@@ -1718,15 +1718,6 @@ extern "C" {
 extern "C" {
     pub fn PLRResume(MusicRef: MUSIC_REF);
 }
-extern "C" {
-    pub fn PlayChannel(
-        channel: COUNT,
-        snd: SOUND,
-        pos: SoundPosition,
-        positional_object: *mut ::std::os::raw::c_void,
-        priority: ::std::os::raw::c_uchar,
-    );
-}
 pub use crate::sound::heart_ffi::{set_music_volume as SetMusicVolume};
 pub use crate::sound::heart_ffi::{set_channel_volume as SetChannelVolume};
 pub use crate::sound::heart_ffi::{stop_sound as StopSound};
