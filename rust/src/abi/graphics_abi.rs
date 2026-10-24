@@ -298,12 +298,7 @@ pub struct DrawMode {
 extern "C" {
     pub fn SetContextForeGroundColor(Color: Color) -> Color;
 }
-extern "C" {
-    pub fn BatchGraphics();
-}
-extern "C" {
-    pub fn UnbatchGraphics();
-}
+pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 extern "C" {
     pub fn CreateDrawable(
         CreateFlags: CREATE_FLAGS,
@@ -1210,18 +1205,7 @@ pub struct tfb_drawcommandqueue {
     pub Size: ::std::os::raw::c_int,
 }
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
-extern "C" {
-    pub fn TFB_BatchGraphics();
-}
-extern "C" {
-    pub fn TFB_UnbatchGraphics();
-}
-extern "C" {
-    pub fn TFB_BatchReset();
-}
-extern "C" {
-    pub fn TFB_GetBatchDepth() -> ::std::os::raw::c_int;
-}
+pub use crate::graphics::dcqueue_abi::{TFB_BatchGraphics, TFB_BatchReset, TFB_GetBatchDepth, TFB_UnbatchGraphics};
 extern "C" {
     pub fn TFB_DrawCommandQueue_Push(Command: *mut TFB_DrawCommand);
 }

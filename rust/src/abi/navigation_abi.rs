@@ -1571,15 +1571,7 @@ extern "C" {
 extern "C" {
     pub fn font_DrawTracedText(pText: *mut TEXT, text: Color, trace: Color);
 }
-extern "C" {
-    pub fn BatchGraphics();
-}
-extern "C" {
-    pub fn UnbatchGraphics();
-}
-extern "C" {
-    pub fn FlushGraphics();
-}
+pub use crate::graphics::gfx_common_abi::{BatchGraphics, FlushGraphics, UnbatchGraphics};
 extern "C" {
     pub fn ClearDrawable();
 }
@@ -6609,12 +6601,7 @@ extern "C" {
 extern "C" {
     pub fn DrawFromExtraScreen(r: *mut RECT);
 }
-extern "C" {
-    pub fn SetGraphicScale(scale: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn SetGraphicScaleMode(mode: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
+pub use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 extern "C" {
     pub fn SetTransitionSource(pRect: *const RECT);
 }

@@ -1,4 +1,8 @@
 //! Live draw command queue, ported from dcqueue.c (GPL-2.0-or-later).
+pub use self::{
+    tfb_batch_graphics as TFB_BatchGraphics, tfb_batch_reset as TFB_BatchReset,
+    tfb_get_batch_depth as TFB_GetBatchDepth, tfb_unbatch_graphics as TFB_UnbatchGraphics,
+};
 use super::native_abi::*;
 use crate::memory::rust_hfree;
 use std::{
@@ -91,16 +95,14 @@ pub unsafe extern "C" fn unlock_dcq() {
 }
 /// # Safety
 /// Queue must be initialized; called by serialized graphics producer.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_BatchGraphics() {
+pub unsafe fn tfb_batch_graphics() {
     LockRecursiveMutex(DCQ_MUTEX);
     DrawCommandQueue.Batching += 1;
     UnlockRecursiveMutex(DCQ_MUTEX);
 }
 /// # Safety
 /// Queue must be initialized; called by serialized graphics producer.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_UnbatchGraphics() {
+pub unsafe fn tfb_unbatch_graphics() {
     LockRecursiveMutex(DCQ_MUTEX);
     if DrawCommandQueue.Batching != 0 {
         DrawCommandQueue.Batching -= 1;
@@ -110,8 +112,7 @@ pub unsafe extern "C" fn TFB_UnbatchGraphics() {
 }
 /// # Safety
 /// Queue must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_GetBatchDepth() -> i32 {
+pub unsafe fn tfb_get_batch_depth() -> i32 {
     LockRecursiveMutex(DCQ_MUTEX);
     let depth = DrawCommandQueue.Batching;
     UnlockRecursiveMutex(DCQ_MUTEX);
@@ -119,8 +120,7 @@ pub unsafe extern "C" fn TFB_GetBatchDepth() -> i32 {
 }
 /// # Safety
 /// Queue must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn TFB_BatchReset() {
+pub unsafe fn tfb_batch_reset() {
     LockRecursiveMutex(DCQ_MUTEX);
     DrawCommandQueue.Batching = 0;
     synchronize(&mut *ptr::addr_of_mut!(DrawCommandQueue));
@@ -488,6 +488,15 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_controls_have_rust_signatures() {
+        let _: unsafe fn() = TFB_BatchGraphics;
+        let _: unsafe fn() = TFB_UnbatchGraphics;
+        let _: unsafe fn() -> i32 = TFB_GetBatchDepth;
+        let _: unsafe fn() = TFB_BatchReset;
+    }
+
     #[test]
     fn nested_batches_publish_only_after_outer_commit_and_wrap_ring() {
         let mut q: TFB_DrawCommandQueue = unsafe { std::mem::zeroed() };

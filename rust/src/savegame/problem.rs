@@ -16,9 +16,9 @@ extern "C" {
         fill: i32,
         background: CColor,
     );
-    fn FlushGraphics();
     fn WaitForAnyButton(new_button: u32, duration: u32, reset: u32) -> u32;
 }
+use crate::graphics::gfx_common_abi::FlushGraphics;
 
 fn color(v: u8) -> CColor {
     let c = Rgba::rgb15(v, v, v);

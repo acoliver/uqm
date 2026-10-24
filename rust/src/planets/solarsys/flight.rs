@@ -32,14 +32,13 @@ extern "C" {
     fn SetAbsFrameIndex(frame: *mut c_void, index: c::COUNT) -> *mut c_void;
     fn SetContext(context: *mut c_void) -> *mut c_void;
     fn SetTransitionSource(rect: *mut c_void);
-    fn BatchGraphics();
     fn RedrawQueue(clear: c::BOOLEAN);
     fn ScreenTransition(kind: std::ffi::c_int, rect: *const c_void);
-    fn UnbatchGraphics();
     fn DrawStamp(stamp: *mut crate::comm::locdata::CStamp);
     fn GameClockTick();
     fn DrawAutoPilotMessage(reset: i32);
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[inline]
 unsafe fn system() -> *mut c::SOLARSYS_STATE {

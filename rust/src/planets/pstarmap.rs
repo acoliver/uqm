@@ -60,8 +60,6 @@ extern "C" {
     fn DrawSISMessageEx(text: *const c_char, cursor: i16, extent: i16, flags: u16) -> u32;
     fn LoadIntoExtraScreen(rect: *mut CRect);
     fn RepairBackRect(rect: *mut CRect);
-    fn BatchGraphics();
-    fn UnbatchGraphics();
     fn SleepThread(ticks: i32);
     fn SetTransitionSource(rect: *mut c_void);
     fn ScreenTransition(kind: i32, rect: *const c_void);
@@ -80,6 +78,7 @@ extern "C" {
     fn getGameState(state: *const u8, start: i32, end: i32) -> u8;
     fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
     Color {

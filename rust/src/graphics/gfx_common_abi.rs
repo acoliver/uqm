@@ -1,4 +1,10 @@
 //! Graphics facade and transition state, ported from gfx_common.c (GPL-2.0-or-later).
+pub use self::{
+    batch_graphics as BatchGraphics, flush_graphics as FlushGraphics,
+    get_batch_depth as GetBatchDepth, get_graphic_scale as GetGraphicScale,
+    get_graphic_scale_mode as GetGraphicScaleMode, set_graphic_scale as SetGraphicScale,
+    set_graphic_scale_mode as SetGraphicScaleMode, unbatch_graphics as UnbatchGraphics,
+};
 use super::dcqueue_abi::{TFB_BatchGraphics, TFB_GetBatchDepth, TFB_UnbatchGraphics};
 use super::native_abi::{EXTENT, POINT, RECT};
 use super::sdl::lifecycle_abi::TFB_UploadTransitionScreen;
@@ -47,22 +53,19 @@ pub unsafe extern "C" fn LoadIntoExtraScreen(rect: *mut RECT) {
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn SetGraphicScale(scale: i32) -> i32 {
+pub unsafe fn set_graphic_scale(scale: i32) -> i32 {
     let old = GSCALE;
     GSCALE = if scale == 0 { 256 } else { scale };
     old
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn GetGraphicScale() -> i32 {
+pub unsafe fn get_graphic_scale() -> i32 {
     GSCALE
 }
 /// # Safety
 /// Mode must be nearest, bilinear or trilinear; called on graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn SetGraphicScaleMode(mode: i32) -> i32 {
+pub unsafe fn set_graphic_scale_mode(mode: i32) -> i32 {
     let old = GSCALE_MODE;
     assert!((1..=3).contains(&mode));
     GSCALE_MODE = mode;
@@ -70,32 +73,27 @@ pub unsafe extern "C" fn SetGraphicScaleMode(mode: i32) -> i32 {
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn GetGraphicScaleMode() -> i32 {
+pub unsafe fn get_graphic_scale_mode() -> i32 {
     GSCALE_MODE
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn BatchGraphics() {
+pub unsafe fn batch_graphics() {
     TFB_BatchGraphics();
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn UnbatchGraphics() {
+pub unsafe fn unbatch_graphics() {
     TFB_UnbatchGraphics();
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn GetBatchDepth() -> i32 {
+pub unsafe fn get_batch_depth() -> i32 {
     TFB_GetBatchDepth()
 }
 /// # Safety
 /// Called on the serialized graphics thread.
-#[no_mangle]
-pub unsafe extern "C" fn FlushGraphics() {
+pub unsafe fn flush_graphics() {
     TFB_DrawScreen_WaitForSignal();
 }
 fn expand_rect(rect: &mut RECT, expansion: i32, width: i32, height: i32) {
@@ -169,6 +167,36 @@ pub unsafe extern "C" fn ScreenTransition(_kind: i32, rect: *const RECT) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scalar_graphics_controls_have_rust_signatures() {
+        let _: unsafe fn(i32) -> i32 = SetGraphicScale;
+        let _: unsafe fn() -> i32 = GetGraphicScale;
+        let _: unsafe fn(i32) -> i32 = SetGraphicScaleMode;
+        let _: unsafe fn() -> i32 = GetGraphicScaleMode;
+        let _: unsafe fn() = BatchGraphics;
+        let _: unsafe fn() = UnbatchGraphics;
+        let _: unsafe fn() -> i32 = GetBatchDepth;
+        let _: unsafe fn() = FlushGraphics;
+    }
+
+    #[test]
+    fn scale_controls_return_previous_values_and_reset_zero_to_identity() {
+        unsafe {
+            let original_scale = SetGraphicScale(512);
+            assert_eq!(GetGraphicScale(), 512);
+            assert_eq!(SetGraphicScale(0), 512);
+            assert_eq!(GetGraphicScale(), 256);
+            SetGraphicScale(original_scale);
+
+            let original_mode = SetGraphicScaleMode(3);
+            assert_eq!(GetGraphicScaleMode(), 3);
+            assert_eq!(SetGraphicScaleMode(1), 3);
+            assert_eq!(GetGraphicScaleMode(), 1);
+            SetGraphicScaleMode(original_mode);
+        }
+    }
+
     #[test]
     fn transition_expansion_stops_at_screen_edges() {
         let mut r = RECT {

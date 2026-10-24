@@ -110,7 +110,6 @@ pub(super) mod c_bridge {
         pub fn c_ResetClearSubtitles();
         pub fn ProcessCommAnimations(do_clear: c_int, seeking: c_int) -> c_int;
         pub fn comm_RedrawSubtitles();
-        pub fn BatchGraphics();
         #[allow(dead_code)]
         pub static mut CommContext: *mut c_void;
 
@@ -124,8 +123,8 @@ pub(super) mod c_bridge {
         pub fn UpdateInputState();
         pub fn SleepThread(duration: c_int);
         pub fn ScreenTransition(which: c_int, rect: *const c_void);
-        pub fn UnbatchGraphics();
     }
+    pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
     extern "C" {
         static mut LastActivity: u32;

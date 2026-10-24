@@ -9,8 +9,6 @@ use std::ptr::{null, null_mut};
 use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
 #[allow(clashing_extern_declarations)]
 extern "C" {
-    fn BatchGraphics();
-    fn UnbatchGraphics();
     fn SetContext(context: *mut c_void) -> *mut c_void;
     fn ClearDrawable();
     fn SetContextFont(font: *mut c_void) -> *mut c_void;
@@ -20,6 +18,7 @@ extern "C" {
     fn DrawStamp(stamp: *mut CStamp);
     static optSubtitles: i32;
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[no_mangle]
 pub static mut shared_phrase_buf: [c_char; 2048] = [0; 2048];

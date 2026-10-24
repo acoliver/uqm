@@ -185,8 +185,6 @@ mod c_bridge {
         );
 
         // Batching
-        pub fn BatchGraphics();
-        pub fn UnbatchGraphics();
 
         // Frame management
         pub fn SetAbsFrameIndex(frame: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
@@ -210,6 +208,7 @@ mod c_bridge {
         // Trackplayer subtitle functions (trackplayer.c)
         pub fn comm_ClearSubtitles();
     }
+    pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 }
 
 /// C `INPUT_STATE` struct — just the menu array we need.

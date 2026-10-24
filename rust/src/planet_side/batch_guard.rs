@@ -48,11 +48,7 @@ pub const fn classify(entry: i32, exit: i32) -> BatchVerdict {
 }
 
 #[cfg(not(test))]
-extern "C" {
-    fn GetBatchDepth() -> i32;
-    fn BatchGraphics();
-    fn UnbatchGraphics();
-}
+use crate::graphics::gfx_common_abi::{BatchGraphics, GetBatchDepth, UnbatchGraphics};
 
 #[cfg(not(test))]
 fn depth() -> i32 {

@@ -64,12 +64,11 @@ mod live {
         fn SetShieldThrobEffect(work: *mut c_void, point: i32, frame: *mut c_void);
 
         fn RepairBackRect(rect: *mut CRect);
-        fn SetGraphicScale(scale: i32) -> i32;
-        fn SetGraphicScaleMode(mode: i32) -> i32;
         fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
         fn SetContextClipRect(rect: *mut CRect);
         fn SetContextDrawMode(mode: DrawMode) -> DrawMode;
     }
+    use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 
     fn stamp(frame: *mut c_void, x: i16, y: i16) {
         CffiPlatform.draw_stamp(Stamp {

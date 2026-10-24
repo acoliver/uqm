@@ -33,12 +33,11 @@ mod runtime {
         fn SetContextForeGroundColor(color: CColor) -> CColor;
         fn DrawStamp(stamp: *mut CStamp);
         fn DrawLine(line: *const Line);
-        fn BatchGraphics();
-        fn UnbatchGraphics();
         fn GraphForegroundStream(data: *mut u8, width: i32, height: i32, speech: i32) -> i32;
         static OffScreenContext: *mut c_void;
         static usingSpeech: i32;
     }
+    use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
     static mut SCOPE_FRAME: *mut frame_desc = null_mut();
     static mut SCOPE_INIT: bool = false;

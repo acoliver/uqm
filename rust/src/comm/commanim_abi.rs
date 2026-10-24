@@ -207,10 +207,9 @@ mod runtime {
         fn SetAbsStringTableIndex(map: *mut c_void, index: u16) -> *mut c_void;
         fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
         fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn BatchGraphics();
-        fn UnbatchGraphics();
         fn DrawStamp(stamp: *mut CStamp);
     }
+    use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
     static mut LAST_TIME: u32 = 0;
     static mut SEQUENCES: [Sequence; 22] = [Sequence::EMPTY; 22];
