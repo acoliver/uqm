@@ -17,6 +17,25 @@ pub(crate) fn node_visible(element: &Element, info: &PLANET_INFO) -> bool {
     element.state_flags.contains(ElementFlags::APPEARING) && !node_retrieved(element, info)
 }
 
+pub(crate) fn sync_node_position(
+    element: &mut Element,
+    positions: &[(
+        super::generation::ScanType,
+        super::generation::ScanNodeId,
+        super::model::SurfacePoint,
+    )],
+) {
+    if !element.state_flags.contains(ElementFlags::APPEARING) {
+        return;
+    }
+    if let Some((_, _, position)) = positions.iter().find(|(scan, node, _)| {
+        element.life_span == (*scan as u16 | (u16::from(node.get() + 1) << 8))
+    }) {
+        element.current.location.x = (position.x >> 2) as i16;
+        element.current.location.y = (position.y >> 2) as i16;
+    }
+}
+
 #[cfg(not(test))]
 mod production {
     use std::ffi::c_void;
@@ -142,6 +161,30 @@ mod production {
         }
     }
 
+    pub(super) unsafe fn sync_positions(surface: &crate::planet_side::assembly::SurfaceAssembly) {
+        let positions: Vec<_> = surface
+            .generated
+            .iter()
+            .map(|entry| {
+                (
+                    entry.scan,
+                    entry.node,
+                    surface
+                        .world
+                        .get(entry.entity)
+                        .expect("generated surface entity")
+                        .position,
+                )
+            })
+            .collect();
+        let mut handle = (*crate::c_bindings::live_queues::display_list()).head as usize;
+        while handle != 0 {
+            let element = &mut *(handle as *mut Element);
+            handle = element.succ as usize;
+            super::sync_node_position(element, &positions);
+        }
+    }
+
     unsafe fn initialize_element(
         element: *mut Element,
         solar: *mut SOLARSYS_STATE,
@@ -229,6 +272,103 @@ pub extern "C" fn generate_planet_side() {
 mod retrieval_tests {
     use super::*;
     #[test]
+    fn moving_scanned_lifeform_follows_surface_across_wrap_but_mineral_stays_put() {
+        use crate::battle::velocity::{world_to_velocity, VelocityDesc};
+        use crate::planet_side::{
+            creatures::CreatureKind, entities::*, generation::*, model::SurfacePoint, world::*,
+        };
+        struct Random;
+        impl WorldRandom for Random {
+            fn next(&mut self) -> u32 {
+                0
+            }
+        }
+        struct NoMasks;
+        impl MaskLookup for NoMasks {
+            fn mask(
+                &self,
+                _: SurfaceEntityId,
+            ) -> Option<&crate::planet_side::geometry::CollisionMask> {
+                None
+            }
+        }
+        let mut world = SurfaceWorld::new();
+        let mut velocity = VelocityDesc::new();
+        velocity.set_components(world_to_velocity(2), 0);
+        let bio = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::LiveCreature {
+                kind: CreatureKind::new(5).unwrap(),
+                hit_points: 2,
+                aware: false,
+                velocity,
+                thrust_wait: 1,
+                frame_index: 0,
+                animation_wait: 4,
+                damage_wait: 0,
+            },
+            position: SurfacePoint {
+                x: WORLD_WIDTH - 1,
+                y: 48,
+            },
+            finite_life: None,
+        });
+        let mineral = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category: 0,
+                size: 0,
+                quantity: 5,
+            },
+            position: SurfacePoint { x: 80, y: 100 },
+            finite_life: None,
+        });
+        let mut bio_dot = Element::new();
+        bio_dot.life_span = (1 << 8) | 2;
+        bio_dot.state_flags |= ElementFlags::APPEARING;
+        bio_dot.current.location.x = 241;
+        bio_dot.current.location.y = 12;
+        let mut mineral_dot = Element::new();
+        mineral_dot.life_span = 1 << 8;
+        mineral_dot.state_flags |= ElementFlags::APPEARING;
+        mineral_dot.current.location.x = 20;
+        mineral_dot.current.location.y = 25;
+        step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &NoMasks,
+                creature_masks: &NoMasks,
+                random: &mut Random,
+            },
+        );
+        let positions = [
+            (
+                ScanType::Biological,
+                ScanNodeId::new(0).unwrap(),
+                world.get(bio).unwrap().position,
+            ),
+            (
+                ScanType::Mineral,
+                ScanNodeId::new(0).unwrap(),
+                world.get(mineral).unwrap().position,
+            ),
+        ];
+        sync_node_position(&mut bio_dot, &positions);
+        sync_node_position(&mut mineral_dot, &positions);
+        assert_eq!(
+            bio_dot.current.location,
+            crate::battle::element::Point::new(0, 12)
+        );
+        assert_eq!(
+            mineral_dot.current.location,
+            crate::battle::element::Point::new(20, 25)
+        );
+        bio_dot.state_flags.remove(ElementFlags::APPEARING);
+        bio_dot.current.location.x = 123;
+        sync_node_position(&mut bio_dot, &positions);
+        assert_eq!(bio_dot.current.location.x, 123);
+    }
+
+    #[test]
     fn retrieved_blips_stay_hidden_on_redraw_and_rescan_for_every_category() {
         let mut info: PLANET_INFO = unsafe { std::mem::zeroed() };
         for scan in 0..3 {
@@ -243,4 +383,9 @@ mod retrieval_tests {
             assert!(!node_visible(&element, &info));
         }
     }
+}
+
+#[cfg(not(test))]
+pub(crate) unsafe fn sync_positions(surface: &super::assembly::SurfaceAssembly) {
+    production::sync_positions(surface);
 }
