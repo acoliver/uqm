@@ -58,6 +58,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::FightBattle(_)
         | Action::FightSamatra(_)
         | Action::FightEncounter(_)
+        | Action::RetreatEncounter(_)
         | Action::SelectPlanetMenu(_)
         | Action::PickBattleShip(_)
         | Action::SelectResponse(_)

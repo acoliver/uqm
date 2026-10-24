@@ -314,7 +314,8 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::CollectPlanetMinerals(_)
         | Action::FightBattle(_)
         | Action::FightSamatra(_)
-        | Action::FightEncounter(_) => {
+        | Action::FightEncounter(_)
+        | Action::RetreatEncounter(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -422,6 +423,7 @@ pub fn scheduler_reduce(
                     | Action::FightBattle(_)
                     | Action::FightSamatra(_)
                     | Action::FightEncounter(_)
+                    | Action::RetreatEncounter(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -887,6 +889,7 @@ fn reduce_navigation(
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightSamatra(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightEncounter(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::RetreatEncounter(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -909,6 +912,7 @@ fn reduce_navigation(
         | (Action::CollectPlanetMinerals(_), ActionPhase::Navigating { remaining })
         | (Action::FightSamatra(_), ActionPhase::Navigating { remaining })
         | (Action::FightEncounter(_), ActionPhase::Navigating { remaining })
+        | (Action::RetreatEncounter(_), ActionPhase::Navigating { remaining })
         | (Action::FightBattle(_), ActionPhase::Navigating { remaining }) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::Navigating {
@@ -964,7 +968,9 @@ fn reduce_navigation(
             effects: EffectPlan::none(),
         },
         (
-            Action::FightBattle(fight) | Action::FightEncounter(fight),
+            Action::FightBattle(fight)
+            | Action::FightEncounter(fight)
+            | Action::RetreatEncounter(fight),
             ActionPhase::WaitingForInput,
         ) => SchedulerTransition {
             new_state: SchedulerState {
@@ -3605,6 +3611,7 @@ mod budgeted_wait_tests {
             }),
             Action::FightBattle(FightBattleStep { max_ticks }),
             Action::FightEncounter(FightBattleStep { max_ticks }),
+            Action::RetreatEncounter(FightBattleStep { max_ticks }),
         ]
     }
 
@@ -3661,6 +3668,7 @@ mod budgeted_wait_tests {
                 | Action::FightBattle(_)
                 | Action::FightSamatra(_)
                 | Action::FightEncounter(_)
+                | Action::RetreatEncounter(_)
         ) {
             ActionPhase::Navigating { remaining }
         } else {

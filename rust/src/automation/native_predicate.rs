@@ -335,6 +335,17 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "ticks=")
                     .is_some_and(|ticks| ticks > 0 && ticks <= value.max_ticks)
         }
+        Action::RetreatEncounter(value) => {
+            shape(
+                label,
+                "fleet_escaped",
+                &["enemy_initial=", "flagship_crew=", "ticks="],
+            ) && at_least(label, "enemy_initial=", 1)
+                && number(label, "flagship_crew=")
+                    .is_some_and(|crew| crew > 0 && crew < u64::from(u16::MAX))
+                && number(label, "ticks=")
+                    .is_some_and(|ticks| ticks > 0 && ticks <= value.max_ticks)
+        }
         Action::FightEncounter(value) => {
             shape(
                 label,
@@ -1071,6 +1082,23 @@ mod tests {
             "planet_minerals_collect_failed:category=radioactive:minimum=2:reason=timeout:units=0",
         ] {
             assert!(!semantic_satisfied(&action, label), "{label}");
+        }
+    }
+
+    #[test]
+    fn retreat_requires_living_flagship_surviving_enemy_and_bounded_proof() {
+        let action =
+            Action::RetreatEncounter(crate::automation::script::FightBattleStep { max_ticks: 900 });
+        let good = "fleet_escaped:enemy_initial=3:flagship_crew=30:ticks=174";
+        assert!(semantic_satisfied(&action, good));
+        for bad in [
+            good.replace("enemy_initial=3", "enemy_initial=0"),
+            good.replace("flagship_crew=30", "flagship_crew=0"),
+            good.replace("flagship_crew=30", "flagship_crew=65535"),
+            good.replace("ticks=174", "ticks=901"),
+            good.replace("ticks=174", "ticks=0"),
+        ] {
+            assert!(!semantic_satisfied(&action, &bad));
         }
     }
 
