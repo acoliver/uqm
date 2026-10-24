@@ -14,7 +14,6 @@ class Uqm < Formula
   desc "Ur-Quan Masters space adventure"
   homepage "https://github.com/acoliver/uqm"
   url "https://github.com/acoliver/uqm/releases/download/$1/uqm-$1-aarch64-apple-darwin.tar.gz"
-  version "${version}"
   sha256 "$2"
   license all_of: ["GPL-2.0-or-later", "CC-BY-NC-SA-2.5"]
 
