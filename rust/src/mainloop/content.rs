@@ -15,7 +15,13 @@ pub fn locate(explicit: Option<&str>) -> anyhow::Result<PathBuf> {
 
 fn locate_at(explicit: Option<&Path>, cwd: &Path, exe: &Path) -> anyhow::Result<PathBuf> {
     let candidates = if let Some(path) = explicit {
-        vec![cwd.join(path)]
+        let path = cwd.join(path);
+        anyhow::ensure!(
+            path.join("version").is_file(),
+            "Content dir '{}' does not contain a 'version' file",
+            path.display()
+        );
+        return Ok(path);
     } else {
         let bin = exe.parent().expect("executable has a parent directory");
         vec![
@@ -64,13 +70,15 @@ mod tests {
             ("prefix/bin/uqm", "prefix/share/uqm"),
         ] {
             let root = tempfile::tempdir().unwrap();
+            let binary = root.path().join(binary);
+            std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
             let content = root.path().join(content);
             std::fs::create_dir_all(&content).unwrap();
             std::fs::write(content.join("version"), "0.8.0").unwrap();
             let unrelated = root.path().join("elsewhere");
             std::fs::create_dir(&unrelated).unwrap();
             assert_eq!(
-                locate_at(None, &unrelated, &root.path().join(binary)).unwrap(),
+                locate_at(None, &unrelated, &binary).unwrap(),
                 content.canonicalize().unwrap()
             );
         }
@@ -81,7 +89,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("content")).unwrap();
         std::fs::write(root.path().join("content/version"), "0.8.0").unwrap();
-        assert!(locate_at(Some(Path::new("missing")), root.path(), &root.path().join("uqm")).is_err());
+        assert!(locate_at(
+            Some(Path::new("missing")),
+            root.path(),
+            &root.path().join("uqm")
+        )
+        .is_err());
     }
 
     #[test]
