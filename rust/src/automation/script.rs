@@ -924,6 +924,7 @@ pub enum Action {
     /// Finish an ordinary whole-fleet encounter using normal-speed Cyborg,
     /// confirming replacement escort choices through the real ship picker.
     FightEncounter(FightBattleStep),
+    RetreatEncounter(FightBattleStep),
     FightSamatra(crate::automation::samatra::FightSamatraStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
@@ -2234,7 +2235,9 @@ fn validate_navigation_step(
             }
             fight.max_ticks
         }
-        Action::FightBattle(fight) | Action::FightEncounter(fight) => {
+        Action::FightBattle(fight)
+        | Action::FightEncounter(fight)
+        | Action::RetreatEncounter(fight) => {
             if fight.max_ticks == 0 {
                 return Some(Err(AutomationError::step(
                     path,
@@ -4676,6 +4679,19 @@ mod tests {
             assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{step}");
         }
         assert!(validated_steps(r#"{"action":"fight_samatra","max_ticks":0}"#).is_err());
+    }
+
+    #[test]
+    fn retreat_encounter_validates_its_closed_input_contract() {
+        assert!(validated_steps(r#"{"action":"retreat_encounter","max_ticks":3000}"#).is_ok());
+        assert!(validated_steps(r#"{"action":"retreat_encounter","max_ticks":0}"#).is_err());
+        for bad in [
+            r#"{"action":"retreat_encounter"}"#,
+            r#"{"action":"retreat_encounter","max_ticks":10,"speed":3}"#,
+        ] {
+            let text = turn_script(bad);
+            assert!(parse_script(text.as_bytes(), "m.json").is_err(), "{bad}");
+        }
     }
 
     #[test]

@@ -1985,6 +1985,10 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             scheduler_event = self.service_fleet_fight(inner, fight.max_ticks, scheduler_event);
+        } else if let Some(Action::RetreatEncounter(retreat)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_fleet_retreat(inner, retreat.max_ticks, scheduler_event);
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
