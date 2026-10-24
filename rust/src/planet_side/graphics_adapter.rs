@@ -150,6 +150,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
         #[cfg(not(test))]
         unsafe {
             {
+                super::orbit_scan::sync_positions(&self.surface.borrow());
                 let scan_position = CPoint {
                     x: snapshot.lander.position.x as i16,
                     y: snapshot.lander.position.y as i16,
