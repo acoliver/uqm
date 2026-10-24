@@ -775,18 +775,6 @@
       "count": 120
     },
     {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 2,
-      "settle": 10
-    },
-    {
-      "action": "select_response",
-      "phrase": "bye_1",
-      "max_ticks": 6000
-    },
-    {
       "action": "fight_encounter",
       "max_ticks": 120000
     },
