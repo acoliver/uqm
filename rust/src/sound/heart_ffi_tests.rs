@@ -384,11 +384,81 @@ fn channel_calls_ignore_missing_sounds_and_idle_channels() {
         y: 0,
     };
     unsafe {
-        PlayChannel(0, ptr::null_mut(), pos, ptr::null_mut(), 1);
+        play_channel(0, ptr::null_mut(), pos, 0, 1);
         assert_eq!(channel_playing(0), 0);
         stop_channel(0, 1);
         set_channel_volume(0, 100, 1);
     }
+}
+
+#[test]
+fn channel_playback_has_a_typed_rust_signature() {
+    let _: unsafe fn(
+        u32,
+        *mut crate::strings::string_table::StringTableEntry,
+        SoundPosition,
+        usize,
+        u8,
+    ) = play_channel;
+}
+
+#[test]
+fn channel_playback_retains_the_full_object_address_on_the_selected_channel() {
+    use crate::strings::string_table::StringTableEntry;
+
+    let _engine = Engine::start();
+    let mut sample = stream::create_sound_sample(None, 1, None).unwrap();
+    super::mixer::buffer::mixer_buffer_data(
+        sample.buffers[0],
+        super::mixer::MixerFormat::Mono16 as u32,
+        &[0; 128],
+        22050,
+        22050,
+        super::mixer::MixerFormat::Stereo16,
+    )
+    .unwrap();
+    let mut sample_ptr = ptr::from_mut(&mut sample);
+    let mut entry = StringTableEntry {
+        data: ptr::from_mut(&mut sample_ptr).cast(),
+        length: std::mem::size_of_val(&sample_ptr) as i32,
+        index: 0,
+        parent: ptr::null_mut(),
+    };
+    let object = usize::MAX - 0xABCD;
+    set_positional_object(2, 42);
+    unsafe {
+        play_channel(
+            1,
+            &mut entry,
+            SoundPosition::non_positional(),
+            object,
+            u8::MAX,
+        );
+    }
+    assert_eq!(channel_playing(1), 1);
+    assert_eq!(get_positional_object(1), object);
+    assert_eq!(get_positional_object(2), 42);
+    stop_channel(1, 0);
+    assert_eq!(channel_playing(1), 0);
+    set_positional_object(1, 0);
+    set_positional_object(2, 0);
+    stream::destroy_sound_sample(&mut sample).unwrap();
+}
+
+#[test]
+fn finished_channel_cleanup_uses_the_mixer_stopped_state() {
+    let _engine = Engine::start();
+    let sample = std::sync::Arc::new(parking_lot::Mutex::new(
+        stream::create_sound_sample(None, 0, None).unwrap(),
+    ));
+    let handle = stream::with_source(1, |source| {
+        source.sample = Some(sample);
+        source.handle
+    })
+    .unwrap();
+    super::mixer::source::mixer_source_stop(handle).unwrap();
+    super::sfx::check_finished_channels();
+    assert!(stream::with_source(1, |source| source.sample.is_none()).unwrap());
 }
 
 #[test]
