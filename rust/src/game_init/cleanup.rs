@@ -27,7 +27,7 @@ pub unsafe fn FreeKernel() {
     DestroyContext(ScreenContext.cast());
     ScreenContext = ptr::null_mut();
     crate::video::control::UninitVideoPlayer();
-    crate::sound::heart_ffi::UninitSound();
+    crate::sound::heart_ffi::uninit_sound();
 }
 
 unsafe fn uninit_contexts() {

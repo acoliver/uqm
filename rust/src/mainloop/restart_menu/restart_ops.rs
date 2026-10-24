@@ -467,7 +467,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn fade_music(&self, end_vol: u8, time_interval: c_short) -> u32 {
         // SAFETY: fade_music is safe to call on the main thread.
-        unsafe { c_extern::FadeMusic(end_vol, time_interval) }
+        c_extern::FadeMusic(end_vol, time_interval)
     }
 
     fn create_flash_overlay(&self) -> usize {

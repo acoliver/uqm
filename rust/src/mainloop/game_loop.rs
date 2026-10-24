@@ -402,7 +402,7 @@ mod cffi {
         }
 
         fn stop_sound(&self) {
-            unsafe { c_extern::StopSound() }
+            c_extern::StopSound()
         }
 
         fn uninit_game_clock(&self) {

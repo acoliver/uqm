@@ -848,10 +848,7 @@ pub unsafe fn rust_do_communication() -> c_int {
     if response_count == 0 {
         // No responses — run last-replay then done.
         // run_last_replay calls C bridges, so no lock.
-        extern "C" {
-            #[allow(clashing_extern_declarations)]
-            fn FadeMusic(target_vol: u8, duration: i16) -> std::ffi::c_uint;
-        }
+        use crate::sound::heart_ffi::fade_music as FadeMusic;
         let timeout = FadeMusic(
             0u8,
             (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,

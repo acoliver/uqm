@@ -358,6 +358,7 @@ pub use crate::navigation::globals::UninitGameStructures;
 extern "C" {
     pub fn UninitGameStructures();
 }
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
 extern "C" {
     /// `BOOLEAN StartGame(void)` — outer-loop controller.
     ///
@@ -393,7 +394,6 @@ extern "C" {
 
     /// `void StopSound(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn StopSound();
 
     /// `void UninitGameClock(void)`.
     /// @plan PLAN-20260707-MAINLOOP.P06

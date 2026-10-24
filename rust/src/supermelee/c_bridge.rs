@@ -22,10 +22,7 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
-extern "C" {
-
-    pub fn StopSound();
-}
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
 
 // ---------------------------------------------------------------------------
 // Global state (from globdata.h)

@@ -19,6 +19,7 @@ pub(super) mod c_bridge {
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
+    pub use crate::sound::heart_ffi::{fade_music as FadeMusic, stop_sound as StopSound};
     pub use crate::ui::border::DrawSISFrame;
     pub use crate::ui::settings::StopMusic;
     extern "C" {
@@ -84,8 +85,6 @@ pub(super) mod c_bridge {
 
         // Audio teardown
 
-        pub fn StopSound();
-        pub fn FadeMusic(vol: u8, duration: i16) -> c_uint;
         pub fn SleepThreadUntil(time: c_uint);
         pub fn FlushColorXForms();
 

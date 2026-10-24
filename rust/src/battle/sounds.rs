@@ -87,7 +87,7 @@ mod engine {
         }
         let channels = &raw mut CHANNELS;
         let channel = (*channels).select(sound, |c| {
-            ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u16) != 0
+            ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
         PlaySoundEffect(
             sound,
@@ -157,7 +157,7 @@ mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn UpdateSoundPositions() {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if ChannelPlaying(i as u16) == 0 {
+            if ChannelPlaying(i) == 0 {
                 continue;
             }
             let object = GetPositionalObject(i as u16).cast::<ELEMENT>();

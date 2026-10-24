@@ -40,6 +40,7 @@ const PICK_GRAPHIC: &[u8] = b"graphics.pickship\0";
 /// `RUN_AWAY_FUEL_COST`.
 const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
+use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 extern "C" {
     static mut SpaceContext: *mut c_void;
     static mut StatusFrame: *mut c_void;
@@ -62,7 +63,6 @@ extern "C" {
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn GetStringAddress(entry: *mut c_void) -> *const c_char;
     fn GetStringLength(entry: *mut c_void) -> u16;
-    fn WaitForSoundEnd(channel: u16);
     fn GetCrewPodCapacity() -> u16;
     fn FleetIsInfinite(player: u16) -> c_int;
     fn GetNextMeleeStarShip(player: u16, result: *mut *mut c_void) -> c_int;
@@ -357,7 +357,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
             unsafe { *live_counters::battle_counter_slot(RPG_PLAYER_NUM) = 1 };
         }
         // SAFETY: plain call.
-        unsafe { WaitForSoundEnd(0) };
+        WaitForSoundEnd(0);
     }
 
     // SAFETY: restores the context saved above.

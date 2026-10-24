@@ -75,7 +75,11 @@ pub unsafe extern "C" fn PlaySoundEffect(
         u8::from(GlobData.Game_state.glob_flags & (SOUND_DISABLED as u8) != 0)
     );
     if GlobData.Game_state.glob_flags & (SOUND_DISABLED as u8) == 0 {
-        SetChannelVolume(channel, (MAX_VOLUME >> 1) as u16, priority);
+        SetChannelVolume(
+            u32::from(channel),
+            (MAX_VOLUME >> 1) as i32,
+            i32::from(priority),
+        );
         PlayChannel(channel, sound, position, positional_object, priority);
     }
 }

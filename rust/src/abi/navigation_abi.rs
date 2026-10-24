@@ -1770,21 +1770,11 @@ extern "C" {
         priority: ::std::os::raw::c_uchar,
     );
 }
-extern "C" {
-    pub fn SetMusicVolume(Volume: COUNT);
-}
-extern "C" {
-    pub fn SetChannelVolume(Channel: COUNT, Volume: COUNT, Priority: BYTE);
-}
-extern "C" {
-    pub fn StopSound();
-}
-extern "C" {
-    pub fn WaitForSoundEnd(Channel: COUNT);
-}
-extern "C" {
-    pub fn FadeMusic(end_vol: BYTE, TimeInterval: SIZE) -> DWORD;
-}
+pub use crate::sound::heart_ffi::{set_music_volume as SetMusicVolume};
+pub use crate::sound::heart_ffi::{set_channel_volume as SetChannelVolume};
+pub use crate::sound::heart_ffi::{stop_sound as StopSound};
+pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
+pub use crate::sound::heart_ffi::{fade_music as FadeMusic};
 pub const COMMON: _bindgen_ty_2 = 0;
 pub const CORROSIVE: _bindgen_ty_2 = 1;
 pub const BASE_METAL: _bindgen_ty_2 = 2;
@@ -7021,9 +7011,7 @@ extern "C" {
 extern "C" {
     pub static mut speechVolumeScale: f32;
 }
-extern "C" {
-    pub fn SetSpeechVolume(volume: f32);
-}
+pub use crate::sound::heart_ffi::{set_speech_volume as SetSpeechVolume};
 extern "C" {
     pub fn AnyButtonPress(DetectSpecial: BOOLEAN) -> BOOLEAN;
 }

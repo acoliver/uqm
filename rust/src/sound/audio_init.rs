@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::sound::formats::DecoderFormats;
 use crate::sound::heart_ffi::{
-    InitStreamDecoder, SetMusicVolume, SetSFXVolume, SetSpeechVolume, UninitStreamDecoder,
+    init_stream_decoder, set_music_volume, set_sfx_volume, set_speech_volume, uninit_stream_decoder,
 };
 use crate::sound::mixer::ffi::{rust_mixer_init, rust_mixer_uninit};
 use crate::sound::volume_globals::{musicVolume, sfxVolumeScale, speechVolumeScale};
@@ -67,7 +67,7 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
     }
     log::info!("Sound decoders initialized.");
 
-    if InitStreamDecoder() != 0 {
+    if init_stream_decoder() != 0 {
         log::error!("Stream decoder initialization failed.");
         rust_mixer_uninit();
         return -1;
@@ -75,9 +75,9 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
 
     libc::atexit(unInitAudio);
 
-    SetSFXVolume(sfxVolumeScale);
-    SetSpeechVolume(speechVolumeScale);
-    SetMusicVolume(musicVolume);
+    set_sfx_volume(sfxVolumeScale);
+    set_speech_volume(speechVolumeScale);
+    set_music_volume(musicVolume);
 
     AUDIO_INITED.store(true, Ordering::SeqCst);
     0
@@ -94,7 +94,7 @@ pub extern "C" fn unInitAudio() {
     // SAFETY: the audio subsystem was brought up by `initAudio`, and the swap
     // above makes this teardown run once.
     unsafe {
-        UninitStreamDecoder();
+        uninit_stream_decoder();
         SoundDecoder_Uninit();
         rust_mixer_uninit();
     }
