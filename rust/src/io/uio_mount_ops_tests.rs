@@ -41,6 +41,92 @@ fn mount_ptr(stack: &Stack, index: usize) -> *mut uio_MountHandle {
     get_mount_registry().lock().unwrap()[index].handle_ptr as *mut uio_MountHandle
 }
 
+fn read_mounted_zip(mount_point: &str, parent: &str) -> Option<Vec<u8>> {
+    use std::io::Write;
+
+    let stack = Stack::new();
+    let host = tempfile::TempDir::new().unwrap();
+    let archive_dir = host.path().join(parent.trim_start_matches('/'));
+    std::fs::create_dir_all(&archive_dir).unwrap();
+    let archive_path = archive_dir.join("packed.ani");
+    let mut archive = zip::ZipWriter::new(std::fs::File::create(archive_path).unwrap());
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    archive.start_file("packed.ani", options).unwrap();
+    archive.write_all(b"archive animation contents").unwrap();
+    archive.finish().unwrap();
+    stack.mount(
+        UIO_FSTYPE_STDIO,
+        UIO_MOUNT_BOTTOM | UIO_MOUNT_RDONLY,
+        host.path(),
+        ptr::null_mut(),
+    );
+
+    unsafe {
+        let parent_path = cstr(parent);
+        let dir = uio_openDir(stack.repo, parent_path.as_ptr(), 0);
+        assert!(!dir.is_null());
+        let point = cstr(mount_point);
+        let name = cstr("packed.ani");
+        let root = cstr("/");
+        let mount = uio_mountDir(
+            stack.repo,
+            point.as_ptr(),
+            UIO_FSTYPE_ZIP,
+            dir,
+            name.as_ptr(),
+            root.as_ptr(),
+            ptr::null_mut(),
+            UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+            ptr::null_mut(),
+        );
+        assert!(!mount.is_null());
+        let mode = cstr("rb");
+        let stream = uio_fopen(dir, name.as_ptr(), mode.as_ptr());
+        let data = if stream.is_null() {
+            None
+        } else {
+            let mut bytes = vec![0; 128];
+            let count = uio_fread(bytes.as_mut_ptr().cast(), 1, bytes.len(), stream);
+            bytes.truncate(count);
+            assert_eq!(uio_fclose(stream), 0);
+            Some(bytes)
+        };
+        assert_eq!(uio_unmountDir(mount), 0);
+        uio_closeDir(dir);
+        assert_eq!(uio_unmountAllDirs(stack.repo), 0);
+        data
+    }
+}
+
+#[test]
+#[serial]
+fn root_zip_mount_spellings_read_archive_entries() {
+    for point in [".", "/", "", "./"] {
+        for parent in [".", "/", ""] {
+            assert_eq!(
+                read_mounted_zip(point, parent).as_deref(),
+                Some(b"archive animation contents".as_slice()),
+                "mount={point:?}, parent={parent:?}"
+            );
+        }
+    }
+}
+
+#[test]
+#[serial]
+fn relative_zip_mounts_and_directory_handles_read_archive_entries() {
+    for point in ["animation", "/animation", "./animation/"] {
+        for parent in ["animation", "/animation", "./animation/"] {
+            assert_eq!(
+                read_mounted_zip(point, parent).as_deref(),
+                Some(b"archive animation contents".as_slice()),
+                "mount={point:?}, parent={parent:?}"
+            );
+        }
+    }
+}
+
 #[test]
 #[serial]
 fn file_location_names_the_mount_and_the_host_path() {
