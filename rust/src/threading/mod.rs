@@ -881,7 +881,7 @@ unsafe fn destroy_ffi_thread_local(thread_local: *mut FfiThreadLocal) {
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_init_thread_system() -> c_int {
+pub unsafe fn rust_init_thread_system() -> c_int {
     match init_thread_system() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -892,7 +892,7 @@ pub unsafe extern "C" fn rust_init_thread_system() -> c_int {
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_uninit_thread_system() {
+pub unsafe fn rust_uninit_thread_system() {
     uninit_thread_system();
 }
 
@@ -903,7 +903,7 @@ pub unsafe extern "C" fn rust_uninit_thread_system() {
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_is_thread_system_initialized() -> c_int {
+pub unsafe fn rust_is_thread_system_initialized() -> c_int {
     if is_thread_system_initialized() {
         1
     } else {
@@ -946,7 +946,7 @@ fn spawn_c_thread(
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_thread_spawn(
+pub unsafe fn rust_thread_spawn(
     name: *const c_char,
     func: unsafe extern "C" fn(*mut c_void) -> c_int,
     data: *mut c_void,
@@ -973,7 +973,7 @@ pub unsafe extern "C" fn rust_thread_spawn(
 /// but the current ABI does not provide synchronous failure reporting
 /// back to the C caller for reclaiming adapter-owned detached-thread
 /// wrapper allocations.
-pub unsafe extern "C" fn rust_thread_spawn_detached(
+pub unsafe fn rust_thread_spawn_detached(
     name: *const c_char,
     func: unsafe extern "C" fn(*mut c_void) -> c_int,
     data: *mut c_void,
@@ -1009,10 +1009,7 @@ pub unsafe extern "C" fn rust_thread_spawn_detached(
 /// * `out_status` must be NULL or point to valid memory
 ///
 /// @plan PLAN-20260314-THREADING.P05
-pub unsafe extern "C" fn rust_thread_join(
-    thread: *mut RustThread,
-    out_status: *mut c_int,
-) -> c_int {
+pub unsafe fn rust_thread_join(thread: *mut RustThread, out_status: *mut c_int) -> c_int {
     if thread.is_null() {
         if !out_status.is_null() {
             *out_status = 0;
@@ -1041,7 +1038,7 @@ pub unsafe extern "C" fn rust_thread_join(
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_thread_yield() {
+pub unsafe fn rust_thread_yield() {
     task_switch();
 }
 
@@ -1052,11 +1049,10 @@ pub unsafe extern "C" fn rust_thread_yield() {
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_hibernate_thread(msecs: u32) {
+pub unsafe fn rust_hibernate_thread(msecs: u32) {
     hibernate_thread(Duration::from_millis(msecs as u64));
 }
 
-#[no_mangle]
 #[allow(
     clippy::missing_safety_doc,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
@@ -1065,7 +1061,7 @@ pub unsafe extern "C" fn rust_hibernate_thread(msecs: u32) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn rust_thread_local_create() -> *mut c_void {
+pub unsafe fn rust_thread_local_create() -> *mut c_void {
     let existing = current_ffi_thread_local();
     if !existing.is_null() {
         return existing as *mut c_void;
@@ -1078,7 +1074,7 @@ pub unsafe extern "C" fn rust_thread_local_create() -> *mut c_void {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
+pub unsafe fn rust_thread_local_destroy(thread_local: *mut c_void) {
     if thread_local.is_null() {
         return;
     }
@@ -1094,7 +1090,7 @@ pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe extern "C" fn rust_get_my_thread_local() -> *mut c_void {
+pub unsafe fn rust_get_my_thread_local() -> *mut c_void {
     current_ffi_thread_local() as *mut c_void
 }
 
@@ -1110,7 +1106,7 @@ pub unsafe extern "C" fn rust_get_my_thread_local() -> *mut c_void {
 ///
 /// # Safety
 /// * `name` must be a valid null-terminated C string or NULL
-pub unsafe extern "C" fn rust_mutex_create(name: *const c_char) -> *mut RustMutex {
+pub unsafe fn rust_mutex_create(name: *const c_char) -> *mut RustMutex {
     let name_str = if name.is_null() {
         None
     } else {
@@ -1129,7 +1125,7 @@ pub unsafe extern "C" fn rust_mutex_create(name: *const c_char) -> *mut RustMute
 /// # Safety
 /// * `mutex` must be a valid handle from rust_mutex_create
 /// * The handle is invalidated after this call
-pub unsafe extern "C" fn rust_mutex_destroy(mutex: *mut RustMutex) {
+pub unsafe fn rust_mutex_destroy(mutex: *mut RustMutex) {
     if !mutex.is_null() {
         drop(Box::from_raw(mutex as *mut RustFfiMutex));
     }
@@ -1142,7 +1138,7 @@ pub unsafe extern "C" fn rust_mutex_destroy(mutex: *mut RustMutex) {
 ///
 /// # Safety
 /// * `mutex` must be a valid handle
-pub unsafe extern "C" fn rust_mutex_lock(mutex: *mut RustMutex) {
+pub unsafe fn rust_mutex_lock(mutex: *mut RustMutex) {
     if !mutex.is_null() {
         let mutex = &*(mutex as *mut RustFfiMutex);
         let _ = mutex.lock();
@@ -1159,7 +1155,7 @@ pub unsafe extern "C" fn rust_mutex_lock(mutex: *mut RustMutex) {
 ///
 /// # Safety
 /// * `mutex` must be a valid handle
-pub unsafe extern "C" fn rust_mutex_try_lock(mutex: *mut RustMutex) -> c_int {
+pub unsafe fn rust_mutex_try_lock(mutex: *mut RustMutex) -> c_int {
     if mutex.is_null() {
         return 0;
     }
@@ -1179,14 +1175,13 @@ pub unsafe extern "C" fn rust_mutex_try_lock(mutex: *mut RustMutex) -> c_int {
 /// # Safety
 /// * `mutex` must be a valid handle
 /// * Must be called from the same thread that locked it
-pub unsafe extern "C" fn rust_mutex_unlock(mutex: *mut RustMutex) {
+pub unsafe fn rust_mutex_unlock(mutex: *mut RustMutex) {
     if !mutex.is_null() {
         let mutex = &*(mutex as *mut RustFfiMutex);
         let _ = mutex.unlock();
     }
 }
 
-#[no_mangle]
 #[allow(
     clippy::missing_safety_doc,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
@@ -1195,7 +1190,7 @@ pub unsafe extern "C" fn rust_mutex_unlock(mutex: *mut RustMutex) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn rust_mutex_depth(mutex: *mut RustMutex) -> c_int {
+pub unsafe fn rust_mutex_depth(mutex: *mut RustMutex) -> c_int {
     if mutex.is_null() {
         return 0;
     }
@@ -1216,7 +1211,7 @@ pub unsafe extern "C" fn rust_mutex_depth(mutex: *mut RustMutex) -> c_int {
 ///
 /// # Safety
 /// * `name` must be a valid null-terminated C string or NULL
-pub unsafe extern "C" fn rust_condvar_create(name: *const c_char) -> *mut RustCondVar {
+pub unsafe fn rust_condvar_create(name: *const c_char) -> *mut RustCondVar {
     let name_str = if name.is_null() {
         None
     } else {
@@ -1234,7 +1229,7 @@ pub unsafe extern "C" fn rust_condvar_create(name: *const c_char) -> *mut RustCo
 ///
 /// # Safety
 /// * `cond` must be a valid handle from rust_condvar_create
-pub unsafe extern "C" fn rust_condvar_destroy(cond: *mut RustCondVar) {
+pub unsafe fn rust_condvar_destroy(cond: *mut RustCondVar) {
     if !cond.is_null() {
         drop(Box::from_raw(cond as *mut UqmCondVar));
     }
@@ -1249,7 +1244,7 @@ pub unsafe extern "C" fn rust_condvar_destroy(cond: *mut RustCondVar) {
 /// # Safety
 /// * Both handles must be valid
 /// * Mutex must be held by the calling thread
-pub unsafe extern "C" fn rust_condvar_wait(cond: *mut RustCondVar, _mutex: *mut RustMutex) {
+pub unsafe fn rust_condvar_wait(cond: *mut RustCondVar, _mutex: *mut RustMutex) {
     if cond.is_null() {
         return;
     }
@@ -1270,7 +1265,7 @@ pub unsafe extern "C" fn rust_condvar_wait(cond: *mut RustCondVar, _mutex: *mut 
 ///
 /// # Safety
 /// * Both handles must be valid
-pub unsafe extern "C" fn rust_condvar_wait_timeout(
+pub unsafe fn rust_condvar_wait_timeout(
     cond: *mut RustCondVar,
     _mutex: *mut RustMutex,
     msecs: u32,
@@ -1293,7 +1288,7 @@ pub unsafe extern "C" fn rust_condvar_wait_timeout(
 ///
 /// # Safety
 /// * `cond` must be a valid handle
-pub unsafe extern "C" fn rust_condvar_signal(cond: *mut RustCondVar) {
+pub unsafe fn rust_condvar_signal(cond: *mut RustCondVar) {
     if !cond.is_null() {
         let cond = &*(cond as *mut UqmCondVar);
         cond.signal();
@@ -1307,7 +1302,7 @@ pub unsafe extern "C" fn rust_condvar_signal(cond: *mut RustCondVar) {
 ///
 /// # Safety
 /// * `cond` must be a valid handle
-pub unsafe extern "C" fn rust_condvar_broadcast(cond: *mut RustCondVar) {
+pub unsafe fn rust_condvar_broadcast(cond: *mut RustCondVar) {
     if !cond.is_null() {
         let cond = &*(cond as *mut UqmCondVar);
         cond.broadcast();
@@ -1327,10 +1322,7 @@ pub unsafe extern "C" fn rust_condvar_broadcast(cond: *mut RustCondVar) {
 ///
 /// # Safety
 /// * `name` must be a valid null-terminated C string or NULL
-pub unsafe extern "C" fn rust_semaphore_create(
-    initial: u32,
-    name: *const c_char,
-) -> *mut RustSemaphore {
+pub unsafe fn rust_semaphore_create(initial: u32, name: *const c_char) -> *mut RustSemaphore {
     let name_str = if name.is_null() {
         None
     } else {
@@ -1348,7 +1340,7 @@ pub unsafe extern "C" fn rust_semaphore_create(
 ///
 /// # Safety
 /// * `sem` must be a valid handle from rust_semaphore_create
-pub unsafe extern "C" fn rust_semaphore_destroy(sem: *mut RustSemaphore) {
+pub unsafe fn rust_semaphore_destroy(sem: *mut RustSemaphore) {
     if !sem.is_null() {
         drop(Box::from_raw(sem as *mut Semaphore));
     }
@@ -1361,7 +1353,7 @@ pub unsafe extern "C" fn rust_semaphore_destroy(sem: *mut RustSemaphore) {
 ///
 /// # Safety
 /// * `sem` must be a valid handle
-pub unsafe extern "C" fn rust_semaphore_acquire(sem: *mut RustSemaphore) {
+pub unsafe fn rust_semaphore_acquire(sem: *mut RustSemaphore) {
     if !sem.is_null() {
         let sem = &*(sem as *mut Semaphore);
         let _ = sem.acquire();
@@ -1378,7 +1370,7 @@ pub unsafe extern "C" fn rust_semaphore_acquire(sem: *mut RustSemaphore) {
 ///
 /// # Safety
 /// * `sem` must be a valid handle
-pub unsafe extern "C" fn rust_semaphore_try_acquire(sem: *mut RustSemaphore) -> c_int {
+pub unsafe fn rust_semaphore_try_acquire(sem: *mut RustSemaphore) -> c_int {
     if sem.is_null() {
         return 0;
     }
@@ -1398,7 +1390,7 @@ pub unsafe extern "C" fn rust_semaphore_try_acquire(sem: *mut RustSemaphore) -> 
 ///
 /// # Safety
 /// * `sem` must be a valid handle
-pub unsafe extern "C" fn rust_semaphore_release(sem: *mut RustSemaphore) {
+pub unsafe fn rust_semaphore_release(sem: *mut RustSemaphore) {
     if !sem.is_null() {
         let sem = &*(sem as *mut Semaphore);
         sem.release();
@@ -1415,7 +1407,7 @@ pub unsafe extern "C" fn rust_semaphore_release(sem: *mut RustSemaphore) {
 ///
 /// # Safety
 /// * `sem` must be a valid handle or NULL
-pub unsafe extern "C" fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
+pub unsafe fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
     if sem.is_null() {
         return 0;
     }
@@ -1428,7 +1420,7 @@ pub unsafe extern "C" fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
 ///
 /// # Safety
 /// Safe to call from C.
-pub unsafe extern "C" fn rust_task_switch() {
+pub unsafe fn rust_task_switch() {
     task_switch();
 }
 
