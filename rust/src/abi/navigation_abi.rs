@@ -1700,12 +1700,8 @@ extern "C" {
 extern "C" {
     pub fn LoadMusicInstance(res: RESOURCE) -> MUSIC_REF;
 }
-extern "C" {
-    pub fn DestroySound(SoundRef: SOUND_REF) -> BOOLEAN;
-}
-extern "C" {
-    pub fn DestroyMusic(MusicRef: MUSIC_REF) -> BOOLEAN;
-}
+pub unsafe fn DestroySound(sound: SOUND_REF) { crate::sound::heart_ffi::destroy_sound(sound.cast()); }
+pub unsafe fn DestroyMusic(music: MUSIC_REF) { crate::sound::heart_ffi::destroy_music(music.cast()); }
 extern "C" {
     pub fn PLRPlaySong(MusicRef: MUSIC_REF, Continuous: BOOLEAN, Priority: BYTE);
 }

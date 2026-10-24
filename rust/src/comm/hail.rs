@@ -37,7 +37,6 @@ pub(super) mod c_bridge {
         pub fn DestroyDrawable(handle: *mut std::ffi::c_void) -> u32;
         pub fn DestroyFont(handle: *mut std::ffi::c_void) -> c_int;
         #[allow(clashing_extern_declarations)]
-        pub fn DestroyMusic(handle: *mut std::ffi::c_void) -> c_int;
         pub fn DestroyStringTable(handle: *mut std::ffi::c_void) -> c_int;
         pub fn ReleaseStringTable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
@@ -125,6 +124,7 @@ pub(super) mod c_bridge {
         pub fn getGameState(state: *const u8, name: c_int, end: c_int) -> u8;
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
+    pub use crate::sound::heart_ffi::DestroyMusic;
     pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 }
 

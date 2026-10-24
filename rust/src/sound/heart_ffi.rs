@@ -6,6 +6,8 @@
 //! the Rust API, convert results → C types. No logic beyond pointer
 //! conversion and error translation. All unsafe code is confined here.
 
+pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
+
 use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
@@ -1060,8 +1062,7 @@ pub fn set_positional_object(source_index: c_uint, object: usize) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
+pub unsafe fn destroy_sound(bank_ptr: *mut c_void) {
     if bank_ptr.is_null() {
         return;
     }
@@ -1402,8 +1403,7 @@ pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn DestroyMusic(music_ref_ptr: *mut c_void) {
+pub unsafe fn destroy_music(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
         return;
     }

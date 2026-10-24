@@ -620,3 +620,30 @@ fn audio_controls_have_safe_rust_signatures() {
     let _: fn(volume: f32) = set_sfx_volume;
     let _: fn(volume: f32) = set_speech_volume;
 }
+
+#[test]
+fn audio_destruction_has_unit_returning_rust_signatures() {
+    let _: unsafe fn(*mut c_void) = DestroyMusic;
+    let _: unsafe fn(*mut c_void) = DestroySound;
+}
+
+#[test]
+fn music_destruction_releases_the_sample_and_its_mixer_buffers() {
+    let _engine = Engine::start();
+    let sample = stream::create_sound_sample(None, 1, None).unwrap();
+    let buffer = sample.buffers[0];
+    let sample = std::sync::Arc::new(parking_lot::Mutex::new(sample));
+    let weak = std::sync::Arc::downgrade(&sample);
+    unsafe {
+        let handle = crate::memory::rust_hmalloc(std::mem::size_of::<
+            *const parking_lot::Mutex<super::types::SoundSample>,
+        >());
+        assert!(!handle.is_null());
+        handle
+            .cast::<*const parking_lot::Mutex<super::types::SoundSample>>()
+            .write(std::sync::Arc::into_raw(sample));
+        DestroyMusic(handle);
+    }
+    assert!(weak.upgrade().is_none());
+    assert!(!super::mixer::buffer::mixer_is_buffer(buffer));
+}

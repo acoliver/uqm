@@ -13,13 +13,13 @@ static mut CURRENT_SPEECH: *mut c_void = ptr::null_mut();
 
 use crate::sound::heart_ffi::snd_stop_speech as snd_StopSpeech;
 extern "C" {
-    fn DestroyMusic(music: *mut c_void);
     fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> *mut c_void;
     fn DestroyMutex(mutex: *mut c_void);
     static contentDir: *mut uio_DirHandle;
     static ScreenWidth: c_int;
     static ScreenHeight: c_int;
 }
+use crate::sound::heart_ffi::DestroyMusic;
 
 /// # Safety
 /// Must run on the graphics thread with graphics initialized.

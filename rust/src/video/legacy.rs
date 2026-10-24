@@ -32,7 +32,6 @@ extern "C" {
 extern "C" {
     fn _init_video_file(path: *const c_char) -> *mut TFB_VideoClip;
     fn LoadMusicFile(path: *const c_char) -> *mut c_void;
-    fn DestroyMusic(music: *mut c_void);
     fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int;
     fn VidPlayEx(
         video: *mut TFB_VideoClip,
@@ -42,6 +41,7 @@ extern "C" {
     ) -> c_int;
 
 }
+use crate::sound::heart_ffi::DestroyMusic;
 
 /// # Safety
 /// `path` must be a terminated resource pathname.
