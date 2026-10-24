@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version tag (vX.Y.Z or vX.Y.Z-rc.N)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+
+jobs:
+  create-release:
+    runs-on: macos-14
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag against workspace version
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os, re, tomllib
+          version = tomllib.load(open('rust/Cargo.toml', 'rb'))['workspace']['package']['version']
+          tag = os.environ['RELEASE_TAG']
+          assert re.fullmatch(r'v\d+\.\d+\.\d+(?:-rc\.\d+)?', tag), f'Invalid tag: {tag}'
+          assert tag == 'v' + version, f'Tag {tag} differs from workspace version {version}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'prerelease={str("-rc." in tag).lower()}\n')
+          PY
+      - name: Create draft release before building
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > release-draft; then
+            test "$(cat release-draft)" = true
+          else
+            args=()
+            if [[ "$RELEASE_TAG" == *-rc.* ]]; then args+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --verify-tag --draft "${args[@]}" --title "$RELEASE_TAG" --generate-notes
+          fi
+
+  package:
+    needs: create-release
+    name: Package (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          key: release-${{ matrix.target }}
+      - name: Install Linux build and packaging dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxss-dev libxext-dev libwayland-dev libxkbcommon-dev libpulse-dev rpm cpio
+      - name: Statically link the Windows CRT
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV'
+      - name: Build, package, unpack and smoke-test every artifact
+        shell: bash
+        run: python scripts/release/package.py "$RELEASE_TAG" '${{ matrix.target }}'
+      - name: Upload tested packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" artifacts/release/uqm-* --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ matrix.target }}
+          path: artifacts/release/SHA256SUMS-*
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: [create-release, package]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: checksums-*
+          path: artifacts/checksums
+          merge-multiple: true
+      - name: Publish complete release with combined checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat artifacts/checksums/SHA256SUMS-* | sort -k2 > artifacts/SHA256SUMS
+          test "$(wc -l < artifacts/SHA256SUMS | tr -d ' ')" = 9
+          gh release upload "$RELEASE_TAG" artifacts/SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=${{ needs.create-release.outputs.prerelease }} --latest=${{ needs.create-release.outputs.prerelease == 'false' }}
+      - name: Update stable Homebrew formula
+        if: needs.create-release.outputs.prerelease == 'false'
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          sha=$(awk '/aarch64-apple-darwin.tar.gz$/ {print $1}' artifacts/SHA256SUMS)
+          bash scripts/release/update_homebrew_tap.sh "$RELEASE_TAG" "$sha" --publish
