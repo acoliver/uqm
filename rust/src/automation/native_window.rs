@@ -3693,6 +3693,42 @@ fn is_normalized_absolute_path(path: &str) -> bool {
         })
 }
 
+/// Select the same dependency features as xtask, but build only the game binary.
+pub const NATIVE_LINKED_BUILD_ARGUMENTS: [&str; 12] = [
+    "build",
+    "--locked",
+    "--manifest-path",
+    "rust/Cargo.toml",
+    "--workspace",
+    "--release",
+    "--no-default-features",
+    "--features",
+    "audio_heart,debug-process",
+    "--bin",
+    "uqm",
+    "--message-format=json-render-diagnostics",
+];
+
+pub(super) fn native_linked_build_arguments_match(arguments: &[String]) -> bool {
+    let required = NATIVE_LINKED_BUILD_ARGUMENTS;
+    // Standalone game builds in retained receipts used the same target and
+    // features before native runs selected the workspace dependency graph.
+    let standalone: Vec<_> = required
+        .iter()
+        .copied()
+        .filter(|argument| *argument != "--workspace")
+        .collect();
+    [required.as_slice(), standalone.as_slice()]
+        .iter()
+        .any(|expected| {
+            arguments == *expected
+                || (arguments.len() == expected.len() + 2
+                    && arguments[..expected.len()] == **expected
+                    && arguments[expected.len()] == "--target-dir"
+                    && is_normalized_absolute_path(&arguments[expected.len() + 1]))
+        })
+}
+
 fn validate_linked_build_receipt_bundle(
     root: &Path,
     manifest: &NativeAcceptanceManifest,
@@ -3720,29 +3756,11 @@ fn validate_linked_build_receipt_bundle(
     {
         return Err(NativeWindowProofError::Receipt);
     }
-    let required_arguments = [
-        "build",
-        "--locked",
-        "--manifest-path",
-        "rust/Cargo.toml",
-        "--release",
-        "--no-default-features",
-        "--features",
-        "audio_heart,debug-process",
-        "--bin",
-        "uqm",
-        "--message-format=json-render-diagnostics",
-    ];
     let arguments = receipt
         .cargo_command
         .get(1..)
         .ok_or(NativeWindowProofError::Receipt)?;
-    if arguments != required_arguments
-        && !(arguments.len() == required_arguments.len() + 2
-            && arguments[..required_arguments.len()] == required_arguments
-            && arguments[required_arguments.len()] == "--target-dir"
-            && is_normalized_absolute_path(&arguments[required_arguments.len() + 1]))
-    {
+    if !native_linked_build_arguments_match(arguments) {
         return Err(NativeWindowProofError::Receipt);
     }
     let members = [
@@ -3904,6 +3922,38 @@ pub fn validate_native_acceptance_bundle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linked_build_commands_preserve_target_features_and_retained_receipts() {
+        let workspace: Vec<_> = NATIVE_LINKED_BUILD_ARGUMENTS
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let standalone: Vec<_> = workspace
+            .iter()
+            .filter(|argument| *argument != "--workspace")
+            .cloned()
+            .collect();
+        for arguments in [workspace, standalone] {
+            assert!(native_linked_build_arguments_match(&arguments));
+            let mut target = arguments.clone();
+            target.extend(["--target-dir".into(), "/build/target".into()]);
+            assert!(native_linked_build_arguments_match(&target));
+            *target.last_mut().unwrap() = "relative/target".into();
+            assert!(!native_linked_build_arguments_match(&target));
+            for (index, value) in arguments.iter().enumerate() {
+                let mut changed = arguments.clone();
+                changed[index] = format!("{value}-wrong");
+                assert!(
+                    !native_linked_build_arguments_match(&changed),
+                    "{changed:?}"
+                );
+            }
+            let mut extra = arguments;
+            extra.push("--all-targets".into());
+            assert!(!native_linked_build_arguments_match(&extra));
+        }
+    }
 
     #[test]
     fn general_checkpoint_proof_does_not_inherit_battle_floors_and_requires_every_action() {
@@ -4497,20 +4547,10 @@ mod tests {
         let linked_receipt = NativeLinkedBuildReceipt {
             schema: NATIVE_LINKED_BUILD_RECEIPT_SCHEMA.to_string(),
             source_sha: "a".repeat(40),
-            cargo_command: vec![
-                "/toolchain/cargo".to_string(),
-                "build".to_string(),
-                "--locked".to_string(),
-                "--manifest-path".to_string(),
-                "rust/Cargo.toml".to_string(),
-                "--release".to_string(),
-                "--no-default-features".to_string(),
-                "--features".to_string(),
-                "audio_heart,debug-process".to_string(),
-                "--bin".to_string(),
-                "uqm".to_string(),
-                "--message-format=json-render-diagnostics".to_string(),
-            ],
+            cargo_command: std::iter::once("/toolchain/cargo")
+                .chain(NATIVE_LINKED_BUILD_ARGUMENTS)
+                .map(str::to_string)
+                .collect(),
             feature: "audio_heart,debug-process".to_string(),
             cargo_executable_path: "/tmp/uqm".to_string(),
             cargo_rust_archive_path: "/tmp/libuqm_rust-a.rlib".to_string(),

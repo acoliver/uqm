@@ -217,7 +217,7 @@ pub(crate) fn require_native_platform(is_macos: bool) -> Result<(), String> {
 /// check that the game it launches is the one this build produced.
 fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
     let cargo = cargo_program();
-    let (output, arguments, paths) = cargo_json_build(root, &cargo, true, LINKED_TEST_FEATURES)?;
+    let (output, arguments, paths) = cargo_json_build(root, &cargo)?;
     let directory = tempfile::tempdir_in(&paths.out_dir)
         .map_err(|error| format!("create linked-build proof directory: {error}"))?;
     let member_limit = native_config::runtime_contract()
@@ -688,22 +688,11 @@ fn cargo_program() -> String {
 fn cargo_json_build(
     root: &Path,
     cargo: &str,
-    release: bool,
-    features: &str,
 ) -> Result<(Vec<u8>, Vec<String>, ProductionPaths), String> {
-    let mut arguments = vec!["build", "--locked", "--manifest-path", "rust/Cargo.toml"];
-    if release {
-        arguments.push("--release");
-    }
-    arguments.extend([
-        "--no-default-features",
-        "--features",
-        features,
-        "--bin",
-        "uqm",
-        "--message-format=json-render-diagnostics",
-    ]);
-    let arguments: Vec<String> = arguments.into_iter().map(str::to_string).collect();
+    let arguments: Vec<String> = uqm_rust::automation::native_window::NATIVE_LINKED_BUILD_ARGUMENTS
+        .into_iter()
+        .map(str::to_string)
+        .collect();
     let output = process::run(Command::new(cargo).current_dir(root).args(&arguments), None);
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
     if !output.succeeded() {
@@ -873,6 +862,27 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_game_build_reuses_workspace_features_without_building_other_binaries() {
+        assert_eq!(
+            uqm_rust::automation::native_window::NATIVE_LINKED_BUILD_ARGUMENTS,
+            [
+                "build",
+                "--locked",
+                "--manifest-path",
+                "rust/Cargo.toml",
+                "--workspace",
+                "--release",
+                "--no-default-features",
+                "--features",
+                "audio_heart,debug-process",
+                "--bin",
+                "uqm",
+                "--message-format=json-render-diagnostics",
+            ]
+        );
+    }
 
     #[test]
     fn rust_library_artifacts_use_rlib_instead_of_staticlib() {
