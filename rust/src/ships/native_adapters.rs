@@ -19,10 +19,24 @@ unsafe fn display_primitive(
         .add(usize::from(index))
 }
 
+fn recover_ship_crew(descriptor: &mut crate::ships::native::abi::RACE_DESC, crew: u16) -> u16 {
+    let mut remaining = descriptor.ship_info.crew_level;
+    let maximum = descriptor.ship_info.max_crew;
+    if remaining != 0 {
+        remaining = if i32::from(crew) >= i32::from(maximum) - i32::from(remaining) {
+            maximum
+        } else {
+            remaining.wrapping_add(crew)
+        };
+    }
+    descriptor.ship_info.crew_level = remaining;
+    remaining
+}
+
 #[cfg(not(test))]
 mod live {
     #![allow(non_snake_case)]
-    use super::{display_primitive, wrap};
+    use super::{display_primitive, recover_ship_crew, wrap};
     use crate::ships::native::{abi::*, cosine, normalize_facing, sine};
     use std::{mem, ptr};
 
@@ -166,11 +180,7 @@ mod live {
                 let ship = element.pParent.cast::<STARSHIP>();
                 if ship.is_null() || (*ship).RaceDescPtr.is_null() { continue; }
                 let descriptor = (*ship).RaceDescPtr;
-                let mut remaining = crate::ships::ffi::rust_race_desc_get_crew_level(descriptor.cast());
-                let max = crate::ships::ffi::rust_race_desc_get_max_crew(descriptor.cast());
-                if remaining != 0 { if i32::from(crew) >= i32::from(max) - i32::from(remaining) { remaining = max; } else { remaining = remaining.wrapping_add(crew); } }
-                crate::ships::ffi::rust_race_desc_set_crew_level(descriptor.cast(), remaining);
-                (*ship).crew_level = remaining;
+                (*ship).crew_level = recover_ship_crew(&mut *descriptor, crew);
                 ships[(*ship).playerNr as usize] = ship;
                 crate::ships::loader_native::free_ship(descriptor, 1, 1);
                 (*ship).RaceDescPtr = ptr::null_mut();
@@ -221,5 +231,24 @@ mod tests {
         assert_eq!(wrap(8191, 8192), 8191);
         assert_eq!(wrap(8192, 8192), 0);
         assert_eq!(wrap(16385, 8192), 8193);
+    }
+}
+
+#[cfg(test)]
+mod crew_writeback_tests {
+    use super::recover_ship_crew;
+    use crate::ships::native::abi::RACE_DESC;
+
+    #[test]
+    fn battle_survivor_retains_native_descriptor_crew_and_recovers_pods() {
+        let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
+        descriptor.ship_info.crew_level = 7;
+        descriptor.ship_info.max_crew = 18;
+        assert_eq!(recover_ship_crew(&mut descriptor, 3), 10);
+        assert_eq!(descriptor.ship_info.crew_level, 10);
+        assert_eq!(descriptor.ship_info.max_crew, 18);
+        assert_eq!(recover_ship_crew(&mut descriptor, 20), 18);
+        descriptor.ship_info.crew_level = 0;
+        assert_eq!(recover_ship_crew(&mut descriptor, 20), 0);
     }
 }
