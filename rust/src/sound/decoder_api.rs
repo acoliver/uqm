@@ -90,16 +90,9 @@ pub unsafe extern "C" fn SoundDecoder_SwapWords(data: *mut u16, size: u32) {
         *p = (*p).swap_bytes();
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn SoundDecoder_Init(
-    flags: c_int,
-    formats: *mut TFB_DecoderFormats,
-) -> c_int {
-    if formats.is_null() {
-        return 1;
-    }
+pub fn init_decoders(flags: c_int, formats: &TFB_DecoderFormats) -> c_int {
     let mut r = registry().lock().unwrap();
-    r.formats = unsafe { *formats };
+    r.formats = *formats;
     r.flags = flags;
     init_builtins(&mut r);
     let mut failed = 0;
@@ -110,8 +103,7 @@ pub unsafe extern "C" fn SoundDecoder_Init(
     }
     failed
 }
-#[no_mangle]
-pub extern "C" fn SoundDecoder_Uninit() {
+pub fn uninit_decoders() {
     let mut r = registry().lock().unwrap();
     for e in &mut r.entries {
         if e.used && !e.ext.is_null() {
@@ -141,7 +133,48 @@ pub unsafe extern "C" fn SoundDecoder_Rewind(d: *mut TFB_SoundDecoder) {
 
 #[cfg(test)]
 mod tests {
-    use super::SoundDecoder_SwapWords;
+    use super::*;
+
+    #[test]
+    fn registry_lifecycle_accepts_shared_formats_with_rust_signatures() {
+        let _: fn(c_int, &super::super::formats::DecoderFormats) -> c_int = init_decoders;
+        let _: fn() = uninit_decoders;
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn registry_initializes_all_builtins_with_the_requested_formats() {
+        let formats = super::super::decoder_vtable_tests::formats();
+        assert_eq!(init_decoders(0, &formats), 0);
+        {
+            let r = registry().lock().unwrap();
+            assert_eq!(r.flags, 0);
+            assert_eq!(r.formats.mono8, formats.mono8);
+            assert_eq!(r.formats.stereo16, formats.stereo16);
+            assert_eq!(r.entries.iter().filter(|e| e.builtin && e.used).count(), 5);
+            let names: Vec<_> = r
+                .entries
+                .iter()
+                .filter(|e| e.used)
+                .map(|entry| unsafe {
+                    std::ffi::CStr::from_ptr(((*entry.funcs).GetName)())
+                        .to_str()
+                        .unwrap()
+                })
+                .collect();
+            assert_eq!(
+                names,
+                [
+                    "Rust Wave",
+                    "Rust MOD",
+                    "Rust Ogg Vorbis",
+                    "Rust DukAud",
+                    "Rust AIFF"
+                ]
+            );
+        }
+        uninit_decoders();
+    }
 
     #[test]
     fn swaps_only_complete_words() {

@@ -1,7 +1,6 @@
 //! Audio subsystem bring-up and tear-down: the Rust mixer, the C decoder
 //! registry, and the stream decoder thread owned by the audio heart.
 
-use std::ffi::c_int;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::sound::formats::DecoderFormats;
@@ -23,10 +22,7 @@ const MIXER_FREQUENCY: u32 = 44100;
 const MIXER_FORMAT_STEREO16: u32 = 0x0202;
 const MIXER_QUALITY_MEDIUM: u32 = 1;
 
-extern "C" {
-    fn SoundDecoder_Init(flags: c_int, formats: *mut DecoderFormats) -> c_int;
-    fn SoundDecoder_Uninit();
-}
+use super::decoder_api::{init_decoders, uninit_decoders};
 
 static AUDIO_INITED: AtomicBool = AtomicBool::new(false);
 
@@ -52,7 +48,7 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
     }
 
     log::info!("Initializing sound decoders.");
-    let mut formats = DecoderFormats {
+    let formats = DecoderFormats {
         big_endian: false,
         want_big_endian: false,
         mono8: AUDIO_FORMAT_MONO8,
@@ -60,7 +56,7 @@ pub unsafe extern "C" fn initAudio(_driver: i32, flags: i32) -> i32 {
         mono16: AUDIO_FORMAT_MONO16,
         stereo16: AUDIO_FORMAT_STEREO16,
     };
-    if SoundDecoder_Init(flags, &mut formats) != 0 {
+    if init_decoders(flags, &formats) != 0 {
         log::error!("Sound decoders initialization failed.");
         rust_mixer_uninit();
         return -1;
@@ -91,11 +87,7 @@ pub extern "C" fn unInitAudio() {
         return;
     }
 
-    // SAFETY: the audio subsystem was brought up by `initAudio`, and the swap
-    // above makes this teardown run once.
-    unsafe {
-        uninit_stream_decoder();
-        SoundDecoder_Uninit();
-        rust_mixer_uninit();
-    }
+    uninit_stream_decoder();
+    uninit_decoders();
+    rust_mixer_uninit();
 }
