@@ -41,6 +41,28 @@ fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
 }
 
 #[test]
+fn jugger_trade_crews_three_allied_utwig_ships() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
+    let save =
+        decode_save(&std::fs::read(root.join("connected-jugger-prep.sav")).unwrap()).unwrap();
+    assert_eq!(save.ship_queue.len(), 3);
+    for ship in &save.ship_queue {
+        assert_eq!(
+            (ship.race_index, ship.crew_level, ship.max_crew),
+            (9, 20, 20)
+        );
+    }
+    assert_eq!(
+        save.race_queue
+            .iter()
+            .find(|race| race.index == 9)
+            .unwrap()
+            .allied_state,
+        1
+    );
+}
+
+#[test]
 fn paid_combat_preparation_crews_three_cruisers_and_keeps_the_survivor() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
     let before =
@@ -188,6 +210,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-jugger-prep" => (23, 2, 2158, 50, 1300, 323, 3),
             "connected-combat-prep" => (23, 2, 2158, 50, 1300, 496, 4),
             "connected-lure-prep" => (22, 2, 2158, 150, 5300, 849, 1),
             "connected-ambush" => (3, 2, 2158, 50, 9164, 3194, 1),
