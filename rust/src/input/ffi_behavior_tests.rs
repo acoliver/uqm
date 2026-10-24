@@ -26,10 +26,9 @@ struct Input;
 
 impl Input {
     fn new() -> Self {
-        unsafe {
-            rust_v_control_uninit();
-            assert_eq!(rust_v_control_init(), 0);
-        }
+        rust_v_control_uninit();
+        assert_eq!(rust_v_control_init(), 0);
+
         Input
     }
 
@@ -47,7 +46,7 @@ impl Input {
 
 impl Drop for Input {
     fn drop(&mut self) {
-        unsafe { rust_v_control_uninit() };
+        rust_v_control_uninit();
     }
 }
 
@@ -71,7 +70,7 @@ fn dump(gesture: &mut VCONTROL_GESTURE, capacity: c_int) -> (c_int, String) {
 }
 
 fn last_gesture_type() -> c_int {
-    unsafe { rust_vcontrol_get_last_gesture_type() }
+    rust_vcontrol_get_last_gesture_type()
 }
 
 fn key_event(kind: u32, sym: i32, repeat: u8) -> sdl2::sys::SDL_Event {
@@ -91,14 +90,12 @@ fn deliver(event: &sdl2::sys::SDL_Event) {
 #[test]
 #[serial]
 fn the_control_system_reports_initialised_only_between_init_and_uninit() {
-    unsafe {
-        rust_v_control_uninit();
-        assert!(!VCONTROL.read().is_initialized());
-        assert_eq!(rust_v_control_init(), 0);
-        assert!(VCONTROL.read().is_initialized());
-        rust_v_control_uninit();
-        assert!(!VCONTROL.read().is_initialized());
-    }
+    rust_v_control_uninit();
+    assert!(!VCONTROL.read().is_initialized());
+    assert_eq!(rust_v_control_init(), 0);
+    assert!(VCONTROL.read().is_initialized());
+    rust_v_control_uninit();
+    assert!(!VCONTROL.read().is_initialized());
 }
 
 #[test]
@@ -358,11 +355,7 @@ fn removing_all_bindings_silences_keys_and_every_pad() {
         rust_vcontrol_process_joy_button_down(0, 0);
     }
     assert_eq!((key, button), (0, 0));
-    assert_eq!(
-        unsafe { rust_vcontrol_get_num_joysticks() },
-        1,
-        "the pad itself stays"
-    );
+    assert_eq!(rust_vcontrol_get_num_joysticks(), 1, "the pad itself stays");
 }
 
 #[test]
@@ -419,7 +412,7 @@ fn keyboard_events_drive_bound_targets_and_remember_the_gesture() {
     deliver(&key_event(0x301, SPACE, 0));
     assert_eq!(target & MASK, 0);
 
-    unsafe { rust_vcontrol_clear_gesture() };
+    rust_vcontrol_clear_gesture();
     assert_eq!(last_gesture_type(), 0);
     assert_eq!(unsafe { rust_vcontrol_get_last_gesture(&mut out) }, 0);
 }
@@ -784,10 +777,10 @@ fn shutting_the_input_system_down_forgets_the_last_gesture() {
     let _input = Input::new();
     deliver(&key_event(0x300, SPACE, 0));
     assert_eq!(last_gesture_type(), 1);
-    unsafe {
-        rust_v_control_uninit();
-        assert_eq!(rust_v_control_init(), 0);
-    }
+
+    rust_v_control_uninit();
+    assert_eq!(rust_v_control_init(), 0);
+
     assert_eq!(
         last_gesture_type(),
         0,

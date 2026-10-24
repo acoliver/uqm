@@ -318,7 +318,7 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
 #[no_mangle]
 pub extern "C" fn TFB_UninitInput() {
     let mut state = INPUT.lock();
-    unsafe { ffi::rust_v_control_uninit() };
+    ffi::rust_v_control_uninit();
     state.controls = Vec::new();
 }
 
