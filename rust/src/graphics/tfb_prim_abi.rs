@@ -132,7 +132,7 @@ pub unsafe extern "C" fn TFB_Prim_Stamp(stamp: *mut STAMP, mode: DrawMode, origi
             y,
             GetGraphicScale(),
             GetGraphicScaleMode(),
-            cmap,
+            cmap.cast(),
             mode,
             0,
         );
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn TFB_Prim_Stamp(stamp: *mut STAMP, mode: DrawMode, origi
             y,
             GetGraphicScale(),
             GetGraphicScaleMode(),
-            cmap,
+            cmap.cast(),
             mode,
             (*_CurFramePtr).image,
         );

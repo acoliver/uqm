@@ -155,7 +155,7 @@ pub unsafe extern "C" fn DestroyDrawable(drawable: *mut drawable_desc) -> BOOLEA
     if drawable.is_null() {
         return 0;
     }
-    super::gfxload::_ReleaseCelData(drawable.cast());
+    super::gfxload::release_cel_data(drawable.cast());
     1
 }
 /// # Safety
@@ -224,7 +224,7 @@ pub unsafe extern "C" fn RotateFrame(frame: *mut frame_desc, angle: i32) -> *mut
     }
     let rotated = CaptureDrawable(drawable);
     if rotated.is_null() {
-        super::gfxload::_ReleaseCelData(drawable.cast());
+        super::gfxload::release_cel_data(drawable.cast());
         return ptr::null_mut();
     }
     (*rotated).image = TFB_DrawImage_New_Rotated((*frame).image, angle);
@@ -273,7 +273,7 @@ unsafe fn matching_frame(frame: *mut frame_desc, width: i32, height: i32) -> *mu
     }
     let new = CaptureDrawable(drawable);
     if new.is_null() {
-        super::gfxload::_ReleaseCelData(drawable.cast());
+        super::gfxload::release_cel_data(drawable.cast());
     }
     new
 }

@@ -112,9 +112,8 @@ unsafe fn parse_ani(line: *const c_char) -> Option<(CString, AniData)> {
 }
 /// # Safety
 /// Stream and resource path must remain live for this serialized resource load.
-#[no_mangle]
-pub unsafe extern "C" fn _GetCelData(fp: *mut uio_Stream, length: u32) -> *mut c_void {
-    let fp = fp.cast();
+pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_void {
+    let fp = fp.cast::<uio::uio_Stream>();
     let mut position = uio::uio_ftell(fp);
     let path = if _cur_resfile_name.is_null() {
         &b""[..]
@@ -159,13 +158,13 @@ pub unsafe extern "C" fn _GetCelData(fp: *mut uio_Stream, length: u32) -> *mut c
         && !uio::uio_fgets(line.as_mut_ptr(), line.len() as i32, file).is_null()
     {
         let Some((name, ani)) = parse_ani(line.as_ptr()) else {
-            log::warn!("_GetCelData: invalid animation entry");
+            log::warn!("get_cel_data: invalid animation entry");
             break;
         };
         let filename = CString::new([prefix, name.as_bytes()].concat()).unwrap();
         let canvas = TFB_DrawCanvas_LoadFromFile(dir.cast(), filename.as_ptr());
         if canvas.is_null() {
-            log::warn!("_GetCelData: Unable to load image!");
+            log::warn!("get_cel_data: Unable to load image!");
         } else {
             images.push((canvas, ani));
         }
@@ -200,8 +199,7 @@ pub unsafe extern "C" fn _GetCelData(fp: *mut uio_Stream, length: u32) -> *mut c
 }
 /// # Safety
 /// Handle must be null or an owned drawable, consumed here; queued image deletion remains deferred.
-#[no_mangle]
-pub unsafe extern "C" fn _ReleaseCelData(handle: *mut c_void) -> BOOLEAN {
+pub unsafe extern "C" fn release_cel_data(handle: *mut c_void) -> i32 {
     if handle.is_null() {
         return 0;
     }
@@ -232,8 +230,8 @@ unsafe extern "C" fn compare_char(a: *const c_void, b: *const c_void) -> i32 {
 }
 /// # Safety
 /// Resource path and directory/stream sentinel must be valid for a serialized font load.
-#[no_mangle]
-pub unsafe extern "C" fn _GetFontData(fp: *mut uio_Stream, _length: u32) -> *mut c_void {
+pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_void {
+    let fp = fp.cast::<uio_Stream>();
     if _cur_resfile_name.is_null() {
         return ptr::null_mut();
     }
@@ -352,8 +350,7 @@ pub unsafe extern "C" fn _GetFontData(fp: *mut uio_Stream, _length: u32) -> *mut
 }
 /// # Safety
 /// Handle must be null or an owned font allocation, consumed here.
-#[no_mangle]
-pub unsafe extern "C" fn _ReleaseFontData(handle: *mut c_void) -> BOOLEAN {
+pub unsafe extern "C" fn release_font_data(handle: *mut c_void) -> i32 {
     if handle.is_null() {
         return 0;
     }
@@ -376,6 +373,16 @@ pub unsafe extern "C" fn _ReleaseFontData(handle: *mut c_void) -> BOOLEAN {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resource_callbacks_use_the_registered_signatures() {
+        use crate::resource::ffi_types::{ResourceFreeFun, ResourceLoadFileFun};
+        let _: [ResourceLoadFileFun; 2] = [super::get_cel_data, super::get_font_data];
+        let release: [ResourceFreeFun; 2] = [super::release_cel_data, super::release_font_data];
+        for callback in release {
+            assert_eq!(unsafe { callback(std::ptr::null_mut()) }, 0);
+        }
+    }
+
     use super::*;
     #[test]
     fn font_baseline_tuning_preserves_legacy_spacing() {

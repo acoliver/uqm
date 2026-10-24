@@ -2,24 +2,8 @@
 
 use std::ffi::c_void;
 
-#[repr(C)]
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub struct Point {
-    pub x: i16,
-    pub y: i16,
-}
-#[repr(C)]
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub struct Extent {
-    pub width: i16,
-    pub height: i16,
-}
-#[repr(C)]
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub struct Rect {
-    pub corner: Point,
-    pub extent: Extent,
-}
+pub use super::native_abi::{EXTENT as Extent, POINT as Point, RECT as Rect};
+
 #[repr(C)]
 pub struct Bbox {
     pub valid: i32,
