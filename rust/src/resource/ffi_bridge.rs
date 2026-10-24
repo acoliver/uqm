@@ -10,6 +10,14 @@
 //! @plan PLAN-20260224-RES-SWAP.P20
 //! @requirement REQ-RES-002-003, REQ-RES-088, REQ-RES-075-079, REQ-RES-R001-R004
 
+pub use self::{
+    res_get_boolean as res_GetBoolean, res_get_integer as res_GetInteger,
+    res_get_string as res_GetString, res_has_key as res_HasKey, res_is_boolean as res_IsBoolean,
+    res_is_integer as res_IsInteger, res_is_string as res_IsString,
+    res_put_boolean as res_PutBoolean, res_put_integer as res_PutInteger,
+    res_put_string as res_PutString,
+};
+
 use std::ffi::{c_char, c_int, c_long, c_void, CStr, CString};
 use std::ptr;
 use std::sync::Mutex;
@@ -804,8 +812,7 @@ pub unsafe extern "C" fn CountResourceTypes() -> u32 {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
+pub unsafe fn res_has_key(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -830,8 +837,7 @@ pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
+pub unsafe fn res_is_string(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -855,8 +861,7 @@ pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
+pub unsafe fn res_is_integer(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -880,8 +885,7 @@ pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_IsBoolean(key: *const c_char) -> c_int {
+pub unsafe fn res_is_boolean(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -932,8 +936,7 @@ pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
+pub unsafe fn res_get_string(key: *const c_char) -> *const c_char {
     static EMPTY: &[u8] = b"\0";
 
     if key.is_null() {
@@ -978,8 +981,7 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
+pub unsafe fn res_get_integer(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -1004,8 +1006,7 @@ pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
+pub unsafe fn res_get_boolean(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -1060,8 +1061,7 @@ pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char) {
+pub unsafe fn res_put_string(key: *const c_char, value: *const c_char) {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return,
@@ -1088,8 +1088,7 @@ pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char)
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
+pub unsafe fn res_put_integer(key: *const c_char, value: c_int) {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return,
@@ -1112,8 +1111,7 @@ pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_PutBoolean(key: *const c_char, value: c_int) {
+pub unsafe fn res_put_boolean(key: *const c_char, value: c_int) {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return,
@@ -1503,6 +1501,20 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use std::ffi::CString;
+
+    #[test]
+    fn resource_property_accessors_have_rust_signatures() {
+        let _: unsafe fn(*const c_char) -> c_int = res_HasKey;
+        let _: unsafe fn(*const c_char) -> c_int = res_IsString;
+        let _: unsafe fn(*const c_char) -> c_int = res_IsInteger;
+        let _: unsafe fn(*const c_char) -> c_int = res_IsBoolean;
+        let _: unsafe fn(*const c_char) -> *const c_char = res_GetString;
+        let _: unsafe fn(*const c_char) -> c_int = res_GetInteger;
+        let _: unsafe fn(*const c_char) -> c_int = res_GetBoolean;
+        let _: unsafe fn(*const c_char, *const c_char) = res_PutString;
+        let _: unsafe fn(*const c_char, c_int) = res_PutInteger;
+        let _: unsafe fn(*const c_char, c_int) = res_PutBoolean;
+    }
 
     /// Reset state for test isolation.
     /// Handles poisoned mutex from prior panics.
