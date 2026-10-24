@@ -41,6 +41,44 @@ fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
 }
 
 #[test]
+fn paid_combat_preparation_crews_three_cruisers_and_keeps_the_survivor() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
+    let before =
+        decode_save(&std::fs::read(root.join("connected-lure-prep.sav")).unwrap()).unwrap();
+    let after =
+        decode_save(&std::fs::read(root.join("connected-combat-prep.sav")).unwrap()).unwrap();
+    assert_eq!(after.ship_queue.len(), 4);
+    let survivor = &before.ship_queue[0];
+    assert_eq!(
+        after
+            .ship_queue
+            .iter()
+            .find(|ship| ship.index == survivor.index),
+        Some(survivor)
+    );
+    for index in 0..3 {
+        let ship = after
+            .ship_queue
+            .iter()
+            .find(|ship| ship.index == index)
+            .unwrap();
+        assert_eq!(
+            (ship.race_index, ship.crew_level, ship.max_crew),
+            (2, 18, 18)
+        );
+    }
+}
+
+#[test]
+fn paid_lure_preparation_preserves_the_surviving_cruiser() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
+    let ambush = decode_save(&std::fs::read(root.join("connected-ambush.sav")).unwrap()).unwrap();
+    let prepared =
+        decode_save(&std::fs::read(root.join("connected-lure-prep.sav")).unwrap()).unwrap();
+    assert_eq!(prepared.ship_queue, ambush.ship_queue);
+}
+
+#[test]
 #[serial]
 fn every_committed_campaign_save_restores_and_round_trips_its_state() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
@@ -149,6 +187,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-combat-prep" => (23, 2, 2158, 50, 1300, 496, 4),
             "connected-lure-prep" => (22, 2, 2158, 150, 5300, 849, 1),
             "connected-ambush" => (3, 2, 2158, 50, 9164, 3194, 1),
             "connected-vault" => (15, 12, 2157, 12, 6283, 2348, 4),

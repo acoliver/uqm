@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "name": "campaign-s10g-connected-lure",
+  "name": "load-connected-combat-prep-v1",
   "start_save": {
-    "path": "saves/connected-lure-prep.sav",
+    "path": "saves/connected-combat-prep.sav",
     "slot": 0
   },
   "budgets": {
-    "max_input_ticks": 900000,
-    "max_presentations": 1800000,
-    "max_wallclock_seconds": 2400
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 120
   },
-  "seed": 1437213528,
+  "seed": 1437213464,
   "steps": [
     {
       "action": "wait_for_main_menu_ready"
@@ -33,12 +33,21 @@
       "action": "tap_menu_key",
       "key": "select",
       "value": 1,
-      "hold": 3,
-      "settle": 45
+      "hold": 1,
+      "settle": 1
     },
     {
-      "action": "wait_input_ticks",
-      "count": 50
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "activity",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "max_ticks": 3000
     },
     {
       "action": "assert_state",
@@ -51,7 +60,7 @@
         {
           "key": "date:day",
           "op": "eq",
-          "value": 22
+          "value": 23
         },
         {
           "key": "date:month",
@@ -66,7 +75,7 @@
         {
           "key": "escorts:count",
           "op": "eq",
-          "value": 1
+          "value": 4
         },
         {
           "key": "escorts:species:0",
@@ -131,7 +140,7 @@
         {
           "key": "escorts:species:2",
           "op": "eq",
-          "value": 1
+          "value": 4
         },
         {
           "key": "escorts:species:20",
@@ -196,7 +205,7 @@
         {
           "key": "sis:crew",
           "op": "eq",
-          "value": 150
+          "value": 50
         },
         {
           "key": "sis:drive:0",
@@ -256,7 +265,7 @@
         {
           "key": "sis:fuel",
           "op": "eq",
-          "value": 5300
+          "value": 1300
         },
         {
           "key": "sis:jet:0",
@@ -336,17 +345,17 @@
         {
           "key": "sis:module:13",
           "op": "eq",
-          "value": 3
+          "value": 22
         },
         {
           "key": "sis:module:14",
           "op": "eq",
-          "value": 3
+          "value": 22
         },
         {
           "key": "sis:module:15",
           "op": "eq",
-          "value": 22
+          "value": 9
         },
         {
           "key": "sis:module:2",
@@ -391,7 +400,7 @@
         {
           "key": "sis:ru",
           "op": "eq",
-          "value": 849
+          "value": 496
         },
         {
           "key": "star:current",
@@ -541,238 +550,8 @@
       ]
     },
     {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "sis:fuel",
-          "op": "ge",
-          "value": 3000
-        },
-        {
-          "key": "sis:crew",
-          "op": "ge",
-          "value": 50
-        }
-      ]
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 18000,
-      "retreat_encounters": true
-    },
-    {
-      "action": "fly_to_star",
-      "target": "Alpha Centauri",
-      "max_ticks": 90000,
-      "retreat_encounters": true
-    },
-    {
-      "action": "navigate_to_contact",
-      "race": 12,
-      "max_ticks": 24000
-    },
-    {
-      "action": "wait_for_communication_responses",
-      "minimum": 2,
-      "max_ticks": 6000
-    },
-    {
-      "action": "select_response",
-      "phrase": "buy",
-      "max_ticks": 18000
-    },
-    {
-      "action": "select_response",
-      "phrase": "buy_fuel",
-      "max_ticks": 18000
-    },
-    {
-      "action": "select_response",
-      "phrase": "fill_me_up",
-      "max_ticks": 18000
-    },
-    {
-      "action": "select_response",
-      "phrase": "be_leaving_now",
-      "max_ticks": 18000
-    },
-    {
-      "action": "wait_for_communication_end",
-      "minimum_completions": 1,
-      "max_ticks": 6000
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "sis:fuel",
-          "op": "eq",
-          "value": 11000
-        },
-        {
-          "key": "sis:crew",
-          "op": "eq",
-          "value": 135
-        }
-      ]
-    },
-    {
       "action": "capture",
-      "label": "paid-three-pod-crew-and-melnorme-fuel"
-    },
-    {
-      "action": "navigate_to_hyperspace",
-      "max_ticks": 18000,
-      "retreat_encounters": true
-    },
-    {
-      "action": "fly_to_star",
-      "target": "Epsilon Scorpii",
-      "max_ticks": 90000,
-      "retreat_encounters": true
-    },
-    {
-      "action": "navigate_to_planet",
-      "planet": 0,
-      "max_ticks": 90000,
-      "patrol_policy": "retreat"
-    },
-    {
-      "action": "navigate_to_orbit",
-      "planet": 0,
-      "max_ticks": 90000,
-      "stop_at_encounter": true,
-      "patrol_policy": "retreat"
-    },
-    {
-      "action": "wait_for_communication_responses",
-      "minimum": 2,
-      "max_ticks": 6000
-    },
-    {
-      "action": "select_response",
-      "phrase": "i_have_a_cunning_plan",
-      "max_ticks": 6000
-    },
-    {
-      "action": "select_response",
-      "phrase": "clue_1",
-      "max_ticks": 6000
-    },
-    {
-      "action": "select_response",
-      "phrase": "clue_2",
-      "max_ticks": 6000
-    },
-    {
-      "action": "select_response",
-      "phrase": "clue_3",
-      "max_ticks": 6000
-    },
-    {
-      "action": "wait_for_communication_end",
-      "minimum_completions": 1,
-      "max_ticks": 6000
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "story:MYCON_FELL_FOR_AMBUSH",
-          "op": "eq",
-          "value": 1
-        },
-        {
-          "key": "story:MYCON_AMBUSH",
-          "op": "eq",
-          "value": 1
-        }
-      ]
-    },
-    {
-      "action": "capture",
-      "label": "mycon-homeworld-accepted-organon-lure"
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 120
-    },
-    {
-      "action": "assert_state",
-      "all": [
-        {
-          "key": "activity",
-          "op": "eq",
-          "value": 4
-        }
-      ]
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "cancel",
-      "value": 1,
-      "hold": 3,
-      "settle": 20
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "up",
-      "value": 1,
-      "hold": 3,
-      "settle": 10
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 1,
-      "settle": 1
-    },
-    {
-      "action": "assert_game_options"
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 30
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "down",
-      "value": 1,
-      "hold": 3,
-      "settle": 5
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 15
-    },
-    {
-      "action": "tap_menu_key",
-      "key": "select",
-      "value": 1,
-      "hold": 3,
-      "settle": 45
-    },
-    {
-      "action": "wait_input_ticks",
-      "count": 30
-    },
-    {
-      "action": "capture",
-      "label": "saved-connected-lure-slot-1"
+      "label": "independently-reloaded-connected-combat-prep"
     },
     {
       "action": "finish"

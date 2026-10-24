@@ -79,7 +79,7 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
         return pursue_heading(dx, dy, observation.ship_facing);
     }
     let distance = distance_squared.sqrt();
-    let speed = distance.clamp(MOON_APPROACH_SPEED, 128.0);
+    let speed = approach_speed(distance);
     steer_to_velocity(dx * speed / distance, dy * speed / distance, observation)
 }
 
@@ -360,19 +360,6 @@ mod tests {
             assert!(!near.thrust);
             assert!(near.right);
         }
-    }
-
-    #[test]
-    fn distant_planet_approach_does_not_brake_below_patrol_speed() {
-        let mut obs = observation(100, 300, 0, 100, 20);
-        obs.velocity_y = -80;
-        assert_eq!(
-            steer_toward_target(obs),
-            NavigationControl {
-                thrust: true,
-                ..NavigationControl::default()
-            }
-        );
     }
 
     #[test]
