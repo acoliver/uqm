@@ -33,6 +33,11 @@ pub unsafe fn rust_init_game_state() {
     if files.is_none() {
         *files = Some(StateFileManager::new());
     }
+    files
+        .as_mut()
+        .expect("state files initialized")
+        .canned_nodes
+        .clear();
 }
 
 ///

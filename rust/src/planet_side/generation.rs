@@ -102,6 +102,9 @@ impl ScanPersistence {
 /// Data returned by the selected system's generation implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneratedNodeKind {
+    CannedBiological {
+        value: u16,
+    },
     Mineral {
         category: usize,
         gross_size: u16,
@@ -126,12 +129,32 @@ pub struct GeneratedNode {
     pub kind: GeneratedNodeKind,
 }
 
+impl GeneratedNode {
+    pub(crate) fn from_canister(node: crate::state::planet_info::CannedNode) -> Self {
+        Self {
+            position: SurfacePoint {
+                x: i32::from(node.x),
+                y: i32::from(node.y),
+            },
+            kind: GeneratedNodeKind::CannedBiological {
+                value: u16::from(node.value),
+            },
+        }
+    }
+}
+
 /// Special-system generation and pickup hooks selected by `GenerateFunctions`.
 pub trait SurfaceGenerator {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError>;
     fn generate(&mut self, scan: ScanType, node: ScanNodeId)
         -> Result<GeneratedNode, AdapterError>;
     fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError>;
+    fn can_node(
+        &mut self,
+        node: ScanNodeId,
+        position: SurfacePoint,
+        value: u16,
+    ) -> Result<(), AdapterError>;
 }
 
 /// Mapping retained alongside runtime entities for deterministic persistence.
@@ -169,6 +192,13 @@ pub fn populate_surface(
             }
             let data = generator.generate(scan, node)?;
             let kind = match data.kind {
+                GeneratedNodeKind::CannedBiological { value } => {
+                    SurfaceEntityKind::CannedCreature {
+                        value,
+                        animation_wait: 4,
+                        frame_index: 0,
+                    }
+                }
                 GeneratedNodeKind::Mineral {
                     category,
                     gross_size,
@@ -230,6 +260,15 @@ mod tests {
     }
 
     impl SurfaceGenerator for Generator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
             Ok(if scan == ScanType::Energy { 0 } else { 2 })
         }
@@ -349,6 +388,15 @@ mod tests {
     }
 
     impl SurfaceGenerator for BioOnlyGenerator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
             Ok(u8::from(scan == ScanType::Biological))
         }

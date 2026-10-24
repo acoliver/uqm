@@ -349,6 +349,7 @@ fn read_chunks<R: Read>(
         events: Vec::new(),
         encounters: Vec::new(),
         scan: None,
+        canned_nodes: Vec::new(),
         group_list: None,
         battle_groups: Vec::new(),
         star: StarDesc {
@@ -404,6 +405,14 @@ fn read_chunks<R: Read>(
             )?),
             STAR_TAG => star = Some(read_star(src, size)?),
             SCAN_TAG => save.scan = Some(read_scan(src, size)?),
+            CANNED_NODES_TAG => {
+                let nodes = read_entries(src, tag, size, 10, canned_node)?;
+                let mut keys = std::collections::HashSet::new();
+                if nodes.iter().any(|node| !keys.insert(node.key())) {
+                    return Err(SaveFormatError::ChunkSize { tag, size });
+                }
+                save.canned_nodes = nodes;
+            }
             GROUP_LIST_TAG => save.group_list = Some(read_group_list(src, size)?),
             BATTLE_GROUP_TAG => save.battle_groups.push(read_battle_group(src, size)?),
             // Includes Summ, GlSt and GmSt repeated after their place, which
@@ -438,6 +447,22 @@ fn read_entries<R: Read, T>(
     }
     body.finish()?;
     Ok(entries)
+}
+
+fn canned_node(b: &mut Body<'_>) -> Result<crate::state::planet_info::CannedNode> {
+    let node = crate::state::planet_info::CannedNode {
+        star: b.u16()?,
+        planet: b.u8()?,
+        moon: b.u8()?,
+        node: b.u8()?,
+        value: b.u8()?,
+        x: b.i16()?,
+        y: b.i16()?,
+    };
+    if !node.is_valid() {
+        return Err(b.mismatch());
+    }
+    Ok(node)
 }
 
 fn race_entry(b: &mut Body<'_>) -> Result<RaceEntry> {

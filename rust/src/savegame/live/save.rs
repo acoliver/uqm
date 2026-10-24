@@ -43,6 +43,7 @@ unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
         events: runtime.events,
         encounters: groups.encounters,
         scan: files.scan,
+        canned_nodes: files.canned_nodes,
         group_list: files.group_list,
         battle_groups: files.battle_groups,
         star,

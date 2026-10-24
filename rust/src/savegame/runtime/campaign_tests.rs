@@ -181,6 +181,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             &mut game,
             &statefiles::StateFileSections {
                 scan: saved.scan.clone(),
+                canned_nodes: saved.canned_nodes.clone(),
                 group_list: saved.group_list.clone(),
                 battle_groups: saved.battle_groups.clone(),
             },

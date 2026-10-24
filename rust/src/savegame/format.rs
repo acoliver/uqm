@@ -54,3 +54,5 @@ pub fn tag_text(tag: u32) -> String {
         })
         .collect()
 }
+
+pub const CANNED_NODES_TAG: u32 = u32::from_le_bytes(*b"Cans");

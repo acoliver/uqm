@@ -97,7 +97,7 @@ pub(crate) mod planets {
         static mut CurStarDescPtr: *mut CStarDesc;
     }
 
-    unsafe fn location(system: *mut SOLARSYS_STATE) -> (c_int, c_int, c_int) {
+    pub(crate) unsafe fn location(system: *mut SOLARSYS_STATE) -> (c_int, c_int, c_int) {
         let star = CurStarDescPtr.offset_from(star_array) as u16;
         let planet = (*(*system).pBaseDesc)
             .pPrevDesc

@@ -340,6 +340,35 @@ where
                 &mut self.world_visuals,
             )?;
         }
+        // Persist dead-but-flashing nodes too, so takeoff cannot revive them.
+        let pending: Vec<_> = {
+            let surface = self.surface.borrow();
+            surface
+                .generated
+                .iter()
+                .filter_map(|entry| {
+                    let entity = surface
+                        .world
+                        .get(entry.entity)
+                        .expect("generated surface entity");
+                    match entity.kind {
+                        SurfaceEntityKind::LiveCreature {
+                            kind,
+                            hit_points: 0,
+                            ..
+                        } => Some((
+                            entry.node,
+                            entity.position,
+                            u16::from(CreatureCatalog::stats(kind).value),
+                        )),
+                        _ => None,
+                    }
+                })
+                .collect()
+        };
+        for (node, position, value) in pending {
+            self.generator.can_node(node, position, value)?;
+        }
         for (entity_id, animation_frame) in &result.effects.canister_frames {
             let visual = self
                 .world_visuals
@@ -349,6 +378,26 @@ where
             surface.masks.insert_entity(*entity_id, visual.mask);
         }
         for (entity_id, value) in &result.effects.canned {
+            let pending = {
+                let surface = self.surface.borrow();
+                surface
+                    .generated
+                    .iter()
+                    .find(|entry| entry.entity == *entity_id)
+                    .map(|entry| {
+                        (
+                            entry.node,
+                            surface
+                                .world
+                                .get(*entity_id)
+                                .expect("canned surface entity")
+                                .position,
+                        )
+                    })
+            };
+            if let Some((node, position)) = pending {
+                self.generator.can_node(node, position, *value)?;
+            }
             let visual = self.world_visuals.canned_creature_visual(0)?;
             transform_creature_to_canned(
                 &mut self.surface.borrow_mut(),
@@ -490,6 +539,15 @@ mod tests {
     struct TakeoffRequestingGenerator;
 
     impl SurfaceGenerator for TakeoffRequestingGenerator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(
             &mut self,
             _scan: super::super::generation::ScanType,
@@ -519,6 +577,15 @@ mod tests {
     struct Generator;
 
     impl SurfaceGenerator for Generator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(
             &mut self,
             _scan: super::super::generation::ScanType,
@@ -727,6 +794,204 @@ mod tests {
         assert_eq!(biological.level(), 1);
         assert!(surface.borrow().world.get(id).is_none());
         assert!(surface.borrow().frames.get(id).is_none());
+    }
+
+    struct PersistentGenerator {
+        files: std::rc::Rc<std::cell::RefCell<crate::state::state_file::StateFileManager>>,
+    }
+    impl SurfaceGenerator for PersistentGenerator {
+        fn node_count(
+            &mut self,
+            scan: super::super::generation::ScanType,
+        ) -> Result<u8, AdapterError> {
+            Ok(u8::from(
+                scan == super::super::generation::ScanType::Biological,
+            ))
+        }
+        fn generate(
+            &mut self,
+            _: super::super::generation::ScanType,
+            node: super::super::generation::ScanNodeId,
+        ) -> Result<super::super::generation::GeneratedNode, AdapterError> {
+            use super::super::generation::*;
+            Ok(
+                match self.files.borrow().canned_node((1, 2, 1, node.get())) {
+                    Some(canned) => GeneratedNode::from_canister(canned),
+                    None => GeneratedNode {
+                        position: SurfacePoint::default(),
+                        kind: GeneratedNodeKind::Biological {
+                            creature: super::super::creatures::CreatureKind::new(0).unwrap(),
+                            hit_points: 1,
+                            initial_frame: 0,
+                        },
+                    },
+                },
+            )
+        }
+        fn pickup(
+            &mut self,
+            _: super::super::generation::ScanType,
+            node: super::super::generation::ScanNodeId,
+        ) -> Result<bool, AdapterError> {
+            self.files
+                .borrow_mut()
+                .remove_canned_node((1, 2, 1, node.get()));
+            Ok(true)
+        }
+        fn can_node(
+            &mut self,
+            node: super::super::generation::ScanNodeId,
+            position: SurfacePoint,
+            value: u16,
+        ) -> Result<(), AdapterError> {
+            self.files
+                .borrow_mut()
+                .can_node(crate::state::planet_info::CannedNode {
+                    star: 1,
+                    planet: 2,
+                    moon: 1,
+                    node: node.get(),
+                    value: value as u8,
+                    x: position.x as i16,
+                    y: position.y as i16,
+                });
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn lethal_shot_survives_relanding_save_load_and_collection_retires_node() {
+        use super::super::generation::*;
+        use crate::state::state_file::StateFileManager;
+        let _guard = telemetry_guard();
+        let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
+        let mut generator = PersistentGenerator {
+            files: files.clone(),
+        };
+        let mut world = SurfaceWorld::new();
+        let generated =
+            populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+        let id = generated[0].entity;
+        let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
+        masks.insert_entity(id, solid());
+        let surface = super::super::assembly::share_surface(SurfaceAssembly {
+            world,
+            generated,
+            masks,
+            frames: Default::default(),
+        });
+        let mut adapter = SurfaceCollisionAdapter {
+            surface: surface.clone(),
+            generator,
+            random: Random {
+                values: Default::default(),
+                calls: 0,
+            },
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        };
+        adapter
+            .register_shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            })
+            .unwrap();
+        let result = adapter
+            .step_world(&lander(), HazardChances::default())
+            .unwrap();
+        adapter
+            .apply_world_step(&result, &mut RecordingAudio)
+            .unwrap();
+        // Departure during the damage flash must already be persistent.
+        let canned = files.borrow().canned_node((1, 2, 1, 0)).unwrap();
+        assert_eq!(canned.value, 1);
+        assert!(files.borrow().canned_node((1, 2, 0, 0)).is_none());
+        let mut save = crate::savegame::decode_save(include_bytes!(
+            "../../tests/fixtures/savegame/legacy-save.00"
+        ))
+        .unwrap();
+        assert!(save.canned_nodes.is_empty());
+        save.canned_nodes.push(canned);
+        let loaded =
+            crate::savegame::decode_save(&crate::savegame::encode_save(&save).unwrap()).unwrap();
+        let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
+        for node in loaded.canned_nodes {
+            files.borrow_mut().can_node(node);
+        }
+        let mut generator = PersistentGenerator {
+            files: files.clone(),
+        };
+        let mut world = SurfaceWorld::new();
+        let generated =
+            populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+        let id = generated[0].entity;
+        assert!(matches!(
+            world.get(id).unwrap().kind,
+            SurfaceEntityKind::CannedCreature { value: 1, .. }
+        ));
+        let position = world.get(id).unwrap().position;
+        let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
+        masks.insert_entity(id, solid());
+        let surface = super::super::assembly::share_surface(SurfaceAssembly {
+            world,
+            generated,
+            masks,
+            frames: Default::default(),
+        });
+        let mut adapter = SurfaceCollisionAdapter {
+            surface: surface.clone(),
+            generator,
+            random: Random {
+                values: Default::default(),
+                calls: 0,
+            },
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        };
+        for _ in 0..20 {
+            let result = adapter
+                .step_world(&lander(), HazardChances::default())
+                .unwrap();
+            adapter
+                .apply_world_step(&result, &mut RecordingAudio)
+                .unwrap();
+            assert_eq!(surface.borrow().world.get(id).unwrap().position, position);
+        }
+        let contact = adapter.contacts(&lander()).unwrap()[0];
+        let mut crew = CrewCount::new(12);
+        let mut minerals = super::super::cargo::MineralCargo::new(100, 0, false);
+        let mut biological = super::super::cargo::BioCargo::default();
+        let outcome = super::super::collision::resolve_lander_collision(
+            &mut super::super::collision::CollisionState {
+                crew: &mut crew,
+                shields: Default::default(),
+                minerals: &mut minerals,
+                biological: &mut biological,
+            },
+            contact.collision,
+            contact.rolls,
+        );
+        adapter.commit(contact, &outcome, 12).unwrap();
+        assert_eq!(biological.level(), 1);
+        assert!(adapter
+            .persistence
+            .is_retrieved(ScanType::Biological, ScanNodeId::new(0).unwrap()));
+        assert!(files.borrow().canned_node(canned.key()).is_none());
+        assert!(surface.borrow().world.is_empty());
+        let persistence = adapter.persistence;
+        let mut generator = PersistentGenerator { files };
+        assert!(
+            populate_surface(&mut generator, persistence, &mut SurfaceWorld::new())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

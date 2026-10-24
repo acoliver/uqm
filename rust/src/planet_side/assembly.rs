@@ -186,6 +186,15 @@ mod tests {
 
     struct Generator;
     impl SurfaceGenerator for Generator {
+        fn can_node(
+            &mut self,
+            _: crate::planet_side::generation::ScanNodeId,
+            _: crate::planet_side::model::SurfacePoint,
+            _: u16,
+        ) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
         fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
             Ok(u8::from(scan == ScanType::Mineral))
         }

@@ -55,6 +55,51 @@ impl ScanRetrieveMask {
     }
 }
 
+/// Uncollected biological canister, keyed independently of surface entity IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CannedNode {
+    pub star: u16,
+    pub planet: u8,
+    pub moon: u8,
+    pub node: u8,
+    pub value: u8,
+    pub x: i16,
+    pub y: i16,
+}
+
+impl CannedNode {
+    pub fn key(self) -> (u16, u8, u8, u8) {
+        (self.star, self.planet, self.moon, self.node)
+    }
+    pub fn is_valid(self) -> bool {
+        self.star < 502
+            && self.planet < 16
+            && self.moon <= 4
+            && self.node < 32
+            && (1..=15).contains(&self.value)
+            && (0..968).contains(&self.x)
+            && (0..300).contains(&self.y)
+    }
+}
+
+impl StateFileManager {
+    pub fn canned_node(&self, key: (u16, u8, u8, u8)) -> Option<CannedNode> {
+        self.canned_nodes
+            .iter()
+            .copied()
+            .find(|node| node.key() == key)
+    }
+    pub fn can_node(&mut self, node: CannedNode) {
+        assert!(node.is_valid(), "invalid internal canister record");
+        self.remove_canned_node(node.key());
+        self.canned_nodes.push(node);
+        self.canned_nodes.sort_by_key(|node| node.key());
+    }
+    pub fn remove_canned_node(&mut self, key: (u16, u8, u8, u8)) {
+        self.canned_nodes.retain(|node| node.key() != key);
+    }
+}
+
 pub struct PlanetInfoManager<'a> {
     state_manager: &'a mut StateFileManager,
 }
@@ -66,6 +111,7 @@ impl<'a> PlanetInfoManager<'a> {
 
     /// Initialize planet info by setting all star offsets to 0.
     pub fn init_planet_info(&mut self, num_stars: usize) -> Result<(), StateFileError> {
+        self.state_manager.canned_nodes.clear();
         self.state_manager
             .with_open_file(STARINFO_FILE, FileMode::Write, |file| {
                 for _ in 0..num_stars {

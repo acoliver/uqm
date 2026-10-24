@@ -27,6 +27,7 @@ pub fn encode_save(save: &SaveFile) -> Result<Vec<u8>, EncodeError> {
         }
         chunk(&mut out, SCAN_TAG, body)?;
     }
+    queue_chunk(&mut out, CANNED_NODES_TAG, &save.canned_nodes, canned_node)?;
     if let Some(list) = &save.group_list {
         chunk(&mut out, GROUP_LIST_TAG, group_list_body(list)?)?;
     }
@@ -176,6 +177,17 @@ fn global_body(g: &GlobalState) -> Vec<u8> {
     put_extent(&mut b, g.velocity.error);
     put_extent(&mut b, g.velocity.incr);
     b
+}
+
+fn canned_node(b: &mut Vec<u8>, node: &crate::state::planet_info::CannedNode) {
+    assert!(node.is_valid(), "invalid internal canister record");
+    put_u16(b, node.star);
+    put_u8(b, node.planet);
+    put_u8(b, node.moon);
+    put_u8(b, node.node);
+    put_u8(b, node.value);
+    put_i16(b, node.x);
+    put_i16(b, node.y);
 }
 
 fn race_entry(b: &mut Vec<u8>, e: &RaceEntry) {

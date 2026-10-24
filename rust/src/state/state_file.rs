@@ -208,6 +208,7 @@ pub enum SeekWhence {
 
 /// State file manager - handles all state files
 pub struct StateFileManager {
+    pub(crate) canned_nodes: Vec<super::planet_info::CannedNode>,
     files: [StateFile; NUM_STATE_FILES],
 }
 
@@ -215,6 +216,7 @@ impl StateFileManager {
     /// Create a new state file manager
     pub fn new() -> Self {
         StateFileManager {
+            canned_nodes: Vec::new(),
             files: [
                 StateFile::new("STARINFO", STAR_BUFSIZE),
                 StateFile::new("RANDGRPINFO", RAND_BUFSIZE),
