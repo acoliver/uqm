@@ -75,7 +75,7 @@
         {
           "key": "escorts:count",
           "op": "eq",
-          "value": 6
+          "value": 4
         },
         {
           "key": "escorts:species:0",
@@ -125,7 +125,7 @@
         {
           "key": "escorts:species:17",
           "op": "eq",
-          "value": 4
+          "value": 2
         },
         {
           "key": "escorts:species:18",
@@ -400,7 +400,7 @@
         {
           "key": "sis:ru",
           "op": "eq",
-          "value": 1798
+          "value": 2348
         },
         {
           "key": "star:current",
