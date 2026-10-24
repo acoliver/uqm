@@ -1,0 +1,560 @@
+{
+  "version": 1,
+  "name": "load-connected-jugger-prep-v1",
+  "start_save": {
+    "path": "saves/connected-jugger-prep.sav",
+    "slot": 0
+  },
+  "budgets": {
+    "max_input_ticks": 300000,
+    "max_presentations": 600000,
+    "max_wallclock_seconds": 120
+  },
+  "seed": 1437213464,
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 1
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "activity",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "max_ticks": 3000
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "activity",
+          "op": "eq",
+          "value": 4
+        },
+        {
+          "key": "date:day",
+          "op": "eq",
+          "value": 23
+        },
+        {
+          "key": "date:month",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "key": "date:year",
+          "op": "eq",
+          "value": 2158
+        },
+        {
+          "key": "escorts:count",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "escorts:species:0",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:1",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:10",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:11",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:12",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:13",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:14",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:15",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:16",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:17",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:18",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:19",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:2",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:20",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:21",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:22",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:23",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:24",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:3",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:4",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:5",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:6",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:7",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:8",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "escorts:species:9",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "sis:crew",
+          "op": "eq",
+          "value": 50
+        },
+        {
+          "key": "sis:drive:0",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:1",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:10",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:2",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:3",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:4",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:5",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:6",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:7",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:8",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:drive:9",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:fuel",
+          "op": "eq",
+          "value": 1300
+        },
+        {
+          "key": "sis:jet:0",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "key": "sis:jet:1",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "key": "sis:jet:2",
+          "op": "eq",
+          "value": 21
+        },
+        {
+          "key": "sis:jet:3",
+          "op": "eq",
+          "value": 21
+        },
+        {
+          "key": "sis:jet:4",
+          "op": "eq",
+          "value": 21
+        },
+        {
+          "key": "sis:jet:5",
+          "op": "eq",
+          "value": 21
+        },
+        {
+          "key": "sis:jet:6",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "key": "sis:jet:7",
+          "op": "eq",
+          "value": 21
+        },
+        {
+          "key": "sis:landers",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "sis:mineral_mass",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "sis:module:0",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:1",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:10",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:11",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:12",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:13",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:14",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:15",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:2",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "sis:module:3",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "key": "sis:module:4",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "key": "sis:module:5",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:6",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:7",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:8",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:module:9",
+          "op": "eq",
+          "value": 22
+        },
+        {
+          "key": "sis:ru",
+          "op": "eq",
+          "value": 323
+        },
+        {
+          "key": "star:current",
+          "op": "eq",
+          "value": 82
+        },
+        {
+          "key": "story:ARILOU_SPACE_SIDE",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:CLEAR_SPINDLE_ON_SHIP",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:EGG_CASE0_ON_SHIP",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:ILWRATH_FIGHT_THRADDASH",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:KNOW_ABOUT_SHATTERED",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "story:KNOW_SYREEN_WORLD_SHATTERED",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:MELNORME_CREDIT0",
+          "op": "eq",
+          "value": 37
+        },
+        {
+          "key": "story:MELNORME_CREDIT1",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:MELNORME_RAINBOW_COUNT",
+          "op": "eq",
+          "value": 4
+        },
+        {
+          "key": "story:MET_ORZ_BEFORE",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:MOONBASE_DESTROYED",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:MYCON_AMBUSH",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:ORZ_MANNER",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "story:PKUNK_MANNER",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "key": "story:PLAYER_HYPNOTIZED",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:PROBE_ILWRATH_ENCOUNTER",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:RADIOACTIVES_PROVIDED",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:RAINBOW_WORLD0",
+          "op": "eq",
+          "value": 35
+        },
+        {
+          "key": "story:SHIP_VAULT_UNLOCKED",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:STARBASE_AVAILABLE",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:SYREEN_KNOW_ABOUT_MYCON",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:SYREEN_SHUTTLE",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:SYREEN_SHUTTLE_ON_SHIP",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:TAALO_PROTECTOR_ON_SHIP",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:TAALO_UNPROTECTED",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:TALKING_PET_ON_SHIP",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "story:UMGAH_ZOMBIE_BLOBBIES",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "key": "story:UTWIG_BOMB_ON_SHIP",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "independently-reloaded-connected-jugger-prep"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
