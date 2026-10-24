@@ -56,9 +56,9 @@ mod live {
         fn ClearSISRect(flags: u16);
         fn AnyButtonPress(detect_special: u32) -> u32;
 
-        fn SleepThread(ticks: i32);
-        fn SleepThreadUntil(time: u32);
     }
+    use crate::threading::pacing::linked::sleep_thread as SleepThread;
+    use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
@@ -132,7 +132,7 @@ mod live {
         }
         fn sleep(&mut self, ticks: u32) {
             unsafe {
-                SleepThread(ticks as i32);
+                SleepThread(ticks);
             }
         }
         fn sleep_until(&mut self, time: u32) {

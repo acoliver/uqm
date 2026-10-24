@@ -110,10 +110,10 @@ mod ffi {
         pub(super) fn RosterMenu() -> i32;
         pub(super) fn GameOptions() -> u32;
         pub(super) fn StarMap() -> i32;
-        pub(super) fn SleepThreadUntil(time: u32);
 
     }
     pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
+    pub(super) use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 }
 
 #[inline]

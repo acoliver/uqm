@@ -26,10 +26,10 @@ mod live {
         fn SetStatusMessageMode(mode: i32) -> i32;
         fn DrawStatusMessage(message: *const c_char);
         fn DrawCargoStrings(old: u8, new: u8);
-        fn SleepThread(ticks: i32);
         fn AnyButtonPress(special: u32) -> u32;
         fn ClearSISRect(flags: u16);
     }
+    use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<Handler> {
         fn ship(&self) -> CSisState {
             unsafe { GlobData.sis_state }
@@ -67,7 +67,7 @@ mod live {
         }
         fn sleep(&mut self, ticks: u32) {
             unsafe {
-                SleepThread(ticks as i32);
+                SleepThread(ticks);
             }
         }
         fn now(&mut self) -> u32 {

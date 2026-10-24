@@ -143,10 +143,8 @@ extern "C" {
     // --- Threading Integration ---
 
     /// Suspend current thread for a duration
-    pub fn SleepThread(ticks: c_int);
 
     /// Suspend current thread until a specific time
-    pub fn SleepThreadUntil(wake_time: u32);
 
     // --- Input Integration ---
 
@@ -216,6 +214,8 @@ pub use crate::graphics::gfx_common_abi::BatchGraphics;
 pub use crate::graphics::gfx_common_abi::SetGraphicScale;
 /// End batched graphics mode
 pub use crate::graphics::gfx_common_abi::UnbatchGraphics;
+pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
+pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
 // ---------------------------------------------------------------------------
 // Safe Rust wrappers
@@ -368,8 +368,8 @@ pub unsafe fn task_switch() {
 /// # Safety
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn sleep_thread(ticks: i32) {
-    SleepThread(ticks as c_int);
+pub unsafe fn sleep_thread(ticks: u32) {
+    SleepThread(ticks);
 }
 
 // ---------------------------------------------------------------------------

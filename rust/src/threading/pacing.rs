@@ -152,7 +152,6 @@ pub fn sleep_for(env: &mut impl PacingEnv, duration: u32) {
     env.sleep_ms(ticks_to_ms(duration));
 }
 
-#[cfg(not(test))]
 pub(crate) mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
     use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};
@@ -239,14 +238,18 @@ pub(crate) mod linked {
     }
 
     /// Sleep for `sleep_time` game time units after servicing the display.
-    #[no_mangle]
-    pub extern "C" fn SleepThread(sleep_time: u32) {
+    ///
+    /// # Safety
+    /// Called on the SDL game thread with input and graphics initialized.
+    pub unsafe fn sleep_thread(sleep_time: u32) {
         sleep_for(&mut GameThread::enter(), sleep_time);
     }
 
     /// Sleep until the game clock reaches `wake_time`.
-    #[no_mangle]
-    pub extern "C" fn SleepThreadUntil(wake_time: u32) {
+    ///
+    /// # Safety
+    /// Called on the SDL game thread with input and graphics initialized.
+    pub unsafe fn sleep_thread_until(wake_time: u32) {
         sleep_until(&mut GameThread::enter(), wake_time);
     }
 }
@@ -254,6 +257,12 @@ pub(crate) mod linked {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linked_sleep_entry_points_use_rust_signatures_and_unsigned_ticks() {
+        let _: unsafe fn(u32) = super::linked::sleep_thread;
+        let _: unsafe fn(u32) = super::linked::sleep_thread_until;
+    }
 
     /// Scripted clock. Flushes cost the scripted number of ticks (zero once
     /// the script runs out), sleeping advances the clock by the milliseconds

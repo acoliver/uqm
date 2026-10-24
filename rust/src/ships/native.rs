@@ -375,7 +375,7 @@ mod engine {
     /// # Safety
     /// The game thread must own initialized pacing and display state.
     pub unsafe fn sleep_thread(ticks: u32) {
-        crate::battle::c_bridge::SleepThread(ticks as i32);
+        crate::battle::c_bridge::SleepThread(ticks);
     }
 
     /// # Safety

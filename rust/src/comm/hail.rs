@@ -14,7 +14,7 @@
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use super::super::locdata::{CGlobData, CRect};
-    use std::ffi::{c_char, c_int, c_uint};
+    use std::ffi::{c_char, c_int};
 
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
@@ -84,7 +84,6 @@ pub(super) mod c_bridge {
 
         // Audio teardown
 
-        pub fn SleepThreadUntil(time: c_uint);
         pub fn FlushColorXForms();
 
         // Activity flags — read C-side CurrentActivity via existing bridge
@@ -126,6 +125,7 @@ pub(super) mod c_bridge {
         pub fn getGameState(state: *const u8, name: c_int, end: c_int) -> u8;
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
+    pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 }
 
 // ============================================================================

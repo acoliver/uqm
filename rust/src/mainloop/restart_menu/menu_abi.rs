@@ -17,8 +17,8 @@ operation!(uqm_set_player_control(player: u8, control: u16) { kernel_abi::Player
 operation!(uqm_get_pulsed_menu_key(index: u8) -> u32 { super::super::input_abi::PulsedInputState.menu[index as usize] as u32 });
 operation!(uqm_get_mouse_button_down() -> u32 { crate::input::sdl_input::MouseButtonDown as u32 });
 pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
-operation!(uqm_sleep_thread_until(time: u32) { crate::threading::pacing::linked::SleepThreadUntil(time); });
-operation!(uqm_sleep_thread(time: u32) { crate::threading::pacing::linked::SleepThread(time); });
+operation!(uqm_sleep_thread_until(time: u32) { crate::threading::pacing::linked::sleep_thread_until(time); });
+operation!(uqm_sleep_thread(time: u32) { crate::threading::pacing::linked::sleep_thread(time); });
 operation!(uqm_set_game_paused(value: u32) { ptr::addr_of_mut!(super::super::input_abi::GamePaused).write_volatile(value); });
 operation!(uqm_reinit_race_queues() {
     let queues = ptr::addr_of_mut!(kernel_abi::race_q).cast::<crate::collections::queue::Queue>();
