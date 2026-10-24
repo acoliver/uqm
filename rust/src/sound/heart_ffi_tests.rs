@@ -437,20 +437,20 @@ fn stopping_all_sound_stops_effect_sources() {
 fn the_track_player_exports_are_quiet_with_no_track() {
     let _engine = Engine::start();
     unsafe {
-        StopTrack();
-        PauseTrack();
-        ResumeTrack();
-        JumpTrack();
-        FastForward_Smooth();
-        FastReverse_Smooth();
-        FastForward_Page();
-        FastReverse_Page();
-        assert_eq!(PlayingTrack(), 0);
-        assert_eq!(GetTrackPosition(1), 0);
-        assert!(GetFirstTrackSubtitle().is_null());
-        assert!(GetNextTrackSubtitle(ptr::null_mut()).is_null());
-        assert!(GetTrackSubtitleText(ptr::null_mut()).is_null());
-        SpliceMultiTrack(ptr::null(), ptr::null());
+        stop_track();
+        pause_track();
+        resume_track();
+        jump_track();
+        fast_forward_smooth();
+        fast_reverse_smooth();
+        fast_forward_page();
+        fast_reverse_page();
+        assert_eq!(playing_track(), 0);
+        assert_eq!(get_track_position(1), 0);
+        assert!(get_first_track_subtitle().is_null());
+        assert!(get_next_track_subtitle(ptr::null_mut()).is_null());
+        assert!(get_track_subtitle_text(ptr::null_mut()).is_null());
+        splice_multi_track(ptr::null(), ptr::null());
     }
 }
 
@@ -468,4 +468,22 @@ fn loading_files_that_are_not_there_gives_nothing() {
         DestroySound(ptr::null_mut());
         DestroyMusic(ptr::null_mut());
     }
+}
+
+#[test]
+fn speech_controls_have_safe_rust_signatures() {
+    let _: fn() = play_track;
+    let _: fn() = stop_track;
+    let _: fn() = jump_track;
+    let _: fn() = pause_track;
+    let _: fn() = resume_track;
+    let _: fn() -> u16 = playing_track;
+    let _: fn() = fast_reverse_smooth;
+    let _: fn() = fast_forward_smooth;
+    let _: fn() = fast_reverse_page;
+    let _: fn() = fast_forward_page;
+    let _: fn(c_int) -> c_int = get_track_position;
+    let _: fn() -> *const std::ffi::c_char = get_track_subtitle;
+    let _: fn() -> *mut c_void = get_first_track_subtitle;
+    let _: Option<unsafe fn()> = None::<super::types::PhraseCallback>;
 }

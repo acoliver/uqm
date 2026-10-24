@@ -4654,15 +4654,9 @@ pub use crate::callback::ffi::Callback_add;
 pub use crate::callback::ffi::Callback_remove;
 pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_haveMore;
-extern "C" {
-    pub fn PauseTrack();
-}
-extern "C" {
-    pub fn ResumeTrack();
-}
-extern "C" {
-    pub fn PlayingTrack() -> COUNT;
-}
+pub use crate::sound::heart_ffi::pause_track as PauseTrack;
+pub use crate::sound::heart_ffi::resume_track as ResumeTrack;
+pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_soundchunk {

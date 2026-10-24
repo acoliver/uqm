@@ -70,16 +70,16 @@ pub(super) mod c_bridge {
     use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_int, c_uint, c_void};
 
+    pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
+    pub use crate::sound::heart_ffi::fast_forward_smooth as FastForward_Smooth;
+    pub use crate::sound::heart_ffi::fast_reverse_page as FastReverse_Page;
+    pub use crate::sound::heart_ffi::fast_reverse_smooth as FastReverse_Smooth;
+    pub use crate::sound::heart_ffi::jump_track as JumpTrack;
+    pub use crate::sound::heart_ffi::play_track as PlayTrack;
+    pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
+    pub use crate::sound::heart_ffi::stop_track as StopTrack;
     pub use crate::time::counter_abi::GetTimeCounter;
     extern "C" {
-        pub fn PlayingTrack() -> u16;
-        pub fn JumpTrack();
-        pub fn PlayTrack();
-        pub fn StopTrack();
-        pub fn FastForward_Page();
-        pub fn FastForward_Smooth();
-        pub fn FastReverse_Page();
-        pub fn FastReverse_Smooth();
         pub fn comm_CheckSubtitles();
         pub fn comm_ClearSubtitles();
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
@@ -443,8 +443,8 @@ pub mod dinput {
 
         if wait_track == 0 {
             crate::automation::ui_observation::observe_communication_replay(true);
-        } else if unsafe { c_bridge::PlayingTrack() } == 0 {
-            unsafe { c_bridge::PlayTrack() };
+        } else if c_bridge::PlayingTrack() == 0 {
+            c_bridge::PlayTrack();
         }
 
         unsafe {
@@ -1257,7 +1257,7 @@ pub fn fade_music_to_background_bridge() {}
 /// Returns current track number (0 = not playing).
 fn playing_track(state: &CommState) -> u32 {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::PlayingTrack() as u32
     }
@@ -1274,7 +1274,7 @@ fn playing_track(state: &CommState) -> u32 {
 
 fn jump_track(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::JumpTrack();
     }
@@ -1286,7 +1286,7 @@ fn jump_track(state: &mut CommState) {
 
 fn play_track(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::PlayTrack();
     }
@@ -1298,7 +1298,7 @@ fn play_track(state: &mut CommState) {
 
 fn stop_track(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         c_bridge::StopTrack();
     }
@@ -1310,7 +1310,7 @@ fn stop_track(state: &mut CommState) {
 
 fn fast_forward(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         match get_scroll_mode() {
             ScrollMode::Page => c_bridge::FastForward_Page(),
@@ -1325,7 +1325,7 @@ fn fast_forward(state: &mut CommState) {
 
 fn fast_reverse(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         match get_scroll_mode() {
             ScrollMode::Page => c_bridge::FastReverse_Page(),

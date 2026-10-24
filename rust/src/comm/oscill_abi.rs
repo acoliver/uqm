@@ -19,6 +19,7 @@ mod runtime {
     }
 
     // Opaque handles and local repr(C) graphics records share the engine ABI.
+    use crate::sound::heart_ffi::get_track_position as GetTrackPosition;
     #[allow(clashing_extern_declarations)]
     extern "C" {
         fn GetFramePixel(frame: *mut frame_desc, point: CPoint) -> CColor;
@@ -35,7 +36,6 @@ mod runtime {
         fn BatchGraphics();
         fn UnbatchGraphics();
         fn GraphForegroundStream(data: *mut u8, width: i32, height: i32, speech: i32) -> i32;
-        fn GetTrackPosition(units: i32) -> i32;
         static OffScreenContext: *mut c_void;
         static usingSpeech: i32;
     }

@@ -6,6 +6,7 @@ use super::sis_graphics::CText;
 use std::ffi::{c_char, c_void};
 use std::ptr::{null, null_mut};
 
+use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
 #[allow(clashing_extern_declarations)]
 extern "C" {
     fn BatchGraphics();
@@ -17,7 +18,6 @@ extern "C" {
     fn TextRect(text: *mut CText, rect: *mut CRect, delta: *mut u8) -> i32;
     fn font_DrawTracedText(text: *mut CText, foreground: CColor, background: CColor);
     fn DrawStamp(stamp: *mut CStamp);
-    fn GetTrackSubtitle() -> *const c_char;
     static optSubtitles: i32;
 }
 

@@ -5,7 +5,7 @@
 use std::ffi::c_void;
 
 /// Callback type for phrase completion notification.
-pub type PhraseCallback = Option<unsafe extern "C" fn()>;
+pub type PhraseCallback = Option<crate::sound::types::PhraseCallback>;
 
 // Special phrase indices matching C commglue.h
 /// Index 0 is a no-op (DS-REQ-007)

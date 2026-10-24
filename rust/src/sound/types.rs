@@ -15,6 +15,9 @@ use parking_lot::Mutex;
 use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
 use super::mixer::types::MixerError;
 
+/// Phrase notification dispatched by speech playback and seeking.
+pub type PhraseCallback = unsafe fn();
+
 // =============================================================================
 // Error Types (REQ-CROSS-ERROR-01..03)
 // =============================================================================

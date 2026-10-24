@@ -64,10 +64,10 @@ mod live {
             speaker,
         );
     }
-    unsafe extern "C" fn zoq() {
+    unsafe fn zoq() {
         select(Speaker::Zoq);
     }
-    unsafe extern "C" fn pik() {
+    unsafe fn pik() {
         select(Speaker::Pik);
     }
     impl ZoqApi for LiveScript<Handler> {
