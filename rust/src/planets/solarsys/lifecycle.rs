@@ -68,6 +68,7 @@ static mut NEXT_TIME: u32 = 0;
 mod ffi {
     use super::*;
 
+    pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
     pub(super) use crate::ui::border::DrawSISFrame;
     pub(super) use crate::ui::settings::StopMusic;
@@ -84,7 +85,6 @@ mod ffi {
 
         pub(super) fn DestroyDrawable(drawable: *mut c_void) -> c::BOOLEAN;
         pub(super) fn SetContext(context: *mut c_void) -> *mut c_void;
-        pub(super) fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
         pub(super) fn SetContextBackGroundColor(color: c::Color) -> c::Color;
         pub(super) fn SetTransitionSource(rect: *mut c_void);
         pub(super) fn RedrawQueue(force: c::BOOLEAN);

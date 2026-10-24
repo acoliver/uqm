@@ -33,6 +33,8 @@ mod live {
     use super::{zoom_scale, Rotation};
     use crate::c_bindings::{global_state::DrawMode, solar_system};
     use crate::comm::locdata::{CColor, CRect};
+    use crate::graphics::context_abi::SetContextClipRect;
+    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{
         uqm_sleep_thread_until as SleepThreadUntil, SetContext,
     };
@@ -64,8 +66,6 @@ mod live {
         fn SetShieldThrobEffect(work: *mut c_void, point: i32, frame: *mut c_void);
 
         fn RepairBackRect(rect: *mut CRect);
-        fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        fn SetContextClipRect(rect: *mut CRect);
         fn SetContextDrawMode(mode: DrawMode) -> DrawMode;
     }
     use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};

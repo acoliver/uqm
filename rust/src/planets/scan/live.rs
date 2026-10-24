@@ -4,6 +4,7 @@ use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, live_queu
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect};
+use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil, SetContext,
 };
@@ -70,7 +71,6 @@ extern "C" {
     #[cfg(not(feature = "debug-process"))]
     fn CreateContextAux() -> *mut c_void;
     fn DestroyContext(context: *mut c_void) -> i32;
-    fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
     fn SetContextFont(font: *mut c_void) -> *mut c_void;
 }
 
@@ -567,7 +567,7 @@ unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
         let mut rect = CffiPlatform.context_clip_rect();
         let context = new_context(c"ScanContext".as_ptr());
         SetContext(context);
-        SetContextFGFrame(Screen);
+        SetContextFGFrame(Screen.cast());
         rect.corner.x += rect.width - width();
         rect.corner.y += rect.height - 75;
         rect.width = width();

@@ -3,50 +3,211 @@ use std::ffi::c_char;
 #[cfg(not(test))]
 use std::ffi::c_void;
 
-macro_rules! packet_data {
-    ($(($ty:ty, $handler:ident, $name:literal)),+ $(,)?) => {
-        const LENGTHS: [usize; 18] = [$(size_of::<$ty>()),+];
-        #[cfg(not(test))]
-        #[no_mangle]
-        pub static mut packetTypeData: [PacketTypeData; 18] = [$(PacketTypeData {
-            len: size_of::<$ty>(), handler: {
-                unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                    super::packethandlers::$handler(conn, packet.cast())
-                }
-                Some(dispatch)
-            },
-            name: concat!($name, "\0").as_ptr().cast(),
-        }),+];
-    };
-}
-packet_data!(
-    (Packet_Init, PacketHandler_Init, "Init"),
-    (Packet_Ping, PacketHandler_Ping, "Ping"),
-    (Packet_Ack, PacketHandler_Ack, "Ack"),
-    (Packet_Ready, PacketHandler_Ready, "Ready"),
-    (Packet_Fleet, PacketHandler_Fleet, "Fleet"),
-    (Packet_TeamName, PacketHandler_TeamName, "TeamName"),
-    (Packet_Handshake0, PacketHandler_Handshake0, "Handshake0"),
-    (Packet_Handshake1, PacketHandler_Handshake1, "Handshake1"),
-    (
-        Packet_HandshakeCancel,
-        PacketHandler_HandshakeCancel,
-        "HandshakeCancel"
-    ),
-    (
-        Packet_HandshakeCancelAck,
-        PacketHandler_HandshakeCancelAck,
-        "HandshakeCancelAck"
-    ),
-    (Packet_SeedRandom, PacketHandler_SeedRandom, "SeedRandom"),
-    (Packet_InputDelay, PacketHandler_InputDelay, "InputDelay"),
-    (Packet_SelectShip, PacketHandler_SelectShip, "SelectShip"),
-    (Packet_BattleInput, PacketHandler_BattleInput, "BattleInput"),
-    (Packet_FrameCount, PacketHandler_FrameCount, "FrameCount"),
-    (Packet_Checksum, PacketHandler_Checksum, "Checksum"),
-    (Packet_Abort, PacketHandler_Abort, "Abort"),
-    (Packet_Reset, PacketHandler_Reset, "Reset"),
-);
+const LENGTHS: [usize; 18] = [
+    size_of::<Packet_Init>(),
+    size_of::<Packet_Ping>(),
+    size_of::<Packet_Ack>(),
+    size_of::<Packet_Ready>(),
+    size_of::<Packet_Fleet>(),
+    size_of::<Packet_TeamName>(),
+    size_of::<Packet_Handshake0>(),
+    size_of::<Packet_Handshake1>(),
+    size_of::<Packet_HandshakeCancel>(),
+    size_of::<Packet_HandshakeCancelAck>(),
+    size_of::<Packet_SeedRandom>(),
+    size_of::<Packet_InputDelay>(),
+    size_of::<Packet_SelectShip>(),
+    size_of::<Packet_BattleInput>(),
+    size_of::<Packet_FrameCount>(),
+    size_of::<Packet_Checksum>(),
+    size_of::<Packet_Abort>(),
+    size_of::<Packet_Reset>(),
+];
+
+#[cfg(not(test))]
+#[no_mangle]
+pub static mut packetTypeData: [PacketTypeData; 18] = [
+    PacketTypeData {
+        len: size_of::<Packet_Init>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Init(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Init", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Ping>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Ping(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Ping", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Ack>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Ack(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Ack", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Ready>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Ready(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Ready", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Fleet>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Fleet(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Fleet", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_TeamName>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_TeamName(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("TeamName", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Handshake0>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Handshake0(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Handshake0", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Handshake1>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Handshake1(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Handshake1", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_HandshakeCancel>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_HandshakeCancel(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("HandshakeCancel", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_HandshakeCancelAck>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_HandshakeCancelAck(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("HandshakeCancelAck", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_SeedRandom>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_SeedRandom(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("SeedRandom", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_InputDelay>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_InputDelay(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("InputDelay", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_SelectShip>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_SelectShip(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("SelectShip", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_BattleInput>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_BattleInput(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("BattleInput", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_FrameCount>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_FrameCount(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("FrameCount", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Checksum>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Checksum(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Checksum", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Abort>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Abort(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Abort", "\0").as_ptr().cast(),
+    },
+    PacketTypeData {
+        len: size_of::<Packet_Reset>(),
+        handler: {
+            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
+                super::packethandlers::PacketHandler_Reset(conn, packet.cast())
+            }
+            Some(dispatch)
+        },
+        name: concat!("Reset", "\0").as_ptr().cast(),
+    },
+];
 
 pub(super) fn minimum_length(kind: usize) -> usize {
     LENGTHS[kind]
@@ -85,41 +246,67 @@ pub extern "C" fn Packet_Init_create() -> *mut Packet_Init {
     }
 }
 
-macro_rules! empty {
-    ($name:ident, $ty:ty, $kind:expr) => {
-        #[no_mangle]
-        pub extern "C" fn $name() -> *mut $ty {
-            unsafe { create($kind, 0) }
-        }
-    };
+#[no_mangle]
+pub extern "C" fn Packet_Ready_create() -> *mut Packet_Ready {
+    unsafe { create(3, 0) }
 }
-empty!(Packet_Ready_create, Packet_Ready, 3);
-empty!(Packet_Handshake0_create, Packet_Handshake0, 6);
-empty!(Packet_Handshake1_create, Packet_Handshake1, 7);
-empty!(Packet_HandshakeCancel_create, Packet_HandshakeCancel, 8);
-empty!(
-    Packet_HandshakeCancelAck_create,
-    Packet_HandshakeCancelAck,
-    9
-);
+#[no_mangle]
+pub extern "C" fn Packet_Handshake0_create() -> *mut Packet_Handshake0 {
+    unsafe { create(6, 0) }
+}
+#[no_mangle]
+pub extern "C" fn Packet_Handshake1_create() -> *mut Packet_Handshake1 {
+    unsafe { create(7, 0) }
+}
+#[no_mangle]
+pub extern "C" fn Packet_HandshakeCancel_create() -> *mut Packet_HandshakeCancel {
+    unsafe { create(8, 0) }
+}
+#[no_mangle]
+pub extern "C" fn Packet_HandshakeCancelAck_create() -> *mut Packet_HandshakeCancelAck {
+    unsafe { create(9, 0) }
+}
 
-macro_rules! value32 {
-    ($name:ident, $ty:ty, $kind:expr, $field:ident) => {
-        #[no_mangle]
-        pub extern "C" fn $name(value: u32) -> *mut $ty {
-            unsafe {
-                let packet = create::<$ty>($kind, 0);
-                (*packet).$field = value.to_be();
-                packet
-            }
-        }
-    };
+#[no_mangle]
+pub extern "C" fn Packet_Ping_create(value: u32) -> *mut Packet_Ping {
+    unsafe {
+        let packet = create::<Packet_Ping>(1, 0);
+        (*packet).id = value.to_be();
+        packet
+    }
 }
-value32!(Packet_Ping_create, Packet_Ping, 1, id);
-value32!(Packet_Ack_create, Packet_Ack, 2, id);
-value32!(Packet_SeedRandom_create, Packet_SeedRandom, 10, seed);
-value32!(Packet_InputDelay_create, Packet_InputDelay, 11, delay);
-value32!(Packet_FrameCount_create, Packet_FrameCount, 14, frameCount);
+#[no_mangle]
+pub extern "C" fn Packet_Ack_create(value: u32) -> *mut Packet_Ack {
+    unsafe {
+        let packet = create::<Packet_Ack>(2, 0);
+        (*packet).id = value.to_be();
+        packet
+    }
+}
+#[no_mangle]
+pub extern "C" fn Packet_SeedRandom_create(value: u32) -> *mut Packet_SeedRandom {
+    unsafe {
+        let packet = create::<Packet_SeedRandom>(10, 0);
+        (*packet).seed = value.to_be();
+        packet
+    }
+}
+#[no_mangle]
+pub extern "C" fn Packet_InputDelay_create(value: u32) -> *mut Packet_InputDelay {
+    unsafe {
+        let packet = create::<Packet_InputDelay>(11, 0);
+        (*packet).delay = value.to_be();
+        packet
+    }
+}
+#[no_mangle]
+pub extern "C" fn Packet_FrameCount_create(value: u32) -> *mut Packet_FrameCount {
+    unsafe {
+        let packet = create::<Packet_FrameCount>(14, 0);
+        (*packet).frameCount = value.to_be();
+        packet
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn Packet_Fleet_create(side: NetplaySide, count: usize) -> *mut Packet_Fleet {
@@ -187,22 +374,26 @@ pub extern "C" fn Packet_Checksum_create(frame: u32, checksum: u32) -> *mut Pack
     }
 }
 
-macro_rules! reason {
-    ($name:ident, $ty:ty, $kind:expr) => {
-        #[no_mangle]
-        pub extern "C" fn $name(reason: u16) -> *mut $ty {
-            unsafe {
-                let packet = create::<$ty>($kind, 0);
-                (*packet).reason = reason.to_be();
-                // These reserved bytes were uninitialized in the C constructors.
-                (*packet).padding0 = 0;
-                packet
-            }
-        }
-    };
+#[no_mangle]
+pub extern "C" fn Packet_Abort_create(reason: u16) -> *mut Packet_Abort {
+    unsafe {
+        let packet = create::<Packet_Abort>(16, 0);
+        (*packet).reason = reason.to_be();
+        // These reserved bytes were uninitialized in the C constructors.
+        (*packet).padding0 = 0;
+        packet
+    }
 }
-reason!(Packet_Abort_create, Packet_Abort, 16);
-reason!(Packet_Reset_create, Packet_Reset, 17);
+#[no_mangle]
+pub extern "C" fn Packet_Reset_create(reason: u16) -> *mut Packet_Reset {
+    unsafe {
+        let packet = create::<Packet_Reset>(17, 0);
+        (*packet).reason = reason.to_be();
+        // These reserved bytes were uninitialized in the C constructors.
+        (*packet).padding0 = 0;
+        packet
+    }
+}
 
 #[cfg(test)]
 mod tests {

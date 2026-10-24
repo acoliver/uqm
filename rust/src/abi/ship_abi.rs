@@ -1,11 +1,7 @@
 // Shared engine records used by the Rust runtime.
 
 pub use crate::math::{
-    RandomContext,
-    arctan as ARCTAN,
-    random as TFB_Random,
-    sinetab,
-    square_root,
+    arctan as ARCTAN, random as TFB_Random, sinetab, square_root, RandomContext,
 };
 
 pub const CONTENTDIR: &[u8; 13] = b"/uqm/content\0";
@@ -942,13 +938,19 @@ pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-unsafe extern "C" {
-    pub fn LoadDirEntryTable(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        pattern: *const ::std::os::raw::c_char,
-        matchType: match_MatchType,
-    ) -> DIRENTRY_REF;
+pub unsafe fn LoadDirEntryTable(
+    dirHandle: *mut uio_DirHandle,
+    path: *const ::std::os::raw::c_char,
+    pattern: *const ::std::os::raw::c_char,
+    matchType: match_MatchType,
+) -> DIRENTRY_REF {
+    crate::resource::direct::LoadDirEntryTable(
+        dirHandle.cast(),
+        path,
+        pattern,
+        matchType as ::std::os::raw::c_int,
+    )
+    .cast()
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1111,9 +1113,9 @@ pub struct tfb_soundsample {
 }
 pub type TFB_SoundSample = tfb_soundsample;
 pub type MUSIC_REF = *mut *mut TFB_SoundSample;
-pub use crate::sound::heart_ffi::{channel_playing as ChannelPlaying};
-pub use crate::sound::heart_ffi::{stop_sound as StopSound};
-pub use crate::sound::heart_ffi::{wait_for_sound_end as WaitForSoundEnd};
+pub use crate::sound::heart_ffi::channel_playing as ChannelPlaying;
+pub use crate::sound::heart_ffi::stop_sound as StopSound;
+pub use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
 pub use crate::time::counter_abi::GetTimeCounter;
@@ -1268,8 +1270,8 @@ unsafe extern "C" {
 }
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
-pub use crate::supermelee::netplay::crc::crc_init as crc_init;
-pub use crate::supermelee::netplay::crc::crc_finish as crc_finish;
+pub use crate::supermelee::netplay::crc::crc_finish;
+pub use crate::supermelee::netplay::crc::crc_init;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type OBJ_SIZE = UWORD;
 pub type HLINK = QUEUE_HANDLE;
@@ -1290,23 +1292,27 @@ pub struct QUEUE {
     pub object_size: COUNT,
     pub num_objects: BYTE,
 }
-unsafe extern "C" {
-    pub fn FreeLink(pq: *mut QUEUE, hLink: HLINK);
+pub unsafe fn FreeLink(pq: *mut QUEUE, hLink: HLINK) {
+    crate::collections::queue::FreeLink(pq.cast(), hLink);
 }
-unsafe extern "C" {
-    pub fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN;
+pub unsafe fn InitQueue(pq: *mut QUEUE, num_elements: COUNT, size: OBJ_SIZE) -> BOOLEAN {
+    BOOLEAN::from(crate::collections::queue::InitQueue(
+        pq.cast(),
+        num_elements,
+        size,
+    ))
 }
-unsafe extern "C" {
-    pub fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN;
+pub unsafe fn UninitQueue(pq: *mut QUEUE) -> BOOLEAN {
+    BOOLEAN::from(crate::collections::queue::UninitQueue(pq.cast()))
 }
-unsafe extern "C" {
-    pub fn ReinitQueue(pq: *mut QUEUE);
+pub unsafe fn ReinitQueue(pq: *mut QUEUE) {
+    crate::collections::queue::ReinitQueue(pq.cast());
 }
-unsafe extern "C" {
-    pub fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK);
+pub unsafe fn RemoveQueue(pq: *mut QUEUE, hLink: HLINK) {
+    crate::collections::queue::RemoveQueue(pq.cast(), hLink);
 }
-unsafe extern "C" {
-    pub fn CountLinks(pq: *mut QUEUE) -> COUNT;
+pub unsafe fn CountLinks(pq: *const QUEUE) -> COUNT {
+    crate::collections::queue::CountLinks(pq.cast())
 }
 unsafe extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
@@ -1325,26 +1331,26 @@ pub struct velocity_desc {
     pub incr: EXTENT,
 }
 pub type VELOCITY_DESC = velocity_desc;
-unsafe extern "C" {
-    pub fn GetCurrentVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-    );
+pub unsafe fn GetCurrentVelocityComponents(
+    velocityptr: *mut VELOCITY_DESC,
+    pdx: *mut SIZE,
+    pdy: *mut SIZE,
+) {
+    crate::battle::velocity::GetCurrentVelocityComponents(velocityptr.cast(), pdx, pdy);
 }
-unsafe extern "C" {
-    pub fn GetNextVelocityComponents(
-        velocityptr: *mut VELOCITY_DESC,
-        pdx: *mut SIZE,
-        pdy: *mut SIZE,
-        num_frames: COUNT,
-    );
+pub unsafe fn GetNextVelocityComponents(
+    velocityptr: *mut VELOCITY_DESC,
+    pdx: *mut SIZE,
+    pdy: *mut SIZE,
+    num_frames: COUNT,
+) {
+    crate::battle::velocity::GetNextVelocityComponents(velocityptr.cast(), pdx, pdy, num_frames);
 }
-unsafe extern "C" {
-    pub fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
+pub unsafe fn SetVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
+    crate::battle::velocity::SetVelocityComponents(velocityptr.cast(), dx, dy);
 }
-unsafe extern "C" {
-    pub fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE);
+pub unsafe fn DeltaVelocityComponents(velocityptr: *mut VELOCITY_DESC, dx: SIZE, dy: SIZE) {
+    crate::battle::velocity::DeltaVelocityComponents(velocityptr.cast(), dx, dy);
 }
 pub type HELEMENT = HLINK;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
@@ -1366,6 +1372,27 @@ pub struct state__bindgen_ty_1 {
 }
 pub type STATE = state;
 pub type ELEMENT = element;
+const _: () = {
+    use crate::battle::element::{Element, ElementVisualState};
+    assert!(size_of::<ELEMENT>() == size_of::<Element>());
+    assert!(align_of::<ELEMENT>() == align_of::<Element>());
+    assert!(std::mem::offset_of!(ELEMENT, succ) == std::mem::offset_of!(Element, succ));
+    assert!(
+        std::mem::offset_of!(ELEMENT, state_flags) == std::mem::offset_of!(Element, state_flags)
+    );
+    assert!(std::mem::offset_of!(ELEMENT, current) == std::mem::offset_of!(Element, current));
+    assert!(
+        std::mem::offset_of!(STATE, location) == std::mem::offset_of!(ElementVisualState, location)
+    );
+    assert!(
+        std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, frame)
+            == std::mem::offset_of!(ElementVisualState, frame)
+    );
+    assert!(
+        std::mem::offset_of!(STATE, image) + std::mem::offset_of!(state__bindgen_ty_1, farray)
+            == std::mem::offset_of!(ElementVisualState, farray)
+    );
+};
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type ElementCollisionFunc = ::std::option::Option<
     unsafe extern "C" fn(
@@ -1444,8 +1471,10 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn RemoveElement(hLink: HLINK);
 }
-unsafe extern "C" {
-    pub fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN;
+pub unsafe fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN {
+    // Gravity reads the shared flags/current-state fields, not the differently
+    // ordered intersection-control fields. Their offsets are checked above.
+    crate::battle::gravity::TimeSpaceMatterConflict(ElementPtr.cast()) as BOOLEAN
 }
 unsafe extern "C" {
     pub fn PlotIntercept(
@@ -1455,16 +1484,16 @@ unsafe extern "C" {
         margin_of_error: COUNT,
     ) -> COUNT;
 }
+pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
 pub use crate::supermelee::netplay::checksum::init_checksum_buffers as initChecksumBuffers;
 pub use crate::supermelee::netplay::checksum::uninit_checksum_buffers as uninitChecksumBuffers;
-pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
 pub use crate::supermelee::netplay::checksum::verify_checksums as verifyChecksums;
 unsafe extern "C" {
     pub fn NetConnection_getStateData(conn: *const NetConnection) -> *mut NetConnectionStateData;
 }
-unsafe extern "C" {
-    pub fn NetConnection_setState(conn: *mut NetConnection, state: NetState);
+pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
+    crate::supermelee::netplay::abi::NetConnection_setState(conn.cast(), state);
 }
 unsafe extern "C" {
     pub fn NetConnection_getState(conn: *const NetConnection) -> NetState;
@@ -1599,9 +1628,19 @@ unsafe extern "C" {
 pub struct FlashContext {
     _unused: [u8; 0],
 }
+#[cfg(not(test))]
+pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
+    crate::ui::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext;
 }
+#[cfg(not(test))]
+pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
+    crate::ui::flash::Flash_setRect(context.cast(), rect.cast());
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn Flash_setRect(context: *mut FlashContext, rect: *const RECT);
 }
@@ -2088,6 +2127,15 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn DrawCrewFuelString(y: COORD, state: SIZE);
 }
+#[cfg(not(test))]
+pub unsafe fn InitShipStatus(
+    ShipInfoPtr: *mut SHIP_INFO,
+    StarShipPtr: *mut STARSHIP,
+    pClipRect: *mut RECT,
+) {
+    crate::ui::shipstat::InitShipStatus(ShipInfoPtr.cast(), StarShipPtr.cast(), pClipRect.cast());
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn InitShipStatus(
         ShipInfoPtr: *mut SHIP_INFO,
@@ -2095,6 +2143,16 @@ unsafe extern "C" {
         pClipRect: *mut RECT,
     );
 }
+#[cfg(not(test))]
+pub unsafe fn DeltaStatistics(
+    ShipInfoPtr: *mut SHIP_INFO,
+    y_offs: COORD,
+    crew_delta: SIZE,
+    energy_delta: SIZE,
+) {
+    crate::ui::shipstat::DeltaStatistics(ShipInfoPtr.cast(), y_offs, crew_delta, energy_delta);
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn DeltaStatistics(
         ShipInfoPtr: *mut SHIP_INFO,
@@ -2281,6 +2339,27 @@ pub use crate::ui::settings::StopMusic;
 extern "C" {
     pub fn StopMusic();
 }
+#[cfg(not(test))]
+pub unsafe fn PlaySoundEffect(
+    S: SOUND,
+    Channel: COUNT,
+    Pos: SoundPosition,
+    PositionalObject: *mut ::std::os::raw::c_void,
+    Priority: BYTE,
+) {
+    crate::ui::settings::PlaySoundEffect(
+        S.cast(),
+        Channel,
+        crate::navigation::abi::SoundPosition {
+            positional: Pos.positional,
+            x: Pos.x,
+            y: Pos.y,
+        },
+        PositionalObject,
+        Priority,
+    );
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn PlaySoundEffect(
         S: SOUND,
@@ -2518,6 +2597,14 @@ pub use crate::ui::border::DrawSISFrame;
 extern "C" {
     pub fn DrawSISFrame();
 }
+#[cfg(not(test))]
+pub unsafe fn DrawHyperCoords(puniverse: POINT) {
+    crate::ui::sis::DrawHyperCoords(crate::navigation::abi::POINT {
+        x: puniverse.x,
+        y: puniverse.y,
+    });
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn DrawHyperCoords(puniverse: POINT);
 }
@@ -3703,6 +3790,11 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn MoveSIS(pdx: *mut SIZE, pdy: *mut SIZE);
 }
+#[cfg(not(test))]
+pub unsafe fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN {
+    crate::navigation::hyper_transition::hyper_transition(ElementPtr.cast())
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn hyper_transition(ElementPtr: *mut ELEMENT) -> BOOLEAN;
 }
@@ -4186,15 +4278,36 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub static mut GameStrings: STRING;
 }
+#[cfg(not(test))]
+pub unsafe fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
+    crate::front_end::gameopt::ConfirmSaveLoad(MsgStamp.cast());
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn ConfirmSaveLoad(MsgStamp: *mut STAMP);
 }
 unsafe extern "C" {
     pub fn GameOptions() -> BOOLEAN;
 }
+#[cfg(not(test))]
+pub unsafe fn GetEncounterStarShip(
+    LastStarShipPtr: *mut STARSHIP,
+    which_player: COUNT,
+) -> HSTARSHIP {
+    crate::pickship::ffi::get_encounter_star_ship(LastStarShipPtr.cast(), which_player)
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn GetEncounterStarShip(LastStarShipPtr: *mut STARSHIP, which_player: COUNT) -> HSTARSHIP;
 }
+#[cfg(not(test))]
+pub unsafe fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT) {
+    crate::pickship::ffi::draw_armada_pick_ship(
+        draw_salvage_frame as ::std::os::raw::c_int,
+        pPickRect.cast(),
+    );
+}
+#[cfg(test)]
 unsafe extern "C" {
     pub fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT);
 }
@@ -4204,14 +4317,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn free_gravity_well();
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputBuffer {
-    pub buf: *mut BATTLE_INPUT_STATE,
-    pub maxSize: usize,
-    pub first: usize,
-    pub size: usize,
-}
+pub use crate::supermelee::netplay::abi::BattleInputBuffer;
 unsafe extern "C" {
     pub fn getBattleInputDelay() -> usize;
 }
@@ -4221,18 +4327,14 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn uninitBattleInputBuffers();
 }
-unsafe extern "C" {
-    pub fn BattleInputBuffer_push(bib: *mut BattleInputBuffer, input: BATTLE_INPUT_STATE) -> bool;
-}
+pub use crate::supermelee::netplay::abi::BattleInputBuffer_push;
 unsafe extern "C" {
     pub fn BattleInputBuffer_pop(
         bib: *mut BattleInputBuffer,
         input: *mut BATTLE_INPUT_STATE,
     ) -> bool;
 }
-unsafe extern "C" {
-    pub fn getBattleInputBuffer(player: usize) -> *mut BattleInputBuffer;
-}
+pub use crate::supermelee::netplay::abi::getBattleInputBuffer;
 unsafe extern "C" {
     pub static mut netConnections: [*mut NetConnection; 0usize];
 }
@@ -4349,3 +4451,47 @@ pub struct tfb_drawcommandqueue {
 }
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
 pub use crate::callback::ffi::Async_process;
+
+#[cfg(test)]
+mod ship_abi_tests {
+    use super::*;
+
+    #[test]
+    fn queue_adapters_preserve_handles_and_boolean_results() {
+        unsafe {
+            let mut queue: QUEUE = std::mem::zeroed();
+            assert_eq!(
+                InitQueue(&mut queue, 2, size_of::<LINK>() as OBJ_SIZE),
+                BOOLEAN_TRUE
+            );
+            let handle = crate::collections::queue::AllocLink((&raw mut queue).cast());
+            assert!(!handle.is_null());
+            crate::collections::queue::PutQueue((&raw mut queue).cast(), handle);
+            assert_eq!(CountLinks(&queue), 1);
+            RemoveQueue(&mut queue, handle);
+            assert_eq!(CountLinks(&queue), 0);
+            FreeLink(&mut queue, handle);
+            assert_eq!(queue.free_list, handle);
+            ReinitQueue(&mut queue);
+            assert_eq!(CountLinks(&queue), 0);
+            assert_eq!(UninitQueue(&mut queue), BOOLEAN_TRUE);
+            assert!(queue.pq_tab.is_null());
+        }
+    }
+
+    #[test]
+    fn velocity_adapters_preserve_signed_components_and_frame_steps() {
+        unsafe {
+            let mut velocity: VELOCITY_DESC = std::mem::zeroed();
+            SetVelocityComponents(&mut velocity, 96, -64);
+            let (mut dx, mut dy) = (0, 0);
+            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            assert_eq!((dx, dy), (96, -64));
+            DeltaVelocityComponents(&mut velocity, 32, -32);
+            GetCurrentVelocityComponents(&mut velocity, &mut dx, &mut dy);
+            assert_eq!((dx, dy), (128, -96));
+            GetNextVelocityComponents(&mut velocity, &mut dx, &mut dy, 2);
+            assert_eq!((dx, dy), (8, -6));
+        }
+    }
+}

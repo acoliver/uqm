@@ -16,6 +16,8 @@ mod live {
     use super::{map_light, shield_level};
     use crate::c_bindings::{global_state as c, solar_system};
     use crate::comm::locdata::{CPoint, CRect};
+    use crate::graphics::context_abi::SetContextClipRect;
+    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::{cmap::Color, drawable::Point};
     use crate::memory::{rust_hcalloc, rust_hmalloc};
     use crate::planets::render::{
@@ -72,8 +74,6 @@ mod live {
         fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
         fn GetStringAddress(table: *mut c_void) -> *const c_char;
         fn InitSphereRotation(direction: i32, shielded: u32);
-        fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        fn SetContextClipRect(rect: *mut CRect);
         fn SetContextDrawMode(mode: c::DrawMode) -> c::DrawMode;
         fn SetContextForeGroundColor(color: c::Color) -> c::Color;
         fn DrawFilledRectangle(rect: *mut CRect);

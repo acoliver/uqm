@@ -125,41 +125,70 @@ pub unsafe extern "C" fn NetDescriptor_getExtra(nd: *const NetDescriptor) -> *mu
     (*nd).extra
 }
 
-macro_rules! callback_setter {
-    ($name:ident, $field:ident, $activate:ident, $deactivate:ident) => {
-        /// # Safety
-        /// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(nd: *mut NetDescriptor, callback: NdCallback) {
-            (*nd).$field = callback;
-            if !(*nd).closed {
-                if callback.is_some() {
-                    $activate(nd);
-                } else {
-                    $deactivate(nd);
-                }
-            }
+unsafe fn update_callback(
+    nd: *mut NetDescriptor,
+    field: &mut NdCallback,
+    callback: NdCallback,
+    activate: unsafe extern "C" fn(*mut NetDescriptor),
+    deactivate: unsafe extern "C" fn(*mut NetDescriptor),
+) {
+    *field = callback;
+    if !(*nd).closed {
+        if callback.is_some() {
+            activate(nd);
+        } else {
+            deactivate(nd);
         }
-    };
+    }
 }
-callback_setter!(
-    NetDescriptor_setReadCallback,
-    read_callback,
-    NetManager_activateReadCallback,
-    NetManager_deactivateReadCallback
-);
-callback_setter!(
-    NetDescriptor_setWriteCallback,
-    write_callback,
-    NetManager_activateWriteCallback,
-    NetManager_deactivateWriteCallback
-);
-callback_setter!(
-    NetDescriptor_setExceptionCallback,
-    exception_callback,
-    NetManager_activateExceptionCallback,
-    NetManager_deactivateExceptionCallback
-);
+
+/// # Safety
+/// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
+#[no_mangle]
+pub unsafe extern "C" fn NetDescriptor_setReadCallback(
+    nd: *mut NetDescriptor,
+    callback: NdCallback,
+) {
+    update_callback(
+        nd,
+        &mut (*nd).read_callback,
+        callback,
+        NetManager_activateReadCallback,
+        NetManager_deactivateReadCallback,
+    );
+}
+
+/// # Safety
+/// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
+#[no_mangle]
+pub unsafe extern "C" fn NetDescriptor_setWriteCallback(
+    nd: *mut NetDescriptor,
+    callback: NdCallback,
+) {
+    update_callback(
+        nd,
+        &mut (*nd).write_callback,
+        callback,
+        NetManager_activateWriteCallback,
+        NetManager_deactivateWriteCallback,
+    );
+}
+
+/// # Safety
+/// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
+#[no_mangle]
+pub unsafe extern "C" fn NetDescriptor_setExceptionCallback(
+    nd: *mut NetDescriptor,
+    callback: NdCallback,
+) {
+    update_callback(
+        nd,
+        &mut (*nd).exception_callback,
+        callback,
+        NetManager_activateExceptionCallback,
+        NetManager_deactivateExceptionCallback,
+    );
+}
 
 /// # Safety
 /// `nd` must hold a live reference. The callback must not consume the deferred callback's reference.

@@ -135,6 +135,10 @@ mod engine {
     use crate::ships::native::{
         cosine, facing_to_angle, init_intersect_points, put_element, sine, starship,
     };
+    use crate::supermelee::netplay::abi as netplay_abi;
+    use crate::supermelee::netplay::abi::{
+        flushPacketQueue, Netplay_isLocalReady, Netplay_localReady,
+    };
     use abi::*;
     use std::ffi::c_void;
     use std::{mem, ptr};
@@ -153,15 +157,10 @@ mod engine {
     }
 
     extern "C" {
-        fn Netplay_localReady(
-            conn: *mut NetConnection,
-            callback: Option<unsafe extern "C" fn(*mut NetConnection, *mut c_void)>,
-            arg: *mut c_void,
-            notify: bool,
-        ) -> bool;
-        fn Netplay_isLocalReady(conn: *const NetConnection) -> bool;
-        fn Netplay_Notify_frameCount(conn: *mut NetConnection, count: BattleFrameCounter);
-        fn flushPacketQueue(conn: *mut NetConnection);
+        fn Netplay_Notify_frameCount(
+            conn: *mut netplay_abi::NetConnection,
+            count: BattleFrameCounter,
+        );
         fn crew_preprocess(e: *mut ELEMENT);
         fn animation_preprocess(e: *mut ELEMENT);
         fn PostProcessStatus(e: *mut ELEMENT);
@@ -221,20 +220,31 @@ mod engine {
         WINNER_STAR_SHIP = ptr::null_mut();
     }
 
-    unsafe extern "C" fn readyToEnd2Callback(conn: *mut NetConnection, _arg: *mut c_void) {
-        NetConnection_setState(conn, NetState_NetState_endingBattle2);
+    unsafe extern "C" fn readyToEnd2Callback(
+        conn: *mut netplay_abi::NetConnection,
+        _arg: *mut c_void,
+    ) {
+        NetConnection_setState(conn.cast(), NetState_NetState_endingBattle2);
     }
 
-    unsafe extern "C" fn readyToEndCallback(conn: *mut NetConnection, _arg: *mut c_void) {
-        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-        NetConnection_setState(conn, NetState_NetState_endingBattle);
+    unsafe extern "C" fn readyToEndCallback(
+        conn: *mut netplay_abi::NetConnection,
+        _arg: *mut c_void,
+    ) {
+        let data = NetConnection_getStateData(conn.cast()).cast::<BattleStateData>();
+        NetConnection_setState(conn.cast(), NetState_NetState_endingBattle);
         let target = battleFrameCount.wrapping_add(1);
         if target > (*data).endFrameCount {
             (*data).endFrameCount = target;
         }
         Netplay_Notify_frameCount(conn, target);
-        flushPacketQueue(conn);
-        Netplay_localReady(conn, Some(readyToEnd2Callback), ptr::null_mut(), false);
+        flushPacketQueue(conn.cast());
+        Netplay_localReady(
+            conn.cast(),
+            Some(readyToEnd2Callback),
+            ptr::null_mut(),
+            false,
+        );
     }
 
     unsafe fn readyForBattleEndPlayer(conn: *mut NetConnection) -> bool {
@@ -244,10 +254,10 @@ mod engine {
             return true;
         }
         if state == NetState_NetState_inBattle {
-            if Netplay_isLocalReady(conn) {
+            if Netplay_isLocalReady(conn.cast()) {
                 return false;
             }
-            Netplay_localReady(conn, Some(readyToEndCallback), ptr::null_mut(), true);
+            Netplay_localReady(conn.cast(), Some(readyToEndCallback), ptr::null_mut(), true);
             if NetConnection_getState(conn) == NetState_NetState_inBattle {
                 return false;
             }

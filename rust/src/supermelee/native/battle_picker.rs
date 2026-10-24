@@ -30,13 +30,11 @@ mod tests {
 #[allow(non_snake_case)]
 pub(super) mod live {
     use super::move_cursor;
+    use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::mainloop::restart_menu::c_extern as flash;
     use crate::supermelee::c_bridge::PlayerControl;
     const FADE_ALL_TO_COLOR: u32 = 253;
-    extern "C" {
-        fn PlayMenuSound(sound: i32);
-    }
     unsafe fn Flash_process(context: *mut FlashContext) {
         flash::Flash_process(context.cast());
     }

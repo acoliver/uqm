@@ -10,6 +10,7 @@ use crate::c_bindings::global_state::{
     QUEUE, RECT, STAMP, STRING, TEXT,
 };
 use crate::comm::locdata::CRect;
+use crate::graphics::context_abi::SetContextClipRect;
 use crate::graphics::{font_abi, frame_abi, pixmap_abi};
 use crate::planets::starmap::FindStar;
 use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
@@ -50,7 +51,6 @@ extern "C" {
     fn SetContext(context: *mut c_void) -> *mut c_void;
     fn SetContextForeGroundColor(color: Color) -> Color;
     fn SetContextBackGroundColor(color: Color) -> Color;
-    fn SetContextClipRect(rect: *mut CRect);
     fn GetContextClipRect(rect: *mut RECT) -> u32;
     fn SetContextOrigin(point: POINT) -> POINT;
     fn ClearDrawable();

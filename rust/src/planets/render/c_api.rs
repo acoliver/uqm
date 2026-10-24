@@ -150,10 +150,11 @@ use super::topography::{
     NUM_BATCH_POINTS,
 };
 
+use crate::graphics::context_abi::SetContextClipRect;
+use crate::graphics::drawable_abi::SetContextFGFrame;
+
 extern "C" {
-    fn SetContextFGFrame(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn SetContextOrigin(origin: c::POINT) -> c::POINT;
-    fn SetContextClipRect(rect: *mut CRect);
     fn GetColorMapAddress(map: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn GetStringLengthBin(string: *mut std::ffi::c_void) -> u16;
 }
@@ -189,7 +190,7 @@ impl TopographyGfx for CffiTopographyGfx {
     }
 
     fn set_clip(&mut self, mut clip: Option<CRect>) {
-        unsafe { SetContextClipRect(clip.as_mut().map_or(std::ptr::null_mut(), |r| r)) };
+        unsafe { SetContextClipRect(clip.as_mut().map_or(std::ptr::null_mut(), |r| r).cast()) };
     }
 
     fn batch(&mut self, points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) {

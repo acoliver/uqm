@@ -1,9 +1,6 @@
 // Shared engine records used by the Rust runtime.
 
-pub use crate::math::{
-    RandomContext,
-    seed_random as TFB_SeedRandom,
-};
+pub use crate::math::{seed_random as TFB_SeedRandom, RandomContext};
 
 pub use super::netconnection::NetConnection_setState;
 #[repr(C)]
@@ -441,24 +438,12 @@ pub struct NetStatistics {
     pub packetsSent: usize,
     pub packetTypeSent: [usize; 18usize],
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NetDescriptor {
-    _unused: [u8; 0],
-}
-pub type NetDescriptor_ReadCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetDescriptor)>;
-pub type NetDescriptor_WriteCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetDescriptor)>;
-pub type NetDescriptor_ExceptionCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetDescriptor)>;
-pub type NetDescriptor_CloseCallback =
-    ::std::option::Option<unsafe extern "C" fn(nd: *mut NetDescriptor)>;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Socket {
-    _unused: [u8; 0],
-}
+pub use crate::network::descriptor::NetDescriptor;
+pub use crate::network::Socket;
+pub type NetDescriptor_ReadCallback = crate::network::descriptor::NdCallback;
+pub type NetDescriptor_WriteCallback = crate::network::descriptor::NdCallback;
+pub type NetDescriptor_ExceptionCallback = crate::network::descriptor::NdCallback;
+pub type NetDescriptor_CloseCallback = crate::network::descriptor::NdCallback;
 pub type sa_family_t = libc::sa_family_t;
 pub type socklen_t = libc::socklen_t;
 pub type iovec = libc::iovec;
@@ -492,177 +477,31 @@ extern "C" {
 pub const ProtocolFamily_PF_unspec: ProtocolFamily = 0;
 pub const ProtocolFamily_PF_inet: ProtocolFamily = 1;
 pub const ProtocolFamily_PF_inet6: ProtocolFamily = 2;
-pub type ProtocolFamily = ::std::os::raw::c_uint;
+pub type ProtocolFamily = ::std::os::raw::c_int;
 pub const Protocol_IPProto_tcp: Protocol = 0;
 pub const Protocol_IPProto_udp: Protocol = 1;
-pub type Protocol = ::std::os::raw::c_uint;
+pub type Protocol = ::std::os::raw::c_int;
 pub const SocketType_Sock_stream: SocketType = 0;
 pub const SocketType_Sock_dgram: SocketType = 1;
-pub type SocketType = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn Socket_open(
-        domain: ProtocolFamily,
-        type_: SocketType,
-        protocol: Protocol,
-    ) -> *mut Socket;
-}
-extern "C" {
-    pub fn Socket_close(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_connect(
-        sock: *mut Socket,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_bind(
-        sock: *mut Socket,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_listen(
-        sock: *mut Socket,
-        backlog: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_accept(
-        sock: *mut Socket,
-        addr: *mut sockaddr,
-        addrLen: *mut socklen_t,
-    ) -> *mut Socket;
-}
-extern "C" {
-    pub fn Socket_send(
-        sock: *mut Socket,
-        buf: *const ::std::os::raw::c_void,
-        len: usize,
-        flags: ::std::os::raw::c_int,
-    ) -> isize;
-}
-extern "C" {
-    pub fn Socket_recv(
-        sock: *mut Socket,
-        buf: *mut ::std::os::raw::c_void,
-        len: usize,
-        flags: ::std::os::raw::c_int,
-    ) -> isize;
-}
-extern "C" {
-    pub fn Socket_setNonBlocking(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setReuseAddr(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setNodelay(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setTOS(sock: *mut Socket, tos: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setInteractive(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setInlineOOB(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_setKeepAlive(sock: *mut Socket) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn Socket_getError(
-        sock: *mut Socket,
-        err: *mut ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn NetDescriptor_new(
-        socket: *mut Socket,
-        extra: *mut ::std::os::raw::c_void,
-    ) -> *mut NetDescriptor;
-}
-extern "C" {
-    pub fn NetDescriptor_close(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetDescriptor_incRef(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetDescriptor_decRef(nd: *mut NetDescriptor) -> bool;
-}
-extern "C" {
-    pub fn NetDescriptor_detach(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetDescriptor_getSocket(nd: *mut NetDescriptor) -> *mut Socket;
-}
-extern "C" {
-    pub fn NetDescriptor_setExtra(nd: *mut NetDescriptor, extra: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn NetDescriptor_getExtra(nd: *const NetDescriptor) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn NetDescriptor_setReadCallback(
-        nd: *mut NetDescriptor,
-        callback: NetDescriptor_ReadCallback,
-    );
-}
-extern "C" {
-    pub fn NetDescriptor_setWriteCallback(
-        nd: *mut NetDescriptor,
-        callback: NetDescriptor_WriteCallback,
-    );
-}
-extern "C" {
-    pub fn NetDescriptor_setExceptionCallback(
-        nd: *mut NetDescriptor,
-        callback: NetDescriptor_ExceptionCallback,
-    );
-}
-extern "C" {
-    pub fn NetDescriptor_setCloseCallback(
-        nd: *mut NetDescriptor,
-        callback: NetDescriptor_CloseCallback,
-    );
-}
-extern "C" {
-    pub fn NetManager_init();
-}
-extern "C" {
-    pub fn NetManager_uninit();
-}
-extern "C" {
-    pub fn NetManager_process(timeoutMs: *mut uint32) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn NetManager_addDesc(nd: *mut NetDescriptor) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn NetManager_removeDesc(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_activateReadCallback(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_deactivateReadCallback(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_activateWriteCallback(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_deactivateWriteCallback(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_activateExceptionCallback(nd: *mut NetDescriptor);
-}
-extern "C" {
-    pub fn NetManager_deactivateExceptionCallback(nd: *mut NetDescriptor);
-}
+pub type SocketType = ::std::os::raw::c_int;
+pub use crate::network::descriptor::{
+    NetDescriptor_close, NetDescriptor_decRef, NetDescriptor_detach, NetDescriptor_getExtra,
+    NetDescriptor_getSocket, NetDescriptor_incRef, NetDescriptor_new,
+    NetDescriptor_setCloseCallback, NetDescriptor_setExceptionCallback, NetDescriptor_setExtra,
+    NetDescriptor_setReadCallback, NetDescriptor_setWriteCallback,
+};
+pub use crate::network::manager::{
+    NetManager_activateExceptionCallback, NetManager_activateReadCallback,
+    NetManager_activateWriteCallback, NetManager_addDesc, NetManager_deactivateExceptionCallback,
+    NetManager_deactivateReadCallback, NetManager_deactivateWriteCallback, NetManager_init,
+    NetManager_process, NetManager_removeDesc, NetManager_uninit,
+};
+pub use crate::network::{
+    Socket_accept, Socket_bind, Socket_close, Socket_connect, Socket_getError, Socket_listen,
+    Socket_open, Socket_recv, Socket_send, Socket_setInlineOOB, Socket_setInteractive,
+    Socket_setKeepAlive, Socket_setNodelay, Socket_setNonBlocking, Socket_setReuseAddr,
+    Socket_setTOS,
+};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ConnectState {
@@ -672,12 +511,12 @@ pub const ConnectStateState_Connect_closed: ConnectStateState = 0;
 pub const ConnectStateState_Connect_resolving: ConnectStateState = 1;
 pub const ConnectStateState_Connect_connecting: ConnectStateState = 2;
 pub type ConnectStateState = ::std::os::raw::c_uint;
-pub use crate::callback::ffi::Callback_init;
-pub use crate::callback::ffi::Callback_uninit;
 pub use crate::callback::ffi::Callback_add;
-pub use crate::callback::ffi::Callback_remove;
-pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_haveMore;
+pub use crate::callback::ffi::Callback_init;
+pub use crate::callback::ffi::Callback_process;
+pub use crate::callback::ffi::Callback_remove;
+pub use crate::callback::ffi::Callback_uninit;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ResolveError {
@@ -1864,15 +1703,15 @@ extern "C" {
 extern "C" {
     pub fn Netplay_NotifyAll_battleInput(input: BATTLE_INPUT_STATE);
 }
-pub use crate::callback::ffi::Async_process;
-pub use crate::callback::ffi::Async_timeBeforeNextMs;
-pub use crate::callback::ffi::Alarm_init;
-pub use crate::callback::ffi::Alarm_uninit;
 pub use crate::callback::ffi::Alarm_addAbsoluteMs;
 pub use crate::callback::ffi::Alarm_addRelativeMs;
-pub use crate::callback::ffi::Alarm_remove;
+pub use crate::callback::ffi::Alarm_init;
 pub use crate::callback::ffi::Alarm_processOne;
+pub use crate::callback::ffi::Alarm_remove;
 pub use crate::callback::ffi::Alarm_timeBeforeNextMs;
+pub use crate::callback::ffi::Alarm_uninit;
+pub use crate::callback::ffi::Async_process;
+pub use crate::callback::ffi::Async_timeBeforeNextMs;
 extern "C" {
     pub fn Netplay_localReady(
         conn: *mut NetConnection,

@@ -23,51 +23,98 @@ unsafe fn setup(conn: *const NetConnection) {
     assert_eq!((*conn).state, NetState_NetState_inSetup);
     assert!(!(*conn).stateFlags.handshake.localOk());
 }
-macro_rules! notify {
-    ($name:ident, ($conn:ident $(, $arg:ident: $ty:ty)*), $body:block) => {
-        /// # Safety
-        /// The connection and any payload pointers are live on the game thread.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name($conn: *mut NetConnection $(, $arg: $ty)*) $body
-    };
-}
-notify!(Netplay_Notify_shipSelected, (conn, index: FleetShipIndex), {
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_shipSelected(
+    conn: *mut NetConnection,
+    index: FleetShipIndex,
+) {
     assert_eq!((*conn).state, NetState_NetState_selectShip);
     sendSelectShip(conn, index);
-});
-notify!(Netplay_Notify_battleInput, (conn, input: BATTLE_INPUT_STATE), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_battleInput(
+    conn: *mut NetConnection,
+    input: BATTLE_INPUT_STATE,
+) {
     assert!(battle_active((*conn).state));
     sendBattleInput(conn, input);
-});
-notify!(Netplay_Notify_setTeamName, (conn, player: i32, name: *const libc::c_char, len: usize), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_setTeamName(
+    conn: *mut NetConnection,
+    player: i32,
+    name: *const libc::c_char,
+    len: usize,
+) {
     setup(conn);
     sendTeamName(conn, side(conn, player), name, len);
-});
-notify!(Netplay_Notify_setFleet, (conn, player: i32, fleet: *const MeleeShip, size: usize), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_setFleet(
+    conn: *mut NetConnection,
+    player: i32,
+    fleet: *const MeleeShip,
+    size: usize,
+) {
     setup(conn);
     sendFleet(conn, side(conn, player), fleet, size);
-});
-notify!(Netplay_Notify_setShip, (conn, player: i32, index: FleetShipIndex, ship: MeleeShip), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_setShip(
+    conn: *mut NetConnection,
+    player: i32,
+    index: FleetShipIndex,
+    ship: MeleeShip,
+) {
     setup(conn);
     sendFleetShip(conn, side(conn, player), index, ship);
-});
-notify!(Netplay_Notify_seedRandom, (conn, seed: u32), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_seedRandom(conn: *mut NetConnection, seed: u32) {
     assert_eq!((*conn).state, NetState_NetState_preBattle);
     sendSeedRandom(conn, seed);
     (*conn).stateFlags.agreement.set_randomSeed(true);
-});
-notify!(Netplay_Notify_inputDelay, (conn, delay: u32), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_inputDelay(conn: *mut NetConnection, delay: u32) {
     assert_eq!((*conn).state, NetState_NetState_preBattle);
     sendInputDelay(conn, delay);
-});
-notify!(Netplay_Notify_frameCount, (conn, frame: BattleFrameCounter), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_frameCount(
+    conn: *mut NetConnection,
+    frame: BattleFrameCounter,
+) {
     assert_eq!((*conn).state, NetState_NetState_endingBattle);
     sendFrameCount(conn, frame);
-});
-notify!(Netplay_Notify_checksum, (conn, frame: BattleFrameCounter, checksum: Checksum), {
+}
+/// # Safety
+/// The connection and any payload pointers are live on the game thread.
+#[no_mangle]
+pub unsafe extern "C" fn Netplay_Notify_checksum(
+    conn: *mut NetConnection,
+    frame: BattleFrameCounter,
+    checksum: Checksum,
+) {
     assert!(battle_active((*conn).state));
     sendChecksum(conn, frame, checksum);
-});
+}
 
 #[cfg(test)]
 mod tests {

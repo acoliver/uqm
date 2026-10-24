@@ -351,45 +351,69 @@ pub unsafe extern "C" fn RescaleFrame(
     UnlockMutex(image.mutex.cast());
     ReleaseDrawable(new)
 }
-macro_rules! pixels {
-    ($name:ident, $ty:ty, $function:ident) => {
-        /// # Safety
-        /// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(
-            frame: *mut frame_desc,
-            pixels: $ty,
-            width: i32,
-            height: i32,
-        ) -> BOOLEAN {
-            if frame.is_null() {
-                return 0;
-            }
-            assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
-            $function((*(*frame).image).NormalImg, pixels, width, height)
-        }
-    };
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn ReadFramePixelColors(
+    frame: *mut frame_desc,
+    pixels: *mut Color,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_GetPixelColors((*(*frame).image).NormalImg, pixels, width, height)
 }
-pixels!(
-    ReadFramePixelColors,
-    *mut Color,
-    TFB_DrawCanvas_GetPixelColors
-);
-pixels!(
-    WriteFramePixelColors,
-    *const Color,
-    TFB_DrawCanvas_SetPixelColors
-);
-pixels!(
-    ReadFramePixelIndexes,
-    *mut u8,
-    TFB_DrawCanvas_GetPixelIndexes
-);
-pixels!(
-    WriteFramePixelIndexes,
-    *const u8,
-    TFB_DrawCanvas_SetPixelIndexes
-);
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn WriteFramePixelColors(
+    frame: *mut frame_desc,
+    pixels: *const Color,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_SetPixelColors((*(*frame).image).NormalImg, pixels, width, height)
+}
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn ReadFramePixelIndexes(
+    frame: *mut frame_desc,
+    pixels: *mut u8,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_GetPixelIndexes((*(*frame).image).NormalImg, pixels, width, height)
+}
+
+/// # Safety
+/// Non-screen frame must be null or live; pixel buffer must cover width * height elements.
+#[no_mangle]
+pub unsafe extern "C" fn WriteFramePixelIndexes(
+    frame: *mut frame_desc,
+    pixels: *const u8,
+    width: i32,
+    height: i32,
+) -> BOOLEAN {
+    if frame.is_null() {
+        return 0;
+    }
+    assert_ne!((*frame).Type, SCREEN_DRAWABLE as u16);
+    TFB_DrawCanvas_SetPixelIndexes((*(*frame).image).NormalImg, pixels, width, height)
+}
 
 #[cfg(test)]
 mod tests {

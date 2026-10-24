@@ -60,14 +60,7 @@ pub struct event {
     pub func_index: BYTE,
 }
 pub type EVENT = event;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Color {
-    pub r: BYTE,
-    pub g: BYTE,
-    pub b: BYTE,
-    pub a: BYTE,
-}
+pub use crate::graphics::native_abi::Color;
 pub type RESOURCE = *const ::std::os::raw::c_char;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -87,40 +80,15 @@ pub type FRAME = *mut FRAME_DESC;
 pub type FONT = *mut FONT_DESC;
 pub type TIME_VALUE = UWORD;
 pub type COORD = SWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct extent {
-    pub width: COORD,
-    pub height: COORD,
-}
+pub use crate::graphics::native_abi::extent;
 pub type EXTENT = extent;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct point {
-    pub x: COORD,
-    pub y: COORD,
-}
+pub use crate::graphics::native_abi::point;
 pub type POINT = point;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct stamp {
-    pub origin: POINT,
-    pub frame: FRAME,
-}
+pub use crate::graphics::native_abi::stamp;
 pub type STAMP = stamp;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct rect {
-    pub corner: POINT,
-    pub extent: EXTENT,
-}
+pub use crate::graphics::native_abi::rect;
 pub type RECT = rect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct line {
-    pub first: POINT,
-    pub second: POINT,
-}
+pub use crate::graphics::native_abi::line;
 pub type LINE = line;
 pub const TEXT_ALIGN_ALIGN_LEFT: TEXT_ALIGN = 0;
 pub const TEXT_ALIGN_ALIGN_CENTER: TEXT_ALIGN = 1;
@@ -130,14 +98,7 @@ pub const TEXT_VALIGN_VALIGN_TOP: TEXT_VALIGN = 0;
 pub const TEXT_VALIGN_VALIGN_MIDDLE: TEXT_VALIGN = 1;
 pub const TEXT_VALIGN_VALIGN_BOTTOM: TEXT_VALIGN = 2;
 pub type TEXT_VALIGN = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct text {
-    pub baseline: POINT,
-    pub pStr: *const UNICODE,
-    pub align: TEXT_ALIGN,
-    pub CharCount: COUNT,
-}
+pub use crate::graphics::native_abi::text;
 pub type TEXT = text;
 pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
@@ -150,24 +111,9 @@ pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
 pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union PRIM_DESC {
-    pub Point: POINT,
-    pub Stamp: STAMP,
-    pub Line: LINE,
-    pub Text: TEXT,
-    pub Rect: RECT,
-}
+pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PRIMITIVE {
-    pub Links: PRIM_LINKS,
-    pub Type: GRAPHICS_PRIM,
-    pub color: Color,
-    pub Object: PRIM_DESC,
-}
+pub use crate::graphics::native_abi::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -178,30 +124,12 @@ pub struct INTERSECT_CONTROL {
 }
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct DrawMode {
-    pub kind: BYTE,
-    pub factor: SWORD,
-}
-extern "C" {
-    pub fn GetContextForeGroundColor() -> Color;
-}
-extern "C" {
-    pub fn GetContextFGFrame() -> FRAME;
-}
-extern "C" {
-    pub fn GetContextClipRect(pRect: *mut RECT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn GetContextDrawMode() -> DrawMode;
-}
-extern "C" {
-    pub fn DrawLine(pLine: *mut LINE);
-}
-extern "C" {
-    pub fn DrawBatch(pBasePrim: *mut PRIMITIVE, PrimLinks: PRIM_LINKS, BatchFlags: BATCH_FLAGS);
-}
+pub use crate::graphics::context_abi::{
+    GetContextClipRect, GetContextDrawMode, GetContextForeGroundColor,
+};
+pub use crate::graphics::drawable_abi::GetContextFGFrame;
+pub use crate::graphics::frame_abi::{DrawBatch, DrawLine};
+pub use crate::graphics::native_abi::DrawMode;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_soundsample {
@@ -793,17 +721,20 @@ pub struct solarsys_state {
     pub Orbit: PLANET_ORBIT,
     pub InOrbit: BOOLEAN,
 }
+#[cfg(not(test))]
+pub use crate::planets::render::c_api::{
+    draw_filled_oval as DrawFilledOval, draw_oval as DrawOval,
+};
+#[cfg(not(test))]
+pub use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
+// The runtime providers are excluded from the isolated unit-test build.
+#[cfg(test)]
 extern "C" {
     pub fn planetOuterLocation(planetI: COUNT) -> POINT;
-}
-extern "C" {
     pub fn XFormIPLoc(pIn: *mut POINT, pOut: *mut POINT, ToDisplay: BOOLEAN);
-}
-extern "C" {
     pub fn DrawOval(pRect: *mut RECT, num_off_pixels: BYTE);
-}
-extern "C" {
     pub fn DrawFilledOval(pRect: *mut RECT);
+    pub fn EscortFeasibilityStudy(race: COUNT) -> COUNT;
 }
 pub type HENCOUNTER = HLINK;
 #[repr(C)]
@@ -907,48 +838,16 @@ pub const ILWRATH_DEFINED: _bindgen_ty_25 = 43;
 pub const ANDROSYNTH_DEFINED: _bindgen_ty_25 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_25 = 45;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[repr(align(8))]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_image {
-    pub _bindgen_opaque_blob: [u64; 11usize],
-}
+pub use crate::graphics::native_abi::tfb_image;
 pub type TFB_Image = tfb_image;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct bresenham_line {
-    pub first: POINT,
-    pub second: POINT,
-    pub abs_delta_x: SIZE,
-    pub abs_delta_y: SIZE,
-    pub error_term: SIZE,
-    pub end_points_exchanged: BOOLEAN,
-    pub intersect_code: INTERSECT_CODE,
-}
+pub use crate::graphics::geometry_ffi::BresenhamLine as bresenham_line;
 pub type BRESENHAM_LINE = bresenham_line;
 pub type DRAWABLE_TYPE = UWORD;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct frame_desc {
-    pub Type: DRAWABLE_TYPE,
-    pub Index: UWORD,
-    pub HotSpot: HOT_SPOT,
-    pub Bounds: EXTENT,
-    pub image: *mut TFB_Image,
-    pub parent: *mut drawable_desc,
-}
-#[repr(C)]
-#[repr(align(8))]
-#[derive(Debug, Copy, Clone)]
-pub struct drawable_desc {
-    pub _bindgen_opaque_blob: [u64; 2usize],
-}
-extern "C" {
-    pub fn _clip_line(pClipRect: *const RECT, pLine: *mut BRESENHAM_LINE) -> INTERSECT_CODE;
-}
-extern "C" {
-    pub fn EscortFeasibilityStudy(race: COUNT) -> COUNT;
-}
+#[cfg(not(test))]
+pub use crate::battle::build_native::EscortFeasibilityStudy;
+pub use crate::graphics::geometry_ffi::_clip_line;
+pub use crate::graphics::native_abi::drawable_desc;
+pub use crate::graphics::native_abi::frame_desc;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SUMMARY_DESC {
@@ -965,4 +864,27 @@ pub struct SUMMARY_DESC {
     pub ShipList: [BYTE; 12usize],
     pub DeviceList: [BYTE; 16usize],
     pub SaveName: [UNICODE; 64usize],
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+    use crate::graphics::{geometry_ffi::BresenhamLine, native_abi as gfx};
+
+    const _: unsafe extern "C" fn() -> gfx::Color = GetContextForeGroundColor;
+    const _: unsafe extern "C" fn() -> gfx::FRAME = GetContextFGFrame;
+    const _: unsafe extern "C" fn(*mut gfx::RECT) -> BOOLEAN = GetContextClipRect;
+    const _: unsafe extern "C" fn() -> gfx::DrawMode = GetContextDrawMode;
+    const _: unsafe extern "C" fn(*mut gfx::PRIMITIVE, PRIM_LINKS, BATCH_FLAGS) = DrawBatch;
+    const _: unsafe extern "C" fn(*mut gfx::LINE) = DrawLine;
+    const _: unsafe extern "C" fn(*const gfx::RECT, *mut BresenhamLine) -> INTERSECT_CODE =
+        _clip_line;
+
+    const _: () = {
+        assert!(std::mem::size_of::<BRESENHAM_LINE>() == std::mem::size_of::<BresenhamLine>());
+        assert!(
+            std::mem::offset_of!(BRESENHAM_LINE, intersect_code)
+                == std::mem::offset_of!(BresenhamLine, intersect_code)
+        );
+    };
 }

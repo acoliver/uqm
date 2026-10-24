@@ -7,7 +7,9 @@ fn button_y(y: i32, button_height: i16, slider_height: i16) -> i16 {
 #[cfg(not(test))]
 mod runtime {
     use super::button_y;
-    use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
+    use crate::comm::locdata::{CColor, CPoint, CStamp};
+    use crate::graphics::context_abi::SetContextClipRect;
+    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::native_abi::frame_desc;
     use std::ffi::c_void;
     use std::ptr::null_mut;
@@ -28,8 +30,6 @@ mod runtime {
         fn ReleaseDrawable(frame: *mut frame_desc) -> *mut c_void;
         fn DestroyDrawable(drawable: *mut c_void) -> i32;
         fn SetContext(context: *mut c_void) -> *mut c_void;
-        fn SetContextFGFrame(frame: *mut frame_desc) -> *mut frame_desc;
-        fn SetContextClipRect(rect: *const CRect) -> i32;
         fn SetContextForeGroundColor(color: CColor) -> CColor;
         fn DrawStamp(stamp: *mut CStamp);
         fn DrawLine(line: *const Line);
@@ -115,7 +115,7 @@ mod runtime {
         {
             let old = SetContext(OffScreenContext);
             SetContextFGFrame(SCOPE_WORK);
-            SetContextClipRect(std::ptr::null());
+            SetContextClipRect(std::ptr::null_mut());
             stamp.frame = SCOPE_FRAME.cast();
             DrawStamp(&raw mut stamp);
             SetContextForeGroundColor(SCOPE_COLOR);

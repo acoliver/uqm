@@ -154,34 +154,163 @@ pub unsafe extern "C" fn HibernateThread(period: u32) {
     rust_hibernate_thread(ms);
 }
 
-macro_rules! forward {
-    ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? = $call:expr) => {
-        /// # Safety
-        /// Pointers and handles obey the corresponding threading provider contract.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name($($arg: $ty),*) $(-> $ret)? { $call }
-    };
+/// # Safety
+/// The name pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn CreateMutex_Core(name: *const c_char, _class: u32) -> *mut RustMutex {
+    rust_mutex_create(name)
 }
 
-forward!(CreateMutex_Core(name: *const c_char, _class: u32) -> *mut RustMutex = rust_mutex_create(name));
-forward!(DestroyMutex(m: *mut RustMutex) = rust_mutex_destroy(m));
-forward!(LockMutex(m: *mut RustMutex) = rust_mutex_lock(m));
-forward!(UnlockMutex(m: *mut RustMutex) = rust_mutex_unlock(m));
-forward!(CreateRecursiveMutex_Core(name: *const c_char, _class: u32) -> *mut RustMutex = rust_mutex_create(name));
-forward!(DestroyRecursiveMutex(m: *mut RustMutex) = rust_mutex_destroy(m));
-forward!(LockRecursiveMutex(m: *mut RustMutex) = rust_mutex_lock(m));
-forward!(UnlockRecursiveMutex(m: *mut RustMutex) = rust_mutex_unlock(m));
-forward!(TryLockRecursiveMutex(m: *mut RustMutex) -> c_int = rust_mutex_try_lock(m));
-forward!(GetRecursiveMutexDepth(m: *mut RustMutex) -> c_int = rust_mutex_depth(m));
-forward!(CreateSemaphore_Core(initial: u32, name: *const c_char, _class: u32) -> *mut RustSemaphore = rust_semaphore_create(initial, name));
-forward!(DestroySemaphore(s: *mut RustSemaphore) = rust_semaphore_destroy(s));
-forward!(SetSemaphore(s: *mut RustSemaphore) = rust_semaphore_acquire(s));
-forward!(ClearSemaphore(s: *mut RustSemaphore) = rust_semaphore_release(s));
-forward!(CreateCondVar_Core(name: *const c_char, _class: u32) -> *mut RustCondVar = rust_condvar_create(name));
-forward!(DestroyCondVar(c: *mut RustCondVar) = rust_condvar_destroy(c));
-forward!(WaitCondVar(c: *mut RustCondVar) = rust_condvar_wait(c, ptr::null_mut()));
-forward!(SignalCondVar(c: *mut RustCondVar) = rust_condvar_signal(c));
-forward!(BroadcastCondVar(c: *mut RustCondVar) = rust_condvar_broadcast(c));
-forward!(CreateThreadLocal() -> *mut c_void = rust_thread_local_create());
-forward!(DestroyThreadLocal(t: *mut c_void) = rust_thread_local_destroy(t));
-forward!(GetMyThreadLocal() -> *mut c_void = rust_get_my_thread_local());
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn DestroyMutex(m: *mut RustMutex) {
+    rust_mutex_destroy(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn LockMutex(m: *mut RustMutex) {
+    rust_mutex_lock(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn UnlockMutex(m: *mut RustMutex) {
+    rust_mutex_unlock(m)
+}
+
+/// # Safety
+/// The name pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn CreateRecursiveMutex_Core(
+    name: *const c_char,
+    _class: u32,
+) -> *mut RustMutex {
+    rust_mutex_create(name)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn DestroyRecursiveMutex(m: *mut RustMutex) {
+    rust_mutex_destroy(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn LockRecursiveMutex(m: *mut RustMutex) {
+    rust_mutex_lock(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn UnlockRecursiveMutex(m: *mut RustMutex) {
+    rust_mutex_unlock(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn TryLockRecursiveMutex(m: *mut RustMutex) -> c_int {
+    rust_mutex_try_lock(m)
+}
+
+/// # Safety
+/// The mutex pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn GetRecursiveMutexDepth(m: *mut RustMutex) -> c_int {
+    rust_mutex_depth(m)
+}
+
+/// # Safety
+/// The name pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn CreateSemaphore_Core(
+    initial: u32,
+    name: *const c_char,
+    _class: u32,
+) -> *mut RustSemaphore {
+    rust_semaphore_create(initial, name)
+}
+
+/// # Safety
+/// The semaphore pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn DestroySemaphore(s: *mut RustSemaphore) {
+    rust_semaphore_destroy(s)
+}
+
+/// # Safety
+/// The semaphore pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn SetSemaphore(s: *mut RustSemaphore) {
+    rust_semaphore_acquire(s)
+}
+
+/// # Safety
+/// The semaphore pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn ClearSemaphore(s: *mut RustSemaphore) {
+    rust_semaphore_release(s)
+}
+
+/// # Safety
+/// The name pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn CreateCondVar_Core(name: *const c_char, _class: u32) -> *mut RustCondVar {
+    rust_condvar_create(name)
+}
+
+/// # Safety
+/// The condition-variable pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn DestroyCondVar(c: *mut RustCondVar) {
+    rust_condvar_destroy(c)
+}
+
+/// # Safety
+/// The condition-variable pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn WaitCondVar(c: *mut RustCondVar) {
+    rust_condvar_wait(c, ptr::null_mut())
+}
+
+/// # Safety
+/// The condition-variable pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn SignalCondVar(c: *mut RustCondVar) {
+    rust_condvar_signal(c)
+}
+
+/// # Safety
+/// The condition-variable pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn BroadcastCondVar(c: *mut RustCondVar) {
+    rust_condvar_broadcast(c)
+}
+
+/// # Safety
+/// Must be called according to the threading provider's thread-local lifecycle contract.
+#[no_mangle]
+pub unsafe extern "C" fn CreateThreadLocal() -> *mut c_void {
+    rust_thread_local_create()
+}
+
+/// # Safety
+/// The thread-local pointer must meet the threading provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn DestroyThreadLocal(t: *mut c_void) {
+    rust_thread_local_destroy(t)
+}
+
+/// # Safety
+/// Must be called on a thread with a valid thread-local value under the provider's contract.
+#[no_mangle]
+pub unsafe extern "C" fn GetMyThreadLocal() -> *mut c_void {
+    rust_get_my_thread_local()
+}

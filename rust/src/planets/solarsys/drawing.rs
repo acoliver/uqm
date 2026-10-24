@@ -421,11 +421,10 @@ pub(super) unsafe fn validate_inner_orbits() {
 }
 
 mod native {
-    use super::*;
-    use crate::comm::locdata::{CColor, CRect, CStamp};
+    use crate::comm::locdata::{CColor, CStamp};
+    pub(super) use crate::graphics::context_abi::SetContextClipRect;
+    pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     extern "C" {
-        pub(super) fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        pub(super) fn SetContextClipRect(rect: *mut CRect);
         pub(super) fn SetContextBackGroundColor(color: CColor) -> CColor;
         pub(super) fn SetContextForeGroundColor(color: CColor) -> CColor;
         pub(super) fn DrawStamp(stamp: *mut CStamp);

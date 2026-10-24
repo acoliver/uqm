@@ -49,17 +49,14 @@ macro_rules! guard {
     };
 }
 
-macro_rules! handler {
-    ($name:ident, $ty:ty, |$conn:ident, $packet:ident| $body:block) => {
-        /// # Safety
-        /// Called on the game thread with a live connection and a validated,
-        /// complete packet of this handler's type.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name($conn: *mut NetConnection, $packet: *const $ty) -> i32 $body
-    };
-}
-
-handler!(PacketHandler_Init, Packet_Init, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Init(
+    conn: *mut NetConnection,
+    packet: *const Packet_Init,
+) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_init && !(*conn).stateFlags.ready.remoteReady(),
@@ -95,23 +92,37 @@ handler!(PacketHandler_Init, Packet_Init, |conn, packet| {
     }
     Netplay_remoteReady(conn);
     0
-});
+}
 
-handler!(PacketHandler_Ping, Packet_Ping, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Ping(
+    conn: *mut NetConnection,
+    packet: *const Packet_Ping,
+) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ping") {
         return -1;
     }
     // Preserve the C handler's pass-through of the stored ID to sendAck.
     sendAck(conn, field!(packet, id));
     0
-});
+}
 
-handler!(PacketHandler_Ack, Packet_Ack, |conn, _packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Ack(
+    conn: *mut NetConnection,
+    _packet: *const Packet_Ack,
+) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ack") {
         return -1;
     }
     0
-});
+}
 
 fn ready_meaningful(state: NetState) -> bool {
     [
@@ -126,7 +137,14 @@ fn ready_meaningful(state: NetState) -> bool {
     .contains(&state)
 }
 
-handler!(PacketHandler_Ready, Packet_Ready, |conn, _packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Ready(
+    conn: *mut NetConnection,
+    _packet: *const Packet_Ready,
+) -> i32 {
     guard!(
         conn,
         ready_meaningful((*conn).state) && !(*conn).stateFlags.ready.remoteReady(),
@@ -134,7 +152,7 @@ handler!(PacketHandler_Ready, Packet_Ready, |conn, _packet| {
     );
     Netplay_remoteReady(conn);
     0
-});
+}
 
 unsafe fn local_side(conn: *const NetConnection, side: u8) -> COUNT {
     if side == NetplaySide_NetplaySide_local as u8 {
@@ -151,7 +169,14 @@ unsafe fn cancel_confirmation(conn: *mut NetConnection, data: *mut BattleStateDa
     }
 }
 
-handler!(PacketHandler_Fleet, Packet_Fleet, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Fleet(
+    conn: *mut NetConnection,
+    packet: *const Packet_Fleet,
+) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
     let count = u16::from_be(field!(packet, numShips)) as usize;
     let player = local_side(conn, field!(packet, side));
@@ -190,9 +215,16 @@ handler!(PacketHandler_Fleet, Packet_Fleet, |conn, packet| {
         Melee_RemoteChange_ship((*data).meleeState, conn, player, position, ship);
     }
     0
-});
+}
 
-handler!(PacketHandler_TeamName, Packet_TeamName, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_TeamName(
+    conn: *mut NetConnection,
+    packet: *const Packet_TeamName,
+) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
     let packet_len = u16::from_be(field!(packet, header).len) as usize;
     if packet_len <= size_of::<Packet_TeamName>() {
@@ -210,7 +242,7 @@ handler!(PacketHandler_TeamName, Packet_TeamName, |conn, packet| {
     );
     Melee_RemoteChange_teamName((*data).meleeState, conn, side, buffer.as_ptr().cast());
     0
-});
+}
 
 unsafe fn handshake_complete(conn: *mut NetConnection) {
     assert!(!(*conn).stateFlags.handshake.localOk());
@@ -220,147 +252,167 @@ unsafe fn handshake_complete(conn: *mut NetConnection) {
     (*conn).state = NetState_NetState_preBattle;
 }
 
-handler!(
-    PacketHandler_Handshake0,
-    Packet_Handshake0,
-    |conn, _packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_inSetup && !(*conn).stateFlags.handshake.remoteOk(),
-            "Handshake0"
-        );
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Handshake0(
+    conn: *mut NetConnection,
+    _packet: *const Packet_Handshake0,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_inSetup && !(*conn).stateFlags.handshake.remoteOk(),
+        "Handshake0"
+    );
+    (*conn).stateFlags.handshake.set_remoteOk(true);
+    if (*conn).stateFlags.handshake.localOk() && !(*conn).stateFlags.handshake.canceling() {
+        sendHandshake1(conn);
+    }
+    0
+}
+
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Handshake1(
+    conn: *mut NetConnection,
+    _packet: *const Packet_Handshake1,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_inSetup
+            && ((*conn).stateFlags.handshake.localOk() || (*conn).stateFlags.handshake.canceling()),
+        "Handshake1"
+    );
+    if (*conn).stateFlags.handshake.canceling() {
         (*conn).stateFlags.handshake.set_remoteOk(true);
-        if (*conn).stateFlags.handshake.localOk() && !(*conn).stateFlags.handshake.canceling() {
+    } else {
+        let remote_was_ok = (*conn).stateFlags.handshake.remoteOk();
+        (*conn).stateFlags.handshake.set_localOk(false);
+        (*conn).stateFlags.handshake.set_remoteOk(false);
+        if !remote_was_ok {
             sendHandshake1(conn);
         }
-        0
+        handshake_complete(conn);
     }
-);
+    0
+}
 
-handler!(
-    PacketHandler_Handshake1,
-    Packet_Handshake1,
-    |conn, _packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_inSetup
-                && ((*conn).stateFlags.handshake.localOk()
-                    || (*conn).stateFlags.handshake.canceling()),
-            "Handshake1"
-        );
-        if (*conn).stateFlags.handshake.canceling() {
-            (*conn).stateFlags.handshake.set_remoteOk(true);
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_HandshakeCancel(
+    conn: *mut NetConnection,
+    _packet: *const Packet_HandshakeCancel,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.remoteOk(),
+        "HandshakeCancel"
+    );
+    (*conn).stateFlags.handshake.set_remoteOk(false);
+    sendHandshakeCancelAck(conn);
+    0
+}
+
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_HandshakeCancelAck(
+    conn: *mut NetConnection,
+    _packet: *const Packet_HandshakeCancelAck,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.canceling(),
+        "HandshakeCancelAck"
+    );
+    (*conn).stateFlags.handshake.set_canceling(false);
+    if (*conn).stateFlags.handshake.localOk() {
+        if (*conn).stateFlags.handshake.remoteOk() {
+            sendHandshake1(conn);
         } else {
-            let remote_was_ok = (*conn).stateFlags.handshake.remoteOk();
-            (*conn).stateFlags.handshake.set_localOk(false);
-            (*conn).stateFlags.handshake.set_remoteOk(false);
-            if !remote_was_ok {
-                sendHandshake1(conn);
-            }
-            handshake_complete(conn);
+            sendHandshake0(conn);
         }
-        0
     }
-);
+    0
+}
 
-handler!(
-    PacketHandler_HandshakeCancel,
-    Packet_HandshakeCancel,
-    |conn, _packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.remoteOk(),
-            "HandshakeCancel"
-        );
-        (*conn).stateFlags.handshake.set_remoteOk(false);
-        sendHandshakeCancelAck(conn);
-        0
-    }
-);
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_SeedRandom(
+    conn: *mut NetConnection,
+    packet: *const Packet_SeedRandom,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_preBattle && !(*conn).stateFlags.discriminant,
+        "SeedRandom"
+    );
+    let data = (*conn).stateData.cast::<BattleStateData>();
+    updateRandomSeed(
+        (*data).meleeState,
+        (*conn).player as COUNT,
+        u32::from_be(field!(packet, seed)),
+    );
+    (*conn).stateFlags.agreement.set_randomSeed(true);
+    0
+}
 
-handler!(
-    PacketHandler_HandshakeCancelAck,
-    Packet_HandshakeCancelAck,
-    |conn, _packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.canceling(),
-            "HandshakeCancelAck"
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_InputDelay(
+    conn: *mut NetConnection,
+    packet: *const Packet_InputDelay,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_preBattle,
+        "InputDelay"
+    );
+    let delay = u32::from_be(field!(packet, delay));
+    if delay > BATTLE_FRAME_RATE {
+        log::error!(
+            "NETPLAY: [{}] Received absurdly large input delay value ({delay}).",
+            (*conn).player as COUNT
         );
-        (*conn).stateFlags.handshake.set_canceling(false);
-        if (*conn).stateFlags.handshake.localOk() {
-            if (*conn).stateFlags.handshake.remoteOk() {
-                sendHandshake1(conn);
-            } else {
-                sendHandshake0(conn);
-            }
-        }
-        0
+        return -1;
     }
-);
+    (*conn).stateFlags.inputDelay = delay as usize;
+    0
+}
 
-handler!(
-    PacketHandler_SeedRandom,
-    Packet_SeedRandom,
-    |conn, packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_preBattle && !(*conn).stateFlags.discriminant,
-            "SeedRandom"
-        );
-        let data = (*conn).stateData.cast::<BattleStateData>();
-        updateRandomSeed(
-            (*data).meleeState,
-            (*conn).player as COUNT,
-            u32::from_be(field!(packet, seed)),
-        );
-        (*conn).stateFlags.agreement.set_randomSeed(true);
-        0
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_SelectShip(
+    conn: *mut NetConnection,
+    packet: *const Packet_SelectShip,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_selectShip,
+        "SelectShip"
+    );
+    let data = (*conn).stateData.cast::<BattleStateData>();
+    if !updateMeleeSelection(
+        (*data).getMeleeState,
+        (*conn).player as COUNT,
+        u16::from_be(field!(packet, ship)),
+    ) {
+        return bad_message();
     }
-);
-
-handler!(
-    PacketHandler_InputDelay,
-    Packet_InputDelay,
-    |conn, packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_preBattle,
-            "InputDelay"
-        );
-        let delay = u32::from_be(field!(packet, delay));
-        if delay > BATTLE_FRAME_RATE {
-            log::error!(
-                "NETPLAY: [{}] Received absurdly large input delay value ({delay}).",
-                (*conn).player as COUNT
-            );
-            return -1;
-        }
-        (*conn).stateFlags.inputDelay = delay as usize;
-        0
-    }
-);
-
-handler!(
-    PacketHandler_SelectShip,
-    Packet_SelectShip,
-    |conn, packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_selectShip,
-            "SelectShip"
-        );
-        let data = (*conn).stateData.cast::<BattleStateData>();
-        if !updateMeleeSelection(
-            (*data).getMeleeState,
-            (*conn).player as COUNT,
-            u16::from_be(field!(packet, ship)),
-        ) {
-            return bad_message();
-        }
-        0
-    }
-);
+    0
+}
 
 fn battle_active(state: NetState) -> bool {
     [
@@ -371,39 +423,52 @@ fn battle_active(state: NetState) -> bool {
     .contains(&state)
 }
 
-handler!(
-    PacketHandler_BattleInput,
-    Packet_BattleInput,
-    |conn, packet| {
-        guard!(conn, battle_active((*conn).state), "BattleInput");
-        if !BattleInputBuffer_push(
-            getBattleInputBuffer((*conn).player as usize),
-            field!(packet, state),
-        ) {
-            return -1;
-        }
-        0
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_BattleInput(
+    conn: *mut NetConnection,
+    packet: *const Packet_BattleInput,
+) -> i32 {
+    guard!(conn, battle_active((*conn).state), "BattleInput");
+    if !BattleInputBuffer_push(
+        getBattleInputBuffer((*conn).player as usize),
+        field!(packet, state),
+    ) {
+        return -1;
     }
-);
+    0
+}
 
-handler!(
-    PacketHandler_FrameCount,
-    Packet_FrameCount,
-    |conn, packet| {
-        guard!(
-            conn,
-            (*conn).state == NetState_NetState_endingBattle,
-            "FrameCount"
-        );
-        let frame = u32::from_be(field!(packet, frameCount));
-        let data = (*conn).stateData.cast::<BattleStateData>();
-        (*data).endFrameCount = (*data).endFrameCount.max(frame);
-        Netplay_remoteReady(conn);
-        0
-    }
-);
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_FrameCount(
+    conn: *mut NetConnection,
+    packet: *const Packet_FrameCount,
+) -> i32 {
+    guard!(
+        conn,
+        (*conn).state == NetState_NetState_endingBattle,
+        "FrameCount"
+    );
+    let frame = u32::from_be(field!(packet, frameCount));
+    let data = (*conn).stateData.cast::<BattleStateData>();
+    (*data).endFrameCount = (*data).endFrameCount.max(frame);
+    Netplay_remoteReady(conn);
+    0
+}
 
-handler!(PacketHandler_Checksum, Packet_Checksum, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Checksum(
+    conn: *mut NetConnection,
+    packet: *const Packet_Checksum,
+) -> i32 {
     guard!(conn, battle_active((*conn).state), "Checksum");
     let frame = u32::from_be(field!(packet, frameNr));
     let checksum = u32::from_be(field!(packet, checksum));
@@ -429,15 +494,29 @@ handler!(PacketHandler_Checksum, Packet_Checksum, |conn, packet| {
     }
     add_remote_checksum(conn, frame, checksum);
     0
-});
+}
 
-handler!(PacketHandler_Abort, Packet_Abort, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Abort(
+    conn: *mut NetConnection,
+    packet: *const Packet_Abort,
+) -> i32 {
     // Match the existing abort feedback's interpretation of the stored reason.
     abortFeedback(conn, field!(packet, reason) as NetplayAbortReason);
     -1
-});
+}
 
-handler!(PacketHandler_Reset, Packet_Reset, |conn, packet| {
+/// # Safety
+/// Called on the game thread with a live connection and a validated,
+/// complete packet of this handler's type.
+#[no_mangle]
+pub unsafe extern "C" fn PacketHandler_Reset(
+    conn: *mut NetConnection,
+    packet: *const Packet_Reset,
+) -> i32 {
     if !test_state(!(*conn).stateFlags.reset.remoteReset(), "Reset") {
         return -1;
     }
@@ -446,7 +525,7 @@ handler!(PacketHandler_Reset, Packet_Reset, |conn, packet| {
         u16::from_be(field!(packet, reason)) as NetplayResetReason,
     );
     0
-});
+}
 
 #[cfg(test)]
 mod tests {

@@ -6,6 +6,7 @@
 //! purchase costs, which bars to draw) are made by the Rust models in this
 //! module's siblings, not here.
 
+use crate::graphics::context_abi::SetContextClipRect;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 
 use super::fuel::GaugeDelta;
@@ -99,7 +100,6 @@ extern "C" {
     fn PlayMenuSound(effect: c_int);
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-    fn SetContextClipRect(rect: *mut CRect);
     fn AnyButtonPress(detect_special: u32) -> u32;
     fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
@@ -336,7 +336,7 @@ impl Gfx for CffiPlatform {
     fn set_context_clip_rect(&self, rect: Rect) {
         let mut rect = to_c_rect(rect);
         // SAFETY: `rect` is valid for the call and copied by it.
-        unsafe { SetContextClipRect(&mut rect) };
+        unsafe { SetContextClipRect((&mut rect as *mut CRect).cast()) };
     }
 
     fn fill_rect(&self, rect: Rect) {

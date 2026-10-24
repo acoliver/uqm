@@ -17,6 +17,7 @@ mod live {
         live_queues, solar_system,
     };
     use crate::comm::locdata::{CGlobData, CRect};
+    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::memory::rust_hfree;
@@ -41,7 +42,6 @@ mod live {
         #[cfg(not(feature = "debug-process"))]
         fn CreateContextAux() -> *mut c_void;
         fn DestroyContext(context: *mut c_void) -> i32;
-        fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
         fn GetScanContext(owner: *mut i32) -> *mut c_void;
         fn DestroyScanContext();
         fn DrawStarBackGround();
@@ -91,7 +91,7 @@ mod live {
         let mut r = CffiPlatform.context_clip_rect();
         PlanetContext = new_context(c"PlanetContext".as_ptr());
         SetContext(PlanetContext);
-        SetContextFGFrame(Screen);
+        SetContextFGFrame(Screen.cast());
         r.height -= 75 + 5;
         CffiPlatform.set_context_clip_rect(r);
         SetContext(old);
