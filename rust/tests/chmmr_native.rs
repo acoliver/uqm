@@ -223,7 +223,7 @@ unsafe fn velocity(el: *mut ELEMENT) -> (SIZE, SIZE) {
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i16; 9] {
     [
-        v.TravelAngle as i16,
+        v.travel_angle as i16,
         v.vector.width,
         v.vector.height,
         v.fract.width,
@@ -1031,8 +1031,8 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
         let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
         for own_angle in 0..64u16 {
             for enemy_angle in 0..64u16 {
-                (*ship.ptr()).velocity.TravelAngle = own_angle;
-                (*enemy.ptr()).velocity.TravelAngle = enemy_angle;
+                (*ship.ptr()).velocity.travel_angle = own_angle;
+                (*enemy.ptr()).velocity.travel_angle = enemy_angle;
                 ship.ss.ship_input_state = (LEFT | SPECIAL | WEAPON) as u8;
                 // Shared intelligence clears WEAPON when weapon_counter is zero.
                 ai(ship.ptr(), concerns.as_mut_ptr(), 0);
@@ -1044,8 +1044,8 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
                 );
             }
         }
-        (*ship.ptr()).velocity.TravelAngle = 0;
-        (*enemy.ptr()).velocity.TravelAngle = 0;
+        (*ship.ptr()).velocity.travel_angle = 0;
+        (*enemy.ptr()).velocity.travel_angle = 0;
         for (turn, counter, weapon_counter, has_enemy, expected) in [
             (12, 0, 0, true, false),
             (13, 0, 0, true, true),

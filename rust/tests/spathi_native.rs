@@ -272,7 +272,7 @@ fn forward_missile_leaves_the_nose_along_the_ship_facing() {
         assert_eq!(index_of((*m).current.image.frame), 4);
         // Facing 4 is angle 16, along +x (angle 0 points up the screen): the nose offset of
         // 16 display pixels, pulled back by one frame of travel at speed 120.
-        assert_eq!((*m).velocity.TravelAngle, 16);
+        assert_eq!((*m).velocity.travel_angle, 16);
         assert_eq!(
             ((*m).current.location.x, (*m).current.location.y),
             (400 + 16 * 4 - 120, 500)
@@ -299,7 +299,7 @@ fn butt_leaves_the_tail_not_the_nose() {
         assert_ne!(butt, ship);
         assert_eq!((*butt).pParent, (&raw mut *fleet.starship).cast());
         assert_eq!(index_of((*butt).current.image.frame), 12);
-        assert_eq!((*butt).velocity.TravelAngle, 48);
+        assert_eq!((*butt).velocity.travel_angle, 48);
         assert_eq!((*butt).state_flags, (APPEARING | FINITE_LIFE) as u16);
         assert_eq!((*butt).__bindgen_anon_1.life_span, 30);
         assert_eq!((*butt).__bindgen_anon_2.hit_points, 1);
@@ -406,7 +406,7 @@ fn butt_homes_one_facing_step_per_tracking_pass() {
         preprocess(butt);
         assert_eq!(index_of((*butt).next.image.frame), 13);
         assert_ne!((*butt).state_flags & CHANGING as u16, 0);
-        assert_eq!((*butt).velocity.TravelAngle, 52);
+        assert_eq!((*butt).velocity.travel_angle, 52);
         assert_eq!((*butt).__bindgen_anon_4.turn_wait, 1);
     }
 }
@@ -483,10 +483,10 @@ fn intelligence_beyond_eight_turns_needs_the_enemy_to_be_closing() {
         fleet.starship.ShipFacing = 0;
 
         // Enemy drifting up the screen (angle 0): facing 8 + 8 - 0 + 4 wraps to 4.
-        (*behind).velocity.TravelAngle = 0;
+        (*behind).velocity.travel_angle = 0;
         assert!(intelligence_sets_special(&mut fleet, ship, behind, 20));
         // Enemy drifting down the screen (angle 32): 8 + 8 - 8 + 4 is 12, past 8.
-        (*behind).velocity.TravelAngle = 32;
+        (*behind).velocity.travel_angle = 32;
         assert!(!intelligence_sets_special(&mut fleet, ship, behind, 20));
         // At eight turns or fewer the enemy's drift no longer matters.
         assert!(intelligence_sets_special(&mut fleet, ship, behind, 8));
@@ -506,15 +506,15 @@ fn intelligence_while_fast_or_in_gravity_needs_the_tail_along_travel() {
         for flag in [SHIP_BEYOND_MAX_SPEED, SHIP_IN_GRAVITY_WELL] {
             fleet.starship.cur_status_flags = flag as u16;
             // Travelling up the screen (angle 0) puts the target astern.
-            (*ship).velocity.TravelAngle = 0;
+            (*ship).velocity.travel_angle = 0;
             assert!(intelligence_sets_special(&mut fleet, ship, behind, 8));
             // Travelling down the screen (angle 32) puts it ahead of the path.
-            (*ship).velocity.TravelAngle = 32;
+            (*ship).velocity.travel_angle = 32;
             assert!(!intelligence_sets_special(&mut fleet, ship, behind, 8));
         }
         // Slow ships ignore their travel direction.
         fleet.starship.cur_status_flags = 0;
-        (*ship).velocity.TravelAngle = 32;
+        (*ship).velocity.travel_angle = 32;
         assert!(intelligence_sets_special(&mut fleet, ship, behind, 8));
     }
 }

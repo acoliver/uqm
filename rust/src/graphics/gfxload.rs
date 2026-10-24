@@ -6,9 +6,10 @@ use crate::strings::string_table as strings;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
 
+use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
+
 extern "C" {
     static mut repository: *mut uio::uio_Repository;
-    fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut crate::c_bindings::global_state::TFB_Image;
 }
 #[derive(Clone, Copy)]
 struct AniData {

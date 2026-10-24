@@ -100,10 +100,8 @@ impl SubtitleDisplay {
 
 #[cfg(not(test))]
 mod c_bridge {
-    extern "C" {
-        /// Redraw the current subtitle text.
-        pub fn comm_RedrawSubtitles();
-    }
+
+    pub use crate::comm::comm_abi::comm_RedrawSubtitles;
 }
 
 // ============================================================================

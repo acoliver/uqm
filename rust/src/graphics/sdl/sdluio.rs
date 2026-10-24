@@ -5,9 +5,7 @@ use sdl2_sys::*;
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
 
-extern "C" {
-    fn TFB_png_to_sdl(src: *mut SDL_RWops) -> *mut SDL_Surface;
-}
+use crate::graphics::sdl::png2sdl::TFB_png_to_sdl;
 
 unsafe fn stream(context: *mut SDL_RWops) -> *mut uio_bridge::uio_Stream {
     (*context).hidden.unknown.data1.cast()

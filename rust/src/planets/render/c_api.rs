@@ -153,11 +153,11 @@ use super::topography::{
 use crate::graphics::context_abi::SetContextClipRect;
 use crate::graphics::drawable_abi::SetContextFGFrame;
 
-extern "C" {
-    fn SetContextOrigin(origin: c::POINT) -> c::POINT;
-    fn GetColorMapAddress(map: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-    fn GetStringLengthBin(string: *mut std::ffi::c_void) -> u16;
-}
+use crate::graphics::context_abi::SetContextOrigin;
+
+use crate::graphics::cmap_abi::GetColorMapAddress;
+
+use crate::strings::string_table::GetStringLengthBin;
 
 /// Borrow of the existing context renderer, without any new frame registry.
 struct CffiTopographyGfx;

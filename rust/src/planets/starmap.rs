@@ -86,13 +86,16 @@ pub unsafe extern "C" fn FindStar(
 }
 
 #[cfg(not(test))]
-mod naming {
+pub(crate) mod naming {
     use super::*;
     use std::ffi::{c_char, c_void};
+
+    use crate::strings::string_table::SetAbsStringTableIndex;
+
+    use crate::strings::string_table::GetStringAddress;
+
     extern "C" {
         static mut GameStrings: *mut c_void;
-        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-        fn GetStringAddress(entry: *mut c_void) -> *const c_char;
     }
 
     /// # Safety
@@ -102,7 +105,7 @@ mod naming {
         let mut out = buffer;
         if (*star).prefix != 0 {
             let mut text = GetStringAddress(SetAbsStringTableIndex(
-                GameStrings,
+                (GameStrings).cast(),
                 crate::c_bindings::global_state::STAR_NUMBER_BASE as u16 + (*star).prefix as u16
                     - 1,
             ));
@@ -119,8 +122,10 @@ mod naming {
                 *out.sub(1) = b' ' as c_char;
             }
         }
-        let mut text =
-            GetStringAddress(SetAbsStringTableIndex(GameStrings, (*star).postfix as u16));
+        let mut text = GetStringAddress(SetAbsStringTableIndex(
+            (GameStrings).cast(),
+            (*star).postfix as u16,
+        ));
         if text.is_null() {
             *out = 0;
         } else {

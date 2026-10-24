@@ -65,7 +65,10 @@ pub(crate) unsafe extern "C" fn callGenerateForScanType(
 }
 
 #[no_mangle]
-unsafe extern "C" fn callPickupForScanType(
+/// # Safety
+/// System and world must be live, exclusively accessible generator records.
+/// Scan must be 0, 1 or 2, and node must identify a node generated for that scan.
+pub unsafe extern "C" fn callPickupForScanType(
     system: *mut SOLARSYS_STATE,
     world: *mut PLANET_DESC,
     node: u16,
@@ -99,7 +102,7 @@ unsafe fn set_node_not_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
 }
 
 #[cfg(not(test))]
-mod live;
+pub(crate) mod live;
 
 #[cfg(test)]
 mod tests {

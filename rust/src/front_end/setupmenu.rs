@@ -67,7 +67,7 @@ impl GammaRange {
     }
 }
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::*;
     use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
     use crate::navigation::globals::GlobData;
@@ -1222,8 +1222,13 @@ mod runtime {
         {
             res_PutString(key.as_ptr(), input_templates[i].name.as_ptr());
         }
-        SaveResourceIndex(configDir, c"uqm.cfg".as_ptr(), c"config.".as_ptr(), 1);
-        SaveKeyConfiguration(configDir, c"flight.cfg".as_ptr());
+        SaveResourceIndex(
+            (configDir).cast(),
+            c"uqm.cfg".as_ptr(),
+            c"config.".as_ptr(),
+            1,
+        );
+        SaveKeyConfiguration((configDir).cast(), c"flight.cfg".as_ptr());
     }
 }
 

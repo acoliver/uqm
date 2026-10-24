@@ -76,8 +76,8 @@ impl SpeechGraphics {
             let oscilloscope = activity_frame(9);
             let slider = activity_frame(5);
             let play = activity_frame(SliderState::Play.frame_index() as u16);
-            c_bridge::InitOscilloscope(oscilloscope);
-            c_bridge::InitSlider(0, 107, 242, slider, play);
+            c_bridge::InitOscilloscope((oscilloscope).cast());
+            c_bridge::InitSlider(0, 107, 242, slider.cast(), play.cast());
         }
     }
 
@@ -87,7 +87,7 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::SetSliderImage(activity_frame(state.frame_index() as u16));
+            c_bridge::SetSliderImage((activity_frame(state.frame_index() as u16)).cast());
         }
     }
 
@@ -141,33 +141,30 @@ impl SpeechGraphics {
 // ============================================================================
 #[cfg(not(test))]
 unsafe fn activity_frame(index: u16) -> *mut std::ffi::c_void {
-    c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, index)
+    (c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), index)).cast()
 }
 
 #[cfg(not(test))]
 mod c_bridge {
-    use std::ffi::c_int;
+
+    pub use crate::comm::oscill_abi::runtime::InitOscilloscope;
+
+    pub use crate::comm::oscill_abi::runtime::InitSlider;
+
+    pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    pub use crate::comm::oscill_abi::runtime::SetSliderImage;
+
+    pub use crate::graphics::context_abi::SetContext;
+
+    pub use crate::comm::oscill_abi::runtime::DrawOscilloscope;
+
+    pub use crate::comm::oscill_abi::runtime::DrawSlider;
+
     extern "C" {
-        /// Initialize oscilloscope display. `frame` is the background frame index.
-        pub fn InitOscilloscope(frame: *mut std::ffi::c_void);
-        /// Initialize slider widget.
-        pub fn InitSlider(
-            x: c_int,
-            y: c_int,
-            w: c_int,
-            slider_frame: *mut std::ffi::c_void,
-            knob_frame: *mut std::ffi::c_void,
-        );
-        pub fn SetAbsFrameIndex(frame: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
-        pub fn SetSliderImage(frame: *mut std::ffi::c_void);
-        pub fn SetContext(ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         pub static mut ActivityFrame: *mut std::ffi::c_void;
-        pub static mut RadarContext: *mut std::ffi::c_void;
-        pub static mut SpaceContext: *mut std::ffi::c_void;
-        /// Redraw oscilloscope waveform.
-        pub fn DrawOscilloscope();
-        /// Redraw slider widget.
-        pub fn DrawSlider();
+        pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
+        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     }
 }
 

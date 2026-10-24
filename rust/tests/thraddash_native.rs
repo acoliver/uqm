@@ -206,7 +206,7 @@ unsafe fn queued() -> Vec<HELEMENT> {
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     [
-        v.TravelAngle.into(),
+        v.travel_angle.into(),
         v.vector.width.into(),
         v.vector.height.into(),
         v.fract.width.into(),
@@ -767,7 +767,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
         for facing in 0..16 {
             ship.ss.ShipFacing = facing;
             for angle in 0..64 {
-                (*weapon.ptr()).velocity.TravelAngle = angle;
+                (*weapon.ptr()).velocity.travel_angle = angle;
                 let mut c = concerns();
                 c[0].ObjectPtr = enemy.ptr();
                 c[0].which_turn = 9;
@@ -783,7 +783,7 @@ fn enticing_weapon_takes_priority_and_uses_rounded_wrapped_travel_angle() {
                 );
             }
         }
-        (*weapon.ptr()).velocity.TravelAngle = 32;
+        (*weapon.ptr()).velocity.travel_angle = 32;
         ship.ss.ShipFacing = 0;
         for (energy, wait, input, expected) in [
             (0, 1, THRUST, THRUST | SPECIAL),

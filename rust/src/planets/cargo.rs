@@ -19,7 +19,7 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::next_element;
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
@@ -27,25 +27,25 @@ mod live {
     use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
-    use std::ffi::{c_char, c_void, CString};
+    use std::ffi::{c_void, CString};
+
+    use crate::ui::sis::capacity::GetStorageBayCapacity;
+
+    use crate::graphics::drawable_abi::GetFrameRect;
+
+    use crate::ui::sis::DrawStatusMessage;
+
+    use crate::ui::util::live::DrawStarConBox;
+
+    use crate::mainloop::input_abi::live::SetMenuSounds;
+
+    use crate::battle::sounds::engine::PlayMenuSound;
+
+    use crate::ui::sis::ClearSISRect;
 
     extern "C" {
         static mut GlobData: CGlobData;
         static MiscDataFrame: *mut c_void;
-        fn GetStorageBayCapacity() -> u16;
-        fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
-        fn DrawStatusMessage(message: *const c_char);
-        fn DrawStarConBox(
-            rect: *mut CRect,
-            border: i16,
-            medium: CColor,
-            dark: CColor,
-            fill: i32,
-            background: CColor,
-        );
-        fn SetMenuSounds(move_sound: u16, select_sound: u16);
-        fn PlayMenuSound(sound: i32);
-        fn ClearSISRect(flags: u16);
     }
 
     const BACK: Rgba = Rgba::rgb15(0, 0, 20);
@@ -64,7 +64,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn ShowRemainingCapacity() {
+    pub unsafe extern "C" fn ShowRemainingCapacity() {
         let g = CffiPlatform;
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
@@ -126,7 +126,7 @@ mod live {
             height: 109,
         };
         DrawStarConBox(
-            &mut r,
+            std::ptr::from_mut(&mut r).cast(),
             1,
             color(Rgba::rgb15(16, 16, 16)),
             color(Rgba::rgb15(8, 8, 8)),
@@ -138,7 +138,7 @@ mod live {
         text(31, 27, Align::Center, g.game_string(CARGO_STRINGS));
         g.set_font(FontId::Tiny);
         let mut frame = g.abs_frame(MiscDataFrame as usize, 11);
-        GetFrameRect(frame as *mut c_void, (&mut r as *mut CRect).cast());
+        GetFrameRect((frame as *mut c_void).cast(), (&mut r as *mut CRect).cast());
         g.set_fg_color(WORTH);
         text(32, 34, Align::Right, "$".into());
         text(58, 34, Align::Right, "#".into());
@@ -185,7 +185,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn DrawCargoStrings(mut old_element: u8, new_element: u8) {
+    pub unsafe extern "C" fn DrawCargoStrings(mut old_element: u8, new_element: u8) {
         let g = CffiPlatform;
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
@@ -253,7 +253,9 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn CargoMenu() {
+    /// # Safety
+    /// Call on the game thread with campaign globals and screen resources initialized.
+    pub unsafe extern "C" fn CargoMenu() {
         let mut menu = Menu {
             input: discard,
             current: 0,

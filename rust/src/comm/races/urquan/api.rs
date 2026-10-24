@@ -22,10 +22,8 @@ impl UrquanApi for super::super::script::live::LiveScript<Handler> {
     }
 
     fn intro_mode(&mut self, mode: i32, duration: u32) {
-        extern "C" {
-            fn SetCommIntroMode(mode: i32, duration: u32);
-        }
-        unsafe { SetCommIntroMode(mode, duration) }
+        use crate::comm::comm_abi::SetCommIntroMode;
+        SetCommIntroMode(mode as u32, duration)
     }
 }
 

@@ -29,44 +29,42 @@ use super::ffi_types::{
 };
 use super::propfile::parse_propfile;
 use super::type_registry;
-#[cfg(not(test))]
-use crate::io::ffi::{uio_DirHandle, uio_Stream};
 
 // =============================================================================
 // UIO extern imports — C file I/O layer
 // =============================================================================
 
 #[cfg(not(test))]
+use crate::graphics::resgfx::InstallGraphicResTypes;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fclose as uio_fclose_raw;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fgetc;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fopen as uio_fopen_raw;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fputc;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fread;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fseek;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_ftell;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_fwrite;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_stat;
+#[cfg(not(test))]
+use crate::io::uio_bridge::uio_unlink as uio_unlink_raw;
+#[cfg(not(test))]
+use crate::ships::code_resources::engine::InstallCodeResType;
+#[cfg(not(test))]
+use crate::strings::sresins::InstallStringTableResType;
+#[cfg(not(test))]
 use crate::video::legacy::InstallVideoResType;
 #[cfg(not(test))]
 extern "C" {
-    #[link_name = "uio_fopen"]
-    fn uio_fopen_raw(
-        dir: *mut uio_DirHandle,
-        path: *const c_char,
-        mode: *const c_char,
-    ) -> *mut uio_Stream;
-    #[link_name = "uio_fclose"]
-    fn uio_fclose_raw(fp: *mut uio_Stream) -> c_int;
-    fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
-    fn uio_fwrite(buf: *const c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
-    fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int;
-    fn uio_ftell(fp: *mut c_void) -> c_long;
-    fn uio_fgetc(fp: *mut c_void) -> c_int;
-    fn uio_fputc(c: c_int, fp: *mut c_void) -> c_int;
-    #[link_name = "uio_unlink"]
-    fn uio_unlink_raw(dir: *mut uio_DirHandle, path: *const c_char) -> c_int;
-    // @plan PLAN-20260314-RESOURCE.P08
-    // @requirement REQ-RES-FILE-003
-    fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int;
-
     static contentDir: *mut c_void;
-
-    // C subsystem type registration functions — called from InitResourceSystem
-    fn InstallGraphicResTypes() -> c_int;
-    fn InstallStringTableResType() -> c_int;
-
-    fn InstallCodeResType() -> c_int;
 }
 
 #[cfg(not(test))]
@@ -411,9 +409,9 @@ pub unsafe extern "C" fn LoadResourceIndex(
     }
 
     // Get file length: seek to end, tell, seek back
-    uio_fseek(fp, 0, 2); // SEEK_END = 2
-    let length = uio_ftell(fp) as usize;
-    uio_fseek(fp, 0, 0); // SEEK_SET = 0
+    uio_fseek((fp).cast(), 0, 2); // SEEK_END = 2
+    let length = uio_ftell((fp).cast()) as usize;
+    uio_fseek((fp).cast(), 0, 0); // SEEK_SET = 0
 
     if length == 0 {
         uio_fclose(fp);
@@ -422,7 +420,7 @@ pub unsafe extern "C" fn LoadResourceIndex(
 
     // Read entire file into buffer
     let mut buf = vec![0u8; length];
-    let bytes_read = uio_fread(buf.as_mut_ptr() as *mut c_void, 1, length, fp);
+    let bytes_read = uio_fread(buf.as_mut_ptr() as *mut c_void, 1, length, (fp).cast());
     uio_fclose(fp);
 
     // Truncate to actual bytes read
@@ -548,7 +546,7 @@ pub unsafe extern "C" fn SaveResourceIndex(
 
     for line in &lines {
         let bytes = line.as_bytes();
-        uio_fwrite(bytes.as_ptr() as *const c_void, 1, bytes.len(), fp);
+        uio_fwrite(bytes.as_ptr() as *const c_void, 1, bytes.len(), (fp).cast());
     }
 
     uio_fclose(fp);
@@ -1183,7 +1181,7 @@ pub unsafe extern "C" fn res_OpenResFile(
 
     // Check if target is a directory using uio_stat
     let mut sb: libc::stat = std::mem::zeroed();
-    if uio_stat(dir, filename, &mut sb) == 0 {
+    if uio_stat((dir).cast(), filename, &mut sb) == 0 {
         // S_ISDIR: check if st_mode has the directory bit set
         // Use libc::S_IFMT and libc::S_IFDIR macros for portability
         if (sb.st_mode & libc::S_IFMT) == libc::S_IFDIR {
@@ -1228,7 +1226,7 @@ pub unsafe extern "C" fn ReadResFile(
     if fp.is_null() || fp == STREAM_SENTINEL || buf.is_null() {
         return 0;
     }
-    uio_fread(buf, size, count, fp)
+    uio_fread(buf, size, count, (fp).cast())
 }
 
 /// Write to a resource file.
@@ -1246,7 +1244,7 @@ pub unsafe extern "C" fn WriteResFile(
     if fp.is_null() || fp == STREAM_SENTINEL || buf.is_null() {
         return 0;
     }
-    uio_fwrite(buf, size, count, fp)
+    uio_fwrite(buf, size, count, (fp).cast())
 }
 
 /// Get a character from a resource file.
@@ -1259,7 +1257,7 @@ pub unsafe extern "C" fn GetResFileChar(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fgetc(fp)
+    uio_fgetc((fp).cast())
 }
 
 /// Put a character to a resource file.
@@ -1272,7 +1270,7 @@ pub unsafe extern "C" fn PutResFileChar(ch: c_char, fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fputc(ch as c_int, fp)
+    uio_fputc(ch as c_int, (fp).cast())
 }
 
 /// Write a newline to a resource file.
@@ -1285,7 +1283,7 @@ pub unsafe extern "C" fn PutResFileNewline(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fputc(b'\n' as c_int, fp)
+    uio_fputc(b'\n' as c_int, (fp).cast())
 }
 
 /// Seek in a resource file.
@@ -1298,7 +1296,7 @@ pub unsafe extern "C" fn SeekResFile(fp: *mut c_void, offset: c_long, whence: c_
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1;
     }
-    uio_fseek(fp, offset, whence) as c_long
+    uio_fseek((fp).cast(), offset, whence) as c_long
 }
 
 /// Tell position in a resource file.
@@ -1311,7 +1309,7 @@ pub unsafe extern "C" fn TellResFile(fp: *mut c_void) -> c_long {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1;
     }
-    uio_ftell(fp)
+    uio_ftell((fp).cast())
 }
 
 /// Get the length of a resource file.
@@ -1329,10 +1327,10 @@ pub unsafe extern "C" fn LengthResFile(fp: *mut c_void) -> usize {
         return 1;
     }
 
-    let cur_pos = uio_ftell(fp);
-    uio_fseek(fp, 0, 2); // SEEK_END
-    let length = uio_ftell(fp) as usize;
-    uio_fseek(fp, cur_pos, 0); // SEEK_SET
+    let cur_pos = uio_ftell((fp).cast());
+    uio_fseek((fp).cast(), 0, 2); // SEEK_END
+    let length = uio_ftell((fp).cast()) as usize;
+    uio_fseek((fp).cast(), cur_pos, 0); // SEEK_SET
     length
 }
 
@@ -1440,7 +1438,7 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
         &mut comp_len as *mut u32 as *mut c_void,
         std::mem::size_of::<u32>(),
         1,
-        fp,
+        (fp).cast(),
     );
     if read != 1 {
         return ptr::null_mut();
@@ -1463,7 +1461,7 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
         return ptr::null_mut();
     }
 
-    let bytes_read = uio_fread(buf as *mut c_void, 1, data_len, fp);
+    let bytes_read = uio_fread(buf as *mut c_void, 1, data_len, (fp).cast());
     if bytes_read != data_len {
         libc::free(buf as *mut c_void);
         return ptr::null_mut();

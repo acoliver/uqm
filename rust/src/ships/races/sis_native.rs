@@ -1,6 +1,6 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, normalize_facing, object_cloaked, put_element, starship,
     };
@@ -367,7 +367,7 @@ mod engine {
         } else {
             let wait = (*e).__bindgen_anon_4.turn_wait >> 4;
             if wait != 0 {
-                let mut face = normalize_facing(angle_to_facing((*e).velocity.TravelAngle as i32));
+                let mut face = normalize_facing(angle_to_facing((*e).velocity.travel_angle as i32));
                 if TrackShip(e, &mut face) > 0 {
                     SetVelocityVector(&raw mut (*e).velocity, 24 << ONE_SHIFT, face);
                 }

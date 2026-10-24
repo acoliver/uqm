@@ -3,9 +3,7 @@ use super::lifecycle_abi::{refresh_rust_screen_globals, update_video_globals};
 use crate::graphics::ffi;
 use std::ffi::{c_char, c_int};
 
-extern "C" {
-    fn Scale_Init();
-}
+use crate::graphics::software_scalers::Scale_Init;
 
 /// # Safety
 /// Called on the SDL main thread; renderer name must be null or a live C string.

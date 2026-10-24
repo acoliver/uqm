@@ -357,50 +357,30 @@ pub unsafe fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout) {
 // These C functions are imported by Rust to interact with C-owned structures
 // during runtime callbacks.
 
+#[cfg(not(test))]
+pub use crate::game_init::macro_abi::GetElementStarShip;
+
+#[cfg(not(test))]
+pub use crate::battle::process_native::engine::AllocElement;
+
+#[cfg(not(test))]
+pub use crate::battle::sounds::engine::ProcessSound;
+
 extern "C" {
-    /// Get the STARSHIP* associated with an ELEMENT.
-    /// C: void GetElementStarShip(ELEMENT *e, STARSHIP **ss);
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn GetElementStarShip(element: *const CElement, starship: *mut *mut CStarship);
-
-    /// Allocate an element in the display list.
-    /// C: HELEMENT AllocElement(void);
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn AllocElement() -> HElement;
-
     /// Insert an element into the display list.
     /// C: void InsertElement(HELEMENT h, HELEMENT after);
-    pub fn InsertElement(h: HElement, after: HElement);
 
     /// Lock an element handle to get a pointer.
     /// C: ELEMENT *LockElement(HELEMENT h, ELEMENT **e);
-    pub fn LockElement(h: HElement, element: *mut *mut CElement);
 
     /// Unlock an element handle.
     /// C: void UnlockElement(HELEMENT h);
-    pub fn UnlockElement(h: HElement);
 
     /// Get the head of the display list.
     /// C: HELEMENT GetHeadElement(void);
-    pub fn GetHeadElement() -> HElement;
 
     /// Get the successor element.
     /// C: HELEMENT GetSuccElement(ELEMENT *e);
-    pub fn GetSuccElement(element: *const CElement) -> HElement;
-
-    /// Play a sound effect.
-    /// C: void ProcessSound(SOUND sound, ELEMENT *e);
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    pub fn ProcessSound(sound: CSound, element: *mut CElement);
 
     /// Initializes the battle arena (display list, galaxy, asteroids/planet, hyperspace).
     /// C: SIZE rust_bridge_init_battle_arena(void);
@@ -408,7 +388,6 @@ extern "C" {
     /// Prototype: rust_bridge_ships.h
     #[cfg(test)]
     pub fn rust_bridge_init_battle_arena() -> CSize;
-
     /// Creates a battle ELEMENT for a spawned ship.
     /// C: BOOLEAN rust_bridge_spawn_element(STARSHIP*, RACE_DESC*, BYTE mass, BYTE activity);
     /// Prototype: rust_bridge_ships.h
@@ -423,7 +402,6 @@ extern "C" {
         ship_mass: CByte,
         activity: CByte,
     ) -> CBoolean;
-
     /// Performs full battle teardown: audio stop, space uninit, crew writeback,
     /// descriptor freeing, IN_BATTLE clearing, queue reinit.
     /// C: void rust_bridge_uninit_ships(void);

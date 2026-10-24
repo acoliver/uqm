@@ -1,5 +1,5 @@
 #[path = "utwig_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Utwig Jugger - Six-lance volley + absorption shield
 // @plan PLAN-20260314-SHIPS.P11

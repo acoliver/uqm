@@ -42,7 +42,7 @@ fn picker_slot(current: u8, left: bool, right: bool, up: bool, down: bool) -> u8
 pub use runtime::{ConfirmSaveLoad, GameOptions, SetNamingCallback};
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::{picker_slot, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::navigation::abi::*;
     use crate::navigation::globals::{GlobData, PlayFrame};
@@ -1019,7 +1019,7 @@ mod runtime {
 
     unsafe fn LoadGameDescriptions(mut pSD: *mut SUMMARY_DESC) {
         for i in 0..MAX_SAVED_GAMES as COUNT {
-            if LoadGame(i, pSD) == 0 {
+            if LoadGame(i, (pSD).cast()) == 0 {
                 (*pSD).year_index = 0;
             }
             pSD = pSD.add(1);
@@ -1089,7 +1089,7 @@ mod runtime {
                 } else {
                     ptr::null_mut()
                 });
-                success = SaveGame(gameIndex, desc, nameBuf.as_ptr());
+                success = SaveGame(gameIndex, (desc).cast(), nameBuf.as_ptr());
             } else {
                 success = 0;
                 *canceled_by_user = 1;

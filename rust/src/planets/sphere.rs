@@ -29,7 +29,7 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::{zoom_scale, Rotation};
     use crate::c_bindings::{global_state::DrawMode, solar_system};
     use crate::comm::locdata::{CColor, CRect};
@@ -50,23 +50,33 @@ mod live {
     };
 
     use crate::time::counter_abi::GetTimeCounter;
+
+    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    use crate::graphics::drawable_abi::GetFrameRect;
+
+    use crate::graphics::pixmap_abi::CaptureDrawable;
+
+    use crate::graphics::drawable_abi::CreateDrawable;
+
+    use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+    use crate::graphics::drawable_abi::DestroyDrawable;
+
+    use crate::planets::plangen::live::RenderPlanetSphere;
+
+    use crate::planets::plangen::live::SetShieldThrobEffect;
+
+    use crate::planets::scan::live::RepairBackRect;
+
+    use crate::graphics::context_abi::SetContextDrawMode;
+
     extern "C" {
-        static PlanetContext: *mut c_void;
-        static OffScreenContext: *mut c_void;
+        static PlanetContext: *mut crate::graphics::native_abi::context_desc;
+        static OffScreenContext: *mut crate::graphics::native_abi::context_desc;
         static optWhichShield: i32;
         static ScreenWidth: i32;
         static ScreenHeight: i32;
-        fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn GetFrameRect(frame: *mut c_void, rect: *mut c_void);
-        fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-        fn CreateDrawable(flags: u8, width: i16, height: i16, frames: u16) -> *mut c_void;
-        fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-        fn DestroyDrawable(drawable: *mut c_void) -> u32;
-        fn RenderPlanetSphere(frame: *mut c_void, point: i32, throb: u32);
-        fn SetShieldThrobEffect(work: *mut c_void, point: i32, frame: *mut c_void);
-
-        fn RepairBackRect(rect: *mut CRect);
-        fn SetContextDrawMode(mode: DrawMode) -> DrawMode;
     }
     use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 
@@ -79,7 +89,7 @@ mod live {
 
     unsafe fn bounds(frame: *mut c_void) -> CRect {
         let mut r = CRect::default();
-        GetFrameRect(frame, (&mut r as *mut CRect).cast());
+        GetFrameRect((frame).cast(), (&mut r as *mut CRect).cast());
         r
     }
 
@@ -95,14 +105,14 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn DrawDefaultPlanetSphere() {
+    pub unsafe extern "C" fn DrawDefaultPlanetSphere() {
         let old = SetContext(PlanetContext);
         DrawPlanetSphere((ScreenWidth - 78) / 2, (ScreenHeight - 13 - 75 - 5 - 9) / 2);
         SetContext(old);
     }
 
     #[no_mangle]
-    unsafe extern "C" fn InitSphereRotation(direction: i32, shielded: u32) {
+    pub unsafe extern "C" fn InitSphereRotation(direction: i32, shielded: u32) {
         let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
         let throb = shielded != 0 && optWhichShield == 1;
         ROTATION = Rotation {
@@ -121,7 +131,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn UninitSphereRotation() {
+    pub unsafe extern "C" fn UninitSphereRotation() {
         let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
         if !(*orbit).WorkFrame.is_null() {
             DestroyDrawable(ReleaseDrawable((*orbit).ObjectFrame.cast()));
@@ -155,7 +165,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn ZoomInPlanetSphere() {
+    pub unsafe extern "C" fn ZoomInPlanetSphere() {
         let orbit = std::ptr::addr_of!((*solar_system::current()).Orbit);
         let width = ScreenWidth - 78;
         let scan_height = ScreenHeight - 13 - 75 - 5;
@@ -195,7 +205,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn RotatePlanetSphere(keep_rate: u32) {
+    pub unsafe extern "C" fn RotatePlanetSphere(keep_rate: u32) {
         static mut NEXT_TIME: u32 = 0;
         let now = GetTimeCounter();
         if keep_rate != 0 && now < NEXT_TIME {
@@ -233,7 +243,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn DrawPlanet(tint_y: i32, color: CColor) {
+    pub unsafe extern "C" fn DrawPlanet(tint_y: i32, color: CColor) {
         let system = solar_system::current();
         let orbit = std::ptr::addr_of_mut!((*system).Orbit);
         CffiPlatform.batch();

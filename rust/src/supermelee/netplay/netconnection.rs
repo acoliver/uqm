@@ -27,8 +27,8 @@ unsafe fn go(conn: *mut NetConnection) -> i32 {
     data.isServer = is_server;
     if is_server {
         let flags = ListenFlags {
-            familyDemand: ProtocolFamily_PF_unspec,
-            familyPrefer: ProtocolFamily_PF_unspec,
+            family_demand: ProtocolFamily_PF_unspec,
+            family_prefer: ProtocolFamily_PF_unspec,
             backlog: NETPLAY_LISTEN_BACKLOG as i32,
         };
         let state = listenPort(
@@ -45,10 +45,10 @@ unsafe fn go(conn: *mut NetConnection) -> i32 {
         data.state.listenState = state;
     } else {
         let flags = ConnectFlags {
-            familyDemand: ProtocolFamily_PF_unspec,
-            familyPrefer: ProtocolFamily_PF_unspec,
+            family_demand: ProtocolFamily_PF_unspec,
+            family_prefer: ProtocolFamily_PF_unspec,
             timeout: NETPLAY_CONNECTTIMEOUT as i32,
-            retryDelayMs: NETPLAY_RETRYDELAY as i32,
+            retry_delay_ms: NETPLAY_RETRYDELAY as i32,
         };
         let state = connectHostByName(
             (*(*conn).options).host,

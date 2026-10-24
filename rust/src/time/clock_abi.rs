@@ -85,14 +85,17 @@ pub(crate) mod live {
     use super::super::clock_bridge::*;
     use super::*;
     use crate::comm::locdata::CGlobData;
-    use std::ffi::{c_char, c_void};
+    use std::ffi::c_void;
     use std::ptr;
+
+    use crate::navigation::events::live::EventHandler;
+
+    use crate::threading::legacy_abi::CreateMutex_Core;
+
+    use crate::threading::legacy_abi::DestroyMutex;
 
     extern "C" {
         static mut GlobData: CGlobData;
-        fn EventHandler(selector: u8);
-        fn CreateMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
-        fn DestroyMutex(mutex: *mut c_void);
     }
     static mut CLOCK_MUTEX: *mut c_void = ptr::null_mut();
 
@@ -171,7 +174,7 @@ pub(crate) mod live {
         ) {
             return 0;
         }
-        CLOCK_MUTEX = CreateMutex_Core(c"Clock Mutex".as_ptr(), 1);
+        CLOCK_MUTEX = (CreateMutex_Core(c"Clock Mutex".as_ptr(), 1)).cast();
         rust_clock_init() as u32
     }
 
@@ -179,7 +182,7 @@ pub(crate) mod live {
     /// The initialized clock must no longer be in use.
     #[no_mangle]
     pub unsafe extern "C" fn UninitGameClock() -> u32 {
-        DestroyMutex(CLOCK_MUTEX);
+        DestroyMutex((CLOCK_MUTEX).cast());
         CLOCK_MUTEX = ptr::null_mut();
         UninitQueue(ptr::addr_of_mut!((*GetGameClock()).event_q));
         rust_clock_uninit() as u32

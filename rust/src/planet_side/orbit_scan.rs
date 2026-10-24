@@ -34,12 +34,17 @@ mod production {
         _tail: [u8; 8],
     }
 
+    use crate::battle::process_native::engine::InitDisplayList;
+
+    use crate::battle::process_native::engine::AllocElement;
+
+    use crate::battle::process_native::engine::FreeElement;
+
+    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
     extern "C" {
         static mut MiscDataFrame: *mut c_void;
         static mut DisplayArray: [CPrimitive; 150];
-        fn InitDisplayList();
-        fn AllocElement() -> usize;
-        fn FreeElement(element: usize);
         #[cfg(test)]
         #[link_name = "rust_bridge_LockElement"]
         fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void);
@@ -49,7 +54,6 @@ mod production {
         #[cfg(test)]
         #[link_name = "rust_bridge_PutElement"]
         fn rust_bridge_put_element(element: usize);
-        fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
     }
     /// # Safety
     /// Called on the game thread with the live resources required by the Rust provider.
@@ -103,21 +107,21 @@ mod production {
                 let Ok(generated) = generator.generate(scan, node) else {
                     continue;
                 };
-                let handle = AllocElement();
+                let handle = AllocElement() as usize;
                 if handle == 0 {
                     continue;
                 }
                 let mut element = std::ptr::null_mut::<c_void>();
                 rust_bridge_lock_element(handle, &mut element);
                 if element.is_null() {
-                    FreeElement(handle);
+                    FreeElement(handle as *mut c_void);
                     continue;
                 }
                 let initialized =
                     initialize_element(element.cast::<Element>(), solar, scan, raw_node, generated);
                 rust_bridge_unlock_element(handle);
                 if initialized.is_err() {
-                    FreeElement(handle);
+                    FreeElement(handle as *mut c_void);
                     continue;
                 }
                 rust_bridge_put_element(handle);
@@ -155,13 +159,16 @@ mod production {
                 element.mass_points = fine_quantity as u8;
                 let dot = mineral_scan_dot(category, gross_size)?;
                 let surface = mineral_surface_sprite(category, gross_size)?;
-                element.current.frame = SetAbsFrameIndex(MiscDataFrame, dot.current);
-                element.next.frame = SetAbsFrameIndex(MiscDataFrame, dot.next);
-                primitive.stamp.frame = SetAbsFrameIndex(MiscDataFrame, surface);
+                element.current.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)).cast();
+                element.next.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)).cast();
+                primitive.stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
-                element.current.frame = SetAbsFrameIndex(MiscDataFrame, ENERGY_SCAN_DOT.current);
-                element.next.frame = SetAbsFrameIndex(MiscDataFrame, ENERGY_SCAN_DOT.next);
+                element.current.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.current)).cast();
+                element.next.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.next)).cast();
                 element.turn_wait = 0x44;
                 element.mass_points = MAX_SCROUNGED;
                 primitive.stamp.frame = (*solar).PlanetSideFrame[1].cast();
@@ -171,8 +178,10 @@ mod production {
                 hit_points,
                 ..
             } => {
-                element.current.frame = SetAbsFrameIndex(MiscDataFrame, BIO_SCAN_DOT.current);
-                element.next.frame = SetAbsFrameIndex(MiscDataFrame, BIO_SCAN_DOT.next);
+                element.current.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast();
+                element.next.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast();
                 element.turn_wait = 0x44;
                 element.mass_points = creature.index();
                 element.crew_or_hp = u16::from(hit_points);

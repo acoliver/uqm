@@ -1,5 +1,5 @@
 #[path = "chmmr_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Chmmr Avatar - Megawatt laser + tractor beam + ZapSat point defense
 // @plan PLAN-20260314-SHIPS.P13

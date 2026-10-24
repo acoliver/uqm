@@ -15,17 +15,12 @@ pub(super) trait AllianceApi<H>: EncounterApi<H> {
 mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
-    extern "C" {
-        fn SetRaceAllied(race: u16, flag: u32) -> u16;
-        fn StartSphereTracking(race: u16) -> u16;
-        fn AddEvent(
-            kind: i32,
-            month: u16,
-            day: u16,
-            year: u16,
-            selector: u8,
-        ) -> *mut std::ffi::c_void;
-    }
+
+    use crate::battle::build_native::engine::SetRaceAllied;
+
+    use crate::battle::build_native::engine::StartSphereTracking;
+
+    use crate::time::clock_abi::live::AddEvent;
     impl<H> AllianceApi<H> for LiveScript<H> {
         fn set_allied(&mut self, race: u16, allied: bool) {
             unsafe {
@@ -39,7 +34,7 @@ mod live {
         }
         fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
             unsafe {
-                AddEvent(kind, month, day, year, selector);
+                AddEvent((kind) as u32, month, day, year, selector);
             }
         }
     }

@@ -52,7 +52,7 @@ unsafe fn number_phrases(
 }
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::*;
     use crate::comm::locdata::{CGlobData, COMM_DATA};
     use std::ffi::{c_char, c_void};
@@ -60,14 +60,18 @@ mod runtime {
 
     use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
     use crate::sound::heart_ffi::splice_track as SpliceTrack;
+
+    use crate::strings::string_table::GetStringAddress;
+
+    use crate::strings::string_table::GetStringSoundClip;
+
+    use crate::strings::string_table::SetAbsStringTableIndex;
+
+    use crate::strings::string_table::SetRelStringTableIndex;
     #[allow(clashing_extern_declarations)]
     extern "C" {
         static mut GlobData: CGlobData;
         static mut instantVictory: i32;
-        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-        fn SetRelStringTableIndex(table: *mut c_void, index: i16) -> *mut c_void;
-        fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-        fn GetStringSoundClip(entry: *mut c_void) -> *mut c_void;
     }
 
     fn get(key: &str) -> u8 {
@@ -102,7 +106,7 @@ mod runtime {
             assert!(indices.len() < tracks.len());
             for (track, index) in tracks.iter_mut().zip(indices) {
                 *track = GetStringSoundClip(SetAbsStringTableIndex(
-                    COMM_DATA.conversation_phrases,
+                    (COMM_DATA.conversation_phrases).cast(),
                     index.wrapping_sub(1),
                 ))
                 .cast();
@@ -119,7 +123,7 @@ mod runtime {
     pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
         let variant = get("NEW_ALLIANCE_NAME");
         let entry = SetAbsStringTableIndex(
-            COMM_DATA.conversation_phrases,
+            (COMM_DATA.conversation_phrases).cast(),
             first.wrapping_sub(1).wrapping_add(variant.into()),
         );
         libc::strcpy(buffer, GetStringAddress(entry));

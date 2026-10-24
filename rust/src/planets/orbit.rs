@@ -9,7 +9,7 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::submenu_selection;
     use crate::battle::element::{Element, ElementFlags};
     use crate::c_bindings::{
@@ -24,56 +24,78 @@ mod live {
     use crate::planet_side::{orbit_music, orbit_scan};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
-    use std::ffi::{c_char, c_void};
+    use std::ffi::c_void;
 
     #[no_mangle]
-    static mut PlanetContext: *mut c_void = std::ptr::null_mut();
+    static mut PlanetContext: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
 
     use crate::ui::border::DrawSISFrame;
     use crate::ui::sis::RepairSISBorder;
+
+    #[cfg(feature = "debug-process")]
+    use crate::graphics::context_abi::CreateContextAux;
+
+    #[cfg(not(feature = "debug-process"))]
+    use crate::graphics::context_abi::CreateContextAux;
+
+    use crate::graphics::context_abi::DestroyContext;
+
+    use crate::planets::scan::live::GetScanContext;
+
+    use crate::planets::scan::live::DestroyScanContext;
+
+    use crate::planets::solarsys::drawing::DrawStarBackGround;
+
+    use crate::ui::sis::DrawSISMessage;
+
+    use crate::ui::sis::DrawSISTitle;
+
+    use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
+
+    use crate::planets::sphere::live::DrawDefaultPlanetSphere;
+
+    use crate::planets::sphere::live::DrawPlanet;
+
+    use crate::planets::sphere::live::ZoomInPlanetSphere;
+
+    use crate::planets::sphere::live::UninitSphereRotation;
+
+    use crate::planets::sphere::live::RotatePlanetSphere;
+
+    use crate::planets::plangen::live::GeneratePlanetSurface;
+
+    use crate::sound::heart_ffi::PLRPlaying;
+
+    use crate::strings::string_table::ReleaseStringTable;
+
+    use crate::strings::string_table::DestroyStringTable;
+
+    use crate::graphics::font_abi::DestroyFont;
+
+    use crate::planets::scan::live::ScanSystem;
+
+    use crate::planets::devices::DevicesMenu;
+
+    use crate::planets::cargo::live::CargoMenu;
+
+    use crate::planets::roster::live::RosterMenu;
+
+    use crate::front_end::gameopt::runtime::GameOptions;
+
+    use crate::planets::pstarmap::StarMap;
+
+    use crate::ui::menu::DoMenuChooser;
+
+    use crate::ui::menu::DrawMenuStateStrings;
+
+    use crate::mainloop::input_abi::live::SetInputCallback;
+
     extern "C" {
         static GlobData: CGlobData;
         static LastActivity: u16;
-        static SpaceContext: *mut c_void;
+        static SpaceContext: *mut crate::graphics::native_abi::context_desc;
         static Screen: *mut c_void;
         static optWhichMenu: i32;
-        #[cfg(feature = "debug-process")]
-        fn CreateContextAux(name: *const c_char) -> *mut c_void;
-        #[cfg(not(feature = "debug-process"))]
-        fn CreateContextAux() -> *mut c_void;
-        fn DestroyContext(context: *mut c_void) -> i32;
-        fn GetScanContext(owner: *mut i32) -> *mut c_void;
-        fn DestroyScanContext();
-        fn DrawStarBackGround();
-
-        fn DrawSISMessage(message: *const c_char);
-        fn DrawSISTitle(title: *const c_char);
-        fn LoadIntoExtraScreen(rect: *mut CRect);
-        fn DrawDefaultPlanetSphere();
-        fn DrawPlanet(y: i32, color: crate::comm::locdata::CColor);
-        fn ZoomInPlanetSphere();
-        fn UninitSphereRotation();
-        fn RotatePlanetSphere(keep_rate: u32);
-        fn GeneratePlanetSurface(
-            world: *mut crate::c_bindings::global_state::PLANET_DESC,
-            frame: *mut crate::c_bindings::global_state::FRAME_DESC,
-        );
-        fn PLRPlaying(music: *mut c_void) -> i32;
-        fn ReleaseStringTable(table: *mut c_void) -> *mut c_void;
-        fn DestroyStringTable(table: *mut c_void) -> i32;
-        fn DestroyFont(font: *mut c_void) -> i32;
-        fn ScanSystem();
-        fn DevicesMenu() -> i32;
-        fn CargoMenu();
-        fn RosterMenu() -> i32;
-        fn GameOptions() -> u32;
-        fn StarMap() -> i32;
-
-        fn DoMenuChooser(menu: *mut MENU_STATE, first: u8) -> u32;
-        fn DrawMenuStateStrings(first: u8, state: i16);
-        fn SetInputCallback(
-            callback: Option<unsafe extern "C" fn()>,
-        ) -> Option<unsafe extern "C" fn()>;
     }
 
     fn black() -> crate::comm::locdata::CColor {
@@ -89,7 +111,7 @@ mod live {
         assert!(PlanetContext.is_null());
         let old = SetContext(SpaceContext);
         let mut r = CffiPlatform.context_clip_rect();
-        PlanetContext = new_context(c"PlanetContext".as_ptr());
+        PlanetContext = (new_context(c"PlanetContext".as_ptr())).cast();
         SetContext(PlanetContext);
         SetContextFGFrame(Screen.cast());
         r.height -= 75 + 5;
@@ -98,7 +120,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn DrawScannedObjects(reversed: u32) {
+    pub unsafe extern "C" fn DrawScannedObjects(reversed: u32) {
         let queue = live_queues::display_list();
         let mut handle = if reversed != 0 {
             (*queue).tail
@@ -193,9 +215,10 @@ mod live {
             DrawPlanetSurfaceBorder();
         }
         if mode == WAIT {
-            SetContext(GetScanContext(std::ptr::null_mut()));
-            let frame =
-                base::CaptureDrawable(base::LoadGraphicInstance(c"graphics.orbitenter".as_ptr()));
+            SetContext((GetScanContext(std::ptr::null_mut())).cast());
+            let frame = base::CaptureDrawable(
+                (base::LoadGraphicInstance(c"graphics.orbitenter".as_ptr())).cast(),
+            );
             g.draw_stamp(Stamp {
                 origin: Point { x: 0, y: 0 },
                 frame: frame as usize,
@@ -205,23 +228,23 @@ mod live {
             DrawDefaultPlanetSphere();
         }
         if mode != WAIT {
-            SetContext(GetScanContext(std::ptr::null_mut()));
+            SetContext((GetScanContext(std::ptr::null_mut())).cast());
             DrawPlanet(0, black());
         }
         if mode != UPDATE {
             base::ScreenTransition(3, (&mut r as *mut CRect).cast());
         }
         g.unbatch();
-        LoadIntoExtraScreen(&mut r);
+        LoadIntoExtraScreen(std::ptr::from_mut(&mut r).cast());
     }
 
     #[no_mangle]
-    unsafe extern "C" fn RedrawPlanetOrbitDisplay() {
+    pub unsafe extern "C" fn RedrawPlanetOrbitDisplay() {
         draw_display(FULL);
     }
 
     #[no_mangle]
-    unsafe extern "C" fn LoadPlanet(surface: *mut crate::c_bindings::global_state::FRAME_DESC) {
+    pub unsafe extern "C" fn LoadPlanet(surface: *mut crate::c_bindings::global_state::FRAME_DESC) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
@@ -239,7 +262,7 @@ mod live {
         orbit_music::set_planet_music((*planet).data_index & !0x80);
         orbit_scan::generate_planet_side();
         if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-            base::PlayMusic(orbit_music::LANDER_MUSIC, 1, 1);
+            base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
         }
         if wait {
             ZoomInPlanetSphere();
@@ -250,7 +273,10 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn FreePlanet() {
+    /// # Safety
+    /// Call on the game thread with a loaded solar system. No other code may retain
+    /// references to the planet resources released by this call.
+    pub unsafe extern "C" fn FreePlanet() {
         let system = solar_system::current();
         let orbit = std::ptr::addr_of_mut!((*system).Orbit);
         UninitSphereRotation();
@@ -301,16 +327,16 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn LoadStdLanderFont(info: *mut PLANET_INFO) {
+    pub unsafe extern "C" fn LoadStdLanderFont(info: *mut PLANET_INFO) {
         (*info).LanderFont = base::LoadGraphicInstance(c"font.lander".as_ptr()).cast();
-        (*info).LanderFontEff = base::CaptureDrawable(base::LoadGraphicInstance(
-            c"graphics.landerfonteffect".as_ptr(),
-        ))
+        (*info).LanderFontEff = base::CaptureDrawable(
+            (base::LoadGraphicInstance(c"graphics.landerfonteffect".as_ptr())).cast(),
+        )
         .cast();
     }
 
     #[no_mangle]
-    unsafe extern "C" fn FreeLanderFont(info: *mut PLANET_INFO) {
+    pub unsafe extern "C" fn FreeLanderFont(info: *mut PLANET_INFO) {
         DestroyFont((*info).LanderFont.cast());
         (*info).LanderFont = std::ptr::null_mut();
         base::DestroyDrawable(base::ReleaseDrawable((*info).LanderFontEff.cast()));
@@ -381,7 +407,7 @@ mod live {
     }
 
     #[no_mangle]
-    unsafe extern "C" fn PlanetOrbitMenu() {
+    pub unsafe extern "C" fn PlanetOrbitMenu() {
         let mut menu: MENU_STATE = std::mem::zeroed();
         DrawMenuStateStrings(0, 0);
         CffiPlatform.set_flash(FlashTarget::Menu3do);
@@ -400,12 +426,12 @@ mod live {
     unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
         #[cfg(feature = "debug-process")]
         {
-            CreateContextAux(name)
+            (CreateContextAux(name)).cast()
         }
         #[cfg(not(feature = "debug-process"))]
         {
             let _ = name;
-            CreateContextAux()
+            CreateContextAux().cast()
         }
     }
 }

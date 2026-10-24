@@ -45,11 +45,11 @@ global!(repository: *mut uio::uio_Repository);
 global!(rootDir: *mut uio::uio_DirHandle);
 global!(usingSpeech: u32);
 
-extern "C" {
-    fn loadIndices(dir: *mut c_void) -> i32;
-    fn loadAddon(name: *const c_char) -> u32;
-    fn prepareAddons(addons: *const *const c_char);
-}
+use crate::mainloop::options_abi::loadIndices;
+
+use crate::mainloop::options_abi::loadAddon;
+
+use crate::mainloop::options_abi::prepareAddons;
 
 unsafe fn context(name: &CStr) -> CONTEXT {
     #[cfg(feature = "debug-process")]

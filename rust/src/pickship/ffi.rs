@@ -41,32 +41,51 @@ const PICK_GRAPHIC: &[u8] = b"graphics.pickship\0";
 const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
 use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
+
+use crate::graphics::context_abi::SetContextForeGroundColor;
+
+use crate::graphics::font_abi::SetContextFont;
+
+use crate::graphics::font_abi::font_DrawText;
+
+use crate::graphics::frame_abi::DrawFilledRectangle;
+
+use crate::graphics::frame_abi::DrawStamp;
+
+use crate::graphics::frame_abi::DrawFilledStamp;
+
+use crate::graphics::drawable_abi::SetFrameHot;
+
+use crate::graphics::pixmap_abi::IncFrameIndex;
+
+use crate::graphics::pixmap_abi::DecFrameIndex;
+
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+use crate::ui::sis::SetFlashRect;
+
+use crate::battle::sounds::engine::PlayMenuSound;
+
+use crate::strings::string_table::SetAbsStringTableIndex;
+
+use crate::strings::string_table::GetStringAddress;
+
+use crate::strings::string_table::GetStringLength;
+
+use crate::ui::sis::capacity::GetCrewPodCapacity;
+
+use crate::battle::encount_native::engine::FleetIsInfinite;
+
+use crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip;
+
+use crate::navigation::globals::inHQSpace;
+
 extern "C" {
-    static mut SpaceContext: *mut c_void;
+    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut StatusFrame: *mut c_void;
     static mut StarConFont: *mut c_void;
     static mut TinyFont: *mut c_void;
     static mut GlobData: CGlobData;
-
-    fn SetContextForeGroundColor(color: CColor) -> CColor;
-    fn SetContextFont(font: *mut c_void) -> *mut c_void;
-    fn font_DrawText(text: *mut CText);
-    fn DrawFilledRectangle(rect: *mut CRect);
-    fn DrawStamp(stamp: *mut CStamp);
-    fn DrawFilledStamp(stamp: *mut CStamp);
-    fn SetFrameHot(frame: *mut c_void, hot_spot: CPoint) -> CPoint;
-    fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn DecFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn SetFlashRect(rect: *const c_void);
-    fn PlayMenuSound(effect: c_int);
-    fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-    fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-    fn GetStringLength(entry: *mut c_void) -> u16;
-    fn GetCrewPodCapacity() -> u16;
-    fn FleetIsInfinite(player: u16) -> c_int;
-    fn GetNextMeleeStarShip(player: u16, result: *mut *mut c_void) -> c_int;
-    fn inHQSpace() -> c_int;
 }
 
 fn color(color: Rgba) -> CColor {
@@ -93,7 +112,7 @@ fn fill(area: Area) {
         height: area.height,
     };
     // SAFETY: `rect` is valid for the call.
-    unsafe { DrawFilledRectangle(&mut rect) };
+    unsafe { DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast()) };
 }
 
 fn draw_text(x: i16, y: i16, text_ptr: *const c_char, char_count: u16) {
@@ -103,7 +122,7 @@ fn draw_text(x: i16, y: i16, text_ptr: *const c_char, char_count: u16) {
     text.align = ALIGN_CENTER;
     text.char_count = char_count;
     // SAFETY: `text` is valid for the call and `p_str` outlives it.
-    unsafe { font_DrawText(&mut text) };
+    unsafe { font_DrawText(std::ptr::from_mut(&mut text).cast()) };
 }
 
 /// The picker frame's corner and what `DoInput` hands back to the callback.
@@ -213,7 +232,7 @@ unsafe fn change_selection(state: &mut PickerState) {
         (0, 0)
     } else {
         // SAFETY: font globals are set at startup.
-        unsafe { SetContextFont(std::ptr::addr_of!(TinyFont).read()) };
+        unsafe { SetContextFont((std::ptr::addr_of!(TinyFont).read()).cast()) };
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
@@ -233,13 +252,13 @@ unsafe fn change_selection(state: &mut PickerState) {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
                 SetAbsStringTableIndex(
-                    ship.race_strings as usize as *mut c_void,
+                    (ship.race_strings as usize as *mut c_void).cast(),
                     u16::from(ship.captains_name_index),
                 )
             };
             // SAFETY: `entry` came from `SetAbsStringTableIndex`.
             let (text, length) = unsafe { (GetStringAddress(entry), GetStringLength(entry)) };
-            (text, length, ship.crew_level, ship.max_crew)
+            (text.cast_const(), length, ship.crew_level, ship.max_crew)
         };
         set_color(Rgba::rgb15(0x14, 0x0A, 0x00));
         draw_text(baseline_x, baseline_y, text, length);
@@ -293,12 +312,12 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
         if select {
             if !state.chosen.is_null() {
                 // SAFETY: plain call.
-                unsafe { PlayMenuSound(MENU_SOUND_SUCCESS) };
+                unsafe { PlayMenuSound((MENU_SOUND_SUCCESS) as u32) };
                 return 0;
             }
         } else if let Some(cursor) = moved(state.cursor, keys) {
             // SAFETY: plain call.
-            unsafe { PlayMenuSound(MENU_SOUND_MOVE) };
+            unsafe { PlayMenuSound((MENU_SOUND_MOVE) as u32) };
             state.cursor = cursor;
             // SAFETY: `state` is the running picker.
             unsafe { change_selection(state) };
@@ -482,23 +501,27 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     // SAFETY: the context global is set at startup.
     let old_context = unsafe { base::SetContext(std::ptr::addr_of!(SpaceContext).read()) };
     // SAFETY: `PICK_GRAPHIC` is NUL terminated.
-    let pick_frame =
-        unsafe { base::CaptureDrawable(base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())) };
+    let pick_frame = unsafe {
+        base::CaptureDrawable((base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())).cast())
+    };
 
     // SAFETY: balanced by `UnbatchGraphics` below.
     unsafe { base::BatchGraphics() };
 
     let mut stamp = CStamp {
         origin: CPoint::default(),
-        frame: pick_frame,
+        frame: (pick_frame).cast(),
     };
     let no_hot_spot = CPoint { x: 0, y: 0 };
     let mut pick = CRect::default();
     let mut clip = CRect::default();
     // SAFETY: the rectangles are valid for the calls and the frame is loaded.
     unsafe {
-        SetFrameHot(stamp.frame, no_hot_spot);
-        crate::battle::c_bridge::GetFrameRect(stamp.frame, std::ptr::addr_of_mut!(pick).cast());
+        SetFrameHot((stamp.frame).cast(), no_hot_spot);
+        crate::battle::c_bridge::GetFrameRect(
+            (stamp.frame).cast(),
+            std::ptr::addr_of_mut!(pick).cast(),
+        );
         crate::c_bindings::global_state::GetContextClipRect(std::ptr::addr_of_mut!(clip).cast());
     }
     pick.corner.x = (clip.width >> 1) - (pick.width >> 1);
@@ -512,10 +535,10 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         let mut salvage = CRect::default();
         // SAFETY: the frames are loaded and `salvage` is valid.
         unsafe {
-            stamp.frame = IncFrameIndex(stamp.frame);
-            SetFrameHot(stamp.frame, no_hot_spot);
+            stamp.frame = (IncFrameIndex((stamp.frame).cast())).cast();
+            SetFrameHot((stamp.frame).cast(), no_hot_spot);
             crate::battle::c_bridge::GetFrameRect(
-                stamp.frame,
+                (stamp.frame).cast(),
                 std::ptr::addr_of_mut!(salvage).cast(),
             );
         }
@@ -523,8 +546,8 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         stamp.origin.y = pick.corner.y - (salvage.height >> 1);
         // SAFETY: as above.
         unsafe {
-            DrawStamp(&mut stamp);
-            stamp.frame = DecFrameIndex(stamp.frame);
+            DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+            stamp.frame = (DecFrameIndex((stamp.frame).cast())).cast();
         }
         pick.corner.y = stamp.origin.y + salvage.height;
 
@@ -535,13 +558,13 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     }
     stamp.origin = pick.corner;
     // SAFETY: the stamp's frame is loaded.
-    unsafe { DrawStamp(&mut stamp) };
+    unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
     let ship_name = unsafe { (*std::ptr::addr_of!(GlobData)).sis_state.ship_name.as_ptr() };
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
-    unsafe { SetContextFont(std::ptr::addr_of!(StarConFont).read()) };
+    unsafe { SetContextFont((std::ptr::addr_of!(StarConFont).read()).cast()) };
     draw_text(
         pick.corner.x + (pick.width >> 1),
         pick.corner.y + pick.height - 5,
@@ -569,21 +592,23 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         let species = ship.SpeciesID;
         if species != NO_ID || ship.crew_level == 0 {
             // SAFETY: the icon frame belongs to the ship.
-            unsafe { DrawStamp(&mut stamp) };
+            unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
             if species == NO_ID {
                 // Dead ship - mark with an X.
                 stamp.origin.x -= 1;
                 // SAFETY: `StatusFrame` is loaded at startup.
                 unsafe {
-                    stamp.frame = SetAbsFrameIndex(std::ptr::addr_of!(StatusFrame).read(), 3);
-                    DrawStamp(&mut stamp);
+                    stamp.frame =
+                        (SetAbsFrameIndex((std::ptr::addr_of!(StatusFrame).read()).cast(), 3))
+                            .cast();
+                    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
                 }
             }
         } else {
             // Ship ran away
             set_color(Rgba::rgb15(0x00, 0x00, 0x14));
             // SAFETY: the icon frame belongs to the ship.
-            unsafe { DrawFilledStamp(&mut stamp) };
+            unsafe { DrawFilledStamp(std::ptr::from_mut(&mut stamp).cast()) };
         }
     }
 

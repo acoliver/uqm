@@ -26,7 +26,7 @@ trait IoHandle {
 
 impl IoHandle for Directory {
     fn io_handle(&self) -> *mut uio_DirHandle {
-        self.handle() as *mut uio_DirHandle
+        self.handle()
     }
 }
 

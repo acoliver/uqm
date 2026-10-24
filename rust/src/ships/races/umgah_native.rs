@@ -1,7 +1,7 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,

@@ -263,7 +263,7 @@ unsafe fn rotateStarbase(menu: *mut MENU_STATE, frame: FRAME) {
         };
         DrawStamp(&mut stamp);
         stamp.frame = IncFrameIndex(stamp.frame);
-        if GetFrameIndex(stamp.frame) == 0 {
+        if GetFrameIndex(stamp.frame.cast()) == 0 {
             stamp.frame = IncFrameIndex(stamp.frame);
         }
         (*menu).flash_frame0 = stamp.frame;
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn DoStarBase(menu: *mut MENU_STATE) -> BOOLEAN {
         (*menu).Initialized = 1;
         (*menu).CurFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.starbase".as_ptr()).cast());
-        (*menu).hMusic = LoadMusicInstance(c"music.starbase".as_ptr());
+        (*menu).hMusic = (LoadMusicInstance(c"music.starbase".as_ptr())).cast();
         SetContext(ScreenContext);
         SetTransitionSource(ptr::null());
         BatchGraphics();

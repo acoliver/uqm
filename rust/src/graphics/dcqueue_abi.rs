@@ -5,15 +5,12 @@ pub use self::{
 };
 use super::native_abi::*;
 use crate::memory::rust_hfree;
-use std::{
-    ffi::{c_char, c_void},
-    ptr,
-};
+use std::ptr;
 const MAX: i32 = 16384;
 const LIMIT: i32 = 4096;
-static mut DCQ_MUTEX: *mut c_void = ptr::null_mut();
+static mut DCQ_MUTEX: *mut crate::threading::RustMutex = ptr::null_mut();
 #[no_mangle]
-pub static mut RenderingCond: *mut c_void = ptr::null_mut();
+pub static mut RenderingCond: *mut crate::threading::RustCondVar = ptr::null_mut();
 pub static mut DCQ: [TFB_DrawCommand; MAX as usize] = unsafe { std::mem::zeroed() };
 #[no_mangle]
 pub static mut DrawCommandQueue: TFB_DrawCommandQueue = unsafe { std::mem::zeroed() };
@@ -23,23 +20,49 @@ static mut LAST_FADE: i32 = 255;
 static mut LAST_TRANSITION: i32 = 255;
 static mut LAST_TIME: u32 = 0;
 static mut FPS_COUNTER: u32 = 0;
-extern "C" {
-    fn TaskSwitch();
-}
-use crate::time::counter_abi::GetTimeCounter;
-extern "C" {
-    fn CreateRecursiveMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
-    fn DestroyRecursiveMutex(mutex: *mut c_void);
-    fn LockRecursiveMutex(mutex: *mut c_void);
-    fn UnlockRecursiveMutex(mutex: *mut c_void);
-    fn GetRecursiveMutexDepth(mutex: *mut c_void) -> i32;
-    fn CreateCondVar_Core(name: *const c_char, class: u32) -> *mut c_void;
-    fn DestroyCondVar(cond: *mut c_void);
-    fn BroadcastCondVar(cond: *mut c_void);
-    fn LockMutex(mutex: *mut c_void);
-    fn UnlockMutex(mutex: *mut c_void);
-    fn ClearSemaphore(sem: *mut c_void);
 
+use crate::threading::legacy_abi::TaskSwitch;
+use crate::time::counter_abi::GetTimeCounter;
+
+use crate::threading::legacy_abi::CreateRecursiveMutex_Core;
+
+use crate::threading::legacy_abi::DestroyRecursiveMutex;
+
+use crate::threading::legacy_abi::LockRecursiveMutex;
+
+use crate::threading::legacy_abi::UnlockRecursiveMutex;
+
+use crate::threading::legacy_abi::GetRecursiveMutexDepth;
+
+use crate::threading::legacy_abi::CreateCondVar_Core;
+
+use crate::threading::legacy_abi::DestroyCondVar;
+
+use crate::threading::legacy_abi::BroadcastCondVar;
+
+use crate::threading::legacy_abi::LockMutex;
+
+use crate::threading::legacy_abi::UnlockMutex;
+
+use crate::threading::legacy_abi::ClearSemaphore;
+
+use crate::graphics::geometry_ffi::TFB_BBox_Init;
+
+use crate::graphics::geometry_ffi::TFB_BBox_Reset;
+
+use crate::graphics::geometry_ffi::TFB_BBox_SetClipRect;
+
+use crate::graphics::geometry_ffi::TFB_BBox_RegisterPoint;
+
+use crate::graphics::geometry_ffi::TFB_BBox_RegisterRect;
+
+use crate::graphics::geometry_ffi::TFB_BBox_RegisterCanvas;
+
+use crate::graphics::cmap_abi::TFB_ReturnColorMap;
+
+use crate::graphics::cmap_abi::GetFadeAmount;
+
+extern "C" {
     static ScreenWidth: i32;
     static ScreenHeight: i32;
     static ScreenWidthActual: i32;
@@ -48,14 +71,6 @@ extern "C" {
     static GfxFlags: i32;
     static TFB_DEBUG_HALT: i32;
     static TransitionAmount: i32;
-    fn TFB_BBox_Init(width: i32, height: i32);
-    fn TFB_BBox_Reset();
-    fn TFB_BBox_SetClipRect(rect: *const RECT);
-    fn TFB_BBox_RegisterPoint(x: i32, y: i32);
-    fn TFB_BBox_RegisterRect(rect: *const RECT);
-    fn TFB_BBox_RegisterCanvas(canvas: *mut c_void, x: i32, y: i32);
-    fn TFB_ReturnColorMap(map: *mut TFB_ColorMap);
-    fn GetFadeAmount() -> i32;
 }
 fn synchronize(queue: &mut TFB_DrawCommandQueue) {
     if queue.Batching == 0 {
@@ -476,7 +491,7 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
             2 => {
                 let map = c.data.image.colormap;
                 if !map.is_null() {
-                    TFB_ReturnColorMap(map);
+                    TFB_ReturnColorMap((map).cast());
                 }
             }
             12 => ClearSemaphore(c.data.sendsignal.sem.cast()),

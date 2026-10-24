@@ -38,6 +38,9 @@ unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: *const c_char) 
     true
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn Melee_LocalChange_ship(
     state: *mut MELEE_STATE,
     side: u16,
@@ -55,6 +58,9 @@ pub unsafe extern "C" fn Melee_LocalChange_ship(
     true
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range. The name must be NUL-terminated.
 pub unsafe extern "C" fn Melee_LocalChange_teamName(
     state: *mut MELEE_STATE,
     side: u16,
@@ -71,6 +77,9 @@ pub unsafe extern "C" fn Melee_LocalChange_teamName(
     true
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range. The fleet must contain all 14 ship slots.
 pub unsafe extern "C" fn Melee_LocalChange_fleet(
     state: *mut MELEE_STATE,
     side: usize,
@@ -83,6 +92,9 @@ pub unsafe extern "C" fn Melee_LocalChange_fleet(
     changed
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn Melee_LocalChange_team(
     state: *mut MELEE_STATE,
     side: usize,
@@ -95,6 +107,9 @@ pub unsafe extern "C" fn Melee_LocalChange_team(
     changed
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn Melee_bootstrapSyncTeam(state: *mut MELEE_STATE, side: usize) {
     let setup = (*state).meleeSetup;
     Netplay_NotifyAll_setFleet(state, side);
@@ -107,6 +122,9 @@ pub unsafe extern "C" fn Melee_bootstrapSyncTeam(state: *mut MELEE_STATE, side: 
     MeleeSetup_setSentTeamName(setup, side, MeleeSetup_getTeamName(setup, side));
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn Melee_RemoteChange_ship(
     state: *mut MELEE_STATE,
     conn: *mut NetConnection,
@@ -132,6 +150,9 @@ pub unsafe extern "C" fn Melee_RemoteChange_ship(
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range. The name must be NUL-terminated.
 pub unsafe extern "C" fn Melee_RemoteChange_teamName(
     state: *mut MELEE_STATE,
     conn: *mut NetConnection,
@@ -158,10 +179,13 @@ pub unsafe extern "C" fn Melee_RemoteChange_teamName(
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn updateRandomSeed(_state: *mut MELEE_STATE, _side: u16, seed: u32) {
+pub extern "C" fn updateRandomSeed(_state: *mut MELEE_STATE, _side: u16, seed: u32) {
     crate::math::seed_random(seed);
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn confirmationCancelled(state: *mut MELEE_STATE, side: u16) {
     status(game_string(
         NETMELEE_STRING_BASE as i32 + if side == 0 { 16 } else { 17 },
@@ -178,6 +202,9 @@ unsafe fn feedback(conn: *mut NetConnection, value: *const c_char, popup: bool) 
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn connectedFeedback(conn: *mut NetConnection) {
     feedback(
         conn,
@@ -194,6 +221,9 @@ pub unsafe extern "C" fn connectedFeedback(conn: *mut NetConnection) {
     PlayMenuSound(3);
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn errorFeedback(conn: *mut NetConnection) {
     feedback(
         conn,
@@ -209,6 +239,9 @@ pub unsafe extern "C" fn errorFeedback(conn: *mut NetConnection) {
     );
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn closeFeedback(conn: *mut NetConnection) {
     feedback(
         conn,
@@ -224,6 +257,9 @@ pub unsafe extern "C" fn closeFeedback(conn: *mut NetConnection) {
     );
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn abortFeedback(conn: *mut NetConnection, reason: u32) {
     if reason < 4 {
         feedback(
@@ -234,6 +270,9 @@ pub unsafe extern "C" fn abortFeedback(conn: *mut NetConnection, reason: u32) {
     }
 }
 #[no_mangle]
+/// # Safety
+/// Call on the game thread with initialized melee UI resources. All pointers
+/// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, remote: bool) {
     flushPacketQueues();
     if reason == 2 && !remote {

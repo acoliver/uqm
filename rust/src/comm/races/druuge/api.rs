@@ -39,9 +39,7 @@ impl DruugeApi for crate::comm::races::script::live::LiveScript<Handler> {
         }
     }
     fn number(&mut self, value: i32) {
-        extern "C" {
-            fn NPCNumber(value: i32, format: *const std::ffi::c_char);
-        }
+        use crate::comm::commglue_abi::runtime::NPCNumber;
         unsafe {
             NPCNumber(value, std::ptr::null());
         }

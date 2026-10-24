@@ -71,9 +71,19 @@ pub struct Stamp {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct IntersectControl {
-    pub intersect_stamp: Stamp,
+    pub last_time_val: u16,
     pub end_point: Point,
+    pub intersect_stamp: Stamp,
 }
+
+crate::c_bindings::assert_c_layout!(
+    IntersectControl,
+    crate::ships::native::abi::INTERSECT_CONTROL {
+        last_time_val: last_time_val,
+        end_point: EndPoint,
+        intersect_stamp: IntersectStamp,
+    }
+);
 
 // ---------------------------------------------------------------------------
 // Element Visual State
@@ -219,6 +229,7 @@ impl Element {
             color_cycle_index: 0,
             velocity: VelocityDesc::new(),
             intersect_control: IntersectControl {
+                last_time_val: 0,
                 intersect_stamp: Stamp {
                     origin: Point::zero(),
                     frame: std::ptr::null_mut(),
@@ -943,6 +954,22 @@ mod tests {
         assert_eq!(start.y, 20);
         assert_eq!(end.x, 30);
         assert_eq!(end.y, 40);
+    }
+
+    #[test]
+    fn live_intersection_fields_are_read_at_their_native_offsets() {
+        let mut native: crate::ships::native::abi::ELEMENT = unsafe { std::mem::zeroed() };
+        native.IntersectControl.last_time_val = 17;
+        native.IntersectControl.EndPoint = crate::graphics::native_abi::POINT { x: 31, y: -47 };
+        native.IntersectControl.IntersectStamp.origin =
+            crate::graphics::native_abi::POINT { x: -3, y: 91 };
+        let model = unsafe { &*std::ptr::from_ref(&native).cast::<Element>() };
+        assert_eq!(model.intersect_control.last_time_val, 17);
+        assert_eq!(model.intersect_control.end_point, Point::new(31, -47));
+        assert_eq!(
+            model.intersect_control.intersect_stamp.origin,
+            Point::new(-3, 91)
+        );
     }
 
     #[test]

@@ -59,12 +59,75 @@ use crate::ui::sis::PreUpdateFlashRect;
 extern "C" {
     fn PreUpdateFlashRect();
 }
+
+use crate::graphics::context_abi::SetContextForeGroundColor;
+
+use crate::graphics::font_abi::SetContextFont;
+
+use crate::graphics::context_abi::SetContextFontEffect;
+
+use crate::graphics::font_abi::GetContextFontLeading;
+
+use crate::graphics::font_abi::font_DrawText;
+
+use crate::graphics::frame_abi::DrawFilledRectangle;
+
+use crate::graphics::frame_abi::DrawRectangle;
+
+use crate::graphics::frame_abi::DrawPoint;
+
+use crate::graphics::frame_abi::DrawStamp;
+
+use crate::graphics::frame_abi::DrawFilledStamp;
+
+use crate::graphics::pixmap_abi::SetRelFrameIndex;
+
+use crate::graphics::pixmap_abi::IncFrameIndex;
+
+use crate::graphics::pixmap_abi::DecFrameIndex;
+
+use crate::graphics::pixmap_abi::GetFrameCount;
+
+use crate::graphics::pixmap_abi::GetFrameIndex;
+
+use crate::ui::sis::SetFlashRect;
+
+use crate::ui::sis::DeltaSISGauges;
+
+use crate::ui::sis::DrawSISMessage;
+
+use crate::ui::sis::DrawSISTitle;
+
+use crate::mainloop::input_abi::live::FlushInput;
+
+use crate::battle::sounds::engine::PlayMenuSound;
+
+use crate::strings::string_table::SetAbsStringTableIndex;
+
+use crate::strings::string_table::GetStringAddress;
+
+use crate::mainloop::input_abi::live::AnyButtonPress;
+
+use crate::strings::sresins::LoadStringTableInstance;
+
+use crate::strings::string_table::CaptureStringTable;
+
+use crate::strings::string_table::ReleaseStringTable;
+
+use crate::strings::string_table::DestroyStringTable;
+
+use crate::strings::string_table::SetRelStringTableIndex;
+
+use crate::graphics::cmap_abi::GetColorMapAddress;
+
+use crate::graphics::cmap_abi::SetColorMap;
+
 extern "C" {
     static mut ScreenWidth: c_int;
     static mut ScreenHeight: c_int;
-    static mut ScreenContext: *mut c_void;
-    static mut StatusContext: *mut c_void;
-    static mut SpaceContext: *mut c_void;
+    static mut ScreenContext: *mut crate::graphics::native_abi::context_desc;
+    static mut StatusContext: *mut crate::graphics::native_abi::context_desc;
+    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut StarConFont: *mut c_void;
     static mut TinyFont: *mut c_void;
     static mut MicroFont: *mut c_void;
@@ -74,40 +137,6 @@ extern "C" {
     static mut optWhichMenu: c_int;
     static mut optWhichFonts: c_int;
     static mut GlobData: CGlobData;
-
-    fn SetContextForeGroundColor(color: CColor) -> CColor;
-    fn SetContextFont(font: *mut c_void) -> *mut c_void;
-    fn SetContextFontEffect(frame: *mut c_void) -> *mut c_void;
-    fn GetContextFontLeading(leading: *mut i16);
-    fn font_DrawText(text: *mut CText);
-    fn DrawFilledRectangle(rect: *mut CRect);
-    fn DrawRectangle(rect: *mut CRect);
-    fn DrawPoint(point: *mut CPoint);
-    fn DrawStamp(stamp: *mut CStamp);
-    fn DrawFilledStamp(stamp: *mut CStamp);
-    fn SetRelFrameIndex(frame: *mut c_void, offset: i16) -> *mut c_void;
-    fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn DecFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn GetFrameCount(frame: *mut c_void) -> u16;
-    fn GetFrameIndex(frame: *mut c_void) -> u16;
-    fn SetFlashRect(rect: *const c_void);
-
-    fn DeltaSISGauges(crew_delta: i16, fuel_delta: i16, resunit_delta: i32);
-
-    fn DrawSISMessage(message: *const c_char);
-    fn DrawSISTitle(title: *const c_char);
-    fn FlushInput();
-    fn PlayMenuSound(effect: c_int);
-    fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
-    fn GetStringAddress(entry: *mut c_void) -> *const c_char;
-    fn AnyButtonPress(detect_special: u32) -> u32;
-    fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
-    fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
-    fn ReleaseStringTable(entry: *mut c_void) -> *mut c_void;
-    fn DestroyStringTable(table: *mut c_void) -> c_int;
-    fn SetRelStringTableIndex(entry: *mut c_void, offset: i16) -> *mut c_void;
-    fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
-    fn SetColorMap(map: *mut c_void) -> c_int;
 }
 
 /// `&GLOBAL (built_ship_q)`.
@@ -201,9 +230,9 @@ impl CffiPlatform {
         // screen runs, and only read afterwards.
         unsafe {
             match ctx {
-                ContextId::Screen => std::ptr::addr_of!(ScreenContext).read(),
-                ContextId::Status => std::ptr::addr_of!(StatusContext).read(),
-                ContextId::Space => std::ptr::addr_of!(SpaceContext).read(),
+                ContextId::Screen => (std::ptr::addr_of!(ScreenContext).read()).cast(),
+                ContextId::Status => (std::ptr::addr_of!(StatusContext).read()).cast(),
+                ContextId::Space => std::ptr::addr_of!(SpaceContext).read().cast(),
             }
         }
     }
@@ -219,10 +248,10 @@ impl CffiPlatform {
         }
     }
 
-    fn load_resource(
+    fn load_resource<T>(
         resource: &str,
-        load: unsafe extern "C" fn(*const c_char) -> *mut c_void,
-    ) -> Result<*mut c_void, StarbaseError> {
+        load: unsafe extern "C" fn(*const c_char) -> *mut T,
+    ) -> Result<*mut T, StarbaseError> {
         let name = c_string(resource);
         // SAFETY: `name` is a valid NUL-terminated string for the call.
         let loaded = unsafe { load(name.as_ptr()) };
@@ -246,12 +275,12 @@ impl Gfx for CffiPlatform {
 
     fn set_context(&self, ctx: ContextId) -> ContextHandle {
         // SAFETY: the pointer is one of the game's context objects.
-        ContextHandle(unsafe { base::SetContext(Self::context_ptr(ctx)) } as usize)
+        ContextHandle(unsafe { base::SetContext((Self::context_ptr(ctx)).cast()) } as usize)
     }
 
     fn restore_context(&self, previous: ContextHandle) {
         // SAFETY: `previous` was returned by `SetContext`.
-        unsafe { base::SetContext(previous.0 as *mut c_void) };
+        unsafe { base::SetContext((previous.0 as *mut c_void).cast()) };
     }
 
     fn context_clip_rect(&self) -> Rect {
@@ -300,12 +329,12 @@ impl Gfx for CffiPlatform {
 
     fn set_font(&self, font: FontId) -> FontHandle {
         // SAFETY: the pointer is one of the game's font objects.
-        FontHandle(unsafe { SetContextFont(Self::font_ptr(font)) } as usize)
+        FontHandle(unsafe { SetContextFont((Self::font_ptr(font)).cast()) } as usize)
     }
 
     fn restore_font(&self, previous: FontHandle) {
         // SAFETY: `previous` was returned by `SetContextFont`.
-        unsafe { SetContextFont(previous.0 as *mut c_void) };
+        unsafe { SetContextFont((previous.0 as *mut c_void).cast()) };
     }
 
     fn set_font_effect(&self, grad_index: Option<u16>) -> FontEffectHandle {
@@ -313,7 +342,7 @@ impl Gfx for CffiPlatform {
         // owned by the game.
         let effect = match grad_index {
             Some(index) => unsafe {
-                base::SetAbsFrameIndex(std::ptr::addr_of!(FontGradFrame).read(), index)
+                base::SetAbsFrameIndex((std::ptr::addr_of!(FontGradFrame).read()).cast(), index)
             },
             None => std::ptr::null_mut(),
         };
@@ -323,7 +352,7 @@ impl Gfx for CffiPlatform {
 
     fn restore_font_effect(&self, previous: FontEffectHandle) {
         // SAFETY: `previous` was returned by `SetContextFontEffect`.
-        unsafe { SetContextFontEffect(previous.0 as *mut c_void) };
+        unsafe { SetContextFontEffect((previous.0 as *mut c_void).cast()) };
     }
 
     fn font_leading(&self) -> i16 {
@@ -342,13 +371,13 @@ impl Gfx for CffiPlatform {
     fn fill_rect(&self, rect: Rect) {
         let mut rect = to_c_rect(rect);
         // SAFETY: `rect` is valid for the call.
-        unsafe { DrawFilledRectangle(&mut rect) };
+        unsafe { DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast()) };
     }
 
     fn draw_rect(&self, rect: Rect) {
         let mut rect = to_c_rect(rect);
         // SAFETY: `rect` is valid for the call.
-        unsafe { DrawRectangle(&mut rect) };
+        unsafe { DrawRectangle(std::ptr::from_mut(&mut rect).cast()) };
     }
 
     fn draw_point(&self, point: Point) {
@@ -360,13 +389,13 @@ impl Gfx for CffiPlatform {
     fn draw_stamp(&self, stamp: Stamp) {
         let mut stamp = to_c_stamp(stamp);
         // SAFETY: `stamp` is valid for the call.
-        unsafe { DrawStamp(&mut stamp) };
+        unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
     }
 
     fn draw_filled_stamp(&self, stamp: Stamp) {
         let mut stamp = to_c_stamp(stamp);
         // SAFETY: `stamp` is valid for the call.
-        unsafe { DrawFilledStamp(&mut stamp) };
+        unsafe { DrawFilledStamp(std::ptr::from_mut(&mut stamp).cast()) };
     }
 
     fn draw_text(&self, text: &TextDraw) {
@@ -382,37 +411,37 @@ impl Gfx for CffiPlatform {
         c_text.align = align;
         c_text.char_count = u16::MAX;
         // SAFETY: `c_text` and `string` are valid for the call.
-        unsafe { font_DrawText(&mut c_text) };
+        unsafe { font_DrawText(std::ptr::from_mut(&mut c_text).cast()) };
     }
 
     fn abs_frame(&self, frame: FrameId, index: u16) -> FrameId {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { base::SetAbsFrameIndex(frame as *mut c_void, index) as FrameId }
+        unsafe { base::SetAbsFrameIndex((frame as *mut c_void).cast(), index) as FrameId }
     }
 
     fn rel_frame(&self, frame: FrameId, offset: i16) -> FrameId {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { SetRelFrameIndex(frame as *mut c_void, offset) as FrameId }
+        unsafe { SetRelFrameIndex((frame as *mut c_void).cast(), offset) as FrameId }
     }
 
     fn inc_frame(&self, frame: FrameId) -> FrameId {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { IncFrameIndex(frame as *mut c_void) as FrameId }
+        unsafe { IncFrameIndex((frame as *mut c_void).cast()) as FrameId }
     }
 
     fn dec_frame(&self, frame: FrameId) -> FrameId {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { DecFrameIndex(frame as *mut c_void) as FrameId }
+        unsafe { DecFrameIndex((frame as *mut c_void).cast()) as FrameId }
     }
 
     fn frame_count(&self, frame: FrameId) -> u16 {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { GetFrameCount(frame as *mut c_void) }
+        unsafe { GetFrameCount((frame as *mut c_void).cast()) }
     }
 
     fn frame_index(&self, frame: FrameId) -> u16 {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        unsafe { GetFrameIndex(frame as *mut c_void) }
+        unsafe { GetFrameIndex((frame as *mut c_void).cast()) }
     }
 
     fn play_frame(&self) -> FrameId {
@@ -453,11 +482,11 @@ impl Gfx for CffiPlatform {
             }
             FlashTarget::Menu3do => {
                 // SAFETY: `SFR_MENU_3DO` is the C sentinel pointer `~0`.
-                unsafe { SetFlashRect(SFR_MENU_3DO as *const c_void) };
+                unsafe { SetFlashRect((SFR_MENU_3DO as *const c_void).cast()) };
             }
             FlashTarget::MenuAny => {
                 // SAFETY: `SFR_MENU_ANY` is the C sentinel pointer `~1`.
-                unsafe { SetFlashRect(SFR_MENU_ANY as *const c_void) };
+                unsafe { SetFlashRect((SFR_MENU_ANY as *const c_void).cast()) };
             }
             FlashTarget::Rect(rect) => {
                 let rect = to_c_rect(rect);
@@ -482,7 +511,8 @@ impl Gfx for CffiPlatform {
         // returned string lives as long as the table.
         unsafe {
             let index = u16::try_from(index).expect("game string indexes fit a COUNT");
-            let entry = SetAbsStringTableIndex(std::ptr::addr_of!(GameStrings).read(), index);
+            let entry =
+                SetAbsStringTableIndex((std::ptr::addr_of!(GameStrings).read()).cast(), index);
             let text = GetStringAddress(entry);
             if text.is_null() {
                 return String::new();
@@ -569,9 +599,10 @@ impl Platform for CffiPlatform {
 
     fn set_status_message_mode(&self, mode: StatusMessageMode) -> StatusMessageMode {
         // SAFETY: plain value call.
-        let previous =
-            unsafe { crate::mainloop::c_extern::SetStatusMessageMode(message_mode_to_c(mode)) };
-        message_mode_from_c(previous)
+        let previous = unsafe {
+            crate::mainloop::c_extern::SetStatusMessageMode((message_mode_to_c(mode)) as u32)
+        };
+        message_mode_from_c((previous) as i32)
     }
 
     fn sis(&self) -> Result<SisView, StarbaseError> {
@@ -783,7 +814,7 @@ impl Platform for CffiPlatform {
 
     fn play_failure_sound(&self) {
         // SAFETY: plain value call.
-        unsafe { PlayMenuSound(MENU_SOUND_FAILURE) };
+        unsafe { PlayMenuSound((MENU_SOUND_FAILURE) as u32) };
     }
 
     fn flush_input(&self) {
@@ -817,7 +848,7 @@ impl Platform for CffiPlatform {
     fn load_graphic(&self, resource: &str) -> Result<FrameId, StarbaseError> {
         let loaded = Self::load_resource(resource, base::LoadGraphicInstance)?;
         // SAFETY: `loaded` is the result of `LoadGraphicInstance`.
-        let frame = unsafe { base::CaptureDrawable(loaded) };
+        let frame = unsafe { base::CaptureDrawable((loaded).cast()) };
         if frame.is_null() {
             return Err(StarbaseError::ResourceLoad(resource.to_owned()));
         }
@@ -826,13 +857,13 @@ impl Platform for CffiPlatform {
 
     fn destroy_drawable(&self, frame: FrameId) {
         // SAFETY: `frame` was returned by `load_graphic` and is released once.
-        unsafe { base::DestroyDrawable(base::ReleaseDrawable(frame as *mut c_void)) };
+        unsafe { base::DestroyDrawable(base::ReleaseDrawable((frame as *mut c_void).cast())) };
     }
 
     fn load_color_map(&self, resource: &str) -> Result<ColorMapId, StarbaseError> {
         let loaded = Self::load_resource(resource, LoadStringTableInstance)?;
         // SAFETY: `loaded` is the result of `LoadStringTableInstance`.
-        let map = unsafe { CaptureStringTable(loaded) };
+        let map = unsafe { CaptureStringTable((loaded).cast()) };
         if map.is_null() {
             return Err(StarbaseError::ResourceLoad(resource.to_owned()));
         }
@@ -841,22 +872,22 @@ impl Platform for CffiPlatform {
 
     fn destroy_color_map(&self, map: ColorMapId) {
         // SAFETY: `map` was returned by `load_color_map` and is released once.
-        unsafe { DestroyStringTable(ReleaseStringTable(map as *mut c_void)) };
+        unsafe { DestroyStringTable(ReleaseStringTable((map as *mut c_void).cast())) };
     }
 
     fn abs_color_map(&self, map: ColorMapId, index: u16) -> ColorMapId {
         // SAFETY: `map` is a colour map handle owned by the caller.
-        unsafe { SetAbsStringTableIndex(map as *mut c_void, index) as ColorMapId }
+        unsafe { SetAbsStringTableIndex((map as *mut c_void).cast(), index) as ColorMapId }
     }
 
     fn rel_color_map(&self, map: ColorMapId, offset: i16) -> ColorMapId {
         // SAFETY: `map` is a colour map handle owned by the caller.
-        unsafe { SetRelStringTableIndex(map as *mut c_void, offset) as ColorMapId }
+        unsafe { SetRelStringTableIndex((map as *mut c_void).cast(), offset) as ColorMapId }
     }
 
     fn apply_color_map(&self, map: ColorMapId) {
         // SAFETY: `map` is a colour map handle owned by the caller.
-        unsafe { SetColorMap(GetColorMapAddress(map as *mut c_void)) };
+        unsafe { SetColorMap(GetColorMapAddress((map as *mut c_void).cast())) };
     }
 
     fn load_music(&self, resource: &str) -> Result<MusicId, StarbaseError> {
@@ -865,7 +896,7 @@ impl Platform for CffiPlatform {
 
     fn play_music(&self, music: MusicId) {
         // SAFETY: `music` was returned by `load_music`; priority 1 as in C.
-        unsafe { base::PlayMusic(music as *mut c_void, 1, 1) };
+        unsafe { base::PlayMusic((music as *mut c_void).cast(), 1, 1) };
     }
 
     fn stop_music(&self) {

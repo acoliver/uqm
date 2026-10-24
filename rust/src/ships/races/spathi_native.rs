@@ -29,7 +29,7 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 }
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
 
@@ -198,7 +198,7 @@ mod engine {
         if (*ss).special_counter == 0 && !(*eval).ObjectPtr.is_null() && (*eval).which_turn <= 24 {
             let target = (*eval).ObjectPtr;
             let travel_facing = normalize_facing(angle_to_facing(
-                i32::from((*ship).velocity.TravelAngle) + HALF_CIRCLE as i32,
+                i32::from((*ship).velocity.travel_angle) + HALF_CIRCLE as i32,
             ));
             // SIZE locals: the int difference is truncated to 16 bits.
             let delta_x = (i32::from((*target).current.location.x)
@@ -212,7 +212,7 @@ mod engine {
                 && ((*eval).which_turn <= 8
                     || within_half_circle(
                         direction_facing,
-                        angle_to_facing(i32::from((*target).velocity.TravelAngle)) - HALF_FACING,
+                        angle_to_facing(i32::from((*target).velocity.travel_angle)) - HALF_FACING,
                     ))
                 && ((*ss).cur_status_flags & (SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16
                     == 0

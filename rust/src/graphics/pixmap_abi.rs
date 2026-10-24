@@ -41,7 +41,9 @@ pub unsafe extern "C" fn GetFrameCount(frame: *mut frame_desc) -> u16 {
 /// # Safety
 /// Frame must be null or a live drawable frame.
 #[no_mangle]
-pub unsafe extern "C" fn GetFrameIndex(frame: *mut frame_desc) -> u16 {
+pub unsafe extern "C" fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16 {
+    // The automation ABI accepts an opaque frame handle; interpretation stays here.
+    let frame = frame.cast::<frame_desc>();
     if frame.is_null() {
         0
     } else {
@@ -91,7 +93,7 @@ pub unsafe extern "C" fn SetEquFrameIndex(
     if dst.is_null() || src.is_null() {
         null_mut()
     } else {
-        SetAbsFrameIndex(dst, GetFrameIndex(src))
+        SetAbsFrameIndex(dst, GetFrameIndex(src.cast()))
     }
 }
 /// # Safety

@@ -61,9 +61,8 @@ pub(super) unsafe fn ReleaseSound(sound: SOUND) -> *mut std::ffi::c_void {
 pub(super) unsafe fn SetPlayerInputAll() -> i32 {
     i32::from(crate::navigation::abi::SetPlayerInputAll())
 }
-extern "C" {
-    pub(super) fn PlayMenuSound(sound: i32);
-}
+
+pub(super) use crate::battle::sounds::engine::PlayMenuSound;
 
 pub(super) unsafe fn getLineWithinWidth(
     text: *mut TEXT,

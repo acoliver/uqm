@@ -27,10 +27,9 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
 }
 
 #[cfg(not(test))]
-extern "C" {
-    fn TFB_FlushGraphicsEx(skip_swap: u32);
-    fn TFB_SwapBuffers(force_full_redraw: i32);
-}
+use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
+#[cfg(not(test))]
+use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 
 #[cfg(not(test))]
 unsafe fn present_complete_transaction() {

@@ -1,7 +1,7 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_facing,
         put_element, sine, starship,
@@ -182,7 +182,7 @@ mod engine {
         if (*e).__bindgen_anon_5.thrust_wait > 0 {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
         } else {
-            let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.TravelAngle)));
+            let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
             let mut facing = original;
             if TrackShip(e, &mut facing) < 0 {
                 facing = normalize_facing(TFB_Random() as i32);

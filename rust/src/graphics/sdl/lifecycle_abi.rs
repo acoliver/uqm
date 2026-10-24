@@ -37,12 +37,18 @@ static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
     color: ffi::rust_gfx_color,
 };
 pub static mut GRAPHICS_BACKEND: *mut TfbGraphicsBackend = ptr::null_mut();
+
+use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
+
+use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
+
+use crate::automation::input_ffi::rust_automation_present_callback;
+
+use crate::automation::input_ffi::rust_automation_presented_frame;
+
+use crate::graphics::cmap_abi::GetFadeAmount;
+
 extern "C" {
-    fn Init_DrawCommandQueue();
-    fn Uninit_DrawCommandQueue();
-    fn rust_automation_present_callback() -> c_int;
-    fn rust_automation_presented_frame() -> c_int;
-    fn GetFadeAmount() -> c_int;
     static TransitionAmount: c_int;
     static TransitionClipRect: RECT;
     static mut ScreenWidth: c_int;

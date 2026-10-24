@@ -14,9 +14,7 @@ pub(super) trait YehatApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 impl YehatApi for LiveScript<Handler> {
     fn have_shofixti_escort(&self) -> bool {
-        extern "C" {
-            fn HaveEscortShip(race: u16) -> u32;
-        }
+        use crate::battle::build_native::engine::HaveEscortShip;
         unsafe { HaveEscortShip(u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP)) != 0 }
     }
 
@@ -25,15 +23,7 @@ impl YehatApi for LiveScript<Handler> {
     }
 
     fn schedule_rebel_event(&mut self) {
-        extern "C" {
-            fn AddEvent(
-                kind: i32,
-                month: u16,
-                day: u16,
-                year: u16,
-                selector: u8,
-            ) -> *mut std::ffi::c_void;
-        }
+        use crate::time::clock_abi::live::AddEvent;
         unsafe {
             AddEvent(1, 0, 0, 0, 15);
         }

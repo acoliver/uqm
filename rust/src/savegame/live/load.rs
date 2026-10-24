@@ -10,13 +10,9 @@ use crate::planets::c_api::GLOB_DATA;
 #[no_mangle]
 pub static mut NextActivity: u16 = 0;
 
+use crate::planets::starmap::FindStar;
+
 extern "C" {
-    fn FindStar(
-        last: *mut std::ffi::c_void,
-        point: *mut crate::comm::dispatch::CPoint,
-        x: i16,
-        y: i16,
-    ) -> *mut std::ffi::c_void;
     static mut CurStarDescPtr: *mut runtime::star::CStarDesc;
 }
 

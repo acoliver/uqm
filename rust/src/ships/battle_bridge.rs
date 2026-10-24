@@ -117,10 +117,17 @@ pub const NUM_EVALUATE_DESCS: usize = 4;
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
+use crate::battle::process_native::engine::AllocElement;
+#[cfg(not(test))]
+use crate::battle::process_native::engine::FreeElement;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::GetFrameCount;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::IncFrameIndex;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+#[cfg(not(test))]
 extern "C" {
-    // Element operations (wrappers for C macros)
-    fn AllocElement() -> HElement;
-    fn FreeElement(h: HElement);
     #[cfg(test)]
     #[link_name = "rust_bridge_PutElement"]
     fn rust_bridge_put_element(h: HElement);
@@ -148,26 +155,18 @@ extern "C" {
     #[cfg(test)]
     #[link_name = "rust_bridge_GetFrameIndex"]
     fn rust_bridge_get_frame_index(f: Frame) -> u16;
-
-    // Weapon creation
     #[cfg(test)]
     fn rust_bridge_initialize_missile(block: *const MissileBlock) -> HElement;
     #[cfg(test)]
     fn rust_bridge_initialize_laser(block: *const LaserBlock) -> HElement;
-
-    // AI
     #[cfg(test)]
     fn rust_bridge_ship_intelligence(ship: ElementPtr, objects: *mut EvaluateDesc, count: u16);
-
-    // Sound
     #[cfg(test)]
     #[link_name = "rust_bridge_ProcessSound"]
     fn rust_bridge_process_sound(sound: usize, source: ElementPtr);
     #[cfg(test)]
     #[link_name = "rust_bridge_SetAbsSoundIndex"]
     fn rust_bridge_set_abs_sound_index(sounds: usize, index: u16) -> usize;
-
-    // Coordinate conversion
     #[cfg(test)]
     #[link_name = "rust_bridge_DISPLAY_TO_WORLD"]
     fn rust_bridge_display_to_world(x: i32) -> i32;
@@ -195,32 +194,24 @@ extern "C" {
     #[cfg(test)]
     #[link_name = "rust_bridge_WRAP_Y"]
     fn rust_bridge_wrap_y(y: i32) -> i32;
-
-    // Element state checks
     #[cfg(test)]
     #[link_name = "rust_bridge_CollidingElement"]
     fn rust_bridge_colliding_element(e: ElementPtr) -> c_int;
     #[cfg(test)]
     #[link_name = "rust_bridge_OBJECT_CLOAKED"]
     fn rust_bridge_object_cloaked(e: ElementPtr) -> c_int;
-
-    // Energy/crew
     #[cfg(test)]
     #[link_name = "rust_bridge_DeltaEnergy"]
     fn rust_bridge_delta_energy(e: ElementPtr, delta: i16) -> c_int;
     #[cfg(test)]
     #[link_name = "rust_bridge_DeltaCrew"]
     fn rust_bridge_delta_crew(e: ElementPtr, delta: i16) -> c_int;
-
-    // Starship association
     #[cfg(test)]
     #[link_name = "rust_bridge_GetElementStarShip"]
     fn rust_bridge_get_element_star_ship(e: ElementPtr, ss: *mut StarShipPtr);
     #[cfg(test)]
     #[link_name = "rust_bridge_SetElementStarShip"]
     fn rust_bridge_set_element_star_ship(e: ElementPtr, ss: StarShipPtr);
-
-    // Misc ship helpers
     #[cfg(test)]
     #[link_name = "rust_bridge_TrackShip"]
     fn rust_bridge_track_ship(e: ElementPtr, pfacing: *mut u16) -> i16;
@@ -238,12 +229,6 @@ extern "C" {
         e1: ElementPtr,
         p1: *mut c_void,
     ) -> HElement;
-
-    // Frame operations (real C functions)
-    fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
-    fn IncFrameIndex(frame: Frame) -> Frame;
-    fn GetFrameCount(frame: Frame) -> u16;
-
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
@@ -475,7 +460,7 @@ pub mod bridge {
     use super::*;
 
     pub fn alloc_element() -> Option<HElement> {
-        let h = unsafe { AllocElement() };
+        let h = unsafe { AllocElement() } as usize;
         if h == 0 {
             None
         } else {
@@ -485,7 +470,7 @@ pub mod bridge {
 
     pub fn free_element(h: HElement) {
         if h != 0 {
-            unsafe { FreeElement(h) }
+            unsafe { FreeElement(h as *mut c_void) }
         }
     }
 
@@ -678,19 +663,19 @@ pub mod bridge {
     ///
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_frame_index(frame: Frame, index: i32) -> Frame {
-        SetAbsFrameIndex(frame, index as u16)
+        (SetAbsFrameIndex((frame).cast(), index as u16)).cast()
     }
     /// # Safety
     ///
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn inc_frame_index(frame: Frame) -> Frame {
-        IncFrameIndex(frame)
+        (IncFrameIndex((frame).cast())).cast()
     }
     /// # Safety
     ///
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_count(frame: Frame) -> i32 {
-        i32::from(GetFrameCount(frame))
+        i32::from(GetFrameCount((frame).cast()))
     }
     pub use crate::battle::velocity::set_velocity_vector;
 }

@@ -1,16 +1,14 @@
 //! Thraddash callbacks and descriptor translated from `thradd.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, facing_to_angle, frame_index, normalize_angle,
         normalize_facing, starship,
     };
-    use std::{ffi::c_void, mem};
+    use std::mem;
 
-    extern "C" {
-        fn InsertQueue(queue: *mut c_void, handle: *mut c_void, before: *mut c_void);
-    }
+    use crate::collections::queue::InsertQueue;
 
     const MAX_CREW: u16 = 8;
     const MAX_ENERGY: u8 = 24;
@@ -245,7 +243,7 @@ mod engine {
                     && (*ss).ship_input_state & (LEFT | RIGHT) as u8 == 0)
                 || normalize_facing(
                     angle_to_facing(
-                        i32::from((*(*weapon).ObjectPtr).velocity.TravelAngle)
+                        i32::from((*(*weapon).ObjectPtr).velocity.travel_angle)
                             + HALF_CIRCLE as i32
                             + OCTANT as i32,
                     ) - i32::from((*ss).ShipFacing),
@@ -288,7 +286,7 @@ mod engine {
                         && ((*enemy).which_turn < 12
                             || normalize_angle(
                                 dir as i32
-                                    - ((*(*enemy).ObjectPtr).velocity.TravelAngle as i32
+                                    - ((*(*enemy).ObjectPtr).velocity.travel_angle as i32
                                         + HALF_CIRCLE as i32)
                                     + OCTANT as i32
                                     + 2,

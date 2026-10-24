@@ -1,21 +1,27 @@
 //! Remaining live dialogue API and subtitle cache, ported from comm.c.
 //! Copyright Paul Reiche, Fred Ford, 1992-2002. GPL-2.0-or-later.
 
-use super::locdata::{CColor, CPoint, CRect, CStamp, COMM_DATA};
+use super::locdata::{CPoint, CRect, CStamp, COMM_DATA};
 use super::sis_graphics::CText;
 use std::ffi::{c_char, c_void};
 use std::ptr::{null, null_mut};
 
+use crate::graphics::context_abi::SetContext;
+
+use crate::graphics::font_abi::font_DrawTracedText;
+
+use crate::graphics::font_abi::GetContextFontLeading;
+
+use crate::graphics::font_abi::SetContextFont;
+
+use crate::graphics::font_abi::TextRect;
+
+use crate::graphics::frame_abi::ClearDrawable;
+
+use crate::graphics::frame_abi::DrawStamp;
 use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
 #[allow(clashing_extern_declarations)]
 extern "C" {
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn ClearDrawable();
-    fn SetContextFont(font: *mut c_void) -> *mut c_void;
-    fn GetContextFontLeading(leading: *mut i16);
-    fn TextRect(text: *mut CText, rect: *mut CRect, delta: *mut u8) -> i32;
-    fn font_DrawTracedText(text: *mut CText, foreground: CColor, background: CColor);
-    fn DrawStamp(stamp: *mut CStamp);
     static optSubtitles: i32;
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
@@ -30,7 +36,7 @@ pub static mut CommWndRect: CRect = CRect {
 };
 
 static mut ANIM_CONTEXT: *mut c_void = null_mut();
-static mut TEXT_CACHE_CONTEXT: *mut c_void = null_mut();
+static mut TEXT_CACHE_CONTEXT: *mut crate::graphics::native_abi::context_desc = null_mut();
 static mut TEXT_CACHE_FRAME: *mut c_void = null_mut();
 static mut CLEAR_SUBTITLES: bool = false;
 static mut SUBTITLE: CText = CText::new(null(), 0);
@@ -72,7 +78,11 @@ pub unsafe extern "C" fn getLineWithinWidth(
         max_chars,
         |text| {
             let mut rect = CRect::default();
-            TextRect(text, &mut rect, null_mut());
+            TextRect(
+                std::ptr::from_mut(text).cast(),
+                std::ptr::from_mut(&mut rect).cast(),
+                null_mut(),
+            );
             rect.width
         },
     ))
@@ -80,7 +90,7 @@ pub unsafe extern "C" fn getLineWithinWidth(
 
 unsafe fn count_lines(text: &mut CText) -> i32 {
     let width = COMM_DATA.alien_text_width as i16;
-    SetContextFont(COMM_DATA.alien_font);
+    SetContextFont((COMM_DATA.alien_font).cast());
     let mut ptr = text.p_str;
     let mut count = 0;
     loop {
@@ -101,7 +111,7 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
         frame: TEXT_CACHE_FRAME,
     };
     if LAST_SUBTITLE == text.p_str {
-        DrawStamp(&mut stamp);
+        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
         UnbatchGraphics();
         return LAST_BASELINE;
     }
@@ -109,7 +119,7 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
     ClearDrawable();
     LAST_SUBTITLE = text.p_str;
     let width = COMM_DATA.alien_text_width as i16;
-    SetContextFont(COMM_DATA.alien_font);
+    SetContextFont((COMM_DATA.alien_font).cast());
     let mut leading = 0i16;
     GetContextFontLeading(&mut leading);
     let mut ptr = text.p_str;
@@ -132,7 +142,7 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
         let eol = getLineWithinWidth(text, &mut ptr, width, max_chars);
         max_chars = max_chars.wrapping_sub(text.char_count).saturating_sub(1);
         font_DrawTracedText(
-            text,
+            std::ptr::from_mut(text).cast(),
             COMM_DATA.alien_text_fcolor,
             COMM_DATA.alien_text_bcolor,
         );
@@ -142,7 +152,7 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
     }
     text.p_str = ptr;
     SetContext(old_context);
-    DrawStamp(&mut stamp);
+    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     LAST_BASELINE = text.baseline.y;
     UnbatchGraphics();
     text.baseline.y
@@ -234,7 +244,7 @@ pub unsafe extern "C" fn c_SetAnimContext(context: *mut c_void) {
 /// Context must remain live while registered; game thread only.
 #[no_mangle]
 pub unsafe extern "C" fn c_SetTextCacheContext(context: *mut c_void) {
-    TEXT_CACHE_CONTEXT = context;
+    TEXT_CACHE_CONTEXT = (context).cast();
 }
 /// # Safety
 /// Frame must remain live while registered; game thread only.

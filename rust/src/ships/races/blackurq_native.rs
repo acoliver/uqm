@@ -1,18 +1,13 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, element, frame_count, frame_index, init_intersect_points,
         normalize_facing, put_element, starship, wrap_delta,
     };
     use std::{mem, ptr};
-    extern "C" {
-        fn InsertQueue(
-            queue: *mut std::ffi::c_void,
-            handle: *mut std::ffi::c_void,
-            before: *mut std::ffi::c_void,
-        );
-    }
+
+    use crate::collections::queue::InsertQueue;
     const fn descriptor() -> RACE_DESC {
         let mut d: RACE_DESC = unsafe { mem::zeroed() };
         d.ship_info.ship_flags = (FIRES_FORE as i32) as _;

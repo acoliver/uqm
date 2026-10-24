@@ -80,48 +80,55 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
     pub use crate::time::counter_abi::GetTimeCounter;
+
+    pub use crate::comm::comm_abi::comm_CheckSubtitles;
+
+    pub use crate::comm::comm_abi::comm_ClearSubtitles;
+
+    pub use crate::comm::oscill_abi::runtime::SetSliderImage;
+
+    pub use crate::comm::oscill_abi::runtime::InitOscilloscope;
+
+    pub use crate::comm::oscill_abi::runtime::InitSlider;
+
+    pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    pub use crate::comm::oscill_abi::runtime::DrawOscilloscope;
+
+    pub use crate::comm::oscill_abi::runtime::DrawSlider;
+
+    pub use crate::graphics::context_abi::SetContext;
+
+    pub use crate::comm::comm_abi::c_GetAnimContext;
+
+    pub use crate::comm::comm_abi::c_GetClearSubtitles;
+
+    pub use crate::comm::comm_abi::c_ResetClearSubtitles;
+
+    pub use crate::comm::commanim_abi::runtime::ProcessCommAnimations;
+
+    pub use crate::comm::comm_abi::comm_RedrawSubtitles;
+
+    pub use crate::ui::settings::PlayMusic;
+
+    pub use crate::graphics::cmap_abi::GetColorMapAddress;
+
+    pub use crate::graphics::cmap_abi::SetColorMap;
+
+    pub use crate::comm::commanim_abi::runtime::DrawAlienFrame;
+
+    pub use crate::comm::commanim_abi::runtime::InitCommAnimations;
+
+    pub use crate::mainloop::input_abi::live::UpdateInputState;
+
+    pub use crate::graphics::gfx_common_abi::ScreenTransition;
+
     extern "C" {
-        pub fn comm_CheckSubtitles();
-        pub fn comm_ClearSubtitles();
-        pub fn SetSliderImage(frame: *mut c_void);
-
-        // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
-        pub fn InitOscilloscope(scope_bg: *mut c_void);
-        pub fn InitSlider(
-            x: c_int,
-            y: c_int,
-            width: c_int,
-            slider_frame: *mut c_void,
-            knob_frame: *mut c_void,
-        );
-        pub fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
         pub static mut ActivityFrame: *mut c_void;
-
-        // Graphics functions for update_speech_graphics (replacing c_UpdateSpeechGraphics)
-        pub fn DrawOscilloscope();
-        pub fn DrawSlider();
-        pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
-        pub static mut RadarContext: *mut c_void;
-        pub static mut SpaceContext: *mut c_void;
-
-        // Animation functions for update_animations (replacing c_UpdateAnimations)
-        pub fn c_GetAnimContext() -> *mut c_void;
-        pub fn c_GetClearSubtitles() -> c_int;
-        pub fn c_ResetClearSubtitles();
-        pub fn ProcessCommAnimations(do_clear: c_int, seeking: c_int) -> c_int;
-        pub fn comm_RedrawSubtitles();
+        pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
+        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         #[allow(dead_code)]
         pub static mut CommContext: *mut c_void;
-
-        // Direct C functions for colormap/music/animation
-        #[allow(clashing_extern_declarations)]
-        pub fn PlayMusic(music: *mut c_void, do_loop: c_int, volume: u8);
-        pub fn GetColorMapAddress(cmap: *mut c_void) -> *mut c_void;
-        pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
-        pub fn DrawAlienFrame(sequences: *const c_void, num: u16, full_redraw: c_int) -> c_int;
-        pub fn InitCommAnimations();
-        pub fn UpdateInputState();
-        pub fn ScreenTransition(which: c_int, rect: *const c_void);
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
@@ -255,7 +262,7 @@ pub(super) mod c_bridge {
         if song.is_null() {
             return;
         }
-        PlayMusic(song, 1, 1);
+        PlayMusic((song).cast(), 1, 1);
     }
 
     /// Apply alien colormap from CommData.AlienColorMap (port of c_SetColorMapFromCommData).
@@ -264,7 +271,7 @@ pub(super) mod c_bridge {
         if cmap.is_null() {
             return;
         }
-        SetColorMap(GetColorMapAddress(cmap));
+        SetColorMap(GetColorMapAddress((cmap).cast()));
     }
 }
 
@@ -931,7 +938,7 @@ pub unsafe fn alien_talk_first_call_init() {
     {
         rust_init_speech_graphics();
         c_bridge::set_color_map_from_comm_data();
-        c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
+        c_bridge::DrawAlienFrame(std::ptr::null_mut(), 0, 1);
         rust_update_speech_graphics();
         comm_intro_transition();
         c_bridge::play_alien_music();
@@ -1402,9 +1409,9 @@ fn init_speech_graphics(state: &mut CommState) {
         let slider_y: std::ffi::c_int = 107;
         let sis_w: std::ffi::c_int = 320 - 64 - 14;
         let af = std::ptr::addr_of_mut!(c_bridge::ActivityFrame);
-        let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 5);
-        let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 2);
-        let frame9 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 9);
+        let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 5);
+        let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 2);
+        let frame9 = c_bridge::SetAbsFrameIndex(std::ptr::read((af).cast()), 9);
         c_bridge::InitOscilloscope(frame9);
         c_bridge::InitSlider(0, slider_y, sis_w, frame5, frame2);
     }
@@ -1412,7 +1419,7 @@ fn init_speech_graphics(state: &mut CommState) {
 
 #[cfg(not(test))]
 unsafe fn set_slider_image_frame(index: u16) {
-    let frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, index);
+    let frame = c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), index);
     c_bridge::SetSliderImage(frame);
 }
 
@@ -1448,7 +1455,7 @@ fn update_animations(state: &mut CommState, seeking: bool) {
 #[cfg(not(test))]
 unsafe fn do_update_animations(seeking: bool) {
     let do_clear = c_bridge::c_GetClearSubtitles();
-    let old_ctx = c_bridge::SetContext(c_bridge::c_GetAnimContext());
+    let old_ctx = c_bridge::SetContext((c_bridge::c_GetAnimContext()).cast());
     c_bridge::BatchGraphics();
     let change = c_bridge::ProcessCommAnimations(do_clear, if seeking { 1 } else { 0 });
     if change != 0 || do_clear != 0 {
@@ -1717,7 +1724,7 @@ fn draw_alien_frame(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
+        c_bridge::DrawAlienFrame(std::ptr::null_mut(), 0, 1);
     }
     #[cfg(test)]
     {
@@ -1785,13 +1792,13 @@ fn comm_intro_transition() {
                     width: sis_screen_width as i16,
                     height: sis_screen_height as i16,
                 };
-                c_bridge::ScreenTransition(3, &mut rect as *mut _ as *const c_void);
+                c_bridge::ScreenTransition(3, (&mut rect as *mut _ as *const c_void).cast());
                 c_bridge::UnbatchGraphics();
             }
             IntroTransition::CrossfadeWindow => {
                 let rect_ptr = std::ptr::addr_of_mut!(crate::comm::hail::c_bridge::CommWndRect)
                     as *const c_void;
-                c_bridge::ScreenTransition(3, rect_ptr);
+                c_bridge::ScreenTransition(3, (rect_ptr).cast());
                 c_bridge::UnbatchGraphics();
             }
             IntroTransition::FadeInScreen { fade_time } => {

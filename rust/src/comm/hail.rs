@@ -14,7 +14,7 @@
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use super::super::locdata::{CGlobData, CRect};
-    use std::ffi::{c_char, c_int};
+    use std::ffi::c_int;
 
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
@@ -37,61 +37,44 @@ pub(super) mod c_bridge {
     pub use crate::ui::border::DrawSISFrame;
     pub use crate::ui::settings::StopMusic;
     pub use crate::ui::sis::DrawSISTitle;
+
+    pub use crate::graphics::resgfx::LoadGraphicInstance;
+
+    pub use crate::sound::resource_types::LoadMusicInstance;
+
+    pub use crate::comm::comm_abi::c_SetAnimContext;
+
+    pub use crate::comm::comm_abi::c_SetTextCacheContext;
+
+    pub use crate::comm::comm_abi::c_SetTextCacheFrame;
+
+    pub use crate::graphics::frame_abi::ClearDrawable;
+
+    pub use crate::ui::sis::DrawSISMessage;
+
+    pub use crate::mainloop::input_abi::live::SetMenuSounds;
+
+    pub use crate::comm::comm_abi::c_SetCurInputState;
+
+    pub use crate::graphics::cmap_abi::FlushColorXForms;
+
+    pub use crate::comm::comm_abi::c_SetTalkingFinished;
+
+    pub use crate::comm::comm_abi::c_SetupSubtitleTextFromCommData;
+
+    pub use crate::comm::comm_abi::c_ClearPhraseBuf;
+
     extern "C" {
-        // Resource loading — accepts RESOURCE (const char *) as *const c_char
-        pub fn LoadGraphicInstance(res: *const c_char) -> *mut std::ffi::c_void;
-        pub fn LoadMusicInstance(res: *const c_char) -> *mut std::ffi::c_void;
-
-        // comm.c static variable setters
-        pub fn c_SetAnimContext(ctx: *mut std::ffi::c_void);
-        pub fn c_SetTextCacheContext(ctx: *mut std::ffi::c_void);
-        pub fn c_SetTextCacheFrame(frame: *mut std::ffi::c_void);
-
-        // Drawable management
-        pub fn ClearDrawable();
-
-        // Graphics batching
-
-        // SIS drawing
-
-        pub fn DrawSISMessage(msg: *const c_char);
-        // Encounter loop — related externs (DoInput imported from c_extern)
-        pub fn SetMenuSounds(sound_0: u16, sound_1: u16);
-        pub fn c_SetCurInputState(state: *mut std::ffi::c_void);
-
-        // Audio teardown
-
-        pub fn FlushColorXForms();
-
-        // Activity flags — read C-side CurrentActivity via existing bridge
-        // LastActivity is a C DWORD (u32) — direct access replaces c_SetLastActivityCheckLoad
         pub static mut LastActivity: u32;
-
-        // Screen / context globals
         pub static mut Screen: *mut std::ffi::c_void;
-        pub static mut SpaceContext: *mut std::ffi::c_void;
-
-        // Comm-internal static variable accessors
-        pub fn c_SetTalkingFinished(finished: c_int);
-        pub fn c_SetupSubtitleTextFromCommData();
-        pub fn c_ClearPhraseBuf();
-
-        // Game-state / layout queries
-        // c_IsStarbaseConversation — PORTED to Rust (direct game_state_keys access)
-
-        // Dimension constants
-
-        // C runtime globals for screen dimensions
+        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
-
-        // C globals for direct access (replacing c_ bridge functions)
         #[allow(dead_code)]
         pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: CRect;
         pub static mut GameStrings: *mut std::ffi::c_void;
         pub static mut GlobData: CGlobData;
-
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
     pub use crate::sound::heart_ffi::DestroyMusic;

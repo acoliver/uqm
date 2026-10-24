@@ -529,7 +529,7 @@ pub unsafe extern "C" fn DoOutfit(menu: *mut MENU_STATE) -> BOOLEAN {
         SetNamingCallback(Some(onNamingDone));
         (*menu).CurFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.modulesmenu".as_ptr()).cast());
-        (*menu).hMusic = LoadMusicInstance(c"music.outfit".as_ptr());
+        (*menu).hMusic = (LoadMusicInstance(c"music.outfit".as_ptr())).cast();
         (*menu).CurState = OUTFIT_FUEL;
         (*menu).ModuleFrame =
             CaptureDrawable(LoadGraphicInstance(c"graphics.outfitmodules".as_ptr()).cast());

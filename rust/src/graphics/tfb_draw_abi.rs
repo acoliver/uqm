@@ -16,26 +16,29 @@ use super::native_canvas::{
     transparency::*, trilinear::*, GSCALE_IDENTITY, TFB_SCALE_BILINEAR, TFB_SCALE_NEAREST,
 };
 use crate::memory::{rust_hfree, rust_hmalloc};
-use std::{
-    ffi::{c_char, c_void},
-    ptr,
-};
+use std::{ffi::c_void, ptr};
 
 type Image = TFB_Image;
 type Canvas = *mut c_void;
+
+use crate::graphics::dcqueue_abi::TFB_EnqueueDrawCommand;
+
+use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
+
+use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
+
+use crate::threading::legacy_abi::CreateMutex_Core;
+
+use crate::threading::legacy_abi::LockMutex;
+
+use crate::threading::legacy_abi::UnlockMutex;
+
+use crate::threading::legacy_abi::DestroyMutex;
 
 extern "C" {
     static mut DrawCommandQueue: TFB_DrawCommandQueue;
     static ScreenWidth: i32;
     static ScreenHeight: i32;
-    fn TFB_EnqueueDrawCommand(command: *mut TFB_DrawCommand);
-    fn TFB_FlushGraphics();
-    fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN);
-    fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> Mutex;
-    fn LockMutex(mutex: Mutex);
-    fn UnlockMutex(mutex: Mutex);
-    fn DestroyMutex(mutex: Mutex);
-
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 

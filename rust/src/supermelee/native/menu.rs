@@ -2,7 +2,7 @@
 mod rules;
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod live {
+pub(crate) mod live {
     use crate::automation::coordinator::rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::comm::hail::game_string;
@@ -27,8 +27,8 @@ mod live {
         mem, ptr,
     };
     mod battle;
-    mod changes;
-    mod drawing;
+    pub(crate) mod changes;
+    pub(crate) mod drawing;
     mod editing;
     use battle::*;
     use changes::{
@@ -75,6 +75,9 @@ mod live {
         }
     }
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread after kernel/resource initialization. Any state
+    /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
         let time = GetTimeCounter();
         GamePaused = 0;
@@ -211,6 +214,9 @@ mod live {
         ok
     }
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread after kernel/resource initialization. Any state
+    /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn Melee() {
         InitGlobData();
         let mut state: MELEE_STATE = mem::zeroed();

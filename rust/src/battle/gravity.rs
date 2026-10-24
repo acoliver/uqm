@@ -6,11 +6,15 @@ use super::battle_types::{cosine, sine};
 use super::element::{Element, ElementFlags, HElement};
 use crate::math::arctan;
 
-use std::os::raw::{c_int, c_void};
+use std::os::raw::c_int;
 
 // ---------------------------------------------------------------------------
 // C bridge externs
 // ---------------------------------------------------------------------------
+
+use crate::graphics::geometry_ffi::DrawablesIntersect;
+
+use crate::graphics::pixmap_abi::SetEquFrameIndex;
 
 extern "C" {
     #[cfg(test)]
@@ -19,18 +23,6 @@ extern "C" {
     fn uqm_wrap_delta_x(dx: i16) -> i16;
     #[cfg(test)]
     fn uqm_wrap_delta_y(dy: i16) -> i16;
-
-    // Graphics intersection — real C functions
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn DrawablesIntersect(control0: *mut c_void, control1: *mut c_void, max_time: u16) -> u16;
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn SetEquFrameIndex(dst_frame: *const c_void, src_frame: *const c_void) -> *const c_void;
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
@@ -255,42 +247,22 @@ pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
 
     let elem = unsafe { &*element };
 
-    // C INTERSECT_CONTROL layout (from gfxlib.h):
-    //   TIME_VALUE last_time_val;   // u16 (2 bytes)
-    //   POINT EndPoint;             // COORD x, y = i16, i16 (4 bytes)
-    //   STAMP IntersectStamp;       // POINT origin (4 bytes) + FRAME frame (8 bytes)
-    // Total: 2 + 4 + 4 + 8 = 18 bytes, padded to 24 (FRAME is 8-byte aligned)
-    #[repr(C)]
-    struct IntersectControl {
-        last_time_val: u16,
-        end_point: Point,
-        intersect_stamp: Stamp,
-    }
+    use crate::graphics::geometry_ffi::{IntersectControl, Point, Stamp};
 
-    #[repr(C)]
-    struct Point {
-        x: i16,
-        y: i16,
-    }
-
-    #[repr(C)]
-    struct Stamp {
-        origin: Point,
-        frame: *const c_void,
-    }
-
-    let elem_control = IntersectControl {
+    let mut elem_control = IntersectControl {
         last_time_val: 0,
-        end_point: Point {
+        EndPoint: Point {
             x: (elem.current.location.x >> ONE_SHIFT),
             y: (elem.current.location.y >> ONE_SHIFT),
         },
-        intersect_stamp: Stamp {
+        IntersectStamp: Stamp {
             origin: Point {
                 x: (elem.current.location.x >> ONE_SHIFT),
                 y: (elem.current.location.y >> ONE_SHIFT),
             },
-            frame: unsafe { SetEquFrameIndex(*elem.current.farray, elem.current.frame) },
+            frame: unsafe {
+                (SetEquFrameIndex((*elem.current.farray).cast(), elem.current.frame.cast())).cast()
+            },
         },
     };
 
@@ -305,30 +277,29 @@ pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
             continue;
         }
 
-        let test_control = IntersectControl {
+        let mut test_control = IntersectControl {
             last_time_val: 0,
-            end_point: Point {
+            EndPoint: Point {
                 x: (test_elem.current.location.x >> ONE_SHIFT),
                 y: (test_elem.current.location.y >> ONE_SHIFT),
             },
-            intersect_stamp: Stamp {
+            IntersectStamp: Stamp {
                 origin: Point {
                     x: (test_elem.current.location.x >> ONE_SHIFT),
                     y: (test_elem.current.location.y >> ONE_SHIFT),
                 },
                 frame: unsafe {
-                    SetEquFrameIndex(*test_elem.current.farray, test_elem.current.frame)
+                    (SetEquFrameIndex(
+                        (*test_elem.current.farray).cast(),
+                        test_elem.current.frame.cast(),
+                    ))
+                    .cast()
                 },
             },
         };
 
-        let hit = unsafe {
-            DrawablesIntersect(
-                &elem_control as *const _ as *mut c_void,
-                &test_control as *const _ as *mut c_void,
-                MAX_TIME_VALUE,
-            )
-        };
+        let hit =
+            unsafe { DrawablesIntersect(&mut elem_control, &mut test_control, MAX_TIME_VALUE) };
 
         if hit != 0 {
             return 1;

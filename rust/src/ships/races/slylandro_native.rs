@@ -1,6 +1,6 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,
         sine, starship,
@@ -133,7 +133,7 @@ mod engine {
             let mut angle: COUNT;
             let delta: SIZE;
             if (*e).state_flags & PLAYER_SHIP as u16 == 0 {
-                angle = (*e).velocity.TravelAngle;
+                angle = (*e).velocity.travel_angle;
                 let mut facing = normalize_facing(angle_to_facing(i32::from(angle)));
                 delta = TrackShip(e, &mut facing);
                 (*laser).__bindgen_anon_4.turn_wait =

@@ -1,24 +1,17 @@
 //! Save failure popup, preserving save.c's measurement and screen restoration.
-use crate::comm::locdata::{CColor, CRect, CStamp};
+use crate::comm::locdata::{CColor, CRect};
 use crate::comm::sis_graphics::CText;
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rgba, Stamp, TextDraw};
-use std::ffi::c_void;
 
-extern "C" {
-    fn TextRect(text: *mut CText, rect: *mut CRect, deltas: *mut u8) -> i32;
-    fn SaveContextFrame(rect: *mut c_void) -> CStamp;
-    fn DrawStarConBox(
-        rect: *mut CRect,
-        border: i16,
-        medium: CColor,
-        dark: CColor,
-        fill: i32,
-        background: CColor,
-    );
-    fn WaitForAnyButton(new_button: u32, duration: u32, reset: u32) -> u32;
-}
+use crate::graphics::font_abi::TextRect;
+
+use crate::ui::util::live::SaveContextFrame;
+
+use crate::ui::util::live::DrawStarConBox;
+
 use crate::graphics::gfx_common_abi::FlushGraphics;
+use crate::ui::util::live::WaitForAnyButton;
 
 fn color(v: u8) -> CColor {
     let c = Rgba::rgb15(v, v, v);
@@ -45,7 +38,11 @@ pub unsafe extern "C" fn SaveProblem() {
     t.char_count = u16::MAX;
     let mut rect = CRect::default();
     if !text.is_empty() {
-        TextRect(&mut t, &mut rect, std::ptr::null_mut());
+        TextRect(
+            std::ptr::from_mut(&mut t).cast(),
+            std::ptr::from_mut(&mut rect).cast(),
+            std::ptr::null_mut(),
+        );
     }
     let (width, height) = g.screen_size();
     let x = (((width - 78) >> 1) as i16 - (rect.width >> 1)) - rect.corner.x;
@@ -56,7 +53,14 @@ pub unsafe extern "C" fn SaveProblem() {
     rect.height += 8;
     let saved = SaveContextFrame((&mut rect as *mut CRect).cast());
     g.batch();
-    DrawStarConBox(&mut rect, 2, color(16), color(8), 1, color(10));
+    DrawStarConBox(
+        std::ptr::from_mut(&mut rect).cast(),
+        2,
+        color(16),
+        color(8),
+        1,
+        color(10),
+    );
     g.set_fg_color(Rgba::rgb15(20, 20, 20));
     if !text.is_empty() {
         g.draw_text(&TextDraw {

@@ -161,62 +161,43 @@ mod c_bridge {
     use super::*;
     pub use crate::comm::ffi::rust_get_response_text;
 
+    pub use crate::comm::comm_abi::comm_ClearSubtitles;
+
+    pub use crate::comm::comm_abi::getLineWithinWidth;
+
+    pub use crate::graphics::context_abi::SetContext;
+
+    pub use crate::graphics::context_abi::SetContextForeGroundColor;
+
+    pub use crate::graphics::font_abi::font_DrawText;
+
+    pub use crate::graphics::font_abi::GetContextFontLeading;
+
+    pub use crate::graphics::font_abi::SetContextFont;
+
+    pub use crate::graphics::frame_abi::DrawFilledRectangle;
+
+    pub use crate::graphics::frame_abi::DrawStamp;
+
+    pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+
+    pub use crate::mainloop::input_abi::live::DoInput;
     pub use crate::sound::heart_ffi::get_first_track_subtitle as GetFirstTrackSubtitle;
     pub use crate::sound::heart_ffi::get_next_track_subtitle as GetNextTrackSubtitle;
     pub use crate::sound::heart_ffi::get_track_subtitle_text as GetTrackSubtitleText;
+
+    pub use crate::strings::string_table::GetStringAddress;
+
+    pub use crate::strings::string_table::SetAbsStringTableIndex;
     #[allow(clashing_extern_declarations)]
     extern "C" {
-        // C globals
         #[allow(dead_code)]
         pub static mut GlobData: crate::comm::locdata::CGlobData;
-        pub static mut SpaceContext: *mut std::ffi::c_void;
+        pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut ActivityFrame: *mut std::ffi::c_void;
         pub static mut TinyFont: *mut std::ffi::c_void;
-
-        // Activity accessor (replaces GlobData.Game_state.CurrentActivity)
-
-        // Input state (controls.h)
         pub static mut PulsedInputState: CInputState;
-
-        // Graphics context
-        pub fn SetContext(ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-        pub fn SetContextForeGroundColor(color: CColor) -> CColor;
-        pub fn SetContextFont(font: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-        pub fn GetContextFontLeading(leading: *mut i16);
-
-        // Graphics primitives
-        pub fn font_DrawText(text: *mut CText);
-        pub fn getLineWithinWidth(
-            text: *mut CText,
-            next: *mut *const std::ffi::c_char,
-            width: i16,
-            maxchars: u16,
-        ) -> std::ffi::c_int;
-        pub fn DrawFilledRectangle(rect: *mut CRect);
-        pub fn DrawStamp(stamp: *mut CStamp);
-
-        // Batching
-
-        // Frame management
-        pub fn SetAbsFrameIndex(frame: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
-
-        // Input
-        pub fn DoInput(state: *mut std::ffi::c_void, reset: std::ffi::c_int);
-
-        // Game strings — GAME_STRING(i) macro = GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
         pub static mut GameStrings: *mut std::ffi::c_void;
-        pub fn SetAbsStringTableIndex(
-            table: *mut std::ffi::c_void,
-            index: u16,
-        ) -> *mut std::ffi::c_void;
-        pub fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
-
-        // Colors — computed from #define macros in colors.h/gfxlib.h
-        // MAKE_RGB15(r,g,b) = { CC5TO8(r), CC5TO8(g), CC5TO8(b), 0xFF }
-        // BUILD_COLOR(col, idx) = col (palette index ignored)
-
-        // Trackplayer subtitle functions (trackplayer.c)
-        pub fn comm_ClearSubtitles();
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
@@ -294,10 +275,10 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
         height: SIS_SCREEN_HEIGHT - (SLIDER_Y + SLIDER_HEIGHT),
     };
     c_bridge::SetContextForeGroundColor(COMM_HISTORY_BACKGROUND_COLOR);
-    c_bridge::DrawFilledRectangle(&mut rect);
+    c_bridge::DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast());
 
     c_bridge::SetContextForeGroundColor(COMM_HISTORY_TEXT_COLOR);
-    c_bridge::SetContextFont(c_bridge::TinyFont);
+    c_bridge::SetContextFont((c_bridge::TinyFont).cast());
 
     let tw = rect.width - 2 - 2;
     let mut t = CText::default();
@@ -324,7 +305,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
         while row < MAX_SUMM_ROWS
             && c_bridge::getLineWithinWidth(&mut t, &mut next, tw, u16::MAX) == 0
         {
-            c_bridge::font_DrawText(&mut t);
+            c_bridge::font_DrawText(std::ptr::from_mut(&mut t).cast());
             t.baseline.y += DELTA_Y_SUMMARY;
             row += 1;
             t.p_str = next;
@@ -336,7 +317,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
             break;
         }
 
-        c_bridge::font_DrawText(&mut t);
+        c_bridge::font_DrawText(std::ptr::from_mut(&mut t).cast());
         t.baseline.y += DELTA_Y_SUMMARY;
         row += 1;
         pss.next_sub = c_bridge::GetNextTrackSubtitle(pss.next_sub);
@@ -359,7 +340,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
         mt.align = ALIGN_CENTER;
         mt.p_str = buffer.as_ptr() as *const std::ffi::c_char;
         c_bridge::SetContextForeGroundColor(COMM_MORE_TEXT_COLOR);
-        c_bridge::font_DrawText(&mut mt);
+        c_bridge::font_DrawText(std::ptr::from_mut(&mut mt).cast());
     }
 
     c_bridge::SetContext(old_ctx);
@@ -425,7 +406,7 @@ const FEEDBACK_STRING_BASE: i32 = 0x0100;
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
 #[cfg(not(test))]
 unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
-    let table = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, id as u16);
+    let table = c_bridge::SetAbsStringTableIndex((c_bridge::GameStrings).cast(), id as u16);
     c_bridge::GetStringAddress(table)
 }
 
@@ -655,17 +636,17 @@ impl CommWindowGfx for CommWindow {
 
     fn space_context(&self) -> *mut std::ffi::c_void {
         // SAFETY: set once at startup, read on the game thread.
-        unsafe { c_bridge::SpaceContext }
+        unsafe { (c_bridge::SpaceContext).cast() }
     }
 
     fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
         // SAFETY: `ctx` is a live context handle owned by the game.
-        unsafe { c_bridge::SetContext(ctx) }
+        unsafe { (c_bridge::SetContext((ctx).cast())).cast() }
     }
 
     fn set_context_font(&mut self, font: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
         // SAFETY: `font` is a live font handle or the previous context font.
-        unsafe { c_bridge::SetContextFont(font) }
+        unsafe { (c_bridge::SetContextFont((font).cast())).cast() }
     }
 
     fn set_foreground_color(&mut self, color: CColor) {
@@ -692,12 +673,12 @@ impl CommWindowGfx for CommWindow {
 
     fn fill_rect(&mut self, rect: &mut CRect) {
         // SAFETY: `rect` is valid for the call.
-        unsafe { c_bridge::DrawFilledRectangle(rect) };
+        unsafe { c_bridge::DrawFilledRectangle(std::ptr::from_mut(rect).cast()) };
     }
 
     fn draw_text(&mut self, text: &mut CText) {
         // SAFETY: `text` and its string are valid for the call.
-        unsafe { c_bridge::font_DrawText(text) };
+        unsafe { c_bridge::font_DrawText(std::ptr::from_mut(text).cast()) };
     }
 
     fn line_within_width(
@@ -732,9 +713,9 @@ impl CommWindowGfx for CommWindow {
     fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16) {
         // SAFETY: `ActivityFrame` is loaded before any communication starts.
         unsafe {
-            let frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, frame_index);
+            let frame = c_bridge::SetAbsFrameIndex((c_bridge::ActivityFrame).cast(), frame_index);
             if let Some(mut stamp) = scroll_indicator_stamp(frame.cast(), origin_y) {
-                c_bridge::DrawStamp(&mut stamp);
+                c_bridge::DrawStamp(std::ptr::from_mut(&mut stamp).cast());
             }
         }
     }

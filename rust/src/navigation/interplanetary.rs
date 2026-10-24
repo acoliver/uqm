@@ -17,7 +17,7 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod live {
+pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
     use crate::navigation::globals::GlobData;
@@ -254,7 +254,7 @@ mod live {
             let wait = (*element).__bindgen_anon_5.thrust_wait;
             if wait != 0 && wait != u8::MAX {
                 (*element).__bindgen_anon_5.thrust_wait -= 1;
-            } else if (vx == 0 && vy == 0) || angle != (*element).velocity.TravelAngle {
+            } else if (vx == 0 && vy == 0) || angle != (*element).velocity.travel_angle {
                 let speed = if wait != 0 && (*group).dest_loc != 0 {
                     if task == ON_STATION as u8 {
                         30

@@ -5,36 +5,42 @@ fn button_y(y: i32, button_height: i16, slider_height: i16) -> i16 {
 }
 
 #[cfg(not(test))]
-mod runtime {
+pub(crate) mod runtime {
     use super::button_y;
     use crate::comm::locdata::{CColor, CPoint, CStamp};
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::native_abi::frame_desc;
-    use std::ffi::c_void;
+
     use std::ptr::null_mut;
 
-    #[repr(C)]
-    struct Line {
-        first: CPoint,
-        second: CPoint,
-    }
+    use crate::graphics::native_abi::line as Line;
 
     // Opaque handles and local repr(C) graphics records share the engine ABI.
+
+    use crate::graphics::context_abi::SetContext;
+
+    use crate::graphics::context_abi::SetContextForeGroundColor;
+
+    use crate::graphics::drawable_abi::CreateDrawable;
+
+    use crate::graphics::drawable_abi::DestroyDrawable;
+
+    use crate::graphics::drawable_abi::GetFramePixel;
+
+    use crate::graphics::frame_abi::DrawLine;
+
+    use crate::graphics::frame_abi::DrawStamp;
+
+    use crate::graphics::pixmap_abi::CaptureDrawable;
+
+    use crate::graphics::pixmap_abi::ReleaseDrawable;
     use crate::sound::heart_ffi::get_track_position as GetTrackPosition;
+
+    use crate::sound::heart_ffi::GraphForegroundStream;
     #[allow(clashing_extern_declarations)]
     extern "C" {
-        fn GetFramePixel(frame: *mut frame_desc, point: CPoint) -> CColor;
-        fn CreateDrawable(flags: u8, width: i16, height: i16, count: u16) -> *mut c_void;
-        fn CaptureDrawable(drawable: *mut c_void) -> *mut frame_desc;
-        fn ReleaseDrawable(frame: *mut frame_desc) -> *mut c_void;
-        fn DestroyDrawable(drawable: *mut c_void) -> i32;
-        fn SetContext(context: *mut c_void) -> *mut c_void;
-        fn SetContextForeGroundColor(color: CColor) -> CColor;
-        fn DrawStamp(stamp: *mut CStamp);
-        fn DrawLine(line: *const Line);
-        fn GraphForegroundStream(data: *mut u8, width: i32, height: i32, speech: i32) -> i32;
-        static OffScreenContext: *mut c_void;
+        static OffScreenContext: *mut crate::graphics::native_abi::context_desc;
         static usingSpeech: i32;
     }
     use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
@@ -117,10 +123,10 @@ mod runtime {
             SetContextFGFrame(SCOPE_WORK);
             SetContextClipRect(std::ptr::null_mut());
             stamp.frame = SCOPE_FRAME.cast();
-            DrawStamp(&raw mut stamp);
+            DrawStamp((&raw mut stamp).cast());
             SetContextForeGroundColor(SCOPE_COLOR);
             for i in 0..i32::from(SCOPE_WIDTH) - 1 {
-                DrawLine(&Line {
+                DrawLine(&mut Line {
                     first: CPoint {
                         x: (i + 1) as i16,
                         y: i16::from(data[i as usize]) + 1,
@@ -136,7 +142,7 @@ mod runtime {
         } else {
             stamp.frame = SCOPE_FRAME.cast();
         }
-        DrawStamp(&raw mut stamp);
+        DrawStamp((&raw mut stamp).cast());
     }
 
     /// # Safety
@@ -189,8 +195,8 @@ mod runtime {
             LAST_OFFSET = offset;
             BUTTON.origin.x = (i32::from(SLIDER.origin.x) + offset) as i16;
             BatchGraphics();
-            DrawStamp(&raw mut SLIDER);
-            DrawStamp(&raw mut BUTTON);
+            DrawStamp((&raw mut SLIDER).cast());
+            DrawStamp((&raw mut BUTTON).cast());
             UnbatchGraphics();
         }
     }

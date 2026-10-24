@@ -140,7 +140,7 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
     use crate::navigation::get;

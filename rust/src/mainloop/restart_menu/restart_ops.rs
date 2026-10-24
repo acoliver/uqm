@@ -400,17 +400,17 @@ impl RestartMenuOps for CffiOps {
     }
     fn capture_drawable(&self, load_result: usize) -> usize {
         // SAFETY: load_result was obtained from LoadGraphicInstance.
-        unsafe { c_extern::CaptureDrawable(load_result as *mut c_void) as usize }
+        unsafe { c_extern::CaptureDrawable((load_result as *mut c_void).cast()) as usize }
     }
     fn destroy_drawable(&self, handle: usize) {
         // SAFETY: handle was obtained from CaptureDrawable and is valid.
         unsafe {
-            c_extern::DestroyDrawable(handle as *mut c_void);
+            c_extern::DestroyDrawable((handle as *mut c_void).cast());
         }
     }
     fn release_drawable(&self, handle: usize) -> usize {
         // SAFETY: handle was obtained from CaptureDrawable.
-        unsafe { c_extern::ReleaseDrawable(handle as *mut c_void) as usize }
+        unsafe { c_extern::ReleaseDrawable((handle as *mut c_void).cast()) as usize }
     }
 
     fn draw_restart_menu_graphic(&self) {
@@ -451,7 +451,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn play_music(&self, handle: usize) {
         // SAFETY: handle was obtained from LoadMusicInstance and is valid.
-        unsafe { c_extern::PlayMusic(handle as *mut c_void, 1, 1) }
+        unsafe { c_extern::PlayMusic((handle as *mut c_void).cast(), 1, 1) }
     }
     fn stop_music(&self) {
         // SAFETY: StopMusic is safe to call any time.
@@ -472,7 +472,7 @@ impl RestartMenuOps for CffiOps {
 
     fn create_flash_overlay(&self) -> usize {
         extern "C" {
-            static ScreenContext: *mut c_void;
+            static ScreenContext: *mut crate::graphics::native_abi::context_desc;
         }
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {
@@ -482,40 +482,44 @@ impl RestartMenuOps for CffiOps {
     }
     fn flash_process(&self, ctx: usize) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_process(ctx as *mut c_void) }
+        unsafe { c_extern::Flash_process((ctx as *mut c_void).cast()) }
     }
     fn flash_pause(&self, ctx: usize) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_pause(ctx as *mut c_void) }
+        unsafe { c_extern::Flash_pause((ctx as *mut c_void).cast()) }
     }
     fn flash_continue(&self, ctx: usize) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_continue(ctx as *mut c_void) }
+        unsafe { c_extern::Flash_continue((ctx as *mut c_void).cast()) }
     }
     fn flash_start(&self, ctx: usize) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_start(ctx as *mut c_void) }
+        unsafe { c_extern::Flash_start((ctx as *mut c_void).cast()) }
     }
     fn flash_terminate(&self, ctx: usize) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_terminate(ctx as *mut c_void) }
+        unsafe { c_extern::Flash_terminate((ctx as *mut c_void).cast()) }
     }
     fn flash_set_merge_factors(&self, ctx: usize, a: c_int, b: c_int, c: c_int) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_setMergeFactors(ctx as *mut c_void, a, b, c) }
+        unsafe { c_extern::Flash_setMergeFactors((ctx as *mut c_void).cast(), a, b, c) }
     }
     fn flash_set_speed(&self, ctx: usize, a: u32, b: u32, c: u32, d: u32) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_setSpeed(ctx as *mut c_void, a, b, c, d) }
+        unsafe { c_extern::Flash_setSpeed((ctx as *mut c_void).cast(), a, b, c, d) }
     }
     fn flash_set_frame_time(&self, ctx: usize, t: u32) {
         // SAFETY: ctx was obtained from create_flash_overlay.
-        unsafe { c_extern::Flash_setFrameTime(ctx as *mut c_void, t) }
+        unsafe { c_extern::Flash_setFrameTime((ctx as *mut c_void).cast(), t) }
     }
     fn flash_set_state_fade_in(&self, ctx: usize, duration: u32) {
         // SAFETY: ctx was obtained from create_flash_overlay.
         unsafe {
-            c_extern::Flash_setState(ctx as *mut c_void, c_extern::FLASH_STATE_FADE_IN, duration)
+            c_extern::Flash_setState(
+                (ctx as *mut c_void).cast(),
+                c_extern::FLASH_STATE_FADE_IN,
+                duration,
+            )
         }
     }
     fn flash_set_overlay(&self, ctx: usize, frame_idx: u32) {
@@ -533,8 +537,8 @@ impl RestartMenuOps for CffiOps {
         // frame index for the flash overlay.
         unsafe {
             let cur_frame = self.get_menu_frame();
-            let new_frame = c_extern::SetAbsFrameIndex(cur_frame as *mut c_void, idx);
-            c_extern::Flash_setOverlay(ctx as *mut c_void, &origin, new_frame)
+            let new_frame = c_extern::SetAbsFrameIndex((cur_frame as *mut c_void).cast(), idx);
+            c_extern::Flash_setOverlay((ctx as *mut c_void).cast(), &origin, new_frame)
         }
     }
 

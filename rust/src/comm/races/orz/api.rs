@@ -9,19 +9,15 @@ pub(super) trait OrzApi: AllianceApi<Handler> {
 #[cfg(not(test))]
 impl OrzApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn remove_escorts(&mut self, race: u16) {
-        extern "C" {
-            fn RemoveEscortShips(race: u16);
-        }
+        use crate::battle::build_native::engine::RemoveEscortShips;
         unsafe {
             RemoveEscortShips(race);
         }
     }
     fn talking(&mut self, enabled: bool) {
-        extern "C" {
-            fn EnableTalkingAnim(enabled: u8);
-        }
+        use crate::comm::comm_abi::EnableTalkingAnim;
         unsafe {
-            EnableTalkingAnim(u8::from(enabled));
+            EnableTalkingAnim((u8::from(enabled)) as i32);
         }
     }
 }

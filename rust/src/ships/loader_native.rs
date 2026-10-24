@@ -1,39 +1,40 @@
 //! Live descriptor/resource lifecycle translated from uqm/loadship.c.
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::abi::{RACE_DESC, SPECIES_ID_NUM_SPECIES_ID};
-    use std::{
-        ffi::{c_char, c_int, c_void},
-        ptr,
-    };
+    use std::ptr;
 
-    extern "C" {
-        fn LoadCodeResInstance(res: *const c_char) -> *mut c_void;
-        fn CaptureCodeRes(
-            code: *mut c_void,
-            globals: *mut c_void,
-            out: *mut *mut c_void,
-        ) -> *mut c_void;
-        fn ReleaseCodeRes(code: *mut c_void) -> *mut c_void;
-        fn DestroyCodeRes(code: *mut c_void) -> u32;
-        fn LoadGraphicInstance(res: *const c_char) -> *mut c_void;
-        fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-        fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-        fn DestroyDrawable(drawable: *mut c_void) -> u32;
-        fn LoadStringTableInstance(res: *const c_char) -> *mut c_void;
-        fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
-        fn ReleaseStringTable(string: *mut c_void) -> *mut c_void;
-        fn DestroyStringTable(table: *mut c_void) -> c_int;
-        fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
-        fn LoadSoundInstance(res: *const c_char) -> *mut c_void;
-        fn load_animation(
-            frames: *mut c_void,
-            big: *const c_char,
-            medium: *const c_char,
-            small: *const c_char,
-        ) -> u32;
-        fn free_image(frames: *mut c_void) -> u32;
-    }
+    use crate::ships::code_resources::engine::LoadCodeResInstance;
+
+    use crate::ships::code_resources::engine::CaptureCodeRes;
+
+    use crate::ships::code_resources::engine::ReleaseCodeRes;
+
+    use crate::ships::code_resources::engine::DestroyCodeRes;
+
+    use crate::graphics::resgfx::LoadGraphicInstance;
+
+    use crate::graphics::pixmap_abi::CaptureDrawable;
+
+    use crate::graphics::pixmap_abi::ReleaseDrawable;
+
+    use crate::graphics::drawable_abi::DestroyDrawable;
+
+    use crate::strings::sresins::LoadStringTableInstance;
+
+    use crate::strings::string_table::CaptureStringTable;
+
+    use crate::strings::string_table::ReleaseStringTable;
+
+    use crate::strings::string_table::DestroyStringTable;
+
+    use crate::sound::resource_types::LoadMusicInstance;
+
+    use crate::sound::resource_types::LoadSoundInstance;
+
+    use crate::game_init::space_resources::live::load_animation;
+
+    use crate::game_init::space_resources::live::free_image;
     use crate::sound::heart_ffi::DestroyMusic;
     use crate::sound::heart_ffi::DestroySound;
 
@@ -70,6 +71,9 @@ mod engine {
     ];
 
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread with the ship catalog and resource system initialized.
+    /// Species must identify a catalog entry; the returned descriptor must be freed once.
     pub unsafe extern "C" fn c_load_ship(species: u32, battle: u32) -> *mut RACE_DESC {
         let Some(key) = CODE_RESOURCES.get(species as usize) else {
             return ptr::null_mut();
@@ -87,10 +91,11 @@ mod engine {
         (*d).CodeRef = code;
         let info = &mut (*d).ship_info;
         if !info.icons_rsc.is_null() {
-            info.icons = CaptureDrawable(LoadGraphicInstance(info.icons_rsc)).cast();
+            info.icons = CaptureDrawable((LoadGraphicInstance(info.icons_rsc)).cast()).cast();
         }
         if !info.melee_icon_rsc.is_null() {
-            info.melee_icon = CaptureDrawable(LoadGraphicInstance(info.melee_icon_rsc)).cast();
+            info.melee_icon =
+                CaptureDrawable((LoadGraphicInstance(info.melee_icon_rsc)).cast()).cast();
         }
         if !info.race_strings_rsc.is_null() {
             info.race_strings =
@@ -137,7 +142,8 @@ mod engine {
         }
         if !data.captain_control.captain_rsc.is_null() {
             data.captain_control.background =
-                CaptureDrawable(LoadGraphicInstance(data.captain_control.captain_rsc)).cast();
+                CaptureDrawable((LoadGraphicInstance(data.captain_control.captain_rsc)).cast())
+                    .cast();
             if data.captain_control.background.is_null() {
                 return false;
             }
@@ -149,7 +155,8 @@ mod engine {
             }
         }
         if !data.ship_sounds_rsc.is_null() {
-            data.ship_sounds = CaptureStringTable(LoadSoundInstance(data.ship_sounds_rsc)).cast();
+            data.ship_sounds =
+                CaptureStringTable((LoadSoundInstance(data.ship_sounds_rsc)).cast()).cast();
             if data.ship_sounds.is_null() {
                 return false;
             }
@@ -158,6 +165,9 @@ mod engine {
     }
 
     #[no_mangle]
+    /// # Safety
+    /// Descriptor must be live and owned by the caller, with no outstanding borrows.
+    /// Resource flags must match the parts loaded into this descriptor.
     pub unsafe extern "C" fn c_free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
         if let Some(uninit) = (*d).uninit_func {
             uninit(d);
@@ -169,7 +179,7 @@ mod engine {
             free_image((&raw mut data.ship).cast());
             DestroyDrawable(ReleaseDrawable(data.captain_control.background.cast()));
             DestroyMusic(data.victory_ditty.cast());
-            DestroySound(ReleaseStringTable(data.ship_sounds.cast()));
+            DestroySound((ReleaseStringTable(data.ship_sounds.cast())).cast());
         }
         if icons != 0 {
             let info = &mut (*d).ship_info;
@@ -181,10 +191,16 @@ mod engine {
     }
 
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread with the ship catalog and resource system initialized.
+    /// Species must identify a catalog entry; the returned descriptor must be freed once.
     pub unsafe extern "C" fn load_ship(species: u32, battle: u32) -> *mut RACE_DESC {
         c_load_ship(species, battle)
     }
     #[no_mangle]
+    /// # Safety
+    /// Descriptor must be live and owned by the caller, with no outstanding borrows.
+    /// Resource flags must match the parts loaded into this descriptor.
     pub unsafe extern "C" fn free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
         c_free_ship(d, icons, battle);
     }

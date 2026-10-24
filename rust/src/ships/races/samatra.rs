@@ -1,5 +1,5 @@
 #[path = "samatra_native.rs"]
-mod native;
+pub(crate) mod native;
 #[path = "samatra_state.rs"]
 pub mod observation;
 

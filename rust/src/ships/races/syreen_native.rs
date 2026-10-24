@@ -4,7 +4,7 @@
 //! including C integer promotion and truncation, so battles replay identically.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{abi::*, element, put_element, starship};
     use std::{mem, ptr};
 

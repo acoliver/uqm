@@ -11,11 +11,7 @@ static mut ACTIVE: bool = false;
 static mut LAST_BUF: [u8; 256] = [0; 256];
 
 /// Standard `DoInput` header of `MENU_STATE`; no private fields are accessed.
-#[repr(C)]
-pub struct MenuHeader {
-    input_func: Option<unsafe extern "C" fn(*mut MenuHeader) -> i32>,
-    initialized: i16,
-}
+pub use crate::ships::native::abi::MENU_STATE as MenuHeader;
 
 #[cfg(not(test))]
 use crate::planets::pstarmap::UpdateFuelRequirement;
@@ -29,22 +25,28 @@ use crate::planets::pstarmap::ZoomStarMap;
 extern "C" {
     fn ZoomStarMap(direction: i16);
 }
+
+use crate::battle::sounds::engine::PlayMenuSound;
+
+use crate::mainloop::input_abi::live::SetMenuRepeatDelay;
+
+use crate::mainloop::input_abi::live::SetMenuSounds;
+
+use crate::planets::pstarmap::flashCurrentLocation;
+
+use crate::planets::pstarmap::search::DoStarSearch;
+
+use crate::planets::pstarmap::DrawStarMap;
+
+use crate::planets::pstarmap::UpdateCursorInfo;
+
+use crate::planets::pstarmap::UpdateCursorLocation;
 #[allow(non_snake_case)]
 extern "C" {
     static ScreenWidth: i32;
     static ScreenHeight: i32;
     static mut GlobData: crate::comm::locdata::CGlobData;
     static CurStarDescPtr: *const crate::savegame::runtime::star::CStarDesc;
-    fn flashCurrentLocation(point: *const CPoint);
-    fn UpdateCursorInfo(previous: *mut u8);
-
-    fn UpdateCursorLocation(x: i32, y: i32, point: *const CPoint);
-    fn DrawStarMap(race: u16, rect: *mut crate::comm::locdata::CRect);
-
-    fn DoStarSearch(menu: *mut MenuHeader) -> i32;
-    fn SetMenuRepeatDelay(min: u32, max: u32, step: u32, gestalt: i32);
-    fn SetMenuSounds(move_sound: u16, select_sound: u16);
-    fn PlayMenuSound(sound: i32);
 }
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
@@ -64,16 +66,16 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
 /// # Safety
 /// `menu` must be the live `MENU_STATE`, called by `DoInput` on the game thread.
 #[no_mangle]
-pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
+pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
     let glob = std::ptr::addr_of_mut!(GlobData);
     let activity = (*glob).game_state.current_activity;
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
-    if (*menu).initialized == 0 {
-        (*menu).initialized = 1;
-        (*menu).input_func = Some(DoMoveCursor);
+    if (*menu).Initialized == 0 {
+        (*menu).Initialized = 1;
+        (*menu).InputFunc = Some(DoMoveCursor);
         ACTIVE = true;
         let universe = if hyper {
             let sis = &(*glob).sis_state;
@@ -88,7 +90,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
         };
         flashCurrentLocation(&universe);
         *last = 0;
-        UpdateCursorInfo(last);
+        UpdateCursorInfo((last).cast());
         UpdateFuelRequirement();
         return 1;
     }
@@ -124,7 +126,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
             }
             let invalid = b"  <random garbage>  \0";
             std::ptr::copy_nonoverlapping(invalid.as_ptr(), last, invalid.len());
-            UpdateCursorInfo(last);
+            UpdateCursorInfo((last).cast());
             UpdateFuelRequirement();
             SetMenuRepeatDelay(14, 105, 7, 1);
             SetMenuSounds(0, 0);
@@ -156,7 +158,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
         };
         if sx != 0 || sy != 0 {
             UpdateCursorLocation(sx, sy, std::ptr::null());
-            UpdateCursorInfo(last);
+            UpdateCursorInfo((last).cast());
             UpdateFuelRequirement();
         }
         SleepThreadUntil(time_in.wrapping_add(14));
@@ -166,5 +168,5 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> i32 {
     if !keep_going {
         ACTIVE = false;
     }
-    i32::from(keep_going)
+    u32::from(keep_going)
 }

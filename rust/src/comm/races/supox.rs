@@ -583,7 +583,7 @@ fn descriptor() -> CLocData {
 }
 
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
 

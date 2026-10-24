@@ -800,7 +800,7 @@ fn descriptor() -> CLocData {
     d
 }
 #[cfg(not(test))]
-mod live {
+pub(crate) mod live {
     use super::*;
     use crate::comm::races::script::live::LiveScript;
     fn run(f: impl FnOnce(&mut Dialogue<'_, LiveScript<Handler>>)) {

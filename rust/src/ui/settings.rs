@@ -14,9 +14,13 @@ pub unsafe fn ToggleMusic() {
     GlobData.Game_state.glob_flags ^= MUSIC_DISABLED as u8;
     if LAST_PRIORITY <= 1 {
         if GlobData.Game_state.glob_flags & (MUSIC_DISABLED as u8) != 0 {
-            PLRStop(LAST_MUSIC_REF);
+            PLRStop((LAST_MUSIC_REF).cast());
         } else if !LAST_MUSIC_REF.is_null() {
-            PLRPlaySong(LAST_MUSIC_REF, LAST_CONTINUOUS, LAST_PRIORITY);
+            PLRPlaySong(
+                LAST_MUSIC_REF.cast(),
+                LAST_CONTINUOUS as i32,
+                LAST_PRIORITY.into(),
+            );
         }
     }
 }
@@ -29,27 +33,27 @@ pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, pr
     LAST_CONTINUOUS = continuous;
     LAST_PRIORITY = priority;
     if GlobData.Game_state.glob_flags & (MUSIC_DISABLED as u8) == 0 {
-        PLRPlaySong(music_ref, continuous, priority);
+        PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
     }
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
 pub unsafe fn StopMusic() {
-    PLRStop(LAST_MUSIC_REF);
+    PLRStop((LAST_MUSIC_REF).cast());
     LAST_MUSIC_REF = std::ptr::null_mut();
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
 pub unsafe fn ResumeMusic() {
-    PLRResume(LAST_MUSIC_REF);
+    PLRResume((LAST_MUSIC_REF).cast());
 }
 
 /// # Safety
 /// The music player must be initialized on the game thread.
 pub unsafe fn PauseMusic() {
-    PLRPause(LAST_MUSIC_REF);
+    PLRPause((LAST_MUSIC_REF).cast());
 }
 
 /// # Safety

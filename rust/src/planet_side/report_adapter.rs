@@ -44,13 +44,18 @@ impl CffiDiscoveryReport {
 }
 
 #[cfg(not(test))]
+use crate::planets::report::live::DoDiscoveryReport;
+#[cfg(not(test))]
+use crate::strings::string_table::DestroyStringTable;
+#[cfg(not(test))]
+use crate::strings::string_table::GetStringTableIndex;
+#[cfg(not(test))]
+use crate::strings::string_table::ReleaseStringTable;
+#[cfg(not(test))]
+use crate::strings::string_table::SetRelStringTableIndex;
+#[cfg(not(test))]
 extern "C" {
     static MenuSounds: *mut c_void;
-    fn DoDiscoveryReport(readout_sounds: *mut c_void);
-    fn SetRelStringTableIndex(string: *mut c_void, offset: i16) -> *mut c_void;
-    fn GetStringTableIndex(string: *mut c_void) -> u16;
-    fn ReleaseStringTable(string: *mut c_void) -> *mut c_void;
-    fn DestroyStringTable(table: *mut c_void) -> i32;
 }
 
 impl DiscoveryReportPort for CffiDiscoveryReport {
@@ -74,10 +79,10 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             match disposition {
                 ReportDisposition::Once => destroy_and_clear(self.discovery_string, string),
                 ReportDisposition::Cycle => {
-                    let next = SetRelStringTableIndex(string, 1);
-                    self.discovery_string.write(next);
+                    let next = SetRelStringTableIndex((string).cast(), 1);
+                    self.discovery_string.write((next).cast());
                     if next.is_null() || GetStringTableIndex(next) == 0 {
-                        destroy_and_clear(self.discovery_string, next);
+                        destroy_and_clear(self.discovery_string, (next).cast());
                     }
                 }
             }
@@ -94,7 +99,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
 #[cfg(not(test))]
 unsafe fn destroy_and_clear(slot: *mut *mut c_void, string: *mut c_void) {
     if !string.is_null() {
-        let _ = DestroyStringTable(ReleaseStringTable(string));
+        let _ = DestroyStringTable(ReleaseStringTable((string).cast()));
     }
     slot.write(std::ptr::null_mut());
 }

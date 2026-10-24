@@ -45,7 +45,7 @@ pub const fn combat_speed(flags: u8) -> u8 {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
         activity, game_state, nth_frame, player_input, race_queue, rgb15, set_activity,
@@ -81,12 +81,15 @@ mod engine {
         Postfix: BYTE,
     }
 
+    use crate::graphics::resgfx::LoadGraphicInstance;
+
+    use crate::planets::starmap::naming::GetClusterName;
+
+    use crate::mainloop::input_abi::live::AnyButtonPress;
+
     extern "C" {
-        fn LoadGraphicInstance(resource: RESOURCE) -> *mut std::ffi::c_void;
         static mut planet: [FRAME; 3];
         static mut CurStarDescPtr: *mut StarDesc;
-        fn GetClusterName(star: *const StarDesc, buf: *mut UNICODE);
-        fn AnyButtonPress(special: BOOLEAN) -> BOOLEAN;
     }
 
     unsafe fn game_string(index: u32) -> *const UNICODE {
@@ -295,7 +298,7 @@ mod engine {
             let mut buf = [0 as UNICODE; 256];
             draw_text(&mut t, game_string(ENCOUNTER_STRING_BASE + 2));
             t.baseline.y += 12;
-            GetClusterName(CurStarDescPtr, buf.as_mut_ptr());
+            GetClusterName((CurStarDescPtr).cast(), buf.as_mut_ptr());
             draw_text(&mut t, buf.as_ptr());
             t.baseline.y += 12;
             draw_text(&mut t, planet_name());

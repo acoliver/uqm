@@ -83,16 +83,9 @@ pub struct NetworkInputContext {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-extern "C" {
-    fn selectShipComputer(
-        context: *mut crate::ships::native::abi::ComputerInputContext,
-        gms: *mut crate::ships::native::abi::GETMELEE_STATE,
-    ) -> Boolean;
-    fn selectShipHuman(
-        context: *mut crate::ships::native::abi::HumanInputContext,
-        gms: *mut crate::ships::native::abi::GETMELEE_STATE,
-    ) -> Boolean;
-}
+use crate::supermelee::native::battle_picker::live::selectShipComputer;
+#[cfg(not(test))]
+use crate::supermelee::native::battle_picker::live::selectShipHuman;
 
 // ---------------------------------------------------------------------------
 // Static vtables — matching C's global BattleInputHandlers structs
@@ -241,12 +234,13 @@ unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bo
 pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
     [std::ptr::null_mut(), std::ptr::null_mut()];
 
-extern "C" {
+use crate::supermelee::netplay::netmelee::networkBattleInput;
 
-    fn networkBattleInput(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
-    fn selectShipNetwork(context: *mut c_void, gms: *mut c_void) -> Boolean;
-    fn battleEndReadyNetwork(context: *mut c_void) -> bool;
-}
+#[cfg(not(test))]
+use crate::supermelee::native::battle_picker::live::selectShipNetwork;
+
+#[cfg(not(test))]
+use crate::battle::tactrans_native::engine::battleEndReadyNetwork;
 
 /// C: `void InputContext_init(InputContext *context, BattleInputHandlers *handlers, COUNT playerNr)`
 #[no_mangle]
@@ -330,18 +324,34 @@ unsafe extern "C" fn unsafe_frame_input_network(
     ctx: *mut InputContext,
     ship: *mut c_void,
 ) -> BattleInputState {
-    networkBattleInput(ctx as *mut c_void, ship)
+    networkBattleInput(ctx.cast(), ship.cast())
 }
 
 unsafe extern "C" fn unsafe_select_ship_network(
     ctx: *mut InputContext,
     gms: *mut c_void,
 ) -> Boolean {
-    selectShipNetwork(ctx as *mut c_void, gms)
+    #[cfg(not(test))]
+    {
+        selectShipNetwork(ctx.cast(), gms.cast())
+    }
+    #[cfg(test)]
+    {
+        let _ = (ctx, gms);
+        panic!("unit test entered live network ship selection")
+    }
 }
 
 unsafe extern "C" fn unsafe_battle_end_ready_network(ctx: *mut InputContext) -> bool {
-    battleEndReadyNetwork(ctx as *mut c_void)
+    #[cfg(not(test))]
+    {
+        battleEndReadyNetwork(ctx.cast())
+    }
+    #[cfg(test)]
+    {
+        let _ = ctx;
+        panic!("unit test entered live network battle completion")
+    }
 }
 
 // ---------------------------------------------------------------------------

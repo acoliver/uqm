@@ -1,23 +1,36 @@
 use super::*;
 use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
 
-unsafe extern "C" {
-    static mut SpaceContext: *mut c_void;
-    static mut OffScreenContext: *mut c_void;
+use crate::graphics::context_abi::SetContext;
+
+use crate::graphics::pixmap_abi::CaptureDrawable;
+
+use crate::graphics::drawable_abi::CreateDrawable;
+
+use crate::graphics::frame_abi::ClearDrawable;
+
+use crate::planets::render::c_api::draw_oval as DrawOval;
+
+use crate::planets::solarsys::GetRandomSeedForStar;
+
+use crate::ui::sis::DrawSISTitle;
+
+use crate::ui::sis::DrawHyperCoords;
+
+use crate::graphics::cmap_abi::GetColorMapAddress;
+
+use crate::graphics::cmap_abi::SetColorMap;
+
+use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+use crate::battle::process_native::engine::RedrawQueue;
+
+use crate::graphics::gfx_common_abi::ScreenTransition;
+
+extern "C" {
+    static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
+    static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
     static CurStarDescPtr: *const c::STAR_DESC;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
-    fn CreateDrawable(flags: u8, width: i16, height: i16, frames: u16) -> *mut c_void;
-    fn ClearDrawable();
-    fn DrawOval(rect: *mut c::RECT, thickness: u8);
-    fn GetRandomSeedForStar(star: *const c::STAR_DESC) -> c::DWORD;
-    fn DrawSISTitle(name: *const i8);
-    fn DrawHyperCoords(point: c::POINT);
-    fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
-    fn SetColorMap(map: *mut c_void) -> i32;
-    fn SetTransitionSource(rect: *mut c_void);
-    fn RedrawQueue(force: c::BOOLEAN);
-    fn ScreenTransition(kind: i32, rect: *const c_void);
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -245,10 +258,9 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
                 .offset(i32::from(index) as isize);
             if current == (*s).SunDesc.as_mut_ptr() {
                 let star_color = ((*CurStarDescPtr).Type & 0xe0) >> 5;
-                SetColorMap(GetColorMapAddress(set_color_map_index(
-                    SUN_CMAP,
-                    u32::from(star_color),
-                )));
+                SetColorMap(GetColorMapAddress(
+                    (set_color_map_index(SUN_CMAP, u32::from(star_color))).cast(),
+                ));
             } else {
                 set_planet_color_map(current);
             }
@@ -348,10 +360,9 @@ unsafe fn set_planet_color_map(planet: *mut c::PLANET_DESC) {
     let index = usize::from((*planet).data_index & !WORLD_TYPE_SPECIAL);
     assert!(index < NUMBER_OF_PLANET_TYPES);
     let color = crate::planets::ffi::plan_data()[index].Type >> 4;
-    SetColorMap(GetColorMapAddress(set_color_map_index(
-        ORBITAL_CMAP,
-        u32::from(color),
-    )));
+    SetColorMap(GetColorMapAddress(
+        (set_color_map_index(ORBITAL_CMAP, u32::from(color))).cast(),
+    ));
 }
 
 unsafe fn calc_sun_size(sun: *mut c::PLANET_DESC, radius: c::SIZE) {
@@ -397,7 +408,7 @@ unsafe fn draw_inner_planets(planet: *mut c::PLANET_DESC) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn DrawStarBackGround() {
+pub unsafe extern "C" fn DrawStarBackGround() {
     let mut stamp = c::STAMP {
         origin: c::POINT { x: 0, y: 0 },
         frame: STARS_FRAME,
@@ -421,14 +432,15 @@ pub(super) unsafe fn validate_inner_orbits() {
 }
 
 mod native {
-    use crate::comm::locdata::{CColor, CStamp};
+
     pub(super) use crate::graphics::context_abi::SetContextClipRect;
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
-    extern "C" {
-        pub(super) fn SetContextBackGroundColor(color: CColor) -> CColor;
-        pub(super) fn SetContextForeGroundColor(color: CColor) -> CColor;
-        pub(super) fn DrawStamp(stamp: *mut CStamp);
-    }
+
+    pub(super) use crate::graphics::context_abi::SetContextBackGroundColor;
+
+    pub(super) use crate::graphics::context_abi::SetContextForeGroundColor;
+
+    pub(super) use crate::graphics::frame_abi::DrawStamp;
 }
 unsafe fn set_frame(frame: *mut c::FRAME_DESC) -> *mut c::FRAME_DESC {
     native::SetContextFGFrame(frame.cast()).cast()

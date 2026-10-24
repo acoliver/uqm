@@ -1,17 +1,16 @@
 //! Orz callbacks and descriptor translated from `sc2/src/uqm/ships/orz/orz.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, normalize_angle,
         normalize_facing, object_cloaked, put_element, sine, starship,
     };
-    use std::{ffi::c_void, mem, ptr};
+    use std::{mem, ptr};
 
-    extern "C" {
-        fn InsertQueue(queue: *mut c_void, handle: *mut c_void, before: *mut c_void);
-        fn ModifySilhouette(ship: *mut ELEMENT, stamp: *mut STAMP, flags: BYTE) -> FRAME;
-    }
+    use crate::collections::queue::InsertQueue;
+
+    use crate::battle::weapon_native::engine::ModifySilhouette;
 
     const MODIFY_SWAP: BYTE = 1 << 1;
     // The cast in element.h prevents bindgen from emitting this macro.
@@ -251,7 +250,7 @@ mod engine {
                 && (*ss).cur_status_flags & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16 != 0
                 && (*ss).ship_input_state & THRUST as u8 == 0
                 && normalize_angle(
-                    i32::from((*ship).velocity.TravelAngle)
+                    i32::from((*ship).velocity.travel_angle)
                         - i32::from(ARCTAN(
                             (i32::from((*target).next.location.x)
                                 - i32::from((*ship).next.location.x))
@@ -464,7 +463,7 @@ mod engine {
                 {
                     pfacing = angle_to_facing(i32::from(ARCTAN(dx, dy))) as COUNT;
                     let delta = normalize_facing(
-                        i32::from(pfacing) - angle_to_facing(i32::from((*e).velocity.TravelAngle))
+                        i32::from(pfacing) - angle_to_facing(i32::from((*e).velocity.travel_angle))
                             + angle_to_facing(OCTANT as i32),
                     ) as SIZE;
                     if i32::from(delta) <= angle_to_facing(QUADRANT as i32) {

@@ -1,11 +1,11 @@
 //! Primitive dispatch, ported from tfb_prim.c (GPL-2.0-or-later).
 use super::native_abi::*;
 use std::ptr;
-extern "C" {
-    fn LockMutex(mutex: *mut std::ffi::c_void);
-    fn UnlockMutex(mutex: *mut std::ffi::c_void);
-}
+
+use crate::threading::legacy_abi::LockMutex;
+
 use crate::graphics::gfx_common_abi::{GetGraphicScale, GetGraphicScaleMode};
+use crate::threading::legacy_abi::UnlockMutex;
 fn scaled_extent(extent: i16, scale: i32) -> i32 {
     (i32::from(extent) * scale + (256 >> 1)) / 256
 }

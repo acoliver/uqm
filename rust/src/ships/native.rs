@@ -35,10 +35,7 @@ pub mod abi {
 
     #[cfg(not(test))]
     pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
-        extern "C" {
-            #[link_name = "DoMenuChooser"]
-            fn choose(menu: *mut crate::c_bindings::global_state::MENU_STATE, first: u8) -> u32;
-        }
+        use crate::ui::menu::DoMenuChooser as choose;
         choose(menu.cast(), first)
     }
 
@@ -94,18 +91,30 @@ mod engine {
     use std::ffi::{c_int, c_void};
 
     // Keep opaque-pointer declarations identical to existing engine imports.
+
+    use crate::graphics::frame_abi::DrawStamp;
+
+    use crate::graphics::frame_abi::DrawFilledStamp;
+
+    use crate::graphics::frame_abi::DrawFilledRectangle;
+
+    use crate::graphics::font_abi::font_DrawText;
+
+    use crate::graphics::font_abi::SetContextFont;
+
+    use crate::navigation::globals::inHyperSpace;
+
+    use crate::ui::sis::SetFlashRect;
+
+    use crate::ui::sis::DrawSISTitle;
+
+    use crate::ui::sis::SetStatusMessageMode;
+
+    use crate::graphics::gfx_common_abi::SetTransitionSource;
+
+    use crate::graphics::frame_abi::DrawRectangle;
+
     extern "C" {
-        fn DrawStamp(stamp: *mut crate::comm::locdata::CStamp);
-        fn DrawFilledStamp(stamp: *mut crate::comm::locdata::CStamp);
-        fn DrawFilledRectangle(rect: *mut crate::comm::locdata::CRect);
-        fn font_DrawText(text: *mut crate::comm::sis_graphics::CText);
-        fn SetContextFont(font: *mut c_void) -> *mut c_void;
-        fn inHyperSpace() -> i32;
-        fn SetFlashRect(rect: *const c_void);
-        fn DrawSISTitle(title: *const std::ffi::c_char);
-        fn SetStatusMessageMode(mode: i32) -> i32;
-        fn SetTransitionSource(rect: *mut c_void);
-        fn DrawRectangle(rect: *mut crate::comm::locdata::CRect);
         #[cfg(test)]
         #[link_name = "rust_bridge_OBJECT_CLOAKED"]
         fn rust_bridge_object_cloaked(element: *mut c_void) -> c_int;
@@ -327,7 +336,7 @@ mod engine {
     /// # Safety
     /// The game thread must own initialized status-message state.
     pub unsafe fn set_status_mode(mode: abi::StatMsgMode) -> abi::StatMsgMode {
-        SetStatusMessageMode(mode as i32) as abi::StatMsgMode
+        SetStatusMessageMode((mode as i32) as u32) as abi::StatMsgMode
     }
 
     /// # Safety

@@ -50,9 +50,7 @@ const MENU_NAMES: &[&str] = &[
 const FLIGHT_NAMES: &[&str] = &["up", "down", "left", "right", "weapon", "special", "escape"];
 
 #[cfg(not(test))]
-extern "C" {
-    fn TaskSwitch();
-}
+use crate::threading::legacy_abi::TaskSwitch;
 #[cfg(not(test))]
 extern "C" {
     #[link_name = "input_templates"]

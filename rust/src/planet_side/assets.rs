@@ -37,19 +37,11 @@ impl CffiPlanetSideAudio {
 }
 
 #[cfg(not(test))]
-use crate::sound::types::CSoundPosition as SoundPosition;
-
+use crate::battle::sounds::engine::NotPositional;
 #[cfg(not(test))]
-extern "C" {
-    fn SetAbsStringTableIndex(sound: *mut c_void, index: u16) -> *mut c_void;
-    fn NotPositional() -> SoundPosition;
-    fn PlaySound(
-        sound: *mut c_void,
-        position: SoundPosition,
-        positional_object: *mut c_void,
-        priority: u8,
-    );
-}
+use crate::battle::sounds::engine::PlaySound;
+#[cfg(not(test))]
+use crate::strings::string_table::SetAbsStringTableIndex;
 
 impl PlanetSideAudio for CffiPlanetSideAudio {
     fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError> {
@@ -59,7 +51,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
 
         #[cfg(not(test))]
         unsafe {
-            let sound = SetAbsStringTableIndex(self.sounds.0, sound_index(cue));
+            let sound = SetAbsStringTableIndex((self.sounds.0).cast(), sound_index(cue));
             let priority = if matches!(cue, SoundCue::Returns | SoundCue::Destroyed) {
                 3
             } else {

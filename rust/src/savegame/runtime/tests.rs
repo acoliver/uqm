@@ -117,7 +117,7 @@ mod c_offset {
     pub const SHIP_FACING: usize = offset_of!(GAME_STATE, ShipFacing);
     pub const IP_PLANET: usize = offset_of!(GAME_STATE, ip_planet);
     pub const IN_ORBIT: usize = offset_of!(GAME_STATE, in_orbit);
-    pub const VELOCITY_ANGLE: usize = offset_of!(GAME_STATE, velocity.TravelAngle);
+    pub const VELOCITY_ANGLE: usize = offset_of!(GAME_STATE, velocity.travel_angle);
     pub const VELOCITY_VECTOR: usize = offset_of!(GAME_STATE, velocity.vector);
     pub const VELOCITY_FRACT: usize = offset_of!(GAME_STATE, velocity.fract);
     pub const VELOCITY_ERROR: usize = offset_of!(GAME_STATE, velocity.error);

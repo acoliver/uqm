@@ -1,17 +1,11 @@
 //! Canvas/image integration against the production linked providers.
 use sdl2_sys::{SDL_CreateRGBSurface, SDL_FreeSurface, SDL_Surface};
-use std::{
-    ffi::{c_char, c_void},
-    ptr,
-};
+use std::ptr;
 use uqm_rust::graphics::{
     native_abi::{Color, DrawMode, TFB_Image, HOT_SPOT},
     native_canvas::{drawing::*, lifecycle::*, DRAW_REPLACE, TFB_SCALE_NEAREST},
 };
-extern "C" {
-    fn CreateMutex_Core(name: *const c_char, class: u32) -> *mut c_void;
-    fn DestroyMutex(mutex: *mut c_void);
-}
+use uqm_rust::threading::legacy_abi::{CreateMutex_Core, DestroyMutex};
 const RGBA_MASKS: (u32, u32, u32, u32) = (0xff, 0xff00, 0xff_0000, 0xff00_0000);
 
 unsafe fn surface(w: i32, h: i32, alpha: bool) -> *mut SDL_Surface {

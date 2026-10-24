@@ -115,12 +115,7 @@ pub struct CffiPlanetSideGraphics<'a, A: PlanetSideAssetAccess> {
 }
 
 #[cfg(not(test))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct CPoint {
-    x: i16,
-    y: i16,
-}
+use crate::graphics::native_abi::point as CPoint;
 
 #[cfg(not(test))]
 #[repr(C)]
@@ -129,16 +124,23 @@ struct CStamp {
     frame: *mut c_void,
 }
 #[cfg(not(test))]
+use crate::graphics::context_abi::SetContext;
+#[cfg(not(test))]
+use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
+#[cfg(not(test))]
+use crate::graphics::frame_abi::ClearDrawable;
+#[cfg(not(test))]
+use crate::graphics::frame_abi::DrawStamp;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
+#[cfg(not(test))]
+use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
+#[cfg(not(test))]
+use crate::planets::scan::live::RedrawSurfaceScan;
+#[cfg(not(test))]
 extern "C" {
-    static mut PlanetContext: *mut c_void;
-    static mut RadarContext: *mut c_void;
-    fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn ClearDrawable();
-    fn DrawStamp(stamp: *mut CStamp);
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn TFB_FlushGraphicsEx(skip_swap: u32);
-    fn TFB_SwapBuffers(force_full_redraw: i32);
-    fn RedrawSurfaceScan(new_location: *const CPoint);
+    static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
+    static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
 }
 #[cfg(not(test))]
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
@@ -152,7 +154,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                     x: snapshot.lander.position.x as i16,
                     y: snapshot.lander.position.y as i16,
                 };
-                RedrawSurfaceScan(&scan_position);
+                RedrawSurfaceScan(std::ptr::from_ref(&scan_position).cast());
                 self.last_scan_position = Some(snapshot.lander.position);
             }
 
@@ -178,9 +180,9 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                     };
                     let mut stamp = CStamp {
                         origin: CPoint { x, y },
-                        frame: SetAbsFrameIndex(frame.base, frame.index),
+                        frame: (SetAbsFrameIndex((frame.base).cast(), frame.index)).cast(),
                     };
-                    DrawStamp(&mut stamp);
+                    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
                 }
             }
 
@@ -202,9 +204,9 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                     x: LANDER_SCREEN_X as i16,
                     y: lander_y,
                 },
-                frame: SetAbsFrameIndex(lander_base, frame_index),
+                frame: (SetAbsFrameIndex((lander_base).cast(), frame_index)).cast(),
             };
-            DrawStamp(&mut lander);
+            DrawStamp(std::ptr::from_mut(&mut lander).cast());
             UnbatchGraphics();
 
             // Draw cargo and crew meters in the radar panel. These overlay the
@@ -365,9 +367,9 @@ unsafe fn draw_crew_meter(lander_base: *mut c_void, crew_count: u8) {
         };
         let mut stamp = CStamp {
             origin: CPoint { x, y },
-            frame: SetAbsFrameIndex(lander_base, frame),
+            frame: (SetAbsFrameIndex((lander_base).cast(), frame)).cast(),
         };
-        DrawStamp(&mut stamp);
+        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     }
 }
 
@@ -380,9 +382,9 @@ unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot)
         let frame_idx = cargo_segment_frame(index, true);
         let mut stamp = CStamp {
             origin: CPoint { x, y },
-            frame: SetAbsFrameIndex(lander_base, frame_idx),
+            frame: (SetAbsFrameIndex((lander_base).cast(), frame_idx)).cast(),
         };
-        DrawStamp(&mut stamp);
+        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     }
 
     // Mineral cargo bar. With improved cargo, the display level is halved so
@@ -396,9 +398,9 @@ unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot)
         let frame_idx = cargo_segment_frame(index, false);
         let mut stamp = CStamp {
             origin: CPoint { x, y },
-            frame: SetAbsFrameIndex(lander_base, frame_idx),
+            frame: (SetAbsFrameIndex((lander_base).cast(), frame_idx)).cast(),
         };
-        DrawStamp(&mut stamp);
+        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     }
 }
 
@@ -428,17 +430,17 @@ unsafe fn draw_surface_tiles(frame: *mut c_void, camera: super::model::SurfacePo
         },
         frame,
     };
-    DrawStamp(&mut stamp);
+    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     stamp.origin.x = stamp
         .origin
         .x
         .wrapping_add((MAP_WIDTH * LANDING_CURSOR_STEP) as i16);
-    DrawStamp(&mut stamp);
+    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
     stamp.origin.x = stamp
         .origin
         .x
         .wrapping_sub((MAP_WIDTH * LANDING_CURSOR_STEP * 2) as i16);
-    DrawStamp(&mut stamp);
+    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
 }
 
 /// Convert fixed-point world coordinates to a viewport coordinate, choosing

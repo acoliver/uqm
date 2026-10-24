@@ -67,7 +67,7 @@ fn acceleration(
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::status_native::{
@@ -105,7 +105,7 @@ mod engine {
         let desc = (*ship).RaceDescPtr;
         let facing = (*ship).ShipFacing;
         let current_angle = facing_to_angle(i32::from(facing)) as COUNT as i32;
-        let travel_angle = (*e).velocity.TravelAngle;
+        let travel_angle = (*e).velocity.travel_angle;
         let mut thrust = (*desc).characteristics.thrust_increment;
         let maximum_thrust = (*desc).characteristics.max_thrust;
         if thrust == maximum_thrust {

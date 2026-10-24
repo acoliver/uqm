@@ -137,16 +137,14 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::abi::*;
     const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
     const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
     const FAST_SHIP: u16 = 150;
 
-    extern "C" {
-        fn crew_preprocess(element: *mut ELEMENT);
-    }
+    use crate::battle::world_elements::engine::crew_preprocess;
 
     unsafe fn validate_element_handle(handle: HELEMENT) {
         if !handle.is_null() {
@@ -201,7 +199,7 @@ mod engine {
     }
 
     unsafe fn GetVelocityTravelAngle(velocity: *mut VELOCITY_DESC) -> COUNT {
-        (*velocity).TravelAngle
+        (*velocity).travel_angle
     }
 
     unsafe fn object_cloaked(element: *mut ELEMENT) -> bool {
@@ -1246,7 +1244,7 @@ mod engine {
         fn zero_velocity_ignores_travel_angle_and_error_but_checks_all_six_components() {
             unsafe {
                 let mut velocity: VELOCITY_DESC = std::mem::zeroed();
-                velocity.TravelAngle = FULL_CIRCLE as u16;
+                velocity.travel_angle = FULL_CIRCLE as u16;
                 velocity.error = EXTENT {
                     width: 31,
                     height: 31,

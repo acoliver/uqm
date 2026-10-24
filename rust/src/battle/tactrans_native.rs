@@ -125,7 +125,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
         activity, connection, player_input, primitive, rgb15, set_activity,
@@ -156,17 +156,21 @@ mod engine {
         endFrameCount: BattleFrameCounter,
     }
 
+    use crate::supermelee::netplay::notify::Netplay_Notify_frameCount;
+
+    use crate::battle::world_elements::engine::crew_preprocess;
+
+    use crate::battle::ship_native::engine::animation_preprocess;
+
+    use crate::battle::status_native::engine::PostProcessStatus;
+
+    use crate::battle::status_native::engine::PreProcessStatus;
+
+    use crate::battle::ship_native::engine::ship_preprocess;
+
+    use crate::battle::ship_native::engine::ship_postprocess;
+
     extern "C" {
-        fn Netplay_Notify_frameCount(
-            conn: *mut netplay_abi::NetConnection,
-            count: BattleFrameCounter,
-        );
-        fn crew_preprocess(e: *mut ELEMENT);
-        fn animation_preprocess(e: *mut ELEMENT);
-        fn PostProcessStatus(e: *mut ELEMENT);
-        fn PreProcessStatus(e: *mut ELEMENT);
-        fn ship_preprocess(e: *mut ELEMENT);
-        fn ship_postprocess(e: *mut ELEMENT);
         static mut explosion: [FRAME; 3];
     }
 

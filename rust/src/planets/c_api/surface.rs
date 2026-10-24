@@ -17,7 +17,8 @@ impl CapturedSurface {
     /// Game thread, with the resource and graphics systems initialised.
     pub unsafe fn load(resource: &std::ffi::CStr) -> Self {
         Self {
-            frame: super::CaptureDrawable(super::LoadGraphicInstance(resource.as_ptr())).cast(),
+            frame: super::CaptureDrawable((super::LoadGraphicInstance(resource.as_ptr())).cast())
+                .cast(),
         }
     }
 

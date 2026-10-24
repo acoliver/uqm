@@ -1,16 +1,14 @@
 //! Chmmr callbacks for the live engine, ported from `ships/chmmr/chmmr.c`.
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         object_cloaked, put_element, sine, starship,
     };
-    use std::{ffi::c_void, mem, ptr};
+    use std::{mem, ptr};
 
-    extern "C" {
-        fn InsertQueue(queue: *mut c_void, handle: *mut c_void, before: *mut c_void);
-    }
+    use crate::collections::queue::InsertQueue;
 
     const CHMMR_OFFSET: i32 = 18;
     const LASER_RANGE: i32 = 150 << ONE_SHIFT;
@@ -210,8 +208,8 @@ mod engine {
             && (*ss).ship_input_state & WEAPON as u8 == 0
             && (*enemy).which_turn > 12
             && normalize_angle(
-                i32::from((*ship).velocity.TravelAngle)
-                    - (i32::from((*(*enemy).ObjectPtr).velocity.TravelAngle) + HALF_CIRCLE as i32)
+                i32::from((*ship).velocity.travel_angle)
+                    - (i32::from((*(*enemy).ObjectPtr).velocity.travel_angle) + HALF_CIRCLE as i32)
                     + QUADRANT as i32,
             ) > HALF_CIRCLE as i32
         {

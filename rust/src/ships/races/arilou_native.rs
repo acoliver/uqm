@@ -68,7 +68,7 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
 }
 
 #[cfg(not(test))]
-mod engine {
+pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{abi::*, starship};
     use std::ptr;

@@ -1,5 +1,5 @@
 #[path = "syreen_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Syreen Penetrator - Particle beam + Siren Song crew steal
 // @plan PLAN-20260314-SHIPS.P12

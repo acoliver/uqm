@@ -56,7 +56,7 @@ impl CffiSurfaceVisuals {
         if self.life[index].is_null() {
             #[cfg(not(test))]
             unsafe {
-                self.life[index] = load_life_form(creature);
+                self.life[index] = (load_life_form(creature)).cast();
                 self.owned_life[index] = !self.life[index].is_null();
             }
             #[cfg(test)]
@@ -71,12 +71,13 @@ impl CffiSurfaceVisuals {
 }
 
 #[cfg(not(test))]
-extern "C" {
-    fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-    fn load_life_form(selector: u8) -> *mut c_void;
-    fn ReleaseDrawable(frame: *mut c_void) -> *mut c_void;
-    fn DestroyDrawable(frame: *mut c_void) -> u32;
-}
+use crate::game_init::world_resources::live::load_life_form;
+#[cfg(not(test))]
+use crate::graphics::drawable_abi::DestroyDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::ReleaseDrawable;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
 impl Drop for CffiSurfaceVisuals {
     fn drop(&mut self) {
@@ -84,8 +85,8 @@ impl Drop for CffiSurfaceVisuals {
         unsafe {
             for (frame, owned) in self.life.iter_mut().zip(self.owned_life) {
                 if owned && !frame.is_null() {
-                    *frame = ReleaseDrawable(*frame);
-                    DestroyDrawable(*frame);
+                    *frame = (ReleaseDrawable((*frame).cast())).cast();
+                    DestroyDrawable((*frame).cast());
                 }
             }
         }
@@ -124,13 +125,13 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         }
 
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, index) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), index) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame { base, index },
             mask,
@@ -206,13 +207,13 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
         let (base, index) = self.lander_shot_frame(facing)?;
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, index) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), index) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("shot_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame { base, index },
             mask,
@@ -222,13 +223,13 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     fn canned_creature_visual(&mut self, kind: CreatureKind) -> Result<EntityVisual, AdapterError> {
         let base = self.surface_visuals.life_frame(kind.index())?;
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, 0) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), 0) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("canned_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame { base, index: 0 },
             mask,
@@ -238,13 +239,13 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     fn hazard_visual(&mut self, kind: HazardKind) -> Result<EntityVisual, AdapterError> {
         let base = self.hazard_base(kind)?;
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, 0) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), 0) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("hazard_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame { base, index: 0 },
             mask,
@@ -258,13 +259,13 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     ) -> Result<EntityVisual, AdapterError> {
         let base = self.surface_visuals.life_frame(kind.index())?;
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, animation_frame) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), animation_frame) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("creature_animation_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame {
                 base,
@@ -297,13 +298,13 @@ impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
             return Err(AdapterError::new("surface_frame_missing"));
         }
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base, frame_index) };
+        let selected = unsafe { SetAbsFrameIndex((base).cast(), frame_index) };
         #[cfg(test)]
         let selected = base;
         if selected.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));
         }
-        let mask = unsafe { extract_frame_mask(selected)? };
+        let mask = unsafe { extract_frame_mask((selected).cast())? };
         Ok(EntityVisual {
             frame: SurfaceFrame {
                 base,

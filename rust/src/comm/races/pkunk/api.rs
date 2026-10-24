@@ -22,9 +22,7 @@ impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
         }
     }
     fn gift_ships(&mut self) -> u16 {
-        extern "C" {
-            fn AddEscortShips(race: u16, count: i16) -> u16;
-        }
+        use crate::battle::build_native::engine::AddEscortShips;
         unsafe { AddEscortShips(crate::comm::dispatch::ship::PKUNK_SHIP as u16, 4) }
     }
 }

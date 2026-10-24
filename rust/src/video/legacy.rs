@@ -29,19 +29,15 @@ use crate::video::control::VidStop;
 extern "C" {
     fn VidStop();
 }
-extern "C" {
-    fn _init_video_file(path: *const c_char) -> *mut TFB_VideoClip;
-    fn LoadMusicFile(path: *const c_char) -> *mut c_void;
-    fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int;
-    fn VidPlayEx(
-        video: *mut TFB_VideoClip,
-        audio: *mut c_void,
-        speech: *mut c_void,
-        loop_frame: u32,
-    ) -> c_int;
 
-}
+use crate::video::control::_init_video_file;
+
+use crate::sound::heart_ffi::LoadMusicFile;
+
+use crate::video::control::DestroyVideo;
+
 use crate::sound::heart_ffi::DestroyMusic;
+use crate::video::control::VidPlayEx;
 
 /// # Safety
 /// `path` must be a terminated resource pathname.

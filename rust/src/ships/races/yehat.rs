@@ -1,5 +1,5 @@
 #[path = "yehat_native.rs"]
-mod native;
+pub(crate) mod native;
 
 // Yehat Terminator - Twin pulse cannon + force shield
 // @plan PLAN-20260314-SHIPS.P11

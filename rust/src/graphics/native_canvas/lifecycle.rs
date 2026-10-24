@@ -14,10 +14,11 @@ use std::ffi::{c_char, c_int, c_void};
 
 const SDL_SWSURFACE: u32 = 0;
 
+use crate::graphics::sdl::platform_abi::TFB_DisplayFormatAlpha;
+
 extern "C" {
     static SDL_Screen: *mut SDL_Surface;
     static format_conv_surf: *mut SDL_Surface;
-    fn TFB_DisplayFormatAlpha(surface: *mut SDL_Surface) -> *mut SDL_Surface;
 }
 
 /// `btable` is a compile-time table in `scaling`, so there is nothing to
