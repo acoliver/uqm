@@ -182,7 +182,21 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                         origin: CPoint { x, y },
                         frame: (SetAbsFrameIndex((frame.base).cast(), frame.index)).cast(),
                     };
-                    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+                    if let SurfaceEntityKind::LiveCreature {
+                        damage_wait: damage_wait @ 1..=7,
+                        ..
+                    } = entity.kind
+                    {
+                        let old_color = crate::graphics::context_abi::SetContextForeGroundColor(
+                            damage_color(damage_wait),
+                        );
+                        crate::graphics::frame_abi::DrawFilledStamp(
+                            std::ptr::from_mut(&mut stamp).cast(),
+                        );
+                        crate::graphics::context_abi::SetContextForeGroundColor(old_color);
+                    } else {
+                        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+                    }
                 }
             }
 
@@ -232,6 +246,26 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
         #[cfg(test)]
         let _ = snapshot;
         Ok(())
+    }
+}
+
+#[cfg(not(test))]
+fn damage_color(remaining: u8) -> crate::graphics::native_abi::Color {
+    let (r, g, b) = match remaining {
+        7 => (31, 31, 31),
+        6 => (31, 31, 10),
+        5 => (31, 28, 0),
+        4 => (31, 21, 0),
+        3 => (31, 14, 0),
+        2 => (31, 7, 0),
+        1 => (27, 0, 0),
+        _ => unreachable!("damage flash has seven colors"),
+    };
+    crate::graphics::native_abi::Color {
+        r: (r << 3) | (r >> 2),
+        g: (g << 3) | (g >> 2),
+        b: (b << 3) | (b >> 2),
+        a: 255,
     }
 }
 

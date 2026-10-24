@@ -135,6 +135,8 @@ pub fn tick(state: &mut LanderState, input: FrameInput) -> TickResult {
         let (dx, dy) = state.velocity.get_next_components(1);
         state.position.x += dx;
         state.position.y += dy;
+        state.position.x = state.position.x.rem_euclid(super::world::WORLD_WIDTH);
+        state.position.y = state.position.y.clamp(0, super::world::WORLD_HEIGHT - 1);
     }
 
     if state.weapon_wait > 0 {
@@ -170,6 +172,26 @@ mod tests {
             CrewCount::new(12),
             upgrades,
         )
+    }
+
+    #[test]
+    fn lander_wraps_at_both_horizontal_edges() {
+        for (start, facing, expected) in [(967, 4, 0), (0, 12, 967)] {
+            let mut lander = LanderState::new(
+                SurfacePoint { x: start, y: 100 },
+                facing,
+                CrewCount::new(12),
+                LanderUpgrades::default(),
+            );
+            tick(
+                &mut lander,
+                FrameInput {
+                    thrust: true,
+                    ..FrameInput::default()
+                },
+            );
+            assert_eq!(lander.position.x, expected);
+        }
     }
 
     #[test]

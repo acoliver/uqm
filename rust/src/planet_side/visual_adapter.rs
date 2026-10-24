@@ -19,6 +19,8 @@ pub struct CffiSurfaceVisuals {
     energy: *mut c_void,
     life: [*mut c_void; 3],
     life_types: [Option<u8>; 3],
+    canister_resources: super::resources::CffiResourcePort,
+    canister: *mut c_void,
     #[cfg(not(test))]
     owned_life: [bool; 3],
 }
@@ -37,9 +39,19 @@ impl CffiSurfaceVisuals {
             energy,
             life,
             life_types: [None; 3],
+            canister_resources: Default::default(),
+            canister: std::ptr::null_mut(),
             #[cfg(not(test))]
             owned_life: [false; 3],
         })
+    }
+
+    fn canister_frame(&mut self) -> Result<*mut c_void, AdapterError> {
+        use super::resources::ResourcePort;
+        if self.canister.is_null() {
+            self.canister = self.canister_resources.load("graphics.lifecan")?;
+        }
+        Ok(self.canister)
     }
 
     fn life_frame(&mut self, creature: u8) -> Result<*mut c_void, AdapterError> {
@@ -81,6 +93,8 @@ use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
 impl Drop for CffiSurfaceVisuals {
     fn drop(&mut self) {
+        use super::resources::ResourcePort;
+        self.canister_resources.free("graphics.lifecan");
         #[cfg(not(test))]
         unsafe {
             for (frame, owned) in self.life.iter_mut().zip(self.owned_life) {
@@ -220,18 +234,21 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
         })
     }
 
-    fn canned_creature_visual(&mut self, kind: CreatureKind) -> Result<EntityVisual, AdapterError> {
-        let base = self.surface_visuals.life_frame(kind.index())?;
+    fn canned_creature_visual(
+        &mut self,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        let base = self.surface_visuals.canister_frame()?;
         #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), 0) };
+        let selected = unsafe { SetAbsFrameIndex(base.cast(), animation_frame) };
         #[cfg(test)]
         let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("canned_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
+        let mask = unsafe { extract_frame_mask(selected.cast())? };
         Ok(EntityVisual {
-            frame: SurfaceFrame { base, index: 0 },
+            frame: SurfaceFrame {
+                base,
+                index: animation_frame,
+            },
             mask,
         })
     }

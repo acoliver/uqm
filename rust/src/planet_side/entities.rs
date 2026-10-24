@@ -34,18 +34,19 @@ pub enum SurfaceEntityKind {
         aware: bool,
         /// Bresenham-style fixed-point velocity, matching C `ELEMENT.velocity`.
         velocity: VelocityDesc,
-        /// Packed `MAKE_BYTE(low, high)` animation/thrust cadence, matching C
-        /// `ELEMENT.thrust_wait`. The low nibble is the inter-frame countdown;
-        /// the high nibble is the reload value added when it hits zero. When
-        /// the countdown reaches zero the creature AI may choose a new heading.
+        /// Heading-change countdown from C `ELEMENT.thrust_wait`.
         thrust_wait: u8,
-        /// Monotonic surface-frame counter used by `!(frame_index & 3)` gating
-        /// in `object_animation`, matching the per-element frame index derived
-        /// from `GetFrameIndex` in the C implementation.
+        /// Animation frame used by the every-fourth-frame AI gate.
         frame_index: u16,
+        /// C `turn_wait = MAKE_BYTE(4, 4)`: one advance per five ticks.
+        animation_wait: u8,
+        /// Remaining colors in the seven-tick shot damage flash.
+        damage_wait: u8,
     },
     CannedCreature {
         value: u16,
+        animation_wait: u8,
+        frame_index: u16,
     },
     Shot(Shot),
     Hazard(HazardKind),

@@ -303,6 +303,8 @@ impl PlanetSideFixture {
                     velocity: VelocityDesc::new(),
                     thrust_wait: 0,
                     frame_index: setup.animation_frame,
+                    animation_wait: 4,
+                    damage_wait: 0,
                 },
                 position: setup.position,
                 finite_life: None,
@@ -455,7 +457,7 @@ mod tests {
 
         fn canned_creature_visual(
             &mut self,
-            _kind: CreatureKind,
+            _animation_frame: u16,
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
