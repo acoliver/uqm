@@ -1,7 +1,6 @@
-//! C FFI bindings for Rust DukAud decoder
+//! Rust callback table for the DukAud decoder.
 //!
-//! Provides C-compatible function pointers matching the `TFB_SoundDecoderFuncs`
-//! vtable structure, replacing `dukaud.c`.
+//! Implements `TFB_SoundDecoderFuncs` for the internal sound registry.
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::ptr;
 use std::sync::Mutex;
@@ -98,7 +97,7 @@ unsafe fn read_uio_file(dir: *mut uio_DirHandle, path: *const c_char) -> Option<
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_GetName() -> *const c_char {
+fn rust_duka_GetName() -> *const c_char {
     RUST_DUKA_NAME.as_ptr() as *const c_char
 }
 
@@ -106,7 +105,7 @@ extern "C" fn rust_duka_GetName() -> *const c_char {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+fn rust_duka_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
     if fmts.is_null() {
         return 0;
     }
@@ -131,7 +130,7 @@ extern "C" fn rust_duka_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_TermModule() {
+fn rust_duka_TermModule() {
     if let Ok(mut guard) = RUST_DUKA_FORMATS.lock() {
         *guard = None;
     }
@@ -141,7 +140,7 @@ extern "C" fn rust_duka_TermModule() {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_GetStructSize() -> u32 {
+fn rust_duka_GetStructSize() -> u32 {
     std::mem::size_of::<TFB_RustDukAudDecoder>() as u32
 }
 
@@ -149,7 +148,7 @@ extern "C" fn rust_duka_GetStructSize() -> u32 {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_duka_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
     }
@@ -167,7 +166,7 @@ extern "C" fn rust_duka_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_duka_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return 0;
     }
@@ -184,7 +183,7 @@ extern "C" fn rust_duka_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Term(decoder: *mut TFB_SoundDecoder) {
+fn rust_duka_Term(decoder: *mut TFB_SoundDecoder) {
     if decoder.is_null() {
         return;
     }
@@ -202,7 +201,7 @@ extern "C" fn rust_duka_Term(decoder: *mut TFB_SoundDecoder) {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Open(
+fn rust_duka_Open(
     decoder: *mut TFB_SoundDecoder,
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -300,7 +299,7 @@ extern "C" fn rust_duka_Open(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Close(decoder: *mut TFB_SoundDecoder) {
+fn rust_duka_Close(decoder: *mut TFB_SoundDecoder) {
     if decoder.is_null() {
         return;
     }
@@ -317,11 +316,7 @@ extern "C" fn rust_duka_Close(decoder: *mut TFB_SoundDecoder) {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Decode(
-    decoder: *mut TFB_SoundDecoder,
-    buf: *mut c_void,
-    bufsize: i32,
-) -> c_int {
+fn rust_duka_Decode(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int {
     if decoder.is_null() || buf.is_null() || bufsize <= 0 {
         return -1;
     }
@@ -344,7 +339,7 @@ extern "C" fn rust_duka_Decode(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
+fn rust_duka_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
     if decoder.is_null() {
         return 0;
     }
@@ -365,7 +360,7 @@ extern "C" fn rust_duka_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u3
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_duka_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
+fn rust_duka_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
     }
@@ -383,8 +378,8 @@ extern "C" fn rust_duka_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
 // Exported vtable
 // =============================================================================
 
-#[no_mangle]
-pub static rust_duka_DecoderVtbl: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
+pub use DUK_DECODER as rust_duka_DecoderVtbl;
+pub static DUK_DECODER: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
     GetName: rust_duka_GetName,
     InitModule: rust_duka_InitModule,
     TermModule: rust_duka_TermModule,

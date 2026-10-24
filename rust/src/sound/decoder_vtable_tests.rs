@@ -33,6 +33,31 @@ pub(super) fn formats() -> TFB_DecoderFormats {
         stereo16: STEREO16,
     }
 }
+#[test]
+fn decoder_callbacks_use_rust_function_signatures() {
+    use std::ffi::{c_char, c_int};
+
+    for funcs in [
+        &rust_wav_DecoderVtbl,
+        &rust_aifa_DecoderVtbl,
+        &super::mod_ffi::rust_mod_DecoderVtbl,
+        &super::ffi::rust_ova_DecoderVtbl,
+        &super::dukaud_ffi::rust_duka_DecoderVtbl,
+    ] {
+        let _: fn() -> *const c_char = funcs.GetName;
+        let _: fn(c_int, *const TFB_DecoderFormats) -> c_int = funcs.InitModule;
+        let _: fn() = funcs.TermModule;
+        let _: fn() -> u32 = funcs.GetStructSize;
+        let _: fn(*mut TFB_SoundDecoder) -> c_int = funcs.GetError;
+        let _: fn(*mut TFB_SoundDecoder) -> c_int = funcs.Init;
+        let _: fn(*mut TFB_SoundDecoder) = funcs.Term;
+        let _: fn(*mut TFB_SoundDecoder, *mut uio_DirHandle, *const c_char) -> c_int = funcs.Open;
+        let _: fn(*mut TFB_SoundDecoder) = funcs.Close;
+        let _: fn(*mut TFB_SoundDecoder, *mut c_void, i32) -> c_int = funcs.Decode;
+        let _: fn(*mut TFB_SoundDecoder, u32) -> u32 = funcs.Seek;
+        let _: fn(*mut TFB_SoundDecoder) -> u32 = funcs.GetFrame;
+    }
+}
 
 /// A uio repository whose root is a temporary directory.
 pub(crate) struct Directory {
