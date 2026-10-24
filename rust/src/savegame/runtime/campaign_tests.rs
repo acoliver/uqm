@@ -210,6 +210,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-lure" => (25, 3, 2158, 35, 6110, 2419, 3),
             "connected-jugger-prep" => (23, 2, 2158, 50, 1300, 323, 3),
             "connected-combat-prep" => (23, 2, 2158, 50, 1300, 496, 4),
             "connected-lure-prep" => (22, 2, 2158, 150, 5300, 849, 1),
