@@ -235,6 +235,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-samatra-remnants" => (14, 6, 2158, 50, 4663, 961616, 5),
             "connected-samatra-distraction" => (13, 6, 2158, 50, 4663, 961616, 10),
             "connected-final-fleet" => (12, 5, 2158, 50, 11000, 960491, 12),
             "connected-chmmr-bomb" => (11, 5, 2158, 50, 11000, 994850, 1),
