@@ -151,6 +151,15 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::BattleOutcomes,
         ],
     ),
+    row(
+        "campaign-s08k-rainbow-funding",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+        ],
+    ),
     row("load-connected-arilou-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07h-connected-taalo",
