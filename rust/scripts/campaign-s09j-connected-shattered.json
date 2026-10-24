@@ -694,20 +694,20 @@
       "action": "fly_to_star",
       "target": "Epsilon Scorpii",
       "max_ticks": 90000,
-      "retreat_encounters": true
+      "retreat_encounters": false
     },
     {
       "action": "navigate_to_planet",
       "planet": 0,
       "max_ticks": 90000,
-      "patrol_policy": "retreat"
+      "patrol_policy": "fight"
     },
     {
       "action": "navigate_to_orbit",
       "planet": 0,
       "max_ticks": 90000,
       "stop_at_encounter": true,
-      "patrol_policy": "retreat"
+      "patrol_policy": "fight"
     },
     {
       "action": "wait_for_communication_responses",
