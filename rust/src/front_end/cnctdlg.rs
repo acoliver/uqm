@@ -140,7 +140,7 @@ unsafe extern "C" fn MCD_DrawTextEntry(widget: *mut WIDGET, x: c_int, y: c_int) 
     let old_text;
     (*entry).value[WIDGET_TEXTENTRY_WIDTH as usize - 1] = 0;
     text.baseline.y = y as COORD;
-    text.CharCount = utf8StringCount((*entry).value.as_ptr()) as COUNT;
+    text.CharCount = utf8StringCount(((*entry).value.as_ptr()).cast()) as COUNT;
     text.pStr = (*entry).value.as_ptr();
     if (*entry).state & WIDGET_TEXTENTRY_STATE_WTE_EDITING == 0 {
         text.baseline.x = 160;
@@ -215,14 +215,14 @@ unsafe extern "C" fn OnTextEntryFrame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
     1
 }
 unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
-    (*widget).cursor_pos = utf8StringCount((*widget).value.as_ptr()) as c_int;
+    (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
     (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
     DrawConnectDialog();
     let mut revert_buf = [0; 256];
     utf8StringCopy(
         revert_buf.as_mut_ptr(),
         mem::size_of_val(&revert_buf),
-        (*widget).value.as_ptr(),
+        ((*widget).value.as_ptr()).cast(),
     );
     let mut state: TEXTENTRY_STATE = mem::zeroed();
     state.Initialized = 0;
@@ -235,7 +235,7 @@ unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
     state.FrameCallback = Some(OnTextEntryFrame);
     if DoTextEntry(&mut state) == 0 {
         utf8StringCopy(
-            (*widget).value.as_mut_ptr(),
+            ((*widget).value.as_mut_ptr()).cast(),
             (*widget).maxlen as usize,
             revert_buf.as_ptr(),
         );

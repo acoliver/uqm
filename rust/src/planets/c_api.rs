@@ -34,6 +34,7 @@ extern "C" {
 }
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
 extern "C" {
     pub fn log_init(max_lines: i32);
     #[link_name = "GlobData"]
@@ -100,7 +101,6 @@ extern "C" {
     pub static mut STAR_ARRAY: *const CStarDesc;
     #[link_name = "CurStarDescPtr"]
     static CUR_STAR_DESC_PTR: *const CStarDesc;
-    fn utf8StringCopy(dst: *mut u8, size: usize, src: *const std::ffi::c_char);
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
@@ -541,7 +541,7 @@ impl PlanetNames for LiveGame {
         unsafe {
             let text = crate::comm::hail::game_string(i32::from(string_index));
             let name = &mut (*glob()).sis_state.planet_name;
-            utf8StringCopy(name.as_mut_ptr(), name.len(), text);
+            utf8StringCopy(name.as_mut_ptr(), name.len(), (text).cast());
         }
     }
     fn set_battle_planet(&mut self, value: u8) {

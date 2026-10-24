@@ -82,12 +82,16 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
                 cost as i32,
             );
             utf8StringCopy(
-                buffer.as_mut_ptr(),
+                (buffer.as_mut_ptr()).cast(),
                 mem::size_of_val(&buffer),
-                rendered.as_ptr(),
+                (rendered.as_ptr()).cast(),
             );
         } else {
-            utf8StringCopy(buffer.as_mut_ptr(), mem::size_of_val(&buffer), label);
+            utf8StringCopy(
+                (buffer.as_mut_ptr()).cast(),
+                mem::size_of_val(&buffer),
+                (label).cast(),
+            );
         }
         if highlight != 0 && selected_item == item {
             SetContextForeGroundColor(PCMENU_SELECTION_BACKGROUND_COLOR);

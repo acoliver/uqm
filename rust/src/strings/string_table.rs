@@ -9,7 +9,7 @@ use std::ffi::{c_char, c_int, c_void};
 use std::ptr::null_mut;
 
 use crate::memory::{rust_hfree, rust_hmalloc};
-use crate::strings::unicode::utf8StringCountN;
+use crate::strings::unicode::utf8_string_count_n as utf8StringCountN;
 
 pub const HAS_SOUND_CLIPS: u16 = 1 << 0;
 pub const HAS_TIMESTAMP: u16 = 1 << 1;

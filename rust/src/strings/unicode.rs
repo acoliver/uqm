@@ -1,7 +1,7 @@
-//! C ABI for the UTF-8 helpers declared in `libs/unicode.h`.
+//! UTF-8 helpers used by the Rust engine.
 //!
-//! The strings handled here are NUL-terminated byte pointers owned by C
-//! callers, so the API stays pointer based. Decoding is strict: overlong
+//! Engine strings are NUL-terminated byte buffers; pointer operations retain
+//! their storage and lifetime contracts. Decoding is strict: overlong
 //! forms and truncated sequences yield `0` after resynchronising on the next
 //! non-continuation byte.
 
@@ -24,8 +24,7 @@ unsafe fn resync(ptr: &mut *const u8) {
 ///
 /// # Safety
 /// `ptr` and `*ptr` must be valid, and the string NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn getCharFromString(ptr: *mut *const u8) -> UniChar {
+pub unsafe fn get_char_from_string(ptr: *mut *const u8) -> UniChar {
     let p = &mut *ptr;
     let lead = **p;
     if lead < 0x80 {
@@ -64,13 +63,12 @@ unsafe fn bad_sequence(p: &mut *const u8) -> UniChar {
     0
 }
 
-/// Like [`getCharFromString`] but never reads at or past `end`; on any
+/// Like [`get_char_from_string`] but never reads at or past `end`; on any
 /// failure `*ptr` is moved to `end`.
 ///
 /// # Safety
 /// `ptr` and `*ptr` must be valid and `end` must lie in the same allocation.
-#[no_mangle]
-pub unsafe extern "C" fn getCharFromStringN(ptr: *mut *const u8, end: *const u8) -> UniChar {
+pub unsafe fn get_char_from_string_n(ptr: *mut *const u8, end: *const u8) -> UniChar {
     let p = &mut *ptr;
     if *p != end {
         let lead = **p;
@@ -86,7 +84,7 @@ pub unsafe extern "C" fn getCharFromStringN(ptr: *mut *const u8, end: *const u8)
             0
         };
         if num_bytes != 0 && (end as usize).wrapping_sub(*p as usize) >= num_bytes {
-            return getCharFromString(ptr);
+            return get_char_from_string(ptr);
         }
     }
     *p = end;
@@ -99,8 +97,7 @@ pub unsafe extern "C" fn getCharFromStringN(ptr: *mut *const u8, end: *const u8)
 ///
 /// # Safety
 /// All pointers must be valid and `start` NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn getLineFromString(
+pub unsafe fn get_line_from_string(
     start: *const u8,
     end: *mut *const u8,
     start_next: *mut *const u8,
@@ -113,7 +110,7 @@ pub unsafe extern "C" fn getLineFromString(
             return start as *mut u8;
         }
         let last = ptr;
-        let ch = getCharFromString(&mut ptr);
+        let ch = get_char_from_string(&mut ptr);
         if ch == 0 {
             *end = last;
             *start_next = ptr;
@@ -125,7 +122,7 @@ pub unsafe extern "C" fn getLineFromString(
                 *start_next = ptr;
                 return start as *mut u8;
             }
-            let ch = getCharFromString(&mut ptr);
+            let ch = get_char_from_string(&mut ptr);
             if ch == 0 {
                 return std::ptr::null_mut();
             }
@@ -148,11 +145,10 @@ pub unsafe extern "C" fn getLineFromString(
 ///
 /// # Safety
 /// `start` must be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn utf8StringCount(start: *const u8) -> usize {
+pub unsafe fn utf8_string_count(start: *const u8) -> usize {
     let mut p = start;
     let mut count = 0;
-    while getCharFromString(&mut p) != 0 {
+    while get_char_from_string(&mut p) != 0 {
         count += 1;
     }
     count
@@ -160,11 +156,10 @@ pub unsafe extern "C" fn utf8StringCount(start: *const u8) -> usize {
 
 /// # Safety
 /// `start..end` must be readable.
-#[no_mangle]
-pub unsafe extern "C" fn utf8StringCountN(start: *const u8, end: *const u8) -> usize {
+pub unsafe fn utf8_string_count_n(start: *const u8, end: *const u8) -> usize {
     let mut p = start;
     let mut count = 0;
-    while getCharFromStringN(&mut p, end) != 0 {
+    while get_char_from_string_n(&mut p, end) != 0 {
         count += 1;
     }
     count
@@ -174,12 +169,11 @@ pub unsafe extern "C" fn utf8StringCountN(start: *const u8, end: *const u8) -> u
 ///
 /// # Safety
 /// `s` must be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn utf8StringPos(s: *const u8, ch: UniChar) -> c_int {
+pub unsafe fn utf8_string_pos(s: *const u8, ch: UniChar) -> c_int {
     let mut p = s;
     let mut pos: c_int = 0;
     while *p != 0 {
-        if getCharFromString(&mut p) == ch {
+        if get_char_from_string(&mut p) == ch {
             return pos;
         }
         pos += 1;
@@ -196,8 +190,7 @@ pub unsafe extern "C" fn utf8StringPos(s: *const u8, ch: UniChar) -> c_int {
 ///
 /// # Safety
 /// `dst` must hold `size` bytes and `src` be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn utf8StringCopy(dst: *mut u8, size: usize, src: *const u8) -> *mut u8 {
+pub unsafe fn utf8_string_copy(dst: *mut u8, size: usize, src: *const u8) -> *mut u8 {
     if size == 0 {
         return std::ptr::null_mut();
     }
@@ -210,8 +203,7 @@ pub unsafe extern "C" fn utf8StringCopy(dst: *mut u8, size: usize, src: *const u
 ///
 /// # Safety
 /// Both strings must be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn utf8StringCompare(a: *const u8, b: *const u8) -> c_int {
+pub unsafe fn utf8_string_compare(a: *const u8, b: *const u8) -> c_int {
     libc::strcmp(a.cast::<c_char>(), b.cast::<c_char>())
 }
 
@@ -219,12 +211,11 @@ pub unsafe extern "C" fn utf8StringCompare(a: *const u8, b: *const u8) -> c_int 
 ///
 /// # Safety
 /// `ptr` must be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn skipUTF8Chars(ptr: *const u8, num: usize) -> *mut u8 {
+pub unsafe fn skip_utf8_chars(ptr: *const u8, num: usize) -> *mut u8 {
     let mut p = ptr;
     for _ in 0..num {
         let old = p;
-        if getCharFromString(&mut p) == 0 {
+        if get_char_from_string(&mut p) == 0 {
             return old as *mut u8;
         }
     }
@@ -235,13 +226,12 @@ pub unsafe extern "C" fn skipUTF8Chars(ptr: *const u8, num: usize) -> *mut u8 {
 ///
 /// # Safety
 /// `wstr` must hold `maxcount` entries and `start` be NUL-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn getUniCharFromString(
+pub unsafe fn get_uni_char_from_string(
     wstr: *mut UniChar,
     maxcount: usize,
     start: *const u8,
 ) -> usize {
-    decode_into(wstr, maxcount, start, |p| getCharFromString(p))
+    decode_into(wstr, maxcount, start, |p| get_char_from_string(p))
 }
 
 unsafe fn decode_into(
@@ -311,8 +301,7 @@ const RANGES: [Range; 6] = [
 ///
 /// # Safety
 /// `ptr` must hold `size` bytes.
-#[no_mangle]
-pub unsafe extern "C" fn getStringFromChar(ptr: *mut u8, size: usize, ch: UniChar) -> c_int {
+pub unsafe fn get_string_from_char(ptr: *mut u8, size: usize, ch: UniChar) -> c_int {
     let Some(index) = RANGES.iter().position(|r| ch <= r.limit) else {
         log_message(
             LOG_WARNING,
@@ -339,8 +328,7 @@ pub unsafe extern "C" fn getStringFromChar(ptr: *mut u8, size: usize, ch: UniCha
 ///
 /// # Safety
 /// `ptr` must hold `size` bytes and `wstr` `count` entries.
-#[no_mangle]
-pub unsafe extern "C" fn getStringFromWideN(
+pub unsafe fn get_string_from_wide_n(
     ptr: *mut u8,
     size: usize,
     wstr: *const UniChar,
@@ -355,7 +343,7 @@ pub unsafe extern "C" fn getStringFromWideN(
         if room == 0 {
             break;
         }
-        let used = match getStringFromChar(next, room, *wstr.add(i)) {
+        let used = match get_string_from_char(next, room, *wstr.add(i)) {
             n if n < 0 => break,
             0 => {
                 *next = b'?';
@@ -370,37 +358,29 @@ pub unsafe extern "C" fn getStringFromWideN(
     next.offset_from(ptr) as usize + 1
 }
 
-/// As [`getStringFromWideN`] for a 0-terminated source.
+/// As [`get_string_from_wide_n`] for a 0-terminated source.
 ///
 /// # Safety
 /// `ptr` must hold `size` bytes and `wstr` be 0-terminated.
-#[no_mangle]
-pub unsafe extern "C" fn getStringFromWide(
-    ptr: *mut u8,
-    size: usize,
-    wstr: *const UniChar,
-) -> usize {
+pub unsafe fn get_string_from_wide(ptr: *mut u8, size: usize, wstr: *const UniChar) -> usize {
     let mut len = 0;
     while *wstr.add(len) != 0 {
         len += 1;
     }
-    getStringFromWideN(ptr, size, wstr, len)
+    get_string_from_wide_n(ptr, size, wstr, len)
 }
 
 /// Every non-control character except the private use area (0xE000-0xF8FF).
-#[no_mangle]
-pub extern "C" fn UniChar_isGraph(ch: UniChar) -> c_int {
+pub fn uni_char_is_graph(ch: UniChar) -> c_int {
     c_int::from((ch > 0xa0 && !(0xe000..=0xf8ff).contains(&ch)) || (ch > 0x20 && ch < 0x7f))
 }
 
-#[no_mangle]
-pub extern "C" fn UniChar_isPrint(ch: UniChar) -> c_int {
-    c_int::from(ch == 0x20 || UniChar_isGraph(ch) != 0)
+pub fn uni_char_is_print(ch: UniChar) -> c_int {
+    c_int::from(ch == 0x20 || uni_char_is_graph(ch) != 0)
 }
 
 /// Latin-1 only, through the C library's current locale.
-#[no_mangle]
-pub extern "C" fn UniChar_toUpper(ch: UniChar) -> UniChar {
+pub fn uni_char_to_upper(ch: UniChar) -> UniChar {
     if ch < 0x100 {
         // SAFETY: toupper is defined for values 0..=255.
         unsafe { libc::toupper(ch as c_int) as UniChar }
@@ -409,8 +389,7 @@ pub extern "C" fn UniChar_toUpper(ch: UniChar) -> UniChar {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn UniChar_toLower(ch: UniChar) -> UniChar {
+pub fn uni_char_to_lower(ch: UniChar) -> UniChar {
     if ch < 0x100 {
         // SAFETY: tolower is defined for values 0..=255.
         unsafe { libc::tolower(ch as c_int) as UniChar }
@@ -423,12 +402,21 @@ pub extern "C" fn UniChar_toLower(ch: UniChar) -> UniChar {
 mod tests {
     use super::*;
 
+    #[test]
+    fn character_helpers_have_rust_signatures() {
+        let _: fn(UniChar) -> c_int = uni_char_is_graph;
+        let _: fn(UniChar) -> c_int = uni_char_is_print;
+        let _: fn(UniChar) -> UniChar = uni_char_to_upper;
+        let _: fn(UniChar) -> UniChar = uni_char_to_lower;
+        let _: unsafe fn(*mut *const u8) -> UniChar = get_char_from_string;
+    }
+
     fn decode_all(bytes: &[u8]) -> Vec<UniChar> {
         let mut p = bytes.as_ptr();
         let mut out = Vec::new();
         unsafe {
             while *p != 0 {
-                out.push(getCharFromString(&mut p));
+                out.push(get_char_from_string(&mut p));
             }
         }
         out
@@ -449,13 +437,13 @@ mod tests {
         let bytes = b"\xc1\x81Z\xe2\x82Y\x80\x80X\0";
         let mut p = bytes.as_ptr();
         unsafe {
-            assert_eq!(getCharFromString(&mut p), 0);
+            assert_eq!(get_char_from_string(&mut p), 0);
             assert_eq!(*p, b'Z');
             p = p.add(1);
-            assert_eq!(getCharFromString(&mut p), 0);
+            assert_eq!(get_char_from_string(&mut p), 0);
             assert_eq!(*p, b'Y');
             p = p.add(1);
-            assert_eq!(getCharFromString(&mut p), 0);
+            assert_eq!(get_char_from_string(&mut p), 0);
             assert_eq!(*p, b'X');
         }
     }
@@ -466,14 +454,14 @@ mod tests {
         unsafe {
             let mut p = bytes.as_ptr();
             let end = p.add(2);
-            assert_eq!(getCharFromStringN(&mut p, end), 0);
+            assert_eq!(get_char_from_string_n(&mut p, end), 0);
             assert_eq!(p, end);
             let mut p = bytes.as_ptr();
-            assert_eq!(getCharFromStringN(&mut p, p.add(3)), 0x20ac);
+            assert_eq!(get_char_from_string_n(&mut p, p.add(3)), 0x20ac);
             assert_eq!(p, bytes.as_ptr().add(3));
             let s = b"ab\xc3\xa9";
-            assert_eq!(utf8StringCountN(s.as_ptr(), s.as_ptr().add(4)), 3);
-            assert_eq!(utf8StringCountN(s.as_ptr(), s.as_ptr().add(3)), 2);
+            assert_eq!(utf8_string_count_n(s.as_ptr(), s.as_ptr().add(4)), 3);
+            assert_eq!(utf8_string_count_n(s.as_ptr(), s.as_ptr().add(3)), 2);
         }
     }
 
@@ -481,20 +469,20 @@ mod tests {
     fn counts_and_finds_characters() {
         let s = b"h\xc3\xa9llo\0";
         unsafe {
-            assert_eq!(utf8StringCount(s.as_ptr()), 5);
-            assert_eq!(utf8StringPos(s.as_ptr(), 0xe9), 1);
-            assert_eq!(utf8StringPos(s.as_ptr(), u32::from(b'o')), 4);
-            assert_eq!(utf8StringPos(s.as_ptr(), u32::from(b'z')), -1);
-            assert_eq!(utf8StringPos(s.as_ptr(), 0), 5);
-            assert_eq!(skipUTF8Chars(s.as_ptr(), 2).offset_from(s.as_ptr()), 3);
-            assert_eq!(skipUTF8Chars(s.as_ptr(), 99).offset_from(s.as_ptr()), 6);
+            assert_eq!(utf8_string_count(s.as_ptr()), 5);
+            assert_eq!(utf8_string_pos(s.as_ptr(), 0xe9), 1);
+            assert_eq!(utf8_string_pos(s.as_ptr(), u32::from(b'o')), 4);
+            assert_eq!(utf8_string_pos(s.as_ptr(), u32::from(b'z')), -1);
+            assert_eq!(utf8_string_pos(s.as_ptr(), 0), 5);
+            assert_eq!(skip_utf8_chars(s.as_ptr(), 2).offset_from(s.as_ptr()), 3);
+            assert_eq!(skip_utf8_chars(s.as_ptr(), 99).offset_from(s.as_ptr()), 6);
         }
     }
 
     unsafe fn line(src: &[u8]) -> Option<(usize, usize)> {
         let start = src.as_ptr();
         let (mut end, mut next) = (start, start);
-        let ret = getLineFromString(start, &mut end, &mut next);
+        let ret = get_line_from_string(start, &mut end, &mut next);
         (!ret.is_null()).then(|| {
             (
                 end.offset_from(start) as usize,
@@ -519,10 +507,10 @@ mod tests {
     fn copy_terminates_and_pads_like_strncpy() {
         let mut dst = [0x55u8; 8];
         unsafe {
-            assert!(utf8StringCopy(dst.as_mut_ptr(), 0, c"x".as_ptr().cast()).is_null());
-            utf8StringCopy(dst.as_mut_ptr(), 3, c"abcdef".as_ptr().cast());
+            assert!(utf8_string_copy(dst.as_mut_ptr(), 0, c"x".as_ptr().cast()).is_null());
+            utf8_string_copy(dst.as_mut_ptr(), 3, c"abcdef".as_ptr().cast());
             assert_eq!(&dst[..4], b"ab\0\x55");
-            utf8StringCopy(dst.as_mut_ptr(), 6, c"a".as_ptr().cast());
+            utf8_string_copy(dst.as_mut_ptr(), 6, c"a".as_ptr().cast());
             assert_eq!(&dst[..6], b"a\0\0\0\0\0");
         }
     }
@@ -531,11 +519,11 @@ mod tests {
     fn encodes_characters_and_reports_short_buffers() {
         let mut buf = [0u8; 8];
         unsafe {
-            assert_eq!(getStringFromChar(buf.as_mut_ptr(), 8, 0x20ac), 3);
+            assert_eq!(get_string_from_char(buf.as_mut_ptr(), 8, 0x20ac), 3);
             assert_eq!(&buf[..3], b"\xe2\x82\xac");
-            assert_eq!(getStringFromChar(buf.as_mut_ptr(), 2, 0x20ac), -3);
-            assert_eq!(getStringFromChar(buf.as_mut_ptr(), 8, 0x8000_0000), 0);
-            assert_eq!(getStringFromChar(buf.as_mut_ptr(), 8, 0x7fff_ffff), 6);
+            assert_eq!(get_string_from_char(buf.as_mut_ptr(), 2, 0x20ac), -3);
+            assert_eq!(get_string_from_char(buf.as_mut_ptr(), 8, 0x8000_0000), 0);
+            assert_eq!(get_string_from_char(buf.as_mut_ptr(), 8, 0x7fff_ffff), 6);
             assert_eq!(&buf[..6], b"\xfd\xbf\xbf\xbf\xbf\xbf");
         }
     }
@@ -545,24 +533,27 @@ mod tests {
         let wide = [0x68, 0xe9, 0x20ac, 0x8000_0000, 0];
         let mut buf = [0xaau8; 16];
         unsafe {
-            assert_eq!(getStringFromWide(buf.as_mut_ptr(), 16, wide.as_ptr()), 8);
+            assert_eq!(get_string_from_wide(buf.as_mut_ptr(), 16, wide.as_ptr()), 8);
             assert_eq!(&buf[..8], b"h\xc3\xa9\xe2\x82\xac?\0");
             // Room for 4 bytes + NUL: the euro sign no longer fits.
-            assert_eq!(getStringFromWide(buf.as_mut_ptr(), 5, wide.as_ptr()), 4);
+            assert_eq!(get_string_from_wide(buf.as_mut_ptr(), 5, wide.as_ptr()), 4);
             assert_eq!(&buf[..4], b"h\xc3\xa9\0");
-            assert_eq!(getStringFromWide(buf.as_mut_ptr(), 0, wide.as_ptr()), 0);
+            assert_eq!(get_string_from_wide(buf.as_mut_ptr(), 0, wide.as_ptr()), 0);
 
             let mut back = [0xffff_ffffu32; 8];
             let src = b"h\xc3\xa9\xe2\x82\xac\0";
-            assert_eq!(getUniCharFromString(back.as_mut_ptr(), 8, src.as_ptr()), 3);
+            assert_eq!(
+                get_uni_char_from_string(back.as_mut_ptr(), 8, src.as_ptr()),
+                3
+            );
             assert_eq!(&back[..4], &[0x68, 0xe9, 0x20ac, 0]);
             assert_eq!(
-                getUniCharFromString(back.as_mut_ptr(), 3, c"abcd".as_ptr().cast()),
+                get_uni_char_from_string(back.as_mut_ptr(), 3, c"abcd".as_ptr().cast()),
                 2
             );
             assert_eq!(&back[..3], &[0x61, 0x62, 0]);
             assert_eq!(
-                getUniCharFromString(back.as_mut_ptr(), 0, c"abcd".as_ptr().cast()),
+                get_uni_char_from_string(back.as_mut_ptr(), 0, c"abcd".as_ptr().cast()),
                 0
             );
         }
@@ -570,18 +561,18 @@ mod tests {
 
     #[test]
     fn character_classes() {
-        assert_eq!(UniChar_isGraph(0x20), 0);
-        assert_eq!(UniChar_isGraph(0x41), 1);
-        assert_eq!(UniChar_isGraph(0x7f), 0);
-        assert_eq!(UniChar_isGraph(0xa0), 0);
-        assert_eq!(UniChar_isGraph(0xa1), 1);
-        assert_eq!(UniChar_isGraph(0xe000), 0);
-        assert_eq!(UniChar_isGraph(0xf8ff), 0);
-        assert_eq!(UniChar_isGraph(0xf900), 1);
-        assert_eq!(UniChar_isPrint(0x20), 1);
-        assert_eq!(UniChar_isPrint(0x0a), 0);
-        assert_eq!(UniChar_toUpper(u32::from(b'a')), u32::from(b'A'));
-        assert_eq!(UniChar_toLower(u32::from(b'Q')), u32::from(b'q'));
-        assert_eq!(UniChar_toUpper(0x20ac), 0x20ac);
+        assert_eq!(uni_char_is_graph(0x20), 0);
+        assert_eq!(uni_char_is_graph(0x41), 1);
+        assert_eq!(uni_char_is_graph(0x7f), 0);
+        assert_eq!(uni_char_is_graph(0xa0), 0);
+        assert_eq!(uni_char_is_graph(0xa1), 1);
+        assert_eq!(uni_char_is_graph(0xe000), 0);
+        assert_eq!(uni_char_is_graph(0xf8ff), 0);
+        assert_eq!(uni_char_is_graph(0xf900), 1);
+        assert_eq!(uni_char_is_print(0x20), 1);
+        assert_eq!(uni_char_is_print(0x0a), 0);
+        assert_eq!(uni_char_to_upper(u32::from(b'a')), u32::from(b'A'));
+        assert_eq!(uni_char_to_lower(u32::from(b'Q')), u32::from(b'q'));
+        assert_eq!(uni_char_to_upper(0x20ac), 0x20ac);
     }
 }

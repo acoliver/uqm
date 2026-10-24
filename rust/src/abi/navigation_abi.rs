@@ -1315,32 +1315,11 @@ extern "C" {
     );
 }
 pub type UniChar = uint32;
-extern "C" {
-    pub fn utf8StringCount(start: *const ::std::os::raw::c_char) -> usize;
-}
-extern "C" {
-    pub fn utf8StringCopy(
-        dst: *mut ::std::os::raw::c_char,
-        size: usize,
-        src: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_uchar;
-}
-extern "C" {
-    pub fn skipUTF8Chars(
-        ptr: *const ::std::os::raw::c_char,
-        num: usize,
-    ) -> *mut ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn getStringFromChar(
-        ptr: *mut ::std::os::raw::c_char,
-        size: usize,
-        ch: UniChar,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn UniChar_isPrint(ch: UniChar) -> ::std::os::raw::c_int;
-}
+pub use crate::strings::unicode::utf8_string_count as utf8StringCount;
+pub use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
+pub use crate::strings::unicode::skip_utf8_chars as skipUTF8Chars;
+pub use crate::strings::unicode::get_string_from_char as getStringFromChar;
+pub use crate::strings::unicode::uni_char_is_print as UniChar_isPrint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct string_table_entry {

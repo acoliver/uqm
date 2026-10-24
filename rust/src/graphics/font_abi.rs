@@ -126,7 +126,7 @@ unsafe fn measure(
             }
         }
         let (mut top, mut bottom, mut width) = (0i16, 0i16, 0i16);
-        let mut string = (*text).pStr;
+        let mut string = (*text).pStr.cast::<u8>();
         let mut next = 0;
         if count > 0 {
             next = getCharFromString(&mut string);
@@ -219,7 +219,7 @@ pub unsafe extern "C" fn _text_blt(clip: *mut RECT, text: *mut TEXT, ctx_origin:
     if count == 0 {
         return;
     }
-    let mut string = (*text).pStr;
+    let mut string = (*text).pStr.cast::<u8>();
     let mut next = getCharFromString(&mut string);
     if next == 0 {
         count = 0;

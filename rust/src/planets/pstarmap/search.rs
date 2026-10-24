@@ -3,15 +3,15 @@
 use super::*;
 use crate::memory::{rust_hfree, rust_hmalloc};
 
+use crate::strings::unicode::get_char_from_string as getCharFromString;
+use crate::strings::unicode::skip_utf8_chars as skipUTF8Chars;
+use crate::strings::unicode::uni_char_to_upper as UniChar_toUpper;
+use crate::strings::unicode::utf8_string_compare as utf8StringCompare;
+use crate::strings::unicode::utf8_string_count as utf8StringCount;
+use crate::strings::unicode::utf8_string_count_n as utf8StringCountN;
 extern "C" {
     pub(super) fn strcmp(a: *const c_char, b: *const c_char) -> i32;
     pub(super) fn strcpy(dst: *mut c_char, src: *const c_char) -> *mut c_char;
-    fn utf8StringCount(text: *const c_char) -> usize;
-    fn utf8StringCountN(start: *const c_char, end: *const c_char) -> usize;
-    fn utf8StringCompare(a: *const c_char, b: *const c_char) -> i32;
-    fn getCharFromString(text: *mut *const c_char) -> u32;
-    fn skipUTF8Chars(text: *const c_char, count: usize) -> *mut c_char;
-    fn UniChar_toUpper(ch: u32) -> u32;
     fn qsort(
         base: *mut c_void,
         count: usize,
@@ -74,7 +74,7 @@ unsafe fn compare_star_names(
     cluster: impl Fn(u8) -> *const c_char,
 ) -> i32 {
     if a.postfix != b.postfix {
-        return utf8StringCompare(cluster(a.postfix), cluster(b.postfix));
+        return utf8StringCompare((cluster(a.postfix)).cast(), (cluster(b.postfix)).cast());
     }
     if a.prefix < b.prefix {
         -1
@@ -110,40 +110,44 @@ unsafe fn split_star_name(state: *mut StarSearchState) {
     (*state).Cluster = ptr::null();
     (*state).ClusterLen = 0;
     (*state).ClusterPos = 0;
-    let mut next = buf.cast_const();
+    let mut next = buf.cast::<u8>().cast_const();
     while *next != 0 && getCharFromString(&mut next) == u32::from(b' ') {
-        buf = next.cast_mut();
+        buf = next.cast_mut().cast();
     }
     if *buf == 0 {
         return;
     }
     (*state).Prefix = buf;
-    buf = next.cast_mut();
+    buf = next.cast_mut().cast();
     while *next != 0 && getCharFromString(&mut next) != u32::from(b' ') {
-        buf = next.cast_mut();
+        buf = next.cast_mut().cast();
     }
     let mut sep = ptr::null_mut();
     if *buf != 0 {
         sep = buf;
-        buf = next.cast_mut();
+        buf = next.cast_mut().cast();
         while *next != 0 && getCharFromString(&mut next) == u32::from(b' ') {
-            buf = next.cast_mut();
+            buf = next.cast_mut().cast();
         }
     }
     if *buf == 0 {
         (*state).Cluster = (*state).Prefix;
-        (*state).ClusterLen = utf8StringCount((*state).Cluster) as i32;
-        (*state).ClusterPos =
-            utf8StringCountN(ptr::addr_of!((*state).Buffer).cast(), (*state).Cluster) as i32;
+        (*state).ClusterLen = utf8StringCount(((*state).Cluster).cast()) as i32;
+        (*state).ClusterPos = utf8StringCountN(
+            ptr::addr_of!((*state).Buffer).cast(),
+            ((*state).Cluster).cast(),
+        ) as i32;
         (*state).Prefix = ptr::null();
         return;
     }
     (*state).Cluster = buf;
-    (*state).ClusterLen = utf8StringCount((*state).Cluster) as i32;
-    (*state).ClusterPos =
-        utf8StringCountN(ptr::addr_of!((*state).Buffer).cast(), (*state).Cluster) as i32;
+    (*state).ClusterLen = utf8StringCount(((*state).Cluster).cast()) as i32;
+    (*state).ClusterPos = utf8StringCountN(
+        ptr::addr_of!((*state).Buffer).cast(),
+        ((*state).Cluster).cast(),
+    ) as i32;
     *sep = 0;
-    (*state).PrefixLen = utf8StringCount((*state).Prefix) as i32;
+    (*state).PrefixLen = utf8StringCount(((*state).Prefix).cast()) as i32;
 }
 
 fn skip_star_cluster(stars: &[CStarDesc], sorted: &[i32], mut i: usize) -> usize {
@@ -154,11 +158,9 @@ fn skip_star_cluster(stars: &[CStarDesc], sorted: &[i32], mut i: usize) -> usize
     }
     i
 }
-unsafe fn matches_chars(
-    mut source: *const c_char,
-    mut destination: *const c_char,
-    count: i32,
-) -> bool {
+unsafe fn matches_chars(source: *const c_char, destination: *const c_char, count: i32) -> bool {
+    let mut source = source.cast::<u8>();
+    let mut destination = destination.cast::<u8>();
     for _ in 0..count {
         let sc = getCharFromString(&mut source);
         let dc = getCharFromString(&mut destination);
@@ -185,7 +187,7 @@ unsafe fn find_next_index(
     while i < stars.len() {
         let star = &stars[sorted[i] as usize];
         let name = cluster_name(star.postfix);
-        if (*state).ClusterLen > utf8StringCount(name) as i32
+        if (*state).ClusterLen > utf8StringCount((name).cast()) as i32
             || !matches_chars((*state).Cluster, name, (*state).ClusterLen)
         {
             i = skip_star_cluster(stars, sorted, i);
@@ -207,7 +209,7 @@ unsafe fn find_next_index(
         }
         let mut name = [0 as c_char; 256];
         full_name(star, name.as_mut_ptr());
-        if (*state).PrefixLen <= utf8StringCount(name.as_ptr()) as i32
+        if (*state).PrefixLen <= utf8StringCount((name.as_ptr()).cast()) as i32
             && matches_chars((*state).Prefix, name.as_ptr(), (*state).PrefixLen)
         {
             break;
@@ -245,8 +247,8 @@ unsafe fn draw_matched_star_name(entry: *mut TextEntryState) {
     } else {
         strcpy(buf.as_mut_ptr(), ptr::addr_of!((*state).Text).cast());
         ex_pos = ((*state).ClusterPos + (*state).ClusterLen) as i16;
-        let pstr = skipUTF8Chars(buf.as_ptr(), (*state).ClusterPos as usize);
-        strcpy(pstr, game_string(u16::from((*star).postfix)));
+        let pstr = skipUTF8Chars((buf.as_ptr()).cast(), (*state).ClusterPos as usize);
+        strcpy((pstr).cast(), game_string(u16::from((*star).postfix)));
         cur_pos = (*entry).CursorPos as i16;
         flags = 2 | if (*entry).JoystickMode != 0 { 4 } else { 0 };
     }

@@ -131,7 +131,7 @@ mod engine {
         size: usize,
         src: *const std::ffi::c_char,
     ) -> *mut u8 {
-        crate::strings::unicode::utf8StringCopy(dst.cast(), size, src.cast())
+        crate::strings::unicode::utf8_string_copy(dst.cast(), size, src.cast())
     }
 
     /// # Safety
