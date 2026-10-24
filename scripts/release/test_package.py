@@ -1,6 +1,7 @@
 """Unit checks for release invariants; native jobs exercise the actual packages."""
 
 from pathlib import Path
+import hashlib
 import struct
 import sys
 import tempfile
@@ -10,6 +11,17 @@ import package
 
 
 class PackagingTests(unittest.TestCase):
+    def test_checksum_files_use_portable_lf_bytes(self):
+        package.OUT.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=package.OUT) as temporary:
+            root = Path(temporary)
+            asset = root / "payload"
+            asset.write_bytes(b"UQM")
+            checksum = root / "SHA256SUMS"
+            package.write_checksums([asset], checksum)
+            expected = hashlib.sha256(b"UQM").hexdigest() + "  payload\n"
+            self.assertEqual(checksum.read_bytes(), expected.encode("ascii"))
+
     def test_build_tool_output_is_decoded_as_utf8_on_every_platform(self):
         result = package.run(
             sys.executable, "-c", "import os; os.write(1, bytes([0xc2, 0x81]))",

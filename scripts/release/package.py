@@ -144,6 +144,15 @@ def linux_packages(stage, work, version, target):
     return [deb, rpm]
 
 
+
+def write_checksums(assets, destination):
+    with destination.open("w", encoding="ascii", newline="\n") as output:
+        for asset in assets:
+            with asset.open("rb") as source:
+                digest = hashlib.file_digest(source, "sha256").hexdigest()
+            output.write(f"{digest}  {asset.name}\n")
+
+
 def package(tag, target):
     version = tomllib.loads((ROOT / "rust/Cargo.toml").read_text())["workspace"]["package"]["version"]
     if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-rc\.\d+)?", tag) or tag != f"v{version}":
@@ -224,12 +233,7 @@ def package(tag, target):
             smoke(command, work, version, content)
         if not windows and not mac:
             assets.extend(linux_packages(stage, work, version, target))
-    sums = OUT / f"SHA256SUMS-{target}"
-    with sums.open("w") as output:
-        for asset in assets:
-            with asset.open("rb") as source:
-                digest = hashlib.file_digest(source, "sha256").hexdigest()
-            output.write(f"{digest}  {asset.name}\n")
+    write_checksums(assets, OUT / f"SHA256SUMS-{target}")
     print(f"Smoke tests passed: {', '.join(asset.name for asset in assets)}")
 
 
