@@ -1,25 +1,14 @@
 //! Rust-owned game logging.
 
-use std::ffi::{c_char, c_int};
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-
-use libc::FILE;
+use std::ffi::c_int;
+use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const LOG_WARNING: i32 = 3;
 const LOG_DEBUG: i32 = 5;
 const MAX_LOG_ENTRY_SIZE: usize = 256;
 
-extern "C" {
-    fn atexit(callback: extern "C" fn()) -> c_int;
-    #[cfg(target_os = "macos")]
-    #[link_name = "__stderrp"]
-    static C_STDERR: *mut FILE;
-    #[cfg(not(target_os = "macos"))]
-    #[link_name = "stderr"]
-    static C_STDERR: *mut FILE;
-}
-
-static STREAM_OUT: AtomicPtr<FILE> = AtomicPtr::new(std::ptr::null_mut());
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
 static SHOW_BOX: AtomicBool = AtomicBool::new(true);
 static ERROR_BOX: AtomicBool = AtomicBool::new(true);
 
@@ -28,10 +17,9 @@ const MAX_STREAM_LEVEL: i32 = LOG_DEBUG;
 
 #[no_mangle]
 pub extern "C" fn log_init(_max_lines: c_int) {
-    // SAFETY: C_STDERR is initialised by the C runtime before main.
-    STREAM_OUT.store(unsafe { C_STDERR }, Ordering::Relaxed);
+    INITIALIZED.store(true, Ordering::Relaxed);
     // SAFETY: exit_callback is a plain extern "C" fn.
-    let status = unsafe { atexit(exit_callback) };
+    let status = unsafe { libc::atexit(exit_callback) };
     assert_eq!(status, 0, "atexit registration failed");
 }
 
@@ -47,34 +35,21 @@ pub extern "C" fn log_showBox(show: bool, err: bool) {
     ERROR_BOX.store(err, Ordering::Relaxed);
 }
 
-fn echo(level: c_int, message: *const c_char) {
-    if level <= MAX_STREAM_LEVEL {
-        // SAFETY: STREAM_OUT is a live FILE set by log_init/log_setOutput and
-        // `message` is NUL-terminated.
-        unsafe {
-            libc::fprintf(
-                STREAM_OUT.load(Ordering::Relaxed),
-                c"%s\n".as_ptr(),
-                message,
-            );
-        }
-    }
-}
-
 /// Logs a formatted message at the game log threshold. Messages are dropped
-/// until `log_init` has set the stream.
+/// until `log_init` has initialized the output.
 pub fn log_message(level: c_int, message: &str) {
-    if STREAM_OUT.load(Ordering::Relaxed).is_null() {
+    if !INITIALIZED.load(Ordering::Relaxed) || level > MAX_STREAM_LEVEL {
         return;
     }
-    let mut text = [0 as c_char; MAX_LOG_ENTRY_SIZE];
-    for (slot, byte) in text[..MAX_LOG_ENTRY_SIZE - 1]
-        .iter_mut()
-        .zip(message.bytes())
-    {
-        *slot = byte as c_char;
-    }
-    echo(level, text.as_ptr());
+    let bytes = message.as_bytes();
+    let length = bytes.len().min(MAX_LOG_ENTRY_SIZE - 1);
+    let length = bytes[..length]
+        .iter()
+        .position(|&byte| byte == 0)
+        .unwrap_or(length);
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(&bytes[..length]);
+    let _ = stderr.write_all(b"\n");
 }
 
 extern "C" fn exit_callback() {
@@ -86,13 +61,9 @@ extern "C" fn exit_callback() {
 
 /// There is no message box on this platform; tell the user so.
 fn display_log(is_error: bool) {
-    let kind = if is_error { c"an error" } else { c"a" };
-    // SAFETY: STREAM_OUT is a live FILE set by log_init/log_setOutput.
-    unsafe {
-        libc::fprintf(
-            STREAM_OUT.load(Ordering::Relaxed),
-            c"Do not know how to display %s box\n".as_ptr(),
-            kind.as_ptr(),
-        );
-    }
+    let kind = if is_error { "an error" } else { "a" };
+    let _ = writeln!(
+        std::io::stderr().lock(),
+        "Do not know how to display {kind} box"
+    );
 }

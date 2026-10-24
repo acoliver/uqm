@@ -34,7 +34,8 @@ pub unsafe extern "C" fn LoadDirEntryTable(
         let mut stat = std::mem::MaybeUninit::uninit();
         if **name == b'.' as c_char
             || uio_stat(dir, *name, stat.as_mut_ptr()) == -1
-            || stat.assume_init().st_mode & libc::S_IFMT != libc::S_IFREG
+            || stat.assume_init().st_mode & libc::S_IFMT as crate::platform::FileMode
+                != libc::S_IFREG as crate::platform::FileMode
         {
             *name = ptr::null_mut();
         } else {

@@ -79,9 +79,7 @@ pub unsafe extern "C" fn data_ready_callback(nd: *mut NetDescriptor) {
             return;
         }
         if result == -1 {
-            let err = std::io::Error::last_os_error()
-                .raw_os_error()
-                .expect("errno");
+            let err = crate::platform::errno();
             if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
                 return;
             }
@@ -97,9 +95,7 @@ pub unsafe extern "C" fn data_ready_callback(nd: *mut NetDescriptor) {
         let used = (*conn).readEnd.offset_from((*conn).readBuf) as usize;
         let processed = received_multi(conn, (*conn).readBuf, used);
         if processed == -1 {
-            let err = std::io::Error::last_os_error()
-                .raw_os_error()
-                .expect("errno");
+            let err = crate::platform::errno();
             NetConnection_doErrorCallback(conn, err);
             NetDescriptor_close(nd);
             return;

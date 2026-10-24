@@ -13,7 +13,6 @@ const _: () = {
         std::mem::offset_of!(CRect, height)
             == std::mem::offset_of!(c::RECT, extent) + std::mem::offset_of!(c::EXTENT, height)
     );
-    assert!(std::mem::size_of::<std::ffi::c_long>() == 8);
 };
 const _: unsafe extern "C" fn(*mut c::RECT, c::BYTE) = c::DrawOval;
 const _: unsafe extern "C" fn(*mut c::RECT) = c::DrawFilledOval;

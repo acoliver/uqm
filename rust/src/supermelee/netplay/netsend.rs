@@ -14,9 +14,7 @@ pub unsafe extern "C" fn sendPacket(conn: *mut NetConnection, packet: *mut Packe
             len -= result as usize;
             continue;
         }
-        let err = std::io::Error::last_os_error()
-            .raw_os_error()
-            .expect("errno");
+        let err = crate::platform::errno();
         if err == libc::EINTR {
             continue;
         }

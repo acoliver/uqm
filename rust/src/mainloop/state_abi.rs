@@ -56,8 +56,8 @@ accessor!(uqm_set_melee_dir(value: *mut uio_DirHandle) = options::meleeDir = val
 accessor!(uqm_set_content_mount_handle(value: *mut uio_MountHandle) = contentMountHandle = value.cast());
 accessor!(uqm_set_base_content_path(path: *const c_char) = {
     let destination = ptr::addr_of_mut!(options::baseContentPath).cast::<c_char>();
-    libc::strncpy(destination, path, libc::PATH_MAX as usize - 1);
-    destination.add(libc::PATH_MAX as usize - 1).write(0);
+    libc::strncpy(destination, path, super::dir_prep::PATH_MAX - 1);
+    destination.add(super::dir_prep::PATH_MAX - 1).write(0);
 });
 
 type Queue = crate::navigation::abi::QUEUE;

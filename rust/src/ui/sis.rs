@@ -362,7 +362,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
 /// buf must have bufLen writable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn DateToString(
-    buf: *mut i8,
+    buf: *mut std::ffi::c_char,
     buf_len: usize,
     month_index: BYTE,
     day_index: BYTE,

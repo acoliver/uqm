@@ -111,7 +111,7 @@ unsafe fn listen_single(state: *mut ListenState, info: *mut libc::addrinfo) -> *
     }
     Socket_setReuseAddr(sock);
     if Socket_setNonBlocking(sock) == -1
-        || Socket_bind(sock, (*info).ai_addr, (*info).ai_addrlen) == -1
+        || Socket_bind(sock, (*info).ai_addr, (*info).ai_addrlen as socklen_t) == -1
         || Socket_listen(sock, (*state).flags.backlog) == -1
     {
         close_preserving_errno(sock);

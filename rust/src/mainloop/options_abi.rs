@@ -18,7 +18,7 @@ global!(
     contentDir: *mut uio_DirHandle, configDir: *mut uio_DirHandle,
     saveDir: *mut uio_DirHandle, meleeDir: *mut uio_DirHandle,
     contentMountHandle: *mut uio_MountHandle,
-    baseContentPath: [c_char; libc::PATH_MAX as usize], input_templates: [[c_char; 30]; 6],
+    baseContentPath: [c_char; super::dir_prep::PATH_MAX], input_templates: [[c_char; 30]; 6],
 );
 
 /// # Safety

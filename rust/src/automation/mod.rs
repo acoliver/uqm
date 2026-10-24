@@ -38,6 +38,7 @@ pub mod input;
 pub mod input_ffi;
 #[cfg(unix)]
 pub mod interrupt;
+#[cfg(unix)]
 pub mod inventory;
 pub mod lifecycle;
 pub mod mode;

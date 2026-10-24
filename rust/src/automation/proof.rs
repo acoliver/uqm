@@ -80,6 +80,7 @@ impl PreflightCheck {
     ///
     /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
     /// @requirement REQ-PROOF-001
+    #[cfg(unix)]
     pub fn establish(
         root: &std::path::Path,
         grace: std::time::Duration,

@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "network/tests.rs"]
 mod async_tests;
 pub mod connect;
@@ -6,28 +6,23 @@ pub mod descriptor;
 pub mod listen;
 pub mod manager;
 
-pub(crate) unsafe fn set_errno(err: libc::c_int) {
-    #[cfg(target_os = "linux")]
-    {
-        *libc::__errno_location() = err;
-    }
-    #[cfg(any(
-        target_vendor = "apple",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    {
-        *libc::__error() = err;
-    }
+pub(crate) mod sys;
+use self::sys as libc;
+use ::libc::{c_char, c_int, c_void, size_t, ssize_t};
+use std::ptr;
+use sys::SocketHandle;
+pub use sys::{sockaddr, socklen_t};
+pub(crate) unsafe fn set_errno(error: c_int) {
+    crate::platform::set_errno(error);
 }
 
-use libc::{c_char, c_int, c_void, size_t, socklen_t, ssize_t};
-use std::ptr;
+unsafe fn last_errno() -> c_int {
+    crate::platform::errno()
+}
 
 #[repr(C)]
 pub struct Socket {
-    fd: c_int,
+    fd: SocketHandle,
 }
 
 #[repr(C)]
@@ -64,15 +59,6 @@ const CALLBACK_ID_INVALID: Option<CallbackId> = None;
 const RESOLVE_CLOSED: c_int = 0;
 const RESOLVE_RESOLVING: c_int = 1;
 
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-unsafe fn last_errno() -> c_int {
-    *libc::__error()
-}
 pub static PROTOCOL_FAMILY_TRANSLATION: [c_int; 3] =
     [libc::PF_UNSPEC, libc::PF_INET, libc::PF_INET6];
 
@@ -80,14 +66,19 @@ pub static PROTOCOL_TRANSLATION: [c_int; 2] = [libc::IPPROTO_TCP, libc::IPPROTO_
 
 pub static SOCKET_TYPE_TRANSLATION: [c_int; 2] = [libc::SOCK_STREAM, libc::SOCK_DGRAM];
 
-#[cfg(target_os = "linux")]
-unsafe fn last_errno() -> c_int {
-    *libc::__errno_location()
+pub extern "C" fn network_init() {
+    #[cfg(windows)]
+    unsafe {
+        sys::initialize();
+    }
 }
 
-pub extern "C" fn network_init() {}
-
-pub extern "C" fn network_uninit() {}
+pub extern "C" fn network_uninit() {
+    #[cfg(windows)]
+    unsafe {
+        sys::uninitialize();
+    }
+}
 
 unsafe fn socket_ref(sock: *mut Socket) -> &'static mut Socket {
     &mut *sock
@@ -109,7 +100,7 @@ pub unsafe extern "C" fn Socket_open(
         types[socket_type as usize],
         protocols[protocol as usize],
     );
-    if fd == -1 {
+    if fd == sys::INVALID_SOCKET {
         return ptr::null_mut();
     }
     Box::into_raw(Box::new(Socket { fd }))
@@ -123,7 +114,7 @@ pub unsafe extern "C" fn socket_open_native(
     protocol: c_int,
 ) -> *mut Socket {
     let fd = libc::socket(domain, socket_type, protocol);
-    if fd == -1 {
+    if fd == sys::INVALID_SOCKET {
         return ptr::null_mut();
     }
     Box::into_raw(Box::new(Socket { fd }))
@@ -190,7 +181,7 @@ pub unsafe extern "C" fn Socket_accept(
     loop {
         let mut length = *addr_len;
         let fd = libc::accept(socket_ref(sock).fd, addr, &mut length);
-        if fd >= 0 {
+        if fd != sys::INVALID_SOCKET {
             *addr_len = length;
             return Box::into_raw(Box::new(Socket { fd }));
         }
@@ -228,12 +219,19 @@ pub unsafe extern "C" fn Socket_recv(
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
 #[no_mangle]
 pub unsafe extern "C" fn Socket_setNonBlocking(sock: *mut Socket) -> c_int {
-    let fd = socket_ref(sock).fd;
-    let flags = libc::fcntl(fd, libc::F_GETFL);
-    if flags == -1 {
-        return -1;
+    #[cfg(windows)]
+    {
+        return sys::nonblocking(socket_ref(sock).fd);
     }
-    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
+    #[cfg(unix)]
+    {
+        let fd = socket_ref(sock).fd;
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags == -1 {
+            return -1;
+        }
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK)
+    }
 }
 
 unsafe fn set_socket_option(sock: *mut Socket, level: c_int, option: c_int, value: c_int) -> c_int {
@@ -274,7 +272,14 @@ pub unsafe extern "C" fn Socket_setInteractive(sock: *mut Socket) -> c_int {
     if Socket_setNodelay(sock) == -1 {
         return -1;
     }
-    Socket_setTOS(sock, 0x10)
+    #[cfg(unix)]
+    {
+        Socket_setTOS(sock, 0x10)
+    }
+    #[cfg(windows)]
+    {
+        0
+    }
 }
 
 /// # Safety
@@ -429,7 +434,7 @@ pub unsafe extern "C" fn split_addr_info_on_family(
     *rest_end = rest_next;
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

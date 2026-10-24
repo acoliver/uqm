@@ -4,32 +4,52 @@
 use std::ffi::{c_char, c_int, CStr, CString};
 
 const EP_HOME: c_int = 1;
+#[cfg(windows)]
+/// # Safety
+/// `path` must be a NUL-terminated UTF-8 path.
+pub unsafe fn mkdirhier(path: *const c_char) -> c_int {
+    let path = CStr::from_ptr(path).to_string_lossy();
+    match std::fs::create_dir_all(path.as_ref()) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_errno(crate::platform::io_errno(&error));
+            -1
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn get_home_dir() -> *const c_char {
+    // SAFETY: the C runtime owns the environment value, as for the Unix path.
+    unsafe { libc::getenv(c"USERPROFILE".as_ptr()) }
+}
+
 const EP_ABSOLUTE: c_int = 2;
 const EP_ENVVARS: c_int = 4;
 const EP_DOTS: c_int = 8;
 const EP_SLASHES: c_int = 16;
 const EP_SINGLESEP: c_int = 32;
 
-fn set_errno(error: c_int) {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        *libc::__error() = error;
-    }
-    #[cfg(target_os = "linux")]
-    unsafe {
-        *libc::__errno_location() = error;
-    }
-}
+use crate::platform::set_errno;
 
 /// # Safety
 /// `dir` must be a NUL-terminated path.
 pub unsafe fn create_directory(dir: *const c_char, mode: c_int) -> c_int {
-    libc::mkdir(dir, mode as libc::mode_t)
+    #[cfg(unix)]
+    {
+        libc::mkdir(dir, mode as libc::mode_t)
+    }
+    #[cfg(windows)]
+    {
+        let _ = mode;
+        libc::mkdir(dir)
+    }
 }
 
 /// # Safety
 /// `path` must be a NUL-terminated path. Existing final entries, including
 /// files, succeed as they did in C; an intermediate file fails on the next stat.
+#[cfg(unix)]
 pub unsafe fn mkdirhier(path: *const c_char) -> c_int {
     let path = CStr::from_ptr(path).to_bytes();
     let mut buffer = Vec::with_capacity(path.len() + 2);
@@ -95,6 +115,7 @@ pub unsafe fn mkdirhier(path: *const c_char) -> c_int {
 }
 
 /// Returns the libc-owned HOME or passwd entry buffer.
+#[cfg(unix)]
 pub fn get_home_dir() -> *const c_char {
     unsafe {
         let home = libc::getenv(c"HOME".as_ptr());
@@ -262,7 +283,7 @@ pub unsafe fn expand_path(dest: *mut c_char, len: usize, src: *const c_char, wha
         },
         || {
             let mut buffer = vec![0u8; len];
-            if libc::getcwd(buffer.as_mut_ptr().cast(), len).is_null() {
+            if libc::getcwd(buffer.as_mut_ptr().cast(), len as _).is_null() {
                 Err(std::io::Error::last_os_error().raw_os_error().unwrap())
             } else {
                 Ok(CStr::from_ptr(buffer.as_ptr().cast()).to_bytes().to_vec())

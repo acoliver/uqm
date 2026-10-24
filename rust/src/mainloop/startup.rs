@@ -41,15 +41,8 @@ mod live {
         crate::log_abi::log_init(15);
         crate::bridge_log::rust_bridge_init();
         if let Some(path) = &parsed.log_file {
-            use std::os::fd::AsRawFd;
-            let file = match std::fs::File::create(path) {
-                Ok(file) => file,
-                Err(error) => {
-                    eprintln!("Could not open logfile: {error}");
-                    return 1;
-                }
-            };
-            if libc::dup2(file.as_raw_fd(), libc::STDERR_FILENO) == -1 {
+            if let Err(error) = crate::platform::redirect_stderr(std::path::Path::new(path)) {
+                eprintln!("Could not open logfile: {error}");
                 return 1;
             }
             for i in 0..argc as usize {
@@ -59,7 +52,7 @@ mod live {
                 );
             }
         }
-        log::info!("The Ur-Quan Masters v0.8.0\nThis software comes with ABSOLUTELY NO WARRANTY; for details see the included 'COPYING' file.");
+        log::info!("The Ur-Quan Masters v{}\nThis software comes with ABSOLUTELY NO WARRANTY; for details see the included 'COPYING' file.", env!("CARGO_PKG_VERSION"));
         if crate::mainloop::init_wrappers::rust_tfb_preinit() != 0 {
             return 1;
         }

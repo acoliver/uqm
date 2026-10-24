@@ -57,16 +57,49 @@ jobs:
           fi
 
   game-build:
-    # Build the game with the same plain Cargo command used locally.
-    runs-on: macos-latest
+    name: Game build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            binary: uqm
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            binary: uqm
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: uqm
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: uqm.exe
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            binary: uqm.exe
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-      - run: brew install pkg-config sdl2
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxss-dev libxext-dev libwayland-dev libxkbcommon-dev libpulse-dev
       - uses: dtolnay/rust-toolchain@1.98.0
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - run: cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm
+          key: game-${{ matrix.target }}
+      - run: cargo build --release --locked --bin uqm --features bundled-sdl --target ${{ matrix.target }}
+      - name: Check version, content and native networking without user state
+        run: |
+          target/${{ matrix.target }}/release/${{ matrix.binary }} --version
+          target/${{ matrix.target }}/release/${{ matrix.binary }} --check-content --contentdir=../sc2/content
+          cargo run --release --locked --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
 
   failure-scenarios:
     name: Failure scenario (${{ matrix.scenario }})

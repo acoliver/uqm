@@ -196,8 +196,10 @@ pub(crate) mod live {
         }
         let mut ok = true;
         for side in [0usize, 1] {
-            if crate::resource::ffi_bridge::PutResFileChar(PlayerControl[side] as i8, stream.cast())
-                == -1
+            if crate::resource::ffi_bridge::PutResFileChar(
+                PlayerControl[side] as std::ffi::c_char,
+                stream.cast(),
+            ) == -1
                 || MeleeSetup_serializeTeam((*state).meleeSetup, side, stream.cast()) == -1
             {
                 ok = false;

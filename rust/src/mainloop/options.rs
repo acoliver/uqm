@@ -430,7 +430,7 @@ pub fn parse_and_store(args: &[String]) -> ParsedOptions {
     let mut opts = ParsedOptions::default();
     parse_args_into(args, &mut opts);
     if !opts.parse_error && opts.run_mode == RunMode::Normal {
-        opts = load_config_defaults();
+        opts = load_config_defaults(opts.config_dir.as_deref());
     }
 
     // Override with CLI args (highest priority)
@@ -450,14 +450,14 @@ pub fn parse_and_store(args: &[String]) -> ParsedOptions {
 /// The config file format is `key = TYPE:value` where TYPE is
 /// BOOLEAN, INT32, or STRING. These values provide defaults that
 /// CLI args can override.
-fn load_config_defaults() -> ParsedOptions {
+fn load_config_defaults(explicit_dir: Option<&str>) -> ParsedOptions {
     let mut opts = ParsedOptions::default();
 
-    // Determine config dir (same logic as prepareConfigDir)
-    let config_dir = std::env::var("UQM_CONFIG_DIR")
-        .or_else(|_| std::env::var("HOME").map(|h| format!("{}/.uqm", h.trim_end_matches('/'))))
-        .unwrap_or_else(|_| "~/.uqm".to_string());
-    let cfg_path = format!("{}/uqm.cfg", config_dir.trim_end_matches('/'));
+    let config_dir = match super::dir_prep::config_path(explicit_dir) {
+        Ok(path) => path,
+        Err(_) => return opts,
+    };
+    let cfg_path = config_dir.join("uqm.cfg");
 
     let content = match std::fs::read_to_string(&cfg_path) {
         Ok(c) => c,
@@ -473,7 +473,7 @@ fn load_config_defaults() -> ParsedOptions {
             apply_config_value(&mut opts, key.trim(), val.trim());
         }
     }
-    tracing::debug!("Loaded config from {}", cfg_path);
+    tracing::debug!("Loaded config from {}", cfg_path.display());
     opts
 }
 
@@ -1593,7 +1593,7 @@ mod config_file_tests {
              scaler = STRING:hq\n",
         ));
 
-        let opts = load_config_defaults();
+        let opts = load_config_defaults(None);
 
         assert!(opts.fullscreen);
         assert_eq!((opts.resolution_width, opts.resolution_height), (1024, 768));
@@ -1603,10 +1603,20 @@ mod config_file_tests {
 
     #[test]
     #[serial]
+    fn explicit_config_directory_controls_the_loaded_defaults() {
+        let _user_config = ConfigDir::with_file(Some("reswidth = INT32:1024\n"));
+        let explicit = tempfile::tempdir().unwrap();
+        std::fs::write(explicit.path().join("uqm.cfg"), "reswidth = INT32:800\n").unwrap();
+        let opts = load_config_defaults(Some(explicit.path().to_str().unwrap()));
+        assert_eq!(opts.resolution_width, 800);
+    }
+
+    #[test]
+    #[serial]
     fn a_missing_config_file_leaves_the_defaults() {
         let _config = ConfigDir::with_file(None);
 
-        let opts = load_config_defaults();
+        let opts = load_config_defaults(None);
 
         assert!(!opts.fullscreen);
         assert_eq!(opts.resolution_width, DEFAULT_RESOLUTION_WIDTH);
@@ -1623,6 +1633,7 @@ mod config_file_tests {
              player1control = INT32:4\n\
              gamma = INT32:1500\n",
         ));
+        let config_path = _config._dir.path().to_str().unwrap();
         let args: Vec<String> = [
             "uqm",
             "--res=800x600",
@@ -1638,7 +1649,7 @@ mod config_file_tests {
             "--logfile",
             "run.log",
             "--configdir",
-            "/cfg",
+            config_path,
             "--addondir",
             "/addons",
             "--contentdir",
@@ -1700,7 +1711,7 @@ mod config_file_tests {
             value
         };
         assert_eq!(text(rust_options_get_log_file()), "run.log");
-        assert_eq!(text(rust_options_get_config_dir()), "/cfg");
+        assert_eq!(text(rust_options_get_config_dir()), config_path);
         assert_eq!(text(rust_options_get_addon_dir()), "/addons");
         assert_eq!(text(rust_options_get_content_dir()), "/content");
         assert_eq!(text(rust_options_get_graphics_backend()), "sdl2");

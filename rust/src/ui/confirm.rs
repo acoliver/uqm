@@ -166,7 +166,13 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     label.draw = Some(Widget_DrawLabel);
     label.height = Some(Widget_HeightLabel);
     label.width = Some(Widget_WidthFullScreen);
-    label.line_count = SplitString(msg.cast(), b'\n' as i8, 30, lines.as_mut_ptr(), bank);
+    label.line_count = SplitString(
+        msg.cast(),
+        b'\n' as std::ffi::c_char,
+        30,
+        lines.as_mut_ptr(),
+        bank,
+    );
     label.lines = lines.as_mut_ptr();
     PauseFlash();
     let old_context = SetContext(ScreenContext);

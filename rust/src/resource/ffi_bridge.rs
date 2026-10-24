@@ -1184,7 +1184,9 @@ pub unsafe extern "C" fn res_OpenResFile(
     if uio_stat((dir).cast(), filename, &mut sb) == 0 {
         // S_ISDIR: check if st_mode has the directory bit set
         // Use libc::S_IFMT and libc::S_IFDIR macros for portability
-        if (sb.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+        if (sb.st_mode & libc::S_IFMT as crate::platform::FileMode)
+            == libc::S_IFDIR as crate::platform::FileMode
+        {
             return STREAM_SENTINEL;
         }
     }
