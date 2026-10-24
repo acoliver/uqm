@@ -32,9 +32,7 @@ struct SaveDirFixture {
 
 impl SaveDirFixture {
     fn new() -> Self {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/save-slot-test-scratch");
-        fs::create_dir_all(&root).unwrap();
-        let scratch = TempDir::new_in(&root).unwrap();
+        let scratch = TempDir::new().unwrap();
         unsafe {
             uio_init();
             let repository = uio_openRepository(0);
@@ -92,6 +90,21 @@ impl Drop for SaveDirFixture {
 
 fn seed() -> SaveFile {
     decode_save(C_WRITTEN_SAVE).unwrap()
+}
+
+#[test]
+#[serial]
+fn scratch_directories_are_unique_temporary_and_removed_on_drop() {
+    let scratch_path = || {
+        let fx = SaveDirFixture::new();
+        let path = fx.scratch.path().to_path_buf();
+        assert!(path.starts_with(std::env::temp_dir()), "{path:?}");
+        fs::write(fx.host("scratch.txt"), b"owned by the test").unwrap();
+        drop(fx);
+        assert!(!path.exists(), "fixture must remove its scratch directory");
+        path
+    };
+    assert_ne!(scratch_path(), scratch_path());
 }
 
 #[test]
