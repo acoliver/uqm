@@ -53,10 +53,9 @@ struct Driver;
 
 impl Driver {
     fn new() -> Self {
-        unsafe {
-            ffi::rust_v_control_uninit();
-            ffi::rust_v_control_init();
-        }
+        ffi::rust_v_control_uninit();
+        ffi::rust_v_control_init();
+
         *INPUT.lock() = InputState::new();
         INPUT.lock().initialized = true;
         Self
