@@ -180,6 +180,7 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::BattleOutcomes,
         ],
     ),
+    row("load-connected-talking-pet-v1", &[Domain::SaveLoad]),
     row("load-connected-umgah-fleet-v1", &[Domain::SaveLoad]),
     row("load-connected-rainbow-funded-v1", &[Domain::SaveLoad]),
     row(
