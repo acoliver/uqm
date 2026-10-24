@@ -46,6 +46,7 @@ pub enum RunMode {
     Normal = 0,
     Usage = 1,
     Version = 2,
+    CheckContent = 3,
 }
 
 /// The full set of parsed options, equivalent to C's `options_struct`.
@@ -180,6 +181,11 @@ fn build_command() -> Command {
         .about("The Ur-Quan Masters")
         .disable_help_flag(true)
         .disable_version_flag(true)
+        .arg(
+            Arg::new("check-content")
+                .long("check-content")
+                .action(ArgAction::SetTrue),
+        )
         // Short options that mirror C's optString
         .arg(
             Arg::new("res")
@@ -421,13 +427,19 @@ fn build_command() -> Command {
 /// Priority: CLI args > config file (`uqm.cfg`) > compiled defaults.
 pub fn parse_and_store(args: &[String]) -> ParsedOptions {
     // Start with config file values (lowest explicit priority)
-    let mut opts = load_config_defaults();
+    let mut opts = ParsedOptions::default();
+    parse_args_into(args, &mut opts);
+    if !opts.parse_error && opts.run_mode == RunMode::Normal {
+        opts = load_config_defaults();
+    }
 
     // Override with CLI args (highest priority)
     parse_args_into(args, &mut opts);
 
     if opts.content_dir.is_none() {
-        opts.content_dir = discover_content_dir();
+        opts.content_dir = super::content::locate(None)
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned());
     }
     let _ = PARSED.set(opts.clone());
     opts
@@ -583,6 +595,9 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
         return;
     }
 
+    if matches.get_flag("check-content") {
+        opts.run_mode = RunMode::CheckContent;
+    }
     apply_display_arguments(&matches, opts);
     apply_path_arguments(&matches, opts);
     if !apply_enum_arguments(&matches, opts) {
@@ -796,51 +811,6 @@ fn parse_choice(v: &str, opts: &mut ParsedOptions) -> c_int {
             OPT_PC
         }
     }
-}
-
-/// Search for the UQM content directory by looking for a `version` file
-/// inside candidate directories. Tries:
-/// 1. Current working directory
-/// 2. `content` relative to cwd
-/// 3. Walk up from the executable's location looking for `content/version`
-/// 4. `../../content` (for running from target/debug or target/release)
-fn discover_content_dir() -> Option<String> {
-    let candidates = [
-        // CWD
-        ".".to_string(),
-        "content".to_string(),
-        "../../content".to_string(),
-        "../../../content".to_string(),
-    ];
-
-    for c in &candidates {
-        if std::path::Path::new(c).join("version").exists() {
-            return Some(if c == "." {
-                std::env::current_dir().ok()?.to_string_lossy().to_string()
-            } else {
-                std::fs::canonicalize(c)
-                    .unwrap_or_else(|_| std::path::PathBuf::from(c))
-                    .to_string_lossy()
-                    .to_string()
-            });
-        }
-    }
-
-    // Walk up from the executable's directory
-    if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent()?.to_path_buf();
-        for _ in 0..6 {
-            let content = dir.join("content");
-            if content.join("version").exists() {
-                return Some(content.to_string_lossy().to_string());
-            }
-            if !dir.pop() {
-                break;
-            }
-        }
-    }
-
-    None
 }
 
 // ===========================================================================
@@ -1352,16 +1322,11 @@ mod tests {
     }
 
     #[test]
-    fn test_discover_content_from_cwd() {
-        // When run from the project root, content/version should exist
-        let discovered = discover_content_dir();
-        // In CI/dev this should find it; just verify it doesn't panic
-        if let Some(ref path) = discovered {
-            assert!(
-                std::path::Path::new(path).join("version").exists(),
-                "discovered content dir {path} should contain version file"
-            );
-        }
+    fn check_content_is_an_early_exit_mode_with_an_optional_explicit_path() {
+        let opts = parse(&["uqm", "--check-content", "--contentdir=custom"]);
+        assert_eq!(opts.run_mode, RunMode::CheckContent);
+        assert_eq!(opts.content_dir.as_deref(), Some("custom"));
+        assert!(!opts.parse_error);
     }
 
     #[test]

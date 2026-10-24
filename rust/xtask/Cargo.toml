@@ -1,6 +1,6 @@
 [package]
 name = "uqm-xtask"
-version = "0.8.0"
+version.workspace = true
 edition = "2021"
 publish = false
 default-run = "uqm-xtask"

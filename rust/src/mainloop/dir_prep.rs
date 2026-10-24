@@ -339,20 +339,8 @@ pub fn prepare_content_dir(
     content_dir: Option<&str>,
     addon_dir: Option<&str>,
 ) -> Result<(), DirPrepError> {
-    // Find the content path
-    let content_path = if let Some(dir) = content_dir {
-        let expanded = expand_path(dir)?;
-        if !expanded.join("version").exists() {
-            return Err(DirPrepError::NotFound(format!(
-                "Content dir '{}' does not contain a 'version' file",
-                expanded.display()
-            )));
-        }
-        expanded
-    } else {
-        find_content_dir()?
-            .ok_or_else(|| DirPrepError::NotFound("Could not find content.".to_string()))?
-    };
+    let content_path = super::content::locate(content_dir)
+        .map_err(|error| DirPrepError::NotFound(error.to_string()))?;
 
     let path_str = content_path.to_string_lossy().to_string();
 
@@ -412,42 +400,6 @@ pub fn prepare_content_dir(
     unsafe { scan_addon_packs(dir) };
 
     Ok(())
-}
-
-/// Find content dir by looking for `version` file in common locations.
-fn find_content_dir() -> Result<Option<PathBuf>, DirPrepError> {
-    let candidates: Vec<PathBuf> = vec![
-        PathBuf::from("."),
-        PathBuf::from("content"),
-        PathBuf::from("../../content"),
-        PathBuf::from("../../../content"),
-    ];
-
-    for c in &candidates {
-        if c.join("version").exists() {
-            let canonical = std::fs::canonicalize(c).unwrap_or_else(|_| c.clone());
-            return Ok(Some(canonical));
-        }
-    }
-
-    // Walk up from executable
-    if let Ok(exe) = std::env::current_exe() {
-        let mut dir = match exe.parent() {
-            Some(d) => d.to_path_buf(),
-            None => return Ok(None),
-        };
-        for _ in 0..6 {
-            let content = dir.join("content");
-            if content.join("version").exists() {
-                return Ok(Some(content));
-            }
-            if !dir.pop() {
-                break;
-            }
-        }
-    }
-
-    Ok(None)
 }
 
 /// Mount zip files from /packages directory below content root.
@@ -844,8 +796,7 @@ mod tests {
     #[serial]
     fn test_find_content_dir_finds_or_none() {
         // Should either find content or return None — never panic
-        let result = find_content_dir().unwrap();
-        if let Some(ref path) = result {
+        if let Ok(path) = super::super::content::locate(None) {
             assert!(
                 path.join("version").exists(),
                 "found content dir {} should have version file",
