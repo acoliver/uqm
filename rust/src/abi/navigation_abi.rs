@@ -1130,14 +1130,7 @@ extern "C" {
 extern "C" {
     pub fn GameClockRunning() -> BOOLEAN;
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Color {
-    pub r: BYTE,
-    pub g: BYTE,
-    pub b: BYTE,
-    pub a: BYTE,
-}
+pub use crate::graphics::native_abi::Color;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_Handle {
