@@ -34,26 +34,35 @@ fn main() {
     // Parse command-line options in Rust (replaces C parseOptions)
     let parsed = options::parse_and_store(&args);
 
-    // Initialize tracing-based logging early
-    logging::init(&parsed.log_file);
+    if parsed.parse_error {
+        eprintln!("Invalid option. Run with -h to see the allowed arguments.");
+        exit(1);
+    }
 
     // Handle early-exit modes (version/usage) that bypass the full init
     match parsed.run_mode {
         options::RunMode::Version => {
-            println!("0.8.0");
+            println!("{}", env!("CARGO_PKG_VERSION"));
             exit(0);
         }
         options::RunMode::Usage => {
             print_usage();
             exit(0);
         }
+        options::RunMode::CheckContent => {
+            match uqm_rust::mainloop::content::check(parsed.content_dir.as_deref()) {
+                Ok(path) => println!("Content OK: {}", path.display()),
+                Err(error) => {
+                    eprintln!("Content check failed: {error:#}");
+                    exit(1);
+                }
+            }
+            exit(0);
+        }
         options::RunMode::Normal => {}
     }
 
-    if parsed.parse_error {
-        eprintln!("Invalid option. Run with -h to see the allowed arguments.");
-        exit(1);
-    }
+    logging::init(&parsed.log_file);
 
     // Automation setup: validate before run_uqm (REQ-MODE-001)
     let auto_opts = uqm_rust::automation::AutomationOptions {
@@ -115,6 +124,8 @@ fn main() {
 
 fn print_usage() {
     println!("Options:");
+    println!("  --version                 (print version and exit) ");
+    println!("  --check-content           (verify content without config, saves or SDL)");
     println!("  -r, --res=WIDTHxHEIGHT (default 1280x960)");
     println!("  -f, --fullscreen (default off)");
     println!("  -w, --windowed (default on)");

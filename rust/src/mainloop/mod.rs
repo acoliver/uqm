@@ -27,6 +27,7 @@
 
 pub mod c_extern;
 pub mod c_main_extern;
+pub mod content;
 pub mod dir_prep;
 pub mod ffi;
 pub mod game_loop;

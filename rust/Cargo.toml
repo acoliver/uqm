@@ -3,6 +3,9 @@ members = ["xtask"]
 default-members = ["."]
 resolver = "2"
 
+[workspace.package]
+version = "0.9.0-rc.1"
+
 [profile.release]
 codegen-units = 1
 lto = "off"
@@ -40,7 +43,7 @@ opt-level = 3
 
 [package]
 name = "uqm"
-version = "0.8.0"
+version.workspace = true
 edition = "2021"
 
 [lib]
@@ -79,7 +82,7 @@ memoffset = "0.9.1"
 rodio = { version = "0.19", default-features = false, features = ["wav", "vorbis"] }
 cpal = "0.15"
 regex = "1" # @plan PLAN-20260314-FILE-IO.P07 @requirement REQ-FIO-DIRLIST-REGEX
-zip = "9" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
+zip = { version = "9", default-features = false, features = ["deflate"] } # UQM packages use stored/deflate entries.
 crc32fast = "1.4" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 bitflags = "2.4" # @plan PLAN-20260320-BATTLE.P04 @requirement REQ-BAT-006 Element state flags
 serde = { version = "1", features = ["derive"] } # @plan PLAN-20260723-RUNTIME-AUTOMATION.P01 @requirement REQ-DEP-002
@@ -97,6 +100,7 @@ fast_image_resize = { version = "5.0", features = ["only_u8x4"] }
 default = ["audio_heart"]
 audio_heart = []
 debug-process = []
+bundled-sdl = ["sdl2/bundled", "sdl2/static-link"]
 
 [[bin]]
 name = "uqm"
