@@ -190,6 +190,7 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row("load-connected-talking-pet-v1", &[Domain::SaveLoad]),
+    row("load-connected-shattered-v1", &[Domain::SaveLoad]),
     row("load-connected-umgah-fleet-v1", &[Domain::SaveLoad]),
     row("load-connected-rainbow-funded-v1", &[Domain::SaveLoad]),
     row(

@@ -149,6 +149,7 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             "dev-taalo-protected" => (2, 3, 2156, 32, 18187, 115, 4),
             "west-bomb-refueled" => (14, 8, 2156, 20, 21000, 1175, 0),
             "war-cleared" => (1, 1, 2157, 20, 21000, 1175, 0),
+            "connected-shattered" => (19, 9, 2157, 36, 11000, 1798, 6),
             "connected-talking-pet" => (10, 9, 2157, 36, 2852, 1798, 2),
             "connected-umgah-fleet" => (16, 7, 2157, 50, 11000, 928, 5),
             "connected-rainbow-funded" => (16, 6, 2157, 8, 11000, 7, 2),
