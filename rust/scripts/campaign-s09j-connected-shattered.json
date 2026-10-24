@@ -578,6 +578,13 @@
       "max_ticks": 18000
     },
     {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 2,
+      "settle": 60
+    },
+    {
       "action": "select_response",
       "phrase": "buy",
       "max_ticks": 18000
