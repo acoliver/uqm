@@ -262,27 +262,71 @@ fn a_second_track_continues_the_numbering_and_the_decoder_offset() {
 }
 
 #[test]
+fn numbered_sale_speech_has_decoders_for_the_number_and_continuation() {
+    let _engine = engine();
+    unsafe {
+        crate::sound::heart_ffi::splice_track(
+            c"comm/melnorme/prefix.ogg".as_ptr(),
+            c"You have ".as_ptr(),
+            std::ptr::null(),
+            None,
+        );
+        let numbers = [c"comm/melnorme/seven.ogg".as_ptr(), std::ptr::null()];
+        crate::sound::heart_ffi::splice_multi_track(numbers.as_ptr(), c"7".as_ptr());
+        crate::sound::heart_ffi::splice_track(
+            c"comm/melnorme/suffix.ogg".as_ptr(),
+            c" credits".as_ptr(),
+            std::ptr::null(),
+            None,
+        );
+    }
+    assert_eq!(chunk_count(), 3);
+    for i in 0..3 {
+        assert!(
+            unsafe { chunk_at(i).as_ref() }.decoder.is_some(),
+            "chunk {i} has no speech decoder"
+        );
+    }
+    assert_eq!(
+        texts(),
+        [Some("You have 7 credits".to_string()), None, None]
+    );
+    play_track(false).unwrap();
+    assert!(playing_track());
+    let sample = playing_sample();
+    while TrackCallbacks.on_end_chunk(&mut sample.lock(), 123) {
+        assert!(sample.lock().decoder.is_some());
+    }
+    TrackCallbacks.on_end_stream(&mut sample.lock());
+    assert_eq!(playing_track_num(), 0);
+}
+
+#[test]
 fn a_multi_track_splice_needs_an_existing_track_and_asks_the_next_one_to_continue_the_page() {
     let _engine = engine();
     assert!(matches!(
-        splice_multi_track(&[Some("a")], &[None], None),
+        splice_multi_track(vec![voice(1, 0.24)], Some("7")),
         Err(AudioError::InvalidSample)
     ));
 
     splice_two_pages(None);
-    splice_multi_track(&[Some("a"), None, Some("b")], &[Some(" tail")], None).unwrap();
+    splice_multi_track(vec![voice(1, 0.24), voice(1, 0.5)], Some(" tail")).unwrap();
 
-    assert_eq!(chunk_count(), 4, "one placeholder per named track");
+    assert_eq!(chunk_count(), 4, "one audio chunk per decoded number clip");
+    let state = TRACK_STATE.lock();
+    assert_eq!(state.dec_offset, 2740.0);
+    assert!((state.sound_sample.as_ref().unwrap().lock().length - 2.74).abs() < 0.001);
+    drop(state);
     assert_eq!(texts()[1], Some("..Second line tail".to_string()));
     assert!(TRACK_STATE.lock().no_page_break);
-    assert!(splice_multi_track(&[], &[], None).is_ok());
+    assert!(splice_multi_track(Vec::new(), Some("")).is_ok());
 }
 
 #[test]
 fn a_track_spliced_without_a_page_break_extends_the_previous_subtitle() {
     let _engine = engine();
     splice_two_pages(None);
-    splice_multi_track(&[], &[], None).unwrap();
+    splice_multi_track(Vec::new(), Some("")).unwrap();
     TRACK_STATE.lock().no_page_break = true;
 
     splice_track(
@@ -784,7 +828,7 @@ fn the_c_string_for_a_page_is_stable_so_callers_can_compare_pointers() {
 fn finding_pages_skips_untagged_audio() {
     let _engine = engine();
     splice_two_pages(None);
-    splice_multi_track(&[Some("filler")], &[None], None).unwrap();
+    splice_multi_track(vec![voice(1, 0.24)], Some("")).unwrap();
     TRACK_STATE.lock().no_page_break = false;
     splice_track(Some("next"), Some("Third"), None, None, vec![voice(1, 1.0)]).unwrap();
     let state = TRACK_STATE.lock();

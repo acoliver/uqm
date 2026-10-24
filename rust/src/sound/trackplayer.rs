@@ -470,56 +470,46 @@ pub fn splice_track(
     Ok(())
 }
 
-/// Splice multiple tracks at once.
+/// Append decoded number clips to the preceding subtitle's audio.
 pub fn splice_multi_track(
-    tracks: &[Option<&str>],
-    texts: &[Option<&str>],
-    _timestamp: Option<&str>,
+    decoders: Vec<Box<dyn SoundDecoder>>,
+    text: Option<&str>,
 ) -> AudioResult<()> {
+    let Some(text) = text else {
+        return Ok(());
+    };
     let mut state = TRACK_STATE.lock();
-
     if state.track_count == 0 {
         return Err(AudioError::InvalidSample);
     }
-
-    let num_tracks = tracks.len().min(MAX_MULTI_TRACKS);
-    if num_tracks == 0 {
+    if decoders.is_empty() {
         return Ok(());
     }
 
-    // Build chunks for each track (decoder loading deferred to FFI)
-    for track in tracks.iter().take(num_tracks) {
-        if track.is_none() {
-            continue;
-        }
-
+    for decoder in decoders.into_iter().take(MAX_MULTI_TRACKS) {
+        let length = decoder.length();
+        let length_ms = (length * 1000.0) as u32;
         let chunk = SoundChunk {
-            decoder: None,
-            length_ms: 0,
+            decoder: Some(decoder),
+            length_ms,
             start_time: state.dec_offset,
-            run_time: ms_to_ticks((3.0 * TEXT_SPEED) as u32) as i32,
+            run_time: ms_to_ticks(length_ms) as i32,
             tag_me: false,
-            track_num: state.track_count.saturating_sub(1),
+            track_num: state.track_count - 1,
             text: None,
             text_cstr: None,
             callback: None,
             next: None,
         };
+        state.sound_sample.as_ref().unwrap().lock().length += length;
+        state.dec_offset += f64::from(length * 1000.0);
         append_chunk(&mut state, chunk);
-        // dec_offset would be advanced by decoder length (when loaded)
     }
 
-    // Append subtitle text to last_sub if provided
-    if let Some(text) = texts.first().and_then(|t| *t) {
-        if !state.last_sub.is_null() {
-            let last_sub = unsafe { &mut *state.last_sub };
-            match &mut last_sub.text {
-                Some(t) => t.push_str(text),
-                None => last_sub.text = Some(text.to_string()),
-            }
-        }
-    }
-
+    let last_sub = unsafe { state.last_sub.as_mut() }.expect("number speech follows a subtitle");
+    last_sub.text.as_mut().unwrap().push_str(text);
+    // An earlier subtitle lookup may have cached this string already.
+    last_sub.text_cstr = None;
     state.no_page_break = true;
     Ok(())
 }
@@ -1450,7 +1440,7 @@ mod tests {
     #[test]
     fn test_splice_multi_track_precondition() {
         let _serial = ENGINE_TEST_LOCK.lock();
-        let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
+        let result = splice_multi_track(Vec::new(), None);
         // Should not panic
         assert!(result.is_ok() || result.is_err());
     }
@@ -1458,7 +1448,7 @@ mod tests {
     #[test]
     fn test_splice_multi_track_appends() {
         let _serial = ENGINE_TEST_LOCK.lock();
-        let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
+        let result = splice_multi_track(Vec::new(), Some("text"));
         assert!(result.is_ok() || result.is_err());
     }
 

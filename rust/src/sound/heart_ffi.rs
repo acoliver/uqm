@@ -736,21 +736,28 @@ pub unsafe fn splice_multi_track(
     if track_names_ptr.is_null() {
         return;
     }
-    // Read null-terminated array of UNICODE* (char*) strings
-    let mut names: Vec<Option<String>> = Vec::new();
-    let mut i = 0;
-    loop {
-        let p = *track_names_ptr.add(i);
-        if p.is_null() {
+    let Some(text) = unicode_ptr_to_option(track_text_ptr) else {
+        return;
+    };
+    let mut decoders = Vec::new();
+    for i in 0..trackplayer::MAX_MULTI_TRACKS {
+        let name_ptr = *track_names_ptr.add(i);
+        if name_ptr.is_null() {
             break;
         }
-        names.push(unicode_ptr_to_option(p));
-        i += 1;
+        let name = CStr::from_ptr(name_ptr).to_string_lossy();
+        let data = uio_read_file(name_ptr);
+        // C loads the complete clip, or its timed null decoder when voice
+        // content is absent. Never append an audio chunk without a decoder.
+        decoders.extend(page_decoders(
+            &name,
+            data.as_deref(),
+            &[-(3.0 * trackplayer::TEXT_SPEED) as i32],
+        ));
     }
-    let text = unicode_ptr_to_option(track_text_ptr);
-    let name_refs: Vec<Option<&str>> = names.iter().map(|n| n.as_deref()).collect();
-    let text_refs: Vec<Option<&str>> = vec![text.as_deref(); name_refs.len()];
-    let _ = trackplayer::splice_multi_track(&name_refs, &text_refs, None);
+    if let Err(error) = trackplayer::splice_multi_track(decoders, Some(&text)) {
+        eprintln!("[SpliceMultiTrack] {error}");
+    }
 }
 
 pub fn play_track() {
