@@ -601,11 +601,6 @@
     },
     {
       "action": "select_response",
-      "phrase": "done_buying_fuel",
-      "max_ticks": 18000
-    },
-    {
-      "action": "select_response",
       "phrase": "buy_info",
       "max_ticks": 18000
     },
