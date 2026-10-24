@@ -30,6 +30,7 @@ pub mod network;
 pub mod pickship;
 pub mod planet_side;
 pub mod planets;
+pub mod platform;
 pub mod resource;
 pub mod savegame;
 pub mod ships;

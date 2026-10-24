@@ -2,7 +2,8 @@
 // Reference: sc2/src/libs/uio/io.h, uiostream.h
 
 use crate::bridge_log::rust_bridge_log_msg;
-use libc::{mode_t, off_t, size_t};
+use crate::platform::{set_errno, FileMode as mode_t};
+use libc::{off_t, size_t};
 use std::collections::HashMap;
 
 use std::fs::{self, OpenOptions};
@@ -40,32 +41,8 @@ const UIO_STREAM_STATUS_ERROR: c_int = 2;
 const UIO_STREAM_OPERATION_NONE: c_int = 0;
 const UIO_STREAM_OPERATION_READ: c_int = 1;
 
-// Helper function to set errno across FFI boundary
-#[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
-fn set_errno(code: c_int) {
-    unsafe {
-        *libc::__error() = code;
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn set_errno(code: c_int) {
-    unsafe {
-        *libc::__errno_location() = code;
-    }
-}
-
 #[cfg(test)]
-fn current_errno() -> c_int {
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
-    unsafe {
-        *libc::__error()
-    }
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    unsafe {
-        *libc::__errno_location()
-    }
-}
+use crate::platform::errno as current_errno;
 
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
@@ -226,7 +203,7 @@ pub unsafe fn uio_rename(
         match fs::rename(&old_host_path, &new_host_path) {
             Ok(_) => 0,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 fail_errno(err_code, -1)
             }
         }
@@ -513,7 +490,7 @@ pub unsafe fn uio_mkdir(dir: *mut uio_DirHandle, path: *const c_char, _mode: mod
         match fs::create_dir(&host_path) {
             Ok(_) => 0,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 fail_errno(err_code, -1)
             }
         }
@@ -564,7 +541,7 @@ pub unsafe fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
         match fs::remove_dir(&host_path) {
             Ok(_) => 0,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 fail_errno(err_code, -1)
             }
         }
@@ -589,8 +566,8 @@ pub unsafe fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -
 
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
-        SEEK_CUR => SeekFrom::Current(offset),
-        SEEK_END => SeekFrom::End(offset),
+        SEEK_CUR => SeekFrom::Current(offset as _),
+        SEEK_END => SeekFrom::End(offset as _),
         _ => return -1,
     };
 
@@ -1635,7 +1612,7 @@ pub unsafe fn uio_open_file_block(handle: *mut uio_Handle) -> *mut uio_FileBlock
         let size = match file_guard.metadata() {
             Ok(meta) => meta.len() as off_t,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 return fail_errno(err_code, ptr::null_mut());
             }
         };
@@ -1693,7 +1670,7 @@ pub unsafe fn uio_open_file_block2(
         let file_size = match file_guard.metadata() {
             Ok(meta) => meta.len(),
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 return fail_errno(err_code, ptr::null_mut());
             }
         };
@@ -1756,7 +1733,7 @@ pub unsafe fn uio_access_file_block(
             let file_size = match file_guard.metadata() {
                 Ok(meta) => meta.len() as off_t,
                 Err(e) => {
-                    let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                    let err_code = crate::platform::io_errno(&e);
                     return fail_errno(err_code, -1) as isize;
                 }
             };
@@ -1786,7 +1763,7 @@ pub unsafe fn uio_access_file_block(
 
         // Seek to position
         if let Err(e) = file_guard.seek(SeekFrom::Start(file_offset as u64)) {
-            let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+            let err_code = crate::platform::io_errno(&e);
             return fail_errno(err_code, -1) as isize;
         }
 
@@ -1794,7 +1771,7 @@ pub unsafe fn uio_access_file_block(
         let bytes_read = match file_guard.read(&mut inner.cache) {
             Ok(n) => n,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 return fail_errno(err_code, -1) as isize;
             }
         };
@@ -1854,7 +1831,7 @@ pub unsafe fn uio_copy_file_block(
             let file_size = match file_guard.metadata() {
                 Ok(meta) => meta.len() as off_t,
                 Err(e) => {
-                    let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                    let err_code = crate::platform::io_errno(&e);
                     return fail_errno(err_code, -1);
                 }
             };
@@ -1878,7 +1855,7 @@ pub unsafe fn uio_copy_file_block(
 
         // Seek to position
         if let Err(e) = file_guard.seek(SeekFrom::Start(file_offset as u64)) {
-            let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+            let err_code = crate::platform::io_errno(&e);
             return fail_errno(err_code, -1);
         }
 
@@ -1887,7 +1864,7 @@ pub unsafe fn uio_copy_file_block(
         let bytes_read = match file_guard.read(&mut temp_buf) {
             Ok(n) => n,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 return fail_errno(err_code, -1);
             }
         };
@@ -3320,7 +3297,7 @@ pub unsafe fn uio_open(
                         "uio_open write failed: path={:?} err={}",
                         file_path, err
                     ));
-                    let err_code = err.raw_os_error().unwrap_or(libc::EIO);
+                    let err_code = crate::platform::io_errno(&err);
                     set_errno(err_code);
                     return ptr::null_mut();
                 }
@@ -3379,7 +3356,7 @@ pub unsafe fn uio_open(
                         "uio_open read failed: path={:?} err={}",
                         virtual_path, err
                     ));
-                    set_errno(err.raw_os_error().unwrap_or(libc::EIO));
+                    set_errno(crate::platform::io_errno(&err));
                     return ptr::null_mut();
                 }
             }
@@ -3400,7 +3377,7 @@ pub unsafe fn uio_open(
                     "uio_open read failed: path={:?} err={}",
                     file_path, err
                 ));
-                set_errno(err.raw_os_error().unwrap_or(libc::EIO));
+                set_errno(crate::platform::io_errno(&err));
                 return ptr::null_mut();
             }
         };
@@ -3537,7 +3514,7 @@ pub unsafe fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int 
         match fs::remove_file(&file_path) {
             Ok(_) => 0,
             Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
+                let err_code = crate::platform::io_errno(&e);
                 fail_errno(err_code, -1)
             }
         }
@@ -3674,7 +3651,7 @@ pub unsafe fn uio_fopen(
                             "uio_fopen failed: path={:?} err={}",
                             file_path, err
                         ));
-                        let err_code = err.raw_os_error().unwrap_or(libc::EIO);
+                        let err_code = crate::platform::io_errno(&err);
                         set_errno(err_code);
                         return ptr::null_mut();
                     }
@@ -3709,7 +3686,7 @@ pub unsafe fn uio_fopen(
                         "uio_fopen failed: path={:?} err={}",
                         file_path, err
                     ));
-                    let err_code = err.raw_os_error().unwrap_or(libc::EIO);
+                    let err_code = crate::platform::io_errno(&err);
                     set_errno(err_code);
                     return ptr::null_mut();
                 }
@@ -3898,8 +3875,8 @@ pub unsafe fn uio_fseek(stream: *mut uio_Stream, offset: c_long, whence: c_int) 
 
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
-        SEEK_CUR => SeekFrom::Current(offset),
-        SEEK_END => SeekFrom::End(offset),
+        SEEK_CUR => SeekFrom::Current(offset as _),
+        SEEK_END => SeekFrom::End(offset as _),
         _ => return -1,
     };
 

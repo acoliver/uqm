@@ -119,6 +119,9 @@ path = "tests/planets_parity.rs"
 name = "linked_provider_fixture"
 path = "tests/linked_provider_fixture.rs"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Networking_WinSock", "Win32_System_Console", "Win32_Foundation"] }
+
 [dev-dependencies]
 tempfile = "3"
 proptest = "1.4"

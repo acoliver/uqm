@@ -1,12 +1,14 @@
 use super::descriptor::{invoke, NetDescriptor};
+use super::sys as libc;
+use super::sys::{fd_set, SocketHandle};
 use super::{last_errno, set_errno};
-use libc::{c_int, fd_set};
+use ::libc::c_int;
 use parking_lot::Mutex;
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 struct Manager {
-    descriptors: [usize; libc::FD_SETSIZE],
-    max_nd: usize,
+    descriptors: BTreeMap<SocketHandle, usize>,
     read_set: fd_set,
     write_set: fd_set,
     exception_set: fd_set,
@@ -15,8 +17,7 @@ struct Manager {
 impl Manager {
     fn new() -> Self {
         Self {
-            descriptors: [0; libc::FD_SETSIZE],
-            max_nd: 0,
+            descriptors: BTreeMap::new(),
             // fd_set consists of integer bit masks; all-zero is the empty set.
             read_set: unsafe { std::mem::zeroed() },
             write_set: unsafe { std::mem::zeroed() },
@@ -40,14 +41,18 @@ pub extern "C" fn NetManager_uninit() {}
 #[no_mangle]
 pub unsafe extern "C" fn NetManager_addDesc(nd: *mut NetDescriptor) -> c_int {
     let fd = (*(*nd).socket).fd;
+    #[cfg(unix)]
     if fd as usize >= libc::FD_SETSIZE {
         set_errno(libc::EMFILE);
         return -1;
     }
     let mut manager = MANAGER.lock();
-    assert_eq!(manager.descriptors[fd as usize], 0);
-    manager.descriptors[fd as usize] = nd as usize;
-    manager.max_nd = manager.max_nd.max(fd as usize + 1);
+    #[cfg(windows)]
+    if manager.descriptors.len() >= libc::FD_SETSIZE {
+        set_errno(libc::EMFILE);
+        return -1;
+    }
+    assert!(manager.descriptors.insert(fd, nd as usize).is_none());
     if (*nd).read_callback.is_some() {
         libc::FD_SET(fd, &mut manager.read_set);
     }
@@ -66,16 +71,10 @@ pub unsafe extern "C" fn NetManager_addDesc(nd: *mut NetDescriptor) -> c_int {
 pub unsafe extern "C" fn NetManager_removeDesc(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     let mut manager = MANAGER.lock();
-    assert_eq!(manager.descriptors[fd as usize], nd as usize);
+    assert_eq!(manager.descriptors.remove(&fd), Some(nd as usize));
     libc::FD_CLR(fd, &mut manager.read_set);
     libc::FD_CLR(fd, &mut manager.write_set);
     libc::FD_CLR(fd, &mut manager.exception_set);
-    manager.descriptors[fd as usize] = 0;
-    if fd as usize + 1 == manager.max_nd {
-        while manager.max_nd > 0 && manager.descriptors[manager.max_nd - 1] == 0 {
-            manager.max_nd -= 1;
-        }
-    }
 }
 
 /// # Safety
@@ -132,13 +131,16 @@ pub unsafe extern "C" fn NetManager_deactivateExceptionCallback(nd: *mut NetDesc
 #[no_mangle]
 pub unsafe extern "C" fn NetManager_process(timeout_ms: *mut u32) -> c_int {
     let mut timeout = libc::timeval {
-        tv_sec: (*timeout_ms / 1000).into(),
+        tv_sec: (*timeout_ms / 1000) as _,
         tv_usec: ((*timeout_ms % 1000) * 1000) as _,
     };
     let (max_nd, mut reads, mut writes, mut exceptions) = {
         let manager = MANAGER.lock();
         (
-            manager.max_nd,
+            manager
+                .descriptors
+                .last_key_value()
+                .map_or(0, |(&fd, _)| fd as usize + 1),
             manager.read_set,
             manager.write_set,
             manager.exception_set,
@@ -161,12 +163,22 @@ pub unsafe extern "C" fn NetManager_process(timeout_ms: *mut u32) -> c_int {
         *timeout_ms = timeout.tv_sec as u32 * 1000 + timeout.tv_usec as u32 / 1000;
         return -1;
     }
-    let mut i = 0;
-    while i < MANAGER.lock().max_nd && result != 0 {
-        // Look up each entry after earlier callbacks, which can remove or replace descriptors.
-        let nd = MANAGER.lock().descriptors[i] as *mut NetDescriptor;
-        if !nd.is_null() {
-            let fd = i as c_int;
+    let mut previous = None;
+    while result != 0 {
+        use std::ops::Bound::{Excluded, Unbounded};
+        // Re-read after each callback: a callback may remove or replace later entries.
+        let next = MANAGER
+            .lock()
+            .descriptors
+            .range((previous.map_or(Unbounded, Excluded), Unbounded))
+            .next()
+            .map(|(&fd, &nd)| (fd, nd));
+        let Some((fd, nd)) = next else {
+            break;
+        };
+        previous = Some(fd);
+        let nd = nd as *mut NetDescriptor;
+        {
             let mut bit_set = false;
             let mut closed = false;
             if libc::FD_ISSET(fd, &exceptions) {
@@ -185,7 +197,6 @@ pub unsafe extern "C" fn NetManager_process(timeout_ms: *mut u32) -> c_int {
                 result -= 1;
             }
         }
-        i += 1;
     }
     *timeout_ms = timeout.tv_sec as u32 * 1000 + timeout.tv_usec as u32 / 1000;
     0

@@ -130,7 +130,7 @@ unsafe extern "C" fn connect_callback(nd: *mut NetDescriptor) {
         state,
         nd,
         (*(*state).info_ptr).ai_addr,
-        (*(*state).info_ptr).ai_addrlen,
+        (*(*state).info_ptr).ai_addrlen as socklen_t,
     );
     ConnectState_decRef(state);
     let released = ConnectState_decRef(state);
@@ -170,7 +170,7 @@ unsafe fn try_next(state: *mut ConnectState) -> *mut Socket {
     Socket_setReuseAddr(sock);
     Socket_setInlineOOB(sock);
     Socket_setKeepAlive(sock);
-    if Socket_connect(sock, (*info).ai_addr, (*info).ai_addrlen) == 0
+    if Socket_connect(sock, (*info).ai_addr, (*info).ai_addrlen as socklen_t) == 0
         || last_errno() == libc::EINPROGRESS
     {
         return sock;

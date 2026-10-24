@@ -142,9 +142,7 @@ pub unsafe extern "C" fn flushPacketQueues() {
             continue;
         }
         if flushPacketQueue(conn) == -1 {
-            let err = std::io::Error::last_os_error()
-                .raw_os_error()
-                .expect("errno");
+            let err = crate::platform::errno();
             if err != libc::EAGAIN && err != libc::EWOULDBLOCK {
                 closePlayerNetworkConnection(player as COUNT);
             }

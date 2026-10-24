@@ -454,9 +454,11 @@ fn load_config_defaults() -> ParsedOptions {
     let mut opts = ParsedOptions::default();
 
     // Determine config dir (same logic as prepareConfigDir)
-    let config_dir = std::env::var("UQM_CONFIG_DIR")
-        .or_else(|_| std::env::var("HOME").map(|h| format!("{}/.uqm", h.trim_end_matches('/'))))
-        .unwrap_or_else(|_| "~/.uqm".to_string());
+    let config_dir = std::env::var("UQM_CONFIG_DIR").unwrap_or_else(|_| {
+        crate::platform::default_config_dir()
+            .to_string_lossy()
+            .into_owned()
+    });
     let cfg_path = format!("{}/uqm.cfg", config_dir.trim_end_matches('/'));
 
     let content = match std::fs::read_to_string(&cfg_path) {

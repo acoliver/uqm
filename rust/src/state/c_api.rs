@@ -83,7 +83,7 @@ pub unsafe extern "C" fn SeekStateFile(
     offset: c_long,
     whence: c_int,
 ) -> c_int {
-    rust_seek_state_file((*file).index, offset, whence)
+    rust_seek_state_file((*file).index, offset as _, whence)
 }
 
 #[cfg(not(test))]

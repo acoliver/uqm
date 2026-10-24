@@ -275,36 +275,7 @@ pub type NetDescriptor_ReadCallback = crate::network::descriptor::NdCallback;
 pub type NetDescriptor_WriteCallback = crate::network::descriptor::NdCallback;
 pub type NetDescriptor_ExceptionCallback = crate::network::descriptor::NdCallback;
 pub type NetDescriptor_CloseCallback = crate::network::descriptor::NdCallback;
-pub type sa_family_t = libc::sa_family_t;
-pub type socklen_t = libc::socklen_t;
-pub type iovec = libc::iovec;
-pub type sockaddr = libc::sockaddr;
-pub type msghdr = libc::msghdr;
-extern "C" {
-    pub fn send(
-        arg1: ::std::os::raw::c_int,
-        arg2: *const ::std::os::raw::c_void,
-        arg3: usize,
-        arg4: ::std::os::raw::c_int,
-    ) -> isize;
-}
-extern "C" {
-    pub fn sendmsg(
-        arg1: ::std::os::raw::c_int,
-        arg2: *const msghdr,
-        arg3: ::std::os::raw::c_int,
-    ) -> isize;
-}
-extern "C" {
-    pub fn sendto(
-        arg1: ::std::os::raw::c_int,
-        arg2: *const ::std::os::raw::c_void,
-        arg3: usize,
-        arg4: ::std::os::raw::c_int,
-        arg5: *const sockaddr,
-        arg6: socklen_t,
-    ) -> isize;
-}
+pub use crate::network::{sockaddr, socklen_t};
 pub const ProtocolFamily_PF_unspec: ProtocolFamily = 0;
 pub const ProtocolFamily_PF_inet: ProtocolFamily = 1;
 pub const ProtocolFamily_PF_inet6: ProtocolFamily = 2;

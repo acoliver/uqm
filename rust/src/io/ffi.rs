@@ -57,15 +57,7 @@ pub use crate::io::uio_bridge::uio_fstat;
 
 pub use crate::io::uio_bridge::uio_unlink;
 
-#[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
-fn current_errno() -> c_int {
-    unsafe { *libc::__error() }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn current_errno() -> c_int {
-    unsafe { *libc::__errno_location() }
-}
+use crate::platform::errno as current_errno;
 
 // Constants for uio_open flags
 const O_RDONLY: c_int = 0;

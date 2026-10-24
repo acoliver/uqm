@@ -95,7 +95,10 @@ pub(crate) mod live {
         for index in 0..load.numIndices {
             let entry =
                 SetAbsStringTableIndex(load.dirEntries, *load.entryIndices.add(index as usize));
-            if libc::strcasecmp(GetStringAddress(entry), name) == 0 {
+            if std::ffi::CStr::from_ptr(GetStringAddress(entry))
+                .to_bytes()
+                .eq_ignore_ascii_case(std::ffi::CStr::from_ptr(name).to_bytes())
+            {
                 return load.preBuiltCount + index;
             }
         }

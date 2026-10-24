@@ -29,8 +29,6 @@ const UIO_MOUNT_ABOVE: c_int = 3 << 2; // 12
 const MATCH_PREFIX: c_int = 1;
 const MATCH_REGEX: c_int = 4;
 
-const CONFIGDIR_DEFAULT: &str = "~/.uqm/";
-
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
@@ -165,7 +163,7 @@ extern "C" {
 }
 
 /// Maximum path length, matching C's PATH_MAX on macOS.
-const PATH_MAX: usize = libc::PATH_MAX as usize;
+pub(crate) const PATH_MAX: usize = 4096;
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
@@ -229,8 +227,10 @@ unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle 
 /// Resolves the path (default `~/.uqm/`), creates it if needed, mounts
 /// it at "/" in the uio repository, and sets the C `configDir` global.
 pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> {
-    let raw = config_dir.unwrap_or(CONFIGDIR_DEFAULT);
-    let path = expand_path(raw)?;
+    let path = match config_dir {
+        Some(raw) => expand_path(raw)?,
+        None => crate::platform::default_config_dir(),
+    };
     let path_str = path.to_string_lossy().to_string();
 
     // Set env var so UQM_SAVE_DIR / UQM_MELEE_DIR can reference it
