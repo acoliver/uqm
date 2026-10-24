@@ -21,6 +21,8 @@ OUT = ROOT / "artifacts/release"
 
 
 def run(*args, **kwargs):
+    if kwargs.get("text"):
+        kwargs.setdefault("encoding", "utf-8")
     return subprocess.run([str(arg) for arg in args], check=True, **kwargs)
 
 
@@ -29,7 +31,7 @@ def smoke(binary, cwd, version, content):
     user_state = cwd / "unused-user-state"
     for name in ["HOME", "APPDATA", "USERPROFILE", "UQM_CONFIG_DIR"]:
         env[name] = str(user_state)
-    kwargs = dict(cwd=cwd, env=env, timeout=30, capture_output=True, text=True)
+    kwargs = dict(cwd=cwd, env=env, timeout=30, capture_output=True, text=True, encoding="utf-8")
     output = run(binary, "--version", **kwargs).stdout.strip()
     if output != version:
         raise RuntimeError(f"unexpected version: {output!r}, expected {version}")
@@ -213,6 +215,11 @@ def package(tag, target):
         smoke(unpacked_binary, work, version, content)
         if mac:
             run("codesign", "--verify", "--deep", "--strict", unpacked / "UQM.app")
+            command_dir = unpacked / "bin"
+            command_dir.mkdir()
+            command = command_dir / "uqm"
+            command.symlink_to("../UQM.app/Contents/MacOS/uqm")
+            smoke(command, work, version, content)
         if not windows and not mac:
             assets.extend(linux_packages(stage, work, version, target))
     sums = OUT / f"SHA256SUMS-{target}"

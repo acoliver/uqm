@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import struct
+import sys
 import tempfile
 import unittest
 
@@ -9,6 +10,13 @@ import package
 
 
 class PackagingTests(unittest.TestCase):
+    def test_build_tool_output_is_decoded_as_utf8_on_every_platform(self):
+        result = package.run(
+            sys.executable, "-c", "import os; os.write(1, bytes([0xc2, 0x81]))",
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.stdout, "\u0081")
+
     def test_tag_must_match_the_workspace_version_before_building(self):
         for tag in ["main", "v0.8.0", "v0.9.0-beta.1"]:
             with self.subTest(tag=tag), self.assertRaises(ValueError):
