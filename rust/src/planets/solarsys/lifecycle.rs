@@ -87,8 +87,6 @@ mod ffi {
         pub(super) fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
         pub(super) fn SetContextBackGroundColor(color: c::Color) -> c::Color;
         pub(super) fn SetTransitionSource(rect: *mut c_void);
-        pub(super) fn BatchGraphics();
-        pub(super) fn UnbatchGraphics();
         pub(super) fn RedrawQueue(force: c::BOOLEAN);
         pub(super) fn ScreenTransition(kind: i32, rect: *const c_void);
         pub(super) fn FadeScreen(kind: u32, interval: c::SIZE) -> c::DWORD;
@@ -115,6 +113,7 @@ mod ffi {
         pub(super) fn SleepThreadUntil(time: u32);
 
     }
+    pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 }
 
 #[inline]

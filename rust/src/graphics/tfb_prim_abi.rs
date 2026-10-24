@@ -2,11 +2,10 @@
 use super::native_abi::*;
 use std::ptr;
 extern "C" {
-    fn GetGraphicScale() -> i32;
-    fn GetGraphicScaleMode() -> i32;
     fn LockMutex(mutex: *mut std::ffi::c_void);
     fn UnlockMutex(mutex: *mut std::ffi::c_void);
 }
+use crate::graphics::gfx_common_abi::{GetGraphicScale, GetGraphicScaleMode};
 fn scaled_extent(extent: i16, scale: i32) -> i32 {
     (i32::from(extent) * scale + (256 >> 1)) / 256
 }

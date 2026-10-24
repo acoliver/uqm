@@ -16,11 +16,10 @@ unsafe extern "C" {
     fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
     fn SetColorMap(map: *mut c_void) -> i32;
     fn SetTransitionSource(rect: *mut c_void);
-    fn BatchGraphics();
     fn RedrawQueue(force: c::BOOLEAN);
     fn ScreenTransition(kind: i32, rect: *const c_void);
-    fn UnbatchGraphics();
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 const MIN_ZOOM_RADIUS: i32 = (128 << 6) >> 3;
 const MAX_ZOOM_RADIUS: i32 = 128 << 6;

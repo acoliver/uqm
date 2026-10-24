@@ -133,8 +133,6 @@ extern "C" {
     static mut PlanetContext: *mut c_void;
     static mut RadarContext: *mut c_void;
     fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn BatchGraphics();
-    fn UnbatchGraphics();
     fn ClearDrawable();
     fn DrawStamp(stamp: *mut CStamp);
     fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
@@ -142,6 +140,8 @@ extern "C" {
     fn TFB_SwapBuffers(force_full_redraw: i32);
     fn RedrawSurfaceScan(new_location: *const CPoint);
 }
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, A> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {

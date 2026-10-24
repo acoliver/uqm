@@ -70,7 +70,6 @@ pub(super) mod c_bridge {
         pub fn GetFrameRect(frame: *mut std::ffi::c_void, rect: *mut std::ffi::c_void);
 
         // Graphics batching
-        pub fn BatchGraphics();
 
         // Transitions
         pub fn SetTransitionSource(src: *mut std::ffi::c_void);
@@ -126,6 +125,7 @@ pub(super) mod c_bridge {
         #[allow(dead_code)]
         pub fn getGameState(state: *const u8, name: c_int, end: c_int) -> u8;
     }
+    pub use crate::graphics::gfx_common_abi::BatchGraphics;
 }
 
 // ============================================================================

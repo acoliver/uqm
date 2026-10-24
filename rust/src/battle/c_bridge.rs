@@ -69,17 +69,8 @@ extern "C" {
     /// Set the current drawing context
     pub fn SetContext(context: Context) -> Context;
 
-    /// Begin batched graphics mode
-    pub fn BatchGraphics();
-
-    /// End batched graphics mode
-    pub fn UnbatchGraphics();
-
     /// Clear the current drawable
     pub fn ClearDrawable();
-
-    /// Set the graphics scale factor (0 = reset)
-    pub fn SetGraphicScale(scale: c_int) -> c_int;
 
     /// Perform screen transition effect
     pub fn ScreenTransition(which: c_int, rect: *const c_void);
@@ -224,6 +215,12 @@ extern "C" {
     /// Free a display primitive slot
     pub fn FreeDisplayPrim(prim_index: c_int);
 }
+/// Begin batched graphics mode
+pub use crate::graphics::gfx_common_abi::BatchGraphics;
+/// Set the graphics scale factor (0 = reset)
+pub use crate::graphics::gfx_common_abi::SetGraphicScale;
+/// End batched graphics mode
+pub use crate::graphics::gfx_common_abi::UnbatchGraphics;
 
 // ---------------------------------------------------------------------------
 // Safe Rust wrappers

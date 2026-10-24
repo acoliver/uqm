@@ -395,8 +395,6 @@ extern "C" {
     pub fn FadeScreen(fade_type: u32, time_interval: c_short) -> u32;
     /// `CONTEXT SetContext(CONTEXT)` — returns the previous context.
     pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
-    pub fn BatchGraphics();
-    pub fn UnbatchGraphics();
     pub fn ClearDrawable();
     pub fn FlushColorXForms();
     #[allow(
@@ -483,6 +481,7 @@ extern "C" {
     pub fn SplashScreen(callback: Option<extern "C" fn(u32)>);
     pub fn DoPopupWindow(string: *const c_char);
 }
+pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[cfg(not(test))]
 pub use draw_restart_menu_graphic as DrawRestartMenuGraphic;

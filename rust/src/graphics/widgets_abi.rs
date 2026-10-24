@@ -43,9 +43,8 @@ pub static mut widget_focus: *mut WIDGET = ptr::null_mut();
 extern "C" {
     static mut ScreenWidth: i32;
     static mut ScreenHeight: i32;
-    fn BatchGraphics();
-    fn UnbatchGraphics();
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 unsafe fn draw_text(text: &mut TEXT) {
     font_DrawText(text);

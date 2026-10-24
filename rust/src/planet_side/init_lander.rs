@@ -75,8 +75,6 @@ const BLACK_COLOR: CColor = CColor {
 extern "C" {
     static mut RadarContext: *mut c_void;
     fn SetContext(context: *mut c_void) -> *mut c_void;
-    fn BatchGraphics();
-    fn UnbatchGraphics();
     fn DrawFilledRectangle(rect: *mut CRect);
     fn SetContextForeGroundColor(color: CColor) -> CColor;
     fn DrawStamp(stamp: *mut CStamp);
@@ -87,6 +85,8 @@ extern "C" {
     fn ReleaseSound(sound: *mut c_void) -> *mut c_void;
     fn GetStorageBayCapacity() -> u16;
 }
+#[cfg(not(test))]
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 /// Load the global LanderFrame graphics. Called by `load_lander_data`.
 pub fn load_lander_frames() {

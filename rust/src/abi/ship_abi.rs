@@ -1081,12 +1081,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn SetContextBackGroundColor(Color: Color) -> Color;
 }
-unsafe extern "C" {
-    pub fn BatchGraphics();
-}
-unsafe extern "C" {
-    pub fn UnbatchGraphics();
-}
+pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 unsafe extern "C" {
     pub fn ClearDrawable();
 }
@@ -3704,12 +3699,7 @@ pub type _bindgen_ty_16 = ::std::os::raw::c_uint;
 unsafe extern "C" {
     pub static mut GfxFlags: ::std::os::raw::c_int;
 }
-unsafe extern "C" {
-    pub fn SetGraphicScale(scale: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub fn SetGraphicScaleMode(mode: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
+pub use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 unsafe extern "C" {
     pub static mut ScreenWidthActual: ::std::os::raw::c_int;
 }

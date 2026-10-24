@@ -29,8 +29,6 @@ extern "C" {
     static ScreenWidth: i32;
     static ScreenHeight: i32;
     fn TFB_EnqueueDrawCommand(command: *mut TFB_DrawCommand);
-    fn BatchGraphics();
-    fn UnbatchGraphics();
     fn TFB_FlushGraphics();
     fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN);
     fn CreateMutex_Core(name: *const c_char, sync_class: u32) -> Mutex;
@@ -39,6 +37,7 @@ extern "C" {
     fn DestroyMutex(mutex: Mutex);
 
 }
+use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 unsafe fn enqueue(command: &mut TFB_DrawCommand) {
     TFB_EnqueueDrawCommand(command);
