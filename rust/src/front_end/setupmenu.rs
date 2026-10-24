@@ -1017,11 +1017,11 @@ mod runtime {
         res_PutInteger(c"config.resheight".as_ptr(), height);
         res_PutBoolean(
             c"config.alwaysgl".as_ptr(),
-            BOOLEAN::from(opts.driver == OPT_DRIVERTYPE_OPTVAL_ALWAYS_GL),
+            c_int::from(opts.driver == OPT_DRIVERTYPE_OPTVAL_ALWAYS_GL),
         );
         res_PutBoolean(
             c"config.usegl".as_ptr(),
-            BOOLEAN::from(driver == TFB_GFXDRIVER_SDL_OPENGL as c_int),
+            c_int::from(driver == TFB_GFXDRIVER_SDL_OPENGL as c_int),
         );
         let scaler = match opts.scaler {
             OPT_SCALETYPE_OPTVAL_HQXX_SCALE => {
@@ -1049,8 +1049,14 @@ mod runtime {
         } else {
             flags &= !(TFB_GFXFLAGS_FULLSCREEN as c_int);
         }
-        res_PutBoolean(c"config.scanlines".as_ptr(), opts.scanlines);
-        res_PutBoolean(c"config.fullscreen".as_ptr(), opts.fullscreen);
+        res_PutBoolean(
+            c"config.scanlines".as_ptr(),
+            c_int::from(opts.scanlines != 0),
+        );
+        res_PutBoolean(
+            c"config.fullscreen".as_ptr(),
+            c_int::from(opts.fullscreen != 0),
+        );
         if width != ScreenWidthActual
             || height != ScreenHeightActual
             || driver != GraphicsDriver
@@ -1163,7 +1169,7 @@ mod runtime {
                 opts.keepaspect == OPT_ENABLABLE_OPTVAL_ENABLED,
             ),
         ] {
-            res_PutBoolean(key.as_ptr(), BOOLEAN::from(value));
+            res_PutBoolean(key.as_ptr(), c_int::from(value));
         }
         res_PutInteger(
             c"config.gamma".as_ptr(),

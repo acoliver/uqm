@@ -165,36 +165,16 @@ extern "C" {
         matchType: match_MatchType,
     ) -> DIRENTRY_REF;
 }
-extern "C" {
-    pub fn res_HasKey(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_IsString(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetString(key: *const ::std::os::raw::c_char) -> *const ::std::os::raw::c_char;
-}
-extern "C" {
-    pub fn res_PutString(key: *const ::std::os::raw::c_char, value: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn res_IsInteger(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetInteger(key: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn res_PutInteger(key: *const ::std::os::raw::c_char, value: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn res_IsBoolean(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetBoolean(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_PutBoolean(key: *const ::std::os::raw::c_char, value: BOOLEAN);
-}
+pub use crate::resource::ffi_bridge::res_HasKey;
+pub use crate::resource::ffi_bridge::res_IsString;
+pub use crate::resource::ffi_bridge::res_GetString;
+pub use crate::resource::ffi_bridge::res_PutString;
+pub use crate::resource::ffi_bridge::res_IsInteger;
+pub use crate::resource::ffi_bridge::res_GetInteger;
+pub use crate::resource::ffi_bridge::res_PutInteger;
+pub use crate::resource::ffi_bridge::res_IsBoolean;
+pub use crate::resource::ffi_bridge::res_GetBoolean;
+pub use crate::resource::ffi_bridge::res_PutBoolean;
 extern "C" {
     pub fn res_IsColor(key: *const ::std::os::raw::c_char) -> BOOLEAN;
 }

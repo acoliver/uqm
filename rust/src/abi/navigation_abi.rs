@@ -1366,21 +1366,11 @@ extern "C" {
 }
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-extern "C" {
-    pub fn res_PutString(key: *const ::std::os::raw::c_char, value: *const ::std::os::raw::c_char);
-}
-extern "C" {
-    pub fn res_PutInteger(key: *const ::std::os::raw::c_char, value: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn res_IsBoolean(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetBoolean(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_PutBoolean(key: *const ::std::os::raw::c_char, value: BOOLEAN);
-}
+pub use crate::resource::ffi_bridge::res_PutString;
+pub use crate::resource::ffi_bridge::res_PutInteger;
+pub use crate::resource::ffi_bridge::res_IsBoolean;
+pub use crate::resource::ffi_bridge::res_GetBoolean;
+pub use crate::resource::ffi_bridge::res_PutBoolean;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct context_desc {
