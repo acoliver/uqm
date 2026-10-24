@@ -26,8 +26,9 @@ const AUDIO_QUALITY_LOW: c_int = 0;
 const AUDIO_QUALITY_MEDIUM: c_int = 1;
 const AUDIO_QUALITY_HIGH: c_int = 2;
 // TFB_SCALE_* (gfx_common.h)
-const TFB_SCALE_TRILINEAR: c_int = 2;
-const TFB_SCALE_STEP: c_int = 1;
+const TFB_SCALE_TRILINEAR: c_int = crate::graphics::gfx_common::ScaleMode::Trilinear as c_int;
+const TFB_SCALE_STEP: c_int = crate::graphics::gfx_common::ScaleMode::Step as c_int;
+const TFB_SCALE_BILINEAR: c_int = crate::graphics::gfx_common::ScaleMode::Bilinear as c_int;
 // OPT_PC / OPT_3DO (options.h)
 const OPT_PC: c_int = 2;
 const OPT_3DO: c_int = 1;
@@ -689,7 +690,7 @@ fn apply_enum_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) ->
         opts.melee_scale = match v.as_str() {
             "smooth" | "3do" => TFB_SCALE_TRILINEAR,
             "step" | "pc" => TFB_SCALE_STEP,
-            "bilinear" => 0,
+            "bilinear" => TFB_SCALE_BILINEAR,
             _ => {
                 opts.parse_error = true;
                 return false;
@@ -1234,6 +1235,29 @@ mod tests {
     }
 
     #[test]
+    fn melee_zoom_matches_graphics_scale_modes() {
+        use crate::graphics::gfx_common::ScaleMode;
+
+        assert_eq!(parse(&["uqm"]).melee_scale, ScaleMode::Trilinear as i32);
+        for (name, mode) in [
+            ("step", ScaleMode::Step),
+            ("pc", ScaleMode::Step),
+            ("smooth", ScaleMode::Trilinear),
+            ("3do", ScaleMode::Trilinear),
+            ("bilinear", ScaleMode::Bilinear),
+        ] {
+            let opts = parse(&["uqm", "--meleezoom", name]);
+            assert!(!opts.parse_error, "{name}");
+            assert_eq!(opts.melee_scale, mode as i32, "{name}");
+        }
+        for (value, mode) in [("false", ScaleMode::Step), ("true", ScaleMode::Trilinear)] {
+            let mut opts = ParsedOptions::default();
+            apply_config_value(&mut opts, "smoothmelee", &format!("BOOLEAN:{value}"));
+            assert_eq!(opts.melee_scale, mode as i32, "smoothmelee={value}");
+        }
+    }
+
+    #[test]
     fn test_melee_zoom() {
         let opts = parse(&["uqm", "-b", "step"]);
         assert_eq!(opts.melee_scale, TFB_SCALE_STEP);
@@ -1760,7 +1784,10 @@ mod config_file_tests {
             parse(&["uqm", "--meleezoom", "pc"]).melee_scale,
             TFB_SCALE_STEP
         );
-        assert_eq!(parse(&["uqm", "--meleezoom", "bilinear"]).melee_scale, 0);
+        assert_eq!(
+            parse(&["uqm", "--meleezoom", "bilinear"]).melee_scale,
+            TFB_SCALE_BILINEAR
+        );
         assert_eq!(
             parse(&["uqm", "--audioquality", "medium"]).sound_quality,
             AUDIO_QUALITY_MEDIUM
