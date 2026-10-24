@@ -171,6 +171,7 @@ pub const MATRIX: &[ScenarioRow] = &[
             Domain::Starbase,
         ],
     ),
+    row("load-connected-umgah-fleet-v1", &[Domain::SaveLoad]),
     row("load-connected-rainbow-funded-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07h-connected-taalo",
