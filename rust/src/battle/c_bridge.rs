@@ -202,11 +202,6 @@ extern "C" {
     /// Move galaxy background for parallax
     pub fn MoveGalaxy(view_state: c_int, dx: c_int, dy: c_int);
 
-    // --- Velocity (C-only entry points, Phase 1 Rust has pure-Rust versions) ---
-
-    /// Set velocity vector from magnitude + facing
-    pub fn SetVelocityVector(vel: *mut c_void, magnitude: c_int, facing: c_int, direction: c_int);
-
     // --- Display Prim Management ---
 
     /// Allocate a display primitive slot
