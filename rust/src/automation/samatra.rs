@@ -186,6 +186,27 @@ impl Controller {
                 i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy),
             )
         };
+        if !s.bomb_carrier && s.selected_species == Some(2) && remaining != 0 {
+            if let Some(hazard) = s
+                .hazards
+                .iter()
+                .filter(|h| distance(h.x, h.y).2 < 600 * 600)
+                .min_by_key(|h| distance(h.x, h.y).2)
+            {
+                let (dx, dy, _) = distance(hazard.x, hazard.y);
+                let aim = bearing_facing(dx, dy).unwrap_or(player.facing);
+                let error = (i32::from(aim) - i32::from(player.facing)).rem_euclid(16);
+                return Progress::Running(Controls {
+                    flight: FightControl {
+                        left: error > 8,
+                        right: (1..=8).contains(&error),
+                        thrust: false,
+                        weapon: error <= 1 || error >= 15,
+                    },
+                    ..Controls::default()
+                });
+            }
+        }
         if !s.bomb_carrier && remaining == 0 {
             let hazard = s
                 .hazards
@@ -310,10 +331,10 @@ fn escort_approach(
     }
     .unwrap_or(player.facing);
     let correction = bearing_facing(ex.round() as i32, ey.round() as i32).unwrap_or(player.facing);
-    let bearing = if in_range || !correcting {
-        aim
-    } else {
+    let bearing = if correcting && (s.selected_species == Some(2) || !in_range) {
         correction
+    } else {
+        aim
     };
     let error = (i32::from(bearing) - i32::from(player.facing)).rem_euclid(16);
     let thrust_error = (i32::from(correction) - i32::from(player.facing)).rem_euclid(16);
@@ -389,6 +410,40 @@ mod tests {
     }
 
     #[test]
+    fn avatar_clears_an_incoming_hazard_before_routing_to_a_generator() {
+        use crate::ships::races::samatra::observation::Hazard;
+        let mut s = snapshot();
+        let mut player = s.player.unwrap();
+        player.x = 2895;
+        player.y = 4123;
+        player.facing = 0;
+        s.player = Some(player);
+        s.hazards.push(Hazard {
+            x: 2907,
+            y: 4008,
+            velocity: (0, 32),
+        });
+        let Progress::Running(keys) = Controller::default().observe(
+            100,
+            Until::GateEntered,
+            0x201,
+            Events {
+                generation: 1,
+                ..Events::default()
+            },
+            Some(&s),
+            None,
+        ) else {
+            panic!()
+        };
+        assert!(
+            keys.flight.weapon,
+            "fire the laser at the approaching hazard"
+        );
+        assert!(!keys.flight.thrust, "do not accelerate into the hazard");
+    }
+
+    #[test]
     fn open_gate_does_not_abandon_hazards_that_can_destroy_the_bomb() {
         use crate::ships::races::samatra::observation::Hazard;
         let mut controller = Controller::default();
@@ -439,6 +494,27 @@ mod tests {
         assert_eq!(
             controller.observe(100, Until::GateEntered, 0, e, None, None),
             Progress::Failed("samatra_battle_ended_without_gate_entry")
+        );
+    }
+
+    #[test]
+    fn avatar_brakes_lateral_drift_even_with_a_generator_in_range() {
+        let mut s = snapshot();
+        s.gate = (4000, 4000);
+        let target = Generator {
+            id: 0,
+            x: 4600,
+            y: 4000,
+            hit_points: 15,
+        };
+        let mut player = s.player.unwrap();
+        player.x = 4840;
+        player.facing = 12;
+        s.velocity = (0, -40);
+        let keys = escort_approach(&s, player, &target);
+        assert!(
+            keys.left || keys.right,
+            "turn south to brake northward drift"
         );
     }
 

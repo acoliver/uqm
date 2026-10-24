@@ -1,10 +1,14 @@
 # Sa-Matra automation and ending observations
 
-## Campaign acceptance is pending
+## Connected campaign completed
 
-`samatra-dev-fixture-v1` is development-only. It does not prove a campaign playthrough, the Talking Pet distraction, the six remnant guard victories, or an earned bomb/fleet. S12–S14 remain pending until the campaign lane supplies a connected pre-boss checkpoint.
+`campaign-s13-connected-ending` starts from `connected-samatra-remnants.sav`, earned by defeating the six remnant guards after the Talking Pet distraction. Its parent chain includes the Mycon lure, Sun Device, Chmmr bomb conversion and paid final fleet. The producer `pt-p12-30` and independent full-state reload `pt-p12-32` passed native-window acceptance. The checkpoint retains the actual losses: five escorts, flagship crew 50, fuel 4663 and RU 961616 on 14 June 2158.
 
-The save search covered `rust/scripts/saves`, `docs/evidence`, and `tmp/retained-proof`: 101 save files, 39 distinct payloads. The committed checkpoints reached the Burvixese caster; the retained saves were opening/save-load proofs. No pre-Sa-Matra checkpoint was identified. Save-summary activity numbers are not live activity numbers and were not used to infer boss readiness.
+Normal Cyborg mode skips the Sa-Matra battle in the original encounter rules. The remnant producer disables it through ordinary Game settings before saving. The ending scenario then uses normal menu, ship-selection, flight and weapon inputs. Avatar steering corrects velocity even while a generator is in range and fires at nearby hazards before resuming its generator approach.
+
+Native run `pt-p12-33` passed both suite and native-window acceptance, exiting 0. Its runtime trace records all eight distinct generator deaths, the open gate, hazard cleanup, escort retreat, bomb selection and actual gate collision. It then records victory, natural final-presentation completion, post-outtake credit control readiness and natural credit-roll completion. The trace ends with `success` at 669231 ms. Ordinary Cancel skips outtake speech after the final presentation; Down accelerates the credit roll only after its controls are ready. Neither input replaces a completion predicate.
+
+`samatra-dev-fixture-v1` remains development-only and is not part of this campaign ancestry. The fixture observations below describe earlier controller development, not additional campaign proof.
 
 ## Development fixture
 
