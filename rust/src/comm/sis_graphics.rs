@@ -80,6 +80,24 @@ struct CStamp {
     frame: *mut std::ffi::c_void,
 }
 
+unsafe fn scroll_indicator_stamp(
+    frame: *mut crate::graphics::native_abi::frame_desc,
+    origin_y: i16,
+) -> Option<CStamp> {
+    if frame.is_null() {
+        return None;
+    }
+    let mut rect = std::mem::zeroed();
+    crate::graphics::drawable_abi::GetFrameRect(frame, &mut rect);
+    Some(CStamp {
+        origin: CPoint {
+            x: SIS_SCREEN_WIDTH - rect.extent.width - 1,
+            y: origin_y,
+        },
+        frame: frame.cast(),
+    })
+}
+
 /// State for the conversation summary page loop (DoInput-compatible).
 /// First field MUST be a function pointer for DoInput compatibility.
 #[repr(C)]
@@ -176,13 +194,6 @@ mod c_bridge {
         ) -> std::ffi::c_int;
         pub fn DrawFilledRectangle(rect: *mut CRect);
         pub fn DrawStamp(stamp: *mut CStamp);
-        pub fn GetFrameRect(
-            frame: *mut std::ffi::c_void,
-            x: *mut std::ffi::c_int,
-            y: *mut std::ffi::c_int,
-            w: *mut std::ffi::c_int,
-            h: *mut std::ffi::c_int,
-        );
 
         // Batching
 
@@ -719,19 +730,12 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16) {
-        let mut stamp = CStamp::default();
         // SAFETY: `ActivityFrame` is loaded before any communication starts.
-        stamp.frame = unsafe { c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, frame_index) };
-        stamp.origin.y = origin_y;
-        let mut rw: std::ffi::c_int = 0;
-        let mut rh: std::ffi::c_int = 0;
-        let mut rx: std::ffi::c_int = 0;
-        let mut ry: std::ffi::c_int = 0;
-        // SAFETY: `stamp.frame` is a live frame; the outputs are valid for the call.
         unsafe {
-            c_bridge::GetFrameRect(stamp.frame, &mut rx, &mut ry, &mut rw, &mut rh);
-            stamp.origin.x = SIS_SCREEN_WIDTH - rw as i16 - 1;
-            c_bridge::DrawStamp(&mut stamp);
+            let frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, frame_index);
+            if let Some(mut stamp) = scroll_indicator_stamp(frame.cast(), origin_y) {
+                c_bridge::DrawStamp(&mut stamp);
+            }
         }
     }
 
@@ -812,6 +816,31 @@ unsafe fn do_summary_page(state: &mut SummaryLoopState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scroll_indicator_uses_the_native_frame_width_and_preserves_its_origin_y() {
+        use crate::graphics::native_abi::{frame_desc, EXTENT, HOT_SPOT};
+
+        unsafe {
+            let mut frame: frame_desc = std::mem::zeroed();
+            frame.Bounds = EXTENT {
+                width: 13,
+                height: 9,
+            };
+            frame.HotSpot = HOT_SPOT { x: -4, y: 2 };
+            let stamp = scroll_indicator_stamp(&mut frame, 225).unwrap();
+            assert_eq!(stamp.origin.x, 228);
+            assert_eq!(stamp.origin.y, 225);
+            assert_eq!(stamp.frame, std::ptr::from_mut(&mut frame).cast());
+            assert_eq!((frame.Bounds.width, frame.Bounds.height), (13, 9));
+            assert_eq!((frame.HotSpot.x, frame.HotSpot.y), (-4, 2));
+        }
+    }
+
+    #[test]
+    fn missing_scroll_indicator_frame_is_not_drawn() {
+        assert!(unsafe { scroll_indicator_stamp(std::ptr::null_mut(), 1) }.is_none());
+    }
 
     #[test]
     fn ctext_layout_matches_c() {
