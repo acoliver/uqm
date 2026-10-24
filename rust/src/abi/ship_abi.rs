@@ -894,14 +894,7 @@ pub type UNICODE = ::std::os::raw::c_char;
 pub const BOOLEAN_FALSE: BOOLEAN = 0;
 pub const BOOLEAN_TRUE: BOOLEAN = 1;
 pub type BOOLEAN = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Color {
-    pub r: BYTE,
-    pub g: BYTE,
-    pub b: BYTE,
-    pub a: BYTE,
-}
+pub use crate::graphics::native_abi::Color;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct uio_DirHandle {
