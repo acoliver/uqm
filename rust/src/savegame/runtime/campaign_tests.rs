@@ -56,12 +56,13 @@ fn paid_combat_preparation_crews_three_cruisers_and_keeps_the_survivor() {
             .find(|ship| ship.index == survivor.index),
         Some(survivor)
     );
-    for index in 0..3 {
-        let ship = after
-            .ship_queue
-            .iter()
-            .find(|ship| ship.index == index)
-            .unwrap();
+    let purchased: Vec<_> = after
+        .ship_queue
+        .iter()
+        .filter(|ship| ship.index != survivor.index)
+        .collect();
+    assert_eq!(purchased.len(), 3);
+    for ship in purchased {
         assert_eq!(
             (ship.race_index, ship.crew_level, ship.max_crew),
             (2, 18, 18)
