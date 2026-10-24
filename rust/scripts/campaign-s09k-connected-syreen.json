@@ -561,7 +561,7 @@
     },
     {
       "action": "select_response",
-      "phrase": "be_leaving_now",
+      "phrase": "goodbye",
       "max_ticks": 6000
     },
     {
