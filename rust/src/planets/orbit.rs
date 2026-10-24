@@ -11,7 +11,7 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::submenu_selection;
-    use crate::battle::element::{Element, ElementFlags};
+    use crate::battle::element::Element;
     use crate::c_bindings::{
         global_state::{MENU_STATE, PLANET_INFO},
         live_queues, solar_system,
@@ -134,7 +134,10 @@ pub(crate) mod live {
             } else {
                 (*element).succ as usize
             };
-            if (*element).state_flags.contains(ElementFlags::APPEARING) {
+            if crate::planet_side::orbit_scan::node_visible(
+                &*element,
+                &(*solar_system::current()).SysInfo.PlanetInfo,
+            ) {
                 CffiPlatform.draw_stamp(Stamp {
                     origin: Point {
                         x: (*element).current.location.x,

@@ -42,7 +42,6 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
     (x, y)
 }
 
-#[cfg(test)]
 use crate::c_bindings::global_state::PLANET_INFO;
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 
@@ -84,16 +83,14 @@ pub unsafe extern "C" fn callPickupForScanType(
     callback.expect("scan pickup")(system, world, node)
 }
 
-#[cfg(test)]
-unsafe fn is_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) -> bool {
+pub(crate) unsafe fn is_node_retrieved(info: *const PLANET_INFO, scan: u8, node: u8) -> bool {
     (*info).ScanRetrieveMask[usize::from(scan)] & (1_u32 << node) != 0
 }
 #[cfg(test)]
 unsafe fn count_nodes_retrieved(info: *mut PLANET_INFO, scan: u8) -> u16 {
     (*info).ScanRetrieveMask[usize::from(scan)].count_ones() as u16
 }
-#[cfg(test)]
-unsafe fn set_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
+pub(crate) unsafe fn set_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
     (*info).ScanRetrieveMask[usize::from(scan)] |= 1_u32 << node;
 }
 #[cfg(test)]
@@ -114,9 +111,9 @@ mod tests {
         unsafe {
             for scan in 0..3 {
                 for node in 0..32 {
-                    assert!(!is_node_retrieved(&mut info, scan, node));
+                    assert!(!is_node_retrieved(&info, scan, node));
                     set_node_retrieved(&mut info, scan, node);
-                    assert!(is_node_retrieved(&mut info, scan, node));
+                    assert!(is_node_retrieved(&info, scan, node));
                     assert_eq!(count_nodes_retrieved(&mut info, scan), u16::from(node) + 1);
                 }
             }

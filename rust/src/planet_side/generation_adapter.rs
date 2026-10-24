@@ -23,7 +23,6 @@ use crate::navigation::abi::NODE_INFO;
 
 #[cfg(not(test))]
 use crate::planets::scan::callGenerateForScanType;
-#[cfg(not(test))]
 use crate::planets::scan::callPickupForScanType;
 #[cfg(not(test))]
 extern "C" {
@@ -196,7 +195,6 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
     }
 
     fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
-        #[cfg(not(test))]
         {
             // A pickup callback may present a discovery report, and the native
             // report helpers were written for the retired lander loop's ambient
@@ -204,25 +202,36 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             // rather than trusting the callback to leave it untouched.
             let solar_system = self.solar_system;
             let world = self.world;
-            super::batch_guard::calling_native_unbatched("surface_generator_pickup_batch", || {
-                // SAFETY: the outer PlanetSide ABI contract guarantees these
-                // borrowed current-system pointers are valid, correctly typed
-                // and exclusively ours for the duration of the call; the
-                // callback runs synchronously on this thread.
+            let retrieved = super::batch_guard::calling_native_unbatched(
+                "surface_generator_pickup_batch",
+                || {
+                    // SAFETY: the outer PlanetSide ABI contract guarantees these
+                    // borrowed current-system pointers are valid, correctly typed
+                    // and exclusively ours for the duration of the call; the
+                    // callback runs synchronously on this thread.
+                    unsafe {
+                        callPickupForScanType(
+                            solar_system.cast(),
+                            world.cast(),
+                            u16::from(node.get()),
+                            scan as u8,
+                        )
+                    }
+                },
+            )?;
+            if retrieved {
                 unsafe {
-                    callPickupForScanType(
-                        solar_system.cast(),
-                        world.cast(),
-                        u16::from(node.get()),
+                    let system = &mut *solar_system
+                        .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
+                    crate::planets::scan::set_node_retrieved(
+                        &mut system.SysInfo.PlanetInfo,
                         scan as u8,
-                    )
+                        node.get(),
+                    );
                 }
-            })
-        }
-        #[cfg(test)]
-        {
-            let _ = (scan, node);
-            Err(AdapterError::new("surface_generator_unlinked"))
+                crate::state::game_state_keys::set_game_state("PLANETARY_CHANGE", 1);
+            }
+            Ok(retrieved)
         }
     }
 }
@@ -230,6 +239,64 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn accepted_live_pickups_update_the_planet_mask_and_dirty_flag() {
+        use crate::c_bindings::global_state::{GenerateFunctions, SOLARSYS_STATE};
+        use crate::state::game_state_keys::{get_game_state, set_game_state};
+        unsafe extern "C" fn accept(
+            _: *mut SOLARSYS_STATE,
+            _: *mut crate::c_bindings::global_state::PLANET_DESC,
+            _: u16,
+        ) -> bool {
+            true
+        }
+        unsafe extern "C" fn reject(
+            _: *mut SOLARSYS_STATE,
+            _: *mut crate::c_bindings::global_state::PLANET_DESC,
+            _: u16,
+        ) -> bool {
+            false
+        }
+        unsafe {
+            crate::state::ffi::rust_init_game_state();
+        }
+        let mut functions: Box<GenerateFunctions> = Box::new(unsafe { std::mem::zeroed() });
+        functions.pickupMinerals = Some(accept);
+        functions.pickupEnergy = Some(accept);
+        functions.pickupLife = Some(accept);
+        let mut system: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
+        system.genFuncs = &*functions;
+        let world = std::ptr::addr_of_mut!(system.PlanetDesc[0]);
+        let mut generator = CffiSurfaceGenerator::for_planet_side(
+            std::ptr::from_mut(&mut *system).cast(),
+            world.cast(),
+        )
+        .unwrap();
+        for (scan, index) in [
+            (ScanType::Mineral, 31),
+            (ScanType::Energy, 0),
+            (ScanType::Biological, 9),
+        ] {
+            set_game_state("PLANETARY_CHANGE", 0);
+            assert!(generator
+                .pickup(scan, ScanNodeId::new(index).unwrap())
+                .unwrap());
+            assert_eq!(
+                system.SysInfo.PlanetInfo.ScanRetrieveMask[scan as usize],
+                1 << index
+            );
+            assert_eq!(get_game_state("PLANETARY_CHANGE"), 1);
+        }
+        functions.pickupEnergy = Some(reject);
+        set_game_state("PLANETARY_CHANGE", 0);
+        assert!(!generator
+            .pickup(ScanType::Energy, ScanNodeId::new(1).unwrap())
+            .unwrap());
+        assert_eq!(system.SysInfo.PlanetInfo.ScanRetrieveMask[1], 1);
+        assert_eq!(get_game_state("PLANETARY_CHANGE"), 0);
+    }
 
     #[test]
     fn null_generation_context_is_rejected() {

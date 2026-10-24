@@ -269,6 +269,71 @@ mod tests {
     }
 
     #[test]
+    fn retrieval_bits_survive_planet_reentry_and_save_load() {
+        use crate::state::planet_info::{PlanetInfoManager, ScanRetrieveMask};
+        use crate::state::state_file::{StateFileManager, STARINFO_FILE};
+        let mut files = StateFileManager::new();
+        let mut manager = PlanetInfoManager::new(&mut files);
+        manager.init_planet_info(2).unwrap();
+        let masks = [2, 0x8000_0000, 1];
+        manager
+            .put_planet_info(1, 0, 1, &ScanRetrieveMask::from_array(&masks), &[1])
+            .unwrap();
+        assert_eq!(
+            manager.get_planet_info(1, 0, 1, &[1]).unwrap().to_array(),
+            masks
+        );
+        assert_eq!(
+            manager.get_planet_info(1, 0, 0, &[1]).unwrap().to_array(),
+            [0; 3]
+        );
+        let mut save = crate::savegame::decode_save(include_bytes!(
+            "../../tests/fixtures/savegame/legacy-save.00"
+        ))
+        .unwrap();
+        save.scan = Some(
+            files
+                .get_file(STARINFO_FILE)
+                .unwrap()
+                .contents()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| u32::from_le_bytes(*b))
+                .collect(),
+        );
+        let loaded =
+            crate::savegame::decode_save(&crate::savegame::encode_save(&save).unwrap()).unwrap();
+        let bytes: Vec<_> = loaded
+            .scan
+            .unwrap()
+            .into_iter()
+            .flat_map(u32::to_le_bytes)
+            .collect();
+        let mut restored = StateFileManager::new();
+        restored.replace_contents(STARINFO_FILE, &bytes).unwrap();
+        let masks = PlanetInfoManager::new(&mut restored)
+            .get_planet_info(1, 0, 1, &[1])
+            .unwrap()
+            .to_array();
+        let mut generator = Generator::default();
+        let mut world = SurfaceWorld::new();
+        let generated = populate_surface(
+            &mut generator,
+            ScanPersistence::from_masks(masks),
+            &mut world,
+        )
+        .unwrap();
+        assert!(generated
+            .iter()
+            .all(|node| !ScanPersistence::from_masks(masks).is_retrieved(node.scan, node.node)));
+        assert_eq!(
+            generator.calls,
+            [(ScanType::Biological, 1), (ScanType::Mineral, 0)]
+        );
+    }
+
+    #[test]
     fn scan_node_ids_reject_bits_outside_u32_mask() {
         assert_eq!(ScanNodeId::new(31).map(ScanNodeId::get), Ok(31));
         assert_eq!(

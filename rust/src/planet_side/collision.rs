@@ -76,14 +76,14 @@ pub fn resolve_lander_collision(
         LanderCollision::Mineral { category, amount } => {
             let pickup = state.minerals.collect(category, amount);
             CollisionOutcome::Cargo {
-                remove_node: matches!(pickup, CargoPickup::Collected { complete: true, .. }),
+                remove_node: matches!(pickup, CargoPickup::Collected { amount: 1.., .. }),
                 pickup,
             }
         }
         LanderCollision::CannedBiological { value } => {
             let pickup = state.biological.collect(value);
             CollisionOutcome::Cargo {
-                remove_node: matches!(pickup, CargoPickup::Collected { complete: true, .. }),
+                remove_node: matches!(pickup, CargoPickup::Collected { amount: 1.., .. }),
                 pickup,
             }
         }
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_mineral_pickup_keeps_node_on_surface() {
+    fn partial_mineral_pickup_retires_the_deposit_like_c() {
         let mut crew = CrewCount::new(12);
         let mut minerals = MineralCargo::new(3, 0, false);
         let mut biological = BioCargo::default();
@@ -285,7 +285,7 @@ mod tests {
                     amount: 3,
                     complete: false
                 },
-                remove_node: false
+                remove_node: true
             }
         );
     }

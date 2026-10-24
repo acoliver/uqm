@@ -1,8 +1,21 @@
-//! Rust-owned producer for the legacy orbit-scan display list.
-//!
-//! The scan renderer is still transitional C, but node generation, filtering,
-//! and element initialization live here so deleting `lander.c` does not leave
-//! the scan consumers with an empty display list.
+//! Scan-node generation, visibility and display-list synchronization.
+
+use crate::battle::element::{Element, ElementFlags};
+use crate::c_bindings::global_state::PLANET_INFO;
+
+pub(crate) fn node_retrieved(element: &Element, info: &PLANET_INFO) -> bool {
+    let scan = element.life_span as u8;
+    let node = (element.life_span >> 8) as u8;
+    assert!(
+        scan < 3 && (1..=32).contains(&node),
+        "invalid scan-node identity"
+    );
+    unsafe { crate::planets::scan::is_node_retrieved(std::ptr::from_ref(info), scan, node - 1) }
+}
+
+pub(crate) fn node_visible(element: &Element, info: &PLANET_INFO) -> bool {
+    element.state_flags.contains(ElementFlags::APPEARING) && !node_retrieved(element, info)
+}
 
 #[cfg(not(test))]
 mod production {
@@ -209,5 +222,25 @@ pub extern "C" fn generate_planet_side() {
     #[cfg(not(test))]
     unsafe {
         production::generate();
+    }
+}
+
+#[cfg(test)]
+mod retrieval_tests {
+    use super::*;
+    #[test]
+    fn retrieved_blips_stay_hidden_on_redraw_and_rescan_for_every_category() {
+        let mut info: PLANET_INFO = unsafe { std::mem::zeroed() };
+        for scan in 0..3 {
+            let mut element = Element::new();
+            element.life_span = (32 << 8) | scan;
+            element.state_flags |= ElementFlags::APPEARING;
+            assert!(node_visible(&element, &info));
+            unsafe { crate::planets::scan::set_node_retrieved(&mut info, scan as u8, 31) };
+            assert!(node_retrieved(&element, &info));
+            assert!(!node_visible(&element, &info));
+            element.state_flags |= ElementFlags::APPEARING;
+            assert!(!node_visible(&element, &info));
+        }
     }
 }
