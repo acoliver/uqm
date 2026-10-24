@@ -771,10 +771,6 @@
       "label": "talana-accepted-egg-casing-and-gave-shuttle"
     },
     {
-      "action": "wait_input_ticks",
-      "count": 120
-    },
-    {
       "action": "assert_state",
       "all": [
         {
