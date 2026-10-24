@@ -22,11 +22,9 @@ use uqm_rust::input::ffi::{
 #[test]
 #[serial]
 fn test_ffi_init_uninit() {
-    unsafe {
-        assert_eq!(rust_v_control_init(), 0);
-        rust_vcontrol_clear_key_bindings();
-        rust_v_control_uninit();
-    }
+    assert_eq!(rust_v_control_init(), 0);
+    rust_vcontrol_clear_key_bindings();
+    rust_v_control_uninit();
 }
 
 #[test]
@@ -200,20 +198,18 @@ fn test_ffi_clear_bindings() {
 #[test]
 #[serial]
 fn test_ffi_gesture_tracking() {
-    unsafe {
-        rust_v_control_init();
+    rust_v_control_init();
 
-        // No gesture initially
-        rust_vcontrol_clear_gesture();
-        assert_eq!(rust_vcontrol_get_last_gesture_type(), 0);
+    // No gesture initially
+    rust_vcontrol_clear_gesture();
+    assert_eq!(rust_vcontrol_get_last_gesture_type(), 0);
 
-        // Simulate key event (this would normally be done via HandleEvent)
-        // For this test we just verify the FFI is callable
-        rust_vcontrol_clear_gesture();
+    // Simulate key event (this would normally be done via HandleEvent)
+    // For this test we just verify the FFI is callable
+    rust_vcontrol_clear_gesture();
 
-        rust_vcontrol_clear_key_bindings();
-        rust_v_control_uninit();
-    }
+    rust_vcontrol_clear_key_bindings();
+    rust_v_control_uninit();
 }
 
 #[test]
