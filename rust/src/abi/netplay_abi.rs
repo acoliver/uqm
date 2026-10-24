@@ -300,11 +300,7 @@ extern "C" {
     pub static mut battleFrameCount: BattleFrameCounter;
 }
 pub type Checksum = uint32;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct crc_State {
-    pub crc: uint32,
-}
+pub use crate::battle::netplay::CrcState as crc_State;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
 #[repr(C)]

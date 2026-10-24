@@ -1,66 +1,29 @@
-use super::abi::crc_State;
+use crate::battle::netplay::CrcState;
 
-const fn table() -> [u32; 256] {
-    let mut result = [0; 256];
-    let mut i = 0;
-    while i < 256 {
-        let mut crc = i as u32;
-        let mut bit = 0;
-        while bit < 8 {
-            crc = (crc >> 1) ^ if crc & 1 != 0 { 0xedb88320 } else { 0 };
-            bit += 1;
-        }
-        result[i] = crc;
-        i += 1;
-    }
-    result
+pub fn crc_init(state: &mut CrcState) {
+    state.init();
 }
 
-pub static CRC_TABLE: [u32; 256] = table();
-
-fn process(state: &mut crc_State, bytes: &[u8]) {
+pub fn crc_process_bytes(state: &mut CrcState, bytes: &[u8]) {
     for &byte in bytes {
-        state.crc = (state.crc >> 8) ^ CRC_TABLE[((state.crc ^ u32::from(byte)) & 0xff) as usize];
+        state.update(byte);
     }
 }
 
-/// # Safety
-/// `state` must point to a writable CRC state.
-#[no_mangle]
-pub unsafe extern "C" fn crc_init(state: *mut crc_State) {
-    (*state).crc = u32::MAX;
+pub fn crc_process_u8(state: &mut CrcState, value: u8) {
+    crc_process_bytes(state, &[value]);
 }
 
-/// # Safety
-/// `state` must be writable and `buf` must contain `len` readable bytes.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processBytes(state: *mut crc_State, buf: *mut u8, len: usize) {
-    // The old, unused C byte loop omitted its pointer increment. Integer CRC
-    // updates below already consumed each byte once, in little-endian order.
-    for index in 0..len {
-        process(&mut *state, &[*buf.add(index)]);
-    }
+pub fn crc_process_u16(state: &mut CrcState, value: u16) {
+    state.process_u16(value);
 }
 
-macro_rules! integer {
-    ($name:ident, $ty:ty) => {
-        /// # Safety
-        /// `state` must point to a writable CRC state.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut crc_State, value: $ty) {
-            process(&mut *state, &value.to_le_bytes());
-        }
-    };
+pub fn crc_process_u32(state: &mut CrcState, value: u32) {
+    state.process_u32(value);
 }
-integer!(crc_processUint8, u8);
-integer!(crc_processUint16, u16);
-integer!(crc_processUint32, u32);
 
-/// # Safety
-/// `state` must point to an initialized CRC state.
-#[no_mangle]
-pub unsafe extern "C" fn crc_finish(state: *const crc_State) -> u32 {
-    !(*state).crc
+pub fn crc_finish(state: &CrcState) -> u32 {
+    state.finish()
 }
 
 #[cfg(test)]
@@ -68,20 +31,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn crc_uses_borrowed_rust_state_and_slices() {
+        let _: fn(&mut CrcState) = crc_init;
+        let _: fn(&CrcState) -> u32 = crc_finish;
+        let _: fn(&mut CrcState, &[u8]) = crc_process_bytes;
+    }
+
+    #[test]
     fn c_integer_vector_and_standard_byte_vector() {
-        unsafe {
-            let mut state = crc_State { crc: 0 };
-            crc_init(&mut state);
-            crc_processUint8(&mut state, 0x12);
-            crc_processUint16(&mut state, 0x3456);
-            crc_processUint32(&mut state, 0x789abcde);
-            assert_eq!(crc_finish(&state), 0x3ce4f575);
-            crc_init(&mut state);
-            crc_processBytes(&mut state, b"123456789".as_ptr().cast_mut(), 9);
-            assert_eq!(crc_finish(&state), 0xcbf43926);
-            crc_init(&mut state);
-            crc_processBytes(&mut state, std::ptr::null_mut(), 0);
-            assert_eq!(crc_finish(&state), 0);
+        let mut state = CrcState::new();
+        crc_init(&mut state);
+        crc_process_u8(&mut state, 0x12);
+        crc_process_u16(&mut state, 0x3456);
+        crc_process_u32(&mut state, 0x789abcde);
+        assert_eq!(crc_finish(&state), 0x3ce4f575);
+        crc_init(&mut state);
+        crc_process_bytes(&mut state, b"123456789");
+        assert_eq!(crc_finish(&state), 0xcbf43926);
+        crc_init(&mut state);
+        crc_process_bytes(&mut state, &[]);
+        assert_eq!(crc_finish(&state), 0);
+    }
+
+    #[test]
+    fn bytes_match_incremental_little_endian_integer_updates() {
+        let mut bytes = CrcState::new();
+        let mut integers = CrcState::new();
+        for value in [0, 1, u32::MAX, 0x89abcdef] {
+            crc_process_bytes(&mut bytes, &value.to_le_bytes());
+            crc_process_u32(&mut integers, value);
+            assert_eq!(crc_finish(&bytes), crc_finish(&integers));
         }
+        for part in b"123456789".chunks(2) {
+            crc_process_bytes(&mut bytes, part);
+            for &byte in part {
+                crc_process_u8(&mut integers, byte);
+            }
+        }
+        assert_eq!(crc_finish(&bytes), crc_finish(&integers));
     }
 }

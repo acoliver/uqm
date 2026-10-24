@@ -1,6 +1,7 @@
 use super::abi::*;
 use super::checkbuf::*;
 use super::crc::*;
+use crate::battle::netplay::CrcState;
 
 pub static mut LOCAL_CHECKSUM_BUFFER: ChecksumBuffer = ChecksumBuffer {
     checksums: std::ptr::null_mut(),
@@ -12,95 +13,72 @@ extern "C" {
     static mut netConnections: [*mut NetConnection; 2];
 }
 
-/// # Safety
-/// Pointers must refer to a writable CRC state and a readable extent.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processEXTENT(state: *mut crc_State, value: *const EXTENT) {
-    crc_processUint16(state, (*value).width as u16);
-    crc_processUint16(state, (*value).height as u16);
+pub fn crc_process_extent(state: &mut CrcState, value: &EXTENT) {
+    crc_process_u16(state, value.width as u16);
+    crc_process_u16(state, value.height as u16);
 }
 
-/// # Safety
-/// Pointers must refer to a writable CRC state and a readable velocity descriptor.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processVELOCITY_DESC(
-    state: *mut crc_State,
-    value: *const VELOCITY_DESC,
-) {
-    crc_processUint16(state, (*value).TravelAngle);
-    crc_processEXTENT(state, &(*value).vector);
-    crc_processEXTENT(state, &(*value).fract);
-    crc_processEXTENT(state, &(*value).error);
-    crc_processEXTENT(state, &(*value).incr);
+pub fn crc_process_velocity(state: &mut CrcState, value: &VELOCITY_DESC) {
+    crc_process_u16(state, value.TravelAngle);
+    crc_process_extent(state, &value.vector);
+    crc_process_extent(state, &value.fract);
+    crc_process_extent(state, &value.error);
+    crc_process_extent(state, &value.incr);
 }
 
-/// # Safety
-/// Pointers must refer to a writable CRC state and a readable point.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processPOINT(state: *mut crc_State, value: *const POINT) {
-    crc_processUint16(state, (*value).x as u16);
-    crc_processUint16(state, (*value).y as u16);
+pub fn crc_process_point(state: &mut CrcState, value: &POINT) {
+    crc_process_u16(state, value.x as u16);
+    crc_process_u16(state, value.y as u16);
 }
 
-/// # Safety
-/// Pointers must refer to a writable CRC state and a readable element state.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processSTATE(state: *mut crc_State, value: *const STATE) {
-    crc_processPOINT(state, &(*value).location);
+pub fn crc_process_element_state(state: &mut CrcState, value: &STATE) {
+    crc_process_point(state, &value.location);
 }
 
-/// # Safety
-/// Pointers must refer to a writable CRC state and a readable element.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processELEMENT(state: *mut crc_State, value: *const ELEMENT) {
-    let value = &*value;
+pub fn crc_process_element(state: &mut CrcState, value: &ELEMENT) {
     if value.state_flags & (1 << 15) != 0 {
         return;
     }
-    crc_processUint16(state, value.state_flags);
-    crc_processUint16(state, value.__bindgen_anon_1.life_span);
-    crc_processUint16(state, value.__bindgen_anon_2.crew_level);
-    crc_processUint8(state, value.__bindgen_anon_3.mass_points);
-    crc_processUint8(state, value.__bindgen_anon_4.turn_wait);
-    crc_processUint8(state, value.__bindgen_anon_5.thrust_wait);
-    crc_processVELOCITY_DESC(state, &value.velocity);
-    crc_processSTATE(state, &value.current);
-    crc_processSTATE(state, &value.next);
+    crc_process_u16(state, value.state_flags);
+    crc_process_u16(state, unsafe { value.__bindgen_anon_1.life_span });
+    crc_process_u16(state, unsafe { value.__bindgen_anon_2.crew_level });
+    crc_process_u8(state, unsafe { value.__bindgen_anon_3.mass_points });
+    crc_process_u8(state, unsafe { value.__bindgen_anon_4.turn_wait });
+    crc_process_u8(state, unsafe { value.__bindgen_anon_5.thrust_wait });
+    crc_process_velocity(state, &value.velocity);
+    crc_process_element_state(state, &value.current);
+    crc_process_element_state(state, &value.next);
 }
 
 /// # Safety
 /// `state` must be writable; the display queue must not be mutated during traversal.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processDispQueue(state: *mut crc_State) {
+pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
     let mut handle = disp_q.head;
     while !handle.is_null() {
         let element = handle.cast::<ELEMENT>();
-        crc_processELEMENT(state, element);
+        crc_process_element(state, &*element);
         handle = (*element).succ;
     }
 }
 
 /// # Safety
 /// `state` must be writable; called on the game thread owning the RNG.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processRNG(state: *mut crc_State) {
+pub unsafe fn crc_process_rng(state: &mut CrcState) {
     let seed = TFB_SeedRandom(0);
-    crc_processUint32(state, seed);
+    crc_process_u32(state, seed);
     TFB_SeedRandom(seed);
 }
 
 /// # Safety
 /// Called on the game thread with a writable CRC state and stable display queue.
-#[no_mangle]
-pub unsafe extern "C" fn crc_processState(state: *mut crc_State) {
-    crc_processRNG(state);
-    crc_processDispQueue(state);
+pub unsafe fn crc_process_game_state(state: &mut CrcState) {
+    crc_process_rng(state);
+    crc_process_display_queue(state);
 }
 
 /// # Safety
 /// Called on the game thread before recording checksums, with live connections.
-#[no_mangle]
-pub unsafe extern "C" fn initChecksumBuffers() {
+pub unsafe fn init_checksum_buffers() {
     for conn in netConnections {
         if !conn.is_null() {
             ChecksumBuffer_init(
@@ -119,8 +97,7 @@ pub unsafe extern "C" fn initChecksumBuffers() {
 
 /// # Safety
 /// Called on the game thread after checksum recording has stopped.
-#[no_mangle]
-pub unsafe extern "C" fn uninitChecksumBuffers() {
+pub unsafe fn uninit_checksum_buffers() {
     for conn in netConnections {
         if !conn.is_null() {
             ChecksumBuffer_uninit(NetConnection_getChecksumBuffer(conn));
@@ -131,16 +108,14 @@ pub unsafe extern "C" fn uninitChecksumBuffers() {
 
 /// # Safety
 /// Called on the game thread with initialized buffers for the current frame.
-#[no_mangle]
-pub unsafe extern "C" fn addLocalChecksum(frame: u32, checksum: u32) {
+pub unsafe fn add_local_checksum(frame: u32, checksum: u32) {
     assert_eq!(frame, { battleFrameCount });
     ChecksumBuffer_addChecksum(&raw mut LOCAL_CHECKSUM_BUFFER, frame, checksum);
 }
 
 /// # Safety
 /// `conn` must be live with an initialized checksum buffer.
-#[no_mangle]
-pub unsafe extern "C" fn addRemoteChecksum(conn: *mut NetConnection, frame: u32, checksum: u32) {
+pub unsafe fn add_remote_checksum(conn: *mut NetConnection, frame: u32, checksum: u32) {
     let delay = getBattleInputDelay();
     assert!(frame as usize <= battleFrameCount as usize + delay + 1);
     assert!(frame as usize + delay >= battleFrameCount as usize);
@@ -149,8 +124,7 @@ pub unsafe extern "C" fn addRemoteChecksum(conn: *mut NetConnection, frame: u32,
 
 /// # Safety
 /// Called on the game thread for a frame present in all initialized buffers.
-#[no_mangle]
-pub unsafe extern "C" fn verifyChecksums(frame: u32) -> bool {
+pub unsafe fn verify_checksums(frame: u32) -> bool {
     let mut local = 0;
     if !ChecksumBuffer_getChecksum(&raw mut LOCAL_CHECKSUM_BUFFER, frame, &mut local) {
         return false;
@@ -207,13 +181,13 @@ mod tests {
                 x: 30000,
                 y: -30000,
             };
-            let mut state = crc_State { crc: 0 };
+            let mut state = CrcState::new();
             crc_init(&mut state);
-            crc_processELEMENT(&mut state, &element);
+            crc_process_element(&mut state, &element);
             // Captured from the original checksum.c and crc.c integer routines.
             assert_eq!(crc_finish(&state), 0x6850e519);
             element.state_flags |= 1 << 15;
-            crc_processELEMENT(&mut state, &element);
+            crc_process_element(&mut state, &element);
             assert_eq!(crc_finish(&state), 0x6850e519);
         }
     }
