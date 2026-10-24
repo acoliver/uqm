@@ -48,13 +48,11 @@ fn registry() -> &'static Mutex<Registry> {
     })
 }
 
-extern "C" {
-    static rust_wav_DecoderVtbl: TFB_SoundDecoderFuncs;
-    static rust_mod_DecoderVtbl: TFB_SoundDecoderFuncs;
-    static rust_ova_DecoderVtbl: TFB_SoundDecoderFuncs;
-    static rust_duka_DecoderVtbl: TFB_SoundDecoderFuncs;
-    static rust_aifa_DecoderVtbl: TFB_SoundDecoderFuncs;
-}
+use super::aiff_ffi::rust_aifa_DecoderVtbl;
+use super::dukaud_ffi::rust_duka_DecoderVtbl;
+use super::ffi::rust_ova_DecoderVtbl;
+use super::mod_ffi::rust_mod_DecoderVtbl;
+use super::wav_ffi::rust_wav_DecoderVtbl;
 
 fn add_builtin(r: &mut Registry, ext: &'static [u8], funcs: *const TFB_SoundDecoderFuncs) {
     r.entries.push(Box::new(TFB_RegSoundDecoder {
@@ -68,13 +66,11 @@ fn init_builtins(r: &mut Registry) {
     if !r.entries.is_empty() {
         return;
     }
-    unsafe {
-        add_builtin(r, b"wav\0", &rust_wav_DecoderVtbl);
-        add_builtin(r, b"mod\0", &rust_mod_DecoderVtbl);
-        add_builtin(r, b"ogg\0", &rust_ova_DecoderVtbl);
-        add_builtin(r, b"duk\0", &rust_duka_DecoderVtbl);
-        add_builtin(r, b"aif\0", &rust_aifa_DecoderVtbl);
-    }
+    add_builtin(r, b"wav\0", &rust_wav_DecoderVtbl);
+    add_builtin(r, b"mod\0", &rust_mod_DecoderVtbl);
+    add_builtin(r, b"ogg\0", &rust_ova_DecoderVtbl);
+    add_builtin(r, b"duk\0", &rust_duka_DecoderVtbl);
+    add_builtin(r, b"aif\0", &rust_aifa_DecoderVtbl);
     r.entries.push(Box::new(TFB_RegSoundDecoder {
         builtin: false,
         used: false,

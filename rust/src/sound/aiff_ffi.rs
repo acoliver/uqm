@@ -1,7 +1,6 @@
-//! C FFI bindings for Rust AIFF decoder
+//! Rust callback table for the AIFF decoder.
 //!
-//! Provides C-compatible function pointers matching the `TFB_SoundDecoderFuncs`
-//! vtable structure, replacing `aiffaud.c`.
+//! Implements `TFB_SoundDecoderFuncs` for the internal sound registry.
 //!
 //! @plan PLAN-20260225-AIFF-DECODER.P15..P17
 //! @requirement REQ-FF-1..15
@@ -103,7 +102,7 @@ unsafe fn read_uio_file(dir: *mut uio_DirHandle, path: *const c_char) -> Option<
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_GetName() -> *const c_char {
+fn rust_aifa_GetName() -> *const c_char {
     RUST_AIFA_NAME.as_ptr() as *const c_char
 }
 
@@ -111,7 +110,7 @@ extern "C" fn rust_aifa_GetName() -> *const c_char {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+fn rust_aifa_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
     if fmts.is_null() {
         return 0;
     }
@@ -136,7 +135,7 @@ extern "C" fn rust_aifa_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_TermModule() {
+fn rust_aifa_TermModule() {
     if let Ok(mut guard) = RUST_AIFA_FORMATS.lock() {
         *guard = None;
     }
@@ -146,7 +145,7 @@ extern "C" fn rust_aifa_TermModule() {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_GetStructSize() -> u32 {
+fn rust_aifa_GetStructSize() -> u32 {
     std::mem::size_of::<TFB_RustAiffDecoder>() as u32
 }
 
@@ -154,7 +153,7 @@ extern "C" fn rust_aifa_GetStructSize() -> u32 {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_aifa_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
     }
@@ -173,7 +172,7 @@ extern "C" fn rust_aifa_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_aifa_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return 0;
     }
@@ -200,7 +199,7 @@ extern "C" fn rust_aifa_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Term(decoder: *mut TFB_SoundDecoder) {
+fn rust_aifa_Term(decoder: *mut TFB_SoundDecoder) {
     if decoder.is_null() {
         return;
     }
@@ -219,7 +218,7 @@ extern "C" fn rust_aifa_Term(decoder: *mut TFB_SoundDecoder) {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Open(
+fn rust_aifa_Open(
     decoder: *mut TFB_SoundDecoder,
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -300,7 +299,7 @@ extern "C" fn rust_aifa_Open(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Close(decoder: *mut TFB_SoundDecoder) {
+fn rust_aifa_Close(decoder: *mut TFB_SoundDecoder) {
     if decoder.is_null() {
         return;
     }
@@ -318,11 +317,7 @@ extern "C" fn rust_aifa_Close(decoder: *mut TFB_SoundDecoder) {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Decode(
-    decoder: *mut TFB_SoundDecoder,
-    buf: *mut c_void,
-    bufsize: c_int,
-) -> c_int {
+fn rust_aifa_Decode(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: c_int) -> c_int {
     if decoder.is_null() || buf.is_null() || bufsize <= 0 {
         return 0;
     }
@@ -345,7 +340,7 @@ extern "C" fn rust_aifa_Decode(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
+fn rust_aifa_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
     if decoder.is_null() {
         return pcm_pos;
     }
@@ -367,7 +362,7 @@ extern "C" fn rust_aifa_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u3
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_aifa_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
+fn rust_aifa_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
     }
@@ -385,8 +380,8 @@ extern "C" fn rust_aifa_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
 // Vtable export
 // =============================================================================
 
-#[no_mangle]
-pub static rust_aifa_DecoderVtbl: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
+pub use AIFF_DECODER as rust_aifa_DecoderVtbl;
+pub static AIFF_DECODER: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
     GetName: rust_aifa_GetName,
     InitModule: rust_aifa_InitModule,
     TermModule: rust_aifa_TermModule,

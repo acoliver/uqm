@@ -1,7 +1,7 @@
-//! C FFI bindings for Rust sound decoders
+//! Rust callback table for the sound decoders.
 //!
-//! Provides C-compatible function pointers matching the `TFB_SoundDecoderFuncs`
-//! vtable structure from `sc2/src/libs/sound/decoders/decoder.h`.
+//! Retains the decoder records inherited from `decoder.h`, with typed Rust
+//! function pointers for the internal registry.
 
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::ptr;
@@ -68,8 +68,7 @@ pub struct TFB_SoundDecoder {
     pub end_sample: u32,
 }
 
-/// C-compatible decoder vtable
-/// Matches TFB_SoundDecoderFuncs from decoder.h
+/// Internal decoder callbacks using the field names inherited from decoder.h.
 #[repr(C)]
 #[allow(
     non_snake_case,
@@ -80,42 +79,42 @@ pub struct TFB_SoundDecoderFuncs {
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub GetName: extern "C" fn() -> *const c_char,
+    pub GetName: fn() -> *const c_char,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub InitModule: extern "C" fn(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int,
+    pub InitModule: fn(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub TermModule: extern "C" fn(),
+    pub TermModule: fn(),
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub GetStructSize: extern "C" fn() -> u32,
+    pub GetStructSize: fn() -> u32,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub GetError: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
+    pub GetError: fn(decoder: *mut TFB_SoundDecoder) -> c_int,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Init: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
+    pub Init: fn(decoder: *mut TFB_SoundDecoder) -> c_int,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Term: extern "C" fn(decoder: *mut TFB_SoundDecoder),
+    pub Term: fn(decoder: *mut TFB_SoundDecoder),
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Open: extern "C" fn(
+    pub Open: fn(
         decoder: *mut TFB_SoundDecoder,
         dir: *mut uio_DirHandle,
         filename: *const c_char,
@@ -124,23 +123,22 @@ pub struct TFB_SoundDecoderFuncs {
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Close: extern "C" fn(decoder: *mut TFB_SoundDecoder),
+    pub Close: fn(decoder: *mut TFB_SoundDecoder),
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Decode:
-        extern "C" fn(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int,
+    pub Decode: fn(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub Seek: extern "C" fn(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32,
+    pub Seek: fn(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32,
     #[allow(
         non_snake_case,
         reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
     )]
-    pub GetFrame: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> u32,
+    pub GetFrame: fn(decoder: *mut TFB_SoundDecoder) -> u32,
 }
 
 // =============================================================================
@@ -170,7 +168,7 @@ static RUST_OGG_NAME: &[u8] = b"Rust Ogg Vorbis\0";
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_GetName() -> *const c_char {
+fn rust_ova_GetName() -> *const c_char {
     RUST_OGG_NAME.as_ptr() as *const c_char
 }
 
@@ -178,7 +176,7 @@ extern "C" fn rust_ova_GetName() -> *const c_char {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
     rust_bridge_log_msg("RUST_OGG_INIT_MODULE");
 
     if fmts.is_null() {
@@ -213,7 +211,7 @@ extern "C" fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats)
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_TermModule() {
+fn rust_ova_TermModule() {
     rust_bridge_log_msg("RUST_OGG_TERM_MODULE");
 
     if let Ok(mut guard) = RUST_OGG_FORMATS.lock() {
@@ -225,7 +223,7 @@ extern "C" fn rust_ova_TermModule() {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_GetStructSize() -> u32 {
+fn rust_ova_GetStructSize() -> u32 {
     std::mem::size_of::<TFB_RustOggDecoder>() as u32
 }
 
@@ -233,7 +231,7 @@ extern "C" fn rust_ova_GetStructSize() -> u32 {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
     }
@@ -253,7 +251,7 @@ extern "C" fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
+fn rust_ova_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     rust_bridge_log_msg("RUST_OGG_INIT");
 
     if decoder.is_null() {
@@ -286,7 +284,7 @@ extern "C" fn rust_ova_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
+fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_OGG_TERM");
 
     if decoder.is_null() {
@@ -336,7 +334,7 @@ extern "C" {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Open(
+fn rust_ova_Open(
     decoder: *mut TFB_SoundDecoder,
     dir: *mut uio_DirHandle,
     filename: *const c_char,
@@ -470,7 +468,7 @@ extern "C" fn rust_ova_Open(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Close(decoder: *mut TFB_SoundDecoder) {
+fn rust_ova_Close(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_OGG_CLOSE");
 
     if decoder.is_null() {
@@ -490,11 +488,7 @@ extern "C" fn rust_ova_Close(decoder: *mut TFB_SoundDecoder) {
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Decode(
-    decoder: *mut TFB_SoundDecoder,
-    buf: *mut c_void,
-    bufsize: i32,
-) -> c_int {
+fn rust_ova_Decode(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int {
     if decoder.is_null() || buf.is_null() || bufsize <= 0 {
         return -1;
     }
@@ -529,7 +523,7 @@ extern "C" fn rust_ova_Decode(
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
+fn rust_ova_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
     rust_bridge_log_msg(&format!("RUST_OGG_SEEK: pcm_pos={}", pcm_pos));
 
     if decoder.is_null() {
@@ -560,7 +554,7 @@ extern "C" fn rust_ova_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32
     non_snake_case,
     reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
-extern "C" fn rust_ova_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
+fn rust_ova_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
     }
@@ -580,9 +574,9 @@ extern "C" fn rust_ova_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
 // Exported vtable
 // =============================================================================
 
-/// Rust Ogg Vorbis decoder vtable - exported for C linkage
-#[no_mangle]
-pub static rust_ova_DecoderVtbl: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
+/// Ogg Vorbis decoder callbacks for the sound registry.
+pub use OGG_DECODER as rust_ova_DecoderVtbl;
+pub static OGG_DECODER: TFB_SoundDecoderFuncs = TFB_SoundDecoderFuncs {
     GetName: rust_ova_GetName,
     InitModule: rust_ova_InitModule,
     TermModule: rust_ova_TermModule,
