@@ -318,15 +318,9 @@ pub extern "C" fn GetNextVelocityComponents(
     }
 }
 
-/// C: void SetVelocityVector(VELOCITY_DESC *, SIZE magnitude, COUNT facing)
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn SetVelocityVector(velocityptr: *mut VelocityDesc, magnitude: i16, facing: u16) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.set_vector(magnitude as i32, facing);
+/// Set velocity from a world-space magnitude and a ship facing.
+pub fn set_velocity_vector(velocity: &mut VelocityDesc, magnitude: i16, facing: u16) {
+    velocity.set_vector(i32::from(magnitude), facing);
 }
 
 /// C: void SetVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)

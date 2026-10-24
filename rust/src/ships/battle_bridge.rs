@@ -244,8 +244,6 @@ extern "C" {
     fn IncFrameIndex(frame: Frame) -> Frame;
     fn GetFrameCount(frame: Frame) -> u16;
 
-    // Velocity
-    fn SetVelocityVector(vel: *mut c_void, magnitude: c_int, facing: c_int, direction: c_int);
 }
 /// # Safety
 /// Called on the game thread with the live resources required by the Rust provider.
@@ -694,17 +692,7 @@ pub mod bridge {
     pub unsafe fn get_frame_count(frame: Frame) -> i32 {
         i32::from(GetFrameCount(frame))
     }
-    /// # Safety
-    ///
-    /// This is an FFI function called from C. The caller must ensure pointers are valid.
-    pub unsafe fn set_velocity_vector(
-        vel: *mut c_void,
-        magnitude: i32,
-        facing: i32,
-        direction: i32,
-    ) {
-        SetVelocityVector(vel, magnitude as c_int, facing as c_int, direction as c_int);
-    }
+    pub use crate::battle::velocity::set_velocity_vector;
 }
 
 // ---------------------------------------------------------------------------
@@ -894,16 +882,7 @@ pub mod bridge {
     pub unsafe fn get_frame_count(_frame: Frame) -> i32 {
         1
     }
-    /// # Safety
-    ///
-    /// This is an FFI function called from C. The caller must ensure pointers are valid.
-    pub unsafe fn set_velocity_vector(
-        _vel: *mut c_void,
-        _magnitude: i32,
-        _facing: i32,
-        _direction: i32,
-    ) {
-    }
+    pub use crate::battle::velocity::set_velocity_vector;
 }
 
 // ---------------------------------------------------------------------------
@@ -945,6 +924,26 @@ pub mod status_flags {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn velocity_bridge_uses_the_real_three_argument_rust_function() {
+        use crate::battle::velocity::VelocityDesc;
+
+        let _: fn(&mut VelocityDesc, i16, u16) = bridge::set_velocity_vector;
+        for (facing, expected) in [
+            (0, (0, -320)),
+            (4, (320, 0)),
+            (8, (0, 320)),
+            (12, (-320, 0)),
+        ] {
+            let mut velocity = VelocityDesc::new();
+            bridge::set_velocity_vector(&mut velocity, 10, facing);
+            assert_eq!(velocity.get_current_components(), expected);
+            assert_eq!(velocity.travel_angle, facing * 4);
+            bridge::set_velocity_vector(&mut velocity, 0, facing);
+            assert_eq!(velocity.get_current_components(), (0, 0));
+        }
+    }
 
     #[test]
     fn alloc_element_returns_nonzero() {

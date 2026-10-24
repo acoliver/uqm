@@ -203,7 +203,7 @@ mod engine {
         magnitude: abi::SIZE,
         facing: abi::COUNT,
     ) {
-        crate::battle::velocity::SetVelocityVector(velocity.cast(), magnitude, facing);
+        crate::battle::velocity::set_velocity_vector(&mut *velocity.cast(), magnitude, facing);
     }
 
     /// # Safety
