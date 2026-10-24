@@ -213,6 +213,11 @@ def package(tag, target):
         smoke(unpacked_binary, work, version, content)
         if mac:
             run("codesign", "--verify", "--deep", "--strict", unpacked / "UQM.app")
+            command_dir = unpacked / "bin"
+            command_dir.mkdir()
+            command = command_dir / "uqm"
+            command.symlink_to("../UQM.app/Contents/MacOS/uqm")
+            smoke(command, work, version, content)
         if not windows and not mac:
             assets.extend(linux_packages(stage, work, version, target))
     sums = OUT / f"SHA256SUMS-{target}"
