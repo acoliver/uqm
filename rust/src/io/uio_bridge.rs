@@ -162,8 +162,7 @@ pub struct uio_MountHandle {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_rename(
+pub unsafe fn uio_rename(
     old_dir: *mut uio_DirHandle,
     old_path: *const c_char,
     new_dir: *mut uio_DirHandle,
@@ -240,12 +239,7 @@ pub unsafe extern "C" fn uio_rename(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_access(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    mode: c_int,
-) -> c_int {
+pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_int) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_access called");
 
@@ -398,12 +392,7 @@ pub unsafe extern "C" fn uio_access(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_stat(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    stat_buf: *mut stat,
-) -> c_int {
+pub unsafe fn uio_stat(dir: *mut uio_DirHandle, path: *const c_char, stat_buf: *mut stat) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_stat called");
 
@@ -486,12 +475,7 @@ pub unsafe extern "C" fn uio_stat(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_mkdir(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    _mode: mode_t,
-) -> c_int {
+pub unsafe fn uio_mkdir(dir: *mut uio_DirHandle, path: *const c_char, _mode: mode_t) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_mkdir called");
 
@@ -542,8 +526,7 @@ pub unsafe extern "C" fn uio_mkdir(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
+pub unsafe fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_rmdir called");
 
@@ -592,8 +575,7 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -> c_int {
+pub unsafe fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -> c_int {
     log_marker("uio_lseek called");
 
     if handle.is_null() {
@@ -1236,12 +1218,7 @@ pub unsafe extern "C" fn uio_transplantDir(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fgets(
-    buf: *mut c_char,
-    size: c_int,
-    stream: *mut uio_Stream,
-) -> *mut c_char {
+pub unsafe fn uio_fgets(buf: *mut c_char, size: c_int, stream: *mut uio_Stream) -> *mut c_char {
     // Wrap entire function in catch_unwind to prevent panics from unwinding across FFI
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         uio_fgets_inner(buf, size, stream)
@@ -1319,8 +1296,7 @@ unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
     rust_bridge_log_msg("RUST_UIO: uio_fgetc entry");
     if stream.is_null() {
         return -1;
@@ -1356,8 +1332,7 @@ pub unsafe extern "C" fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
     rust_bridge_log_msg("RUST_UIO: uio_ungetc entry");
     if stream.is_null() {
         return -1;
@@ -1404,7 +1379,7 @@ extern "C" {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_vfprintf(
+pub unsafe fn uio_vfprintf(
     stream: *mut uio_Stream,
     format: *const c_char,
     args: *mut libc::c_void,
@@ -1453,8 +1428,7 @@ pub unsafe extern "C" fn uio_vfprintf(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return -1;
     }
@@ -1481,8 +1455,7 @@ pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) -> c_int {
     if stream.is_null() || s.is_null() {
         return -1;
     }
@@ -1510,8 +1483,7 @@ pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) ->
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fflush(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return 0; // Flushing NULL stream is a no-op success
     }
@@ -1538,8 +1510,7 @@ pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_feof(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_feof(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return 0;
     }
@@ -1558,8 +1529,7 @@ pub unsafe extern "C" fn uio_feof(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_ferror(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_ferror(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return 0;
     }
@@ -1576,8 +1546,7 @@ pub unsafe extern "C" fn uio_ferror(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fwrite(
+pub unsafe fn uio_fwrite(
     ptr: *const libc::c_void,
     size: size_t,
     nmemb: size_t,
@@ -1623,8 +1592,7 @@ pub unsafe extern "C" fn uio_fwrite(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_clearerr(stream: *mut uio_Stream) {
+pub unsafe fn uio_clearerr(stream: *mut uio_Stream) {
     if stream.is_null() {
         return;
     }
@@ -1669,7 +1637,7 @@ pub struct uio_FileBlock {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_open_file_block(handle: *mut uio_Handle) -> *mut uio_FileBlock {
+pub unsafe fn uio_open_file_block(handle: *mut uio_Handle) -> *mut uio_FileBlock {
     ffi_guard!(ptr::null_mut(), {
         log_marker("uio_openFileBlock called");
 
@@ -1713,7 +1681,7 @@ pub unsafe extern "C" fn uio_open_file_block(handle: *mut uio_Handle) -> *mut ui
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_open_file_block2(
+pub unsafe fn uio_open_file_block2(
     handle: *mut uio_Handle,
     offset: off_t,
     size: size_t,
@@ -1775,7 +1743,7 @@ pub unsafe extern "C" fn uio_open_file_block2(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_access_file_block(
+pub unsafe fn uio_access_file_block(
     block: *mut uio_FileBlock,
     offset: off_t,
     length: size_t,
@@ -1873,7 +1841,7 @@ pub unsafe extern "C" fn uio_access_file_block(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_copy_file_block(
+pub unsafe fn uio_copy_file_block(
     block: *mut uio_FileBlock,
     offset: off_t,
     buffer: *mut c_char,
@@ -1962,7 +1930,7 @@ pub unsafe extern "C" fn uio_copy_file_block(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_clear_file_block_buffers(block: *mut uio_FileBlock) {
+pub unsafe fn uio_clear_file_block_buffers(block: *mut uio_FileBlock) {
     ffi_guard!((), {
         log_marker("uio_clearFileBlockBuffers called");
 
@@ -1983,7 +1951,7 @@ pub unsafe extern "C" fn uio_clear_file_block_buffers(block: *mut uio_FileBlock)
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_close_file_block(block: *mut uio_FileBlock) -> c_int {
+pub unsafe fn uio_close_file_block(block: *mut uio_FileBlock) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_closeFileBlock called");
 
@@ -2004,7 +1972,7 @@ pub unsafe extern "C" fn uio_close_file_block(block: *mut uio_FileBlock) -> c_in
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_set_file_block_usage_hint(
+pub unsafe fn uio_set_file_block_usage_hint(
     _block: *mut uio_FileBlock,
     _usage: c_int,
     _read_ahead_buf_size: size_t,
@@ -2028,7 +1996,7 @@ pub struct uio_FileSystemHandler {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_get_file_system_handler(_id: c_int) -> *mut uio_FileSystemHandler {
+pub unsafe fn uio_get_file_system_handler(_id: c_int) -> *mut uio_FileSystemHandler {
     log_marker("uio_getFileSystemHandler called - stub");
     // Return a dummy handler
     let handler = Box::new(uio_FileSystemHandler { _private: [] });
@@ -2039,7 +2007,7 @@ pub unsafe extern "C" fn uio_get_file_system_handler(_id: c_int) -> *mut uio_Fil
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_g_pfile_flags_from_proot_flags(_flags: c_int) -> c_int {
+pub unsafe fn uio_g_pfile_flags_from_proot_flags(_flags: c_int) -> c_int {
     log_marker("uio_gPFileFlagsFromPRootFlags called - stub");
     _flags // Pass through unchanged
 }
@@ -2048,7 +2016,7 @@ pub unsafe extern "C" fn uio_g_pfile_flags_from_proot_flags(_flags: c_int) -> c_
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_walk_gppath(
+pub unsafe fn uio_walk_gppath(
     _start_gpdir: *mut uio_GPDir,
     _path: *const c_char,
     _flags: c_int,
@@ -2130,7 +2098,7 @@ pub unsafe extern "C" fn uio_DirHandle_print(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpdir_handle_delete(_handle: *mut uio_PDirHandle) {
+pub unsafe fn uio_gpdir_handle_delete(_handle: *mut uio_PDirHandle) {
     log_marker("uio_GPDirHandle_delete called - stub");
     if !_handle.is_null() {
         let _ = Box::from_raw(_handle);
@@ -2141,7 +2109,7 @@ pub unsafe extern "C" fn uio_gpdir_handle_delete(_handle: *mut uio_PDirHandle) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpdir_add_file(
+pub unsafe fn uio_gpdir_add_file(
     _g_pdir: *mut uio_GPDir,
     _file_name: *const c_char,
     _file: *mut uio_GPFile,
@@ -2153,7 +2121,7 @@ pub unsafe extern "C" fn uio_gpdir_add_file(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpdir_close_entries(_g_pdir: *mut uio_GPDir) {
+pub unsafe fn uio_gpdir_close_entries(_g_pdir: *mut uio_GPDir) {
     log_marker("uio_GPDir_closeEntries called - stub");
 }
 
@@ -2161,7 +2129,7 @@ pub unsafe extern "C" fn uio_gpdir_close_entries(_g_pdir: *mut uio_GPDir) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpdir_commit_sub_dir(
+pub unsafe fn uio_gpdir_commit_sub_dir(
     _g_pdir: *mut uio_GPDir,
     _dir_name: *const c_char,
     _sub_dir: *mut uio_GPDir,
@@ -2174,7 +2142,7 @@ pub unsafe extern "C" fn uio_gpdir_commit_sub_dir(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpdir_get_gpdir_entry(
+pub unsafe fn uio_gpdir_get_gpdir_entry(
     _g_pdir: *mut uio_GPDir,
     _name: *const c_char,
 ) -> *mut uio_GPDirEntry {
@@ -2186,9 +2154,7 @@ pub unsafe extern "C" fn uio_gpdir_get_gpdir_entry(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpdir_get_pdir_entry_handle(
-    _entry: *mut uio_GPDirEntry,
-) -> *mut uio_PDirHandle {
+pub unsafe fn uio_gpdir_get_pdir_entry_handle(_entry: *mut uio_GPDirEntry) -> *mut uio_PDirHandle {
     log_marker("uio_GPDir_getPDirEntryHandle called - stub");
     ptr::null_mut()
 }
@@ -2197,7 +2163,7 @@ pub unsafe extern "C" fn uio_gpdir_get_pdir_entry_handle(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpdir_open_entries(_g_pdir: *mut uio_GPDir) -> c_int {
+pub unsafe fn uio_gpdir_open_entries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_openEntries called - stub");
     -1
 }
@@ -2206,7 +2172,7 @@ pub unsafe extern "C" fn uio_gpdir_open_entries(_g_pdir: *mut uio_GPDir) -> c_in
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpdir_prepare_sub_dir(
+pub unsafe fn uio_gpdir_prepare_sub_dir(
     _g_pdir: *mut uio_GPDir,
     _dir_name: *const c_char,
 ) -> *mut uio_GPDir {
@@ -2218,7 +2184,7 @@ pub unsafe extern "C" fn uio_gpdir_prepare_sub_dir(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpdir_read_entries(_g_pdir: *mut uio_GPDir) -> c_int {
+pub unsafe fn uio_gpdir_read_entries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_readEntries called - stub");
     -1
 }
@@ -2227,7 +2193,7 @@ pub unsafe extern "C" fn uio_gpdir_read_entries(_g_pdir: *mut uio_GPDir) -> c_in
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpfile_handle_delete(_handle: *mut uio_Handle) {
+pub unsafe fn uio_gpfile_handle_delete(_handle: *mut uio_Handle) {
     log_marker("uio_GPFileHandle_delete called - stub");
 }
 
@@ -2235,7 +2201,7 @@ pub unsafe extern "C" fn uio_gpfile_handle_delete(_handle: *mut uio_Handle) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gpfile_delete(_g_pfile: *mut uio_GPFile) {
+pub unsafe fn uio_gpfile_delete(_g_pfile: *mut uio_GPFile) {
     log_marker("uio_GPFile_delete called - stub");
     if !_g_pfile.is_null() {
         let _ = Box::from_raw(_g_pfile);
@@ -2246,7 +2212,7 @@ pub unsafe extern "C" fn uio_gpfile_delete(_g_pfile: *mut uio_GPFile) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_gpfile_new(
+pub unsafe fn uio_gpfile_new(
     _p_root: *mut uio_PRoot,
     _extra: *mut libc::c_void,
     _flags: c_int,
@@ -2260,7 +2226,7 @@ pub unsafe extern "C" fn uio_gpfile_new(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gproot_delete(_g_proot: *mut uio_GPRoot) {
+pub unsafe fn uio_gproot_delete(_g_proot: *mut uio_GPRoot) {
     log_marker("uio_GPRoot_delete called - stub");
     if !_g_proot.is_null() {
         let _ = Box::from_raw(_g_proot);
@@ -2271,7 +2237,7 @@ pub unsafe extern "C" fn uio_gproot_delete(_g_proot: *mut uio_GPRoot) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gproot_make_proot(_g_proot: *mut uio_GPRoot) -> *mut uio_PRoot {
+pub unsafe fn uio_gproot_make_proot(_g_proot: *mut uio_GPRoot) -> *mut uio_PRoot {
     log_marker("uio_GPRoot_makePRoot called - stub");
     // For simplicity, just cast (assuming compatible layout)
     _g_proot as *mut uio_PRoot
@@ -2281,7 +2247,7 @@ pub unsafe extern "C" fn uio_gproot_make_proot(_g_proot: *mut uio_GPRoot) -> *mu
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_gproot_umount(_p_root: *mut uio_PRoot) -> c_int {
+pub unsafe fn uio_gproot_umount(_p_root: *mut uio_PRoot) -> c_int {
     log_marker("uio_GPRoot_umount called - stub");
     0
 }
@@ -2290,7 +2256,7 @@ pub unsafe extern "C" fn uio_gproot_umount(_p_root: *mut uio_PRoot) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_handle_new(
+pub unsafe fn uio_handle_new(
     _root: *mut uio_PRoot,
     _native: *mut libc::c_void,
     _open_flags: c_int,
@@ -2303,9 +2269,7 @@ pub unsafe extern "C" fn uio_handle_new(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_proot_get_root_dir_handle(
-    _p_root: *mut uio_PRoot,
-) -> *mut uio_PDirHandle {
+pub unsafe fn uio_proot_get_root_dir_handle(_p_root: *mut uio_PRoot) -> *mut uio_PDirHandle {
     log_marker("uio_PRoot_getRootDirHandle called - stub");
     let handle = Box::new(uio_PDirHandle { _private: [] });
     Box::leak(handle) as *mut uio_PDirHandle
@@ -2319,7 +2283,7 @@ pub unsafe extern "C" fn uio_proot_get_root_dir_handle(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_stdio_access_handle_get_path(
+pub unsafe fn uio_stdio_access_handle_get_path(
     handle: *mut uio_StdioAccessHandle,
 ) -> *const c_char {
     ffi_guard!(ptr::null(), {
@@ -2345,7 +2309,7 @@ pub unsafe extern "C" fn uio_stdio_access_handle_get_path(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_get_stdio_access(
+pub unsafe fn uio_get_stdio_access(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     _flags: c_int,
@@ -2526,7 +2490,7 @@ pub unsafe extern "C" fn uio_get_stdio_access(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe extern "C" fn uio_release_stdio_access(handle: *mut uio_StdioAccessHandle) {
+pub unsafe fn uio_release_stdio_access(handle: *mut uio_StdioAccessHandle) {
     ffi_guard!((), {
         log_marker("uio_releaseStdioAccess called");
 
@@ -2568,7 +2532,7 @@ pub unsafe extern "C" fn uio_release_stdio_access(handle: *mut uio_StdioAccessHa
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn uio_copy_file(
+pub unsafe fn uio_copy_file(
     src_dir: *mut uio_DirHandle,
     src_path: *const c_char,
     dst_dir: *mut uio_DirHandle,
@@ -2710,7 +2674,7 @@ const SEEK_END: c_int = 2;
 /// The message pointer must be a valid null-terminated C string.
 ///
 /// Returns 0 on success, -1 on failure.
-pub unsafe extern "C" fn rust_bridge_log_msg_c(message: *const c_char) -> c_int {
+pub unsafe fn rust_bridge_log_msg_c(message: *const c_char) -> c_int {
     use crate::bridge_log::rust_bridge_log_msg;
 
     if message.is_null() {
@@ -3293,8 +3257,7 @@ pub unsafe extern "C" fn uio_openDirRelative(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_open(
+pub unsafe fn uio_open(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     flags: c_int,
@@ -3475,8 +3438,7 @@ pub unsafe extern "C" fn uio_open(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
+pub unsafe fn uio_close(handle: *mut uio_Handle) -> c_int {
     log_marker("uio_close called");
     if !handle.is_null() {
         let _ = Box::from_raw(handle);
@@ -3488,8 +3450,7 @@ pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: size_t) -> isize {
+pub unsafe fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: size_t) -> isize {
     if handle.is_null() || buf.is_null() || count == 0 {
         return -1;
     }
@@ -3510,12 +3471,7 @@ pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: 
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_write(
-    handle: *mut uio_Handle,
-    buf: *const u8,
-    count: size_t,
-) -> isize {
+pub unsafe fn uio_write(handle: *mut uio_Handle, buf: *const u8, count: size_t) -> isize {
     if handle.is_null() || buf.is_null() || count == 0 {
         return -1;
     }
@@ -3536,8 +3492,7 @@ pub unsafe extern "C" fn uio_write(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int {
+pub unsafe fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int {
     if handle.is_null() || stat_buf.is_null() {
         return -1;
     }
@@ -3563,8 +3518,7 @@ pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat)
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
+pub unsafe fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_unlink called");
 
@@ -3619,8 +3573,7 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fopen(
+pub unsafe fn uio_fopen(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     mode: *const c_char,
@@ -3825,8 +3778,7 @@ pub unsafe extern "C" fn uio_fopen(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fclose(stream: *mut uio_Stream) -> c_int {
     log_marker("uio_fclose called");
     if !stream.is_null() {
         let s = &*stream;
@@ -3855,8 +3807,7 @@ pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fread(
+pub unsafe fn uio_fread(
     buf: *mut libc::c_void,
     size: size_t,
     nmemb: size_t,
@@ -3952,12 +3903,7 @@ pub unsafe extern "C" fn uio_fread(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fseek(
-    stream: *mut uio_Stream,
-    offset: c_long,
-    whence: c_int,
-) -> c_int {
+pub unsafe fn uio_fseek(stream: *mut uio_Stream, offset: c_long, whence: c_int) -> c_int {
     if stream.is_null() {
         return -1;
     }
@@ -3992,8 +3938,7 @@ pub unsafe extern "C" fn uio_fseek(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_ftell(stream: *mut uio_Stream) -> c_long {
+pub unsafe fn uio_ftell(stream: *mut uio_Stream) -> c_long {
     if stream.is_null() {
         return -1;
     }
