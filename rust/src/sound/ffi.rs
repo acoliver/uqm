@@ -17,18 +17,7 @@ use super::ogg::OggDecoder;
 // C-compatible structures matching decoder.h
 // =============================================================================
 
-/// C-compatible decoder formats structure
-/// Matches TFB_DecoderFormats from decoder.h
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct TFB_DecoderFormats {
-    pub big_endian: bool,
-    pub want_big_endian: bool,
-    pub mono8: u32,
-    pub stereo8: u32,
-    pub mono16: u32,
-    pub stereo16: u32,
-}
+pub use super::formats::DecoderFormats as TFB_DecoderFormats;
 
 pub use crate::io::uio_bridge::uio_DirHandle;
 
