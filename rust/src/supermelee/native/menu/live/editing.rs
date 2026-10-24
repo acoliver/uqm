@@ -72,7 +72,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         if row == 2 && key(KEY_MENU_SELECT) {
             (*state).CurIndex = 0;
             name(state, side, 1, ptr::null());
-            let mut buf = [0i8; 31];
+            let mut buf = [0 as std::ffi::c_char; 31];
             libc::strncpy(
                 buf.as_mut_ptr(),
                 MeleeSetup_getTeamName((*state).meleeSetup, side as usize),

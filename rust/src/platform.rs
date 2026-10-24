@@ -17,14 +17,10 @@ pub fn redirect_stderr(path: &std::path::Path) -> std::io::Result<()> {
     {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::System::Console::{SetStdHandle, STD_ERROR_HANDLE};
-        unsafe extern "C" {
-            fn _open_osfhandle(handle: isize, flags: c_int) -> c_int;
-            fn _get_osfhandle(fd: c_int) -> isize;
-        }
         // SAFETY: transfer the file handle to the CRT, duplicate it onto stderr,
         // then point Rust/Win32 stderr at that same live CRT-owned handle.
         unsafe {
-            let fd = _open_osfhandle(
+            let fd = libc::open_osfhandle(
                 file.as_raw_handle() as isize,
                 libc::O_WRONLY | libc::O_BINARY,
             );
@@ -37,7 +33,7 @@ pub fn redirect_stderr(path: &std::path::Path) -> std::io::Result<()> {
             if result == -1 {
                 return Err(std::io::Error::from_raw_os_error(errno()));
             }
-            if SetStdHandle(STD_ERROR_HANDLE, _get_osfhandle(2) as _) == 0 {
+            if SetStdHandle(STD_ERROR_HANDLE, libc::get_osfhandle(2) as _) == 0 {
                 return Err(std::io::Error::last_os_error());
             }
         }
