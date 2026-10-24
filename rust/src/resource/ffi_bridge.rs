@@ -11,10 +11,11 @@
 //! @requirement REQ-RES-002-003, REQ-RES-088, REQ-RES-075-079, REQ-RES-R001-R004
 
 pub use self::{
-    res_get_boolean as res_GetBoolean, res_get_integer as res_GetInteger,
-    res_get_string as res_GetString, res_has_key as res_HasKey, res_is_boolean as res_IsBoolean,
-    res_is_integer as res_IsInteger, res_is_string as res_IsString,
-    res_put_boolean as res_PutBoolean, res_put_integer as res_PutInteger,
+    res_get_boolean as res_GetBoolean, res_get_color as res_GetColor,
+    res_get_integer as res_GetInteger, res_get_string as res_GetString, res_has_key as res_HasKey,
+    res_is_boolean as res_IsBoolean, res_is_color as res_IsColor, res_is_integer as res_IsInteger,
+    res_is_string as res_IsString, res_put_boolean as res_PutBoolean,
+    res_put_color as res_PutColor, res_put_integer as res_PutInteger,
     res_put_string as res_PutString,
 };
 
@@ -909,8 +910,7 @@ pub unsafe fn res_is_boolean(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
+pub unsafe fn res_is_color(key: *const c_char) -> c_int {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -1035,8 +1035,7 @@ pub unsafe fn res_get_boolean(key: *const c_char) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
+pub unsafe fn res_get_color(key: *const c_char) -> u32 {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return 0,
@@ -1135,8 +1134,7 @@ pub unsafe fn res_put_boolean(key: *const c_char, value: c_int) {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn res_PutColor(key: *const c_char, value: u32) {
+pub unsafe fn res_put_color(key: *const c_char, value: u32) {
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
         None => return,
@@ -2137,6 +2135,30 @@ mod tests {
                 let result = res_GetBoolean(key.as_ptr());
                 assert_eq!(result, 0);
             }
+        }
+    }
+
+    #[test]
+    fn color_property_accessors_have_packed_rust_signatures() {
+        let _: unsafe fn(*const c_char) -> c_int = crate::graphics::native_abi::res_IsColor;
+        let _: unsafe fn(*const c_char) -> u32 = crate::graphics::native_abi::res_GetColor;
+        let _: unsafe fn(*const c_char, u32) = crate::graphics::native_abi::res_PutColor;
+    }
+
+    #[test]
+    #[serial]
+    fn graphics_property_imports_preserve_rgba_byte_order() {
+        unsafe {
+            reset_state();
+            let key = c"test.graphics.rgba";
+            crate::graphics::native_abi::res_PutColor(key.as_ptr(), 0x12345678);
+            assert_eq!(crate::graphics::native_abi::res_IsColor(key.as_ptr()), 1);
+            assert_eq!(
+                crate::graphics::native_abi::res_GetColor(key.as_ptr()),
+                0x12345678
+            );
+            let value = CStr::from_ptr(res_GetString(key.as_ptr()));
+            assert_eq!(value.to_bytes(), b"");
         }
     }
 

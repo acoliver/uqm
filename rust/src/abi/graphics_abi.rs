@@ -175,15 +175,9 @@ pub use crate::resource::ffi_bridge::res_PutInteger;
 pub use crate::resource::ffi_bridge::res_IsBoolean;
 pub use crate::resource::ffi_bridge::res_GetBoolean;
 pub use crate::resource::ffi_bridge::res_PutBoolean;
-extern "C" {
-    pub fn res_IsColor(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetColor(key: *const ::std::os::raw::c_char) -> Color;
-}
-extern "C" {
-    pub fn res_PutColor(key: *const ::std::os::raw::c_char, value: Color);
-}
+pub use crate::resource::ffi_bridge::res_IsColor;
+pub use crate::resource::ffi_bridge::res_GetColor;
+pub use crate::resource::ffi_bridge::res_PutColor;
 extern "C" {
     pub fn res_Remove(key: *const ::std::os::raw::c_char) -> BOOLEAN;
 }
