@@ -330,20 +330,26 @@ where
             super::telemetry::creature_hit();
         }
 
-        // Transform canned creatures: swap live creature → canned creature and
-        // update the visual.
+        // Apply living animation before the hit's canister transition.
+        for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
+            advance_creature_animation_frame(
+                &mut self.surface.borrow_mut(),
+                *entity_id,
+                *kind,
+                *animation_frame,
+                &mut self.world_visuals,
+            )?;
+        }
+        for (entity_id, animation_frame) in &result.effects.canister_frames {
+            let visual = self
+                .world_visuals
+                .canned_creature_visual(*animation_frame)?;
+            let mut surface = self.surface.borrow_mut();
+            surface.frames.insert(*entity_id, visual.frame);
+            surface.masks.insert_entity(*entity_id, visual.mask);
+        }
         for (entity_id, value) in &result.effects.canned {
-            let kind = {
-                let surface = self.surface.borrow();
-                surface.world.get(*entity_id).and_then(|e| match &e.kind {
-                    SurfaceEntityKind::LiveCreature { kind, .. } => Some(*kind),
-                    _ => None,
-                })
-            };
-            let Some(kind) = kind else {
-                continue;
-            };
-            let visual = self.world_visuals.canned_creature_visual(kind)?;
+            let visual = self.world_visuals.canned_creature_visual(0)?;
             transform_creature_to_canned(
                 &mut self.surface.borrow_mut(),
                 *entity_id,
@@ -373,17 +379,6 @@ where
             if should_remove {
                 remove_surface_entity(&mut self.surface.borrow_mut(), *entity_id)?;
             }
-        }
-
-        // Advance every creature's animation frame atomically: frame + mask.
-        for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
-            advance_creature_animation_frame(
-                &mut self.surface.borrow_mut(),
-                *entity_id,
-                *kind,
-                *animation_frame,
-                &mut self.world_visuals,
-            )?;
         }
 
         {
@@ -427,10 +422,17 @@ fn classify(kind: &SurfaceEntityKind) -> Option<LanderCollision> {
             amount: *quantity,
         }),
         SurfaceEntityKind::EnergyNode { node } => Some(LanderCollision::Energy { node: *node }),
+        SurfaceEntityKind::LiveCreature {
+            kind,
+            hit_points: 0,
+            ..
+        } => Some(LanderCollision::CannedBiological {
+            value: u16::from(CreatureCatalog::stats(*kind).value),
+        }),
         SurfaceEntityKind::LiveCreature { kind, .. } => Some(LanderCollision::LiveCreature {
             danger: CreatureCatalog::stats(*kind).danger,
         }),
-        SurfaceEntityKind::CannedCreature { value } => {
+        SurfaceEntityKind::CannedCreature { value, .. } => {
             Some(LanderCollision::CannedBiological { value: *value })
         }
         SurfaceEntityKind::Hazard(hazard) => Some(LanderCollision::NaturalHazard(*hazard)),
@@ -618,12 +620,12 @@ mod tests {
 
         fn canned_creature_visual(
             &mut self,
-            _kind: super::super::creatures::CreatureKind,
+            animation_frame: u16,
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
-                    index: 1,
+                    base: 2_usize as *mut _,
+                    index: animation_frame,
                 },
                 mask: solid(),
             })
@@ -655,6 +657,79 @@ mod tests {
     }
 
     #[test]
+    fn stunned_creature_keeps_canister_visual_and_yields_bio_on_pickup() {
+        let _guard = telemetry_guard();
+        let mut creature = brainbox_entity(1);
+        if let SurfaceEntityKind::LiveCreature {
+            kind, frame_index, ..
+        } = &mut creature.kind
+        {
+            *kind = super::super::creatures::CreatureKind::new(0).unwrap();
+            *frame_index = 2;
+        }
+        let surface = shared_surface_with_entity(creature);
+        let id = surface.borrow().world.ids()[0];
+        let mut adapter = test_adapter(surface.clone());
+        adapter
+            .register_shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            })
+            .unwrap();
+        for _ in 0..8 {
+            let result = adapter
+                .step_world(&lander(), HazardChances::default())
+                .unwrap();
+            adapter
+                .apply_world_step(&result, &mut RecordingAudio)
+                .unwrap();
+            assert_eq!(
+                surface.borrow().frames.get(id).unwrap().base,
+                2_usize as *mut _,
+                "living animation must never overwrite the canister sprite"
+            );
+        }
+        let start = surface.borrow().world.get(id).unwrap().position;
+        let result = adapter
+            .step_world(&lander(), HazardChances::default())
+            .unwrap();
+        adapter
+            .apply_world_step(&result, &mut RecordingAudio)
+            .unwrap();
+        assert_eq!(surface.borrow().world.get(id).unwrap().position, start);
+        let contact = adapter
+            .contacts(&lander())
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(
+            contact.collision,
+            LanderCollision::CannedBiological { value: 1 }
+        );
+        let mut crew = CrewCount::new(12);
+        let mut minerals = super::super::cargo::MineralCargo::new(100, 0, false);
+        let mut biological = super::super::cargo::BioCargo::default();
+        let outcome = super::super::collision::resolve_lander_collision(
+            &mut super::super::collision::CollisionState {
+                crew: &mut crew,
+                shields: Default::default(),
+                minerals: &mut minerals,
+                biological: &mut biological,
+            },
+            contact.collision,
+            contact.rolls,
+        );
+        adapter.commit(contact, &outcome, 12).unwrap();
+        assert_eq!(biological.level(), 1);
+        assert!(surface.borrow().world.get(id).is_none());
+        assert!(surface.borrow().frames.get(id).is_none());
+    }
+
+    #[test]
     fn overlapping_creature_is_classified_from_catalog() {
         let mut world = SurfaceWorld::new();
         let id = world.insert(SurfaceEntity {
@@ -665,6 +740,8 @@ mod tests {
                 velocity: crate::battle::velocity::VelocityDesc::new(),
                 thrust_wait: 0,
                 frame_index: 1,
+                animation_wait: 4,
+                damage_wait: 0,
             },
             position: SurfacePoint::default(),
             finite_life: None,
@@ -715,6 +792,8 @@ mod tests {
                 velocity: crate::battle::velocity::VelocityDesc::new(),
                 thrust_wait: 0,
                 frame_index: 0,
+                animation_wait: 4,
+                damage_wait: 0,
             },
             position: SurfacePoint::default(),
             finite_life: None,
@@ -983,6 +1062,8 @@ mod tests {
                 velocity: VelocityDesc::new(),
                 thrust_wait: 0,
                 frame_index: 3,
+                animation_wait: 0,
+                damage_wait: 0,
             },
             position: SurfacePoint {
                 x: 100,
@@ -1169,7 +1250,11 @@ mod tests {
     fn commit_does_not_count_canned_biological_cargo() {
         let _guard = telemetry_guard();
         let surface = shared_surface_with_entity(SurfaceEntity {
-            kind: SurfaceEntityKind::CannedCreature { value: 7 },
+            kind: SurfaceEntityKind::CannedCreature {
+                value: 7,
+                animation_wait: 4,
+                frame_index: 0,
+            },
             position: SurfacePoint::default(),
             finite_life: None,
         });

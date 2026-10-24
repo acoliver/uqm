@@ -190,6 +190,8 @@ pub fn populate_surface(
                     velocity: VelocityDesc::new(),
                     thrust_wait: 0,
                     frame_index: u16::from(initial_frame),
+                    animation_wait: 4,
+                    damage_wait: 0,
                 },
             };
             let entity = world.insert(SurfaceEntity {

@@ -517,6 +517,7 @@ pub struct WorldStepEffects {
     /// IDs of creatures that were canned by shots this frame, with their new
     /// biological value. The caller swaps the entity kind.
     pub canned: Vec<(SurfaceEntityId, u16)>,
+    pub canister_frames: Vec<(SurfaceEntityId, u16)>,
     /// IDs of entities whose finite life expired this frame. The caller must
     /// remove their frames and masks in sync with the world.
     pub expired: Vec<SurfaceEntityId>,
@@ -617,7 +618,27 @@ fn process_entity<M: MaskLookup, R: WorldRandom>(
             velocity,
             thrust_wait,
             frame_index,
+            animation_wait,
+            damage_wait,
         } => {
+            if *damage_wait > 0 {
+                *damage_wait -= 1;
+                if *damage_wait == 0 && *hit_points == 0 {
+                    velocity.zero();
+                    *frame_index = 0;
+                    effects
+                        .canned
+                        .push((id, u16::from(CreatureCatalog::stats(*kind).value)));
+                    effects
+                        .sounds
+                        .push(super::hazards::SoundCue::LifeformCanned);
+                }
+            }
+            if *animation_wait > 0 {
+                *animation_wait -= 1;
+                return integrate_entity(world, id, shot_masks, creature_masks, effects);
+            }
+            *animation_wait = 4;
             let position = entity.position;
             let mut ctx = CreatureUpdateContext {
                 kind: *kind,
@@ -631,10 +652,25 @@ fn process_entity<M: MaskLookup, R: WorldRandom>(
             };
             let new_aware = update_creature(&mut ctx, random);
             *aware = new_aware;
-            // Animation leaks from frame_index every surface frame: the C code
-            // advances the primitive frame inside object_animation, and each step
-            // must keep hotspot and extent in lockstep with the drawn image.
-            effects.creature_frames.push((id, *kind, *frame_index));
+            // Drawable and collision mask advance together on animation ticks.
+            if *hit_points == 0 {
+                effects.canister_frames.push((id, *frame_index % 4));
+            } else {
+                effects.creature_frames.push((id, *kind, *frame_index % 4));
+            }
+        }
+        SurfaceEntityKind::CannedCreature {
+            animation_wait,
+            frame_index,
+            ..
+        } => {
+            if *animation_wait == 0 {
+                *animation_wait = 4;
+                *frame_index = (*frame_index + 1) % 4;
+                effects.canister_frames.push((id, *frame_index));
+            } else {
+                *animation_wait -= 1;
+            }
         }
         SurfaceEntityKind::Shot(shot) => {
             // Lifetime is tracked via finite_life; velocity integration below.
@@ -643,6 +679,16 @@ fn process_entity<M: MaskLookup, R: WorldRandom>(
         _ => {}
     }
 
+    integrate_entity(world, id, shot_masks, creature_masks, effects);
+}
+
+fn integrate_entity<M: MaskLookup>(
+    world: &mut SurfaceWorld,
+    id: SurfaceEntityId,
+    shot_masks: &M,
+    creature_masks: &M,
+    effects: &mut WorldStepEffects,
+) {
     // Integrate velocity for all entities that have one.
     let (dx, dy) = entity_velocity_delta(world, id);
     if dx != 0 || dy != 0 {
@@ -753,6 +799,8 @@ fn check_shot_creature_collision<M: MaskLookup>(
             aware,
             velocity,
             thrust_wait,
+            damage_wait,
+            frame_index,
             ..
         } = &mut creature.kind
         else {
@@ -762,7 +810,11 @@ fn check_shot_creature_collision<M: MaskLookup>(
         let outcome = apply_shot_hit(*kind, hit_points, velocity, thrust_wait, aware, shot_facing);
         // LANDER_HITS is played inside C `shotCreature`, which a retrieved
         // creature never reaches.
-        if !matches!(outcome, ShotCreatureOutcome::Retrieved) {
+        if !matches!(
+            outcome,
+            ShotCreatureOutcome::Retrieved | ShotCreatureOutcome::AlreadyCanned
+        ) {
+            *damage_wait = 7;
             effects.sounds.push(super::hazards::SoundCue::LanderHits);
         }
         if !matches!(outcome, ShotCreatureOutcome::AlreadyCanned) {
@@ -771,11 +823,9 @@ fn check_shot_creature_collision<M: MaskLookup>(
         match outcome {
             ShotCreatureOutcome::AlreadyCanned => {}
             ShotCreatureOutcome::Stunned => {}
-            ShotCreatureOutcome::Canned { value } => {
-                effects.canned.push((creature_id, value));
-                effects
-                    .sounds
-                    .push(super::hazards::SoundCue::LifeformCanned);
+            ShotCreatureOutcome::Canned { .. } => {
+                *frame_index = 0;
+                effects.canister_frames.push((creature_id, 0));
             }
             ShotCreatureOutcome::Retrieved => effects.retrieved.push(creature_id),
         }
@@ -908,6 +958,8 @@ mod tests {
                 velocity: VelocityDesc::new(),
                 thrust_wait: 0,
                 frame_index: 0,
+                animation_wait: 4,
+                damage_wait: 0,
             },
             position,
             finite_life: None,
@@ -1299,7 +1351,7 @@ mod tests {
 
         // Advance through the first AI tick and enough fixed-point movement
         // frames to produce one world-coordinate displacement.
-        for _ in 0..20 {
+        for _ in 0..40 {
             step_world(
                 &mut world,
                 WorldStepInputs {
@@ -1354,10 +1406,37 @@ mod tests {
                 random: &mut random,
             },
         );
-        assert_eq!(effects.canned, vec![(creature_id, 1)]);
-        assert!(effects
+        assert_eq!(effects.canister_frames, [(creature_id, 0)]);
+        assert!(effects.canned.is_empty());
+        assert!(!effects
             .sounds
             .contains(&super::super::hazards::SoundCue::LifeformCanned));
+        for tick in 1..=7 {
+            let effects = step_world(
+                &mut world,
+                WorldStepInputs {
+                    lander_position: SurfacePoint::default(),
+                    shot_masks: &shot_masks,
+                    creature_masks: &creature_masks,
+                    random: &mut random,
+                },
+            );
+            assert_eq!(
+                effects
+                    .sounds
+                    .contains(&super::super::hazards::SoundCue::LifeformCanned),
+                tick == 7
+            );
+            if tick == 7 {
+                assert_eq!(effects.canned, [(creature_id, 1)]);
+                let SurfaceEntityKind::LiveCreature { velocity, .. } =
+                    &world.get(creature_id).unwrap().kind
+                else {
+                    panic!("creature missing")
+                };
+                assert!(velocity.is_zero());
+            }
+        }
     }
 
     /// Build a 2px-wide opaque mask centered so its second pixel is the `x + 1`
@@ -1586,6 +1665,8 @@ mod tests {
                 },
                 thrust_wait: 0,
                 frame_index: 0,
+                animation_wait: 4,
+                damage_wait: 0,
             },
             position: SurfacePoint {
                 x: WORLD_WIDTH - 1,
@@ -1624,6 +1705,8 @@ mod tests {
                 },
                 thrust_wait: 0,
                 frame_index: 0,
+                animation_wait: 4,
+                damage_wait: 0,
             },
             position: SurfacePoint { x: 10, y: 0 },
             finite_life: None,
@@ -1668,30 +1751,30 @@ mod tests {
     }
 
     #[test]
-    fn creature_animation_frame_is_reported_every_surface_step() {
+    fn creature_animation_advances_every_fifth_surface_tick() {
         let mut world = SurfaceWorld::new();
         let creature_id = world.insert(live_creature(24, 2, SurfacePoint { x: 10, y: 10 }));
-        let shot_masks = MapMasks::default();
-        let creature_masks = MapMasks::default();
+        let masks = MapMasks::default();
         let mut random = SeqRandom::new(&[]);
-        let effects = step_world(
-            &mut world,
-            WorldStepInputs {
-                lander_position: SurfacePoint::default(),
-                shot_masks: &shot_masks,
-                creature_masks: &creature_masks,
-                random: &mut random,
-            },
-        );
-        assert!(
-            effects
-                .creature_frames
-                .iter()
-                .any(|(id, kind, frame)| *id == creature_id
-                    && kind.is_brainbox_bulldozer()
-                    && *frame == 1),
-            "brainbox must advance its animation frame each surface step"
-        );
+        for tick in 1..=40 {
+            let effects = step_world(
+                &mut world,
+                WorldStepInputs {
+                    lander_position: SurfacePoint::default(),
+                    shot_masks: &masks,
+                    creature_masks: &masks,
+                    random: &mut random,
+                },
+            );
+            if tick % 5 == 0 {
+                assert_eq!(
+                    effects.creature_frames,
+                    [(creature_id, CreatureKind::new(24).unwrap(), (tick / 5) % 4)]
+                );
+            } else {
+                assert!(effects.creature_frames.is_empty(), "tick {tick}");
+            }
+        }
     }
 
     // -- Brainbox Bulldozer acceptance ------------------------------------------

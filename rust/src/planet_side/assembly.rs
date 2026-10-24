@@ -38,7 +38,7 @@ pub trait WorldVisualPort {
     /// Visual for a creature that was canned (hit points reached zero).
     fn canned_creature_visual(
         &mut self,
-        kind: super::creatures::CreatureKind,
+        animation_frame: u16,
     ) -> Result<EntityVisual, AdapterError>;
 
     /// Visual for a spawned hazard (earthquake, lightning, lava).
@@ -149,7 +149,15 @@ pub fn transform_creature_to_canned(
     let Some(target) = assembly.world.get_mut(entity) else {
         return Err(AdapterError::new("canned_entity_missing"));
     };
-    target.kind = super::entities::SurfaceEntityKind::CannedCreature { value };
+    let animation_wait = match target.kind {
+        super::entities::SurfaceEntityKind::LiveCreature { animation_wait, .. } => animation_wait,
+        _ => return Err(AdapterError::new("canned_entity_kind")),
+    };
+    target.kind = super::entities::SurfaceEntityKind::CannedCreature {
+        value,
+        animation_wait,
+        frame_index: 0,
+    };
     assembly.frames.insert(entity, visual.frame);
     assembly.masks.insert_entity(entity, visual.mask);
     Ok(())
@@ -286,10 +294,7 @@ mod tests {
             Err(AdapterError::new("unused_in_creature_animation_test"))
         }
 
-        fn canned_creature_visual(
-            &mut self,
-            _kind: super::super::creatures::CreatureKind,
-        ) -> Result<EntityVisual, AdapterError> {
+        fn canned_creature_visual(&mut self, _frame: u16) -> Result<EntityVisual, AdapterError> {
             Err(AdapterError::new("unused_in_creature_animation_test"))
         }
 
@@ -342,6 +347,8 @@ mod tests {
                     velocity: crate::battle::velocity::VelocityDesc::default(),
                     thrust_wait: 0,
                     frame_index: 0,
+                    animation_wait: 4,
+                    damage_wait: 0,
                 },
                 position: SurfacePoint::default(),
                 finite_life: None,
