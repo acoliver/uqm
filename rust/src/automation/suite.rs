@@ -142,7 +142,26 @@ pub const MATRIX: &[ScenarioRow] = &[
         ],
     ),
     row("load-connected-full-drives-v1", &[Domain::SaveLoad]),
+    row(
+        "campaign-s08j-connected-talking-pet",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+        ],
+    ),
+    row(
+        "campaign-s08k-rainbow-funding",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::CommunicationChoices,
+            Domain::BattleOutcomes,
+        ],
+    ),
     row("load-connected-arilou-v1", &[Domain::SaveLoad]),
+    row("load-connected-rainbow-funded-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07h-connected-taalo",
         &[
