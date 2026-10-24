@@ -58,6 +58,15 @@ fn decoder_callbacks_use_rust_function_signatures() {
         let _: fn(*mut TFB_SoundDecoder) -> u32 = funcs.GetFrame;
     }
 }
+#[test]
+fn decoder_open_callbacks_accept_the_native_directory_handle() {
+    let _: fn(&Directory) -> *mut crate::io::uio_bridge::uio_DirHandle = Directory::handle;
+    let _: fn(
+        *mut TFB_SoundDecoder,
+        *mut crate::io::uio_bridge::uio_DirHandle,
+        *const std::ffi::c_char,
+    ) -> i32 = rust_wav_DecoderVtbl.Open;
+}
 
 /// A uio repository whose root is a temporary directory.
 pub(crate) struct Directory {
@@ -105,7 +114,7 @@ impl Directory {
     }
 
     pub(crate) fn handle(&self) -> *mut uio_DirHandle {
-        self.handle as *mut uio_DirHandle
+        self.handle
     }
 }
 
