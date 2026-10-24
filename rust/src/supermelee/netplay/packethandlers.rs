@@ -3,7 +3,7 @@ use super::abi::{
     UqmNetplayConstants_UQM_NETPLAY_BATTLE_FRAME_RATE as BATTLE_FRAME_RATE,
     UqmNetplayConstants_UQM_NETPLAY_NUM_MELEE_SHIPS as NUM_MELEE_SHIPS,
 };
-use super::checksum::addRemoteChecksum;
+use super::checksum::add_remote_checksum;
 use super::packetsenders::{
     sendAbort, sendAck, sendHandshake0, sendHandshake1, sendHandshakeCancelAck,
 };
@@ -427,7 +427,7 @@ handler!(PacketHandler_Checksum, Packet_Checksum, |conn, packet| {
         );
         return 0;
     }
-    addRemoteChecksum(conn, frame, checksum);
+    add_remote_checksum(conn, frame, checksum);
     0
 });
 

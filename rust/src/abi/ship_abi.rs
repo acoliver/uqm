@@ -1288,17 +1288,9 @@ unsafe extern "C" {
     pub fn FreeBattleSong();
 }
 pub type Checksum = uint32;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct crc_State {
-    pub crc: uint32,
-}
-unsafe extern "C" {
-    pub fn crc_init(state: *mut crc_State);
-}
-unsafe extern "C" {
-    pub fn crc_finish(state: *const crc_State) -> uint32;
-}
+pub use crate::battle::netplay::CrcState as crc_State;
+pub use crate::supermelee::netplay::crc::crc_init as crc_init;
+pub use crate::supermelee::netplay::crc::crc_finish as crc_finish;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type OBJ_SIZE = UWORD;
 pub type HLINK = QUEUE_HANDLE;
@@ -1484,21 +1476,11 @@ unsafe extern "C" {
         margin_of_error: COUNT,
     ) -> COUNT;
 }
-unsafe extern "C" {
-    pub fn crc_processState(state: *mut crc_State);
-}
-unsafe extern "C" {
-    pub fn initChecksumBuffers();
-}
-unsafe extern "C" {
-    pub fn uninitChecksumBuffers();
-}
-unsafe extern "C" {
-    pub fn addLocalChecksum(frameNr: BattleFrameCounter, checksum: Checksum);
-}
-unsafe extern "C" {
-    pub fn verifyChecksums(frameNr: BattleFrameCounter) -> bool;
-}
+pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
+pub use crate::supermelee::netplay::checksum::init_checksum_buffers as initChecksumBuffers;
+pub use crate::supermelee::netplay::checksum::uninit_checksum_buffers as uninitChecksumBuffers;
+pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
+pub use crate::supermelee::netplay::checksum::verify_checksums as verifyChecksums;
 unsafe extern "C" {
     pub fn NetConnection_getStateData(conn: *const NetConnection) -> *mut NetConnectionStateData;
 }

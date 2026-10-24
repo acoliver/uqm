@@ -13,8 +13,8 @@ pub mod abi {
     include!("../../abi/netplay_abi.rs");
 }
 mod checkbuf;
-mod checksum;
-mod crc;
+pub(crate) mod checksum;
+pub(crate) mod crc;
 mod packet;
 mod packethandlers;
 mod packetq;
