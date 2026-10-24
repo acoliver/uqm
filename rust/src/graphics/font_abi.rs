@@ -34,9 +34,7 @@ pub unsafe extern "C" fn SetContextFont(font: *mut font_desc) -> *mut font_desc 
     }
     last
 }
-extern "C" {
-    fn _ReleaseFontData(handle: *mut std::ffi::c_void) -> BOOLEAN;
-}
+use super::gfxload::release_font_data;
 /// # Safety
 /// Font must be null or an owned live font; consumed by this call.
 #[no_mangle]
@@ -47,7 +45,7 @@ pub unsafe extern "C" fn DestroyFont(font: *mut font_desc) -> BOOLEAN {
     if !_CurFontPtr.is_null() && _CurFontPtr == font {
         SetContextFont(ptr::null_mut());
     }
-    _ReleaseFontData(font.cast())
+    release_font_data(font.cast()) as BOOLEAN
 }
 /// # Safety
 /// Text and its string must be live on the graphics thread.

@@ -91,51 +91,17 @@ pub type ResourceStringFun = ::std::option::Option<
 pub type ResourceLoadFileFun = ::std::option::Option<
     unsafe extern "C" fn(fp: *mut uio_Stream, len: DWORD) -> *mut ::std::os::raw::c_void,
 >;
-extern "C" {
-    pub fn LoadResourceFromPath(
-        pathname: *const ::std::os::raw::c_char,
-        fn_: ResourceLoadFileFun,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn res_OpenResFile(
-        dir: *mut uio_DirHandle,
-        filename: *const ::std::os::raw::c_char,
-        mode: *const ::std::os::raw::c_char,
-    ) -> *mut uio_Stream;
-}
-extern "C" {
-    pub fn LengthResFile(fp: *mut uio_Stream) -> usize;
-}
-extern "C" {
-    pub fn res_CloseResFile(fp: *mut uio_Stream) -> BOOLEAN;
-}
-extern "C" {
-    pub fn InstallResTypeVectors(
-        res_type: *const ::std::os::raw::c_char,
-        loadFun: ResourceLoadFun,
-        freeFun: ResourceFreeFun,
-        stringFun: ResourceStringFun,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetResource(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn res_DetachResource(res: RESOURCE) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn res_FreeResource(res: RESOURCE);
-}
-extern "C" {
-    pub fn res_GetIntResource(res: RESOURCE) -> DWORD;
-}
-extern "C" {
-    pub fn res_GetBooleanResource(res: RESOURCE) -> BOOLEAN;
-}
-extern "C" {
-    pub fn res_GetResourceType(res: RESOURCE) -> *const ::std::os::raw::c_char;
-}
+pub use crate::resource::ffi_bridge::LoadResourceFromPath;
+pub use crate::resource::ffi_bridge::res_OpenResFile;
+pub use crate::resource::ffi_bridge::LengthResFile;
+pub use crate::resource::ffi_bridge::res_CloseResFile;
+pub use crate::resource::ffi_bridge::InstallResTypeVectors;
+pub use crate::resource::ffi_bridge::res_GetResource;
+pub use crate::resource::ffi_bridge::res_DetachResource;
+pub use crate::resource::ffi_bridge::res_FreeResource;
+pub use crate::resource::ffi_bridge::res_GetIntResource;
+pub use crate::resource::ffi_bridge::res_GetBooleanResource;
+pub use crate::resource::ffi_bridge::res_GetResourceType;
 pub type UniChar = uint32;
 pub use crate::strings::unicode::get_char_from_string as getCharFromString;
 #[repr(C)]
@@ -153,18 +119,9 @@ pub type STRING_TABLE_DESC = string_table;
 pub type STRING_TABLE = *mut STRING_TABLE_DESC;
 pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
-extern "C" {
-    pub fn GetStringAddress(String: STRING) -> STRINGPTR;
-}
+pub use crate::strings::string_table::GetStringAddress;
 pub type DIRENTRY_REF = STRING_TABLE;
-extern "C" {
-    pub fn LoadDirEntryTable(
-        dirHandle: *mut uio_DirHandle,
-        path: *const ::std::os::raw::c_char,
-        pattern: *const ::std::os::raw::c_char,
-        matchType: match_MatchType,
-    ) -> DIRENTRY_REF;
-}
+pub use crate::resource::direct::LoadDirEntryTable;
 pub use crate::resource::ffi_bridge::res_HasKey;
 pub use crate::resource::ffi_bridge::res_IsString;
 pub use crate::resource::ffi_bridge::res_GetString;
@@ -178,9 +135,7 @@ pub use crate::resource::ffi_bridge::res_PutBoolean;
 pub use crate::resource::ffi_bridge::res_IsColor;
 pub use crate::resource::ffi_bridge::res_GetColor;
 pub use crate::resource::ffi_bridge::res_PutColor;
-extern "C" {
-    pub fn res_Remove(key: *const ::std::os::raw::c_char) -> BOOLEAN;
-}
+pub use crate::resource::ffi_bridge::res_Remove;
 pub type CONTEXT_DESC = context_desc;
 pub type FRAME_DESC = frame_desc;
 pub type FONT_DESC = font_desc;
@@ -192,14 +147,14 @@ pub type DRAWABLE = *mut DRAWABLE_DESC;
 pub type COORD = SWORD;
 pub type CREATE_FLAGS = BYTE;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct extent {
     pub width: COORD,
     pub height: COORD,
 }
 pub type EXTENT = extent;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct point {
     pub x: COORD,
     pub y: COORD,
@@ -213,7 +168,7 @@ pub struct stamp {
 }
 pub type STAMP = stamp;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct rect {
     pub corner: POINT,
     pub extent: EXTENT,
@@ -260,27 +215,16 @@ pub struct PRIMITIVE {
 }
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-extern "C" {
-    pub fn BoxIntersect(pr1: *mut RECT, pr2: *mut RECT, printer: *mut RECT) -> INTERSECT_CODE;
-}
+pub use crate::graphics::geometry_ffi::BoxIntersect;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DrawMode {
     pub kind: BYTE,
     pub factor: SWORD,
 }
-extern "C" {
-    pub fn SetContextForeGroundColor(Color: Color) -> Color;
-}
+pub use crate::graphics::context_abi::SetContextForeGroundColor;
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-extern "C" {
-    pub fn CreateDrawable(
-        CreateFlags: CREATE_FLAGS,
-        width: SIZE,
-        height: SIZE,
-        num_frames: COUNT,
-    ) -> DRAWABLE;
-}
+pub use crate::graphics::drawable_abi::CreateDrawable;
 pub type Mutex = *mut ::std::os::raw::c_void;
 pub type Semaphore = *mut ::std::os::raw::c_void;
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
@@ -289,50 +233,17 @@ pub const SCREEN_TFB_SCREEN_EXTRA: SCREEN = 1;
 pub const SCREEN_TFB_SCREEN_TRANSITION: SCREEN = 2;
 pub const SCREEN_TFB_GFX_NUMSCREENS: SCREEN = 3;
 pub type SCREEN = ::std::os::raw::c_uint;
-extern "C" {
-    pub fn TFB_InitGraphics(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        renderer: *const ::std::os::raw::c_char,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_ReInitGraphics(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_UninitGraphics();
-}
-extern "C" {
-    pub fn TFB_ProcessEvents();
-}
-extern "C" {
-    pub fn TFB_SetGamma(gamma: f32) -> bool;
-}
-extern "C" {
-    pub fn TFB_UploadTransitionScreen();
-}
-extern "C" {
-    pub fn TFB_SupportsHardwareScaling() -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_SwapBuffers(force_full_redraw: ::std::os::raw::c_int);
-}
-extern "C" {
-    pub fn TFB_FlushGraphics();
-}
-extern "C" {
-    pub fn TFB_FlushGraphicsEx(skip_swap: BOOLEAN);
-}
-extern "C" {
-    pub fn TFB_PurgeDanglingGraphics();
-}
+pub use crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics;
+pub use crate::graphics::sdl::platform_abi::TFB_ReInitGraphics;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents;
+pub use crate::graphics::sdl::platform_abi::TFB_SetGamma;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_UploadTransitionScreen;
+pub use crate::graphics::sdl::platform_abi::TFB_SupportsHardwareScaling;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
+pub use crate::graphics::dcqueue_abi::TFB_FlushGraphics;
+pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
+pub use crate::graphics::dcqueue_abi::TFB_PurgeDanglingGraphics;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NativePalette {
@@ -348,12 +259,8 @@ pub struct tfb_colormap {
     pub palette: *mut NativePalette,
 }
 pub type TFB_ColorMap = tfb_colormap;
-extern "C" {
-    pub fn TFB_GetColorMap(index: ::std::os::raw::c_int) -> *mut TFB_ColorMap;
-}
-extern "C" {
-    pub fn TFB_ReturnColorMap(map: *mut TFB_ColorMap);
-}
+pub use crate::graphics::cmap_abi::TFB_GetColorMap;
+pub use crate::graphics::cmap_abi::TFB_ReturnColorMap;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct tfb_image {
@@ -403,453 +310,74 @@ pub struct tfb_pixelformat {
     pub Aloss: DWORD,
 }
 pub type TFB_PixelFormat = tfb_pixelformat;
-extern "C" {
-    pub fn TFB_DrawScreen_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, dest: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Copy(r: *const RECT, src: SCREEN, dest: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        dest: SCREEN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_CopyToImage(img: *mut TFB_Image, r: *const RECT, src: SCREEN);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_SetMipmap(
-        img: *mut TFB_Image,
-        mmimg: *mut TFB_Image,
-        hotx: ::std::os::raw::c_int,
-        hoty: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_DeleteImage(img: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_DeleteData(arg1: *mut ::std::os::raw::c_void);
-}
-extern "C" {
-    pub fn TFB_DrawScreen_WaitForSignal();
-}
-extern "C" {
-    pub fn TFB_DrawScreen_ReinitVideo(
-        driver: ::std::os::raw::c_int,
-        flags: ::std::os::raw::c_int,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawScreen_Callback(
-        callback: ::std::option::Option<unsafe extern "C" fn(arg: *mut ::std::os::raw::c_void)>,
-        arg: *mut ::std::os::raw::c_void,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_CreateForScreen(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        withalpha: BOOLEAN,
-    ) -> *mut TFB_Image;
-}
-extern "C" {
-    pub fn TFB_DrawImage_New_Rotated(
-        img: *mut TFB_Image,
-        angle: ::std::os::raw::c_int,
-    ) -> *mut TFB_Image;
-}
-extern "C" {
-    pub fn TFB_DrawImage_SetMipmap(
-        img: *mut TFB_Image,
-        mmimg: *mut TFB_Image,
-        hotx: ::std::os::raw::c_int,
-        hoty: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Delete(image: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawImage_FixScaling(
-        image: *mut TFB_Image,
-        target: ::std::os::raw::c_int,
-        type_: ::std::os::raw::c_int,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Intersect(
-        img1: *mut TFB_Image,
-        img1org: POINT,
-        img2: *mut TFB_Image,
-        img2org: POINT,
-        interRect: *const RECT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawImage_CopyRect(
-        source: *mut TFB_Image,
-        srcRect: *const RECT,
-        target: *mut TFB_Image,
-        dstPt: POINT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, target: *mut TFB_Image);
-}
-extern "C" {
-    pub fn TFB_DrawImage_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawImage_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        target: *mut TFB_Image,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_LoadFromFile(
-        dir: *mut ::std::os::raw::c_void,
-        fileName: *const ::std::os::raw::c_char,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_TrueColor(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        hasalpha: BOOLEAN,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_ForScreen(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        withalpha: BOOLEAN,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_Paletted(
-        w: ::std::os::raw::c_int,
-        h: ::std::os::raw::c_int,
-        palette: *mut Color,
-        transparent_index: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_ScaleTarget(
-        canvas: TFB_Canvas,
-        oldcanvas: TFB_Canvas,
-        type_: ::std::os::raw::c_int,
-        last_type: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_New_RotationTarget(
-        src: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-    ) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_ToScreenFormat(canvas: TFB_Canvas) -> TFB_Canvas;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_IsPaletted(canvas: TFB_Canvas) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rescale_Bilinear(
-        src: TFB_Canvas,
-        dst: TFB_Canvas,
-        scale: ::std::os::raw::c_int,
-        src_hs: *mut HOT_SPOT,
-        size: *mut EXTENT,
-        dst_hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rescale_Trilinear(
-        src: TFB_Canvas,
-        mipmap: TFB_Canvas,
-        dst: TFB_Canvas,
-        scale: ::std::os::raw::c_int,
-        src_hs: *mut HOT_SPOT,
-        mm_hs: *mut HOT_SPOT,
-        size: *mut EXTENT,
-        dst_hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetScaledExtent(
-        src_canvas: TFB_Canvas,
-        src_hs: *mut HOT_SPOT,
-        src_mipmap: TFB_Canvas,
-        mm_hs: *mut HOT_SPOT,
-        scale: ::std::os::raw::c_int,
-        type_: ::std::os::raw::c_int,
-        size: *mut EXTENT,
-        hs: *mut HOT_SPOT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rotate(
-        src: TFB_Canvas,
-        dst: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-        size: EXTENT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetRotatedExtent(
-        src: TFB_Canvas,
-        angle: ::std::os::raw::c_int,
-        size: *mut EXTENT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetExtent(canvas: TFB_Canvas, size: *mut EXTENT);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetClipRect(canvas: TFB_Canvas, clipRect: *const RECT);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Delete(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Line(
-        x1: ::std::os::raw::c_int,
-        y1: ::std::os::raw::c_int,
-        x2: ::std::os::raw::c_int,
-        y2: ::std::os::raw::c_int,
-        color: Color,
-        arg1: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Rect(rect: *mut RECT, arg1: Color, arg2: DrawMode, target: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Image(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: *mut TFB_ColorMap,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_FilledImage(
-        img: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        scale: ::std::os::raw::c_int,
-        scaleMode: ::std::os::raw::c_int,
-        arg1: Color,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_FontChar(
-        arg1: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-        arg2: DrawMode,
-        target: TFB_Canvas,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_CopyRect(
-        source: TFB_Canvas,
-        srcRect: *const RECT,
-        target: TFB_Canvas,
-        dstPt: POINT,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetFontCharData(
-        canvas: TFB_Canvas,
-        outData: *mut BYTE,
-        dataPitch: ::std::os::raw::c_uint,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_ExtractPalette(canvas: TFB_Canvas) -> *mut Color;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPalette(target: TFB_Canvas, palette: *mut Color);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetTransparentIndex(canvas: TFB_Canvas) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetTransparentIndex(
-        canvas: TFB_Canvas,
-        i: ::std::os::raw::c_int,
-        rleaccel: BOOLEAN,
-    );
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetTransparentColor(canvas: TFB_Canvas, color: *mut Color) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetTransparentColor(canvas: TFB_Canvas, color: Color, rleaccel: BOOLEAN);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_CopyTransparencyInfo(src: TFB_Canvas, dst: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Initialize();
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Lock(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Unlock(canvas: TFB_Canvas);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetScreenFormat(fmt: *mut TFB_PixelFormat);
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetStride(canvas: TFB_Canvas) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetLine(
-        canvas: TFB_Canvas,
-        line: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_void;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixel(
-        canvas: TFB_Canvas,
-        x: ::std::os::raw::c_int,
-        y: ::std::os::raw::c_int,
-    ) -> Color;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_Intersect(
-        canvas1: TFB_Canvas,
-        c1org: POINT,
-        canvas2: TFB_Canvas,
-        c2org: POINT,
-        interRect: *const RECT,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixelColors(
-        arg1: TFB_Canvas,
-        pixels: *mut Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPixelColors(
-        arg1: TFB_Canvas,
-        pixels: *const Color,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_GetPixelIndexes(
-        arg1: TFB_Canvas,
-        data: *mut BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_DrawCanvas_SetPixelIndexes(
-        arg1: TFB_Canvas,
-        data: *const BYTE,
-        width: ::std::os::raw::c_int,
-        height: ::std::os::raw::c_int,
-    ) -> BOOLEAN;
-}
-extern "C" {
-    pub fn TFB_GetScreenCanvas(screen: SCREEN) -> TFB_Canvas;
-}
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Line;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Rect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Image;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Copy;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FilledImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_FontChar;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_CopyToImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_DeleteData;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_WaitForSignal;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_Callback;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CreateForScreen;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_New_Rotated;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_SetMipmap;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Delete;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FixScaling;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Intersect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_CopyRect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Line;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Rect;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_Image;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FilledImage;
+pub use crate::graphics::tfb_draw_abi::TFB_DrawImage_FontChar;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_LoadFromFile;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_TrueColor;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ForScreen;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_Paletted;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_ScaleTarget;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_New_RotationTarget;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_ToScreenFormat;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_IsPaletted;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Bilinear;
+pub use crate::graphics::native_canvas::trilinear::TFB_DrawCanvas_Rescale_Trilinear;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetScaledExtent;
+pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_Rotate;
+pub use crate::graphics::native_canvas::rotation::TFB_DrawCanvas_GetRotatedExtent;
+pub use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_GetExtent;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_SetClipRect;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Delete;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Line;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Rect;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_Image;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_FilledImage;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_FontChar;
+pub use crate::graphics::native_canvas::drawing::TFB_DrawCanvas_CopyRect;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetFontCharData;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_ExtractPalette;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetPalette;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentIndex;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentIndex;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_GetTransparentColor;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_SetTransparentColor;
+pub use crate::graphics::native_canvas::transparency::TFB_DrawCanvas_CopyTransparencyInfo;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Initialize;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetScreenFormat;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetStride;
+pub use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_GetLine;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixel;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_Intersect;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixelColors;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_SetPixelColors;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixelIndexes;
+pub use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_SetPixelIndexes;
+pub use crate::graphics::sdl::lifecycle_abi::TFB_GetScreenCanvas;
 pub type FBK_FLAGS = UWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -927,12 +455,8 @@ pub type GRAPHICS_STATUS = BYTE;
 extern "C" {
     pub static mut _GraphicsStatusFlags: GRAPHICS_STATUS;
 }
-extern "C" {
-    pub fn GetContextValidRect(pValidRect: *mut RECT, origin: *mut POINT) -> BOOLEAN;
-}
-extern "C" {
-    pub fn FixContextFontEffect();
-}
+pub use crate::graphics::frame_abi::GetContextValidRect;
+pub use crate::graphics::context_abi::FixContextFontEffect;
 pub type DRAWABLE_TYPE = UWORD;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -951,9 +475,7 @@ pub struct drawable_desc {
     pub MaxIndex: UWORD,
     pub Frame: *mut FRAME_DESC,
 }
-extern "C" {
-    pub fn AllocDrawable(num_frames: COUNT) -> DRAWABLE;
-}
+pub use crate::graphics::drawable_abi::AllocDrawable;
 extern "C" {
     pub static mut _CurFramePtr: FRAME;
 }
@@ -977,33 +499,13 @@ pub struct font_desc {
 extern "C" {
     pub static mut _CurFontPtr: FONT;
 }
-extern "C" {
-    pub fn TFB_Prim_Line(arg1: *mut LINE, arg2: Color, arg3: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_Point(arg1: *mut POINT, arg2: Color, arg3: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_Rect(arg1: *mut RECT, arg2: Color, arg3: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_FillRect(arg1: *mut RECT, arg2: Color, arg3: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_Stamp(arg1: *mut STAMP, arg2: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_StampFill(arg1: *mut STAMP, arg2: Color, arg3: DrawMode, ctxOrigin: POINT);
-}
-extern "C" {
-    pub fn TFB_Prim_FontChar(
-        charOrigin: POINT,
-        fontChar: *mut TFB_Char,
-        backing: *mut TFB_Image,
-        arg1: DrawMode,
-        ctxOrigin: POINT,
-    );
-}
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_Line;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_Point;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_Rect;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_FillRect;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_Stamp;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_StampFill;
+pub use crate::graphics::tfb_prim_abi::TFB_Prim_FontChar;
 pub const TFB_DRAWCOMMANDTYPE_LINE: _bindgen_ty_4 = 0;
 pub const TFB_DRAWCOMMANDTYPE_RECTANGLE: _bindgen_ty_4 = 1;
 pub const TFB_DRAWCOMMANDTYPE_IMAGE: _bindgen_ty_4 = 2;
@@ -1180,15 +682,9 @@ pub struct tfb_drawcommandqueue {
 }
 pub type TFB_DrawCommandQueue = tfb_drawcommandqueue;
 pub use crate::graphics::dcqueue_abi::{TFB_BatchGraphics, TFB_BatchReset, TFB_GetBatchDepth, TFB_UnbatchGraphics};
-extern "C" {
-    pub fn TFB_DrawCommandQueue_Push(Command: *mut TFB_DrawCommand);
-}
-extern "C" {
-    pub fn TFB_DrawCommandQueue_Pop(Command: *mut TFB_DrawCommand) -> ::std::os::raw::c_int;
-}
-extern "C" {
-    pub fn TFB_EnqueueDrawCommand(DrawCommand: *mut TFB_DrawCommand);
-}
+pub use crate::graphics::dcqueue_abi::TFB_DrawCommandQueue_Push;
+pub use crate::graphics::dcqueue_abi::TFB_DrawCommandQueue_Pop;
+pub use crate::graphics::dcqueue_abi::TFB_EnqueueDrawCommand;
 pub const WIDGET_EVENT_UP: _bindgen_ty_5 = 0;
 pub const WIDGET_EVENT_DOWN: _bindgen_ty_5 = 1;
 pub const WIDGET_EVENT_LEFT: _bindgen_ty_5 = 2;

@@ -2,17 +2,13 @@
 use super::native_abi::*;
 use std::ffi::{c_char, c_void};
 
-extern "C" {
-    fn _GetCelData(fp: *mut uio_Stream, length: u32) -> *mut c_void;
-    fn _GetFontData(fp: *mut uio_Stream, length: u32) -> *mut c_void;
-    fn _ReleaseCelData(handle: *mut c_void) -> BOOLEAN;
-    fn _ReleaseFontData(handle: *mut c_void) -> BOOLEAN;
+use super::gfxload::{get_cel_data, get_font_data, release_cel_data, release_font_data};
+use crate::resource::ffi_types::ResourceData;
+unsafe extern "C" fn cel_data(path: *const c_char, data: *mut ResourceData) {
+    (*data).ptr = LoadResourceFromPath(path, Some(get_cel_data));
 }
-unsafe extern "C" fn cel_data(path: *const c_char, data: *mut RESOURCE_DATA) {
-    (*data).ptr = LoadResourceFromPath(path, Some(_GetCelData));
-}
-unsafe extern "C" fn font_data(path: *const c_char, data: *mut RESOURCE_DATA) {
-    (*data).ptr = LoadResourceFromPath(path, Some(_GetFontData));
+unsafe extern "C" fn font_data(path: *const c_char, data: *mut ResourceData) {
+    (*data).ptr = LoadResourceFromPath(path, Some(get_font_data));
 }
 /// # Safety
 /// Must be called during serialized resource-system initialization.
@@ -21,13 +17,13 @@ pub unsafe extern "C" fn InstallGraphicResTypes() -> BOOLEAN {
     InstallResTypeVectors(
         c"GFXRES".as_ptr(),
         Some(cel_data),
-        Some(_ReleaseCelData),
+        Some(release_cel_data),
         None,
     );
     InstallResTypeVectors(
         c"FONTRES".as_ptr(),
         Some(font_data),
-        Some(_ReleaseFontData),
+        Some(release_font_data),
         None,
     );
     1

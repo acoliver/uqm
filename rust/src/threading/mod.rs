@@ -1432,5 +1432,4 @@ pub unsafe extern "C" fn rust_task_switch() {
     task_switch();
 }
 
-#[cfg(not(test))]
 pub mod legacy_abi;

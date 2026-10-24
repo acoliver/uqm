@@ -30,7 +30,7 @@ unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
         usize::MAX as *mut uio::uio_Stream
     };
     assert!(!fp.is_null());
-    let font = gfxload::_GetFontData(fp.cast(), 0).cast::<abi::font_desc>();
+    let font = gfxload::get_font_data(fp.cast(), 0).cast::<abi::font_desc>();
     if zipped {
         assert_eq!(uio::uio_fclose(fp), 0);
     }
@@ -97,7 +97,7 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
     assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_END), 0);
     let length = uio::uio_ftell(fp) as u32;
     assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_SET), 0);
-    let drawable = gfxload::_GetCelData(fp.cast(), length).cast::<abi::drawable_desc>();
+    let drawable = gfxload::get_cel_data(fp.cast(), length).cast::<abi::drawable_desc>();
     uio::uio_fclose(fp);
     abi::_cur_resfile_name = ptr::null();
     assert!(!drawable.is_null());
