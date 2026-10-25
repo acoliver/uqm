@@ -964,6 +964,7 @@ pub enum Action {
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
     SetupMeleeMutualLossFixture(SetupMeleeMutualLossFixtureStep),
+    SetupPlanetSideMineralGallery(SetupPlanetSideCollisionFixtureStep),
     ExpectQuit(ExpectQuitStep),
     Finish,
 }

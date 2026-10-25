@@ -18,7 +18,7 @@
 //! itself never calls a telemetry increment and never declares a collision.
 
 use crate::battle::velocity::VelocityDesc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use super::assembly::{insert_surface_entity, EntityVisual, SharedSurface};
 use super::creatures::CreatureKind;
@@ -115,7 +115,7 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
     }
 }
 
-static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static FIXTURE_REQUESTED: AtomicU8 = AtomicU8::new(0);
 
 /// Make the script action the sole authority for the fixture.
 ///
@@ -134,8 +134,16 @@ static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
 ///
 /// Returns an [`AdapterError`] when a fixture request is already pending.
 pub(crate) fn coordinator_queues_fixture_request() -> Result<(), AdapterError> {
+    queue_fixture_request(1)
+}
+
+pub(crate) fn coordinator_queues_mineral_gallery_request() -> Result<(), AdapterError> {
+    queue_fixture_request(2)
+}
+
+fn queue_fixture_request(layout: u8) -> Result<(), AdapterError> {
     if FIXTURE_REQUESTED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .compare_exchange(0, layout, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
     {
         Err(AdapterError::new("fixture_request_already_pending"))
@@ -151,10 +159,11 @@ pub(crate) fn coordinator_queues_fixture_request() -> Result<(), AdapterError> {
 /// queue cannot be consumed or fail outside automation.
 #[must_use]
 pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
-    if FIXTURE_REQUESTED.swap(false, Ordering::SeqCst) {
-        Some(PlanetSideFixture::for_collision_parity(position))
-    } else {
-        None
+    match FIXTURE_REQUESTED.swap(0, Ordering::SeqCst) {
+        0 => None,
+        1 => Some(PlanetSideFixture::for_collision_parity(position)),
+        2 => Some(PlanetSideFixture::mineral_gallery(position)),
+        _ => unreachable!("only the coordinator queues fixture layouts"),
     }
 }
 
@@ -163,7 +172,7 @@ pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<
 /// The coordinator clears any pending request at its single finalization path so
 /// the one-shot queue cannot leak into a later script.
 pub(crate) fn clear_pending_fixture_request() {
-    FIXTURE_REQUESTED.store(false, Ordering::SeqCst);
+    FIXTURE_REQUESTED.store(0, Ordering::SeqCst);
 }
 
 impl PlanetSideFixture {
@@ -205,6 +214,26 @@ impl PlanetSideFixture {
             position,
         });
         self
+    }
+
+    /// All native mineral sprites, separated from each other and the lander.
+    #[must_use]
+    pub fn mineral_gallery(anchor: SurfacePoint) -> Self {
+        let mut fixture = Self::new();
+        for category in 0..8 {
+            for gross_size in 0..3 {
+                fixture = fixture.with_mineral(
+                    category,
+                    gross_size,
+                    19,
+                    SurfacePoint {
+                        x: anchor.x - 98 + category as i32 * 28,
+                        y: anchor.y - 60 + i32::from(gross_size) * 23,
+                    },
+                );
+            }
+        }
+        fixture
     }
 
     /// The standard issue #162 collision-parity layout anchored to the
@@ -552,6 +581,30 @@ mod tests {
         fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError> {
             self.played.push(cue);
             Ok(())
+        }
+    }
+
+    #[test]
+    fn mineral_gallery_queues_all_categories_and_sizes_once() {
+        let _serialize = fixture_test_serialize();
+        clear_pending_fixture_request();
+        coordinator_queues_mineral_gallery_request().unwrap();
+        coordinator_queues_fixture_request().expect_err("pending gallery cannot be overwritten");
+        let anchor = SurfacePoint { x: 1, y: 200 };
+        let fixture = tap_planet_side_fixture_request(anchor).unwrap();
+        assert!(tap_planet_side_fixture_request(anchor).is_none());
+        assert_eq!(fixture.minerals.len(), 24);
+        assert!(fixture.brainboxes.is_empty());
+        for category in 0..8 {
+            for gross in 0..3 {
+                let mineral = &fixture.minerals[category * 3 + gross];
+                assert_eq!(
+                    (mineral.category, mineral.gross_size),
+                    (category, gross as u16)
+                );
+                assert_eq!(mineral.position.x - anchor.x, -98 + category as i32 * 28);
+                assert_eq!(mineral.position.y - anchor.y, -60 + gross as i32 * 23);
+            }
         }
     }
 

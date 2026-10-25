@@ -1555,10 +1555,12 @@ fn reduce_capture_and_assertion(
 
         // SetupPlanetSideCollisionFixture: the coordinator queues the
         // one-shot fixture before the reducer advances it.
-        (Action::SetupPlanetSideCollisionFixture(_), ActionPhase::WaitingForInput)
-        | (Action::SetupMeleeMutualLossFixture(_), ActionPhase::WaitingForInput) => {
-            advance_to_next(state, config, sv, EffectPlan::none())
-        }
+        (
+            Action::SetupPlanetSideCollisionFixture(_)
+            | Action::SetupMeleeMutualLossFixture(_)
+            | Action::SetupPlanetSideMineralGallery(_),
+            ActionPhase::WaitingForInput,
+        ) => advance_to_next(state, config, sv, EffectPlan::none()),
 
         // Finish: terminal success. Consumes the input callback.
         (Action::Finish, ActionPhase::WaitingForInput) => SchedulerTransition {

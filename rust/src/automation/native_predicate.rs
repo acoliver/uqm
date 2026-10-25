@@ -417,6 +417,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "index=") == Some(value.index as u64)
                 && at_least(label, "count=", value.index as u64 + 1)
         }
+        Action::SetupPlanetSideMineralGallery(_) => label == "planet_side_mineral_gallery_queued",
         Action::SetupPlanetSideCollisionFixture(_) => {
             label == "planet_side_collision_fixture_queued"
         }

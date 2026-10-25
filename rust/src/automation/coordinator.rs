@@ -2227,16 +2227,33 @@ impl Coordinator {
         // mismatch instead of an idempotent success.
         if matches!(
             self.actions.get(inner.sched_state.step_index),
-            Some(Action::SetupPlanetSideCollisionFixture(_))
+            Some(
+                Action::SetupPlanetSideCollisionFixture(_)
+                    | Action::SetupPlanetSideMineralGallery(_)
+            )
         ) && inner.sched_state.phase == ActionPhase::WaitingForInput
             && scheduler_event == SchedulerEvent::AdmittedInput
         {
-            match crate::planet_side::automation_fixture::coordinator_queues_fixture_request() {
+            let gallery = matches!(
+                self.actions.get(inner.sched_state.step_index),
+                Some(Action::SetupPlanetSideMineralGallery(_))
+            );
+            let request = if gallery {
+                crate::planet_side::automation_fixture::coordinator_queues_mineral_gallery_request()
+            } else {
+                crate::planet_side::automation_fixture::coordinator_queues_fixture_request()
+            };
+            match request {
                 Ok(()) => {
                     self.write_trace_labeled(
                         &mut inner,
                         RecordKind::SemanticAssertion,
-                        "planet_side_collision_fixture_queued".to_string(),
+                        if gallery {
+                            "planet_side_mineral_gallery_queued"
+                        } else {
+                            "planet_side_collision_fixture_queued"
+                        }
+                        .to_string(),
                     );
                 }
                 Err(error) => {

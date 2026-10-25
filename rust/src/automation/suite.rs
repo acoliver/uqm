@@ -683,6 +683,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     row("setup-menu-v1", &[Domain::BootMenu]),
     row("netplay-dialog-v1", &[Domain::BootMenu]),
     fixture("samatra-dev-fixture-v1", FixtureKind::DevelopmentSetup),
+    fixture("mineral-sizes-v1", FixtureKind::DevelopmentSetup),
     row("load-burvixese-caster-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s04b-burvixese-caster",
