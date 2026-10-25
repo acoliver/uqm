@@ -26,6 +26,12 @@ pub(crate) fn trigger() -> Result<(), String> {
         if ships.iter().any(|ship| ship.is_null()) {
             return Err("mutual-loss fixture requires two live ship elements".into());
         }
+        if ships
+            .iter()
+            .any(|ship| (**ship).state_flags & (NONSOLID | DISAPPEARING) as u16 != 0)
+        {
+            return Err("mutual-loss fixture requires both arrival transitions to finish".into());
+        }
         let scout = starship(ships[0]);
         let enemy = starship(ships[1]);
         if (*scout).SpeciesID != SPECIES_ID_SHOFIXTI_ID
