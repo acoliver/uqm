@@ -168,38 +168,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
             let topo_frame = surface_topography_frame()?;
             draw_surface_tiles(topo_frame, snapshot.lander.position);
 
-            {
-                let surface = self.surface.borrow();
-                for (id, entity) in surface.world.iter() {
-                    let Some(frame) = surface.frames.get(id) else {
-                        continue;
-                    };
-                    let Some((x, y)) =
-                        project_surface_point(entity.position, snapshot.lander.position)
-                    else {
-                        continue;
-                    };
-                    let mut stamp = CStamp {
-                        origin: CPoint { x, y },
-                        frame: (SetAbsFrameIndex((frame.base).cast(), frame.index)).cast(),
-                    };
-                    if let SurfaceEntityKind::LiveCreature {
-                        damage_wait: damage_wait @ 1..=7,
-                        ..
-                    } = entity.kind
-                    {
-                        let old_color = crate::graphics::context_abi::SetContextForeGroundColor(
-                            damage_color(damage_wait),
-                        );
-                        crate::graphics::frame_abi::DrawFilledStamp(
-                            std::ptr::from_mut(&mut stamp).cast(),
-                        );
-                        crate::graphics::context_abi::SetContextForeGroundColor(old_color);
-                    } else {
-                        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-                    }
-                }
-            }
+            draw_surface_entities(&self.surface.borrow(), snapshot.lander.position);
 
             // Select the lander graphic and frame index based on lifecycle phase.
             let (lander_graphic, frame_index) = select_lander_graphic(
@@ -247,6 +216,42 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
         #[cfg(test)]
         let _ = snapshot;
         Ok(())
+    }
+}
+
+/// Draw registered world entities into the current surface context.
+///
+/// # Safety
+/// The caller must own the graphics thread, with a live context, destination
+/// frame, and all registered source frames. This does not present the frame.
+#[cfg(not(test))]
+pub unsafe fn draw_surface_entities(
+    surface: &super::assembly::SurfaceAssembly,
+    camera: super::model::SurfacePoint,
+) {
+    for (id, entity) in surface.world.iter() {
+        let Some(frame) = surface.frames.get(id) else {
+            continue;
+        };
+        let Some((x, y)) = project_surface_point(entity.position, camera) else {
+            continue;
+        };
+        let mut stamp = CStamp {
+            origin: CPoint { x, y },
+            frame: SetAbsFrameIndex(frame.base.cast(), frame.index).cast(),
+        };
+        if let SurfaceEntityKind::LiveCreature {
+            damage_wait: damage_wait @ 1..=7,
+            ..
+        } = entity.kind
+        {
+            let old_color =
+                crate::graphics::context_abi::SetContextForeGroundColor(damage_color(damage_wait));
+            crate::graphics::frame_abi::DrawFilledStamp(std::ptr::from_mut(&mut stamp).cast());
+            crate::graphics::context_abi::SetContextForeGroundColor(old_color);
+        } else {
+            DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+        }
     }
 }
 
