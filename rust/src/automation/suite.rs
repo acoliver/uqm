@@ -712,6 +712,14 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("load-thraddash-diverted-v1", &[Domain::SaveLoad]),
     row(
+        "thraddash-guard-v1",
+        &[
+            Domain::SaveLoad,
+            Domain::NavigationOrbitScan,
+            Domain::BattleOutcomes,
+        ],
+    ),
+    row(
         "campaign-s03c-thraddash-diverted",
         &[
             Domain::SaveLoad,
