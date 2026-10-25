@@ -110,6 +110,97 @@ fn speech_start_time() -> i32 {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn speech_callback_advances_while_the_comm_slider_waits_for_the_source() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let _engine = engine();
+    splice_two_pages(None);
+    play_track(false).unwrap();
+    let sample_arc = Arc::clone(TRACK_STATE.lock().sound_sample.as_ref().unwrap());
+    let (reading, reader_started) = mpsc::channel();
+
+    let (reader, callback_was_blocked) = stream::with_source(SPEECH_SOURCE, |_| {
+        let reader = std::thread::spawn(move || {
+            track_position(100, || {
+                reading.send(()).unwrap();
+                stream::get_stream_position_ticks(SPEECH_SOURCE)
+            })
+        });
+        reader_started.recv_timeout(Duration::from_secs(5)).unwrap();
+        // The decoder owns source -> sample before entering TrackCallbacks.
+        // The slider has reached its source read and cannot finish until we
+        // release the source. Acquiring track state here must remain possible.
+        let mut sample = sample_arc.lock();
+        let state = TRACK_STATE.try_lock_for(Duration::from_secs(1));
+        let blocked = state.is_none();
+        drop(state);
+        if !blocked {
+            assert!(TrackCallbacks.on_end_chunk(&mut sample, 0));
+        }
+        (reader, blocked)
+    })
+    .unwrap();
+    reader.join().unwrap();
+    assert!(
+        !callback_was_blocked,
+        "comm holds TRACK_STATE waiting for the source; decoder holds the source waiting for TRACK_STATE"
+    );
+    assert_eq!(cur_chunk(), Some(chunk_at(1)));
+}
+
+#[test]
+fn track_mutations_leave_state_available_to_decoder_callbacks() {
+    use crate::sound::test_support::Probe;
+    use std::time::Duration;
+
+    type Mutation = fn() -> AudioResult<()>;
+    let mutations: [(&str, Mutation); 4] = [
+        ("stop", stop_track),
+        ("seek", || seek_to_position(ms_to_ticks(500))),
+        ("splice", || {
+            splice_track(
+                Some("next"),
+                Some("Next line"),
+                None,
+                None,
+                vec![long_voice(1.0)],
+            )
+        }),
+        ("number splice", || {
+            splice_multi_track(vec![long_voice(1.0)], Some("42"))
+        }),
+    ];
+    for (name, mutation) in mutations {
+        let _engine = engine();
+        splice_two_pages(None);
+        play_track(false).unwrap();
+        let sample_arc = Arc::clone(TRACK_STATE.lock().sound_sample.as_ref().unwrap());
+        let (worker, blocked) = stream::with_source(SPEECH_SOURCE, |_| {
+            let mut sample = sample_arc.lock();
+            let worker = Probe::spawn(move || mutation().unwrap());
+            assert!(
+                !worker.finishes_within_grace(),
+                "{name} must wait for the source/sample"
+            );
+            let state = TRACK_STATE.try_lock_for(Duration::from_secs(1));
+            let blocked = state.is_none();
+            drop(state);
+            if !blocked {
+                assert!(TrackCallbacks.on_end_chunk(&mut sample, 0));
+            }
+            (worker, blocked)
+        })
+        .unwrap();
+        worker.join().unwrap();
+        assert!(
+            !blocked,
+            "{name} holds track state while waiting for the decoder's source/sample"
+        );
+    }
+}
+
+#[test]
 fn splicing_a_track_builds_one_tagged_chunk_per_subtitle_page() {
     let _engine = engine();
 
