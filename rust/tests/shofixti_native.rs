@@ -10,6 +10,15 @@ use uqm_rust::ships::native::{
 
 unsafe extern "C" {
     fn init_shofixti() -> *mut RACE_DESC;
+    fn selectShipHuman(context: *mut HumanInputContext, state: *mut GETMELEE_STATE) -> BOOLEAN;
+    fn selectShipComputer(
+        context: *mut ComputerInputContext,
+        state: *mut GETMELEE_STATE,
+    ) -> BOOLEAN;
+    static mut PlayerControls: [u32; 2];
+    static mut race_q: [QUEUE; 2];
+    static mut PlayerInput: [*mut InputContext; 2];
+    static mut OffScreenContext: *mut uqm_rust::graphics::native_abi::context_desc;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
     fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
     fn InitDisplayList();
@@ -860,5 +869,156 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
         assert_eq!({ disp_q.tail }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
+    }
+}
+
+#[test]
+fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
+    use uqm_rust::{
+        battle::tactrans_native as transitions, pickship::ffi::get_encounter_star_ship_with_picker,
+    };
+    unsafe extern "C" fn ready(_: *mut InputContext) -> bool {
+        true
+    }
+    unsafe {
+        for computer in [false, true] {
+            for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
+                let _battle = Battle::new(16);
+                let saved_queues = race_q;
+                let saved_inputs = PlayerInput;
+                let saved_offscreen = OffScreenContext;
+                let saved_controls = PlayerControls;
+                let saved_pulsed = PulsedInputState;
+                let mut context = mem::zeroed();
+                OffScreenContext = &mut context;
+                GlobData.Game_state.CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
+                battle_counter = initial;
+                let mut ship = Ship::new(0);
+                let mut other = Ship::new(1);
+                ship.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                other.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                let mut reserves: [STARSHIP; 2] = mem::zeroed();
+                let mut handlers = BattleInputHandlers {
+                    frameInput: None,
+                    selectShip: None,
+                    battleEndReady: Some(ready),
+                    deleteContext: None,
+                };
+                let mut inputs = [InputContext {
+                    handlers: &mut handlers,
+                    playerNr: 0,
+                }; 2];
+                inputs[1].playerNr = 1;
+                for side in 0..2 {
+                    PlayerInput[side] = &mut inputs[side];
+                    let active = if side == 0 {
+                        &raw mut *ship.ss
+                    } else {
+                        &raw mut *other.ss
+                    };
+                    reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                    reserves[side].index = 1;
+                    reserves[side].playerNr = side as SIZE;
+                    race_q[side] = mem::zeroed();
+                    race_q[side].head = active.cast();
+                    race_q[side].tail = active.cast();
+                    if initial[side] > 1 {
+                        (*active).succ = (&raw mut reserves[side]).cast();
+                        reserves[side].pred = active.cast();
+                        race_q[side].tail = (&raw mut reserves[side]).cast();
+                    }
+                }
+                // Arm the real glory device, execute its area damage, then
+                // process both deaths within the same simulated frame.
+                let blast = ship.arm().unwrap();
+                blast(element(disp_q.tail));
+                assert_eq!(
+                    (
+                        ship.desc.ship_info.crew_level,
+                        other.desc.ship_info.crew_level
+                    ),
+                    (0, 0)
+                );
+                (*ship.ptr()).death_func.unwrap()(ship.ptr());
+                transitions::ship_death(other.ptr());
+                let remaining = battle_counter;
+                assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
+                assert_eq!(
+                    (ship.ss.SpeciesID, other.ss.SpeciesID),
+                    (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
+                );
+                transitions::cleanup_dead_ship(ship.ptr());
+                transitions::cleanup_dead_ship(other.ptr());
+                transitions::StopDitty();
+                let expected_selection = initial == [2, 2];
+                let mut selected = [false; 2];
+                for side in 0..2 {
+                    let outgoing = if side == 0 { ship.ptr() } else { other.ptr() };
+                    // The fixture owns its frame buffers, rather than the
+                    // resource loader used by production free_ship.
+                    let desc = if side == 0 {
+                        &mut ship.desc
+                    } else {
+                        &mut other.desc
+                    };
+                    desc.ship_data.ship = [ptr::null_mut(); 3];
+                    desc.ship_data.weapon = [ptr::null_mut(); 3];
+                    desc.ship_data.special = [ptr::null_mut(); 3];
+                    transitions::new_ship_with_picker(outgoing, |last, player| {
+                        assert_eq!(player as usize, side);
+                        let chosen = get_encounter_star_ship_with_picker(
+                            last.cast(),
+                            player,
+                            |player, out| {
+                                selected[side] = true;
+                                let mut state: GETMELEE_STATE = mem::zeroed();
+                                let p = &mut state.player[player as usize];
+                                p.selecting = 1;
+                                p.ships_left = 1;
+                                p.col = 1;
+                                // Expire the computer's display delay without a sleep.
+                                p.timeIn = u32::MAX - 419;
+                                let result = if computer && side == 1 {
+                                    selectShipComputer(
+                                        (&mut inputs[side] as *mut InputContext).cast(),
+                                        &mut state,
+                                    )
+                                } else {
+                                    PlayerControls[side] = side as u32;
+                                    PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
+                                    selectShipHuman(
+                                        (&mut inputs[side] as *mut InputContext).cast(),
+                                        &mut state,
+                                    )
+                                };
+                                assert_eq!(result, 1);
+                                assert_eq!(state.player[side].done, 1);
+                                assert_eq!(
+                                    state.player[side].hBattleShip,
+                                    (&raw mut reserves[side]).cast()
+                                );
+                                *out = state.player[side].hBattleShip;
+                                1
+                            },
+                        );
+                        assert_eq!(!chosen.is_null(), expected_selection);
+                        (!chosen.is_null()) as BOOLEAN
+                    });
+                }
+                assert_eq!(selected, [expected_selection; 2]);
+                let remaining = battle_counter;
+                assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
+                assert_eq!(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16, 0);
+                assert_eq!(
+                    GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
+                    expected_selection
+                );
+                race_q = saved_queues;
+                PlayerInput = saved_inputs;
+                OffScreenContext = saved_offscreen;
+                PlayerControls = saved_controls;
+                PulsedInputState = saved_pulsed;
+            }
+        }
     }
 }

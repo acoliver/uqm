@@ -1,0 +1,684 @@
+{
+  "version": 1,
+  "name": "super-melee-mutual-loss-v1",
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 420
+  },
+  "seed": 1437213464,
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 90
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 0
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "delete",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "capture",
+      "label": "mutual-loss-two-ships-each"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 60
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "left",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "tap_player_key",
+      "key": "weapon",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 60,
+      "max_ticks": 1200
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "battle:ships_p1",
+          "op": "eq",
+          "value": 2
+        },
+        {
+          "key": "battle:ships_p2",
+          "op": "eq",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "mutual-loss-before-glory"
+    },
+    {
+      "action": "setup_melee_mutual_loss_fixture"
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 1
+          },
+          {
+            "key": "battle:ships_p2",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 600
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 180
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 512
+    },
+    {
+      "action": "capture",
+      "label": "mutual-loss-next-ship-selection"
+    },
+    {
+      "action": "tap_player_key",
+      "key": "weapon",
+      "value": 1,
+      "hold": 3,
+      "settle": 6
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 300,
+      "max_ticks": 1200
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "battle:ships_p1",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "key": "battle:ships_p2",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "mutual-loss-replacement-battle"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

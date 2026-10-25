@@ -420,6 +420,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
         Action::SetupPlanetSideCollisionFixture(_) => {
             label == "planet_side_collision_fixture_queued"
         }
+        Action::SetupMeleeMutualLossFixture(_) => label == "melee_mutual_loss_fixture_triggered",
         _ => false,
     }
 }

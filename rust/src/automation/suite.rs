@@ -872,6 +872,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("battle-v1", &[Domain::BattleOutcomes]),
     row("super-melee-v1", &[Domain::BattleOutcomes]),
+    fixture("super-melee-mutual-loss-v1", FixtureKind::DevelopmentSetup),
     row(
         "out-of-fuel-v1",
         &[Domain::Starbase, Domain::NavigationOrbitScan],

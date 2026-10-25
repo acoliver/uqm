@@ -63,7 +63,8 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::PickBattleShip(_)
         | Action::SelectResponse(_)
         | Action::SelectCommunicationResponse(_)
-        | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),
+        | Action::SetupPlanetSideCollisionFixture(_)
+        | Action::SetupMeleeMutualLossFixture(_) => Some(CheckpointClass::Navigation),
         Action::WaitInputTicks(_)
         | Action::WaitPresentations(_)
         | Action::SetMenuKey(_)
