@@ -1058,14 +1058,14 @@ pub(crate) mod runtime {
             if LoadGame(i, (pSD).cast()) == 0 {
                 (*pSD).year_index = 0;
             }
-            crate::bridge_log::rust_bridge_log_msg(&format!(
+            log::info!(
                 "RUST_PICKER: enumerated slot={i} state={}",
                 if (*pSD).year_index == 0 {
                     "unavailable"
                 } else {
                     "occupied"
                 },
-            ));
+            );
             pSD = pSD.add(1);
         }
     }
@@ -1083,13 +1083,13 @@ pub(crate) mod runtime {
             occupied,
         );
         if action != PickerAction::Continue {
-            crate::bridge_log::rust_bridge_log_msg(&format!(
+            log::info!(
                 "RUST_PICKER: action={action:?} slot={} select={} cancel={} activity={:#x}",
                 (*pMS).CurState,
                 key(KEY_MENU_SELECT),
                 key(KEY_MENU_CANCEL),
                 activity,
-            ));
+            );
         }
         match action {
             PickerAction::Abort => return 0,
@@ -1170,10 +1170,10 @@ pub(crate) mod runtime {
 
     unsafe fn PickGame(saving: BOOLEAN, fromMainMenu: BOOLEAN) -> BOOLEAN {
         let activity = GlobData.Game_state.CurrentActivity;
-        crate::bridge_log::rust_bridge_log_msg(&format!(
+        log::info!(
             "RUST_PICKER: enter saving={saving} main_menu={fromMainMenu} activity={:#x}",
             activity,
-        ));
+        );
         let mut pickState: PickGameState = mem::zeroed();
         pickState.saving = saving;
         pickState.SummaryFrame = SetAbsFrameIndex(PlayFrame, 39);
@@ -1210,7 +1210,7 @@ pub(crate) mod runtime {
             MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN,
             0,
         );
-        crate::bridge_log::rust_bridge_log_msg("RUST_PICKER: list_drawn slots=50");
+        log::info!("RUST_PICKER: list_drawn slots=50");
         MenuState.InputFunc = Some(DoPickGame);
         loop {
             let mut canceled_by_user: BOOLEAN = 0;
@@ -1226,16 +1226,17 @@ pub(crate) mod runtime {
                 &mut canceled_by_user,
             ) != 0
             {
-                crate::bridge_log::rust_bridge_log_msg(if saving != 0 {
-                    "RUST_PICKER: exit=save_success"
-                } else {
-                    "RUST_PICKER: exit=load_success"
-                });
+                log::info!(
+                    "{}",
+                    if saving != 0 {
+                        "RUST_PICKER: exit=save_success"
+                    } else {
+                        "RUST_PICKER: exit=load_success"
+                    }
+                );
                 break;
             }
-            crate::bridge_log::rust_bridge_log_msg(
-                "RUST_PICKER: operation_failed picker_remains_open",
-            );
+            log::info!("RUST_PICKER: operation_failed picker_remains_open");
             if saving != 0 && canceled_by_user == 0 {
                 SaveProblem();
             }
