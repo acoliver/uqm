@@ -1,5 +1,15 @@
 //! Window reconfiguration without replacing the live screen surfaces.
 use super::*;
+
+#[cfg(all(feature = "debug-process", target_os = "macos"))]
+#[path = "ffi_video_macos.rs"]
+mod macos;
+
+#[cfg(feature = "debug-process")]
+fn native_position_changed(cached: (i32, i32), native: (i32, i32), requested: (i32, i32)) -> bool {
+    cached != requested || native != requested
+}
+
 #[cfg(feature = "debug-process")]
 fn display_geometry_changed(
     previous: &mut Option<sdl2::rect::Rect>,
@@ -20,11 +30,21 @@ pub(super) fn sync_native_display_geometry() -> Result<(), String> {
     let bounds = state.video.display_bounds(display)?;
     let display_changed = display_geometry_changed(&mut state.native_display_bounds, bounds);
     let position = state.canvas.window().position();
-    if display_changed || position != (config.client_bounds.x, config.client_bounds.y) {
-        // Cocoa may deliver its work-area adjustment after the display change.
-        // Keep the actual proof window at the owned position before publishing.
+    #[cfg(target_os = "macos")]
+    let native = macos::position(state.canvas.window())?;
+    #[cfg(not(target_os = "macos"))]
+    let native = position;
+    if display_changed
+        || native_position_changed(
+            position,
+            native,
+            (config.client_bounds.x, config.client_bounds.y),
+        )
+    {
+        // Cocoa can rebase its bottom-left frame before SDL updates its cached
+        // top-left position, even after the display-change placement ran.
         rust_bridge_log_msg(&format!(
-            "NATIVE_PLACEMENT: display={bounds:?} changed={display_changed} client={position:?} requested=({}, {})",
+            "NATIVE_PLACEMENT: display={bounds:?} changed={display_changed} client={position:?} native={native:?} requested=({}, {})",
             config.client_bounds.x, config.client_bounds.y
         ));
         state.canvas.window_mut().set_position(
@@ -96,6 +116,29 @@ pub(super) fn scanlines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn native_placement_detects_a_cocoa_move_with_an_unchanged_sdl_position() {
+        let requested = (80, 48);
+        let sdl_cached = requested;
+        let cocoa_position = (80, 85);
+        assert!(native_position_changed(
+            sdl_cached,
+            cocoa_position,
+            requested
+        ));
+        assert!(!native_position_changed(requested, requested, requested));
+        assert!(native_position_changed((80, 30), requested, requested));
+    }
+
+    #[cfg(all(feature = "debug-process", target_os = "macos"))]
+    #[test]
+    fn cocoa_bottom_left_origin_is_rebased_against_the_live_primary_height() {
+        assert_eq!(macos::top_left_y(1080.0, 72.0, 960.0), 48);
+        assert_eq!(macos::top_left_y(1117.0, 72.0, 960.0), 85);
+        assert_eq!(macos::top_left_y(1117.0, 109.0, 960.0), 48);
+    }
 
     #[cfg(feature = "debug-process")]
     #[test]
