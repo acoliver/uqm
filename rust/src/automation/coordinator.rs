@@ -2198,6 +2198,29 @@ impl Coordinator {
         if inner.terminal_class.is_some() {
             return true;
         }
+        if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::SetupMeleeMutualLossFixture(_))
+        ) && inner.sched_state.phase == ActionPhase::WaitingForInput
+            && scheduler_event == SchedulerEvent::AdmittedInput
+        {
+            match super::melee_fixture::trigger() {
+                Ok(()) => self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    "melee_mutual_loss_fixture_triggered".to_string(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        format!("melee_mutual_loss_fixture_failed:{error}"),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
         // The setup_planet_side_collision_fixture action is explicit and
         // one-shot: only the current action queues, only once.  A duplicate
         // while a request is still pending is a fail-fast semantic

@@ -41,6 +41,7 @@ pub mod interrupt;
 #[cfg(unix)]
 pub mod inventory;
 pub mod lifecycle;
+mod melee_fixture;
 pub mod mode;
 #[cfg(all(unix, feature = "debug-process"))]
 pub mod native_artifacts;

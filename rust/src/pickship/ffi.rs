@@ -393,6 +393,23 @@ pub unsafe extern "C" fn get_encounter_star_ship(
     last: *mut STARSHIP,
     which_player: u16,
 ) -> *mut c_void {
+    unsafe {
+        get_encounter_star_ship_with_picker(last, which_player, |player, result| {
+            GetNextMeleeStarShip(player, result)
+        })
+    }
+}
+
+/// Resolve the next ship with an explicit boundary for the blocking melee UI.
+///
+/// # Safety
+/// As for `get_encounter_star_ship`. The picker must write a live selected
+/// ship handle when it succeeds.
+pub unsafe fn get_encounter_star_ship_with_picker(
+    last: *mut STARSHIP,
+    which_player: u16,
+    pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
+) -> *mut c_void {
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
     let counter = unsafe { live_counters::battle_counter_slot(side) };
@@ -421,7 +438,7 @@ pub unsafe extern "C" fn get_encounter_star_ship(
         }
         let mut ship = std::ptr::null_mut();
         // SAFETY: `ship` is a valid out-parameter.
-        if unsafe { GetNextMeleeStarShip(which_player, &mut ship) } == 0 {
+        if pick(which_player, &mut ship) == 0 {
             return std::ptr::null_mut();
         }
         return ship;

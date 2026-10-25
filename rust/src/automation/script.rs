@@ -879,6 +879,11 @@ pub struct WaitForCommunicationReplayStep {
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanetSideCollisionFixtureStep {}
 
+/// Place the active melee ships within glory-device range and arm its last switch.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetupMeleeMutualLossFixtureStep {}
+
 /// The no-payload step that waits for the production restart menu to finish
 /// initialization and accept navigation input.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -958,6 +963,7 @@ pub enum Action {
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
+    SetupMeleeMutualLossFixture(SetupMeleeMutualLossFixtureStep),
     ExpectQuit(ExpectQuitStep),
     Finish,
 }
@@ -3251,6 +3257,24 @@ mod tests {
         assert!(matches!(
             validate_script(doc, p()).unwrap_err(),
             AutomationError::EmptySteps { .. }
+        ));
+    }
+
+    #[test]
+    fn melee_mutual_loss_fixture_has_no_state_grant_parameters() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_melee_mutual_loss_fixture"},{"action":"finish"}]}"#;
+        let doc = validate_script(parse_script(txt.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert!(matches!(
+            doc.steps()[0],
+            Action::SetupMeleeMutualLossFixture(_)
+        ));
+        let with_payload = txt.replace(
+            "\"setup_melee_mutual_loss_fixture\"",
+            "\"setup_melee_mutual_loss_fixture\",\"crew\":0",
+        );
+        assert!(matches!(
+            parse_script(with_payload.as_bytes(), p()).unwrap_err(),
+            AutomationError::UnknownField { .. }
         ));
     }
 

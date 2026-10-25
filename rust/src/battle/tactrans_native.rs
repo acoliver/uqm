@@ -408,6 +408,18 @@ pub(crate) mod engine {
     /// `dead` must be a live ship awaiting replacement with a valid starship and initialized battle, fleet, and network state.
     #[no_mangle]
     pub unsafe extern "C" fn new_ship(dead: *mut ELEMENT) {
+        new_ship_with_picker(dead, |ship, side| GetNextStarShip(ship, side));
+    }
+
+    /// Run the replacement transition with an explicit selection/spawn boundary.
+    ///
+    /// # Safety
+    /// As for `new_ship`. The picker must return the next-ship result for the
+    /// supplied player and must not retain the outgoing ship pointer.
+    pub unsafe fn new_ship_with_picker(
+        dead: *mut ELEMENT,
+        pick: impl FnOnce(*mut STARSHIP, COUNT) -> BOOLEAN,
+    ) {
         let ship = starship(dead);
         if !readyForBattleEnd() {
             (*dead).state_flags &= !(DISAPPEARING as u16);
@@ -434,7 +446,7 @@ pub(crate) mod engine {
             UpdateShipFragCrew(ship);
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
-        if GetNextStarShip(ship, (*ship).playerNr as COUNT) != 0 {
+        if pick(ship, (*ship).playerNr as COUNT) != 0 {
             if !negotiateReadyConnections(true, NetState_NetState_inBattle) {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
