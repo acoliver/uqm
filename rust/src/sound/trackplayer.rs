@@ -178,6 +178,8 @@ impl TrackPlayerState {
 }
 
 /// Global track player state (mutex-protected).
+/// When nesting locks, acquire source -> sample -> track state, as stream
+/// callbacks do. Never wait for a source or sample while holding track state.
 static TRACK_STATE: std::sync::LazyLock<Mutex<TrackPlayerState>> =
     std::sync::LazyLock::new(|| Mutex::new(TrackPlayerState::new()));
 
@@ -395,6 +397,7 @@ pub fn splice_track(
     let decoder_count = decoders.len();
     let chunk_count = pages.len().max(decoder_count);
     let mut dec_iter = decoders.drain(..);
+    let mut added_lengths = Vec::new();
 
     for i in 0..chunk_count {
         let page = pages.get(i);
@@ -414,12 +417,8 @@ pub fn splice_track(
             0
         };
 
-        // Update sound_sample length from this decoder
         if let Some(ref dec) = page_decoder {
-            if let Some(ref sample_arc) = state.sound_sample {
-                let mut sample = sample_arc.lock();
-                sample.length += dec.length();
-            }
+            added_lengths.push(dec.length());
         }
 
         // C parity for no_page_break: first chunk of this splice is audio-only and
@@ -467,6 +466,14 @@ pub fn splice_track(
         state.track_count += 1;
     }
     state.last_track_name = _name.to_string();
+    let sample_arc = state.sound_sample.clone();
+    drop(state);
+    if let Some(sample_arc) = sample_arc {
+        let mut sample = sample_arc.lock();
+        for length in added_lengths {
+            sample.length += length;
+        }
+    }
     Ok(())
 }
 
@@ -486,6 +493,7 @@ pub fn splice_multi_track(
         return Ok(());
     }
 
+    let mut added_lengths = Vec::new();
     for decoder in decoders.into_iter().take(MAX_MULTI_TRACKS) {
         let length = decoder.length();
         let length_ms = (length * 1000.0) as u32;
@@ -501,7 +509,7 @@ pub fn splice_multi_track(
             callback: None,
             next: None,
         };
-        state.sound_sample.as_ref().unwrap().lock().length += length;
+        added_lengths.push(length);
         state.dec_offset += f64::from(length * 1000.0);
         append_chunk(&mut state, chunk);
     }
@@ -511,6 +519,12 @@ pub fn splice_multi_track(
     // An earlier subtitle lookup may have cached this string already.
     last_sub.text_cstr = None;
     state.no_page_break = true;
+    let sample_arc = Arc::clone(state.sound_sample.as_ref().unwrap());
+    drop(state);
+    let mut sample = sample_arc.lock();
+    for length in added_lengths {
+        sample.length += length;
+    }
     Ok(())
 }
 
@@ -551,23 +565,27 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
 
 /// Stop track playback and clear the track list.
 pub fn stop_track() -> AudioResult<()> {
-    let mut state = TRACK_STATE.lock();
-
     let _ = stream::stop_stream(SPEECH_SOURCE);
+
+    // Deferred callbacks can still own the sample after StopStream returns.
+    // Wait for them before taking track state, in the same order they use.
+    let sample_arc = TRACK_STATE.lock().sound_sample.clone();
+    let mut sample = sample_arc.as_ref().map(|sample| sample.lock());
+    let mut state = TRACK_STATE.lock();
 
     state.track_count = 0;
     state.tracks_length.store(0, Ordering::Release);
     state.cur_chunk = None;
     state.cur_sub_chunk = None;
 
-    if let Some(sample_arc) = state.sound_sample.take() {
-        let mut sample = sample_arc.lock();
+    state.sound_sample = None;
+    if let Some(sample) = sample.as_mut() {
         // Clear buffer tags before dropping chunks (ISSUE-CONC-04)
         for tag in sample.buffer_tags.iter_mut() {
             *tag = None;
         }
         sample.decoder = None;
-        let _ = stream::destroy_sound_sample(&mut sample);
+        let _ = stream::destroy_sound_sample(sample);
     }
 
     state.chunks_head = None;
@@ -755,6 +773,12 @@ pub fn fast_forward_page() -> AudioResult<()> {
 /// - 0 = game ticks (raw position)
 /// - non-zero = scaled (position * in_units / length)
 pub fn get_track_position(in_units: u32) -> u32 {
+    track_position(in_units, || {
+        stream::get_stream_position_ticks(SPEECH_SOURCE)
+    })
+}
+
+fn track_position(in_units: u32, read_position: impl FnOnce() -> u32) -> u32 {
     let state = TRACK_STATE.lock();
     if state.sound_sample.is_none() {
         return 0;
@@ -763,7 +787,10 @@ pub fn get_track_position(in_units: u32) -> u32 {
     if len == 0 {
         return 0;
     }
-    let pos = stream::get_stream_position_ticks(SPEECH_SOURCE).min(len);
+    // Like C GetTrackPosition, detach the length before taking the source lock.
+    // The decoder holds source -> sample -> TRACK_STATE in OnEndChunk.
+    drop(state);
+    let pos = read_position().min(len);
     if in_units == 0 {
         pos
     } else {
@@ -1009,7 +1036,11 @@ fn chunk_is_in_list(head: &Option<Box<SoundChunk>>, target: *const SoundChunk) -
 /// - attach selected decoder to sample and restart stream if needed
 fn seek_to_position(pos: u32) -> AudioResult<()> {
     eprintln!("[PARITY][SEEK] request_ticks={}", pos);
-    let sample_arc = {
+    let Some(sample_arc) = TRACK_STATE.lock().sound_sample.clone() else {
+        return Ok(());
+    };
+    let has_chunk = stream::with_source(SPEECH_SOURCE, |source| {
+        let mut sample = sample_arc.lock();
         let mut state = TRACK_STATE.lock();
         let target = resolve_seek_target(&mut state, pos);
         eprintln!(
@@ -1020,31 +1051,21 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
         );
 
         // Keep stream position/timebase coherent with C get_current_track_pos().
-        stream::with_source(SPEECH_SOURCE, |source| {
-            source.start_time = get_time_counter() as i32 - target.clamped_ticks as i32;
-        });
+        source.start_time = get_time_counter() as i32 - target.clamped_ticks as i32;
 
         if target.chunk_ptr.is_none() {
             // Beyond end of all tracks.
             state.cur_chunk = None;
             state.cur_sub_chunk = None;
-            drop(state);
-            let _ = stream::stop_stream(SPEECH_SOURCE);
-            return Ok(());
+            source.stream_should_be_playing = false;
+            return false;
         }
-
-        let sample_arc = match state.sound_sample.as_ref() {
-            Some(s) => Arc::clone(s),
-            None => return Ok(()),
-        };
 
         let chunk_ptr = target.chunk_ptr.unwrap();
         let chunk = unsafe { chunk_ptr.as_ref() };
         let seek_ms = target.seek_time_ms;
 
         {
-            let mut sample = sample_arc.lock();
-
             // Return currently attached decoder back to old cur_chunk before switching.
             if let Some(dec) = sample.decoder.take() {
                 if let Some(cur_ptr) = state.cur_chunk {
@@ -1079,11 +1100,13 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
         }
 
         state.cur_chunk = Some(chunk_ptr);
+        true
+    })
+    .expect("speech source exists");
 
-        sample_arc
-    };
-
-    if !stream::playing_stream(SPEECH_SOURCE) {
+    if !has_chunk {
+        let _ = stream::stop_stream(SPEECH_SOURCE);
+    } else if !stream::playing_stream(SPEECH_SOURCE) {
         stream::play_stream(sample_arc, SPEECH_SOURCE, false, true, false)?;
     }
 
