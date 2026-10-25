@@ -469,7 +469,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn process_collisions(
+    /// # Safety
+    /// Elements must belong to the initialized display queue on the game thread,
+    /// with live collision images and callbacks on every solid element.
+    pub unsafe fn process_collisions(
         mut next_test: HELEMENT,
         element_ptr: *mut ELEMENT,
         min_time: TIME_VALUE,
@@ -480,6 +483,13 @@ pub(crate) mod engine {
             let test = locked(test_handle);
             if (*test).state_flags & process_flags == 0 {
                 preprocess(test);
+            }
+            // A death callback can retire every element owned by its ship,
+            // including the active projectile, and clear their callbacks.
+            if !colliding(element_ptr) {
+                (*element_ptr).state_flags |= COLLISION as ELEMENT_FLAGS;
+                unlock(test_handle);
+                return COLLISION as ELEMENT_FLAGS;
             }
             next_test = successor(test);
             if test == element_ptr {
@@ -1184,8 +1194,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    AllocElement, FreeElement, InitDisplayList, InsertPrim, RedrawQueue, RemoveElement,
-    SetUpElement, Untarget,
+    process_collisions, AllocElement, FreeElement, InitDisplayList, InsertPrim, RedrawQueue,
+    RemoveElement, SetUpElement, Untarget,
 };
 
 #[cfg(test)]
