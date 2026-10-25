@@ -16,6 +16,21 @@ unsafe extern "C" {
     fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
+    static mut _GraphicsStatusFlags: BYTE;
+    fn TFB_DrawCanvas_New_Paletted(
+        w: i32,
+        h: i32,
+        palette: *const Color,
+        transparent: i32,
+    ) -> *mut c_void;
+    fn TFB_DrawCanvas_SetPixelIndexes(
+        canvas: *mut c_void,
+        pixels: *const BYTE,
+        w: i32,
+        h: i32,
+    ) -> BOOLEAN;
+    fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut c_void;
+    fn TFB_DrawImage_Delete(image: *mut c_void);
 }
 
 static ENGINE: Mutex<()> = Mutex::new(());
@@ -25,6 +40,7 @@ struct Battle {
     display: *mut PRIMITIVE,
     width: i32,
     height: i32,
+    graphics: BYTE,
 }
 
 impl Battle {
@@ -34,6 +50,8 @@ impl Battle {
             let display = GlobData.Game_state.DisplayArray;
             let width = ScreenWidth;
             let height = ScreenHeight;
+            let graphics = _GraphicsStatusFlags;
+            _GraphicsStatusFlags &= !4;
             assert_ne!(
                 InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
                 0
@@ -47,6 +65,7 @@ impl Battle {
                 display,
                 width,
                 height,
+                graphics,
             }
         }
     }
@@ -59,6 +78,7 @@ impl Drop for Battle {
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
+            _GraphicsStatusFlags = self.graphics;
         }
     }
 }
@@ -84,6 +104,7 @@ struct DrawableDesc {
 struct FrameSet {
     _drawable: Box<DrawableDesc>,
     frames: Vec<FrameDesc>,
+    image: *mut c_void,
 }
 
 impl FrameSet {
@@ -108,11 +129,36 @@ impl FrameSet {
         Self {
             _drawable: drawable,
             frames,
+            image: ptr::null_mut(),
         }
     }
 
     fn frame(&self, index: usize) -> FRAME {
         (&raw const self.frames[index]).cast_mut().cast()
+    }
+
+    unsafe fn make_opaque(&mut self) {
+        let canvas = TFB_DrawCanvas_New_Paletted(4, 4, ptr::null(), -1);
+        assert!(!canvas.is_null());
+        assert_ne!(
+            TFB_DrawCanvas_SetPixelIndexes(canvas, [1u8; 16].as_ptr(), 4, 4),
+            0
+        );
+        self.image = TFB_DrawImage_New(canvas);
+        assert!(!self.image.is_null());
+        for frame in &mut self.frames {
+            frame.image = self.image;
+        }
+    }
+}
+
+impl Drop for FrameSet {
+    fn drop(&mut self) {
+        if !self.image.is_null() {
+            unsafe {
+                TFB_DrawImage_Delete(self.image);
+            }
+        }
     }
 }
 
@@ -143,6 +189,7 @@ impl Ship {
         (*e).playerNr = player;
         (*e).pParent = (&raw mut *ss).cast();
         (*e).state_flags = PLAYER_SHIP as u16;
+        (*e).collision_func = Some(uqm_rust::battle::ship_native::collision);
         (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
         (*e).__bindgen_anon_2.crew_level = 8;
         (*e).__bindgen_anon_3.mass_points = 7;
@@ -845,5 +892,114 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
         assert_ne!(input & RIGHT as u8, 0);
         assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
         assert_eq!(frame_index((*ship.ptr()).next.image.frame), 1);
+    }
+}
+
+#[test]
+fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
+    let _battle = Battle::new(16);
+    unsafe {
+        let mut ship = Ship::new(0);
+        let mut enemy = Ship::new(1);
+        let trail = ship.burn();
+        (*trail).preprocess_func.unwrap()(trail);
+        (*trail).state_flags &= !(APPEARING as u16);
+        (*trail).state_flags |= PRE_PROCESS as u16;
+        (*trail).__bindgen_anon_1.life_span = 20;
+        // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
+        (*enemy.ptr()).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
+        (*enemy.ptr()).collision_func = Some(uqm_rust::battle::ship_native::collision);
+        (*enemy.ptr()).current.location = (*trail).current.location;
+        (*enemy.ptr()).next = (*enemy.ptr()).current;
+        ship.napalm_frames.make_opaque();
+        enemy._ship_frames.make_opaque();
+        (*enemy.ptr()).IntersectControl = (*trail).IntersectControl;
+        (*enemy.ptr()).IntersectControl.IntersectStamp.frame = enemy._ship_frames.frame(0);
+        (*ship.ptr()).__bindgen_anon_1.life_span = 0;
+        (*ship.ptr()).death_func = Some(uqm_rust::battle::tactrans_native::cleanup_dead_ship);
+        _GraphicsStatusFlags |= 4;
+        let result = uqm_rust::battle::process_native::process_collisions(
+            ship.handle,
+            trail,
+            MAX_TIME_VALUE as TIME_VALUE,
+            PRE_PROCESS as u16,
+        );
+        assert_ne!(result & COLLISION as u16, 0);
+        assert!((*trail).collision_func.is_none());
+        assert_ne!((*trail).state_flags & (NONSOLID | DISAPPEARING) as u16, 0);
+        assert_eq!(enemy.desc.ship_info.crew_level, 8);
+    }
+}
+
+#[test]
+fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips() {
+    // The non-solid categories deliberately have no collision callback, just
+    // like their constructors. Solid categories use the live collision code.
+    for (flags, hp, mass, damage) in [
+        (PLAYER_SHIP, 8, 7, true),
+        (0, 1, 3, true),           // asteroid
+        (0, 200, 200, false),      // planet
+        (FINITE_LIFE, 3, 1, true), // missile
+        (FINITE_LIFE, 1, 1, true), // laser
+        (FINITE_LIFE | CREW_OBJECT, 1, 0, true),
+        (FINITE_LIFE | NONSOLID, 1, 1, false), // blast/rubble/ion trail
+        (FINITE_LIFE | DISAPPEARING, 1, 1, false),
+    ] {
+        for napalm in [false, true] {
+            let _battle = Battle::new(16);
+            unsafe {
+                let mut ship = Ship::new(0);
+                let mut target = Ship::new(1);
+                let weapon = if napalm {
+                    let trail = ship.burn();
+                    (*trail).preprocess_func.unwrap()(trail);
+                    ship.napalm_frames.make_opaque();
+                    trail
+                } else {
+                    let horn = element(ship.fire());
+                    (*horn).next = (*horn).current;
+                    ship.horn_frames.make_opaque();
+                    horn
+                };
+                (*weapon).state_flags &= !(APPEARING as u16);
+                (*weapon).state_flags |= PRE_PROCESS as u16;
+                (*weapon).IntersectControl.IntersectStamp.origin = POINT { x: 1000, y: 1000 };
+                (*weapon).IntersectControl.EndPoint = POINT { x: 1000, y: 1000 };
+                (*weapon).IntersectControl.IntersectStamp.frame = (*weapon).next.image.frame;
+                target._ship_frames.make_opaque();
+                let t = target.ptr();
+                (*t).state_flags = flags as u16 | PRE_PROCESS as u16;
+                (*t).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
+                (*t).__bindgen_anon_2.hit_points = hp;
+                (*t).__bindgen_anon_3.mass_points = mass;
+                (*t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
+                    Some(uqm_rust::battle::ship_native::collision)
+                } else {
+                    None
+                };
+                (*t).IntersectControl = (*weapon).IntersectControl;
+                (*t).IntersectControl.IntersectStamp.frame = target._ship_frames.frame(0);
+                let mut context: uqm_rust::graphics::native_abi::context_desc = mem::zeroed();
+                let old_context = uqm_rust::graphics::context_abi::SetContext(&mut context);
+                uqm_rust::battle::process_native::process_collisions(
+                    target.handle,
+                    weapon,
+                    MAX_TIME_VALUE as TIME_VALUE,
+                    PRE_PROCESS as u16,
+                );
+                uqm_rust::graphics::context_abi::SetContext(old_context);
+                let expected = if damage {
+                    hp - if napalm { 2.min(hp) } else { 1 }
+                } else {
+                    hp
+                };
+                assert_eq!(
+                    (*t).__bindgen_anon_2.hit_points,
+                    expected,
+                    "flags={flags:x} napalm={napalm}"
+                );
+                assert!((*weapon).collision_func.is_some());
+            }
+        }
     }
 }
