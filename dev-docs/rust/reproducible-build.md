@@ -1,14 +1,19 @@
 # Build inputs
 
-Cargo builds the Rust game directly. `rust/build.rs` discovers the installed
-SDL2 library through pkg-config. Dependencies are locked in `rust/Cargo.lock`;
-use `--locked` for repeatable dependency resolution.
+Cargo builds the Rust game directly. Dependencies are locked in
+`rust/Cargo.lock`; use `--locked` for repeatable dependency resolution.
+There is no first-party C archive or source manifest to generate.
+
+From `rust/`, the release build is:
 
 ```sh
-cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm
+cargo build --release --locked --bin uqm --features bundled-sdl
 ```
 
-There is no first-party C archive or source manifest to generate.
+`bundled-sdl` builds SDL2 from the crate's external source and statically links it.
+Without that feature, `rust/build.rs` discovers installed SDL2 through pkg-config
+on Unix targets. See [building](../../docs/building.md) for platform prerequisites
+and [releasing](../releasing.md) for package checks.
 
 ## Scaler pixel format
 
