@@ -19,6 +19,7 @@ output in the checkout's ignored directories and remove obsolete local artifacts
 - [Release process and package layout](releasing.md)
 - [Contributor rules](RULES.md)
 - [Planning](PLAN.md), [plan template](PLAN-TEMPLATE.md) and [coordination](COORDINATING.md)
+- Idiomatic Rust migration design: [overview](design/idiomatic-rust/overview.html) (summary), [architecture](design/idiomatic-rust/architecture.md), [quality gates](design/idiomatic-rust/quality-gates.md), [plan](design/idiomatic-rust/plan.md)
 
 ## Tests and runtime scenarios
 

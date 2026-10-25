@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UQM: from C-shaped Rust to idiomatic Rust</title>
+<style>
+  :root {
+    --ink: #1d232b; --muted: #5b6672; --line: #d9dee4; --bg: #ffffff;
+    --now: #b8462e; --now-bg: #fbf1ee; --fut: #1f6f50; --fut-bg: #eef7f2;
+    --code-bg: #f6f8fa; --pilot: #fff6d6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef1f4; color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; background: var(--bg); padding: 32px 40px 48px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  h2 { font-size: 19px; margin: 36px 0 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  h2 .num { color: var(--muted); font-weight: 400; margin-right: 6px; }
+  h3 { font-size: 15px; margin: 22px 0 6px; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+    background: var(--code-bg); padding: 1px 4px; border-radius: 3px; }
+  .verdict { border: 2px solid var(--ink); border-radius: 6px; padding: 14px 18px; background: #fafbfc; }
+  .verdict b { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 10px 0; }
+  th, td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #f1f3f5; font-weight: 600; }
+  td.now { background: var(--now-bg); }
+  td.fut { background: var(--fut-bg); }
+  tr.pilot td { background: var(--pilot); }
+  tr.pilot td:first-child { font-weight: 700; }
+  figure { margin: 14px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .pair { display: grid; grid-template-columns: 1fr; gap: 0; margin: 12px 0 18px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+  .panel { padding: 0; }
+  .panel .tag { font: 600 11.5px/1 -apple-system, Helvetica, Arial, sans-serif; text-transform: uppercase;
+    letter-spacing: .06em; padding: 7px 12px; }
+  .panel.now .tag { color: var(--now); background: var(--now-bg); border-bottom: 1px solid #f0d7cf; }
+  .panel.fut .tag { color: var(--fut); background: var(--fut-bg); border-bottom: 1px solid #cfe7da; border-top: 1px solid var(--line); }
+  .panel .tag span { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+  pre { margin: 0; padding: 10px 12px; background: var(--code-bg); overflow-x: auto;
+    font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
+  .kw { color: #7a2d9a; }
+  .ty { color: #0b6380; }
+  .cm { color: #6a737d; font-style: italic; }
+  .st { color: #2a7a3a; }
+  .un { color: #b3261e; font-weight: 600; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .box { border: 1px solid var(--line); border-radius: 5px; padding: 8px 12px; }
+  .box.now { border-left: 4px solid var(--now); }
+  .box.fut { border-left: 4px solid var(--fut); }
+  .box h4 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+  .box.now h4 { color: var(--now); }
+  .box.fut h4 { color: var(--fut); }
+  .small { font-size: 13px; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>UQM: from C-shaped Rust to idiomatic Rust</h1>
+<p class="sub">The <code>uqm</code> crate under <code>rust/</code> at <code>main</code> 0ba2845ad. Summary of architecture.md, quality-gates.md and plan.md, with the design review findings (summarised in plan.md section 6) already applied.</p>
+
+<!-- 1 -->
+<div class="verdict">
+<b>Verdict</b>
+Today the game is about 218k lines of Rust that still has the shape of the C it was ported from: 375 <code>static mut</code> globals, Rust modules calling each other through 1,922 <code>extern "C"</code> functions, and 23% of production lines inside <code>unsafe</code>.
+The target is an owned <code>Game</code> passed as <code>&amp;mut</code> into per-mode sessions, battle elements in an order-preserving pool addressed by generational ids, races and planet generators as traits, and <code>unsafe</code> only in the platform layer.
+The work runs as nine phases of small PRs, starting with a battle-core pilot, and every PR must reproduce a deterministic replay byte for byte and pass save round trips, the native failure scenarios and shrink-only xtask gates.
+Game behaviour, the save file format and the netplay wire format and checksum do not change.
+</div>
+
+<!-- 2 -->
+<h2><span class="num">1</span>At a glance</h2>
+<p>Production code only (tests, blank and comment lines excluded). Today's values are line-regex counts from the design and are approximate; Phase 0 replaces them with syn-based counts in the baseline file. Targets are the Phase 8 exit criteria.</p>
+<table>
+<tr><th style="width:34%">Measure</th><th class="now" style="width:33%">Now</th><th style="width:33%">Target</th></tr>
+<tr><td><code>static mut</code> definitions</td><td class="now">375 (24 from the <code>global!</code> macro)</td><td class="fut">0</td></tr>
+<tr><td><code>extern "C" fn</code> definitions</td><td class="now">1,922</td><td class="fut">0 outside platform</td></tr>
+<tr><td><code>#[no_mangle]</code> / <code>#[export_name]</code></td><td class="now">1,257</td><td class="fut">0</td></tr>
+<tr><td>Foreign declarations in <code>extern "C" {}</code></td><td class="now">641 fns and 340 statics in 123 files</td><td class="fut">platform only (SDL2, sockets, macOS)</td></tr>
+<tr><td>Lines inside <code>unsafe</code></td><td class="now">23% of 217.7k</td><td class="fut">only in 4 allowed platform modules; crate root <code>#![deny(unsafe_code)]</code></td></tr>
+<tr><td>ABI record files</td><td class="now">6 bindgen files in <code>abi/</code>, 12.1k lines, each <code>include!</code>d into its own module; <code>ELEMENT</code> defined 3 times</td><td class="fut"><code>abi/</code> deleted; one plain struct per record</td></tr>
+<tr><td><code>#[repr(C)]</code></td><td class="now">390</td><td class="fut">platform only</td></tr>
+<tr><td>Functions with raw-pointer parameters</td><td class="now">1,907</td><td class="fut">platform only</td></tr>
+<tr><td><code>#[allow(..)]</code></td><td class="now">269 (176 <code>non_snake_case</code>)</td><td class="fut">only the platform <code>unsafe_code</code> allows</td></tr>
+<tr><td><code>.unwrap()</code> / <code>.expect(</code></td><td class="now">716</td><td class="fut">0 in production</td></tr>
+<tr><td>Untestable <code>#![cfg(not(test))]</code> modules</td><td class="now">16 (all of <code>ui/</code>, <code>navigation/hyper_*</code>)</td><td class="fut">0</td></tr>
+<tr><td>Size outliers</td><td class="now">29 files over 1,000 lines; 263 functions over 80 lines</td><td class="fut">800 per file, 80 per function; existing outliers baselined and may only shrink</td></tr>
+<tr><td>Quality gates in CI</td><td class="now">fmt, clippy with default lints, tests, <code>abi-check</code>, a shell C-file ratchet, 5 release builds, 4 native scenarios</td><td class="fut">adds <code>xtask quality</code> (8 checks), clippy deny and debt sets, per-file coverage floor (70% target), <code>cargo deny</code>, replay parity</td></tr>
+</table>
+
+<!-- 3 -->
+<h2><span class="num">2</span>Architecture</h2>
+<div class="cols">
+<div class="box now"><h4>Now</h4>
+<p class="small">Rust modules call each other through the linker. Almost every foreign declaration resolves to a <code>#[no_mangle]</code> definition in this same crate; the only external native code is SDL2, libc sockets and macOS frameworks. State lives in shared <code>static mut</code> globals that any module can reach.</p>
+</div>
+<div class="box fut"><h4>Future</h4>
+<p class="small">Layers with one dependency direction. <code>app</code> owns one <code>Game</code> and one <code>Platform</code> and passes them down as <code>&amp;mut</code>. Each mode creates its session on entry and drops it on exit. Only <code>platform</code> touches native code.</p>
+</div>
+</div>
+
+<figure>
+<svg viewBox="0 0 860 412" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a949e"/></marker>
+    <marker id="a1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b8462e"/></marker>
+  </defs>
+  <text x="14" y="14" font-weight="700" fill="#b8462e">NOW</text>
+  <!-- linker band: every module imports and exports symbols through it -->
+  <rect x="14" y="22" width="832" height="52" rx="4" fill="#fbe9e4" fill-opacity="0.9" stroke="#b8462e" stroke-dasharray="5 3"/>
+  <text x="430" y="40" text-anchor="middle" fill="#8f2f1b" font-weight="600">The linker: modules call each other by symbol name</text>
+  <text x="430" y="58" text-anchor="middle" fill="#8f2f1b" font-size="11">1,257 #[no_mangle] exports, 1,922 extern "C" fn, 641 foreign fns + 340 foreign statics declared in 123 files</text>
+  <!-- one short two-way arrow per module: calls out and is called through symbols -->
+  <g stroke="#b8462e" stroke-width="1.3" marker-start="url(#a1r)" marker-end="url(#a1r)">
+    <line x1="66" y1="77" x2="66" y2="95"/><line x1="170" y1="77" x2="170" y2="95"/>
+    <line x1="274" y1="77" x2="274" y2="95"/><line x1="378" y1="77" x2="378" y2="95"/>
+    <line x1="482" y1="77" x2="482" y2="95"/><line x1="586" y1="77" x2="586" y2="95"/>
+    <line x1="690" y1="77" x2="690" y2="95"/><line x1="794" y1="77" x2="794" y2="95"/>
+  </g>
+  <!-- modules -->
+  <g fill="#f4f6f8" stroke="#6b7782">
+    <rect x="18" y="98" width="96" height="34" rx="4"/><rect x="122" y="98" width="96" height="34" rx="4"/>
+    <rect x="226" y="98" width="96" height="34" rx="4"/><rect x="330" y="98" width="96" height="34" rx="4"/>
+    <rect x="434" y="98" width="96" height="34" rx="4"/><rect x="538" y="98" width="96" height="34" rx="4"/>
+    <rect x="642" y="98" width="96" height="34" rx="4"/><rect x="746" y="98" width="96" height="34" rx="4"/>
+  </g>
+  <g text-anchor="middle" font-family="Menlo, monospace" font-size="11.5">
+    <text x="66" y="119">mainloop</text><text x="170" y="119">battle</text><text x="274" y="119">ships/races</text>
+    <text x="378" y="119">navigation</text><text x="482" y="119">planets</text><text x="586" y="119">comm</text>
+    <text x="690" y="119">supermelee</text><text x="794" y="119">savegame</text>
+  </g>
+  <!-- one direct access arrow per module down to the shared globals -->
+  <g stroke="#8a949e" stroke-width="1.3" marker-end="url(#a1)">
+    <line x1="66" y1="133" x2="66" y2="157"/><line x1="170" y1="133" x2="170" y2="157"/>
+    <line x1="274" y1="133" x2="274" y2="157"/><line x1="378" y1="133" x2="378" y2="157"/>
+    <line x1="482" y1="133" x2="482" y2="157"/><line x1="586" y1="133" x2="586" y2="157"/>
+    <line x1="690" y1="133" x2="690" y2="157"/><line x1="794" y1="133" x2="794" y2="157"/>
+  </g>
+  <!-- shared globals bar -->
+  <rect x="14" y="160" width="832" height="82" rx="4" fill="#fffaec" stroke="#b58a1b"/>
+  <text x="24" y="176" font-weight="600" fill="#6b5310">Shared globals: 375 static mut, read and written with unsafe by any module (examples)</text>
+  <g fill="#fff3d6" stroke="#b58a1b">
+    <rect x="24" y="188" width="110" height="44" rx="4"/><rect x="141" y="188" width="110" height="44" rx="4"/>
+    <rect x="258" y="188" width="110" height="44" rx="4"/><rect x="375" y="188" width="110" height="44" rx="4"/>
+    <rect x="492" y="188" width="110" height="44" rx="4"/><rect x="609" y="188" width="110" height="44" rx="4"/>
+    <rect x="726" y="188" width="110" height="44" rx="4"/>
+  </g>
+  <g text-anchor="middle" font-size="11">
+    <text x="79" y="206" font-family="Menlo, monospace">GlobData</text><text x="79" y="222" fill="#6b5310">2 Rust types</text>
+    <text x="196" y="206" font-family="Menlo, monospace">disp_q</text><text x="196" y="222" fill="#6b5310">element queue</text>
+    <text x="313" y="206" font-family="Menlo, monospace">DisplayArray</text><text x="313" y="222" fill="#6b5310">[330] vs [150]</text>
+    <text x="430" y="206" font-family="Menlo, monospace">CurStarDescPtr</text><text x="430" y="222" fill="#6b5310">7 declarations</text>
+    <text x="547" y="206" font-family="Menlo, monospace">race_q[2]</text><text x="547" y="222" fill="#6b5310">ship queues</text>
+    <text x="664" y="206" font-family="Menlo, monospace">COMM_STATE</text><text x="664" y="222" fill="#6b5310">RwLock global</text>
+    <text x="781" y="206" font-family="Menlo, monospace">Screen, fonts</text><text x="781" y="222" fill="#6b5310">global! statics</text>
+  </g>
+  <!-- record and table boxes: the queues hold these records -->
+  <g stroke="#8a949e" stroke-width="1.3" marker-end="url(#a1)">
+    <line x1="196" y1="233" x2="196" y2="257"/>
+    <line x1="547" y1="233" x2="547" y2="257"/>
+  </g>
+  <rect x="14" y="260" width="410" height="96" rx="4" fill="#f4f0fb" stroke="#6d4fa3"/>
+  <text x="26" y="280" font-weight="600" fill="#4b3478">abi/*.rs: 6 bindgen files, 12.1k lines</text>
+  <g font-size="11.5" fill="#333">
+    <text x="26" y="298">each include!d into its own module: 6 type universes</text>
+    <text x="26" y="314">#[repr(C)] struct element defined 3 times</text>
+    <text x="26" y="330">RACE_DESC also seen as opaque [u128; 24]</text>
+    <text x="26" y="346">reconciled by 164 layout asserts, 74 link_name aliases</text>
+  </g>
+  <rect x="436" y="260" width="410" height="96" rx="4" fill="#f4f0fb" stroke="#6d4fa3"/>
+  <text x="448" y="280" font-weight="600" fill="#4b3478">Ship behaviour: 28 static mut &lt;RACE&gt;_DESC</text>
+  <g font-size="11.5" fill="#333">
+    <text x="448" y="298">fields: Option&lt;unsafe extern "C" fn(*mut ELEMENT)&gt;</text>
+    <text x="448" y="314">template copied per ship; hooks swapped at run time</text>
+    <text x="448" y="330">race code derefs pred, succ, pParent, hTarget itself</text>
+    <text x="448" y="346">ELEMENT/HELEMENT named in 27 race files, 13 battle files</text>
+  </g>
+  <rect x="14" y="368" width="832" height="30" rx="4" fill="#eef1f4" stroke="#aab3bc"/>
+  <text x="430" y="388" text-anchor="middle" fill="#444" font-size="11.5">External native code: SDL2 (sdl2 / sdl2-sys), libc sockets in network.rs, macOS frameworks</text>
+</svg>
+<figcaption>Now. Every module reaches shared globals directly, and calls into other modules go through exported symbols. <code>DisplayArray</code> is defined with 330 entries (<code>battle/process_native.rs:259</code>) and declared with 150 (<code>planet_side/orbit_scan.rs:79</code>); <code>GlobData</code> is defined as <code>GLOBDATA</code> (<code>navigation/globals.rs:10</code>) and declared as <code>CGlobData</code> (<code>mainloop/ffi.rs:45</code>).</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 860 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f6f50"/></marker>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#fbe9e4"/><line x1="0" y1="0" x2="0" y2="8" stroke="#efc9bd" stroke-width="3"/></pattern>
+  </defs>
+  <text x="14" y="14" font-weight="700" fill="#1f6f50">FUTURE</text>
+  <!-- app -->
+  <rect x="14" y="22" width="832" height="40" rx="4" fill="#e9eef3" stroke="#56626e"/>
+  <text x="24" y="39" font-weight="700">app</text>
+  <text x="62" y="39" font-size="11.5">composition root: builds Platform and Game, owns the automation Observer, runs the loop</text>
+  <text x="62" y="55" font-size="11.5" font-family="Menlo, monospace">app::run(&amp;mut game, &amp;mut io)  where  Io { platform: &amp;mut Platform, observer: &amp;mut dyn Observer }</text>
+  <!-- left lane: Io to platform -->
+  <line x1="26" y1="62" x2="26" y2="456" stroke="#b8462e" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+  <text transform="translate(38,300) rotate(-90)" font-size="11" fill="#8f2f1b" text-anchor="middle">platform reached only through Io</text>
+  <!-- app to modes -->
+  <line x1="450" y1="62" x2="450" y2="86" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="458" y="78" font-size="11" fill="#1f6f50" font-family="Menlo, monospace">&amp;mut Game, &amp;mut Io</text>
+  <!-- modes -->
+  <rect x="44" y="88" width="802" height="104" rx="4" fill="#eaf2fb" stroke="#3b6ea5"/>
+  <text x="54" y="105" font-weight="700">modes</text>
+  <text x="106" y="105" font-size="11.5">one session per mode: created on entry, dropped on exit</text>
+  <g fill="#ffffff" stroke="#3b6ea5">
+    <rect x="54" y="114" width="150" height="70" rx="4"/><rect x="212" y="114" width="150" height="70" rx="4"/>
+    <rect x="370" y="114" width="150" height="70" rx="4"/><rect x="528" y="114" width="150" height="70" rx="4"/>
+    <rect x="686" y="114" width="150" height="70" rx="4"/>
+  </g>
+  <g font-size="11">
+    <text x="62" y="131" font-weight="700" font-family="Menlo, monospace">Battle</text>
+    <text x="62" y="147">was disp_q, race_q,</text><text x="62" y="161">DisplayArray, zoom_out</text><text x="62" y="175">melee, hyperspace, IP</text>
+    <text x="220" y="131" font-weight="700" font-family="Menlo, monospace">SolarSystem</text>
+    <text x="220" y="147">was pSolarSysState</text><text x="220" y="161">sys: SolarSys</text><text x="220" y="175">star: StarId (required)</text>
+    <text x="378" y="131" font-weight="700" font-family="Menlo, monospace">Comm</text>
+    <text x="378" y="147">was COMM_STATE,</text><text x="378" y="161">COMM_DATA</text><text x="378" y="175">dialogue Api impl</text>
+    <text x="536" y="131" font-weight="700" font-family="Menlo, monospace">PlanetSide</text>
+    <text x="536" y="147">exists today:</text><text x="536" y="161">PlanetSideSession,</text><text x="536" y="175">generational SurfaceWorld</text>
+    <text x="694" y="131" font-weight="700" font-family="Menlo, monospace">Starbase, menus</text>
+    <text x="694" y="147">starbase, ui,</text><text x="694" y="161">front_end, melee setup,</text><text x="694" y="175">restart menu</text>
+  </g>
+  <line x1="340" y1="192" x2="340" y2="216" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
+  <!-- content -->
+  <rect x="44" y="218" width="600" height="90" rx="4" fill="#f1f8ee" stroke="#4d8a3a"/>
+  <text x="54" y="235" font-weight="700">content</text>
+  <text x="114" y="235" font-size="11.5">uses engine types only; declares host traits that modes implement</text>
+  <g fill="#ffffff" stroke="#4d8a3a">
+    <rect x="54" y="244" width="138" height="56" rx="4"/><rect x="200" y="244" width="138" height="56" rx="4"/>
+    <rect x="346" y="244" width="138" height="56" rx="4"/><rect x="492" y="244" width="144" height="56" rx="4"/>
+  </g>
+  <g font-size="11">
+    <text x="62" y="261" font-weight="700" font-family="Menlo, monospace">trait Race</text><text x="62" y="277">one impl per species</text><text x="62" y="291">safe ElementHooks</text>
+    <text x="208" y="261" font-weight="700" font-family="Menlo, monospace">SystemGenerator</text><text x="208" y="277">+ SiteHost trait</text><text x="208" y="291">replaces 13-hook vtable</text>
+    <text x="354" y="261" font-weight="700" font-family="Menlo, monospace">Dialogue&lt;A: Api&gt;</text><text x="354" y="277">scripts stay code</text><text x="354" y="291">Api impl changes</text>
+    <text x="500" y="261" font-weight="700" font-family="Menlo, monospace">Vfs, ResourceCache</text><text x="500" y="277">typed Handle&lt;Frame&gt;</text><text x="500" y="291">data tables unchanged</text>
+  </g>
+  <!-- persistence -->
+  <rect x="656" y="218" width="190" height="90" rx="4" fill="#f7f1e8" stroke="#9a6b2a"/>
+  <text x="666" y="235" font-weight="700">persistence</text>
+  <g font-size="11"><text x="666" y="253">save codec, bytes unchanged</text>
+  <text x="666" y="269" font-family="Menlo, monospace" font-size="10.5">snapshot(&amp;Game, SessionView)</text>
+  <text x="666" y="285" font-family="Menlo, monospace" font-size="10.5">apply(SaveFile, &amp;mut Game)</text>
+  <text x="666" y="300">team files, config</text></g>
+  <line x1="340" y1="308" x2="340" y2="330" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
+  <line x1="750" y1="308" x2="750" y2="330" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
+  <!-- engine -->
+  <rect x="44" y="332" width="802" height="112" rx="4" fill="#f3f3f3" stroke="#56626e"/>
+  <text x="54" y="349" font-weight="700">engine</text>
+  <text x="104" y="349" font-size="11.5">no wall clock, threads, env, filesystem or SDL (checked by xtask quality layers)</text>
+  <g fill="#ffffff" stroke="#56626e">
+    <rect x="54" y="358" width="240" height="78" rx="4"/><rect x="304" y="358" width="250" height="78" rx="4"/><rect x="564" y="358" width="272" height="78" rx="4"/>
+  </g>
+  <g font-size="11" font-family="Menlo, monospace">
+    <text x="62" y="375" font-weight="700">struct Game {</text>
+    <text x="74" y="390">world: World,     // GlobData</text>
+    <text x="74" y="404">kernel: Kernel,   // setup globals</text>
+    <text x="74" y="418">content, options, rng }</text>
+    <text x="312" y="375" font-weight="700">struct World {</text>
+    <text x="324" y="390">activity, clock, sis,</text>
+    <text x="324" y="404">story: StoryState,</text>
+    <text x="324" y="418">current_star: Option&lt;StarId&gt; }</text>
+    <text x="572" y="375" font-weight="700">OrderedPool&lt;T, N&gt; + Id&lt;T&gt;</text>
+    <text x="572" y="390">Cx { b: &amp;mut Battle, world, rng }</text>
+    <text x="572" y="404">fixed-point math, RNG,</text>
+    <text x="572" y="418">Observer trait, canvas, DCQ</text>
+  </g>
+  <!-- platform -->
+  <rect x="14" y="458" width="832" height="50" rx="4" fill="url(#hatch)" stroke="#b8462e"/>
+  <text x="54" y="478" font-weight="700" fill="#8f2f1b">platform (edge)</text>
+  <text x="170" y="478" font-size="11.5" fill="#5a2012">SDL2 window, textures, events, audio device, sockets, OS clock, macOS FFI</text>
+  <text x="54" y="497" font-size="11.5" fill="#5a2012">The only modules where unsafe is allowed: platform::sdl, platform::macos, platform::net, threading/qos.rs</text>
+</svg>
+<figcaption>Future. Dependencies point down: <code>app</code> to <code>modes</code> to <code>content</code> to <code>engine</code>; <code>persistence</code> to <code>engine</code>. A lower layer never names a higher layer's type. Existing directories map onto layers in place; there is no bulk rename.</figcaption>
+</figure>
+
+<p>The game logic runs on one thread today (<code>CreateThread_Core</code> has no caller; the other threads are audio and automation I/O), so an owned <code>&amp;mut Game</code> needs no locks. Entry points take what they use, for example <code>fn battle(game: &amp;mut Game, io: &amp;mut Io&lt;'_&gt;, kind: BattleKind) -&gt; Result&lt;BattleOutcome, GameError&gt;</code>. The call graph and statement order stay the same; only the way state is reached changes.</p>
+<p>Two alternatives were rejected. A <code>thread_local!</code> <code>RefCell&lt;Game&gt;</code> fails at run time because collision callbacks re-enter (collision, then death, then spawn), so a second <code>borrow_mut</code> panics. Wrapping the statics in an <code>UnsafeCell</code> with a "single thread" rule leaves aliasing unchecked by the compiler, which is the problem being solved.</p>
+<p>Some code already has the target shape and is left alone: <code>planet_side/</code>, the savegame codec, dialogue scripts, the planet generator logic in <code>planets/generate/orz.rs</code>, <code>mainloop/state_machine.rs</code> and the sound command enum.</p>
+
+<!-- 4 -->
+<h2><span class="num">3</span>Data layout: element queue to ordered pool</h2>
+<figure>
+<svg viewBox="0 0 860 496" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="a3r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b8462e"/></marker>
+    <marker id="a3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f6f50"/></marker>
+    <marker id="a3k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a949e"/></marker>
+  </defs>
+  <text x="14" y="18" font-weight="700" fill="#b8462e">NOW</text>
+  <text x="56" y="18" font-size="11.5" fill="#444">disp_q: a QUEUE over an HMalloc'd table (collections/queue.rs); records are #[repr(C)] ELEMENT</text>
+  <rect x="14" y="34" width="150" height="80" rx="4" fill="#fff3d6" stroke="#b58a1b"/>
+  <g font-family="Menlo, monospace" font-size="11">
+    <text x="22" y="52" font-weight="700">static disp_q</text>
+    <text x="22" y="70">head: HELEMENT</text>
+    <text x="22" y="86">tail: HELEMENT</text>
+    <text x="22" y="102">free list</text>
+  </g>
+  <g fill="#fbf1ee" stroke="#b8462e">
+    <rect x="200" y="30" width="140" height="116" rx="4"/><rect x="370" y="30" width="140" height="116" rx="4"/>
+    <rect x="540" y="30" width="140" height="116" rx="4"/><rect x="710" y="30" width="136" height="116" rx="4"/>
+  </g>
+  <g font-family="Menlo, monospace" font-size="10.5">
+    <text x="208" y="46" font-weight="700">ELEMENT</text><text x="208" y="62">pred: *mut</text><text x="208" y="76">succ: *mut</text><text x="208" y="90">preprocess_func:</text><text x="216" y="104">unsafe extern fn</text><text x="208" y="118">pParent: *mut c_void</text><text x="208" y="132">hTarget, 5 unions</text>
+    <text x="378" y="46" font-weight="700">ELEMENT</text><text x="378" y="62">pred: *mut</text><text x="378" y="76">succ: *mut</text><text x="378" y="90">collision_func:</text><text x="386" y="104">unsafe extern fn</text><text x="378" y="118">pParent: *mut c_void</text><text x="378" y="132">hTarget, 5 unions</text>
+    <text x="548" y="46" font-weight="700">ELEMENT</text><text x="548" y="62">pred: *mut</text><text x="548" y="76">succ: *mut</text><text x="548" y="90">death_func:</text><text x="556" y="104">unsafe extern fn</text><text x="548" y="118">pParent: *mut c_void</text><text x="548" y="132">hTarget, 5 unions</text>
+    <text x="718" y="46" font-weight="700">ELEMENT</text><text x="718" y="62">pred: *mut</text><text x="718" y="76">succ: null</text><text x="718" y="90">...</text>
+  </g>
+  <g stroke="#b8462e" fill="none" stroke-width="1.4">
+    <line x1="164" y1="66" x2="198" y2="66" marker-end="url(#a3r)"/>
+    <line x1="300" y1="72" x2="368" y2="72" marker-end="url(#a3r)"/>
+    <line x1="470" y1="72" x2="538" y2="72" marker-end="url(#a3r)"/>
+    <line x1="640" y1="72" x2="708" y2="72" marker-end="url(#a3r)"/>
+    <path d="M89,114 V170 H778 V148" marker-end="url(#a3r)"/>
+    <path d="M440,146 V158 H270 V148" stroke-dasharray="4 3" marker-end="url(#a3r)"/>
+  </g>
+  <g font-size="11" fill="#8f2f1b">
+    <text x="96" y="164">tail</text>
+    <text x="454" y="188">hTarget (dashed): raw handle;</text>
+    <text x="454" y="202">nothing detects a freed and reused slot</text>
+  </g>
+  <text x="14" y="232" font-size="11.5" fill="#444">Any code holding a pointer can read or rewrite links; 27 race files dereference records directly. pParent points at a STARSHIP or an IP group.</text>
+  <line x1="14" y1="246" x2="846" y2="246" stroke="#d9dee4"/>
+  <g transform="translate(0,24)">
+
+  <text x="14" y="244" font-weight="700" fill="#1f6f50">FUTURE</text>
+  <text x="74" y="244" font-size="11.5" fill="#444" font-family="Menlo, monospace">OrderedPool&lt;Element, 150&gt;  slots: Box&lt;[Slot&lt;T&gt;; N]&gt;  head: 1  tail: 4  free: 3</text>
+  <!-- succ arcs above slots -->
+  <g stroke="#1f6f50" fill="none" stroke-width="1.4">
+    <path d="M100,276 C110,256 230,256 240,276" marker-end="url(#a3g)"/>
+    <path d="M240,276 C260,248 500,248 520,276" marker-end="url(#a3g)"/>
+  </g>
+  <text x="600" y="270" font-size="11" fill="#1f6f50">succ links are slot indices, in C link order</text>
+  <g stroke-width="1.2">
+    <rect x="34" y="278" width="128" height="88" rx="4" fill="#eef7f2" stroke="#1f6f50"/>
+    <rect x="174" y="278" width="128" height="88" rx="4" fill="#eef7f2" stroke="#1f6f50"/>
+    <rect x="314" y="278" width="128" height="88" rx="4" fill="#f4f5f6" stroke="#a3abb3" stroke-dasharray="4 3"/>
+    <rect x="454" y="278" width="128" height="88" rx="4" fill="#eef7f2" stroke="#1f6f50"/>
+    <rect x="594" y="278" width="128" height="88" rx="4" fill="#f4f5f6" stroke="#a3abb3" stroke-dasharray="4 3"/>
+    <rect x="734" y="278" width="112" height="88" rx="4" fill="#f4f5f6" stroke="#a3abb3" stroke-dasharray="4 3"/>
+  </g>
+  <g font-family="Menlo, monospace" font-size="10.5">
+    <text x="42" y="295" font-weight="700">slot 1  gen 4</text><text x="42" y="311">pred -  succ 2</text><text x="42" y="327">Some(Element)</text><text x="42" y="343">hooks: fn ptrs</text><text x="42" y="357">parent: Ship(s0)</text>
+    <text x="182" y="295" font-weight="700">slot 2  gen 1</text><text x="182" y="311">pred 1  succ 4</text><text x="182" y="327">Some(Element)</text><text x="182" y="343">hooks: fn ptrs</text><text x="182" y="357">parent: Ship(s0)</text>
+    <text x="322" y="295" font-weight="700" fill="#6b7782">slot 3  gen 2</text><text x="322" y="311" fill="#6b7782">None</text><text x="322" y="327" fill="#6b7782">next free: 5</text>
+    <text x="462" y="295" font-weight="700">slot 4  gen 7</text><text x="462" y="311">pred 2  succ -</text><text x="462" y="327">Some(Element)</text><text x="462" y="343">target: Some(id)</text><text x="462" y="357">parent: Ship(s1)</text>
+    <text x="602" y="295" font-weight="700" fill="#6b7782">slot 5  gen 1</text><text x="602" y="311" fill="#6b7782">None</text><text x="602" y="327" fill="#6b7782">next free: 6</text>
+    <text x="742" y="295" font-weight="700" fill="#6b7782">slot 6 ...150</text><text x="742" y="311" fill="#6b7782">None</text>
+  </g>
+  <!-- free list below -->
+  <g stroke="#8a949e" fill="none" stroke-dasharray="4 3" stroke-width="1.2">
+    <path d="M378,366 C390,392 646,392 658,368" marker-end="url(#a3k)"/>
+    <path d="M658,366 C670,388 778,388 790,368" marker-end="url(#a3k)"/>
+  </g>
+  <text x="420" y="402" font-size="11" fill="#5b6672">LIFO free list, as FreeLink: the last slot freed is the next one allocated</text>
+  <!-- ElementId -->
+  <rect x="34" y="384" width="230" height="40" rx="4" fill="#ffffff" stroke="#1f6f50"/>
+  <text x="44" y="401" font-family="Menlo, monospace" font-size="11">ElementId { ix: 4, gen: 7 }</text>
+  <text x="44" y="417" font-size="10.5" fill="#444">Copy value; pool[id] checks gen</text>
+  <path d="M264,396 C380,380 470,390 500,368" stroke="#1f6f50" fill="none" stroke-width="1.4" marker-end="url(#a3g)"/>
+  <text x="14" y="446" font-size="11.5" fill="#1d232b">Allocation returns slots 1, 2, 3 in order, as InitQueue sets them up. A full pool returns None, so the weapon does not fire, as in C.</text>
+  <text x="14" y="463" font-size="11.5" fill="#1d232b">Iteration and collision order match C exactly. A stale id is a bug and panics; the parity run counts stale lookups.</text>
+  </g>
+</svg>
+<figcaption>One generic container replaces every <code>QUEUE</code>: battle elements, <code>race_q[2]</code>, the <code>GAME_STATE</code> queues and the clock's event queue. Display primitives use the same shape, since primitive link order is drawing order.</figcaption>
+</figure>
+
+<p>The pool reproduces C order by following the queue's rules:</p>
+<ul>
+<li><b>Allocation.</b> <code>InitQueue</code> frees slots N down to 1 (<code>collections/queue.rs:110-114</code>), so allocation hands out 1, 2, 3 and reuse is last-freed-first. The pool does the same, and exhaustion at <code>MAX_DISPLAY_ELEMENTS = 150</code> behaves as before.</li>
+<li><b>Links.</b> <code>put</code> appends like <code>PutQueue</code>, <code>insert_before</code> matches <code>InsertQueue</code>, <code>remove</code> unlinks without freeing.</li>
+<li><b>Traversal.</b> There is no snapshot iterator. Loops call <code>head()</code> and <code>succ(id)</code> at the same point C reads the successor, so elements appended by a callback during a pass are visited in that pass.</li>
+<li><b>Records.</b> The five bindgen unions hold same-typed members and become one field each with named accessors. <code>pParent: *mut c_void</code> becomes <code>enum Parent { None, Ship(ShipId), IpGroup(Id&lt;IpGroup&gt;) }</code>. <code>image.farray</code> becomes a <code>FrameSetRef</code> that names its owner (a ship and role, or a shared set such as <code>blast</code>), so Arilou's "is this my special" test becomes an equality on owners.</li>
+</ul>
+
+<!-- 5 -->
+<h2><span class="num">4</span>Code, before and after</h2>
+<p>"Now" code is quoted from <code>main</code> at the cited lines, with <code>...</code> where lines are cut. "Future" code is the target sketch from architecture.md.</p>
+
+<h3>4.1 Global state in the main loop</h3>
+<div class="pair">
+<div class="panel now"><div class="tag">Now<span>rust/src/mainloop/game_loop.rs, mainloop/ffi.rs</span></div>
+<pre><span class="cm">// mainloop/game_loop.rs:114-117. ops is CffiOps, a 40-method GameLoopOps impl</span>
+<span class="kw">match</span> decision {
+    ActivityDecision::InstallBombAtEarth =&gt; ops.install_bomb_at_earth(),
+    ActivityDecision::VisitStarBase =&gt; ops.visit_starbase()?,
+    ActivityDecision::RaceCommunication =&gt; ops.race_communication(),
+    ...
+<span class="cm">// mainloop/game_loop.rs:305-311. Each method forwards to a linker symbol</span>
+<span class="kw">fn</span> start_game(&amp;<span class="kw">self</span>) -&gt; <span class="ty">bool</span> {
+    <span class="un">unsafe</span> { c_extern::StartGame() != 0 }
+}
+<span class="kw">fn</span> get_current_activity(&amp;<span class="kw">self</span>) -&gt; <span class="ty">ActivityValue</span> {
+    ActivityValue::new(<span class="un">unsafe</span> { c_extern::get_current_activity() })
+}
+<span class="cm">// mainloop/ffi.rs:42-46. GlobData redeclared with a second Rust type</span>
+<span class="kw">pub mod</span> globdata_ffi {
+    <span class="un">extern "C"</span> {
+        #[link_name = <span class="st">"GlobData"</span>]
+        <span class="kw">pub</span> <span class="un">static mut</span> GlobData: crate::comm::locdata::<span class="ty">CGlobData</span>;
+    }
+}
+<span class="cm">// mainloop/ffi.rs:289-297. Tests always see 0</span>
+<span class="kw">pub fn</span> get_crew_enlisted() -&gt; <span class="ty">u16</span> {
+    #[cfg(not(test))]
+    {
+        <span class="cm">// SAFETY: reads a u16 field from the C GlobData global.</span>
+        <span class="un">unsafe</span> { c_globals::globdata_ffi::GlobData.sis_state.crew_enlisted }
+    }
+    #[cfg(test)]
+    0
+}</pre></div>
+<div class="panel fut"><div class="tag">Future<span>app::run, architecture.md 8.3</span></div>
+<pre><span class="kw">fn</span> execute_activity(game: &amp;<span class="kw">mut</span> <span class="ty">Game</span>, io: &amp;<span class="kw">mut</span> <span class="ty">Io</span>&lt;'_&gt;, decision: <span class="ty">ActivityDecision</span>)
+    -&gt; <span class="ty">Result</span>&lt;(), <span class="ty">GameError</span>&gt; {
+    <span class="kw">let</span> act = &amp;<span class="kw">mut</span> game.world.activity;
+    act.current = state_machine::pre_dispatch_mutate(act.current, decision);
+    <span class="kw">match</span> decision {
+        ActivityDecision::InstallBombAtEarth =&gt; starbase::install_bomb_at_earth(game, io)?,
+        ActivityDecision::VisitStarBase =&gt; starbase::visit(game, io)?,
+        ActivityDecision::RaceCommunication =&gt; comm::race_communication(game, io)?,
+        ActivityDecision::ExploreSolarSystem =&gt; {
+            game.world.clock.set_rate(INTERPLANETARY_CLOCK_RATE);
+            solar_system::explore(game, io)?
+        }
+        ActivityDecision::Battle =&gt; { battle(game, io, <span class="ty">BattleKind</span>::Hyperspace)?; }
+    }
+    <span class="ty">Ok</span>(())
+}
+<span class="cm">// The death check is a field read. Tests build a Game with the state they need.</span>
+<span class="kw">let</span> dead = game.world.sis.crew_enlisted == 0xFFFF;</pre></div>
+</div>
+<p>The state machine (<code>evaluate</code>, <code>check_break</code>) is kept as is. <code>GameLoopOps</code> exists so tests could mock link-time symbols; it stays only if a test still needs it. <code>World::new_game</code> replaces <code>InitGameStructures</code> and puts the initial fleets in the same order.</p>
+
+<h3>4.2 A ship callback: VUX limpet collision</h3>
+<div class="pair">
+<div class="panel now"><div class="tag">Now<span>rust/src/ships/races/vux_native.rs:77-120</span></div>
+<pre><span class="un">unsafe extern "C"</span> <span class="kw">fn</span> limpet_collision(
+    a: <span class="un">*mut</span> <span class="ty">ELEMENT</span>,
+    _pa: <span class="un">*mut</span> <span class="ty">POINT</span>,
+    b: <span class="un">*mut</span> <span class="ty">ELEMENT</span>,
+    _pb: <span class="un">*mut</span> <span class="ty">POINT</span>,
+) {
+    <span class="kw">if</span> (*b).state_flags &amp; PLAYER_SHIP <span class="kw">as</span> u16 != 0 {
+        <span class="kw">let</span> other = starship(b);
+        <span class="kw">let</span> rd = (*other).RaceDescPtr;
+        (*rd).characteristics.turn_wait = (*rd).characteristics.turn_wait.wrapping_add(1);
+        <span class="kw">if</span> (*rd).characteristics.turn_wait == 0 {
+            (*rd).characteristics.turn_wait = (*rd).characteristics.turn_wait.wrapping_sub(1);
+        }
+        ... <span class="cm">// lines 90-103: thrust_wait the same way, then max_thrust</span>
+        (*rd).cyborg_control.ManeuverabilityIndex = 0;
+        <span class="kw">let</span> ss = starship(a);
+        ProcessSound(
+            SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 2),
+            b,
+        );
+        <span class="kw">let mut</span> stamp: <span class="ty">STAMP</span> = <span class="un">mem::zeroed()</span>;
+        stamp.frame = SetAbsFrameIndex(
+            (*(*ss).RaceDescPtr).ship_data.weapon[0],
+            TFB_Random() <span class="kw">as</span> COUNT,
+        );
+        ModifySilhouette(b, &amp;<span class="kw">mut</span> stamp, MODIFY_IMAGE <span class="kw">as</span> BYTE);
+    }
+    (*a).__bindgen_anon_2.hit_points = 0;
+    (*a).__bindgen_anon_1.life_span = 0;
+    (*a).state_flags |= (COLLISION | DISAPPEARING) <span class="kw">as</span> u16;
+}</pre></div>
+<div class="panel fut"><div class="tag">Future<span>content::races::vux, architecture.md 5.2 and 8.2</span></div>
+<pre><span class="kw">pub type</span> <span class="ty">CollisionFn</span> = <span class="kw">fn</span>(&amp;<span class="kw">mut</span> <span class="ty">Cx</span>, <span class="ty">ElementId</span>, &amp;<span class="kw">mut</span> <span class="ty">Point</span>, <span class="ty">ElementId</span>, &amp;<span class="kw">mut</span> <span class="ty">Point</span>);
+
+<span class="kw">fn</span> limpet_collision(cx: &amp;<span class="kw">mut</span> <span class="ty">Cx</span>, limpet: <span class="ty">ElementId</span>, _: &amp;<span class="kw">mut</span> <span class="ty">Point</span>, hit: <span class="ty">ElementId</span>, _: &amp;<span class="kw">mut</span> <span class="ty">Point</span>) {
+    <span class="kw">if</span> cx.b.elements[hit].flags.contains(<span class="ty">Flags</span>::PLAYER_SHIP) {
+        <span class="kw">let</span> target = cx.b.ship_of(hit);
+        <span class="kw">let</span> c = &amp;<span class="kw">mut</span> cx.b.ships[target].race.characteristics;
+        c.turn_wait = c.turn_wait.saturating_add(1);   <span class="cm">// wrapping_add then undo at 0</span>
+        c.thrust_wait = c.thrust_wait.saturating_add(1);
+        slow_thrust(c);
+        cx.b.ships[target].race.intel.maneuverability_index = 0;
+        <span class="kw">let</span> owner = cx.b.ship_of(limpet);
+        <span class="kw">let</span> sounds = cx.b.ships[owner].race.data.ship_sounds;
+        cx.b.sounds.process(sounds.index(2), hit);      <span class="cm">// same order: sound, then RNG draw</span>
+        <span class="kw">let</span> frame = cx.b.ships[owner].race.data.weapon[0].with_index(cx.rng.next() <span class="kw">as</span> u16);
+        cx.b.modify_silhouette(hit, <span class="ty">Stamp</span>::from(frame), <span class="ty">Modify</span>::Image);
+    }
+    <span class="kw">let</span> e = &amp;<span class="kw">mut</span> cx.b.elements[limpet];
+    e.set_hit_points(0);
+    e.life_span = 0;
+    e.flags |= <span class="ty">Flags</span>::COLLISION | <span class="ty">Flags</span>::DISAPPEARING;
+}</pre></div>
+</div>
+<p>Each ship owns its copy of <code>RaceDesc</code>, as C copies the template per ship, so the limpet slows only the ship it hit. Per-species behaviour goes behind <code>trait Race</code> (<code>preprocess</code>, <code>postprocess</code>, <code>init_weapon</code>, <code>intelligence</code>, <code>uninit</code>), returned as <code>&amp;'static dyn Race</code> by a <code>match</code> on <code>Species</code>. The roughly 150 element callbacks become plain <code>fn</code> pointers in <code>ElementHooks</code>, so Androsynth and Pkunk can still save and restore a hook by copying it. One enum of all callbacks and a <code>Box&lt;dyn&gt;</code> per missile were rejected: the first puts every race's weapons in one match, the second allocates per missile and stops <code>next = current</code> being a copy.</p>
+
+<h3>4.3 Battle element iteration</h3>
+<div class="pair">
+<div class="panel now"><div class="tag">Now<span>rust/src/battle/process_native.rs</span></div>
+<pre><span class="cm">// :304-310</span>
+<span class="un">unsafe fn</span> successor(e: <span class="un">*mut</span> <span class="ty">ELEMENT</span>) -&gt; <span class="ty">HELEMENT</span> {
+    (*e).succ
+}
+<span class="un">unsafe fn</span> head() -&gt; <span class="ty">HELEMENT</span> {
+    disp_q.head                                  <span class="cm">// static mut, game_init/kernel_abi.rs:43</span>
+}
+<span class="cm">// :743-751 and :793-794, in preprocess_queue</span>
+<span class="kw">let mut</span> handle = head();
+<span class="kw">while</span> !handle.is_null() {
+    <span class="kw">let</span> e = locked(handle);
+    <span class="kw">if</span> (*e).state_flags &amp; PRE_PROCESS_BIT == 0 {
+        preprocess(e);
+    }
+    <span class="kw">let</span> next = successor(e);
+    <span class="kw">if</span> colliding(e) &amp;&amp; (*e).state_flags &amp; COLLISION_BIT == 0 {
+        process_collisions(next, e, MAX_TIME_VALUE <span class="kw">as</span> TIME_VALUE, PRE_PROCESS_BIT);
+    }
+    ... <span class="cm">// player-ship zoom and origin maths</span>
+    unlock(handle);
+    handle = next;
+}</pre></div>
+<div class="panel fut"><div class="tag">Future<span>engine::battle, architecture.md 4 and 5.3</span></div>
+<pre><span class="kw">let mut</span> cur = cx.b.elements.head();
+<span class="kw">while let</span> <span class="ty">Some</span>(el) = cur {
+    <span class="kw">if</span> !cx.b.elements[el].flags.contains(<span class="ty">Flags</span>::PRE_PROCESS) {
+        preprocess(cx, el);                <span class="cm">// may append; appended elements are visited this pass</span>
+    }
+    <span class="kw">let</span> next = cx.b.elements.succ(el);   <span class="cm">// read at the same point as C</span>
+    <span class="kw">if</span> colliding(cx, el) &amp;&amp; !cx.b.elements[el].flags.contains(<span class="ty">Flags</span>::COLLISION) {
+        process_collisions(cx, next, el, MAX_TIME_VALUE, <span class="ty">Flags</span>::PRE_PROCESS);
+    }
+    ... <span class="cm">// zoom maths unchanged</span>
+    cur = next;
+}
+
+<span class="cm">// Inside process_collisions: copy the hook, end the borrow, call, reread.</span>
+<span class="kw">let</span> hook = cx.b.elements[first].hooks.collide;   <span class="cm">// Copy; borrow ends here</span>
+invoke_collision(cx, hook, first, second);       <span class="cm">// may damage, run a death hook, allocate</span>
+<span class="kw">let</span> hook = cx.b.elements[second].hooks.collide;  <span class="cm">// reread: the first call may replace it</span>
+invoke_collision(cx, hook, second, first);</pre></div>
+</div>
+<p><code>process_collisions</code> keeps its recursion, its restarts and its pairwise callback order (player ship first). No element borrow lives across a hook call, which is what lets a collision kill a ship whose death hook spawns new elements in the middle of the pass.</p>
+
+<h3>4.4 Planet generator vtable</h3>
+<div class="pair">
+<div class="panel now"><div class="tag">Now<span>rust/src/planets/generate/, planets/solarsys/, battle/gendef.rs</span></div>
+<pre><span class="cm">// planets/generate/vtable.rs:28-43. Thirteen nullable C function pointers</span>
+#[repr(C)]
+<span class="kw">pub struct</span> <span class="ty">GenerateFunctions</span> {
+    <span class="kw">pub</span> init_npcs: <span class="ty">SystemHook</span>,
+    ...
+    <span class="kw">pub</span> generate_orbital: <span class="ty">WorldHook</span>,   <span class="cm">// Option&lt;unsafe extern "C" fn(...)&gt;</span>
+    ...
+}
+<span class="cm">// planets/generate/home_exports.rs:524-535</span>
+<span class="un">unsafe extern "C"</span> <span class="kw">fn</span> orz_orbital(system: <span class="un">*mut</span> <span class="ty">SOLARSYS_STATE</span>, world: <span class="un">*mut</span> <span class="ty">PLANET_DESC</span>) -&gt; <span class="ty">bool</span> {
+    orbit_world(system, world, |orbit, body| {
+        orz::generate_orbital(
+            orbit,
+            body,
+            current_star_index(),
+            &amp;<span class="kw">mut</span> LiveStory,
+            &amp;<span class="kw">mut</span> orz_home(system),
+            || load_planet_default_surface(),
+        )
+    })
+}
+<span class="cm">// home_exports.rs:649-656</span>
+#[export_name = <span class="st">"generateOrzFunctions"</span>]
+<span class="kw">pub static</span> GENERATE_ORZ_FUNCTIONS: <span class="ty">GenerateFunctions</span> = <span class="ty">GenerateFunctions</span> {
+    generate_orbital: <span class="ty">Some</span>(orz_orbital),
+    ...
+    ..DEFAULT_HOOKS
+};
+<span class="cm">// battle/gendef.rs:74, selected by star type</span>
+<span class="kw">pub</span> <span class="un">extern "C"</span> <span class="kw">fn</span> getGenerateFunctions(index: <span class="ty">u8</span>) -&gt; <span class="un">*const</span> <span class="ty">GenerateFunctions</span> {
+<span class="cm">// planets/solarsys/lifecycle.rs:234, the call site</span>
+((*(*state).genFuncs).generatePlanets.unwrap())(state);</pre></div>
+<div class="panel fut"><div class="tag">Future<span>content::generate, architecture.md 5.3 and 8.4</span></div>
+<pre><span class="kw">pub trait</span> <span class="ty">SystemGenerator</span>: <span class="ty">Sync</span> {
+    <span class="kw">fn</span> generate_orbital(&amp;<span class="kw">self</span>, s: &amp;<span class="kw">mut</span> <span class="ty">SolarSys</span>, host: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">SiteHost</span>, body: <span class="ty">Body</span>) -&gt; <span class="ty">bool</span> {
+        default::generate_orbital(s, host, body)
+    }
+    <span class="cm">// the other 12 hooks: same pattern, each with a default</span>
+}
+<span class="kw">pub trait</span> <span class="ty">SiteHost</span>: <span class="ty">Story</span> + <span class="ty">HomeContactSite</span> + <span class="ty">OrzSite</span> + <span class="ty">MyconSite</span> <span class="cm">/* + other site traits */</span> {}
+
+<span class="kw">impl</span> <span class="ty">SystemGenerator</span> <span class="kw">for</span> <span class="ty">Orz</span> {
+    <span class="kw">fn</span> generate_orbital(&amp;<span class="kw">self</span>, s: &amp;<span class="kw">mut</span> <span class="ty">SolarSys</span>, host: &amp;<span class="kw">mut</span> <span class="kw">dyn</span> <span class="ty">SiteHost</span>, body: <span class="ty">Body</span>) -&gt; <span class="ty">bool</span> {
+        <span class="kw">let</span> star = s.star_index;
+        s.with_orbit(body, |orbit| orz::generate_orbital(orbit, body, star, host, load_default_surface))
+    }
+}
+
+<span class="cm">// Call site in modes::solar_system. session.sys and game are disjoint borrows.</span>
+generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &amp;<span class="kw">mut</span> <span class="ty">Site</span> { game, io }, body);</pre></div>
+</div>
+<p>The generator logic in <code>planets/generate/orz.rs</code> is already safe and does not change. What goes is the shim layer: the vtable, six <code>*_exports.rs</code> files and <code>getGenerateFunctions</code>. When a generator starts a conversation, <code>Site::talk</code> calls <code>comm::race_communication(game, io)</code> synchronously; the <code>SolarSystem</code> session stays on the caller's stack and comm cannot reach it, which matches today (comm reads no <code>pSolarSysState</code>).</p>
+
+<!-- 6 -->
+<h2><span class="num">5</span>Migrating without breaking the game</h2>
+<p>Race files, hyperspace and IP flight read element records directly through raw pointers, so the storage cannot be swapped in one step. Each shared authority changes in three stages, and no stage keeps a second copy of any state.</p>
+<figure>
+<svg viewBox="0 0 860 230" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs><marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#56626e"/></marker></defs>
+  <g stroke-width="1.4">
+    <rect x="14" y="14" width="262" height="150" rx="5" fill="#fbf1ee" stroke="#b8462e"/>
+    <rect x="299" y="14" width="262" height="150" rx="5" fill="#fff6d6" stroke="#b58a1b"/>
+    <rect x="584" y="14" width="262" height="150" rx="5" fill="#eef7f2" stroke="#1f6f50"/>
+  </g>
+  <line x1="276" y1="89" x2="297" y2="89" stroke="#56626e" stroke-width="2" marker-end="url(#a4)"/>
+  <line x1="561" y1="89" x2="582" y2="89" stroke="#56626e" stroke-width="2" marker-end="url(#a4)"/>
+  <g font-size="11.5">
+    <text x="26" y="36" font-weight="700" font-size="13">A. One authority</text>
+    <text x="26" y="56">One definition of ELEMENT, STARSHIP,</text>
+    <text x="26" y="72">RACE_DESC, disp_q, race_q, DisplayArray</text>
+    <text x="26" y="88">in engine::battle. ABI copies re-export.</text>
+    <text x="26" y="104">Layout and raw links unchanged.</text>
+    <text x="26" y="120">Hooks become Legacy(extern fn) or</text>
+    <text x="26" y="136">Native(fn(&amp;mut Cx, ElementId)).</text>
+    <text x="311" y="36" font-weight="700" font-size="13">B. Convert consumers</text>
+    <text x="311" y="56">Converted code uses ElementTable and</text>
+    <text x="311" y="72">ElementId over the same storage.</text>
+    <text x="311" y="88">Unconverted races keep raw pointers.</text>
+    <text x="311" y="104">app::bridge publishes one &amp;mut Cx for</text>
+    <text x="311" y="120">nested entry, strictly LIFO.</text>
+    <text x="311" y="136">One copy, so no sync step exists.</text>
+    <text x="596" y="36" font-weight="700" font-size="13">C. Replace the representation</text>
+    <text x="596" y="56">When no raw reader is left: storage</text>
+    <text x="596" y="72">becomes OrderedPool, pParent becomes</text>
+    <text x="596" y="88">Parent, hTarget Option&lt;ElementId&gt;,</text>
+    <text x="596" y="104">unions become fields, farray FrameSetRef.</text>
+    <text x="596" y="120">Hook::Legacy, the statics and the</text>
+    <text x="596" y="136">record types are deleted.</text>
+  </g>
+  <g font-size="11.5" fill="#444" font-weight="600">
+    <text x="26" y="186">Battle records: Phase 1, PR 1</text>
+    <text x="311" y="186">Battle records: Phases 1 and 2</text>
+    <text x="596" y="186">Battle records: Phase 2 exit</text>
+    <text x="26" y="204">GlobData: Phase 0</text>
+    <text x="311" y="204">GlobData: Phase 4 (689 refs, 111 files)</text>
+    <text x="596" y="204">GlobData: Phase 4, owned World</text>
+  </g>
+  <text x="14" y="224" font-size="11" fill="#5b6672">Counters legacy_hooks (0 at Phase 2 exit) and bridge_calls (0 at Phase 8) get finite budgets in the Phase 1 opening PR and only shrink.</text>
+</svg>
+<figcaption>The three-stage storage transition (architecture.md 4.1).</figcaption>
+</figure>
+<p>Stage B has five rules: storage is never moved, so a raw element pointer is valid until its slot is freed; pointers handed to legacy code derive from the static's address, never from a Rust reference; converted code holds no record reference across a call into legacy code; nested entry goes through <code>app::bridge</code>, which holds at most one published context and panics if entered with none; and no synchronisation step may be added, because there is only one copy.</p>
+
+<h3>Proving behaviour is unchanged</h3>
+<ul>
+<li><b>V1, deterministic replay.</b> <code>uqm --replay &lt;scenario&gt;</code> replaces the three sources of variation that seeds alone leave open. A replay clock moves only when the game sleeps (no real sleep happens). <code>ReplayAudio</code> runs the sound command enum on the game thread and answers track and position queries from replay time, so speech ends on the same step every run. Scripted input is consumed at input admission, by count. The trace has one line per input, simulation step and present, carrying the unchanged netplay CRC, a state digest of every element, ship and story field, and a canvas digest. A golden is committed only when three recordings are byte-identical: macOS, ubuntu CI, and a run with random 0-20 ms sleeps under CPU load.</li>
+<li><b>Corpus.</b> Nine replays (four Cyborg-vs-Cyborg melee fleets covering all 25 melee ships, human-input melee, campaign battle, Sa-Matra, hyperspace, solar flight, lander, comm, new game) plus eight short fixtures for the hard cases: hook swap (Androsynth), reincarnation (Pkunk), <code>pred</code>-walking point defence (Chmmr), death that spawns mid-pass, converted-hits-unconverted collision, pool exhaustion at 150, frame-set identity, and hyperspace star contact with save and reload. Refactor PRs may not change goldens; a deliberate behaviour fix is its own PR with the <code>parity-golden-update</code> label.</li>
+<li><b>V2, native scenarios.</b> Lander destroyed, out of fuel, lost battle and Super Melee on a real macOS window.</li>
+<li><b>V3, saves.</b> Codec round trip for the 73 saves in <code>rust/scripts/saves/</code> plus <code>legacy-save.00</code>. A runtime test loads each save under replay mode, enters the saved mode, and compares a live capture with the Phase 0 golden. Load and save are not inverse operations, so the normalisations the current code applies are listed as data.</li>
+<li><b>V4, campaign reload.</b> The 45 <code>load-*</code> scenarios and the smoke set, run natively at each phase exit with OS screenshots inspected.</li>
+</ul>
+<p>PR rules: one unit per PR (one race, queue, module or session), with the old path deleted in the same PR; mechanical moves and semantic changes in separate PRs; about 1,500 changed non-mechanical lines at most; tests move with the code.</p>
+
+<!-- 7 -->
+<h2><span class="num">6</span>Quality gates</h2>
+<p>Every check is a Rust <code>cargo xtask</code> subcommand or a lint table. None hashes or pins our own files. CI today runs fmt, clippy with default lints, tests, <code>abi-check</code> and a shell C-file ratchet; PR #282 removed the complexity, coverage and audit gates.</p>
+<table>
+<tr><th style="width:17%">Check</th><th style="width:37%">Measures</th><th style="width:20%">Limit</th><th style="width:26%">Idea from</th></tr>
+<tr><td><code>quality loc</code></td><td>Effective lines per production file (lines with a token)</td><td>800</td><td>llxprt-code-rs <code>xtask/src/loc.rs</code></td></tr>
+<tr><td><code>quality complexity</code></td><td>Per function: lines, cyclomatic, cognitive (syn walk)</td><td>80 / 25 / 30</td><td>llxprt-code-rs <code>complexity.rs</code></td></tr>
+<tr><td><code>quality ffi</code></td><td>Per subsystem: <code>static mut</code>, <code>extern "C" fn</code>, foreign items, <code>no_mangle</code>, <code>repr(C)</code>, <code>link_name</code>, raw-pointer params, <code>abi/*</code> includes, bridge calls, <code>Hook::Legacy</code></td><td>baseline; 0 when absent</td><td>llxprt-code-rs <code>coupling.rs</code> (shrink-only ledger)</td></tr>
+<tr><td><code>quality unsafe</code></td><td>Unsafe blocks, fns, impls and lines inside them</td><td>baseline; 0 outside <code>UNSAFE_ALLOWED</code></td><td>jefe <code>architecture.rs</code> (reviewed exception list)</td></tr>
+<tr><td><code>quality allows</code></td><td>Every <code>allow</code>/<code>expect</code>, valued by lines it covers; <code>cfg(not(test))</code> modules</td><td>baseline</td><td>llxprt-code-rs <code>analyze.rs</code>, jefe <code>clippy_policy.rs</code></td></tr>
+<tr><td><code>quality layers</code></td><td>Imports against the layer table; no clock, thread, env, fs, net, process or sdl2 in engine/content/modes</td><td>baseline</td><td>llxprt-code-rs <code>compat.rs</code> (banned-pattern scan)</td></tr>
+<tr><td><code>quality native-files</code></td><td>Tracked <code>.c .h .m .s</code> and similar files</td><td>0, absolute</td><td>UQM project standards; replaces the shell ratchet</td></tr>
+<tr><td><code>quality deps</code></td><td>No first-party native builds, vendoring or <code>[patch]</code>; native-building registry crates listed (<code>sdl2-sys</code>, <code>oboe-sys</code>)</td><td>absolute</td><td>UQM project standards section 1</td></tr>
+<tr><td><code>clippy</code></td><td>Deny set; debt set (<code>unsafe_op_in_unsafe_fn</code>, <code>undocumented_unsafe_blocks</code>, <code>unwrap_used</code>, <code>expect_used</code>) counted with <code>--force-warn</code> so an existing <code>allow</code> cannot hide moved debt</td><td>deny: 0; debt: baseline</td><td>jefe and vibetools (<code>[lints]</code>, <code>clippy.toml</code>)</td></tr>
+<tr><td><code>coverage</code></td><td><code>cargo llvm-cov</code>, per file</td><td>no per-file drop; 70% target</td><td>jefe <code>toolchain.rs</code>; 70% from UQM before #282</td></tr>
+<tr><td><code>deny</code></td><td><code>cargo deny</code>: advisories, licences, bans, sources</td><td>0 findings</td><td>UQM (one pinned tool in place of cargo audit)</td></tr>
+<tr><td><code>parity</code></td><td>Replay corpus against <code>rust/tests/golden/parity/</code></td><td>exact match</td><td>UQM (this design)</td></tr>
+</table>
+<p><b>Shrink-only baseline.</b> Existing debt lives in one file, <code>rust/xtask/quality-baseline.toml</code>, written only by xtask. A value above its entry fails, and a new violator with no entry fails. A value below its entry prints a notice; <code>cargo xtask quality --tighten</code> rewrites the file downward in one command, and phase-exit PRs run it. With <code>--base</code>, each PR is also measured against the base branch tree, so headroom freed by an earlier PR cannot be spent later.</p>
+<p><b>Debt transfers.</b> Moving a function or file to its new layer would otherwise look like new debt. <code>cargo xtask quality move &lt;old&gt; &lt;new&gt;</code> records the move; it is accepted if the old key existed at base and is now gone, each source credits one target, and no crate total rises. Any other growth needs the <code>quality-growth-approved</code> label, which only you apply. Setting the <code>legacy_hooks</code> and <code>bridge_calls</code> budgets in the Phase 1 opening PR is one such approval.</p>
+<p>Not adopted: crate-wide clippy <code>pedantic</code>, and 60-line or cognitive-15 limits, which would force splits of functions that mirror one C function and make side-by-side review against the original harder.</p>
+
+<!-- 8 -->
+<h2><span class="num">7</span>Phases</h2>
+<p>Each phase is a series of small PRs; <code>main</code> stays playable and green after every one. Sizes are changed lines.</p>
+<table>
+<tr><th style="width:15%">Phase</th><th style="width:31%">Removes</th><th style="width:38%">Exit criterion</th><th style="width:16%">Size</th></tr>
+<tr><td>0. Soundness, gates, replay</td><td>About 5.5k dormant lines (<code>ships/traits.rs</code>, non-native race halves, <code>battle/process_loop.rs</code> and 3 more); 20 <code>not_unsafe_ptr_arg_deref</code> and 7 <code>clashing_extern_declarations</code> allows; mismatched foreign static types; the shell ratchet</td><td>Baseline committed; gates green on a PR and on the next push; three identical recordings for every corpus entry; save tests pass for 74 files</td><td>xtask +4k; src about -5k</td></tr>
+<tr class="pilot"><td>1. Battle core (pilot)</td><td>Duplicate <code>ELEMENT</code>/<code>STARSHIP</code>/<code>RACE_DESC</code> copies with their asserts and aliases; <code>zoom_out</code>, <code>nth_frame</code>, <code>OPT_MAX_ZOOM_OUT</code>, <code>battle_counter</code> statics</td><td>One definition per record; VUX, Androsynth, Arilou with 0 unsafe; mixed-collision, death-spawn, Chmmr and star-contact fixtures identical; 0 stale-id lookups. The <code>Race</code>, <code>ElementHooks</code> and <code>Cx</code> APIs are approved here before any further conversion</td><td>8-10k, ~45 files</td></tr>
+<tr><td>2. Ships, AI, Stage C</td><td>28 <code>&lt;RACE&gt;_DESC</code> templates, <code>RaceDescPtr</code>, <code>Hook::Legacy</code>, the queue statics and record types</td><td>Ships and battle have no ffi or unsafe baseline entries; <code>legacy_hooks</code> = 0</td><td>14-18k, ~75 files</td></tr>
+<tr><td>3. Super Melee, netplay</td><td><code>#[repr(C)]</code> packets (become <code>enum Packet</code> with a codec); supermelee <code>extern "C" fn</code> 267 to 0, <code>no_mangle</code> 221 to 0</td><td>Packet byte fixtures unchanged; a two-peer loopback battle agrees on every checksum</td><td>6-8k, ~45 files</td></tr>
+<tr><td>4. World state, main loop</td><td><code>GlobData</code>, <code>CurStarDescPtr</code>, <code>GLOBAL_GAME_STATE</code>, string-keyed story access, <code>global!</code> statics, <code>CffiOps</code>, <code>collections/queue.rs</code></td><td><code>GlobData</code> references = 0; story lookups by string = 0; every scenario gives the same input and present counts as before</td><td>10-14k, ~130 files, mostly mechanical</td></tr>
+<tr><td>5. Navigation, planets</td><td><code>GenerateFunctions</code>, six <code>*_exports.rs</code>, <code>pSolarSysState</code>, <code>navigation_abi.rs</code>; planets <code>static mut</code> 46 to 0</td><td>No ffi or unsafe entries in planets, navigation, planet_side; <code>planets_parity.rs</code> passes on C-captured fixtures</td><td>10-12k, ~90 files</td></tr>
+<tr><td>6. Comm, starbase, menus</td><td><code>COMM_STATE</code>, <code>COMM_DATA</code>; comm <code>static mut</code> 70 to 0; ui and front_end <code>extern "C" fn</code> 119 to 0</td><td>No <code>cfg(not(test))</code> modules left; dialogue scripts change only in their <code>Api</code> impls</td><td>12-15k, ~120 files</td></tr>
+<tr><td>7. Platform, content</td><td><code>SDL_Surface</code> canvases (become pixel buffers), <code>uio_*</code> (becomes <code>Vfs</code>), <code>res_*</code>, decoder vtables; graphics <code>no_mangle</code> 243 to 0</td><td>Unsafe only in allowed modules; canvas digests match; real-window screenshots checked</td><td>15-20k, ~150 files</td></tr>
+<tr><td>8. Closeout</td><td><code>rust/src/abi/</code>, <code>app::bridge</code>, <code>abi-check</code>, naming allows; adds crate-root <code>#![deny(unsafe_code)]</code></td><td>The targets in section 1; coverage at least 70%; only size and complexity entries left in the baseline</td><td>~40 files, net deletion</td></tr>
+</table>
+<p><b>Why battle first.</b> The hardest part of the design, exact C ordering with re-entrant callbacks, lives in battle; ships and Super Melee depend on its interfaces; and it has the strongest oracle (netplay CRC plus the state trace, from a menu with a fixed seed). Starting with Super Melee would mean converting its battle calls twice. Planet generators would prove little, since their logic is already safe. <code>GlobData</code> touches 111 files and would fix an access pattern before any pattern is proven.</p>
+
+<!-- 9 -->
+<h2><span class="num">8</span>What stays the same on purpose</h2>
+<ul>
+<li>Fixed-point arithmetic and C integer widths, including <code>wrapping_*</code> operations and narrowing casts. Type aliases may be renamed (<code>Count = u16</code>) but not widened.</li>
+<li>Statement order in ported functions, including RNG draws and sound queueing, even where idiomatic code would reorder them.</li>
+<li>The save format: packed layout, LZH compression and chunk order, including the writer's element-amount quirk.</li>
+<li>The netplay wire format, <code>NETPLAY_PROTOCOL_VERSION</code> and the sync checksum, byte for byte.</li>
+<li>Dialogue as code (<code>Dialogue&lt;A: Api&gt;</code>), data tables, race descriptor constants, string-table indices and resource names.</li>
+<li>Scenario JSON in <code>rust/scripts/</code> and the automation scheduler's contract: input admission, simulation checkpoint and committed present stay three separate hooks.</li>
+<li>Traceability: functions drop CamelCase when they stop being exported and keep a <code>/// C: &lt;name&gt; (&lt;file&gt;.c)</code> doc line.</li>
+</ul>
+
+</main>
+</body>
+</html>
