@@ -52,7 +52,7 @@ fn describe_class(class: Result<u32, c_int>) -> String {
     }
 }
 
-/// Formats the one-line startup report.
+/// Formats the one-line diagnostic for a QoS declaration that did not work.
 pub fn format_report(
     before: Result<u32, c_int>,
     set_rc: c_int,
@@ -66,13 +66,29 @@ pub fn format_report(
     )
 }
 
-/// Declares the calling thread latency-sensitive and logs the outcome once.
-/// A failure is reported and the game continues at the inherited class.
+/// Decides whether the outcome deserves a diagnostic. A successful call
+/// that reads back user-interactive is silent.
+pub fn report(
+    before: Result<u32, c_int>,
+    set_rc: c_int,
+    after: Result<u32, c_int>,
+) -> Option<String> {
+    if set_rc == 0 && after == Ok(QOS_CLASS_USER_INTERACTIVE) {
+        None
+    } else {
+        Some(format_report(before, set_rc, after))
+    }
+}
+
+/// Declares the calling thread latency-sensitive. A failure is reported on
+/// stderr and the game continues at the inherited class.
 pub fn declare_game_thread_interactive() {
     let before = current_class();
     let set_rc = set_user_interactive();
     let after = current_class();
-    eprintln!("{}", format_report(before, set_rc, after));
+    if let Some(message) = report(before, set_rc, after) {
+        eprintln!("{message}");
+    }
 }
 
 #[cfg(test)]
@@ -92,6 +108,43 @@ mod tests {
         assert_eq!(
             format_report(Err(3), 1, Err(3)),
             "qos: before=unavailable(rc=3) set_rc=1 after=unavailable(rc=3)"
+        );
+    }
+
+    #[test]
+    fn success_reading_back_user_interactive_is_silent() {
+        assert_eq!(report(Ok(0x15), 0, Ok(QOS_CLASS_USER_INTERACTIVE)), None);
+        assert_eq!(
+            report(
+                Ok(QOS_CLASS_USER_INTERACTIVE),
+                0,
+                Ok(QOS_CLASS_USER_INTERACTIVE)
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn nonzero_return_code_is_reported() {
+        assert_eq!(
+            report(Ok(0x15), 1, Ok(QOS_CLASS_USER_INTERACTIVE)),
+            Some("qos: before=0x15 set_rc=1 after=0x21".to_string())
+        );
+    }
+
+    #[test]
+    fn other_class_after_success_code_is_reported() {
+        assert_eq!(
+            report(Ok(0x15), 0, Ok(0x15)),
+            Some("qos: before=0x15 set_rc=0 after=0x15".to_string())
+        );
+    }
+
+    #[test]
+    fn unreadable_class_after_success_code_is_reported() {
+        assert_eq!(
+            report(Ok(0x15), 0, Err(3)),
+            Some("qos: before=0x15 set_rc=0 after=unavailable(rc=3)".to_string())
         );
     }
 

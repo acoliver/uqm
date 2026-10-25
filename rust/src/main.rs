@@ -15,10 +15,6 @@ use uqm_rust::mainloop::logging;
 use uqm_rust::mainloop::options;
 
 fn main() {
-    // The frame loop runs on this thread; see threading::qos.
-    #[cfg(target_os = "macos")]
-    uqm_rust::threading::qos::declare_game_thread_interactive();
-
     // Collect args as C strings for the C init sequence
     let args: Vec<String> = std::env::args().collect();
     let c_args: Vec<CString> = args
@@ -63,6 +59,11 @@ fn main() {
     }
 
     logging::init(&parsed.log_file);
+
+    // The frame loop runs on this thread; see threading::qos. Declared after
+    // argument handling so --version, --help and --check-content stay inert.
+    #[cfg(target_os = "macos")]
+    uqm_rust::threading::qos::declare_game_thread_interactive();
 
     // Automation setup: validate before run_uqm (REQ-MODE-001)
     let auto_opts = uqm_rust::automation::AutomationOptions {
