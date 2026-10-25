@@ -38,12 +38,44 @@ fn picker_slot(current: u8, left: bool, right: bool, up: bool, down: bool) -> u8
     next
 }
 
+/// The original DoPickGame exit priority, independent of presentation and I/O.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickerAction {
+    Continue,
+    Cancel,
+    Abort,
+    Select,
+    EmptySlot,
+}
+
+pub fn picker_action(
+    abort: bool,
+    cancel: bool,
+    select: bool,
+    saving: bool,
+    occupied: bool,
+) -> PickerAction {
+    if abort {
+        PickerAction::Abort
+    } else if cancel {
+        PickerAction::Cancel
+    } else if select {
+        if saving || occupied {
+            PickerAction::Select
+        } else {
+            PickerAction::EmptySlot
+        }
+    } else {
+        PickerAction::Continue
+    }
+}
+
 #[cfg(not(test))]
-pub use runtime::{ConfirmSaveLoad, GameOptions, SetNamingCallback};
+pub use runtime::{ConfirmSaveLoad, GameOptions, LoadGameDescriptions, SetNamingCallback};
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
-    use super::{picker_slot, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+    use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::navigation::abi::*;
     use crate::navigation::globals::{GlobData, PlayFrame};
     use crate::state::game_state_keys::{get_game_state, set_game_state};
@@ -1017,11 +1049,23 @@ pub(crate) mod runtime {
         UnbatchGraphics();
     }
 
-    unsafe fn LoadGameDescriptions(mut pSD: *mut SUMMARY_DESC) {
+    /// Enumerate the original 50-slot picker list synchronously.
+    ///
+    /// # Safety
+    /// Game-thread caller supplies 50 writable summaries and owns the save directory.
+    pub unsafe fn LoadGameDescriptions(mut pSD: *mut SUMMARY_DESC) {
         for i in 0..MAX_SAVED_GAMES as COUNT {
             if LoadGame(i, (pSD).cast()) == 0 {
                 (*pSD).year_index = 0;
             }
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_PICKER: enumerated slot={i} state={}",
+                if (*pSD).year_index == 0 {
+                    "unavailable"
+                } else {
+                    "occupied"
+                },
+            ));
             pSD = pSD.add(1);
         }
     }
@@ -1029,36 +1073,51 @@ pub(crate) mod runtime {
     unsafe extern "C" fn DoPickGame(pMS: *mut MENU_STATE) -> BOOLEAN {
         let pickState = (*pMS).privData.cast::<PickGameState>();
         let TimeIn = GetTimeCounter();
-        if GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY != 0 {
-            return 0;
+        let occupied = (*pickState).summary[(*pMS).CurState as usize].year_index != 0;
+        let activity = GlobData.Game_state.CurrentActivity;
+        let action = picker_action(
+            activity & CHECK_ABORT as ACTIVITY != 0,
+            key(KEY_MENU_CANCEL),
+            key(KEY_MENU_SELECT),
+            (*pickState).saving != 0,
+            occupied,
+        );
+        if action != PickerAction::Continue {
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_PICKER: action={action:?} slot={} select={} cancel={} activity={:#x}",
+                (*pMS).CurState,
+                key(KEY_MENU_SELECT),
+                key(KEY_MENU_CANCEL),
+                activity,
+            ));
         }
-        if key(KEY_MENU_CANCEL) {
-            (*pickState).success = 0;
-            return 0;
-        } else if key(KEY_MENU_SELECT) {
-            let pSD = ptr::addr_of_mut!((*pickState).summary)
-                .cast::<SUMMARY_DESC>()
-                .add((*pMS).CurState as usize);
-            if (*pickState).saving != 0 || (*pSD).year_index != 0 {
+        match action {
+            PickerAction::Abort => return 0,
+            PickerAction::Cancel => {
+                (*pickState).success = 0;
+                return 0;
+            }
+            PickerAction::Select => {
                 PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
                 (*pickState).success = 1;
                 return 0;
             }
-            PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE);
-        } else {
-            let NewState = picker_slot(
-                (*pMS).CurState,
-                key(KEY_MENU_LEFT) || key(KEY_MENU_PAGE_UP),
-                key(KEY_MENU_RIGHT) || key(KEY_MENU_PAGE_DOWN),
-                key(KEY_MENU_UP),
-                key(KEY_MENU_DOWN),
-            );
-            if NewState != (*pMS).CurState {
-                (*pMS).CurState = NewState;
-                SetContext(SpaceContext);
-                RedrawPickDisplay(pickState, (*pMS).CurState as COUNT);
+            PickerAction::EmptySlot => PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_FAILURE),
+            PickerAction::Continue => {
+                let NewState = picker_slot(
+                    (*pMS).CurState,
+                    key(KEY_MENU_LEFT) || key(KEY_MENU_PAGE_UP),
+                    key(KEY_MENU_RIGHT) || key(KEY_MENU_PAGE_DOWN),
+                    key(KEY_MENU_UP),
+                    key(KEY_MENU_DOWN),
+                );
+                if NewState != (*pMS).CurState {
+                    (*pMS).CurState = NewState;
+                    SetContext(SpaceContext);
+                    RedrawPickDisplay(pickState, (*pMS).CurState as COUNT);
+                }
+                SleepThreadUntil(TimeIn.wrapping_add(ONE_SECOND / 30));
             }
-            SleepThreadUntil(TimeIn.wrapping_add(ONE_SECOND / 30));
         }
         1
     }
@@ -1110,6 +1169,11 @@ pub(crate) mod runtime {
     }
 
     unsafe fn PickGame(saving: BOOLEAN, fromMainMenu: BOOLEAN) -> BOOLEAN {
+        let activity = GlobData.Game_state.CurrentActivity;
+        crate::bridge_log::rust_bridge_log_msg(&format!(
+            "RUST_PICKER: enter saving={saving} main_menu={fromMainMenu} activity={:#x}",
+            activity,
+        ));
         let mut pickState: PickGameState = mem::zeroed();
         pickState.saving = saving;
         pickState.SummaryFrame = SetAbsFrameIndex(PlayFrame, 39);
@@ -1146,6 +1210,7 @@ pub(crate) mod runtime {
             MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN,
             0,
         );
+        crate::bridge_log::rust_bridge_log_msg("RUST_PICKER: list_drawn slots=50");
         MenuState.InputFunc = Some(DoPickGame);
         loop {
             let mut canceled_by_user: BOOLEAN = 0;
@@ -1161,8 +1226,16 @@ pub(crate) mod runtime {
                 &mut canceled_by_user,
             ) != 0
             {
+                crate::bridge_log::rust_bridge_log_msg(if saving != 0 {
+                    "RUST_PICKER: exit=save_success"
+                } else {
+                    "RUST_PICKER: exit=load_success"
+                });
                 break;
             }
+            crate::bridge_log::rust_bridge_log_msg(
+                "RUST_PICKER: operation_failed picker_remains_open",
+            );
             if saving != 0 && canceled_by_user == 0 {
                 SaveProblem();
             }
