@@ -17,7 +17,8 @@ assembly, implementation-bearing headers, generated native source, helper or
 test native source, or internal migration ABI. Do not reintroduce C game implementations. Adding C to solve a problem moves the project
 backwards; port the subsystem instead.
 
-**External libraries are the exception, and they are governed.** SDL2 is discovered through `rust/build.rs`; audio and platform dependencies
+**External libraries are the exception, and they are governed.** SDL2 is built from the external crate source with `bundled-sdl`, or discovered
+through `rust/build.rs` on Unix without that feature; audio and platform dependencies
 are declared by Cargo. Vendoring or patching any of them is
 forbidden, because a patched copy is first-party native code again.
 
@@ -27,8 +28,8 @@ forbidden, because a patched copy is first-party native code again.
 
 1. Fail fast. Prefer an invariant that reports a violation over a fallback that
    hides it.
-2. Keep runtime behaviour deterministic and reproducible, because the evidence
-   contract depends on replay.
+2. Keep runtime behaviour deterministic and reproducible, because scenario
+   tests depend on replay.
 3. Prefer strong typing and explicit domain modelling over shortcuts.
 4. Optimise for maintainability over cleverness.
 5. Treat lint, tests and docs as part of the change, not optional polish.
@@ -64,7 +65,7 @@ Remove superseded implementations and adapters when replacing a subsystem.
 
 ### Safety and correctness
 
-`unsafe` is unavoidable at the C boundary and is therefore permitted only there.
+`unsafe` is permitted only at FFI and pointer adapter boundaries.
 Every `unsafe` block must be confined to an FFI or adapter module, must be as
 small as the operation requires, and must carry a comment stating what makes it
 sound. Do not spread `unsafe` into logic modules; wrap the boundary and keep the
@@ -104,10 +105,13 @@ pushes to `main`. Gates may be tightened. They must not be weakened.
 | Check | Contract |
 |---|---|
 | Formatting | `cargo fmt --all --check` |
-| Lints | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
-| Tests | `cargo test --workspace --locked` |
+| Lints | Strict Clippy over all workspace targets with `audio_heart,debug-process` enabled. |
+| Tests | Workspace tests with `audio_heart,debug-process` enabled. |
 | C ratchet | The tracked C/C++/Objective-C file count must not exceed the base branch count. |
-| Game build | `cargo build --release --locked --bin uqm` builds the game on macOS. |
+| Game build | Release builds with `bundled-sdl` on macOS ARM64, Linux x64/ARM64 and Windows x64/ARM64. |
+| ABI declarations | `xtask abi-check` checks declarations against Rust providers. |
+| Failure scenarios | Four real-window failure scenarios on macOS. |
+| Release tools | Packaging unit tests and Homebrew helper syntax. |
 
 Notes that matter:
 
@@ -197,7 +201,7 @@ A change is mergeable only when all of the following hold:
 ## 10) Non-negotiable summary
 
 - Do not add first-party native code.
-- Do not link an external library that is not in the allowlist, and do not
+- Do not link an external library that is not declared in Cargo, and do not
   vendor or patch one that is.
 - Do not disable or weaken a lint, complexity, security or visual gate.
 - Do not use `unwrap` or `expect` in production paths.

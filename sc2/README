@@ -1,8 +1,8 @@
 The Ur-Quan Masters derives from the Toys for Bob 3DO version of Star Control II,
 released with their permission and encouragement.
 
-This checkout now builds the game entirely in Rust. See ../README.md and
-../dev-docs/rust/howtorun.md for current build and run instructions.
+This checkout now builds the game entirely in Rust. See ../docs/building.md and
+../docs/playing.md for current build and run instructions.
 
 Upstream project: https://sc2.sourceforge.net/
 All trademarks and tradenames belong to their respective owners.

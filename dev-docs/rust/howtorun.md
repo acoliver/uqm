@@ -1,32 +1,31 @@
 # Build, run and test
 
-The production game is `rust/src/main.rs`, backed by the `uqm_rust` library.
-All game code is Rust. SDL2 development libraries and pkg-config must be installed.
-Linux also needs ALSA development headers for audio.
+The production executable is `rust/src/main.rs`, backed by the `uqm_rust` library.
+Follow [building from source](../../docs/building.md) for platform prerequisites,
+bundled/static SDL2 builds and running with the repository's content.
 
-From the repository root:
-
-```sh
-cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm
-rust/target/release/uqm --contentdir sc2/content/packages
-```
-
-From `rust/`, run the same checks used for development:
+From `rust/`, run the development checks:
 
 ```sh
 cargo fmt --all --check
+cargo run --locked --manifest-path xtask/Cargo.toml -- abi-check
 cargo clippy --workspace --all-targets --locked --no-default-features --features audio_heart,debug-process -- -D warnings
 cargo test --workspace --locked --no-default-features --features audio_heart,debug-process
 ```
 
-CI pins its Rust version in `.github/workflows/ci.yaml`.
+These checks use installed SDL2. On macOS install `pkg-config` and `sdl2` through
+Homebrew; on Linux install `pkg-config`, `libsdl2-dev` and ALSA development headers.
+CI pins its toolchain in [ci.yaml](../../.github/workflows/ci.yaml).
 
-The xtask crate provides `debug`, `release`, `test` and `native` commands:
+The xtask crate provides `debug`, `release`, `test` and `native` commands.
+For example, from the repository root:
 
 ```sh
-cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run \
+cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run \
   --scenario starbase-visit-v1 --artifacts tmp/starbase --content sc2/content/packages
 ```
 
-Native scenarios require a real macOS window. See
-[SCENARIOS.md](../../rust/scripts/SCENARIOS.md) for scenario and save handling.
+The native runner takes the package directory as `--content`, unlike the game's
+`--contentdir`, which takes the content root. Native scenarios require a real
+macOS window. See [the scenario guide](../testing/scenarios.md) for scenario and
+save handling. Remove run output when it is no longer needed.

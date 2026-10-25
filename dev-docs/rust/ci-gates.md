@@ -1,15 +1,20 @@
 # CI
 
-`.github/workflows/ci.yaml` is the only workflow. It runs on pull requests and on
-pushes to `main`.
+[The CI workflow](../../.github/workflows/ci.yaml) runs on pull requests and pushes
+to `main`. It pins Rust 1.98.0.
 
-| Job | Runner | What it checks |
-|---|---|---|
-| `rust` | ubuntu-latest | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, with `audio_heart,debug-process` enabled. |
-| `c-ratchet` | ubuntu-latest | The number of tracked C, C++ and Objective-C files (`.c .h .cc .cpp .hpp .m .mm`) in the pull request must not exceed the base branch. The count is printed on every run. |
-| `game-build` | macos-latest | `cargo build --release --locked --manifest-path rust/Cargo.toml --bin uqm`. |
+| Job | Runner | Checks |
+| --- | --- | --- |
+| `rust` | Ubuntu | Formatting, `xtask abi-check`, strict Clippy and workspace tests, using `--no-default-features --features audio_heart,debug-process` |
+| `c-ratchet` | Ubuntu | Tracked C/C++/Objective-C file count must not exceed the base branch count |
+| `game-build` | macOS ARM64, Linux x64/ARM64, Windows x64/ARM64 | Release build with `bundled-sdl`, version/content checks and native networking smoke |
+| `failure-scenarios` | macOS | Real-window `lander-destroyed-v1`, `out-of-fuel-v1`, `lost-battle-v1` and `super-melee-v1` runs |
+| `release-tools` | Ubuntu | Python packaging tests and Homebrew helper shell syntax |
 
-The checks do not pin digests of repository files. Scenario scripts under
-`rust/scripts` can be edited without updating any hash. The local scenario runner
-(`cargo xtask native ...`, see `rust/scripts/SCENARIOS.md`) drives playthroughs on
-a developer machine and is not part of CI.
+Failed scenario runs upload diagnostic artifacts with a three-day retention.
+See [scenario tooling](../testing/scenarios.md) for local runs. CI does not pin
+scenario source digests.
+
+[The Release workflow](../../.github/workflows/release.yml) runs for version tags
+or an explicit existing tag. It builds and smoke-tests all release packages before
+publishing them. See [releasing](../releasing.md) for tag, artifact and tap details.
