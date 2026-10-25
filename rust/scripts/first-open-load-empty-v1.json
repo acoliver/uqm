@@ -60,6 +60,13 @@
     },
     {
       "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
       "key": "select",
       "value": 1,
       "hold": 3,
