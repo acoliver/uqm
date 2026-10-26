@@ -7,3 +7,7 @@ CMAKE_POLICY_VERSION_MINIMUM = "3.5"
 
 # External prerequisites are discovered for the active target through
 # pkg-config. No workstation- or package-manager-specific path is valid here.
+
+[alias]
+xtask = "run --locked --manifest-path xtask/Cargo.toml --no-default-features --"
+xtask-native = "run --locked --release --manifest-path xtask/Cargo.toml --"

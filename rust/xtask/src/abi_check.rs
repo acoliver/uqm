@@ -989,7 +989,7 @@ fn cfg_enabled(meta: &syn::Meta, config: &BuildCfg) -> Result<bool, String> {
             };
             let actual = match key.as_str() {
                 "feature" => match expected.as_str() {
-                    "audio_heart" => true,
+                    "audio_heart" | "native" | "bundled-sdl" => true,
                     "debug-process" => config.debug_process,
                     _ => {
                         return Err(format!(
