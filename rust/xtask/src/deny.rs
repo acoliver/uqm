@@ -53,9 +53,8 @@ if [ "$*" = 'deny --version' ]; then echo 'cargo-deny 0.20.2'; exit 0; fi
         );
         assert!(run_with_cargo(root.path(), &[], cargo.as_os_str()).is_ok());
         let cargo = fixture_program(root.path(), "echo cargo-deny wrong-version");
-        assert!(run_with_cargo(root.path(), &[], cargo.as_os_str())
-            .unwrap_err()
-            .contains("install cargo-deny"));
+        let error = run_with_cargo(root.path(), &[], cargo.as_os_str()).unwrap_err();
+        assert!(error.contains("install cargo-deny"), "{error}");
         let cargo = fixture_program(
             root.path(),
             r#"
