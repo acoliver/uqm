@@ -2,7 +2,8 @@
 all-features = true
 
 [advisories]
-db-path = "target/advisory-db"
+# rust-cache prunes non-build files under target, including advisory Git metadata.
+db-path = "../tmp/advisory-db"
 yanked = "deny"
 ignore = []
 

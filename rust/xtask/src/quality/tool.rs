@@ -192,6 +192,23 @@ fn compare_base(
 }
 
 #[cfg(test)]
+#[cfg(unix)]
+pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = root.join("cargo-fixture");
+    std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    path
+}
+
+#[cfg(test)]
+pub(crate) fn fixture_directory() -> tempfile::TempDir {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/quality-fixtures");
+    std::fs::create_dir_all(&directory).unwrap();
+    tempfile::tempdir_in(directory.canonicalize().unwrap()).unwrap()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -288,20 +305,4 @@ mod tests {
         assert!(compare(&both, &before, &moves).is_err());
         assert!(compare(&after, &before, &BTreeMap::new()).is_err());
     }
-}
-
-#[cfg(all(test, unix))]
-pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = root.join("cargo-fixture");
-    std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
-    path
-}
-
-#[cfg(test)]
-pub(crate) fn fixture_directory() -> tempfile::TempDir {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/quality-fixtures");
-    std::fs::create_dir_all(&directory).unwrap();
-    tempfile::tempdir_in(directory.canonicalize().unwrap()).unwrap()
 }

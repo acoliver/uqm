@@ -29,20 +29,18 @@ impl Baseline {
                 .unwrap_or(false),
             ..Self::default()
         };
-        for (section, slot) in [("lint", &mut result.lint)] {
-            if let Some(table) = document.get(section).and_then(toml_edit::Item::as_table) {
-                let mut values = BTreeMap::new();
-                for (key, value) in table {
-                    values.insert(
-                        key.to_string(),
-                        value
-                            .as_integer()
-                            .and_then(|v| u64::try_from(v).ok())
-                            .ok_or_else(|| format!("invalid {section} value: {key}"))?,
-                    );
-                }
-                *slot = Some(values);
+        if let Some(table) = document.get("lint").and_then(toml_edit::Item::as_table) {
+            let mut values = BTreeMap::new();
+            for (key, value) in table {
+                values.insert(
+                    key.to_string(),
+                    value
+                        .as_integer()
+                        .and_then(|v| u64::try_from(v).ok())
+                        .ok_or_else(|| format!("invalid lint value: {key}"))?,
+                );
             }
+            result.lint = Some(values);
         }
         if let Some(table) = document.get("entry").and_then(toml_edit::Item::as_table) {
             for (key, value) in table {
@@ -67,17 +65,15 @@ impl Baseline {
     pub fn write(&self, path: &Path) -> Result<(), String> {
         let mut document = toml_edit::DocumentMut::new();
         document.insert("layers", toml_edit::value(self.layers));
-        for (name, values) in [("lint", &self.lint)] {
-            if let Some(values) = values {
-                let mut table = toml_edit::Table::new();
-                for (key, value) in values {
-                    table.insert(
-                        key,
-                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
-                    );
-                }
-                document.insert(name, toml_edit::Item::Table(table));
+        if let Some(values) = &self.lint {
+            let mut table = toml_edit::Table::new();
+            for (key, value) in values {
+                table.insert(
+                    key,
+                    toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
+                );
             }
+            document.insert("lint", toml_edit::Item::Table(table));
         }
         let mut entries = toml_edit::Table::new();
         for (key, value) in &self.entries {
