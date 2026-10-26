@@ -39,7 +39,7 @@ pub fn encode_save(save: &SaveFile) -> Result<Vec<u8>, EncodeError> {
     Ok(out)
 }
 
-pub(super) fn encode_summary(summary: &Summary) -> Vec<u8> {
+pub fn encode_summary(summary: &Summary) -> Vec<u8> {
     let mut out = Vec::new();
     chunk(&mut out, SUMMARY_TAG, summary_body(summary)).expect("summary fits a chunk");
     out
@@ -179,7 +179,7 @@ fn global_body(g: &GlobalState) -> Vec<u8> {
     b
 }
 
-fn canned_node(b: &mut Vec<u8>, node: &crate::state::planet_info::CannedNode) {
+fn canned_node(b: &mut Vec<u8>, node: &CannedNode) {
     assert!(node.is_valid(), "invalid internal canister record");
     put_u16(b, node.star);
     put_u8(b, node.planet);

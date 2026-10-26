@@ -449,8 +449,8 @@ fn read_entries<R: Read, T>(
     Ok(entries)
 }
 
-fn canned_node(b: &mut Body<'_>) -> Result<crate::state::planet_info::CannedNode> {
-    let node = crate::state::planet_info::CannedNode {
+fn canned_node(b: &mut Body<'_>) -> Result<CannedNode> {
+    let node = CannedNode {
         star: b.u16()?,
         planet: b.u8()?,
         moon: b.u8()?,

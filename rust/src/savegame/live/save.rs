@@ -64,10 +64,7 @@ pub unsafe extern "C" fn SaveGame(
         let slots = SaveSlots::new(saveDir.cast())?;
         let mut save = capture(CStr::from_ptr(name).to_bytes())?;
         summary.write(SummaryDesc::from(&save.summary));
-        // save.c write_a16 never advanced its input pointer. Preserve the
-        // bytes written by that API without changing the general Rust codec.
-        let first_amount = save.summary.sis.element_amounts[0];
-        save.summary.sis.element_amounts.fill(first_amount);
+        runtime::prepare_summary_for_write(&mut save.summary);
         slots.write(usize::from(slot), &save)?;
         Ok(())
     })();

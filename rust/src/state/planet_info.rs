@@ -55,32 +55,7 @@ impl ScanRetrieveMask {
     }
 }
 
-/// Uncollected biological canister, keyed independently of surface entity IDs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CannedNode {
-    pub star: u16,
-    pub planet: u8,
-    pub moon: u8,
-    pub node: u8,
-    pub value: u8,
-    pub x: i16,
-    pub y: i16,
-}
-
-impl CannedNode {
-    pub fn key(self) -> (u16, u8, u8, u8) {
-        (self.star, self.planet, self.moon, self.node)
-    }
-    pub fn is_valid(self) -> bool {
-        self.star < 502
-            && self.planet < 16
-            && self.moon <= 4
-            && self.node < 32
-            && (1..=15).contains(&self.value)
-            && (0..968).contains(&self.x)
-            && (0..300).contains(&self.y)
-    }
-}
+pub use uqm_save::CannedNode;
 
 impl StateFileManager {
     pub fn canned_node(&self, key: (u16, u8, u8, u8)) -> Option<CannedNode> {

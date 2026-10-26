@@ -1,7 +1,7 @@
 //! Packed story-state fields. Positions are part of the save format.
 
 pub const NUM_GAME_STATE_BITS: usize = 1238;
-pub const NUM_GAME_STATE_BYTES: usize = 155;
+const _: () = assert!(NUM_GAME_STATE_BITS.div_ceil(8) == super::NUM_GAME_STATE_BYTES);
 
 macro_rules! game_state_fields {
     ($($name:ident ($end_name:ident): $start:literal..=$end:literal,)*) => {
@@ -495,7 +495,7 @@ mod tests {
         }
         assert_eq!(next, 1238);
         assert_eq!(NUM_GAME_STATE_BITS, next);
-        assert_eq!(NUM_GAME_STATE_BYTES, next.div_ceil(8));
+        assert_eq!(super::super::NUM_GAME_STATE_BYTES, next.div_ceil(8));
         assert_eq!(lookup_game_state_bits("unknown"), None);
     }
 
