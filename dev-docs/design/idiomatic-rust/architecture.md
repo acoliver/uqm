@@ -1,7 +1,12 @@
 # UQM target architecture: from C-shaped Rust to idiomatic Rust
 
-Scope: the `uqm` crate under `rust/` at `main` 0ba2845ad. Companion documents:
-[quality-gates.md](quality-gates.md) (checks) and [plan.md](plan.md) (phases).
+Scope: the `uqm` crate under `rust/` at `main` 0ba2845ad, and the Cargo workspace it
+becomes (section 2.1). Companion documents: [quality-gates.md](quality-gates.md)
+(checks), [plan.md](plan.md) (phases), [work-items.md](work-items.md) (one issue per
+PR) and [AGENTS.md](AGENTS.md) (rules for implementing agents). The dependency counts
+cited here came from one-off line-regex scans of production code at 0ba2845ad (test
+code skipped); the scan scripts are not kept. The Phase 0 `quality layers` check
+(P0-04) replaces them with syn-based counts.
 
 ## 1. Starting point
 
@@ -74,43 +79,150 @@ Per-subsystem figures are in plan.md section 1. Facts that shape the design:
    scripts (`Dialogue<A: OrzApi>`), generator logic (`planets/generate/orz.rs` over
    `Story`/site traits), `mainloop/state_machine.rs`, the sound command enum
    (`sound/rodio_audio.rs:20`), `threading/pacing.rs` (`PacingEnv`).
+10. **One package with a cyclic module graph.** Everything builds as one `uqm`
+    package (404k lines in `rust/src` with tests). The only other workspace member,
+    `xtask`, depends on it (`xtask/Cargo.toml`, `uqm-rust`), so every xtask command
+    compiles the game, and `incremental = false` (`rust/.cargo/config.toml:2`) means
+    any edit recompiles the whole package. Through `crate::` paths alone, 25 of the 37
+    top-level modules form one strongly connected component. The `abi/*.rs` hubs
+    widen it: `ships::native::abi` re-exports battle, Super Melee and ui functions
+    (`abi/ship_abi.rs:1184-1195`, `:1618-1630`) and is imported by battle, mainloop,
+    game_init and graphics. The modules also link through foreign statics: 364 of the
+    371 cross-module foreign declarations the scan resolves are statics, defined in
+    `game_init` (112, the `global!` kernel set), `mainloop` (76, the option globals of
+    `mainloop/options_abi.rs:12-22`), `graphics` (57), `navigation` (52, `GlobData`)
+    and `planets` (21, `CurStarDescPtr`). The exception is
+    the layer that was `libs/` in C (graphics, sound, resource, video, strings,
+    threading, input, io, network, collections, math, logging): it reaches the game
+    through 13 `crate::` paths and 7 foreign static declarations only (section 2.2).
 
 ## 2. Layers
 
 ```
-app/          composition root: main, CLI, builds Platform + Game, runs the loop
-automation/   implements engine::observe::Observer and the scripted input source
+app/          composition root: main, CLI, config, builds Platform + Game, runs the
+              loop; automation (scenarios, scheduler, Observer impl, native harness)
 modes/        melee_setup, battle, hyperspace, solar_system, orbit, planet_side,
               comm, starbase, menus (front_end, ui, restart)
 content/      races (descriptors + behaviour), system generators, dialogue scripts,
-              data tables, resource index, VFS
+              data tables
 engine/       fixed-point math, RNG, ordered pools, element/ship records and the
               battle world (Battle, Cx), process loop, collision, typed World and
-              story state, clock, observer trait, resource handles, canvas, DCQ
-persistence/  save format (savegame/), state files, melee team files, config
-platform/     SDL2 window/texture/events/audio device, sockets, OS clock, macOS FFI
+              story state, clock, Observer and host-port traits, resource cache,
+              canvas, DCQ, snapshot/apply between Game and SaveFile
+persistence/  byte formats only: save file, state files, melee team files
+platform/     SDL2 window/texture/events/audio device, sockets, OS clock, file
+              system (Vfs), threads and QoS, macOS FFI
 ```
 
-Dependency direction: `app` → `automation`, `modes` → `content` → `engine`;
-`persistence` → `engine`. A lower layer never names a higher layer's type. Where
-content must call back into a mode (a generator starting a conversation), `content`
-declares a narrow host trait and `modes` implements it (section 5.3). `platform` is
-reached only through the `Platform` value passed in by `app`. `engine`, `content` and
-`modes` do not read wall-clock time, spawn threads, read environment variables or
-touch the filesystem; `xtask quality layers` checks it (quality-gates.md section 3).
-
-Existing top-level modules map onto layers in place; directories are not renamed in
-bulk. A phase creates a new module only where it splits a mixed one (for example
-`battle/process_native.rs` becomes `engine::battle` + `modes::battle`).
+Dependency direction: `app` → `modes` → `content` → `engine` → `persistence`;
+`platform` → `engine`, and only `app` names `platform`. A lower layer never names a
+higher layer's type. Where content must call back into a mode (a generator starting a
+conversation), `content` declares a narrow host trait and `modes` implements it
+(section 5.3). Modes reach the platform only through the `engine::host::Platform`
+trait object in `Io` (section 3). `persistence` holds no game types: it encodes and
+decodes `SaveFile`, and `engine::save` maps `Game` to and from it (section 7).
+`engine`, `content`, `modes` and `persistence` do not read wall-clock time, spawn
+threads, read environment variables or touch the filesystem.
 
 | Layer | Current modules |
 |---|---|
-| platform | `graphics/sdl`, `graphics/ffi_video*`, `input/sdl_input.rs`, `sound/rodio_*`, `network*`, `threading/qos.rs`, `time` (OS clock part), `platform.rs` |
-| engine | `math`, `collections`, `battle/{process_native,velocity,gravity,world_elements,weapon_native,ship_native}`, `state`, `time` (game clock), `graphics/{drawable,frame,context,dcqueue,tfb_draw,native_canvas,software_*}`, `resource`, `strings` |
-| content | `ships/races/*_native.rs`, `planets/generate`, `planets/tables.rs`, `comm/races`, `io` (VFS) |
-| modes | `battle/{battle_native,tactrans_native,encount_native,cyborg_native}`, `supermelee`, `pickship`, `navigation`, `planets/{solarsys,orbit,scan,pstarmap}`, `planet_side`, `comm`, `starbase`, `ui`, `front_end`, `mainloop/restart_menu` |
-| persistence | `savegame`, `state/state_file.rs`, `supermelee/setup/persistence.rs`, `config.rs` |
+| platform | `graphics/sdl`, `graphics/ffi_video*`, `input/sdl_input.rs`, `sound/rodio_*`, `network*`, `io` (VFS backends), `threading/qos.rs`, `time/counter_abi.rs` (OS clock), `platform.rs`, the process, descriptor and fd-relative file calls of `automation/child_session.rs`, `native_runner.rs` and `interrupt.rs`, the CoreGraphics and sandbox parts of `automation/native_window.rs` and `automation/native_isolation.rs` |
+| engine | `math`, `collections`, `battle/{process_native,velocity,gravity,world_elements,weapon_native,ship_native,sounds}`, the combat AI `battle/{cyborg_native,ai,ai_entry}` (the race files call `ship_intelligence`, `cyborg_native.rs:512`, as `vux_native.rs:190` does), `state` (except state-file bytes), `time/clock_*` (game clock), `graphics/{drawable,frame,context,dcqueue,tfb_draw,native_canvas,software_*}`, `resource`, `strings`, `sound` (command queue, decoders), `savegame/{live,runtime}` |
+| content | `ships/races/*_native.rs`, ship descriptors and loader, `planets/generate`, `planets/tables.rs`, `comm/races` |
+| modes | `battle/{battle_native,tactrans_native,encount_native}`, `supermelee`, `pickship`, `navigation`, `planets/{solarsys,orbit,scan,pstarmap}`, `planet_side`, `comm`, `starbase`, `ui`, `front_end`, `mainloop/restart_menu` |
+| persistence | `savegame/{format,types,encode,decode,error,lzh}`, the byte layout in `state/state_file.rs` and `state/planet_info.rs`, `supermelee/setup/persistence.rs` |
+| app | `main.rs`, `cli.rs`, `config.rs`, `mainloop` (game loop), `automation`, `bin/`; `c_bindings.rs` and `game_init` until Phase 4 |
 
+A phase creates a new module only where it splits a mixed one (for example
+`battle/process_native.rs` becomes `engine::battle` + `modes::battle`). Code whose
+crate does not exist yet, or cannot move yet, is staged in a root module named after
+its layer (`rust/src/engine/` from Phase 1); `quality layers` applies the target
+crate's rules to the staging module from the day it is created.
+
+### 2.1 Crates
+
+The layers become Cargo packages so the compiler enforces the direction. Package
+names are `uqm-<name>` under `rust/crates/<name>/`; the root package stays at
+`rust/` as `uqm` (library `uqm_rust`) and becomes the app.
+
+| Crate | Holds | Workspace deps | `unsafe` |
+|---|---|---|---|
+| `uqm-save` | `SaveFile`, encode/decode, LZH, state-file and `.mle` byte layouts, `SaveFormatError` | none | `#![forbid(unsafe_code)]` |
+| `uqm-engine` | the engine layer; until Phase 7 also the SDL/OS backends it was seeded with | `uqm-save` | baseline debt, `forbid` from Phase 7 exit |
+| `uqm-content` | `Race` impls and descriptors, `SystemGenerator` impls, data tables, dialogue scripts | `uqm-engine` | `forbid` |
+| `uqm-modes` | every mode session and its UI | `uqm-engine`, `uqm-content`, `uqm-save` | `forbid` |
+| `uqm-platform` | `SdlPlatform`, rodio audio, sockets, Vfs, OS clock, QoS, macOS FFI | `uqm-engine` | `#![deny(unsafe_code)]`, `#[allow(unsafe_code)]` on the modules in `UNSAFE_ALLOWED` |
+| `uqm` (root) | app and automation; bins `uqm`, `uqm-gameplay-proof`, `uqm-native-acceptance` | all | `forbid` from Phase 8 |
+| `uqm-xtask` | gates and the native harness CLI | `uqm` only with feature `native` | n/a |
+
+Rules:
+- Only `uqm-platform` depends on `sdl2`, `sdl2-sys`, `gl`, `libc`, `windows-sys`,
+  `rodio` or `cpal`. Until Phase 7 `uqm-engine` and the root carry these as baseline
+  entries of `quality layers` (quality-gates.md section 3.5).
+- `engine::host` declares the ports: `trait Platform` (present a frame, poll input,
+  queue audio commands, read the clock, `files()`, `net()`), `trait Files` (what
+  callers do today on VFS paths: open for read, open for write, remove, list a
+  directory, stat) and `trait Net` (the six netplay socket operations). The
+  replay clock and `ReplayAudio` are engine types that `uqm-platform` composes when
+  `--replay` is set. Each port has two implementations from the start (real and
+  replay; real and in-memory loopback for `Net`), which is what justifies the trait.
+- A mode that must call a C-style graphics or sound function before Phase 7 calls a
+  safe wrapper added to `uqm-engine`; the wrapper's `unsafe` is engine debt, which is
+  what lets `uqm-modes` and `uqm-content` start with `forbid(unsafe_code)`.
+- A move keeps module paths: `git mv rust/src/graphics rust/crates/engine/src/graphics`,
+  the new crate root declares `pub mod graphics`, and the root re-exports it
+  (`pub use uqm_engine::graphics;`), so `crate::graphics::…` in root code and
+  `uqm_rust::graphics::…` in `rust/tests` keep resolving. The `time` module splits:
+  the root keeps `time/mod.rs`, `clock_abi.rs` and `clock_bridge.rs` (the game
+  clock) and re-exports `counter_abi` from the engine. Phase 8 replaces the
+  re-exports with crate paths.
+- Features are declared on the root and forwarded: `bundled-sdl`, `debug-process`
+  and `audio_heart` (`bundled-sdl = ["uqm-engine/bundled-sdl"]`, later
+  `uqm-platform/bundled-sdl`). `rust/build.rs` (the pkg-config probe) moves to the
+  crate that depends on `sdl2`.
+- Release builds keep `codegen-units = 1` and `lto = "off"`, so a non-generic function
+  is not inlined across crates. Small engine functions on the element loop (pool
+  index, `ElementTable` accessors, fixed-point helpers) are `#[inline]`. Integer
+  results do not depend on inlining, so traces are unaffected.
+
+### 2.2 When each crate is split
+
+A crate can be cut only when no module in it names a module outside it and above it.
+Cargo rejects cyclic packages, and a foreign declaration against the dependency
+direction is unsafe to rely on: a crate's own test binary does not link the crates
+above it, and GNU ld, the default linker on the Linux targets, searches archives in
+command-line order, which rustc derives from Cargo dependencies. `static mut` shared
+across crates compiles, but every access needs `unsafe`, so it blocks the crate's
+`forbid(unsafe_code)` instead of the split.
+
+| Crate | Split in | First contents | Blockers cleared first |
+|---|---|---|---|
+| `uqm-save` | Phase 0 (P0-05) | `savegame/{format,types,encode,decode,error}.rs` | the codec names `state::planet_info::CannedNode` and `state::game_state::NUM_GAME_STATE_BYTES` (`savegame/types.rs:8,313`, `encode.rs:182`, `decode.rs:452`); both move into the crate. `.mle` joins in Phase 3, state-file layouts in Phase 4, LZH in Phase 7 (`savegame/lzh/mod.rs:14` reads through `resource::ffi_bridge`) |
+| `uqm-engine` | Phase 1 (P1-06) | the former `libs/` layer: graphics, sound, resource, video, strings, threading, input, io, network, callback, collections, math, memory, logging, log_abi, bridge_log, `platform.rs`, `time/counter_abi.rs` (about 50k production lines by the section 1 counts) | 13 upward paths: `graphics/ffi.rs:137,254,565,566,574,596`, `graphics/ffi_video.rs:25` and `graphics/sdl/lifecycle_abi.rs:45,47` call automation; `graphics/geometry_ffi.rs:438` re-exports a ships ABI type; `input/sdl_input.rs:14` reads `mainloop::dir_prep`; `resource/ffi_bridge.rs:60` installs the ship code resource type; `threading/critical_timer.rs:53` takes an automation guard. 7 foreign statics defined in the game: `repository` (`graphics/gfxload.rs:12`, defined `game_init/kernel_abi.rs:44`), `input_templates` (`input/sdl_input.rs:57`) and `contentDir` (`resource/ffi_bridge.rs:67`, `sound/heart_ffi.rs:77`, `strings/getstr.rs:27`, `video/control.rs:21`, and `abi/graphics_abi.rs:998`, which `graphics/native_abi.rs:11` includes), all defined in `mainloop/options_abi.rs:12-22`. The eighth, `GlobData` at `time/clock_abi.rs:98`, is in the game clock, which stays in the root |
+| `uqm-engine`, core | Phase 4 exit (P4-07) | `src/engine/` staging (records, `Battle`, `Cx`, pools), `World`, `Game`, `Kernel`, `StoryState`, `GameClock`, `Observer`, `engine::save` | the battle core reads `GlobData` (`battle/process_native.rs:723,896,1164`, `battle/ship_native.rs:189-434`) and calls main-loop wrap helpers (`battle/gravity.rs:31-45`); the game clock calls comm, navigation and ui (`time/clock_abi.rs:87-111`) |
+| `uqm-content`, `uqm-modes` | Phase 6 exit (P6-05) | content and modes rows of the layer table | the generator vtable and `*_exports.rs` shims (Phase 5); dialogue scripts that name mode types (`LiveScript` calling comm and ui, `comm/races/script.rs:65-89`; `CLocData` descriptors and dispatch constants, `comm/races/orz.rs:3-4,793-795`), split into content traits and modes adapters by P6-02; `COMM_STATE` (`comm/state.rs:23`, P6-01); mode code calling automation directly (`crate::automation` paths: comm 21, planets 10, front_end 9, ui 7; replaced by the `Observer` in Phase 4); `app::bridge` calls (budget 0 at Phase 6 exit) |
+| `uqm-platform` | Phase 7 exit (P7-10) | the platform row, carved out of `uqm-engine` | engine code reaching SDL state directly (`graphics/ffi.rs` `get_gfx_state`, also used by `automation/native_window.rs:1952`); `SDL_Surface` canvases, including video's (`video/ffi.rs:18,42-45`); the `uio_*` API and its callers; POSIX process and descriptor code in automation and `platform.rs` (P7-09) |
+
+Not adopted:
+- **A crate per mode** (`uqm-battle`, `uqm-comm`, …). Modes call each other
+  synchronously (`Site::talk` calls `comm::race_communication`,
+  `home_exports.rs:96-98`; the main loop enters every mode), so there is no direction
+  between them for the compiler to enforce.
+- **`uqm-automation`.** Automation sits only under the app binary; a separate crate
+  enforces nothing new, and xtask would still compile modes through it.
+- **Separate graphics or sound crates.** They would enforce no rule beyond the
+  engine/platform split.
+- **A port-trait crate** so that `uqm-platform` does not rebuild on engine edits: a
+  compile-time measure only, added if the measured rebuild cost warrants it.
+- **Moving `rust/src` to `rust/crates/uqm`.** Path churn in every document and open
+  PR, with no enforcement gained.
+
+Compile time: today any edit rebuilds the whole package and relinks all 61
+integration-test binaries. After each split, an edit above a crate reuses that
+crate's rlib; `cargo test -p <crate>` builds only that crate and its dependencies;
+and the release profile's single codegen unit per crate lets independent crates
+compile in parallel. Each split PR records `cargo build --timings` before and after
+(plan.md section 3.1).
 ## 3. Ownership: an owned `Game` passed explicitly
 
 ```rust
@@ -150,12 +262,15 @@ Mode state lives in a session value created on entry and dropped on exit, as
 | `pSolarSysState` | `SolarSystem` session, holding `sys: SolarSys` (planets, moons, orbit) with a required `star: StarId` |
 | `COMM_STATE` (`comm/state.rs:23`, `LazyLock<RwLock>`), `COMM_DATA` (`comm/locdata.rs:15`) | `Comm` session |
 | `ScreenContext`, `SpaceContext`, `Screen`, fonts, frames (`kernel_abi.rs:23-46`) | `Kernel`, loaded once by `LoadKernel` |
-| `AUDIO_SENDER` (`sound/rodio_audio.rs:54`), SDL window, input state | `Platform` |
+| `AUDIO_SENDER` (`sound/rodio_audio.rs:54`), SDL window, input state | `uqm_platform::SdlPlatform`, behind `engine::host::Platform` |
 | `Coordinator` statics (automation) | `automation` observer, owned by `app` |
 
 Entry points take what they use: `fn battle(game: &mut Game, io: &mut Io<'_>, kind:
-BattleKind) -> Result<BattleOutcome, GameError>`, where `Io { platform: &mut Platform,
-observer: &mut dyn Observer }`.
+BattleKind) -> Result<BattleOutcome, GameError>`, where `Io<'a> { platform: &'a mut dyn
+Platform, observer: &'a mut dyn Observer }`. `Platform` is the engine port trait of
+section 2.1, so `uqm-modes` compiles without `uqm-platform`. `Game`, `World`, `Kernel`
+and `Options` are engine types; `Game::content` holds the loaded tables (ship catalog,
+star catalog, string tables) as engine data that `uqm-content` fills.
 
 **Ordering.** The call graph and statement order stay the same; only the way state
 is reached changes. RNG draws, element traversal and sound queueing happen in the
@@ -245,10 +360,16 @@ stage keeps a second copy of any state.
 **Stage A: one authority, current representation.** `engine::battle::record` holds
 the only definition of `ELEMENT`, `STARSHIP`, `RACE_DESC`, `QUEUE` and `PRIMITIVE`
 (from `abi/ship_abi.rs`), and `engine::battle::legacy` the only definition of
-`disp_q`, `race_q`, `DisplayArray`, `DisplayLinks` and `DisplayFreeList`. The copies in
+`disp_q`, `race_q`, `DisplayArray`, `DisplayLinks` and `DisplayFreeList`. Both live in
+the root staging module `rust/src/engine/` until Phase 4 exit, when they move into the
+`uqm-engine` crate with the rest of the battle core (section 2.2). The copies in
 `navigation_abi.rs`, `netplay_abi.rs` and `global_state_abi.rs` become re-exports.
-Layout, raw links, `pParent`, `hTarget` and the unions are unchanged, so
-unconverted races keep their code. The one record change is the hook fields:
+Layout, raw links, `pParent`, `hTarget`, the unions and the hook fields are
+unchanged, so unconverted races keep their code. The Stage A PR (P1-01) moves
+definitions only.
+
+The hook fields change in the first Stage B PR (P1-02), together with `ElementId`,
+`Cx` and the dispatcher they refer to, so no PR names a type that does not exist yet:
 
 ```rust
 pub enum ElementHook { Legacy(unsafe extern "C" fn(*mut ELEMENT)), Native(fn(&mut Cx, ElementId)) }
@@ -259,6 +380,8 @@ The `Legacy` variants are together called `Hook::Legacy`. Legacy writes become
 `Some(CollisionHook::Legacy(f))`, a mechanical edit; Androsynth's save and restore
 (`androsynth_native.rs:389-397`) still copies the whole value.
 Legacy code that calls a hook field calls `invoke_*` instead, the one dispatcher.
+The same PR adds `LinkQueue<T>`, a typed view of the same kind over any other `QUEUE`
+(`race_q`, the GAME_STATE queues, `event_q`); later units move queue consumers to it.
 
 **Stage B: convert consumers on that representation.** Converted code reaches records
 only through `ElementTable`, a view over the authority, and names them by
@@ -289,18 +412,21 @@ Until Phase 4, `Cx` reaches world state through the single `GlobData` definition
 under the same rules.
 
 **Stage C: replace the representation.** When no legacy reader of the records
-remains (Phase 2 exit: all races, the AI and the element callbacks in `navigation/`),
-a PR series swaps the storage for `OrderedPool`, links for slot indices, `pParent`
+remains (Phase 2 exit: all races, the AI, the element callbacks in `navigation/`, the
+ship pickers and the battle sound tracker; the `raw_records` counter is 0),
+a PR swaps the storage for `OrderedPool` (in `uqm-engine`, `collections::pool`), links for slot indices, `pParent`
 for `Parent`, `hTarget` for `Option<ElementId>`, unions for fields, `farray` for
-`FrameSetRef`, and deletes `Hook::Legacy`, the authority statics and the record
-types. The pools move into `Battle`, which each element-loop mode creates on entry,
+`FrameSetRef`, and deletes the authority statics and the record types
+(`Hook::Legacy` is already gone with the last race, P2-15). The pools move into `Battle`, which each element-loop mode creates on entry,
 if the migration trace shows no element survives a mode switch (`InitDisplayList`
 reinitialises the queue at mode entry); otherwise they stay in `Kernel` and `Battle` borrows them. Order is
 unchanged, so V1 traces stay identical.
 
 `GlobData` follows the same stages: Phase 0 leaves one definition (Stage A); Phase 4
 converts readers to `World` accessors over it (B), then replaces it with the owned
-`World` (C).
+`World` (C). The GAME_STATE queues and `event_q` do too: every consumer moves to
+`LinkQueue` views (P4-03, `queue_calls` = 0), then the storage becomes `OrderedPool`
+and `collections/queue.rs` is deleted (P4-04).
 
 ## 5. Behaviour dispatch
 
@@ -310,7 +436,7 @@ The 28 initialisers in `ships/code_resources.rs:75-104` return pointers to
 `static mut <RACE>_DESC` templates whose fields hold `Option<unsafe extern "C" fn>`.
 
 ```rust
-pub trait Race: Sync {                                   // content; uses engine types only
+pub trait Race: Sync {                                   // declared in engine, implemented in content
     fn descriptor(&self) -> RaceDesc;                    // plain data template
     fn preprocess(&self, _cx: &mut Cx, _ship: ShipId) {}
     fn postprocess(&self, _cx: &mut Cx, _ship: ShipId) {}
@@ -318,8 +444,13 @@ pub trait Race: Sync {                                   // content; uses engine
     fn intelligence(&self, cx: &mut Cx, ship: ShipId, concerns: &mut Concerns);
     fn uninit(&self, _ship: &mut Starship) {}
 }
-pub fn race(species: Species) -> &'static dyn Race { match species { Species::Arilou => &Arilou, /* ... */ } }
+pub fn race(species: Species) -> &'static dyn Race { match species { Species::Arilou => &Arilou, /* ... */ } } // content
 ```
+
+The engine stores the `&'static dyn Race` in each `Starship` and never names a species
+type, so `uqm-engine` does not depend on `uqm-content`. `SystemGenerator` and
+`SiteHost` (section 5.3) are declared in content, since only modes call them;
+`SolarSys` is an engine type because `engine::save` reads it.
 
 `Cx { b: &mut Battle, world: &mut World, rng: &mut RandomContext }` is the engine's
 battle context. `Starship` owns its copy of `RaceDesc` (C copies the template per
@@ -397,26 +528,34 @@ becomes `impl Story for StoryState`, and the `*_exports.rs` shims go.
 - Internal invariant violations (stale id, a `PLAYER_SHIP` element without a ship
   parent, bridge entry with no published context) panic with context: fail fast.
   Recoverable conditions use `Result`. No `unwrap`/`expect` in production paths.
-- `unsafe` is allowed only in `platform::sdl` (texture upload, `sdl2-sys` calls),
-  `platform::macos` (today `graphics/ffi_video_macos.rs`, the CoreFoundation and
-  CoreGraphics parts of `automation/native_window.rs`, `automation/native_isolation.rs`),
-  `platform::net` unless replaced by `std::net`, and `threading/qos.rs`. Software
-  canvases become Rust pixel buffers (`Vec<u32>` RGBA8888, which the scalers already
-  take); only the final present touches SDL. Every block carries `// SAFETY:`.
+- `unsafe` is allowed only in five modules of `uqm-platform`: `sdl` (texture upload,
+  `sdl2-sys` calls), `macos` (today `graphics/ffi_video_macos.rs`, the CoreFoundation
+  and CoreGraphics parts of `automation/native_window.rs`,
+  `automation/native_isolation.rs`), `net` unless replaced by `std::net`, `qos`
+  (today `threading/qos.rs`) and `os` (process, descriptor, fd-relative file and
+  errno calls: today `automation/child_session.rs`, `native_runner.rs`,
+  `interrupt.rs` and `platform.rs`, gathered behind `engine::platform::os` by P7-09). Every other crate carries `#![forbid(unsafe_code)]` from
+  the point given in section 2.2. Software canvases become Rust pixel buffers
+  (`Vec<u32>` RGBA8888, which the scalers already take); only the final present
+  touches SDL. Every block carries `// SAFETY:`.
 
 ## 7. Interfaces with the rest of the system
 
-**Content loading.** `io/uio_bridge.rs` becomes `content::Vfs`, keeping mount order
-and precedence (`UIO_MOUNT_TOP/BOTTOM/ABOVE/BELOW`, `uio_bridge.rs:20-27`) and zip
-packages. `resource/` becomes a typed `ResourceCache` returning `Handle<Frame>`,
-`Handle<StringTable>`, `Handle<Sound>`; dropping the owner releases the resource,
-replacing `CaptureDrawable`/`ReleaseDrawable`/`DestroyDrawable` pairs.
+**Content loading.** `io/uio_bridge.rs` becomes `uqm_platform::vfs::Vfs`, keeping
+mount order and precedence (`UIO_MOUNT_TOP/BOTTOM/ABOVE/BELOW`, `uio_bridge.rs:20-27`)
+and zip packages. It lives in the platform because it reads the filesystem, which the
+engine may not. `resource/` becomes a typed `engine::ResourceCache` that reads through
+the `Files` port and returns `Handle<Frame>`, `Handle<StringTable>`, `Handle<Sound>`;
+dropping the owner releases the resource, replacing
+`CaptureDrawable`/`ReleaseDrawable`/`DestroyDrawable` pairs. Content tests use an
+in-memory `Files`.
 
-**Savegame.** The byte format and `encode.rs`/`decode.rs`/`lzh/` stay. The live
-connection becomes
+**Savegame.** The byte format and `encode.rs`/`decode.rs`/`lzh/` stay, in `uqm-save`.
+The live connection is `engine::save`; it names engine types only, so the solar view
+is the `SolarSys` data that the `SolarSystem` session owns:
 
 ```rust
-pub struct SessionView<'a> { pub battle: Option<&'a Battle>, pub solar: Option<&'a SolarSystem> }
+pub struct SessionView<'a> { pub battle: Option<&'a Battle>, pub solar: Option<&'a SolarSys> }
 fn snapshot(game: &Game, view: SessionView<'_>) -> SaveFile;          // as capture() in live/save.rs:16-50
 fn apply(save: SaveFile, game: &mut Game) -> Result<Activity, LoadError>;
 ```
@@ -452,7 +591,8 @@ the same entry points as today. Scenario JSON in `rust/scripts/` does not change
 **Netplay.** The wire format stays byte-identical and `NETPLAY_PROTOCOL_VERSION`
 (`supermelee/netplay/packet.rs:238`) does not change. `#[repr(C)]` packet structs and
 `packetTypeData` (`packet.rs:29`) become `enum Packet` with explicit
-`encode`/`decode`, tested against byte fixtures. The sync checksum stays byte-for-byte
+`encode`/`decode`, tested against byte fixtures. Sockets are reached through the
+`engine::host::Net` port; an in-memory loopback `Net` runs the two-peer test. The sync checksum stays byte-for-byte
 (`supermelee/netplay/checksum.rs:38-77`): the RNG seed, then, in link order, each
 element without `BACKGROUND_OBJECT` (bit 15), hashing flags, life span, crew, mass,
 turn and thrust waits, velocity and both locations. It omits images, targets,

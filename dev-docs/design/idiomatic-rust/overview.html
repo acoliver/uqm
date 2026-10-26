@@ -65,14 +65,15 @@
 <main>
 
 <h1>UQM: from C-shaped Rust to idiomatic Rust</h1>
-<p class="sub">The <code>uqm</code> crate under <code>rust/</code> at <code>main</code> 0ba2845ad. Summary of architecture.md, quality-gates.md and plan.md, with the design review findings (summarised in plan.md section 6) already applied.</p>
+<p class="sub">The <code>uqm</code> crate under <code>rust/</code> at <code>main</code> 0ba2845ad. Summary of architecture.md, quality-gates.md and plan.md, with the design review findings (summarised in plan.md section 6) already applied. The PRs are listed in work-items.md; agents follow AGENTS.md.</p>
 
 <!-- 1 -->
 <div class="verdict">
 <b>Verdict</b>
 Today the game is about 218k lines of Rust that still has the shape of the C it was ported from: 375 <code>static mut</code> globals, Rust modules calling each other through 1,922 <code>extern "C"</code> functions, and 23% of production lines inside <code>unsafe</code>.
 The target is an owned <code>Game</code> passed as <code>&amp;mut</code> into per-mode sessions, battle elements in an order-preserving pool addressed by generational ids, races and planet generators as traits, and <code>unsafe</code> only in the platform layer.
-The work runs as nine phases of small PRs, starting with a battle-core pilot, and every PR must reproduce a deterministic replay byte for byte and pass save round trips, the native failure scenarios and shrink-only xtask gates.
+The single package becomes six crates whose dependency graph lets the compiler enforce the layers; each crate splits off once its code stops reaching upward, starting with the save format in Phase 0 and the former C library layer in Phase 1.
+The work runs as nine phases and 63 PRs, starting with a battle-core pilot, and every PR must reproduce a deterministic replay byte for byte and pass save round trips, the native failure scenarios and shrink-only xtask gates.
 Game behaviour, the save file format and the netplay wire format and checksum do not change.
 </div>
 
@@ -85,7 +86,7 @@ Game behaviour, the save file format and the netplay wire format and checksum do
 <tr><td><code>extern "C" fn</code> definitions</td><td class="now">1,922</td><td class="fut">0 outside platform</td></tr>
 <tr><td><code>#[no_mangle]</code> / <code>#[export_name]</code></td><td class="now">1,257</td><td class="fut">0</td></tr>
 <tr><td>Foreign declarations in <code>extern "C" {}</code></td><td class="now">641 fns and 340 statics in 123 files</td><td class="fut">platform only (SDL2, sockets, macOS)</td></tr>
-<tr><td>Lines inside <code>unsafe</code></td><td class="now">23% of 217.7k</td><td class="fut">only in 4 allowed platform modules; crate root <code>#![deny(unsafe_code)]</code></td></tr>
+<tr><td>Lines inside <code>unsafe</code></td><td class="now">23% of 217.7k</td><td class="fut">only in 5 allowed platform modules; crate root <code>#![deny(unsafe_code)]</code></td></tr>
 <tr><td>ABI record files</td><td class="now">6 bindgen files in <code>abi/</code>, 12.1k lines, each <code>include!</code>d into its own module; <code>ELEMENT</code> defined 3 times</td><td class="fut"><code>abi/</code> deleted; one plain struct per record</td></tr>
 <tr><td><code>#[repr(C)]</code></td><td class="now">390</td><td class="fut">platform only</td></tr>
 <tr><td>Functions with raw-pointer parameters</td><td class="now">1,907</td><td class="fut">platform only</td></tr>
@@ -93,6 +94,7 @@ Game behaviour, the save file format and the netplay wire format and checksum do
 <tr><td><code>.unwrap()</code> / <code>.expect(</code></td><td class="now">716</td><td class="fut">0 in production</td></tr>
 <tr><td>Untestable <code>#![cfg(not(test))]</code> modules</td><td class="now">16 (all of <code>ui/</code>, <code>navigation/hyper_*</code>)</td><td class="fut">0</td></tr>
 <tr><td>Size outliers</td><td class="now">29 files over 1,000 lines; 263 functions over 80 lines</td><td class="fut">800 per file, 80 per function; existing outliers baselined and may only shrink</td></tr>
+<tr><td>Packages</td><td class="now">one game package (404k lines with tests) plus xtask, which compiles the game before every check; 25 of 37 top-level modules in one dependency cycle</td><td class="fut">six crates plus xtask; the crate graph enforces the layers; gates run without compiling the game</td></tr>
 <tr><td>Quality gates in CI</td><td class="now">fmt, clippy with default lints, tests, <code>abi-check</code>, a shell C-file ratchet, 5 release builds, 4 native scenarios</td><td class="fut">adds <code>xtask quality</code> (8 checks), clippy deny and debt sets, per-file coverage floor (70% target), <code>cargo deny</code>, replay parity</td></tr>
 </table>
 
@@ -246,16 +248,16 @@ Game behaviour, the save file format and the netplay wire format and checksum do
   <!-- persistence -->
   <rect x="656" y="218" width="190" height="90" rx="4" fill="#f7f1e8" stroke="#9a6b2a"/>
   <text x="666" y="235" font-weight="700">persistence</text>
-  <g font-size="11"><text x="666" y="253">save codec, bytes unchanged</text>
-  <text x="666" y="269" font-family="Menlo, monospace" font-size="10.5">snapshot(&amp;Game, SessionView)</text>
-  <text x="666" y="285" font-family="Menlo, monospace" font-size="10.5">apply(SaveFile, &amp;mut Game)</text>
-  <text x="666" y="300">team files, config</text></g>
+  <g font-size="11"><text x="666" y="253">byte formats only</text>
+  <text x="666" y="269">SaveFile encode/decode, LZH</text>
+  <text x="666" y="285">state files, .mle teams</text>
+  <text x="666" y="300">engine maps Game to SaveFile</text></g>
   <line x1="340" y1="308" x2="340" y2="330" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
-  <line x1="750" y1="308" x2="750" y2="330" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
+  <line x1="750" y1="330" x2="750" y2="310" stroke="#1f6f50" stroke-width="1.5" marker-end="url(#a2)"/>
   <!-- engine -->
   <rect x="44" y="332" width="802" height="112" rx="4" fill="#f3f3f3" stroke="#56626e"/>
   <text x="54" y="349" font-weight="700">engine</text>
-  <text x="104" y="349" font-size="11.5">no wall clock, threads, env, filesystem or SDL (checked by xtask quality layers)</text>
+  <text x="104" y="349" font-size="11.5">no wall clock, threads, env, filesystem or SDL (crate graph and xtask quality layers)</text>
   <g fill="#ffffff" stroke="#56626e">
     <rect x="54" y="358" width="240" height="78" rx="4"/><rect x="304" y="358" width="250" height="78" rx="4"/><rect x="564" y="358" width="272" height="78" rx="4"/>
   </g>
@@ -277,10 +279,23 @@ Game behaviour, the save file format and the netplay wire format and checksum do
   <rect x="14" y="458" width="832" height="50" rx="4" fill="url(#hatch)" stroke="#b8462e"/>
   <text x="54" y="478" font-weight="700" fill="#8f2f1b">platform (edge)</text>
   <text x="170" y="478" font-size="11.5" fill="#5a2012">SDL2 window, textures, events, audio device, sockets, OS clock, macOS FFI</text>
-  <text x="54" y="497" font-size="11.5" fill="#5a2012">The only modules where unsafe is allowed: platform::sdl, platform::macos, platform::net, threading/qos.rs</text>
+  <text x="54" y="497" font-size="11.5" fill="#5a2012">uqm-platform; unsafe allowed only in its sdl, macos, net and qos modules</text>
 </svg>
-<figcaption>Future. Dependencies point down: <code>app</code> to <code>modes</code> to <code>content</code> to <code>engine</code>; <code>persistence</code> to <code>engine</code>. A lower layer never names a higher layer's type. Existing directories map onto layers in place; there is no bulk rename.</figcaption>
+<figcaption>Future. Arrows point at what a layer depends on: <code>app</code> to <code>modes</code> to <code>content</code> to <code>engine</code>, and <code>engine</code> to <code>persistence</code> (byte formats only); <code>platform</code> implements the engine's port traits and only <code>app</code> names it. A lower layer never names a higher layer's type. Each layer becomes a crate (below).</figcaption>
 </figure>
+
+<h3>Crates</h3>
+<p>Today 25 of the 37 top-level modules form one cycle through <code>crate::</code> paths, and 364 of 371 cross-module foreign declarations are statics such as <code>GlobData</code>. Cargo rejects cyclic packages, so a crate can split only once its code stops reaching upward. Modules move with <code>git mv</code>, keep their paths and are re-exported by the root, so a split is a mechanical PR.</p>
+<table>
+<tr><th style="width:15%">Crate</th><th style="width:37%">Holds</th><th style="width:18%">Depends on</th><th style="width:14%"><code>unsafe</code></th><th style="width:16%">Split</th></tr>
+<tr><td><code>uqm-save</code></td><td>save, state-file and <code>.mle</code> byte formats; no game types</td><td>none</td><td class="fut">forbid</td><td>Phase 0</td></tr>
+<tr><td><code>uqm-engine</code></td><td>math, pools, battle core, <code>World</code>, <code>Game</code>, clock, <code>Observer</code> and port traits, canvas, DCQ, resources</td><td><code>uqm-save</code></td><td>forbid from Phase 7</td><td>Phase 1 (former <code>libs/</code>, 50k lines); core joins at Phase 4</td></tr>
+<tr><td><code>uqm-content</code></td><td>races, generators, data tables, dialogue scripts</td><td><code>uqm-engine</code></td><td class="fut">forbid</td><td>Phase 6</td></tr>
+<tr><td><code>uqm-modes</code></td><td>every mode session and its UI</td><td>engine, content, save</td><td class="fut">forbid</td><td>Phase 6</td></tr>
+<tr><td><code>uqm-platform</code></td><td>SDL2, audio device, sockets, Vfs, OS clock, process and descriptor calls, macOS FFI</td><td><code>uqm-engine</code></td><td class="now">5 allowed modules</td><td>Phase 7, carved out of engine</td></tr>
+<tr><td><code>uqm</code></td><td>app, automation, binaries</td><td>all</td><td class="fut">forbid from Phase 8</td><td>stays</td></tr>
+</table>
+<p class="small">What blocks each split, with file and line, is in architecture.md section 2.2. The former C library layer reaches the game through only 13 paths and 7 foreign statics, which one PR inverts before the move. Per-mode crates, a separate automation crate and graphics or sound crates were considered and not adopted: none would enforce a rule the six crates do not.</p>
 
 <p>The game logic runs on one thread today (<code>CreateThread_Core</code> has no caller; the other threads are audio and automation I/O), so an owned <code>&amp;mut Game</code> needs no locks. Entry points take what they use, for example <code>fn battle(game: &amp;mut Game, io: &amp;mut Io&lt;'_&gt;, kind: BattleKind) -&gt; Result&lt;BattleOutcome, GameError&gt;</code>. The call graph and statement order stay the same; only the way state is reached changes.</p>
 <p>Two alternatives were rejected. A <code>thread_local!</code> <code>RefCell&lt;Game&gt;</code> fails at run time because collision callbacks re-enter (collision, then death, then spawn), so a second <code>borrow_mut</code> panics. Wrapping the statics in an <code>UnsafeCell</code> with a "single thread" rule leaves aliasing unchecked by the compiler, which is the problem being solved.</p>
@@ -620,13 +635,13 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
     <text x="26" y="56">One definition of ELEMENT, STARSHIP,</text>
     <text x="26" y="72">RACE_DESC, disp_q, race_q, DisplayArray</text>
     <text x="26" y="88">in engine::battle. ABI copies re-export.</text>
-    <text x="26" y="104">Layout and raw links unchanged.</text>
-    <text x="26" y="120">Hooks become Legacy(extern fn) or</text>
-    <text x="26" y="136">Native(fn(&amp;mut Cx, ElementId)).</text>
+    <text x="26" y="104">Layout, raw links and hook fields</text>
+    <text x="26" y="120">unchanged; definitions move only.</text>
+    <text x="26" y="136">Every reader keeps compiling.</text>
     <text x="311" y="36" font-weight="700" font-size="13">B. Convert consumers</text>
     <text x="311" y="56">Converted code uses ElementTable and</text>
     <text x="311" y="72">ElementId over the same storage.</text>
-    <text x="311" y="88">Unconverted races keep raw pointers.</text>
+    <text x="311" y="88">Hooks become Legacy or Native(Cx).</text>
     <text x="311" y="104">app::bridge publishes one &amp;mut Cx for</text>
     <text x="311" y="120">nested entry, strictly LIFO.</text>
     <text x="311" y="136">One copy, so no sync step exists.</text>
@@ -635,8 +650,8 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
     <text x="596" y="72">becomes OrderedPool, pParent becomes</text>
     <text x="596" y="88">Parent, hTarget Option&lt;ElementId&gt;,</text>
     <text x="596" y="104">unions become fields, farray FrameSetRef.</text>
-    <text x="596" y="120">Hook::Legacy, the statics and the</text>
-    <text x="596" y="136">record types are deleted.</text>
+    <text x="596" y="120">The statics and record types are</text>
+    <text x="596" y="136">deleted (Hook::Legacy already gone).</text>
   </g>
   <g font-size="11.5" fill="#444" font-weight="600">
     <text x="26" y="186">Battle records: Phase 1, PR 1</text>
@@ -646,7 +661,7 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
     <text x="311" y="204">GlobData: Phase 4 (689 refs, 111 files)</text>
     <text x="596" y="204">GlobData: Phase 4, owned World</text>
   </g>
-  <text x="14" y="224" font-size="11" fill="#5b6672">Counters legacy_hooks (0 at Phase 2 exit) and bridge_calls (0 at Phase 8) get finite budgets in the Phase 1 opening PR and only shrink.</text>
+  <text x="14" y="224" font-size="11" fill="#5b6672">Counters legacy_hooks (0 at Phase 2 exit) and bridge_calls (0 at Phase 6 exit) get finite budgets in the first two Phase 1 PRs and only shrink.</text>
 </svg>
 <figcaption>The three-stage storage transition (architecture.md 4.1).</figcaption>
 </figure>
@@ -660,7 +675,7 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
 <li><b>V3, saves.</b> Codec round trip for the 73 saves in <code>rust/scripts/saves/</code> plus <code>legacy-save.00</code>. A runtime test loads each save under replay mode, enters the saved mode, and compares a live capture with the Phase 0 golden. Load and save are not inverse operations, so the normalisations the current code applies are listed as data.</li>
 <li><b>V4, campaign reload.</b> The 45 <code>load-*</code> scenarios and the smoke set, run natively at each phase exit with OS screenshots inspected.</li>
 </ul>
-<p>PR rules: one unit per PR (one race, queue, module or session), with the old path deleted in the same PR; mechanical moves and semantic changes in separate PRs; about 1,500 changed non-mechanical lines at most; tests move with the code.</p>
+<p>PR rules: one work unit per PR (a queue, module, session or group of races), with the old path deleted in the same PR; mechanical moves and semantic changes in separate PRs; 500 to 3,000 changed lines, mechanical moves larger; tests move with the code; nothing is deleted before its last consumer moves. The critical path is 34 of the 63 units; the rest run in parallel lanes over 36 waves (work-items.md).</p>
 
 <!-- 7 -->
 <h2><span class="num">6</span>Quality gates</h2>
@@ -672,7 +687,7 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
 <tr><td><code>quality ffi</code></td><td>Per subsystem: <code>static mut</code>, <code>extern "C" fn</code>, foreign items, <code>no_mangle</code>, <code>repr(C)</code>, <code>link_name</code>, raw-pointer params, <code>abi/*</code> includes, bridge calls, <code>Hook::Legacy</code></td><td>baseline; 0 when absent</td><td>llxprt-code-rs <code>coupling.rs</code> (shrink-only ledger)</td></tr>
 <tr><td><code>quality unsafe</code></td><td>Unsafe blocks, fns, impls and lines inside them</td><td>baseline; 0 outside <code>UNSAFE_ALLOWED</code></td><td>jefe <code>architecture.rs</code> (reviewed exception list)</td></tr>
 <tr><td><code>quality allows</code></td><td>Every <code>allow</code>/<code>expect</code>, valued by lines it covers; <code>cfg(not(test))</code> modules</td><td>baseline</td><td>llxprt-code-rs <code>analyze.rs</code>, jefe <code>clippy_policy.rs</code></td></tr>
-<tr><td><code>quality layers</code></td><td>Imports against the layer table; no clock, thread, env, fs, net, process or sdl2 in engine/content/modes</td><td>baseline</td><td>llxprt-code-rs <code>compat.rs</code> (banned-pattern scan)</td></tr>
+<tr><td><code>quality layers</code></td><td>Crate graph from <code>cargo metadata</code>: allowed workspace edges, OS crates only in <code>uqm-platform</code>, references still blocking the next split, banned <code>std</code> APIs; the module layer table inside the root</td><td>edges absolute; rest baseline</td><td>llxprt-code-rs <code>compat.rs</code> (banned-pattern scan); jefe <code>architecture.rs</code></td></tr>
 <tr><td><code>quality native-files</code></td><td>Tracked <code>.c .h .m .s</code> and similar files</td><td>0, absolute</td><td>UQM project standards; replaces the shell ratchet</td></tr>
 <tr><td><code>quality deps</code></td><td>No first-party native builds, vendoring or <code>[patch]</code>; native-building registry crates listed (<code>sdl2-sys</code>, <code>oboe-sys</code>)</td><td>absolute</td><td>UQM project standards section 1</td></tr>
 <tr><td><code>clippy</code></td><td>Deny set; debt set (<code>unsafe_op_in_unsafe_fn</code>, <code>undocumented_unsafe_blocks</code>, <code>unwrap_used</code>, <code>expect_used</code>) counted with <code>--force-warn</code> so an existing <code>allow</code> cannot hide moved debt</td><td>deny: 0; debt: baseline</td><td>jefe and vibetools (<code>[lints]</code>, <code>clippy.toml</code>)</td></tr>
@@ -681,23 +696,23 @@ generator(star).generate_orbital(&amp;<span class="kw">mut</span> session.sys, &
 <tr><td><code>parity</code></td><td>Replay corpus against <code>rust/tests/golden/parity/</code></td><td>exact match</td><td>UQM (this design)</td></tr>
 </table>
 <p><b>Shrink-only baseline.</b> Existing debt lives in one file, <code>rust/xtask/quality-baseline.toml</code>, written only by xtask. A value above its entry fails, and a new violator with no entry fails. A value below its entry prints a notice; <code>cargo xtask quality --tighten</code> rewrites the file downward in one command, and phase-exit PRs run it. With <code>--base</code>, each PR is also measured against the base branch tree, so headroom freed by an earlier PR cannot be spent later.</p>
-<p><b>Debt transfers.</b> Moving a function or file to its new layer would otherwise look like new debt. <code>cargo xtask quality move &lt;old&gt; &lt;new&gt;</code> records the move; it is accepted if the old key existed at base and is now gone, each source credits one target, and no crate total rises. Any other growth needs the <code>quality-growth-approved</code> label, which only you apply. Setting the <code>legacy_hooks</code> and <code>bridge_calls</code> budgets in the Phase 1 opening PR is one such approval.</p>
+<p><b>Debt transfers.</b> Moving a function or file to its new layer would otherwise look like new debt. <code>cargo xtask quality move &lt;old&gt; &lt;new&gt;</code> records the move; it is accepted if the old key existed at base and is now gone, each source credits one target, and no crate total rises. Any other growth needs the <code>quality-growth-approved</code> label, which only you apply. Setting the <code>legacy_hooks</code> and <code>bridge_calls</code> budgets in the first two Phase 1 PRs is one such approval.</p>
 <p>Not adopted: crate-wide clippy <code>pedantic</code>, and 60-line or cognitive-15 limits, which would force splits of functions that mirror one C function and make side-by-side review against the original harder.</p>
 
 <!-- 8 -->
 <h2><span class="num">7</span>Phases</h2>
-<p>Each phase is a series of small PRs; <code>main</code> stays playable and green after every one. Sizes are changed lines.</p>
+<p>Each phase is a series of PRs, 63 in all (work-items.md); <code>main</code> stays playable and green after every one. Sizes are changed lines.</p>
 <table>
 <tr><th style="width:15%">Phase</th><th style="width:31%">Removes</th><th style="width:38%">Exit criterion</th><th style="width:16%">Size</th></tr>
-<tr><td>0. Soundness, gates, replay</td><td>About 5.5k dormant lines (<code>ships/traits.rs</code>, non-native race halves, <code>battle/process_loop.rs</code> and 3 more); 20 <code>not_unsafe_ptr_arg_deref</code> and 7 <code>clashing_extern_declarations</code> allows; mismatched foreign static types; the shell ratchet</td><td>Baseline committed; gates green on a PR and on the next push; three identical recordings for every corpus entry; save tests pass for 74 files</td><td>xtask +4k; src about -5k</td></tr>
-<tr class="pilot"><td>1. Battle core (pilot)</td><td>Duplicate <code>ELEMENT</code>/<code>STARSHIP</code>/<code>RACE_DESC</code> copies with their asserts and aliases; <code>zoom_out</code>, <code>nth_frame</code>, <code>OPT_MAX_ZOOM_OUT</code>, <code>battle_counter</code> statics</td><td>One definition per record; VUX, Androsynth, Arilou with 0 unsafe; mixed-collision, death-spawn, Chmmr and star-contact fixtures identical; 0 stale-id lookups. The <code>Race</code>, <code>ElementHooks</code> and <code>Cx</code> APIs are approved here before any further conversion</td><td>8-10k, ~45 files</td></tr>
-<tr><td>2. Ships, AI, Stage C</td><td>28 <code>&lt;RACE&gt;_DESC</code> templates, <code>RaceDescPtr</code>, <code>Hook::Legacy</code>, the queue statics and record types</td><td>Ships and battle have no ffi or unsafe baseline entries; <code>legacy_hooks</code> = 0</td><td>14-18k, ~75 files</td></tr>
-<tr><td>3. Super Melee, netplay</td><td><code>#[repr(C)]</code> packets (become <code>enum Packet</code> with a codec); supermelee <code>extern "C" fn</code> 267 to 0, <code>no_mangle</code> 221 to 0</td><td>Packet byte fixtures unchanged; a two-peer loopback battle agrees on every checksum</td><td>6-8k, ~45 files</td></tr>
-<tr><td>4. World state, main loop</td><td><code>GlobData</code>, <code>CurStarDescPtr</code>, <code>GLOBAL_GAME_STATE</code>, string-keyed story access, <code>global!</code> statics, <code>CffiOps</code>, <code>collections/queue.rs</code></td><td><code>GlobData</code> references = 0; story lookups by string = 0; every scenario gives the same input and present counts as before</td><td>10-14k, ~130 files, mostly mechanical</td></tr>
-<tr><td>5. Navigation, planets</td><td><code>GenerateFunctions</code>, six <code>*_exports.rs</code>, <code>pSolarSysState</code>, <code>navigation_abi.rs</code>; planets <code>static mut</code> 46 to 0</td><td>No ffi or unsafe entries in planets, navigation, planet_side; <code>planets_parity.rs</code> passes on C-captured fixtures</td><td>10-12k, ~90 files</td></tr>
-<tr><td>6. Comm, starbase, menus</td><td><code>COMM_STATE</code>, <code>COMM_DATA</code>; comm <code>static mut</code> 70 to 0; ui and front_end <code>extern "C" fn</code> 119 to 0</td><td>No <code>cfg(not(test))</code> modules left; dialogue scripts change only in their <code>Api</code> impls</td><td>12-15k, ~120 files</td></tr>
-<tr><td>7. Platform, content</td><td><code>SDL_Surface</code> canvases (become pixel buffers), <code>uio_*</code> (becomes <code>Vfs</code>), <code>res_*</code>, decoder vtables; graphics <code>no_mangle</code> 243 to 0</td><td>Unsafe only in allowed modules; canvas digests match; real-window screenshots checked</td><td>15-20k, ~150 files</td></tr>
-<tr><td>8. Closeout</td><td><code>rust/src/abi/</code>, <code>app::bridge</code>, <code>abi-check</code>, naming allows; adds crate-root <code>#![deny(unsafe_code)]</code></td><td>The targets in section 1; coverage at least 70%; only size and complexity entries left in the baseline</td><td>~40 files, net deletion</td></tr>
+<tr><td>0. Soundness, gates, replay</td><td>About 5.5k dormant lines (<code>ships/traits.rs</code>, non-native race halves, <code>battle/process_loop.rs</code> and 3 more); 20 <code>not_unsafe_ptr_arg_deref</code> and 7 <code>clashing_extern_declarations</code> allows; mismatched foreign static types; the shell ratchet</td><td>Baseline committed; gates green on a PR and on the next push; three identical recordings for every corpus entry; save tests pass for 74 files; <code>uqm-save</code> split</td><td>xtask +4k; src about -5k; 8 PRs</td></tr>
+<tr class="pilot"><td>1. Battle core (pilot)</td><td>Duplicate <code>ELEMENT</code>/<code>STARSHIP</code>/<code>RACE_DESC</code> copies with their asserts and aliases; <code>zoom_out</code>, <code>nth_frame</code>, <code>OPT_MAX_ZOOM_OUT</code>, <code>battle_counter</code> statics</td><td>One definition per record; VUX and Androsynth with 0 unsafe; mixed-collision, death-spawn, Chmmr and star-contact fixtures identical; 0 stale-id lookups. The <code>Race</code>, <code>ElementHooks</code> and <code>Cx</code> APIs are approved here before any further conversion; <code>uqm-engine</code> split from the former library layer</td><td>8-10k, ~45 files, plus a move; 6 PRs</td></tr>
+<tr><td>2. Ships, AI, Stage C</td><td>28 <code>&lt;RACE&gt;_DESC</code> templates, <code>RaceDescPtr</code>, <code>Hook::Legacy</code>, the queue statics and record types</td><td>Ships and battle have no ffi or unsafe baseline entries; <code>legacy_hooks</code> = 0</td><td>35-40k with race tests, ~95 files; 16 PRs (races in 10 groups)</td></tr>
+<tr><td>3. Super Melee, netplay</td><td><code>#[repr(C)]</code> packets (become <code>enum Packet</code> with a codec); supermelee <code>extern "C" fn</code> 267 to 0, <code>no_mangle</code> 221 to 0</td><td>Packet byte fixtures unchanged; a two-peer loopback battle agrees on every checksum</td><td>6-8k, ~45 files; 3 PRs</td></tr>
+<tr><td>4. World state, main loop</td><td><code>GlobData</code>, <code>CurStarDescPtr</code>, <code>GLOBAL_GAME_STATE</code>, string-keyed story access, <code>global!</code> statics, <code>CffiOps</code>, <code>collections/queue.rs</code></td><td><code>GlobData</code> references = 0; story lookups by string = 0; every scenario gives the same input and present counts as before; battle core and <code>World</code> move into <code>uqm-engine</code></td><td>10-14k, ~130 files, mostly mechanical; 7 PRs</td></tr>
+<tr><td>5. Navigation, planets</td><td><code>GenerateFunctions</code>, six <code>*_exports.rs</code>, <code>pSolarSysState</code>, <code>global_state_abi.rs</code>; planets <code>static mut</code> 46 to 0</td><td>No ffi or unsafe entries in planets, navigation, planet_side; <code>planets_parity.rs</code> passes on C-captured fixtures</td><td>15-17k, ~110 files; 6 PRs</td></tr>
+<tr><td>6. Comm, starbase, menus</td><td><code>COMM_STATE</code>, <code>COMM_DATA</code>; comm <code>static mut</code> 70 to 0; ui and front_end <code>extern "C" fn</code> 119 to 0; <code>navigation_abi.rs</code>; <code>app::bridge</code></td><td>No <code>cfg(not(test))</code> modules left; dialogue scripts change only in their <code>Api</code> impls; <code>uqm-content</code> and <code>uqm-modes</code> split</td><td>12-15k, ~120 files; 5 PRs</td></tr>
+<tr><td>7. Platform, content</td><td><code>SDL_Surface</code> canvases (become pixel buffers), <code>uio_*</code> (becomes <code>Vfs</code>), <code>res_*</code>, decoder vtables; graphics <code>no_mangle</code> 243 to 0</td><td>Unsafe only in allowed modules; canvas digests match; real-window screenshots checked; <code>uqm-platform</code> carved out of the engine</td><td>24-28k, ~170 files; 10 PRs</td></tr>
+<tr><td>8. Closeout</td><td><code>rust/src/abi/</code>, <code>abi-check</code>, naming allows, root re-exports; adds root <code>#![forbid(unsafe_code)]</code></td><td>The targets in section 1; coverage at least 70%; only size and complexity entries left in the baseline</td><td>~40 files, net deletion; 2 PRs</td></tr>
 </table>
 <p><b>Why battle first.</b> The hardest part of the design, exact C ordering with re-entrant callbacks, lives in battle; ships and Super Melee depend on its interfaces; and it has the strongest oracle (netplay CRC plus the state trace, from a menu with a fixed seed). Starting with Super Melee would mean converting its battle calls twice. Planet generators would prove little, since their logic is already safe. <code>GlobData</code> touches 111 files and would fix an access pattern before any pattern is proven.</p>
 
