@@ -138,24 +138,35 @@ pub fn record(
     options: &Options,
     measured: BTreeMap<String, u64>,
 ) -> Result<(), String> {
+    record_for_host(root, options, measured, std::env::consts::OS)
+}
+
+fn record_for_host(
+    root: &Path,
+    options: &Options,
+    measured: BTreeMap<String, u64>,
+    host: &str,
+) -> Result<(), String> {
     let path = root.join("rust/xtask/quality-baseline.toml");
     let mut baseline = Baseline::read(&path)?;
-    let previous = baseline.lint.as_ref();
+    let previous = baseline.lint.get(host);
     if let Some(previous) = previous {
         if !options.allow_growth {
             compare(&measured, previous, &baseline.moved)?;
         }
     } else if !options.tighten {
-        return Err("tool baseline missing; initialize with --tighten".into());
+        return Err(format!(
+            "tool baseline for {host} missing; initialize with --tighten"
+        ));
     }
-    compare_base(root, options, &baseline, &measured, previous)?;
+    compare_base(root, options, &baseline, &measured, host)?;
     println!(
-        "lint debt: {} per-file entries, total={}",
+        "lint debt ({host}): {} per-file entries, total={}",
         measured.len(),
         measured.values().sum::<u64>()
     );
     if options.tighten {
-        baseline.lint = Some(measured);
+        baseline.lint.insert(host.into(), measured);
         baseline.write(&path)?;
     }
     Ok(())
@@ -166,25 +177,28 @@ fn compare_base(
     options: &Options,
     baseline: &Baseline,
     measured: &BTreeMap<String, u64>,
-    previous: Option<&BTreeMap<String, u64>>,
+    host: &str,
 ) -> Result<(), String> {
     if let Some(reference) = &options.base {
         if let Some(base) = baseline::baseline_at_ref(root, reference)? {
-            let prior = base.lint;
-            if let Some(prior) = prior {
-                if !options.allow_growth {
-                    compare(measured, &prior, &baseline.moved)?;
-                    if let Some(previous) = previous {
-                        compare(previous, &prior, &baseline.moved)?;
+            if !options.allow_growth {
+                for (os, previous) in &baseline.lint {
+                    if let Some(prior) = base.lint.get(os) {
+                        compare(previous, prior, &baseline.moved)?;
                     }
                 }
+            }
+            if let Some(prior) = base.lint.get(host) {
+                if !options.allow_growth {
+                    compare(measured, prior, &baseline.moved)?;
+                }
                 println!(
-                    "base {reference}: {} file counters -> {}",
+                    "base {reference} ({host}): {} file counters -> {}",
                     prior.len(),
                     measured.len()
                 );
             } else {
-                println!("base {reference}: initial lint baseline");
+                println!("base {reference}: initial {host} lint baseline");
             }
         }
     }
@@ -296,7 +310,9 @@ mod tests {
         let growth = BTreeMap::from([("unwrap|uqm::a::@file".into(), 3)]);
         assert!(record(root.path(), &options, growth.clone()).is_err());
         let mut inflated = Baseline::read(&path).unwrap();
-        inflated.lint = Some(growth.clone());
+        inflated
+            .lint
+            .insert(std::env::consts::OS.into(), growth.clone());
         inflated.write(&path).unwrap();
         assert!(record(root.path(), &options, measured.clone()).is_err());
         assert!(record(root.path(), &options, growth.clone()).is_err());
@@ -309,6 +325,56 @@ mod tests {
             growth,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn host_checks_and_tightening_are_independent_and_preserve_other_hosts() {
+        let root = fixture_directory();
+        std::fs::create_dir_all(root.path().join("rust/xtask")).unwrap();
+        let path = root.path().join("rust/xtask/quality-baseline.toml");
+        let counts = |value| BTreeMap::from([("unwrap|uqm::a::@file".into(), value)]);
+        let baseline = Baseline {
+            lint: [("linux".into(), counts(2)), ("macos".into(), counts(4))].into(),
+            ..Baseline::default()
+        };
+        baseline.write(&path).unwrap();
+        let git = |args: &[&str]| {
+            status(Command::new("git").current_dir(root.path()).args(args)).unwrap()
+        };
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "base",
+        ]);
+        let options = Options {
+            base: Some("HEAD".into()),
+            ..Options::default()
+        };
+        record_for_host(root.path(), &options, counts(4), "macos").unwrap();
+        assert!(record_for_host(root.path(), &options, counts(3), "linux").is_err());
+        assert!(record_for_host(root.path(), &options, counts(5), "macos").is_err());
+        assert!(record_for_host(root.path(), &options, counts(1), "windows").is_err());
+        let tighten = Options {
+            tighten: true,
+            ..options
+        };
+        record_for_host(root.path(), &tighten, counts(3), "macos").unwrap();
+        let tightened = Baseline::read(&path).unwrap();
+        assert_eq!(tightened.lint["linux"], baseline.lint["linux"]);
+        assert_eq!(tightened.lint["macos"], counts(3));
+        assert!(record_for_host(root.path(), &tighten, counts(4), "macos").is_err());
+        record_for_host(root.path(), &tighten, counts(1), "linux").unwrap();
+        assert_eq!(Baseline::read(&path).unwrap().lint["macos"], counts(3));
+        let mut inflated = Baseline::read(&path).unwrap();
+        inflated.lint.insert("linux".into(), counts(3));
+        inflated.write(&path).unwrap();
+        assert!(record_for_host(root.path(), &tighten, counts(3), "macos").is_err());
     }
 
     #[test]
