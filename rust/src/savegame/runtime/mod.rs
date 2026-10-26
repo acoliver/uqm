@@ -20,11 +20,18 @@ pub mod summary;
 
 use std::fmt;
 
-use super::types::{EventEntry, GlobalState, GAME_STATE_BYTES};
+use super::types::{EventEntry, GlobalState, Summary, GAME_STATE_BYTES};
 use crate::comm::locdata::CGameState;
 use crate::state::ffi::{replace_game_state, snapshot_game_state, GameStateOwnerError};
 
 pub use events::EventError;
+
+/// Preserve the live writer's historical `write_a16` element-amount layout.
+/// The general codec must retain distinct amounts when re-encoding a save.
+pub fn prepare_summary_for_write(summary: &mut Summary) {
+    let first_amount = summary.sis.element_amounts[0];
+    summary.sis.element_amounts.fill(first_amount);
+}
 
 /// The sections of a save that this module owns, as read from the live game.
 #[derive(Debug, Clone, PartialEq, Eq)]

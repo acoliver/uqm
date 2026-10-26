@@ -5,7 +5,8 @@
 //! layout; `encode` and `decode` own that.
 
 use super::error::SaveNameError;
-use crate::state::game_state::NUM_GAME_STATE_BYTES;
+/// Number of bytes in the serialized story-state bitfield.
+pub const NUM_GAME_STATE_BYTES: usize = 155;
 
 /// Slots offered by the Starbase menu (`MAX_SAVED_GAMES`, gameopt.c:41).
 pub const MAX_SAVED_GAMES: usize = 50;
@@ -30,9 +31,35 @@ pub const MAX_BUILT_SHIPS: usize = 12;
 pub const MAX_EXCLUSIVE_DEVICES: usize = 16;
 /// `MAX_HYPER_SHIPS` (encount.h).
 pub const MAX_HYPER_SHIPS: usize = 7;
-/// Size of the game-state bit array, taken from the generated game-state
-/// bindings so that it cannot drift from the C header.
+/// Size of the serialized game-state bit array.
 pub const GAME_STATE_BYTES: usize = NUM_GAME_STATE_BYTES;
+
+/// Uncollected biological canister, keyed independently of surface entity IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CannedNode {
+    pub star: u16,
+    pub planet: u8,
+    pub moon: u8,
+    pub node: u8,
+    pub value: u8,
+    pub x: i16,
+    pub y: i16,
+}
+
+impl CannedNode {
+    pub fn key(self) -> (u16, u8, u8, u8) {
+        (self.star, self.planet, self.moon, self.node)
+    }
+    pub fn is_valid(self) -> bool {
+        self.star < 502
+            && self.planet < 16
+            && self.moon <= 4
+            && self.node < 32
+            && (1..=15).contains(&self.value)
+            && (0..968).contains(&self.x)
+            && (0..300).contains(&self.y)
+    }
+}
 
 /// A signed 16-bit point (`POINT`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -310,7 +337,7 @@ pub struct SaveFile {
     /// present, empty chunk.
     pub scan: Option<Vec<u32>>,
     /// Optional "Cans" records. Absent in older saves.
-    pub canned_nodes: Vec<crate::state::planet_info::CannedNode>,
+    pub canned_nodes: Vec<CannedNode>,
     pub group_list: Option<GroupList>,
     pub battle_groups: Vec<BattleGroup>,
     pub star: StarDesc,

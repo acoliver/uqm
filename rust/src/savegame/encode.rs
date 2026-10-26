@@ -179,7 +179,7 @@ fn global_body(g: &GlobalState) -> Vec<u8> {
     b
 }
 
-fn canned_node(b: &mut Vec<u8>, node: &crate::state::planet_info::CannedNode) {
+fn canned_node(b: &mut Vec<u8>, node: &CannedNode) {
     assert!(node.is_valid(), "invalid internal canister record");
     put_u16(b, node.star);
     put_u8(b, node.planet);
