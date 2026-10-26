@@ -42,9 +42,16 @@ jobs:
       - run: cargo xtask quality $BASE_ARG $GROWTH
         env:
           GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--allow-growth' || '' }}
-      - run: cargo xtask clippy $BASE_ARG $GROWTH
+      - run: cargo xtask clippy $BASE_ARG $GROWTH $TIGHTEN
         env:
           GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--allow-growth' || '' }}
+          TIGHTEN: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--tighten' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') }}
+        with:
+          name: clippy-baseline-linux-x86_64
+          path: rust/xtask/quality-baseline.toml
+          retention-days: 3
       - run: cargo test --workspace --locked --no-default-features --features "$FEATURES"
 
   supply:

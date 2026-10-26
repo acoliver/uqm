@@ -85,6 +85,9 @@ Clippy sees only compiled `cfg` branches, so another host can report different
 counts. Local runs remain useful checks but must not raise the Linux baseline.
 Document or remove unsafe blocks behind target-specific branches, or use the CI
 measurement when tightening entries (decision [#708](https://github.com/acoliver/uqm/issues/708)).
+Without an approved growth label, CI runs Clippy with `--tighten` after checking
+the recorded limits and publishes `clippy-baseline-linux-x86_64`. Download that
+generated baseline when recording target-specific reductions; do not edit counts.
 
 In Phase 8 the debt set becomes `deny`. Where a compiler lint can enforce a rule it
 is used instead of a count: when a phase closes a subsystem, that subsystem's module
