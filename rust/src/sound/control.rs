@@ -193,7 +193,11 @@ pub fn wait_for_sound_end(channel: Option<usize>) {
             break;
         }
 
-        thread::sleep(Duration::from_millis(10));
+        if crate::time::source::is_replay() {
+            crate::threading::pacing::linked::replay_sleep_for(840 / 100);
+        } else {
+            thread::sleep(Duration::from_millis(10));
+        }
     }
 }
 

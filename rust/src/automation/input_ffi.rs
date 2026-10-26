@@ -702,12 +702,11 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
     Coordinator::process_player_input_observation().into()
 }
 
-/// Advance active automation at non-`DoInput` main-thread boundaries.
+/// Admit input for nested button waits outside `DoInput`.
 ///
-/// This is used after synchronous communication returns, where there may be no
-/// subsequent legacy input callback before Rust dispatch returns to the outer
-/// game loop. It runs only the scheduler service step; the next production
-/// input owner performs `UpdateInputState`.
+/// Both callers sample production input immediately after this hook:
+/// `ui::util::wait_until` through `AnyButtonPress`, and `MeleeGameOver`
+/// through `UpdateInputState`. Semantic notifications do not call it.
 #[no_mangle]
 pub extern "C" fn rust_automation_service_boundary() -> i32 {
     rust_automation_service_do_input()

@@ -58,6 +58,7 @@ fn main() {
         options::RunMode::Normal => {}
     }
 
+    uqm_rust::time::source::install(parsed.replay.is_some());
     logging::init(&parsed.log_file);
 
     // The frame loop runs on this thread; see threading::qos. Declared after
@@ -66,10 +67,32 @@ fn main() {
     uqm_rust::threading::qos::declare_game_thread_interactive();
 
     // Automation setup: validate before run_uqm (REQ-MODE-001)
-    let auto_opts = uqm_rust::automation::AutomationOptions {
+    let mut auto_opts = uqm_rust::automation::AutomationOptions {
         script_path: parsed.automation_script.clone(),
         output_dir: parsed.automation_output.clone(),
     };
+    if let Some(scenario) = &parsed.replay {
+        if parsed.native_window_proof.is_some() {
+            eprintln!("Replay cannot be combined with native-window proof.");
+            exit(1);
+        }
+        let path = std::path::PathBuf::from(scenario);
+        let path = if path.is_file() {
+            path
+        } else {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("scripts")
+                .join(format!("{scenario}.json"))
+        };
+        auto_opts.script_path = Some(path.to_string_lossy().into_owned());
+        if auto_opts.output_dir.is_none() {
+            let output = parsed.replay_summary.as_ref().map_or_else(
+                || std::path::PathBuf::from("tmp/replay"),
+                |path| std::path::PathBuf::from(path).with_extension("artifacts"),
+            );
+            auto_opts.output_dir = Some(output.to_string_lossy().into_owned());
+        }
+    }
 
     // Build capabilities resolved from build.vars at compile time
     let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
@@ -121,6 +144,14 @@ fn main() {
         }
     };
 
+    if let Some(path) = &parsed.replay_summary {
+        if let Err(error) =
+            uqm_rust::automation::Coordinator::write_replay_summary(std::path::Path::new(path))
+        {
+            eprintln!("Replay summary failed: {error}");
+            exit(1);
+        }
+    }
     exit(exit_code);
 }
 
@@ -153,6 +184,8 @@ fn print_usage() {
     println!("  --sound=DRIVER (openal, mixsdl, none; default mixsdl)");
     println!("  --stereosfx (positional sound effects)");
     println!("  --safe (start in safe mode)");
+    println!("  --replay=SCENARIO         (deterministic scenario execution)");
+    println!("  --replay-summary=FILE     (write replay counters and completion)");
     println!("  --automation-script=FILE   (enable runtime automation)");
     println!("  --automation-output=DIR    (automation output directory)");
     #[cfg(feature = "debug-process")]

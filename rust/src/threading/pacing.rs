@@ -237,12 +237,28 @@ pub(crate) mod linked {
         }
     }
 
+    fn replay_sleep(wake: u32) {
+        let mut env = GameThread::enter();
+        env.process_async();
+        env.pump_and_flush();
+        crate::time::source::advance_to(wake);
+        crate::sound::stream::advance_replay();
+    }
+
+    pub(crate) fn replay_sleep_for(duration: u32) {
+        replay_sleep(GetTimeCounter().saturating_add(duration));
+    }
+
     /// Sleep for `sleep_time` game time units after servicing the display.
     ///
     /// # Safety
     /// Called on the SDL game thread with input and graphics initialized.
     pub unsafe fn sleep_thread(sleep_time: u32) {
-        sleep_for(&mut GameThread::enter(), sleep_time);
+        if crate::time::source::is_replay() {
+            replay_sleep_for(sleep_time);
+        } else {
+            sleep_for(&mut GameThread::enter(), sleep_time);
+        }
     }
 
     /// Sleep until the game clock reaches `wake_time`.
@@ -250,7 +266,11 @@ pub(crate) mod linked {
     /// # Safety
     /// Called on the SDL game thread with input and graphics initialized.
     pub unsafe fn sleep_thread_until(wake_time: u32) {
-        sleep_until(&mut GameThread::enter(), wake_time);
+        if crate::time::source::is_replay() {
+            replay_sleep(wake_time);
+        } else {
+            sleep_until(&mut GameThread::enter(), wake_time);
+        }
     }
 }
 

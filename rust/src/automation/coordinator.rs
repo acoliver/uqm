@@ -344,6 +344,7 @@ struct CoordInner {
     hyperspace_flight_observed: bool,
     /// Release a semantically injected Select key on the next callback.
     release_semantic_select: bool,
+    replay_final_activity: u16,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -498,6 +499,7 @@ impl Coordinator {
                 consumed_planet_menu_generation: 0,
                 consumed_ship_picker_generation: 0,
                 release_semantic_select: false,
+                replay_final_activity: 0,
                 orbit_transition_pending: false,
                 hyperspace_flight_observed: false,
             }),
@@ -513,6 +515,28 @@ impl Coordinator {
         }
 
         let _ = COORDINATOR.set(coord);
+    }
+
+    fn elapsed_ms(&self) -> u64 {
+        if crate::time::source::is_replay() {
+            u64::from(crate::time::source::now_ms())
+        } else {
+            self.started_at.elapsed().as_millis() as u64
+        }
+    }
+
+    /// Write only deterministic runtime observations, excluding host timing.
+    pub fn write_replay_summary(path: &std::path::Path) -> Result<(), String> {
+        let coord = Self::get().ok_or("replay coordinator not initialized")?;
+        let inner = coord.inner.lock();
+        let summary = serde_json::json!({
+            "completed": inner.terminal_class == Some(TerminalClass::Success),
+            "inputs_admitted": inner.input_seen,
+            "steps": crate::time::source::steps(),
+            "presents": inner.present_seen,
+            "final_activity": inner.replay_final_activity,
+        });
+        std::fs::write(path, format!("{summary}\n")).map_err(|error| error.to_string())
     }
 
     /// Get the global coordinator if active.
@@ -745,6 +769,9 @@ impl Coordinator {
     /// whether a pending semantic response action now requires speech skipping.
     #[must_use]
     pub fn service_and_should_skip_pending_communication_speech() -> bool {
+        if crate::time::source::is_replay() {
+            return Self::should_skip_pending_communication_speech();
+        }
         for _ in 0..4 {
             if Self::should_skip_pending_communication_speech() {
                 return true;
@@ -771,6 +798,9 @@ impl Coordinator {
     /// Consume an already-observed communication completion after hail teardown
     /// and expose the next action before returning to the outer game loop.
     pub fn service_communication_completion_boundary() -> bool {
+        if crate::time::source::is_replay() {
+            return false;
+        }
         for _ in 0..2 {
             let Some(coord) = Self::get() else {
                 return false;
@@ -2724,7 +2754,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind: RecordKind::SemanticAssertion,
             label: Some(if passed {
                 "activity_assertion_passed".into()
@@ -2818,7 +2848,7 @@ impl Coordinator {
             let reservation = self.runtime.commit.reserve();
             let mut record = super::capture::capture_trace_record(
                 reservation.sequence(),
-                self.started_at.elapsed().as_millis() as u64,
+                self.elapsed_ms(),
                 CaptureGeneration(frame.generation),
                 &id,
             );
@@ -3208,6 +3238,7 @@ impl Coordinator {
         if !record_first_terminal(&mut inner.terminal_class, class) {
             return;
         }
+        inner.replay_final_activity = crate::mainloop::ffi::get_current_activity().0;
         self.runtime.mirror.terminal.try_set(class);
 
         // Propagate stop to the C game loop: set CHECK_ABORT so the
@@ -3491,7 +3522,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind,
             label: None,
             from: None,
@@ -3524,7 +3555,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind: RecordKind::RunEnd,
             label: None,
             from: None,
@@ -3554,7 +3585,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind,
             label: Some(label),
             from: None,
@@ -3586,7 +3617,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind: RecordKind::Readiness,
             label: None,
             from: None,
@@ -3622,7 +3653,7 @@ impl Coordinator {
             sequence: seq,
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
-            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            elapsed_ms: self.elapsed_ms(),
             kind: RecordKind::Presentation,
             label: None,
             from: None,
@@ -3673,7 +3704,7 @@ impl Coordinator {
         let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
             reservation.sequence(),
-            self.started_at.elapsed().as_millis() as u64,
+            self.elapsed_ms(),
             generation,
             label,
         );
@@ -3746,7 +3777,7 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
         sequence: seq,
         input_seen: inner.input_seen,
         present_seen: inner.present_seen,
-        elapsed_ms: coord.started_at.elapsed().as_millis() as u64,
+        elapsed_ms: coord.elapsed_ms(),
         kind: RecordKind::SeedApplication,
         label: None,
         from: None,

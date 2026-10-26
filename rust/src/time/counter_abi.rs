@@ -1,7 +1,7 @@
-//! SDL-backed game time counter.
+//! Game time counter.
 //!
 //! The counter runs at `ONE_SECOND` (840) units per second, derived from
-//! `SDL_GetTicks`.
+//! the selected process clock.
 
 #![allow(non_snake_case)]
 
@@ -24,9 +24,9 @@ pub fn InitTimeSystem() {}
 
 pub fn UnInitTimeSystem() {}
 
+#[track_caller]
 pub fn GetTimeCounter() -> u32 {
-    // SAFETY: SDL_GetTicks has no preconditions.
-    ticks_to_time_count(unsafe { sdl2_sys::SDL_GetTicks() })
+    super::source::now_ticks()
 }
 
 #[cfg(test)]
