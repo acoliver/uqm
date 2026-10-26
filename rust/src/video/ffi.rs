@@ -42,7 +42,7 @@ use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
 use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 
 extern "C" {
-    static SDL_Screen: *mut SDL_Surface;
+    static mut SDL_Screen: *mut crate::graphics::ffi::SDL_Surface;
 }
 
 // Minimal SDL types needed for direct pixel writes.

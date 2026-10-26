@@ -4,8 +4,6 @@
 // These are C functions we need to call from Rust for integration.
 // They remain as extern declarations until they're needed at runtime.
 
-use std::os::raw::c_void;
-
 // ---------------------------------------------------------------------------
 // Activity constants (from globdata.h)
 // ---------------------------------------------------------------------------
@@ -37,9 +35,5 @@ extern "C" {
 // UIO directory for melee files
 // ---------------------------------------------------------------------------
 
-extern "C" {
-    /// The melee save directory handle
-    pub static mut meleeDir: *mut c_void;
-    /// The config directory handle
-    pub static mut configDir: *mut c_void;
-}
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::{configDir, meleeDir};

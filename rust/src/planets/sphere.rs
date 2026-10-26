@@ -72,11 +72,11 @@ pub(crate) mod live {
     use crate::graphics::context_abi::SetContextDrawMode;
 
     extern "C" {
-        static PlanetContext: *mut crate::graphics::native_abi::context_desc;
-        static OffScreenContext: *mut crate::graphics::native_abi::context_desc;
-        static optWhichShield: i32;
-        static ScreenWidth: i32;
-        static ScreenHeight: i32;
+        static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
+        static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
+        static mut optWhichShield: i32;
+        static mut ScreenWidth: i32;
+        static mut ScreenHeight: i32;
     }
     use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 

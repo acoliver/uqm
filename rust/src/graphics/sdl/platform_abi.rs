@@ -4,9 +4,9 @@ use sdl2_sys as sys;
 use std::{ffi::c_int, ptr};
 extern "C" {
     static mut GfxFlags: c_int;
-    static GraphicsDriver: c_int;
-    static ScreenWidthActual: c_int;
-    static ScreenHeightActual: c_int;
+    static mut GraphicsDriver: i32;
+    static mut ScreenWidthActual: i32;
+    static mut ScreenHeightActual: i32;
 }
 /// # Safety
 /// Called on the SDL main thread with graphics initialized.

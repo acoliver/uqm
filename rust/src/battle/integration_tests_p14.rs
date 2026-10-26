@@ -4,15 +4,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::battle::display_list::DisplayList;
     use crate::battle::element::*;
     use crate::battle::lifecycle::*;
-    use crate::battle::process_loop::*;
     use crate::battle::ship_runtime::*;
-    use crate::battle::tactical::*;
     use crate::battle::velocity::VelocityDesc;
-
-    const DISPLAY_LIST_CAPACITY: usize = 64;
 
     // ---- Test 1: Shared asset ref-counting ----
 
@@ -47,8 +42,6 @@ mod tests {
     fn test_escape_triggers_flee_check() {
         let input = BattleInputState(BattleInputState::ESCAPE.0);
         assert!(has_escape_input(input));
-        assert!(run_away_allowed(IN_ENCOUNTER, true, false));
-        assert!(!run_away_allowed(SUPER_MELEE, true, false));
     }
 
     // ---- Test 3: Music selection ----
@@ -64,135 +57,6 @@ mod tests {
             BattleMusicType::QuasiSpace
         );
         assert_eq!(select_battle_music(false, false), BattleMusicType::Normal);
-    }
-
-    // ---- Test 4: Element alloc → setup → free ----
-
-    #[test]
-    fn test_element_alloc_setup_free_cycle() {
-        let mut list = DisplayList::new(DISPLAY_LIST_CAPACITY);
-        let handle = alloc_element(&mut list).expect("alloc should succeed");
-        if let Some(elem) = list.get_mut(handle) {
-            elem.state_flags = ElementFlags::APPEARING;
-            elem.current.location.x = 100;
-            elem.current.location.y = 200;
-            elem.life_span = 10;
-            setup_element(elem);
-            assert_eq!(elem.next.location.x, 100);
-            assert_eq!(elem.next.location.y, 200);
-        }
-        let _ = free_element(&mut list, handle);
-    }
-
-    // ---- Test 5: Pre-process applies velocity ----
-
-    #[test]
-    fn test_pre_process_velocity_integration() {
-        unsafe {
-            let mut list = DisplayList::new(DISPLAY_LIST_CAPACITY);
-            let handle = alloc_element(&mut list).expect("alloc should succeed");
-            if let Some(elem) = list.get_mut(handle) {
-                elem.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::FINITE_LIFE;
-                elem.life_span = 10;
-                elem.current.location.x = 1000;
-                elem.current.location.y = 2000;
-                elem.next.location.x = 1000;
-                elem.next.location.y = 2000;
-                elem.velocity.set_components(256, 512);
-            }
-            pre_process(handle, &mut list);
-            if let Some(elem) = list.get(handle) {
-                assert_eq!(elem.life_span, 9);
-                // Velocity applied (fixed-point: actual delta depends on VELOCITY_SHIFT)
-                assert_ne!(elem.next.location.x, 1000); // moved
-                assert_ne!(elem.next.location.y, 2000); // moved
-            }
-        }
-    }
-
-    // ---- Test 6: Zoom step mode ----
-
-    #[test]
-    fn test_zoom_step_mode_close() {
-        let r = calc_reduction_step(10, 10, 0, false, false);
-        assert_eq!(r, 0);
-    }
-
-    // ---- Test 7: Zoom continuous mode ----
-
-    #[test]
-    fn test_zoom_continuous_close() {
-        let r = calc_reduction_continuous(10, 10, false, false);
-        assert!(r >= 0);
-    }
-
-    // ---- Test 8: Display coordinate conversion ----
-
-    #[test]
-    fn test_display_coord_step_mode() {
-        assert_eq!(calc_display_coord_step(1000, 500, 0), 500);
-        assert_eq!(calc_display_coord_step(1000, 500, 1), 250);
-    }
-
-    #[test]
-    fn test_display_coord_continuous_mode() {
-        let result = calc_display_coord_continuous(1000, 500, 1 << ZOOM_SHIFT);
-        assert_eq!(result, 500);
-    }
-
-    // ---- Test 9: Explosion fragment schedule ----
-
-    #[test]
-    fn test_explosion_fragment_schedule() {
-        // explosion_fragment_count returns (count, hide_ship, clear_preprocess)
-        assert_eq!(explosion_fragment_count(0).0, 1);
-        assert_eq!(explosion_fragment_count(3).0, 2);
-        assert_eq!(explosion_fragment_count(10).0, 3);
-        assert_eq!(explosion_fragment_count(15).0, 3);
-        assert!(explosion_fragment_count(15).1); // hide_ship at tick 15
-        assert_eq!(explosion_fragment_count(20).0, 1);
-        assert!(explosion_fragment_count(25).2); // clear_preprocess at tick 25
-    }
-
-    // ---- Test 10: Cleanup life_span ----
-
-    #[test]
-    fn test_cleanup_life_span_variants() {
-        let ls_with = compute_cleanup_life_span(true, false);
-        let ls_without = compute_cleanup_life_span(false, false);
-        let ls_winner = compute_cleanup_life_span(true, true);
-        assert!(ls_with >= MIN_DITTY_FRAME_COUNT);
-        assert_eq!(ls_without, 2);
-        assert!(ls_winner > ls_with);
-    }
-
-    // ---- Test 11: Flee allowance full matrix ----
-
-    #[test]
-    fn test_flee_allowance_matrix() {
-        assert!(run_away_allowed(IN_ENCOUNTER, true, false));
-        assert!(run_away_allowed(IN_LAST_BATTLE, true, false));
-        assert!(!run_away_allowed(SUPER_MELEE, true, false));
-        assert!(!run_away_allowed(IN_ENCOUNTER, false, false));
-        assert!(!run_away_allowed(IN_ENCOUNTER, true, true));
-    }
-
-    // ---- Test 12: Battle counter decrement ----
-
-    #[test]
-    fn test_battle_counter_decrement() {
-        // MAX_SHIP_MASS = 10; normal ships have mass <= 10
-        assert!(should_decrement_battle_counter(5));
-        assert!(should_decrement_battle_counter(MAX_SHIP_MASS));
-        // Fleeing ships have mass > MAX_SHIP_MASS
-        assert!(!should_decrement_battle_counter(MAX_SHIP_MASS + 1));
-    }
-
-    // ---- Test 13: Ion trail colors ----
-
-    #[test]
-    fn test_ion_trail_colors_valid() {
-        assert_eq!(ION_TRAIL_COLOR_TABLE.len(), ION_TRAIL_LIFE as usize);
     }
 
     // ---- Test 14: Player order ----

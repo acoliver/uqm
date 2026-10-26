@@ -10,10 +10,10 @@ pub(super) trait PkunkApi: AllianceApi<Handler> {
 impl PkunkApi for crate::comm::races::script::live::LiveScript<Handler> {
     fn date(&self) -> (u16, u16, u16) {
         extern "C" {
-            static mut GlobData: crate::comm::locdata::CGlobData;
+            static mut GlobData: crate::ships::native::abi::GLOBDATA;
         }
         unsafe {
-            let date = &(*std::ptr::addr_of!(GlobData)).game_state.game_clock;
+            let date = &(*std::ptr::addr_of!(GlobData)).Game_state.GameClock;
             (
                 date.year_index,
                 u16::from(date.month_index),

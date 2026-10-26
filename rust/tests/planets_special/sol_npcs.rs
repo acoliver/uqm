@@ -6,7 +6,6 @@ use uqm_rust::collections::queue::{AllocLink, InitQueue, PutQueue, Queue, Uninit
 use uqm_rust::comm::dispatch::{
     CFleetInfo, CShipFragment, CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER,
 };
-use uqm_rust::comm::locdata::CQueue;
 use uqm_rust::planets::c_api::{self, GLOB_DATA};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::special::{LiveStory, Story};
@@ -22,14 +21,14 @@ pub fn check(h: &mut Harness) {
     let word = LiveStory.word("URQUAN_PROBE_GRPOFFS0");
     let activity = uqm_rust::mainloop::ffi::get_current_activity();
     unsafe {
-        let ip = &raw mut GLOB_DATA.game_state.ip_group_q;
-        let built = &raw mut GLOB_DATA.game_state.npc_built_ship_q;
-        let fleets = &raw mut GLOB_DATA.game_state.avail_race_q;
-        let reference = &raw mut GLOB_DATA.game_state.battle_group_ref;
+        let ip = &raw mut GLOB_DATA.Game_state.ip_group_q;
+        let built = &raw mut GLOB_DATA.Game_state.npc_built_ship_q;
+        let fleets = &raw mut GLOB_DATA.Game_state.avail_race_q;
+        let reference = &raw mut GLOB_DATA.Game_state.BattleGroupRef;
         let saved = (ip.read(), built.read(), fleets.read(), reference.read());
-        ip.write(CQueue::default());
-        built.write(CQueue::default());
-        fleets.write(CQueue::default());
+        ip.write(Queue::default());
+        built.write(Queue::default());
+        fleets.write(Queue::default());
         assert!(InitQueue(
             ip.cast(),
             4,
@@ -63,14 +62,17 @@ pub fn check(h: &mut Harness) {
         let saved_star = super::CurStarDescPtr;
         let saved_catalog = std::ptr::addr_of!(c_api::STAR_ARRAY).read();
         // The ordinary game restart installs this same Rust catalog.
-        std::ptr::addr_of_mut!(c_api::STAR_ARRAY)
-            .write(std::ptr::addr_of!(uqm_rust::planets::tables::STARMAP_ARRAY).cast());
+        std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(
+            std::ptr::addr_of!(uqm_rust::planets::tables::STARMAP_ARRAY)
+                .cast_mut()
+                .cast(),
+        );
         let catalog = std::slice::from_raw_parts(
             c_api::STAR_ARRAY,
             uqm_rust::planets::tables::STAR_CATALOG_LEN,
         );
         let sol = catalog.iter().position(|star| star.index == 1).unwrap();
-        super::CurStarDescPtr = c_api::STAR_ARRAY.add(sol).cast_mut().cast();
+        super::CurStarDescPtr = c_api::STAR_ARRAY.add(sol).cast();
         LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", 0);
         set_game_state("CHMMR_BOMB_STATE", 0);
         set_game_state("PROBE_MESSAGE_DELIVERED", 0);

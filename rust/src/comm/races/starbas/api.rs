@@ -42,7 +42,6 @@ pub(super) trait StarbaseApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 mod live {
     use super::*;
-    use crate::comm::locdata::CGlobData;
     use crate::comm::races::script::live::LiveScript;
 
     use crate::threading::legacy_abi::TaskSwitch;
@@ -60,8 +59,8 @@ mod live {
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
     extern "C" {
-        static mut GlobData: CGlobData;
-        static usingSpeech: u8;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        static mut usingSpeech: u32;
     }
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -69,7 +68,7 @@ mod live {
     impl StarbaseApi for LiveScript<Handler> {
         fn date(&self) -> Date {
             unsafe {
-                let clock = &(*std::ptr::addr_of!(GlobData)).game_state.game_clock;
+                let clock = &(*std::ptr::addr_of!(GlobData)).Game_state.GameClock;
                 Date {
                     year: clock.year_index,
                     month: clock.month_index,
@@ -79,16 +78,16 @@ mod live {
         }
         fn ship(&self) -> Ship {
             unsafe {
-                let sis = &(*std::ptr::addr_of!(GlobData)).sis_state;
+                let sis = &(*std::ptr::addr_of!(GlobData)).SIS_state;
                 Ship {
-                    drives: sis.drive_slots,
-                    jets: sis.jet_slots,
-                    modules: sis.module_slots,
-                    crew: sis.crew_enlisted,
-                    fuel: sis.fuel_on_board,
-                    landers: sis.num_landers,
-                    units: sis.res_units,
-                    mineral_mass: sis.total_element_mass,
+                    drives: sis.DriveSlots,
+                    jets: sis.JetSlots,
+                    modules: sis.ModuleSlots,
+                    crew: sis.CrewEnlisted,
+                    fuel: sis.FuelOnBoard,
+                    landers: sis.NumLanders,
+                    units: sis.ResUnits,
+                    mineral_mass: sis.TotalElementMass,
                 }
             }
         }
@@ -107,15 +106,15 @@ mod live {
             }
         }
         fn mineral_amount(&self, category: usize) -> u16 {
-            unsafe { GlobData.sis_state.element_amounts[category] }
+            unsafe { GlobData.SIS_state.ElementAmounts[category] }
         }
         fn mineral_worth(&self, category: usize) -> u8 {
-            unsafe { GlobData.game_state.element_worth[category] }
+            unsafe { GlobData.Game_state.ElementWorth[category] }
         }
         fn remove_minerals(&mut self, category: usize, amount: u16) {
             unsafe {
-                GlobData.sis_state.element_amounts[category] -= amount;
-                GlobData.sis_state.total_element_mass -= amount;
+                GlobData.SIS_state.ElementAmounts[category] -= amount;
+                GlobData.SIS_state.TotalElementMass -= amount;
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
@@ -153,7 +152,7 @@ mod live {
         }
         fn skip_sale(&mut self) -> bool {
             unsafe {
-                AnyButtonPress(1) != 0 || GlobData.game_state.current_activity & (1 << 14) != 0
+                AnyButtonPress(1) != 0 || GlobData.Game_state.CurrentActivity & (1 << 14) != 0
             }
         }
     }

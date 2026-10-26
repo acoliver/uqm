@@ -564,7 +564,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn init_slylandro_comm() -> *mut crate::comm::locdata::CLocData {
         static mut DESC: Option<crate::comm::locdata::CLocData> = None;
         extern "C" {
-            static ScreenWidth: i32;
+            static mut ScreenWidth: i32;
         }
         let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
         d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;

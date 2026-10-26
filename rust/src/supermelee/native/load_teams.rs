@@ -280,7 +280,7 @@ pub(crate) mod live {
         DestroyStringTable(ReleaseStringTable(load.dirEntries));
         load.dirEntries = crate::strings::string_table::CaptureStringTable(
             LoadDirEntryTable(
-                meleeDir,
+                meleeDir.cast(),
                 c"".as_ptr(),
                 c".mle".as_ptr(),
                 match_MatchType_match_MATCH_SUFFIX,

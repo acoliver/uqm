@@ -1,7 +1,7 @@
 //! Lifecycle tests for the directory preparation steps, run against a real
 //! uio repository and real temporary directories.
 
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::path::Path;
 
@@ -39,7 +39,7 @@ impl Fixture {
         }
         unsafe {
             uio_init();
-            repository = uio_openRepository(0) as *mut c_void;
+            repository = uio_openRepository(0);
         }
         Fixture { home, saved_env }
     }
@@ -63,10 +63,10 @@ impl Drop for Fixture {
         unsafe {
             for handle in [configDir, contentDir, saveDir, meleeDir] {
                 if !handle.is_null() {
-                    uio_closeDir(handle as *mut uio_DirHandle);
+                    uio_closeDir(handle);
                 }
             }
-            uio_closeRepository(repository as *mut uio_Repository);
+            uio_closeRepository(repository);
             repository = ptr::null_mut();
             configDir = ptr::null_mut();
             contentDir = ptr::null_mut();
@@ -85,10 +85,10 @@ impl Drop for Fixture {
     }
 }
 
-fn read_through_uio(dir: *mut c_void, name: &str) -> Option<Vec<u8>> {
+fn read_through_uio(dir: *mut uio_DirHandle, name: &str) -> Option<Vec<u8>> {
     let name = CString::new(name).unwrap();
     unsafe {
-        let handle = uio_open(dir as *mut uio_DirHandle, name.as_ptr(), 0, 0);
+        let handle = uio_open(dir, name.as_ptr(), 0, 0);
         if handle.is_null() {
             return None;
         }
@@ -107,16 +107,11 @@ fn read_through_uio(dir: *mut c_void, name: &str) -> Option<Vec<u8>> {
     }
 }
 
-fn list_through_uio(dir: *mut c_void, pattern: &str, match_type: c_int) -> Vec<String> {
+fn list_through_uio(dir: *mut uio_DirHandle, pattern: &str, match_type: c_int) -> Vec<String> {
     let empty = CString::new("").unwrap();
     let pattern = CString::new(pattern).unwrap();
     unsafe {
-        let list = uio_getDirList(
-            dir as *mut uio_DirHandle,
-            empty.as_ptr(),
-            pattern.as_ptr(),
-            match_type,
-        );
+        let list = uio_getDirList(dir, empty.as_ptr(), pattern.as_ptr(), match_type);
         if list.is_null() {
             return Vec::new();
         }

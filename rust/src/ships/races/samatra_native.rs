@@ -1,4 +1,6 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
+
+pub use super::samatra_state as observation;
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{
@@ -8,7 +10,7 @@ pub(crate) mod engine {
     use crate::state::game_state_keys::get_game_state;
     use std::mem;
 
-    use super::super::observation;
+    use super::observation;
     use crate::collections::queue::InsertQueue;
     const COMET_SPEED: SIZE = 12 << ONE_SHIFT;
     const SENTINEL_SPEED: SIZE = 8 << ONE_SHIFT;
@@ -725,9 +727,9 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub(super) use engine::snapshot;
+pub use engine::snapshot;
 
 #[cfg(test)]
-pub(super) fn snapshot() -> Option<super::observation::Snapshot> {
+pub fn snapshot() -> Option<observation::Snapshot> {
     None
 }

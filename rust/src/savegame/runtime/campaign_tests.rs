@@ -149,11 +149,14 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             rust_init_game_state();
         }
         let mut game = super::queue_tests::LiveGame::new();
-        assert!(crate::collections::queue::InitQueue(
-            std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
-            crate::time::clock_bridge::NUM_EVENTS as u16,
-            std::mem::size_of::<crate::time::clock_bridge::CEvent>() as u16,
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            crate::collections::queue::InitQueue(
+                std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
+                crate::time::clock_bridge::NUM_EVENTS as u16,
+                std::mem::size_of::<crate::time::clock_bridge::CEvent>() as u16,
+            )
+        });
 
         let restored =
             restore_runtime(&mut game, &saved.global, &saved.game_state, &saved.events).unwrap();
@@ -300,8 +303,11 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
             }
         })
         .unwrap();
-        crate::collections::queue::UninitQueue(
-            std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
-        );
+        unsafe {
+            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+            crate::collections::queue::UninitQueue(
+                std::ptr::addr_of_mut!(game.game_clock.event_q).cast(),
+            )
+        };
     }
 }

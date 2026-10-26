@@ -360,11 +360,10 @@ fn handle_timeout<O: RestartMenuOps + ?Sized>(ops: &O) {
 /// @requirement REQ-RM-006
 #[cfg(not(test))]
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_void) -> c_int {
+/// # Safety
+/// A nonnull `menu_state_ptr` must point to an initialized restart menu
+/// state exclusively owned by the game thread for the duration of this call.
+pub unsafe extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_void) -> c_int {
     if menu_state_ptr.is_null() {
         return 0;
     }

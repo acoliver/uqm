@@ -2,7 +2,6 @@
 // @plan PLAN-20260314-SHIPS.P04
 // @requirement REQ-NONMELEE-SAME-RUNTIME, REQ-ROSTER-PRESERVE, REQ-MUTATION-PRESERVE
 
-use super::traits::ShipBehavior;
 use super::types::{
     Characteristics, FleetStuff, IntelStuff, RaceDesc, RaceDescTemplate, ShipData, ShipFlags,
     ShipInfo, ShipsError, SpeciesId,
@@ -14,49 +13,6 @@ use super::types::{
 
 /// Infinite sphere of influence radius.
 const INFINITE_RADIUS: u16 = 0xFFFF;
-
-// ---------------------------------------------------------------------------
-// TemplateOnlyShip  (metadata-safe behavior object)
-// ---------------------------------------------------------------------------
-
-/// Metadata-safe ship behavior implementation for species whose combat
-/// behavior hasn't been ported yet.
-///
-/// All hooks are safe no-ops. This allows metadata-only descriptor creation
-/// for catalog/analysis work before full race implementation is complete.
-/// The template is captured at construction time so `descriptor_template()`
-/// can never panic.
-#[derive(Debug, Clone)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "production descriptors use race impls; retained for metadata-only test path"
-    )
-)]
-struct TemplateOnlyShip {
-    template: RaceDescTemplate,
-}
-
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "production descriptors use race impls; retained for metadata-only test path"
-    )
-)]
-impl TemplateOnlyShip {
-    fn new(species: SpeciesId) -> Result<Self, ShipsError> {
-        let template = descriptor_template_for_species(species)?;
-        Ok(Self { template })
-    }
-}
-
-impl ShipBehavior for TemplateOnlyShip {
-    fn descriptor_template(&self) -> RaceDescTemplate {
-        self.template.clone()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Template Table  (complete coverage for all 28 species)
@@ -997,72 +953,17 @@ pub fn descriptor_template_for_species(species: SpeciesId) -> Result<RaceDescTem
 }
 
 // ---------------------------------------------------------------------------
-// Ship Behavior Creation
-// ---------------------------------------------------------------------------
-
-/// Creates a ship behavior instance for the specified species.
-///
-/// Phase P11 implemented 8 simple races with real combat behavior.
-/// Phase P12 implemented 8 mode-switching races with real combat behavior.
-/// Phase P13 implements 12 complex & non-melee races with real combat behavior.
-/// All 28 species now have complete race-specific implementations.
-///
-/// # Errors
-/// Returns `ShipsError::UnknownSpecies` for `NoId` or invalid species.
-pub fn create_ship_behavior(species: SpeciesId) -> Result<Box<dyn ShipBehavior>, ShipsError> {
-    match species {
-        SpeciesId::NoId => Err(ShipsError::UnknownSpecies(0)),
-
-        // Phase P11: 8 simple races with real combat behavior
-        SpeciesId::Arilou => Ok(Box::<super::races::ArilouShip>::default()),
-        SpeciesId::Earthling => Ok(Box::<super::races::HumanShip>::default()),
-        SpeciesId::Spathi => Ok(Box::<super::races::SpathiShip>::default()),
-        SpeciesId::Supox => Ok(Box::<super::races::SupoxShip>::default()),
-        SpeciesId::Thraddash => Ok(Box::<super::races::ThraddashShip>::default()),
-        SpeciesId::Yehat => Ok(Box::<super::races::YehatShip>::default()),
-        SpeciesId::Druuge => Ok(Box::<super::races::DruugeShip>::default()),
-        SpeciesId::Ilwrath => Ok(Box::<super::races::IlwrathShip>::default()),
-
-        // Phase P12: 8 mode-switching races with real combat behavior
-        SpeciesId::Androsynth => Ok(Box::<super::races::AndrosynthShip>::default()),
-        SpeciesId::Mmrnmhrm => Ok(Box::<super::races::MmrnmhrmShip>::default()),
-        SpeciesId::Orz => Ok(Box::<super::races::OrzShip>::default()),
-        SpeciesId::Pkunk => Ok(Box::<super::races::PkunkShip>::default()),
-        SpeciesId::Shofixti => Ok(Box::<super::races::ShofixtiShip>::default()),
-        SpeciesId::Syreen => Ok(Box::<super::races::SyreenShip>::default()),
-        SpeciesId::Utwig => Ok(Box::<super::races::UtwigShip>::default()),
-        SpeciesId::Vux => Ok(Box::<super::races::VuxShip>::default()),
-
-        // Phase P13: 12 complex & non-melee races with real combat behavior
-        SpeciesId::Chmmr => Ok(Box::<super::races::ChmmrShip>::default()),
-        SpeciesId::Chenjesu => Ok(Box::<super::races::ChenjesuShip>::default()),
-        SpeciesId::Mycon => Ok(Box::<super::races::MyconShip>::default()),
-        SpeciesId::Melnorme => Ok(Box::<super::races::MelnormeShip>::default()),
-        SpeciesId::Umgah => Ok(Box::<super::races::UmgahShip>::default()),
-        SpeciesId::UrQuan => Ok(Box::<super::races::UrquanShip>::default()),
-        SpeciesId::KohrAh => Ok(Box::<super::races::BlackUrquanShip>::default()),
-        SpeciesId::Slylandro => Ok(Box::<super::races::SlylandroShip>::default()),
-        SpeciesId::Zoqfotpik => Ok(Box::<super::races::ZoqfotpikShip>::default()),
-        SpeciesId::SisShip => Ok(Box::<super::races::SisShip>::default()),
-        SpeciesId::SaMatra => Ok(Box::<super::races::SamatraShip>::default()),
-        SpeciesId::UrQuanProbe => Ok(Box::<super::races::ProbeShip>::default()),
-    }
-}
-
-// ---------------------------------------------------------------------------
 // RaceDesc Creation
 // ---------------------------------------------------------------------------
 
 /// Creates a full `RaceDesc` instance for the specified species.
 ///
-/// Combines the species template with a behavior object. For now, all species
-/// use `TemplateOnlyShip`. Real combat behavior will be added in P11-P13.
+/// Builds the descriptor from the plain species template.
 ///
 /// # Errors
 /// Returns `ShipsError::UnknownSpecies` for `NoId` or invalid species.
 pub fn create_race_desc(species: SpeciesId) -> Result<RaceDesc, ShipsError> {
     let template = descriptor_template_for_species(species)?;
-    let behavior = create_ship_behavior(species)?;
 
     Ok(RaceDesc {
         ship_info: template.ship_info,
@@ -1070,23 +971,17 @@ pub fn create_race_desc(species: SpeciesId) -> Result<RaceDesc, ShipsError> {
         characteristics: template.characteristics,
         ship_data: template.ship_data,
         intel: template.intel,
-        behavior,
         data: None,
     })
 }
 
 /// Creates a metadata-only `RaceDesc` for catalog/analysis work.
 ///
-/// This function must succeed for all 28 valid species, regardless of whether
-/// their combat behavior has been implemented yet. Uses `TemplateOnlyShip` for
-/// safe no-op behavior. Safe for use in non-combat contexts like ship catalog,
-/// fleet management, UI display, etc.
+/// This succeeds for all 28 valid species without constructing combat state.
 ///
 /// # Errors
 /// Returns `ShipsError::UnknownSpecies` for `NoId` or invalid species.
 pub fn create_metadata_only_desc(species: SpeciesId) -> Result<RaceDesc, ShipsError> {
-    // Currently identical to create_race_desc since all species use TemplateOnlyShip.
-    // This separation allows future divergence when live combat behavior is added.
     create_race_desc(species)
 }
 
@@ -1097,8 +992,26 @@ pub fn create_metadata_only_desc(species: SpeciesId) -> Result<RaceDesc, ShipsEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ships::traits::{BattleContext, ShipState};
-    use crate::ships::types::StatusFlags;
+
+    #[test]
+    fn catalog_metadata_matches_pre_soundness_catalog_for_all_28_species() {
+        let mut metadata = String::new();
+        for id in 1..=28 {
+            let species = SpeciesId::from_i32(id).unwrap();
+            let desc = create_metadata_only_desc(species).unwrap();
+            metadata.push_str(&format!(
+                "{species:?}: {:?}\n",
+                (
+                    desc.ship_info,
+                    desc.fleet,
+                    desc.characteristics,
+                    desc.ship_data,
+                    desc.intel
+                )
+            ));
+        }
+        assert_eq!(metadata, include_str!("catalog_metadata.txt"));
+    }
 
     // -- Template coverage tests --------------------------------------------
 
@@ -1251,56 +1164,6 @@ mod tests {
         assert_eq!(template.characteristics.ship_mass, 100);
     }
 
-    // -- create_ship_behavior tests -----------------------------------------
-
-    #[test]
-    fn create_ship_behavior_all_28_species_succeed() {
-        let all_species = [
-            SpeciesId::Arilou,
-            SpeciesId::Chmmr,
-            SpeciesId::Earthling,
-            SpeciesId::Orz,
-            SpeciesId::Pkunk,
-            SpeciesId::Shofixti,
-            SpeciesId::Spathi,
-            SpeciesId::Supox,
-            SpeciesId::Thraddash,
-            SpeciesId::Utwig,
-            SpeciesId::Vux,
-            SpeciesId::Yehat,
-            SpeciesId::Melnorme,
-            SpeciesId::Druuge,
-            SpeciesId::Ilwrath,
-            SpeciesId::Mycon,
-            SpeciesId::Slylandro,
-            SpeciesId::Umgah,
-            SpeciesId::UrQuan,
-            SpeciesId::Zoqfotpik,
-            SpeciesId::Syreen,
-            SpeciesId::KohrAh,
-            SpeciesId::Androsynth,
-            SpeciesId::Chenjesu,
-            SpeciesId::Mmrnmhrm,
-            SpeciesId::SisShip,
-            SpeciesId::SaMatra,
-            SpeciesId::UrQuanProbe,
-        ];
-        for species in &all_species {
-            let result = create_ship_behavior(*species);
-            assert!(
-                result.is_ok(),
-                "create_ship_behavior failed for {:?}",
-                species
-            );
-        }
-    }
-
-    #[test]
-    fn create_ship_behavior_no_id_returns_error() {
-        let result = create_ship_behavior(SpeciesId::NoId);
-        assert!(result.is_err());
-    }
-
     // -- create_race_desc tests ----------------------------------------------
 
     #[test]
@@ -1405,45 +1268,6 @@ mod tests {
     fn create_metadata_only_desc_no_id_returns_error() {
         let result = create_metadata_only_desc(SpeciesId::NoId);
         assert!(result.is_err());
-    }
-
-    // -- TemplateOnlyShip tests ----------------------------------------------
-
-    #[test]
-    fn template_only_ship_returns_correct_template() {
-        let ship = TemplateOnlyShip::new(SpeciesId::Spathi).unwrap();
-        let template = ship.descriptor_template();
-        assert_eq!(template.ship_info.ship_cost, 18);
-    }
-
-    #[test]
-    fn template_only_ship_defaults_are_safe() {
-        let mut ship = TemplateOnlyShip::new(SpeciesId::Arilou).unwrap();
-        let mut state = ShipState {
-            crew_level: 6,
-            max_crew: 6,
-            energy_level: 20,
-            max_energy: 20,
-            ship_facing: 0,
-            cur_status_flags: StatusFlags::empty(),
-            old_status_flags: StatusFlags::empty(),
-            player_nr: 0,
-            position: (0, 0),
-            velocity: (0, 0),
-            ..ShipState::default()
-        };
-        let ctx = BattleContext {
-            hyperspace: false,
-            frame_count: 0,
-            gravity_center: None,
-        };
-        // All default hooks should be safe no-ops
-        assert!(ship.preprocess(&mut state, &ctx).is_ok());
-        assert!(ship.postprocess(&mut state, &ctx).is_ok());
-        assert!(ship.init_weapon(&state, &ctx).unwrap().is_empty());
-        assert!(ship.intelligence(&state, &ctx).is_empty());
-        ship.uninit(); // Should not panic
-        assert!(ship.collision_override().is_none());
     }
 
     // -- Resource IDs are zero (P05's job) -----------------------------------

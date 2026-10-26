@@ -20,9 +20,9 @@ use crate::graphics::frame_abi::ClearDrawable;
 
 use crate::graphics::frame_abi::DrawStamp;
 use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
-#[allow(clashing_extern_declarations)]
+
 extern "C" {
-    static optSubtitles: i32;
+    static mut optSubtitles: u32;
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 

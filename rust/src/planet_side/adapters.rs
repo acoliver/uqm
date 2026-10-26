@@ -63,7 +63,7 @@ use crate::ui::sis::DrawStorageBays;
 #[cfg(not(test))]
 extern "C" {
     #[link_name = "GlobData"]
-    static mut GLOB_DATA: crate::comm::locdata::CGlobData;
+    static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
 }
 #[cfg(not(test))]
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -131,13 +131,13 @@ impl CffiShipStatus {
     pub fn snapshot(&self) -> ShipStatus {
         #[cfg(not(test))]
         unsafe {
-            let sis = std::ptr::addr_of!(GLOB_DATA.sis_state).read();
+            let sis = std::ptr::addr_of!(GLOB_DATA.SIS_state).read();
             ShipStatus {
-                crew_enlisted: sis.crew_enlisted,
-                landers: sis.num_landers,
-                total_element_mass: sis.total_element_mass,
-                element_amounts: sis.element_amounts,
-                total_bio_mass: sis.total_bio_mass,
+                crew_enlisted: sis.CrewEnlisted,
+                landers: sis.NumLanders,
+                total_element_mass: sis.TotalElementMass,
+                element_amounts: sis.ElementAmounts,
+                total_bio_mass: sis.TotalBioMass,
             }
         }
         #[cfg(test)]
@@ -174,23 +174,22 @@ impl ShipStatusPort for CffiShipStatus {
                 DeltaSISGauges(delta.crew, 0, 0);
             }
 
-            let sis = std::ptr::addr_of_mut!(GLOB_DATA.sis_state);
+            let sis = std::ptr::addr_of_mut!(GLOB_DATA.SIS_state);
             if delta.landers < 0 {
-                (*sis).num_landers = (*sis)
-                    .num_landers
+                (*sis).NumLanders = (*sis)
+                    .NumLanders
                     .saturating_sub(delta.landers.unsigned_abs());
                 DrawLanders();
             } else if delta.landers > 0 {
-                (*sis).num_landers = (*sis).num_landers.saturating_add(delta.landers as u8);
+                (*sis).NumLanders = (*sis).NumLanders.saturating_add(delta.landers as u8);
                 DrawLanders();
             }
 
-            for (current, added) in (*sis).element_amounts.iter_mut().zip(delta.element_amounts) {
+            for (current, added) in (*sis).ElementAmounts.iter_mut().zip(delta.element_amounts) {
                 *current = current.saturating_add(added);
             }
-            (*sis).total_element_mass =
-                (*sis).total_element_mass.saturating_add(delta.element_mass);
-            (*sis).total_bio_mass = (*sis).total_bio_mass.saturating_add(delta.biological_mass);
+            (*sis).TotalElementMass = (*sis).TotalElementMass.saturating_add(delta.element_mass);
+            (*sis).TotalBioMass = (*sis).TotalBioMass.saturating_add(delta.biological_mass);
             if delta.element_mass != 0 {
                 DrawStorageBays(0);
             }

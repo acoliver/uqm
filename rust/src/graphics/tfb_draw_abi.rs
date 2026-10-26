@@ -37,8 +37,8 @@ use crate::threading::legacy_abi::DestroyMutex;
 
 extern "C" {
     static mut DrawCommandQueue: TFB_DrawCommandQueue;
-    static ScreenWidth: i32;
-    static ScreenHeight: i32;
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 

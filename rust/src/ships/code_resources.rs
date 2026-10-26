@@ -66,7 +66,7 @@ pub(crate) mod engine {
 
     use crate::ships::races::zoqfot_native::engine::init_zoqfotpik;
 
-    use crate::ships::races::samatra::native::engine::init_samatra;
+    use crate::ships::races::samatra::engine::init_samatra;
 
     use crate::ships::races::sis_native::engine::init_sis;
 

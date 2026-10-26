@@ -57,15 +57,13 @@ use crate::io::uio_bridge::uio_stat;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_unlink as uio_unlink_raw;
 #[cfg(not(test))]
+use crate::mainloop::options_abi::contentDir;
+#[cfg(not(test))]
 use crate::ships::code_resources::engine::InstallCodeResType;
 #[cfg(not(test))]
 use crate::strings::sresins::InstallStringTableResType;
 #[cfg(not(test))]
 use crate::video::legacy::InstallVideoResType;
-#[cfg(not(test))]
-extern "C" {
-    static contentDir: *mut c_void;
-}
 
 #[cfg(not(test))]
 unsafe fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void {
@@ -1383,7 +1381,7 @@ pub unsafe extern "C" fn LoadResourceFromPath(
     };
 
     let mode = c"rb".as_ptr() as *const c_char;
-    let fp = res_OpenResFile(contentDir, pathname, mode);
+    let fp = res_OpenResFile(contentDir.cast(), pathname, mode);
 
     // Reject null only. STREAM_SENTINEL means "directory" and must be
     // passed through to the load function (e.g. _GetFontData reads glyph

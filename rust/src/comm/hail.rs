@@ -13,7 +13,6 @@
 
 #[cfg(not(test))]
 pub(super) mod c_bridge {
-    use super::super::locdata::{CGlobData, CRect};
     use std::ffi::c_int;
 
     pub use crate::comm::locdata::COMM_DATA as CommData;
@@ -65,16 +64,16 @@ pub(super) mod c_bridge {
     pub use crate::comm::comm_abi::c_ClearPhraseBuf;
 
     extern "C" {
-        pub static mut LastActivity: u32;
-        pub static mut Screen: *mut std::ffi::c_void;
+        pub static mut LastActivity: u16;
+        pub static mut Screen: *mut crate::graphics::native_abi::frame_desc;
         pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
         #[allow(dead_code)]
         pub static mut optSmoothScroll: c_int;
-        pub static mut CommWndRect: CRect;
-        pub static mut GameStrings: *mut std::ffi::c_void;
-        pub static mut GlobData: CGlobData;
+        pub static mut CommWndRect: crate::comm::locdata::CRect;
+        pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
+        pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
     pub use crate::sound::heart_ffi::DestroyMusic;
@@ -134,7 +133,7 @@ unsafe fn draw_sis_com_window() {
 unsafe fn planet_name() -> *const std::ffi::c_char {
     // GlobData.SIS_state.PlanetName is a char[16] array
     // Use addr_of_mut! to avoid creating a shared reference to mutable static
-    let planet_name_ptr = std::ptr::addr_of_mut!(c_bridge::GlobData.sis_state.planet_name);
+    let planet_name_ptr = std::ptr::addr_of_mut!(c_bridge::GlobData.SIS_state.PlanetName);
     planet_name_ptr as *const std::ffi::c_char
 }
 

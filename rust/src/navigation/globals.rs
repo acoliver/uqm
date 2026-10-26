@@ -7,7 +7,7 @@ use crate::state::ffi;
 use std::{mem, ptr};
 
 #[no_mangle]
-pub static mut GlobData: GLOBDATA = unsafe { mem::zeroed() };
+pub static mut GlobData: crate::ships::native::abi::GLOBDATA = unsafe { mem::zeroed() };
 #[no_mangle]
 pub static mut RadarContext: CONTEXT = ptr::null_mut();
 #[no_mangle]
@@ -16,13 +16,13 @@ pub static mut PlayFrame: FRAME = ptr::null_mut();
 /// # Safety
 /// Game-thread access to the initialized state singleton.
 #[no_mangle]
-pub unsafe extern "C" fn getGameState(_shadow: *const u8, start: i32, end: i32) -> u8 {
+pub unsafe extern "C" fn getGameState(start: i32, end: i32) -> u8 {
     ffi::rust_get_game_state_bits(start, end)
 }
 /// # Safety
 /// Game-thread access to the initialized state singleton.
 #[no_mangle]
-pub unsafe extern "C" fn setGameState(_shadow: *mut u8, start: i32, end: i32, value: u8) {
+pub unsafe extern "C" fn setGameState(start: i32, end: i32, value: u8) {
     ffi::rust_set_game_state_bits(start, end, value);
 }
 

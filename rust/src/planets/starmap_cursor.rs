@@ -43,10 +43,10 @@ use crate::planets::pstarmap::UpdateCursorInfo;
 use crate::planets::pstarmap::UpdateCursorLocation;
 #[allow(non_snake_case)]
 extern "C" {
-    static ScreenWidth: i32;
-    static ScreenHeight: i32;
-    static mut GlobData: crate::comm::locdata::CGlobData;
-    static CurStarDescPtr: *const crate::savegame::runtime::star::CStarDesc;
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
+    static mut GlobData: crate::ships::native::abi::GLOBDATA;
+    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
 }
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
@@ -70,7 +70,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     use crate::c_bindings::controller_input::PulsedInputState;
     let time_in = crate::time::counter_abi::GetTimeCounter();
     let glob = std::ptr::addr_of_mut!(GlobData);
-    let activity = (*glob).game_state.current_activity;
+    let activity = (*glob).Game_state.CurrentActivity;
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
     if (*menu).Initialized == 0 {
@@ -78,7 +78,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         (*menu).InputFunc = Some(DoMoveCursor);
         ACTIVE = true;
         let universe = if hyper {
-            let sis = &(*glob).sis_state;
+            let sis = &(*glob).SIS_state;
             let log_units_x = (((ScreenWidth - 64) << 5) >> 4) * 195;
             let log_units_y = ((ScreenHeight << 5) >> 4) * 25;
             CPoint {
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         return 0;
     } else if keys[9] != 0 {
         let selected = std::ptr::addr_of!(cursorLoc).read();
-        (*glob).game_state.autopilot = crate::comm::locdata::CPoint {
+        (*glob).Game_state.autopilot = crate::comm::locdata::CPoint {
             x: selected.x,
             y: selected.y,
         };
@@ -110,7 +110,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
             if hyper {
                 crate::front_end::uqmdebug::doInstantMove();
             } else if activity & 0xff == 4 {
-                (*glob).game_state.current_activity |= 0x0800;
+                (*glob).Game_state.CurrentActivity |= 0x0800;
                 crate::front_end::uqmdebug::DEBUG_HOOK =
                     Some(crate::front_end::uqmdebug::doInstantMove);
             }
@@ -164,7 +164,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         SleepThreadUntil(time_in.wrapping_add(14));
     }
     flashCurrentLocation(std::ptr::null());
-    let keep_going = (*glob).game_state.current_activity & 0x4000 == 0;
+    let keep_going = (*glob).Game_state.CurrentActivity & 0x4000 == 0;
     if !keep_going {
         ACTIVE = false;
     }

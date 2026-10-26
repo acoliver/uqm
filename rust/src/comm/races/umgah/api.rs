@@ -7,11 +7,10 @@ pub(super) trait UmgahApi: EncounterApi<Handler> {
 impl UmgahApi for super::super::script::live::LiveScript<Handler> {
     fn add_biomass(&mut self, amount: u16) {
         extern "C" {
-            static mut GlobData: crate::comm::locdata::CGlobData;
+            static mut GlobData: crate::ships::native::abi::GLOBDATA;
         }
         unsafe {
-            GlobData.sis_state.total_bio_mass =
-                GlobData.sis_state.total_bio_mass.wrapping_add(amount);
+            GlobData.SIS_state.TotalBioMass = GlobData.SIS_state.TotalBioMass.wrapping_add(amount);
         }
     }
 }

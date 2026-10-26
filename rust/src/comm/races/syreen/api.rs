@@ -8,7 +8,7 @@ pub(super) trait SyreenApi: AllianceApi<Handler> {
 impl SyreenApi for super::super::script::live::LiveScript<Handler> {
     fn using_speech(&self) -> bool {
         extern "C" {
-            static usingSpeech: u8;
+            static mut usingSpeech: u32;
         }
         unsafe { usingSpeech != 0 }
     }

@@ -111,11 +111,7 @@ pub(crate) mod engine {
             SHOFIXTI_DESC.cyborg_control.intelligence_func = Some(shofixti_intelligence);
             let mut d = SHOFIXTI_DESC;
             if GlobData.Game_state.CurrentActivity as u8 == IN_ENCOUNTER as u8
-                && getGameState(
-                    (&raw const GlobData.Game_state.GameState).cast(),
-                    SHOFIXTI_RECRUITED as i32,
-                    END_SHOFIXTI_RECRUITED as i32,
-                ) == 0
+                && getGameState(SHOFIXTI_RECRUITED as i32, END_SHOFIXTI_RECRUITED as i32) == 0
             {
                 d.ship_data.ship_rsc = [
                     c"ship.shofixti.graphics.oldscout.large".as_ptr(),

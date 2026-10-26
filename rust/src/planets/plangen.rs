@@ -84,7 +84,7 @@ pub(crate) mod live {
     use crate::graphics::frame_abi::DrawFilledRectangle;
 
     extern "C" {
-        static ScreenWidth: i32;
+        static mut ScreenWidth: i32;
     }
 
     unsafe fn frame(flags: u8, width: usize, height: usize, count: u16) -> *mut c::FRAME_DESC {

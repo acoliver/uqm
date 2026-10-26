@@ -43,7 +43,6 @@ mod production {
     use crate::battle::element::{Element, ElementFlags};
     use crate::c_bindings::global_state::SOLARSYS_STATE;
     use crate::c_bindings::solar_system;
-    use crate::comm::locdata::{CColor, CPoint, CStamp};
 
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
     use super::super::generation_adapter::CffiSurfaceGenerator;
@@ -56,16 +55,6 @@ mod production {
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
 
-    #[repr(C)]
-    struct CPrimitive {
-        links: u32,
-        primitive_type: u8,
-        color: CColor,
-        _padding: [u8; 7],
-        stamp: CStamp,
-        _tail: [u8; 8],
-    }
-
     use crate::battle::process_native::engine::InitDisplayList;
 
     use crate::battle::process_native::engine::AllocElement;
@@ -75,8 +64,8 @@ mod production {
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
     extern "C" {
-        static mut MiscDataFrame: *mut c_void;
-        static mut DisplayArray: [CPrimitive; 150];
+        static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
+        static mut DisplayArray: [crate::ships::native::abi::PRIMITIVE; 330];
         #[cfg(test)]
         #[link_name = "rust_bridge_LockElement"]
         fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void);
@@ -202,8 +191,8 @@ mod production {
         element.state_flags = ElementFlags::empty();
 
         let primitive = &mut DisplayArray[usize::from(element.prim_index)];
-        primitive.primitive_type = STAMP_PRIM;
-        primitive.stamp.origin = CPoint::default();
+        primitive.Type = STAMP_PRIM;
+        primitive.Object.Stamp.origin = crate::ships::native::abi::POINT { x: 0, y: 0 };
 
         match generated.kind {
             super::super::generation::GeneratedNodeKind::Mineral {
@@ -218,7 +207,8 @@ mod production {
                 element.current.frame =
                     (SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)).cast();
                 element.next.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)).cast();
-                primitive.stamp.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
+                primitive.Object.Stamp.frame =
+                    (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
                 element.current.frame =
@@ -227,7 +217,7 @@ mod production {
                     (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.next)).cast();
                 element.turn_wait = 0x44;
                 element.mass_points = MAX_SCROUNGED;
-                primitive.stamp.frame = (*solar).PlanetSideFrame[1].cast();
+                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[1].cast();
             }
             super::super::generation::GeneratedNodeKind::CannedBiological { value } => {
                 element.current.frame =
@@ -236,7 +226,7 @@ mod production {
                     (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast();
                 element.mass_points = value as u8;
                 element.crew_or_hp = 0;
-                primitive.stamp.frame = (*solar).PlanetSideFrame[0].cast();
+                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[0].cast();
             }
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
@@ -250,7 +240,7 @@ mod production {
                 element.turn_wait = 0x44;
                 element.mass_points = creature.index();
                 element.crew_or_hp = u16::from(hit_points);
-                primitive.stamp.frame = (*solar).PlanetSideFrame[3].cast();
+                primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[3].cast();
             }
         }
         Ok(())

@@ -71,16 +71,6 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    // planets.h star_desc; only the starmap pointer is needed here.
-    #[repr(C)]
-    struct StarDesc {
-        star_pt: POINT,
-        Type: BYTE,
-        Index: BYTE,
-        Prefix: BYTE,
-        Postfix: BYTE,
-    }
-
     use crate::graphics::resgfx::LoadGraphicInstance;
 
     use crate::planets::starmap::naming::GetClusterName;
@@ -89,7 +79,7 @@ pub(crate) mod engine {
 
     extern "C" {
         static mut planet: [FRAME; 3];
-        static mut CurStarDescPtr: *mut StarDesc;
+        static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
     }
 
     unsafe fn game_string(index: u32) -> *const UNICODE {

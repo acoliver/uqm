@@ -6,7 +6,6 @@
     dead_code,
     unnecessary_transmutes,
     clippy::all,
-    clashing_extern_declarations,
     reason = "generated ABI declarations share engine pointer types with other bridges"
 )]
 pub mod abi {

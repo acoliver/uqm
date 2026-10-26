@@ -863,11 +863,10 @@ pub extern "C" fn rust_options_get_graphics_backend() -> *mut c_char {
 }
 
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn rust_options_free_string(s: *mut c_char) {
+/// # Safety
+/// A nonnull `s` must have been returned by `CString::into_raw` in this
+/// library, and must not have been freed or changed in length.
+pub unsafe extern "C" fn rust_options_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {
             let _ = CString::from_raw(s);
@@ -1707,7 +1706,10 @@ mod config_file_tests {
                 .to_str()
                 .unwrap()
                 .to_string();
-            rust_options_free_string(ptr);
+            unsafe {
+                // SAFETY: The test owns this CString allocation and releases it exactly once.
+                rust_options_free_string(ptr)
+            };
             value
         };
         assert_eq!(text(rust_options_get_log_file()), "run.log");
@@ -1721,7 +1723,10 @@ mod config_file_tests {
         assert_eq!(text(rust_options_get_addon(1)), "second");
         assert!(rust_options_get_addon(2).is_null());
         assert!(rust_options_get_addon(-1).is_null());
-        rust_options_free_string(std::ptr::null_mut());
+        unsafe {
+            // SAFETY: The test owns this CString allocation and releases it exactly once.
+            rust_options_free_string(std::ptr::null_mut())
+        };
     }
 
     fn parse(args: &[&str]) -> ParsedOptions {

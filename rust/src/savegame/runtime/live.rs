@@ -23,14 +23,13 @@ use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
 use super::summary::{self, SummaryError};
 use crate::c_bindings::global_state::RPG_PLAYER_NUM;
 use crate::c_bindings::{live_queues, solar_system};
-use crate::comm::locdata::CGlobData;
 use crate::savegame::types::{StarDesc, Summary};
 
 extern "C" {
     #[link_name = "GlobData"]
-    static mut GLOB_DATA: CGlobData;
+    static mut GLOB_DATA: crate::ships::native::abi::GLOBDATA;
     #[link_name = "CurStarDescPtr"]
-    static mut CUR_STAR_DESC_PTR: *mut CStarDesc;
+    static mut CUR_STAR_DESC_PTR: *mut crate::savegame::runtime::star::CStarDesc;
     #[link_name = "star_array"]
     static mut STAR_ARRAY: *mut CStarDesc;
 }
@@ -66,10 +65,16 @@ pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError>
     let solar = SolarSystem::new(
         state.as_ref(),
         current.as_ref().map(|star| star.index),
-        glob.sis_state.planet_name,
+        glob.SIS_state.PlanetName.map(|byte| byte as u8),
         &LiveGameStrings,
     );
-    summary::capture_summary(&glob.sis_state, &glob.game_state, &solar, name)
+    // SAFETY: the existing codec views assert all field offsets and alignments against these records.
+    summary::capture_summary(
+        &*std::ptr::addr_of!(glob.SIS_state).cast::<crate::comm::locdata::CSisState>(),
+        &*std::ptr::addr_of!(glob.Game_state).cast::<crate::comm::locdata::CGameState>(),
+        &solar,
+        name,
+    )
 }
 
 /// The live star catalog.
@@ -144,8 +149,12 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
     let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
-    location::save_solar_location(&mut glob.game_state, &*state, star_index)
-        .map_err(LiveLocationError::Location)
+    location::save_solar_location(
+        &mut *std::ptr::addr_of_mut!(glob.Game_state).cast::<crate::comm::locdata::CGameState>(),
+        &*state,
+        star_index,
+    )
+    .map_err(LiveLocationError::Location)
 }
 
 /// `SaveSisHyperState ()` over the live `GlobData`, `race_q[RPG_PLAYER_NUM]`
@@ -161,7 +170,11 @@ pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError
     let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
     let display_list = &*live_queues::display_list();
     let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
-    hyper_save::save_hyper_facing(&mut glob.game_state, player_ships, display_list)
+    hyper_save::save_hyper_facing(
+        &mut *std::ptr::addr_of_mut!(glob.Game_state).cast::<crate::comm::locdata::CGameState>(),
+        player_ships,
+        display_list,
+    )
 }
 
 /// The live flagship's own `ShipFacing` (0..16), read from `race_q[RPG_PLAYER_NUM]`

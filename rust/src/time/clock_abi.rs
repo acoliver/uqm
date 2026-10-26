@@ -84,7 +84,6 @@ unsafe fn process_day_events(
 pub(crate) mod live {
     use super::super::clock_bridge::*;
     use super::*;
-    use crate::comm::locdata::CGlobData;
     use std::ffi::c_void;
     use std::ptr;
 
@@ -95,7 +94,7 @@ pub(crate) mod live {
     use crate::threading::legacy_abi::DestroyMutex;
 
     extern "C" {
-        static mut GlobData: CGlobData;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
     }
     static mut CLOCK_MUTEX: *mut c_void = ptr::null_mut();
 
@@ -103,7 +102,7 @@ pub(crate) mod live {
     /// Game-thread access to the live global state.
     #[no_mangle]
     pub unsafe extern "C" fn GetGameClock() -> *mut ClockState {
-        ptr::addr_of_mut!(GlobData.game_state.game_clock)
+        ptr::addr_of_mut!(GlobData.Game_state.GameClock).cast()
     }
 
     pub(crate) unsafe fn finish_clock_day() {
@@ -233,11 +232,10 @@ mod tests {
     #[test]
     fn daily_events_are_removed_before_callbacks_and_preserve_order() {
         let mut queue: Queue = unsafe { std::mem::zeroed() };
-        assert!(InitQueue(
-            &mut queue,
-            8,
-            std::mem::size_of::<CEvent>() as u16
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(&mut queue, 8, std::mem::size_of::<CEvent>() as u16)
+        });
         let queue = &mut queue as *mut Queue;
         unsafe {
             insert_event(queue, (2155, 3, 17), 0);
@@ -257,7 +255,10 @@ mod tests {
             assert_eq!(seen, [0, 1, 2, 4, 3]);
             assert!((*queue).head.is_null());
         }
-        UninitQueue(queue);
+        unsafe {
+            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+            UninitQueue(queue)
+        };
     }
 
     #[test]
@@ -271,11 +272,10 @@ mod tests {
     #[test]
     fn events_are_sorted_and_same_date_events_keep_insertion_order() {
         let mut queue: Queue = unsafe { std::mem::zeroed() };
-        assert!(InitQueue(
-            &mut queue,
-            4,
-            std::mem::size_of::<CEvent>() as u16
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(&mut queue, 4, std::mem::size_of::<CEvent>() as u16)
+        });
         unsafe {
             let late = insert_event(&mut queue, (2156, 1, 1), 1);
             let first = insert_event(&mut queue, (2155, 2, 18), 2);
@@ -288,6 +288,9 @@ mod tests {
             assert_eq!(queue.tail, late);
             assert!(insert_event(&mut queue, (2155, 1, 1), 5).is_null());
         }
-        UninitQueue(&mut queue);
+        unsafe {
+            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+            UninitQueue(&mut queue)
+        };
     }
 }

@@ -11,15 +11,15 @@ pub(super) trait TalkpetApi: AllianceApi<Handler> {
 impl TalkpetApi for super::super::script::live::LiveScript<Handler> {
     fn flags(&self) -> u8 {
         extern "C" {
-            static mut GlobData: crate::comm::locdata::CGlobData;
+            static mut GlobData: crate::ships::native::abi::GLOBDATA;
         }
-        unsafe { GlobData.game_state.glob_flags }
+        unsafe { GlobData.Game_state.glob_flags }
     }
     fn npc_ships(&self) -> bool {
         extern "C" {
-            static mut GlobData: crate::comm::locdata::CGlobData;
+            static mut GlobData: crate::ships::native::abi::GLOBDATA;
         }
-        unsafe { !GlobData.game_state.npc_built_ship_q.head.is_null() }
+        unsafe { !GlobData.Game_state.npc_built_ship_q.head.is_null() }
     }
     fn umgah_alive(&mut self) -> bool {
         use crate::battle::build_native::engine::StartSphereTracking;

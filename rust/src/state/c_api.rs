@@ -94,7 +94,7 @@ pub(crate) mod planets {
 
     extern "C" {
         static mut star_array: *mut CStarDesc;
-        static mut CurStarDescPtr: *mut CStarDesc;
+        static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
     }
 
     pub(crate) unsafe fn location(system: *mut SOLARSYS_STATE) -> (c_int, c_int, c_int) {

@@ -62,7 +62,7 @@ pub(super) fn animation(
 #[cfg(not(test))]
 pub(super) mod live {
     use super::*;
-    use crate::comm::locdata::{CGlobData, COMM_DATA};
+    use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_char, CStr};
 
     use crate::ui::sis::DrawLanders;
@@ -80,7 +80,7 @@ pub(super) mod live {
     use crate::comm::comm_abi::AlienTalkSegue;
 
     extern "C" {
-        static mut GlobData: CGlobData;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
         static mut shared_phrase_buf: [c_char; 2048];
     }
 
@@ -120,10 +120,10 @@ pub(super) mod live {
                     for &fragment in fragments {
                         let ptr = match fragment {
                             GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!(GlobData.sis_state.commander_name).cast()
+                                std::ptr::addr_of!(GlobData.SIS_state.CommanderName).cast()
                             }
                             GLOBAL_SHIP_NAME => {
-                                std::ptr::addr_of!(GlobData.sis_state.ship_name).cast()
+                                std::ptr::addr_of!(GlobData.SIS_state.ShipName).cast()
                             }
                             _ => {
                                 let index =
@@ -164,16 +164,16 @@ pub(super) mod live {
         fn supplies(&self) -> Supplies {
             unsafe {
                 Supplies {
-                    landers: GlobData.sis_state.num_landers,
-                    fuel: GlobData.sis_state.fuel_on_board,
-                    radioactives: GlobData.sis_state.element_amounts[6],
+                    landers: GlobData.SIS_state.NumLanders,
+                    fuel: GlobData.SIS_state.FuelOnBoard,
+                    radioactives: GlobData.SIS_state.ElementAmounts[6],
                 }
             }
         }
 
         fn add_lander(&mut self) {
             unsafe {
-                GlobData.sis_state.num_landers += 1;
+                GlobData.SIS_state.NumLanders += 1;
                 DrawLanders();
             }
         }

@@ -135,11 +135,10 @@ impl Iterator for ElementQueueIter {
 /// a non-gravity body near a gravity body, applies gravitational velocity
 /// delta. Returns TRUE if a gravity body is found nearby.
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
+/// # Safety
+/// A nonnull `element` must point to a live Element in the initialized
+/// game-thread element queue. The caller must serialize queue access.
+pub unsafe extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
     if element.is_null() {
         return 0;
     }
@@ -236,11 +235,10 @@ pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
 /// Checks if the element overlaps any colliding element or player ship.
 /// Uses DrawablesIntersect for bounding-box collision detection.
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
+/// # Safety
+/// A nonnull `element` must point to a live Element. The element queue
+/// and drawable system must be initialized and accessed on the game thread.
+pub unsafe extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
     if element.is_null() {
         return 0;
     }

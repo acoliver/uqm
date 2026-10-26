@@ -40,18 +40,24 @@ impl LiveGame {
         // SAFETY: `CGameState` is integers and raw pointers; all zeroes is a
         // valid value, and it is what C's static storage starts as.
         let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-        assert!(InitQueue(
-            &mut game.game_clock.event_q,
-            NUM_EVENTS as u16,
-            size_of::<CEvent>() as u16
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                &mut game.game_clock.event_q,
+                NUM_EVENTS as u16,
+                size_of::<CEvent>() as u16,
+            )
+        });
         Self(game)
     }
 }
 
 impl Drop for LiveGame {
     fn drop(&mut self) {
-        UninitQueue(&mut self.0.game_clock.event_q);
+        unsafe {
+            // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+            UninitQueue(&mut self.0.game_clock.event_q)
+        };
     }
 }
 
@@ -124,7 +130,6 @@ mod c_offset {
     pub const VELOCITY_INCR: usize = offset_of!(GAME_STATE, velocity.incr);
     pub const BATTLE_GROUP_REF: usize = offset_of!(GAME_STATE, BattleGroupRef);
     pub const DISPLAY_ARRAY: usize = offset_of!(GAME_STATE, DisplayArray);
-    pub const GAME_STATE_BITS: usize = offset_of!(GAME_STATE, GameState);
 }
 
 /// `SaveGameState` writes the 75 "GlSt" bytes in this order: (position in the
@@ -376,7 +381,7 @@ fn restore_leaves_what_glst_does_not_carry() {
     let frame = 0x1000usize as *mut std::ffi::c_void;
     game.ship_stamp.frame = frame;
     game.battle_group_ref = 0xdead_beef;
-    game.game_state_bytes = [0x5a; GAME_STATE_BYTES];
+
     game.current_activity = 0x0102;
     let events = [event(18, 2, 2155, 2), event(7, 3, 2156, 9)];
     events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
@@ -388,7 +393,7 @@ fn restore_leaves_what_glst_does_not_carry() {
     assert_eq!(game.current_activity, 0x0102);
     assert_eq!(game.ship_stamp.frame, frame);
     assert_eq!(game.battle_group_ref, 0xdead_beef);
-    assert_eq!(game.game_state_bytes, [0x5a; GAME_STATE_BYTES]);
+
     assert_eq!(queue_state(&game.game_clock.event_q), before);
     assert_eq!(
         get(&game, c_offset::STAMP_FRAME, 8),
@@ -398,7 +403,6 @@ fn restore_leaves_what_glst_does_not_carry() {
         get(&game, c_offset::BATTLE_GROUP_REF, 4),
         0xdead_beefu32.to_le_bytes()
     );
-    assert_eq!(get(&game, c_offset::GAME_STATE_BITS, 1), vec![0x5a]);
     assert_eq!(get(&game, c_offset::DISPLAY_ARRAY, 8), vec![0; 8]);
 }
 
@@ -492,7 +496,11 @@ fn a_full_pool_of_events_round_trips_and_leaves_no_free_slot() {
         .map(|n| event(1 + n, 1 + n % 12, 2155 + u16::from(n), n))
         .collect();
     events::restore_events(&mut game.game_clock.event_q, &events).unwrap();
-    assert!(AllocLink(&mut game.game_clock.event_q).is_null());
+    assert!(unsafe {
+        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+        AllocLink(&mut game.game_clock.event_q)
+    }
+    .is_null());
     assert_eq!(
         events::capture_events(&game.game_clock.event_q).unwrap(),
         events
@@ -619,7 +627,10 @@ fn a_queue_that_is_not_an_event_pool_is_refused() {
 
     // SAFETY: as above.
     let mut wrong_size: Queue = unsafe { std::mem::zeroed() };
-    assert!(InitQueue(&mut wrong_size, NUM_EVENTS as u16, 16));
+    assert!(unsafe {
+        // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+        InitQueue(&mut wrong_size, NUM_EVENTS as u16, 16)
+    });
     assert_eq!(
         events::restore_events(&mut wrong_size, &[]),
         Err(EventError::WrongObjectSize {
@@ -627,14 +638,20 @@ fn a_queue_that_is_not_an_event_pool_is_refused() {
             expected: size_of::<CEvent>()
         })
     );
-    UninitQueue(&mut wrong_size);
+    unsafe {
+        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+        UninitQueue(&mut wrong_size)
+    };
 }
 
 #[test]
 fn a_smaller_pool_bounds_the_event_count() {
     // SAFETY: `Queue` is integers and raw pointers; all zeroes is C's initial state.
     let mut small: Queue = unsafe { std::mem::zeroed() };
-    assert!(InitQueue(&mut small, 3, size_of::<CEvent>() as u16));
+    assert!(unsafe {
+        // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+        InitQueue(&mut small, 3, size_of::<CEvent>() as u16)
+    });
     let four: Vec<_> = (0..4).map(|n| event(1 + n, 1, 2155, n)).collect();
     assert_eq!(
         events::restore_events(&mut small, &four),
@@ -644,7 +661,10 @@ fn a_smaller_pool_bounds_the_event_count() {
         })
     );
     assert!(events::restore_events(&mut small, &four[..3]).is_ok());
-    UninitQueue(&mut small);
+    unsafe {
+        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+        UninitQueue(&mut small)
+    };
 }
 
 #[test]
@@ -761,10 +781,7 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
     assert_eq!(game.current_activity, 0x0100);
     // The Rust singleton owns the bits; the C shadow array follows it.
     assert_eq!(snapshot_game_state().unwrap(), bits);
-    assert_eq!(
-        get(&game, c_offset::GAME_STATE_BITS, GAME_STATE_BYTES),
-        bits
-    );
+    assert_eq!(snapshot_game_state().unwrap(), bits);
 
     game.current_activity = global.current_activity;
     let captured = capture_runtime(&game).unwrap();
@@ -775,11 +792,10 @@ fn restore_then_capture_returns_the_sections_that_were_restored() {
 
 #[test]
 #[serial]
-fn capture_reads_game_state_from_the_singleton_and_not_the_c_shadow() {
+fn capture_reads_game_state_from_the_singleton() {
     let mut game = LiveGame::new();
     let singleton = game_state_bits(40);
     restore_runtime(&mut game, &sentinel_global(), &singleton, &[]).unwrap();
-    game.game_state_bytes = [0xee; GAME_STATE_BYTES];
 
     assert_eq!(capture_runtime(&game).unwrap().game_state, singleton);
 }
@@ -802,7 +818,6 @@ fn a_rejected_restore_changes_nothing() {
     game.current_activity = 0x0100;
     let before_sections = capture_runtime(&game).unwrap();
     let before_queue = queue_state(&game.game_clock.event_q);
-    let before_shadow = game.game_state_bytes;
 
     let mut other_global = sentinel_global();
     other_global.glob_flags = 0xff;
@@ -821,7 +836,7 @@ fn a_rejected_restore_changes_nothing() {
     );
     assert_eq!(capture_runtime(&game).unwrap(), before_sections);
     assert_eq!(queue_state(&game.game_clock.event_q), before_queue);
-    assert_eq!(game.game_state_bytes, before_shadow);
+
     assert_eq!(snapshot_game_state().unwrap(), original_bits);
 }
 
@@ -869,9 +884,8 @@ fn restoring_a_c_written_save_puts_its_bytes_at_the_c_offsets() {
         );
     }
 
-    // GmSt: the singleton and the C shadow both hold the chunk.
+    // GmSt: the singleton holds the chunk.
     assert_eq!(snapshot_game_state().unwrap().as_slice(), gmst);
-    assert_eq!(get(&game, c_offset::GAME_STATE_BITS, 155), gmst);
 
     // Evts: four events, in the file's order, in real pool slots.
     let walked = walk_events(&game.game_clock.event_q);

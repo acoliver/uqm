@@ -17,7 +17,6 @@ use crate::planets::orbits::{self, OrbitRequest};
 use crate::planets::surface;
 use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
 use crate::planets::topography;
-use crate::savegame::runtime::star::CStarDesc;
 
 /// `PlanData` (formerly defined in `surface.c`): the planet-frame table.
 #[export_name = "PlanData"]
@@ -31,7 +30,7 @@ extern "C" {
     #[link_name = "SysGenRNG"]
     static mut SYS_GEN_RNG: *mut RandomContext;
     #[link_name = "CurStarDescPtr"]
-    static mut CUR_STAR_DESC_PTR: *const CStarDesc;
+    static mut CUR_STAR_DESC_PTR: *mut crate::savegame::runtime::star::CStarDesc;
 }
 
 /// `*SysGenRNG`: the stream shared with the rest of the system generators.

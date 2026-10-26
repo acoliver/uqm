@@ -192,9 +192,15 @@ pub fn restore_events(queue: &mut Queue, events: &[EventEntry]) -> Result<(), Ev
 
 /// The mutation half of `restore_events`, for callers that validated already.
 pub(super) fn install_events(queue: &mut Queue, events: &[EventEntry]) {
-    ReinitQueue(queue);
+    unsafe {
+        // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
+        ReinitQueue(queue)
+    };
     for entry in events {
-        let link = AllocLink(queue);
+        let link = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(queue)
+        };
         assert!(
             !link.is_null(),
             "event pool ran out of slots after validation"
@@ -211,6 +217,9 @@ pub(super) fn install_events(queue: &mut Queue, events: &[EventEntry]) {
                 func_index: entry.func_index,
             });
         }
-        PutQueue(queue, link);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(queue, link)
+        };
     }
 }

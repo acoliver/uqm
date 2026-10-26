@@ -472,7 +472,7 @@ impl RestartMenuOps for CffiOps {
 
     fn create_flash_overlay(&self) -> usize {
         extern "C" {
-            static ScreenContext: *mut crate::graphics::native_abi::context_desc;
+            static mut ScreenContext: *mut crate::graphics::native_abi::context_desc;
         }
         // SAFETY: ScreenContext is a global initialized during game startup.
         unsafe {

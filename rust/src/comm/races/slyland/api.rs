@@ -12,7 +12,6 @@ pub(super) trait SlylandApi: EncounterApi<Handler> {
 #[cfg(not(test))]
 mod live {
     use super::*;
-    use crate::comm::locdata::CGlobData;
     use crate::comm::races::script::live::LiveScript;
 
     // Like the original response references, these belong to the game thread.
@@ -21,9 +20,9 @@ mod live {
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
     extern "C" {
-        static GlobData: CGlobData;
-        static ScreenWidth: i32;
-        static ScreenHeight: i32;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        static mut ScreenWidth: i32;
+        static mut ScreenHeight: i32;
     }
     impl SlylandApi for LiveScript<Handler> {
         fn choices(&self) -> [u16; 5] {
@@ -37,8 +36,8 @@ mod live {
         fn position(&self) -> (i32, i32, i32, i32) {
             unsafe {
                 (
-                    GlobData.sis_state.log_x,
-                    GlobData.sis_state.log_y,
+                    GlobData.SIS_state.log_x,
+                    GlobData.SIS_state.log_y,
                     ScreenWidth,
                     ScreenHeight,
                 )

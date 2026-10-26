@@ -7,7 +7,6 @@ use std::sync::Mutex;
 
 use crate::battle::velocity::VelocityDesc;
 use crate::c_bindings::{assert_c_layout, global_state};
-use crate::state::game_state::NUM_GAME_STATE_BYTES;
 use crate::time::clock_bridge::ClockState;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
@@ -91,15 +90,6 @@ pub struct CQueue {
     pub num_objects: u8,
 }
 
-/// C `GLOBDATA` struct (globdata.h) — repr(C) mirror.
-/// `SIS_STATE` is at 0 (124 bytes) and `GAME_STATE` at 128 (512 bytes), 640 in
-/// all; the build compares these against the bindgen layout below.
-#[repr(C)]
-pub struct CGlobData {
-    pub sis_state: CSisState,   // offset 0, size 124
-    pub game_state: CGameState, // offset 128, size 512
-}
-
 /// C `GAME_STATE` struct (globdata.h) — repr(C) mirror of every field.
 ///
 /// No padding is written by hand: each gap the C compiler leaves is the same
@@ -121,15 +111,14 @@ pub struct CGameState {
     pub ship_facing: u16,        // offset 120
     pub ip_planet: u8,           // offset 122
     // `GLOBAL(in_orbit)`: save/load-only orbit encoding, not live orbit state.
-    pub in_orbit: u8,                                 // offset 123
-    pub velocity: VelocityDesc,                       // offset 124, VELOCITY_DESC
-    pub battle_group_ref: u32,                        // offset 144, DWORD
-    pub avail_race_q: CQueue,                         // offset 152
-    pub npc_built_ship_q: CQueue,                     // offset 192
-    pub ip_group_q: CQueue,                           // offset 232
-    pub encounter_q: CQueue,                          // offset 272
-    pub built_ship_q: CQueue,                         // offset 312
-    pub game_state_bytes: [u8; NUM_GAME_STATE_BYTES], // offset 352, GameState array
+    pub in_orbit: u8,             // offset 123
+    pub velocity: VelocityDesc,   // offset 124, VELOCITY_DESC
+    pub battle_group_ref: u32,    // offset 144, DWORD
+    pub avail_race_q: CQueue,     // offset 152
+    pub npc_built_ship_q: CQueue, // offset 192
+    pub ip_group_q: CQueue,       // offset 232
+    pub encounter_q: CQueue,      // offset 272
+    pub built_ship_q: CQueue,     // offset 312
 }
 
 assert_c_layout!(
@@ -150,14 +139,6 @@ assert_c_layout!(
         ship_name: ShipName,
         commander_name: CommanderName,
         planet_name: PlanetName,
-    }
-);
-
-assert_c_layout!(
-    CGlobData,
-    global_state::GLOBDATA {
-        sis_state: SIS_state,
-        game_state: Game_state,
     }
 );
 
@@ -185,7 +166,6 @@ assert_c_layout!(
         ip_group_q: ip_group_q,
         encounter_q: encounter_q,
         built_ship_q: built_ship_q,
-        game_state_bytes: GameState,
     }
 );
 
@@ -504,13 +484,15 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
         assert_eq!(std::mem::size_of::<CStamp>(), 16);
-        assert_eq!(std::mem::size_of::<CGlobData>(), 640);
-        assert_eq!(std::mem::offset_of!(CGlobData, game_state), 128);
-        assert_eq!(std::mem::size_of::<CGameState>(), 512);
+        assert_eq!(std::mem::size_of::<global_state::GLOBDATA>(), 480);
+        assert_eq!(
+            std::mem::offset_of!(global_state::GLOBDATA, Game_state),
+            128
+        );
+        assert_eq!(std::mem::size_of::<CGameState>(), 352);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);
         assert_eq!(std::mem::offset_of!(CGameState, avail_race_q), 152);
-        assert_eq!(std::mem::offset_of!(CGameState, game_state_bytes), 352);
     }
 
     #[test]

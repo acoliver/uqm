@@ -16,8 +16,8 @@ use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
 
 extern "C" {
-    static ScreenWidth: i32;
-    static ScreenHeight: i32;
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
 }
 /// # Safety
 /// Frame must be null or live, and graphics operations must be serialized.

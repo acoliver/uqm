@@ -259,11 +259,10 @@ fn isqrt(value: u32) -> u16 {
 /// Entry point for the C battle loop. Delegates to `elastic_collide`
 /// after dereferencing the raw pointers.
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn collide(e0: *mut Element, e1: *mut Element) {
+/// # Safety
+/// Nonnull pointers must reference distinct, initialized Elements that
+/// the caller exclusively owns for the duration of the collision.
+pub unsafe extern "C" fn collide(e0: *mut Element, e1: *mut Element) {
     if e0.is_null() || e1.is_null() {
         return;
     }

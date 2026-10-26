@@ -3,16 +3,14 @@
 use crate::battle::c_bridge::SleepThread;
 use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
 use crate::mainloop::restart_menu::c_extern::{DoInput, FadeScreen};
-use std::ffi::c_void;
 use std::sync::Mutex;
 
 use crate::automation::story_actions::DeviceObservation;
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, ship};
-use crate::comm::locdata::{CColor, CGlobData, CRect};
+use crate::comm::locdata::{CColor, CRect};
 use crate::mainloop::types::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
-use crate::savegame::runtime::star::CStarDesc;
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
 use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
@@ -64,11 +62,11 @@ use crate::ui::sis::ClearSISRect;
 use crate::ui::util::live::DrawStarConBox;
 #[allow(non_snake_case)]
 extern "C" {
-    static mut GlobData: CGlobData;
+    static mut GlobData: crate::ships::native::abi::GLOBDATA;
     static mut NextActivity: u16;
-    static CurStarDescPtr: *const CStarDesc;
-    static pSolarSysState: *mut crate::c_bindings::global_state::SOLARSYS_STATE;
-    static MiscDataFrame: *mut c_void;
+    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
+    static mut pSolarSysState: *mut crate::ships::native::abi::solarsys_state;
+    static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
 }
 
 #[repr(C)]
@@ -167,9 +165,9 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
 unsafe fn reset_groups() {
     crate::c_bindings::global_state::EncounterGroup = 0;
     PutGroupInfo(0, 255);
-    ReinitQueue(std::ptr::addr_of_mut!(GlobData.game_state.ip_group_q).cast::<Queue>());
+    ReinitQueue(std::ptr::addr_of_mut!(GlobData.Game_state.ip_group_q).cast::<Queue>());
     assert_eq!(
-        CountLinks(std::ptr::addr_of_mut!(GlobData.game_state.npc_built_ship_q).cast::<Queue>()),
+        CountLinks(std::ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q).cast::<Queue>()),
         0
     );
 }
@@ -186,7 +184,7 @@ unsafe fn use_caster() -> bool {
         }
         return false;
     }
-    if GlobData.game_state.current_activity & 0xff != 4 || !playerInSolarSystem() {
+    if GlobData.Game_state.CurrentActivity & 0xff != 4 || !playerInSolarSystem() {
         return false;
     }
     if orbit_is(1)
@@ -194,7 +192,7 @@ unsafe fn use_caster() -> bool {
         && get("CHMMR_UNLEASHED") == 0
     {
         NextActivity |= CHECK_LOAD;
-        GlobData.game_state.current_activity |= START_ENCOUNTER;
+        GlobData.Game_state.CurrentActivity |= START_ENCOUNTER;
         reset_groups();
         set("GLOBAL_FLAGS_AND_DATA", 1 << 7);
         SaveSolarSysLocation();
@@ -203,7 +201,7 @@ unsafe fn use_caster() -> bool {
     let home = u32::from((*CurStarDescPtr).index) == ILWRATH_DEFINED;
     let mut found = home && StartSphereTracking(u16::from(ship::ILWRATH_SHIP)) != 0;
     if !found {
-        let queue = std::ptr::addr_of!(GlobData.game_state.ip_group_q);
+        let queue = std::ptr::addr_of!(GlobData.Game_state.ip_group_q);
         let group = (*queue)
             .head
             .cast::<crate::c_bindings::global_state::IP_GROUP>();
@@ -215,7 +213,7 @@ unsafe fn use_caster() -> bool {
         return false;
     }
     NextActivity |= CHECK_LOAD;
-    GlobData.game_state.current_activity |= START_ENCOUNTER;
+    GlobData.Game_state.CurrentActivity |= START_ENCOUNTER;
     reset_groups();
     set("GLOBAL_FLAGS_AND_DATA", if home { 1 << 4 } else { 1 << 5 });
     if playerInPlanetOrbit() {
@@ -246,7 +244,7 @@ unsafe fn invoke(id: u8) -> u8 {
             1
         }
         3 => {
-            if GlobData.game_state.current_activity & 0xff != 4 || !playerInPlanetOrbit() {
+            if GlobData.Game_state.CurrentActivity & 0xff != 4 || !playerInPlanetOrbit() {
                 return 0;
             }
             PlayMenuSound(3);
@@ -255,11 +253,11 @@ unsafe fn invoke(id: u8) -> u8 {
                 FadeScreen(253, 1680);
             } else {
                 set("CHMMR_EMERGING", 1);
-                GlobData.game_state.current_activity |= START_ENCOUNTER;
+                GlobData.Game_state.CurrentActivity |= START_ENCOUNTER;
                 reset_groups();
                 clone_ship_fragment(
                     ship::CHMMR_SHIP,
-                    std::ptr::addr_of_mut!(GlobData.game_state.npc_built_ship_q).cast::<Queue>(),
+                    std::ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q).cast::<Queue>(),
                     0,
                 );
             }
@@ -267,23 +265,23 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         2 => {
             set("UTWIG_BOMB", 0);
-            GlobData.game_state.current_activity &= !0x0200;
-            GlobData.sis_state.crew_enlisted = u16::MAX;
+            GlobData.Game_state.CurrentActivity &= !0x0200;
+            GlobData.SIS_state.CrewEnlisted = u16::MAX;
             1
         }
         1 => {
             NextActivity |= CHECK_LOAD;
-            GlobData.game_state.current_activity |= START_ENCOUNTER;
+            GlobData.Game_state.CurrentActivity |= START_ENCOUNTER;
             set("GLOBAL_FLAGS_AND_DATA", 0);
             if inHQSpace() != 0 {
-                if !GlobData.game_state.encounter_q.head.is_null() {
+                if !GlobData.Game_state.encounter_q.head.is_null() {
                     set("SHIP_TO_COMPEL", 1);
                 }
-                GlobData.game_state.current_activity &= !0x0200;
+                GlobData.Game_state.CurrentActivity &= !0x0200;
                 SaveSisHyperState();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
-                if !GlobData.game_state.ip_group_q.head.is_null() {
+                if !GlobData.Game_state.ip_group_q.head.is_null() {
                     set("SHIP_TO_COMPEL", 1);
                     reset_groups();
                 }
@@ -298,10 +296,10 @@ unsafe fn invoke(id: u8) -> u8 {
         }
         12 | 13 => u8::from(use_caster()),
         0 => {
-            if inHyperSpace() == 0 || GlobData.sis_state.fuel_on_board < 1000 {
+            if inHyperSpace() == 0 || GlobData.SIS_state.FuelOnBoard < 1000 {
                 return 0;
             }
-            GlobData.sis_state.fuel_on_board -= 1000;
+            GlobData.SIS_state.FuelOnBoard -= 1000;
             set("PORTAL_COUNTER", 1);
             1
         }
@@ -319,9 +317,9 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
     unsafe {
         state.insert(
             "activity".into(),
-            u32::from(GlobData.game_state.current_activity),
+            u32::from(GlobData.Game_state.CurrentActivity),
         );
-        state.insert("fuel".into(), GlobData.sis_state.fuel_on_board);
+        state.insert("fuel".into(), GlobData.SIS_state.FuelOnBoard);
     }
     state
 }
@@ -331,7 +329,7 @@ unsafe extern "C" fn frame(menu: *mut Menu) -> i32 {
     let keys = std::ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
         .read()
         .menu;
-    if GlobData.game_state.current_activity & 0x4000 != 0 || keys[10] != 0 {
+    if GlobData.Game_state.CurrentActivity & 0x4000 != 0 || keys[10] != 0 {
         return 0;
     }
     if keys[9] != 0 {
@@ -423,13 +421,13 @@ pub unsafe extern "C" fn DevicesMenu() -> i32 {
     DoInput(std::ptr::addr_of_mut!(menu).cast(), 1);
     SetMenuSounds(0x000f, 0x0010);
     OBSERVATION.lock().unwrap().list = None;
-    if GlobData.sis_state.crew_enlisted != u16::MAX
-        && GlobData.game_state.current_activity & 0x4000 == 0
+    if GlobData.SIS_state.CrewEnlisted != u16::MAX
+        && GlobData.Game_state.CurrentActivity & 0x4000 == 0
     {
         ClearSISRect(8);
         if get("PORTAL_COUNTER") == 0
-            && GlobData.game_state.current_activity & START_ENCOUNTER == 0
-            && GlobData.sis_state.crew_enlisted != u16::MAX
+            && GlobData.Game_state.CurrentActivity & START_ENCOUNTER == 0
+            && GlobData.SIS_state.CrewEnlisted != u16::MAX
         {
             return 1;
         }

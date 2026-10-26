@@ -23,7 +23,7 @@ pub(crate) mod live {
     use super::next_element;
     use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
-    use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect};
+    use crate::comm::locdata::{CColor, CPoint, CRect};
     use crate::mainloop::restart_menu::c_extern::DoInput;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
@@ -44,8 +44,8 @@ pub(crate) mod live {
     use crate::ui::sis::ClearSISRect;
 
     extern "C" {
-        static mut GlobData: CGlobData;
-        static MiscDataFrame: *mut c_void;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
     }
 
     const BACK: Rgba = Rgba::rgb15(0, 0, 20);
@@ -69,7 +69,7 @@ pub(crate) mod live {
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
         let free = u32::from(GetStorageBayCapacity())
-            .wrapping_sub(u32::from(GlobData.sis_state.total_element_mass));
+            .wrapping_sub(u32::from(GlobData.SIS_state.TotalElementMass));
         g.batch();
         g.set_fg_color(BACK);
         g.fill_rect(Rect {
@@ -97,16 +97,16 @@ pub(crate) mod live {
             height: 7,
         });
         let amount = if element == 8 {
-            GlobData.sis_state.total_bio_mass
+            GlobData.SIS_state.TotalBioMass
         } else {
             g.set_fg_color(if selected { AMOUNT } else { WORTH });
             text(
                 32,
                 y + 6,
                 Align::Right,
-                GlobData.game_state.element_worth[usize::from(element)].to_string(),
+                GlobData.Game_state.ElementWorth[usize::from(element)].to_string(),
             );
-            GlobData.sis_state.element_amounts[usize::from(element)]
+            GlobData.SIS_state.ElementAmounts[usize::from(element)]
         };
         g.set_fg_color(if selected { SELECTED } else { AMOUNT });
         text(58, y + 6, Align::Right, amount.to_string());
@@ -221,17 +221,17 @@ pub(crate) mod live {
     unsafe extern "C" fn discard(menu: *mut Menu) -> i32 {
         let menu = &mut *menu;
         let pulse = std::ptr::addr_of!(PulsedInputState).read();
-        if GlobData.game_state.current_activity & (1 << 14) != 0
+        if GlobData.Game_state.CurrentActivity & (1 << 14) != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
         {
             return 0;
         }
         if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
-            let amount = &mut GlobData.sis_state.element_amounts[usize::from(menu.current)];
+            let amount = &mut GlobData.SIS_state.ElementAmounts[usize::from(menu.current)];
             if *amount != 0 {
                 *amount -= 1;
                 DrawCargoStrings(menu.current, menu.current);
-                GlobData.sis_state.total_element_mass -= 1;
+                GlobData.SIS_state.TotalElementMass -= 1;
                 ShowRemainingCapacity();
             } else {
                 PlayMenuSound(2);

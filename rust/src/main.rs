@@ -109,7 +109,8 @@ fn main() {
     }
 
     // Run the full UQM lifecycle: init -> game loop -> teardown
-    let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
+    // SAFETY: the main thread keeps all argument CStrings and argv storage alive through shutdown.
+    let exit_code = unsafe { init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr()) };
 
     // Finalize automation after teardown and propagate its terminal/evidence status.
     let exit_code = match uqm_rust::automation::Coordinator::finalize(exit_code) {

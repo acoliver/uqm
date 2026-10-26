@@ -16,7 +16,7 @@
 use super::response::ResponseFunc;
 use super::state::CommState;
 
-fn communication_background_volume(background: u8, using_speech: i32) -> u8 {
+fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
     if using_speech != 0 {
         background / 2
     } else {
@@ -68,7 +68,7 @@ pub(super) mod c_bridge {
         CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
     };
     use crate::comm::locdata::COMM_DATA;
-    use std::ffi::{c_int, c_void};
+    use std::ffi::c_int;
 
     pub use crate::sound::heart_ffi::fade_music as FadeMusic;
     pub use crate::sound::heart_ffi::fast_forward_page as FastForward_Page;
@@ -124,18 +124,16 @@ pub(super) mod c_bridge {
     pub use crate::graphics::gfx_common_abi::ScreenTransition;
 
     extern "C" {
-        pub static mut ActivityFrame: *mut c_void;
+        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
         pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        #[allow(dead_code)]
-        pub static mut CommContext: *mut c_void;
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
     extern "C" {
-        static mut LastActivity: u32;
-        pub static optSmoothScroll: c_int;
+        static mut LastActivity: u16;
+        pub static mut optSmoothScroll: i32;
     }
 
     /// Direct access to PulsedInputState.menu[key_index] (replaces c_GetPulsedMenuKey)
@@ -288,7 +286,7 @@ pub mod dinput {
     const CHECK_ABORT: u32 = 0x4000;
 
     extern "C" {
-        static mut usingSpeech: c_int;
+        static mut usingSpeech: u32;
     }
     use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 

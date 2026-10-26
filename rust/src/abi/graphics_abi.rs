@@ -994,6 +994,7 @@ pub struct _widget_controlentry {
     pub controlname: [[::std::os::raw::c_char; 16usize]; 2usize],
 }
 pub type WIDGET_CONTROLENTRY = _widget_controlentry;
-extern "C" {
-    pub static mut contentDir: *mut uio_DirHandle;
-}
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::contentDir;
+#[cfg(test)]
+pub use crate::mainloop::dir_prep::c_dir_globals::contentDir;

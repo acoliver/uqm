@@ -41,7 +41,7 @@ pub(crate) mod runtime {
     use crate::comm::comm_abi::SetCommIntroMode;
 
     extern "C" {
-        static mut CommWndRect: RECT;
+        static mut CommWndRect: crate::comm::locdata::CRect;
     }
     const CIM_CROSSFADE_WINDOW: c_int = 1;
     const TRANS_COLOR: Color = rgb15(0, 0, 31);
@@ -280,7 +280,7 @@ pub(crate) mod runtime {
         }
         if OUT_TAKES_RUNNING != 0 {
             SetContextForeGroundColor(TRANS_COLOR);
-            DrawFilledRectangle(ptr::addr_of_mut!(CommWndRect));
+            DrawFilledRectangle(ptr::addr_of_mut!(CommWndRect).cast());
         }
         SetContext(old_context);
     }
@@ -595,7 +595,7 @@ pub(crate) mod runtime {
             crate::automation::ending::credits_started();
         }
         CommWndRect.corner.x =
-            ((screen_rect.extent.width as c_int - CommWndRect.extent.width as c_int) / 2) as COORD;
+            ((screen_rect.extent.width as c_int - CommWndRect.width as c_int) / 2) as COORD;
         CommWndRect.corner.y = 5;
         init_credits();
         VICTORY_CREDITS_ACTIVE = with_outtakes != 0;

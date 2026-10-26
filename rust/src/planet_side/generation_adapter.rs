@@ -26,7 +26,7 @@ use crate::planets::scan::callGenerateForScanType;
 use crate::planets::scan::callPickupForScanType;
 #[cfg(not(test))]
 extern "C" {
-    static Elements: *const u8;
+    static mut Elements: *const u8;
 }
 
 /// Why a [`CffiSurfaceGenerator`] exists, fixed by its typed constructor.

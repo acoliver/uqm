@@ -138,7 +138,7 @@ pub const BUFFER_SIZE: usize = 16384;
 use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
 extern "C" {
-    static QuitPosted: i32;
+    static mut QuitPosted: i32;
 }
 
 /// Current game time in 840 units per second.

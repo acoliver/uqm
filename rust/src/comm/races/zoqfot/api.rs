@@ -51,11 +51,11 @@ pub(super) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: 
 #[cfg(not(test))]
 mod live {
     use super::*;
-    use crate::comm::locdata::{CGlobData, COMM_DATA};
+    use crate::comm::locdata::COMM_DATA;
     use crate::comm::races::script::{live::LiveScript, ScriptApi};
     static mut LAST_ALIEN: u8 = 1;
     extern "C" {
-        static mut GlobData: CGlobData;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
     }
     unsafe fn select(speaker: Speaker) {
         select_speaker(
@@ -92,8 +92,8 @@ mod live {
         fn date(&self) -> (i16, u8) {
             unsafe {
                 (
-                    GlobData.game_state.game_clock.year_index as i16,
-                    GlobData.game_state.game_clock.month_index,
+                    GlobData.Game_state.GameClock.year_index as i16,
+                    GlobData.Game_state.GameClock.month_index,
                 )
             }
         }

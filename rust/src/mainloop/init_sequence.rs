@@ -13,11 +13,10 @@ use super::teardown;
 /// This is the Rust-owned equivalent of C `main()` + `Starcon2Main()`.
 ///
 /// @plan PLAN-20260707-BINARY-INVERSION.P05
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub fn run_uqm(argc: c_int, argv: *mut *mut std::os::raw::c_char) -> c_int {
+/// # Safety
+/// `argv` must point to `argc` valid, NUL-terminated argument strings plus
+/// a null sentinel, and remain live during initialization. Call on the main thread.
+pub unsafe fn run_uqm(argc: c_int, argv: *mut *mut std::os::raw::c_char) -> c_int {
     // Initialize subsystems using the Rust-parsed configuration.
     let init_result = unsafe { c_main_extern::initialize(argc, argv) };
 

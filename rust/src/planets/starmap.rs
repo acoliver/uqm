@@ -88,14 +88,14 @@ pub unsafe extern "C" fn FindStar(
 #[cfg(not(test))]
 pub(crate) mod naming {
     use super::*;
-    use std::ffi::{c_char, c_void};
+    use std::ffi::c_char;
 
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::GetStringAddress;
 
     extern "C" {
-        static mut GameStrings: *mut c_void;
+        static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
     }
 
     /// # Safety

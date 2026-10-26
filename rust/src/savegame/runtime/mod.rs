@@ -105,9 +105,7 @@ pub fn capture_runtime(game: &CGameState) -> Result<RuntimeSections, RuntimeErro
 ///
 /// Everything that can be rejected is checked before anything changes, and the
 /// one remaining fallible step, replacing the game-state singleton, runs
-/// before the first write to `game`. The C shadow of the game-state bits is
-/// written too, as `LoadGameState` does, so C code that still reads it sees
-/// the loaded bits.
+/// before the first write to `game`. The singleton owns all story-state bits.
 pub fn restore_runtime(
     game: &mut CGameState,
     global: &GlobalState,
@@ -116,7 +114,7 @@ pub fn restore_runtime(
 ) -> Result<Restored, RuntimeError> {
     events::validate_restore(&game.game_clock.event_q, events)?;
     replace_game_state(game_state)?;
-    game.game_state_bytes = *game_state;
+
     events::install_events(&mut game.game_clock.event_q, events);
     Ok(Restored {
         next_activity: global::apply_global_state(game, global),

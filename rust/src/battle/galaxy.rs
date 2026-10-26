@@ -213,7 +213,7 @@ pub(crate) mod engine {
         },
     ];
     extern "C" {
-        static mut zoom_out: u16;
+        static mut zoom_out: i16;
         static mut DisplayLinks: u32;
         static mut DisplayFreeList: u16;
     }
@@ -279,7 +279,7 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn MoveGalaxy(view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
-            let mut reduction = zoom_out;
+            let mut reduction = zoom_out as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
                 if inHQSpace() != 0 {

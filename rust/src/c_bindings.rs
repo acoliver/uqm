@@ -77,9 +77,9 @@ pub mod live_queues {
 
     extern "C" {
         #[link_name = "race_q"]
-        static mut RACE_Q: [CQueue; NUM_PLAYERS];
+        static mut RACE_Q: [crate::collections::queue::Queue; 2];
         #[link_name = "disp_q"]
-        static mut DISP_Q: CQueue;
+        static mut DISP_Q: crate::collections::queue::Queue;
     }
 
     /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
@@ -99,7 +99,7 @@ pub mod live_queues {
     /// Game thread only. The caller may read the queue only while C is not
     /// changing it.
     pub unsafe fn display_list() -> *const CQueue {
-        std::ptr::addr_of!(DISP_Q)
+        std::ptr::addr_of!(DISP_Q).cast()
     }
 }
 

@@ -136,37 +136,37 @@ pub struct RecordingPlatform {
 
 /// Starting crew from the ported race descriptors.
 fn source_max_crew(ship_dir: &str) -> u16 {
-    use crate::ships::{races::*, traits::ShipBehavior};
-    let ported = match ship_dir {
-        "human" => Some(HumanShip.descriptor_template()),
-        "spathi" => Some(SpathiShip.descriptor_template()),
-        "ilwrath" => Some(IlwrathShip.descriptor_template()),
-        "arilou" => Some(ArilouShip.descriptor_template()),
-        "androsyn" => Some(AndrosynthShip::default().descriptor_template()),
-        "supox" => Some(SupoxShip.descriptor_template()),
-        "syreen" => Some(SyreenShip.descriptor_template()),
-        "druuge" => Some(DruugeShip.descriptor_template()),
-        "mycon" => Some(MyconShip.descriptor_template()),
-        "chmmr" => Some(ChmmrShip.descriptor_template()),
-        "melnorme" => Some(MelnormeShip.descriptor_template()),
-        "blackurq" => Some(BlackUrquanShip.descriptor_template()),
-        "urquan" => Some(UrquanShip.descriptor_template()),
-        "utwig" => Some(UtwigShip.descriptor_template()),
-        "thradd" => Some(ThraddashShip.descriptor_template()),
-        "umgah" => Some(UmgahShip.descriptor_template()),
-        "vux" => Some(VuxShip.descriptor_template()),
-        "yehat" => Some(YehatShip.descriptor_template()),
-        "zoqfot" => Some(ZoqfotpikShip.descriptor_template()),
-        "shofixti" => Some(ShofixtiShip.descriptor_template()),
-        "slylandr" => Some(SlylandroShip.descriptor_template()),
-        "orz" => Some(OrzShip.descriptor_template()),
-        "pkunk" => Some(PkunkShip.descriptor_template()),
-        _ => None,
+    use crate::ships::{registry::descriptor_template_for_species, types::SpeciesId};
+    let species = match ship_dir {
+        "human" => SpeciesId::Earthling,
+        "spathi" => SpeciesId::Spathi,
+        "ilwrath" => SpeciesId::Ilwrath,
+        "arilou" => SpeciesId::Arilou,
+        "androsyn" => SpeciesId::Androsynth,
+        "supox" => SpeciesId::Supox,
+        "syreen" => SpeciesId::Syreen,
+        "druuge" => SpeciesId::Druuge,
+        "mycon" => SpeciesId::Mycon,
+        "chmmr" => SpeciesId::Chmmr,
+        "melnorme" => SpeciesId::Melnorme,
+        "blackurq" => SpeciesId::KohrAh,
+        "urquan" => SpeciesId::UrQuan,
+        "utwig" => SpeciesId::Utwig,
+        "thradd" => SpeciesId::Thraddash,
+        "umgah" => SpeciesId::Umgah,
+        "vux" => SpeciesId::Vux,
+        "yehat" => SpeciesId::Yehat,
+        "zoqfot" => SpeciesId::Zoqfotpik,
+        "shofixti" => SpeciesId::Shofixti,
+        "slylandr" => SpeciesId::Slylandro,
+        "orz" => SpeciesId::Orz,
+        "pkunk" => SpeciesId::Pkunk,
+        _ => panic!("unknown ship descriptor {ship_dir}"),
     };
-    if let Some(desc) = ported {
-        return desc.ship_info.crew_level;
-    }
-    panic!("unknown ship descriptor {ship_dir}")
+    descriptor_template_for_species(species)
+        .unwrap()
+        .ship_info
+        .crew_level
 }
 
 /// Directories of the ship sources, in `avail_race_q` order.

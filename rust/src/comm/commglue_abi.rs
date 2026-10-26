@@ -54,7 +54,7 @@ unsafe fn number_phrases(
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
-    use crate::comm::locdata::{CGlobData, COMM_DATA};
+    use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_char, c_void};
     use std::ptr::null_mut;
 
@@ -68,10 +68,10 @@ pub(crate) mod runtime {
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::SetRelStringTableIndex;
-    #[allow(clashing_extern_declarations)]
+
     extern "C" {
-        static mut GlobData: CGlobData;
-        static mut instantVictory: i32;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        static mut instantVictory: u32;
     }
 
     fn get(key: &str) -> u8 {
@@ -128,10 +128,7 @@ pub(crate) mod runtime {
         );
         libc::strcpy(buffer, GetStringAddress(entry));
         if variant == 3 {
-            libc::strcat(
-                buffer,
-                (&raw const GlobData.sis_state.commander_name).cast(),
-            );
+            libc::strcat(buffer, (&raw const GlobData.SIS_state.CommanderName).cast());
             libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
         }
     }
@@ -149,8 +146,8 @@ pub(crate) mod runtime {
             }
             3 => {
                 set("BATTLE_SEGUE", 0);
-                GlobData.sis_state.crew_enlisted = u16::MAX;
-                GlobData.game_state.current_activity |= 0x2000;
+                GlobData.SIS_state.CrewEnlisted = u16::MAX;
+                GlobData.Game_state.CurrentActivity |= 0x2000;
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -161,8 +158,8 @@ pub(crate) mod runtime {
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
         if get("BATTLE_SEGUE") == 0 {
-            if GlobData.sis_state.crew_enlisted == u16::MAX
-                && GlobData.game_state.current_activity & 0x2000 != 0
+            if GlobData.SIS_state.CrewEnlisted == u16::MAX
+                && GlobData.Game_state.CurrentActivity & 0x2000 != 0
             {
                 3
             } else {

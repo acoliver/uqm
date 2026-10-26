@@ -113,21 +113,12 @@ pub(crate) mod engine {
     /// # Safety
     /// `start..=end` must name a valid game-state bit field on the game thread.
     pub unsafe fn game_state(start: u32, end: u32) -> u8 {
-        getGameState(
-            (&raw const GlobData.Game_state.GameState).cast(),
-            start as i32,
-            end as i32,
-        )
+        getGameState(start as i32, end as i32)
     }
     /// # Safety
     /// `start..=end` must name a valid game-state bit field owned by the game thread.
     pub unsafe fn set_game_state(start: u32, end: u32, value: u8) {
-        setGameState(
-            (&raw mut GlobData.Game_state.GameState).cast(),
-            start as i32,
-            end as i32,
-            value,
-        );
+        setGameState(start as i32, end as i32, value);
     }
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
