@@ -10,8 +10,7 @@ use parking_lot::Mutex;
 type Callback = Box<dyn FnOnce() + Send>;
 
 fn now_ms() -> u32 {
-    // Alarms share the SDL clock used by input and network pacing.
-    unsafe { sdl2_sys::SDL_GetTicks() }
+    crate::time::source::now_ms()
 }
 
 /// Identity of a queued callback, valid until it runs or is cancelled.

@@ -34,7 +34,11 @@ unsafe extern "C" fn background_init_kernel(timeout: u32) {
         && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
     {
         super::input_abi::UpdateInputState();
-        crate::threading::legacy_abi::TaskSwitch();
+        if crate::time::source::is_replay() {
+            crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
+        } else {
+            crate::threading::legacy_abi::TaskSwitch();
+        }
     }
 }
 

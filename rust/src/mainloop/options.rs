@@ -107,6 +107,8 @@ pub struct ParsedOptions {
     pub automation_script: Option<String>,
     pub automation_output: Option<String>,
     pub native_window_proof: Option<String>,
+    pub replay: Option<String>,
+    pub replay_summary: Option<String>,
 }
 
 impl Default for ParsedOptions {
@@ -152,6 +154,8 @@ impl Default for ParsedOptions {
             automation_script: None,
             automation_output: None,
             native_window_proof: None,
+            replay: None,
+            replay_summary: None,
         }
     }
 }
@@ -387,6 +391,20 @@ fn build_command() -> Command {
                 .help("Start in safe mode"),
         )
         .arg(Arg::new("renderer").long("renderer").value_name("NAME"))
+        .arg(
+            Arg::new("replay")
+                .long("replay")
+                .value_name("SCENARIO")
+                .conflicts_with("automation-script")
+                .help("Run a scenario using deterministic time, audio and input"),
+        )
+        .arg(
+            Arg::new("replay-summary")
+                .long("replay-summary")
+                .value_name("FILE")
+                .requires("replay")
+                .help("Write the deterministic replay summary"),
+        )
         // Automation options
         .arg(
             Arg::new("automation-script")
@@ -666,6 +684,9 @@ fn apply_path_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) {
     if let Some(v) = matches.get_one::<String>("renderer") {
         opts.graphics_backend = Some(v.clone());
     }
+
+    opts.replay = matches.get_one::<String>("replay").cloned();
+    opts.replay_summary = matches.get_one::<String>("replay-summary").cloned();
 
     // Automation options
     if let Some(v) = matches.get_one::<String>("automation-script") {
@@ -1873,5 +1894,43 @@ mod config_file_tests {
         let opts = parse(&["uqm", "--native-window-proof", "proof.json"]);
 
         assert_eq!(opts.native_window_proof.as_deref(), Some("proof.json"));
+    }
+}
+
+#[cfg(test)]
+mod replay {
+    use super::*;
+
+    #[test]
+    fn replay_scenario_and_summary_are_parsed_by_the_live_parser() {
+        let args = [
+            "uqm",
+            "--replay",
+            "super-melee-v1",
+            "--replay-summary",
+            "summary.json",
+        ]
+        .map(String::from);
+        let mut parsed = ParsedOptions::default();
+        parse_args_into(&args, &mut parsed);
+        assert!(!parsed.parse_error);
+        assert_eq!(parsed.replay.as_deref(), Some("super-melee-v1"));
+        assert_eq!(parsed.replay_summary.as_deref(), Some("summary.json"));
+    }
+
+    #[test]
+    fn summary_requires_replay_and_replay_conflicts_with_live_automation() {
+        assert!(build_command()
+            .try_get_matches_from(["uqm", "--replay-summary", "x"])
+            .is_err());
+        assert!(build_command()
+            .try_get_matches_from([
+                "uqm",
+                "--replay",
+                "super-melee-v1",
+                "--automation-script",
+                "script.json"
+            ])
+            .is_err());
     }
 }

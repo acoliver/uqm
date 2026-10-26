@@ -9,6 +9,14 @@ use clap::Parser;
 #[command(version = "0.8.0")]
 #[command(about = "The Ur-Quan Masters - space exploration strategy game", long_about = None)]
 pub struct Cli {
+    /// Run a scenario with deterministic time, audio and input.
+    #[arg(long, value_name = "SCENARIO")]
+    pub replay: Option<String>,
+
+    /// Write the deterministic replay summary.
+    #[arg(long, value_name = "FILE", requires = "replay")]
+    pub replay_summary: Option<String>,
+
     /// Screen resolution (e.g., 640x480)
     #[arg(short, long, value_name = "WIDTHxHEIGHT")]
     pub res: Option<String>,
