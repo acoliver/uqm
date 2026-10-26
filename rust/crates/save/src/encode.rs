@@ -39,7 +39,7 @@ pub fn encode_save(save: &SaveFile) -> Result<Vec<u8>, EncodeError> {
     Ok(out)
 }
 
-pub(super) fn encode_summary(summary: &Summary) -> Vec<u8> {
+pub fn encode_summary(summary: &Summary) -> Vec<u8> {
     let mut out = Vec::new();
     chunk(&mut out, SUMMARY_TAG, summary_body(summary)).expect("summary fits a chunk");
     out

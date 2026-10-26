@@ -55,7 +55,7 @@ impl ScanRetrieveMask {
     }
 }
 
-pub use crate::savegame::types::CannedNode;
+pub use uqm_save::CannedNode;
 
 impl StateFileManager {
     pub fn canned_node(&self, key: (u16, u8, u8, u8)) -> Option<CannedNode> {

@@ -1697,10 +1697,15 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "tracing-subscriber",
+ "uqm-save",
  "windows-sys 0.61.2",
  "xbrz-rs",
  "zip",
 ]
+
+[[package]]
+name = "uqm-save"
+version = "0.9.0"
 
 [[package]]
 name = "uqm-xtask"

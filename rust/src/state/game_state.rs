@@ -5,8 +5,8 @@ use std::fmt;
 
 #[path = "schema.rs"]
 mod schema;
-pub use crate::savegame::types::NUM_GAME_STATE_BYTES;
 pub use schema::{lookup_game_state_bits, GAME_STATE_FIELDS, NUM_GAME_STATE_BITS};
+pub use uqm_save::NUM_GAME_STATE_BYTES;
 
 const _: () = assert!(GAME_STATE_FIELDS[GAME_STATE_FIELDS.len() - 1].2 + 1 == NUM_GAME_STATE_BITS);
 

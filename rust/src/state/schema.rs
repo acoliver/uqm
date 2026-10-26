@@ -495,7 +495,7 @@ mod tests {
         }
         assert_eq!(next, 1238);
         assert_eq!(NUM_GAME_STATE_BITS, next);
-        assert_eq!(NUM_GAME_STATE_BYTES, next.div_ceil(8));
+        assert_eq!(super::super::NUM_GAME_STATE_BYTES, next.div_ceil(8));
         assert_eq!(lookup_game_state_bits("unknown"), None);
     }
 

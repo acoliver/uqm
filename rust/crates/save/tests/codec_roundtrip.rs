@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use uqm_rust::savegame::{decode_save, encode_save};
+use uqm_save::{decode_save, encode_save};
 
 fn roundtrip(path: &Path) -> Result<(), Box<dyn Error>> {
     let original = fs::read(path)?;
@@ -20,7 +20,7 @@ fn roundtrip(path: &Path) -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn all_committed_saves_roundtrip_byte_identically() -> Result<(), Box<dyn Error>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut saves = fs::read_dir(root.join("scripts/saves"))?
         .map(|entry| entry.map(|entry| entry.path()))
         .collect::<Result<Vec<_>, _>>()?;
