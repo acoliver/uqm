@@ -1,7 +1,11 @@
 use super::*;
 
 pub(super) fn run() -> Result<(), String> {
-    let mut args = env::args().skip(1);
+    run_arguments(env::args().skip(1))
+}
+
+fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), String> {
+    let mut args = arguments.into_iter();
     let command = args.next().ok_or_else(usage)?;
     #[cfg(feature = "native")]
     if command == "observer-helper" || command == NATIVE_ACCEPTANCE_COMMAND {
@@ -64,4 +68,38 @@ pub(super) fn repository_root() -> Result<PathBuf, String> {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .ok_or_else(|| "xtask is not inside the repository".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gate_dispatch_and_argument_errors() {
+        let invoke = |args: &[&str]| run_arguments(args.iter().map(|arg| (*arg).to_owned()));
+        assert!(invoke(&[]).unwrap_err().contains("usage:"));
+        assert!(invoke(&["unknown"])
+            .unwrap_err()
+            .contains("unknown command"));
+        assert!(invoke(&["unknown", "extra"])
+            .unwrap_err()
+            .contains("unexpected arguments"));
+        for command in ["quality", "clippy", "coverage", "deny"] {
+            let error = invoke(&[command, "--invalid"]).unwrap_err();
+            assert!(!error.contains("unknown command"), "{command}: {error}");
+        }
+        assert!(invoke(&["abi-check"]).is_ok());
+        assert!(repository_root()
+            .unwrap()
+            .join("rust/xtask/Cargo.toml")
+            .is_file());
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn native_dispatch_validates_commands_without_launching_a_game() {
+        for command in ["native", "observer-helper", "native-acceptance"] {
+            assert!(run_arguments([command.to_owned(), "--invalid".to_owned()]).is_err());
+        }
+    }
 }

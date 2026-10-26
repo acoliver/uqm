@@ -130,7 +130,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             .sum();
         println!("{lint}: {total}");
     }
-    tool::record(root, &options, diagnostics.counts, false)
+    tool::record(root, &options, diagnostics.counts)
 }
 
 #[cfg(test)]
@@ -261,7 +261,7 @@ mod tests {
     fn new_debt_and_spent_headroom_fail() {
         let baseline = [("unwrap|uqm::file".into(), 2)].into();
         let measured = [("unwrap|uqm::file".into(), 3)].into();
-        assert!(tool::compare(&measured, &baseline, &BTreeMap::new(), false).is_err());
-        assert!(tool::compare(&measured, &BTreeMap::new(), &BTreeMap::new(), false).is_err());
+        assert!(tool::compare(&measured, &baseline, &BTreeMap::new()).is_err());
+        assert!(tool::compare(&measured, &BTreeMap::new(), &BTreeMap::new()).is_err());
     }
 }

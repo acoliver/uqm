@@ -11,7 +11,6 @@ pub struct Baseline {
     pub moved: BTreeMap<String, String>,
     pub layers: bool,
     pub lint: Option<BTreeMap<String, u64>>,
-    pub coverage: Option<BTreeMap<String, u64>>,
 }
 
 impl Baseline {
@@ -30,10 +29,7 @@ impl Baseline {
                 .unwrap_or(false),
             ..Self::default()
         };
-        for (section, slot) in [
-            ("lint", &mut result.lint),
-            ("coverage", &mut result.coverage),
-        ] {
+        for (section, slot) in [("lint", &mut result.lint)] {
             if let Some(table) = document.get(section).and_then(toml_edit::Item::as_table) {
                 let mut values = BTreeMap::new();
                 for (key, value) in table {
@@ -71,7 +67,7 @@ impl Baseline {
     pub fn write(&self, path: &Path) -> Result<(), String> {
         let mut document = toml_edit::DocumentMut::new();
         document.insert("layers", toml_edit::value(self.layers));
-        for (name, values) in [("lint", &self.lint), ("coverage", &self.coverage)] {
+        for (name, values) in [("lint", &self.lint)] {
             if let Some(values) = values {
                 let mut table = toml_edit::Table::new();
                 for (key, value) in values {
@@ -137,17 +133,11 @@ impl Baseline {
             .as_ref()
             .map(|m| move_entries(m, old, new, prefix))
             .transpose()?;
-        let coverage = self
-            .coverage
-            .as_ref()
-            .map(|m| move_entries(m, old, new, prefix))
-            .transpose()?;
-        if entries == self.entries && lint == self.lint && coverage == self.coverage {
+        if entries == self.entries && lint == self.lint {
             return Err(format!("no baseline debt at {old}"));
         }
         self.entries = entries;
         self.lint = lint;
-        self.coverage = coverage;
         self.moved.insert(old.into(), new.into());
         Ok(())
     }
@@ -474,10 +464,9 @@ mod tests {
         assert!(validate_transfers(&current, &base, &moves).is_ok());
     }
     #[test]
-    fn prefix_move_rewrites_lint_and_coverage_sections_including_zero_floors() {
+    fn prefix_move_rewrites_lint_section() {
         let mut baseline = Baseline {
             lint: Some(entries(&[("unwrap_used|uqm::graphics::draw::@file", 2)])),
-            coverage: Some(entries(&[("uqm::graphics::draw::@file", 0)])),
             ..Baseline::default()
         };
         baseline
@@ -486,10 +475,6 @@ mod tests {
         assert_eq!(
             baseline.lint.unwrap(),
             entries(&[("unwrap_used|uqm-engine::graphics::draw::@file", 2)])
-        );
-        assert_eq!(
-            baseline.coverage.unwrap(),
-            entries(&[("uqm-engine::graphics::draw::@file", 0)])
         );
     }
     #[test]

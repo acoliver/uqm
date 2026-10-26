@@ -87,7 +87,10 @@ fn inspect_package(
         let manifest = document(&package.manifest_path)?;
         forbidden_tables(&manifest)?;
         if manifest["package"]["publish"].as_bool() != Some(false)
-            || manifest["package"]["version"]["workspace"].as_bool() != Some(true)
+            || manifest["package"]["version"]
+                .get("workspace")
+                .and_then(toml_edit::Item::as_bool)
+                != Some(true)
         {
             return Err(format!(
                 "{} must inherit workspace version and set publish=false",
@@ -232,5 +235,73 @@ mod tests {
         assert!(inspect_package(&p, &BTreeSet::new(), Path::new("rust"), false).is_ok());
         p.name = "cmake".into();
         assert!(inspect_package(&p, &BTreeSet::new(), Path::new("rust"), false).is_ok());
+    }
+    #[test]
+    fn workspace_dependency_policy_passes_current_tree() {
+        check(&crate::cli::repository_root().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn first_party_manifests_dependencies_and_build_scripts_are_checked() {
+        let root = super::super::tool::fixture_directory();
+        let manifest = root.path().join("Cargo.toml");
+        let valid = "[package]\nname=\"fixture\"\nversion.workspace=true\npublish=false\n";
+        fs::write(&manifest, valid).unwrap();
+        let members = BTreeSet::from([manifest.clone()]);
+        let mut package = Package {
+            id: "fixture".into(),
+            name: "fixture".into(),
+            manifest_path: manifest.clone(),
+            dependencies: vec![],
+            targets: vec![],
+            source: None,
+            links: None,
+        };
+        assert!(inspect_package(&package, &members, root.path(), true).is_ok());
+        package.links = Some("native".into());
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        package.links = None;
+        fs::write(&manifest, "[package]\nversion=\"0.0.0\"\npublish=false\n").unwrap();
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        fs::write(&manifest, valid).unwrap();
+        for name in BUILD_TOOLS {
+            package.dependencies = vec![Dependency {
+                name: (*name).into(),
+                kind: Some("build".into()),
+                path: None,
+            }];
+            assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        }
+        package.dependencies = vec![Dependency {
+            name: "member".into(),
+            kind: None,
+            path: Some(root.path().join("outside")),
+        }];
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        package.dependencies[0].path = Some(root.path().to_owned());
+        assert!(inspect_package(&package, &members, root.path(), true).is_ok());
+        package.targets = vec![Target {
+            kind: vec!["custom-build".into()],
+            src_path: root.path().join("build.rs"),
+        }];
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        package.dependencies = vec![
+            Dependency {
+                name: "sdl2".into(),
+                kind: None,
+                path: None,
+            },
+            Dependency {
+                name: "pkg-config".into(),
+                kind: Some("build".into()),
+                path: None,
+            },
+        ];
+        assert!(inspect_package(&package, &members, root.path(), true).is_ok());
+        package.dependencies[1].name = "other".into();
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
+        package.dependencies[1].name = "pkg-config".into();
+        package.targets[0].src_path = root.path().join("unapproved.rs");
+        assert!(inspect_package(&package, &members, root.path(), true).is_err());
     }
 }

@@ -116,32 +116,20 @@ pub fn compare(
     current: &BTreeMap<String, u64>,
     before: &BTreeMap<String, u64>,
     moves: &BTreeMap<String, String>,
-    coverage: bool,
 ) -> Result<(), String> {
     let mut errors = Vec::new();
     for (key, after) in current {
         let prior = before
             .get(key)
             .or(transferred(key, current, before, moves)?);
-        if coverage {
-            if prior.is_some_and(|value| after < value) {
-                errors.push(format!(
-                    "{key}: {} -> {after} basis points",
-                    prior.copied().unwrap_or(0)
-                ));
-            }
-        } else if *after > prior.copied().unwrap_or(0) {
+        if *after > prior.copied().unwrap_or(0) {
             errors.push(format!("{key}: {} -> {after}", prior.copied().unwrap_or(0)));
         }
     }
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(format!(
-            "{} regression:\n{}",
-            if coverage { "coverage" } else { "lint debt" },
-            errors.join("\n")
-        ))
+        Err(format!("lint debt regression:\n{}", errors.join("\n")))
     }
 }
 
@@ -149,35 +137,25 @@ pub fn record(
     root: &Path,
     options: &Options,
     measured: BTreeMap<String, u64>,
-    coverage: bool,
 ) -> Result<(), String> {
     let path = root.join("rust/xtask/quality-baseline.toml");
     let mut baseline = Baseline::read(&path)?;
-    let previous = if coverage {
-        baseline.coverage.as_ref()
-    } else {
-        baseline.lint.as_ref()
-    };
+    let previous = baseline.lint.as_ref();
     if let Some(previous) = previous {
         if !options.allow_growth {
-            compare(&measured, previous, &baseline.moved, coverage)?;
+            compare(&measured, previous, &baseline.moved)?;
         }
     } else if !options.tighten {
         return Err("tool baseline missing; initialize with --tighten".into());
     }
-    compare_base(root, options, &baseline, &measured, previous, coverage)?;
+    compare_base(root, options, &baseline, &measured, previous)?;
     println!(
-        "{}: {} per-file entries, total={}",
-        if coverage { "coverage" } else { "lint debt" },
+        "lint debt: {} per-file entries, total={}",
         measured.len(),
         measured.values().sum::<u64>()
     );
     if options.tighten {
-        if coverage {
-            baseline.coverage = Some(measured);
-        } else {
-            baseline.lint = Some(measured);
-        }
+        baseline.lint = Some(measured);
         baseline.write(&path)?;
     }
     Ok(())
@@ -189,16 +167,15 @@ fn compare_base(
     baseline: &Baseline,
     measured: &BTreeMap<String, u64>,
     previous: Option<&BTreeMap<String, u64>>,
-    coverage: bool,
 ) -> Result<(), String> {
     if let Some(reference) = &options.base {
         if let Some(base) = baseline::baseline_at_ref(root, reference)? {
-            let prior = if coverage { base.coverage } else { base.lint };
+            let prior = base.lint;
             if let Some(prior) = prior {
                 if !options.allow_growth {
-                    compare(measured, &prior, &baseline.moved, coverage)?;
+                    compare(measured, &prior, &baseline.moved)?;
                     if let Some(previous) = previous {
-                        validate_recorded(measured, previous, &prior, &baseline.moved, coverage)?;
+                        compare(previous, &prior, &baseline.moved)?;
                     }
                 }
                 println!(
@@ -207,60 +184,124 @@ fn compare_base(
                     measured.len()
                 );
             } else {
-                println!(
-                    "base {reference}: initial {} baseline",
-                    if coverage { "coverage" } else { "lint" }
-                );
+                println!("base {reference}: initial lint baseline");
             }
         }
     }
     Ok(())
 }
 
-fn validate_recorded(
-    measured: &BTreeMap<String, u64>,
-    recorded: &BTreeMap<String, u64>,
-    prior: &BTreeMap<String, u64>,
-    moves: &BTreeMap<String, String>,
-    coverage: bool,
-) -> Result<(), String> {
-    let mut current = recorded.clone();
-    if coverage {
-        for key in measured.keys() {
-            current.entry(key.clone()).or_insert(0);
-        }
-    }
-    compare(&current, prior, moves, coverage)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn a_recorded_coverage_floor_cannot_be_removed_for_a_live_file() {
-        let prior = [("uqm::a::@file".into(), 5000)].into();
-        let measured = [("uqm::a::@file".into(), 6000)].into();
-        assert!(
-            validate_recorded(&measured, &BTreeMap::new(), &prior, &BTreeMap::new(), true).is_err()
+    fn options_and_workspace_file_paths_are_validated() {
+        let args = |values: &[&str]| values.iter().map(|v| (*v).into()).collect::<Vec<String>>();
+        let options = Options::parse(&args(&["--base", "HEAD", "--tighten"])).unwrap();
+        assert_eq!(options.base.as_deref(), Some("HEAD"));
+        assert!(options.tighten);
+        assert!(Options::parse(&args(&["--base"])).is_err());
+        assert!(Options::parse(&args(&["--invalid"])).is_err());
+        assert!(Options::parse(&args(&["--tighten", "--allow-growth"])).is_err());
+        let root = Path::new("/repo");
+        let ids = [("src/a.rs".into(), "uqm::a::@file".into())].into();
+        assert_eq!(
+            file_identity(root, "/repo/rust/src/a.rs", &ids)
+                .unwrap()
+                .as_deref(),
+            Some("uqm::a::@file")
         );
-        assert!(validate_recorded(
-            &BTreeMap::new(),
-            &BTreeMap::new(),
-            &prior,
-            &BTreeMap::new(),
-            true
-        )
-        .is_ok());
+        assert!(file_identity(root, "/external/a.rs", &ids)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            file_identity(root, "xtask/tests/a.rs", &ids)
+                .unwrap()
+                .as_deref(),
+            Some("uqm-xtask::@path::tests::a.rs")
+        );
     }
+
     #[test]
-    fn file_moves_transfer_lints_and_coverage_without_duplicate_credit() {
+    fn recording_tightens_and_cannot_spend_or_inflate_base_headroom() {
+        let root = fixture_directory();
+        let git = |args: &[&str]| {
+            status(Command::new("git").current_dir(root.path()).args(args)).unwrap()
+        };
+        std::fs::create_dir_all(root.path().join("rust/xtask")).unwrap();
+        let path = root.path().join("rust/xtask/quality-baseline.toml");
+        Baseline::default().write(&path).unwrap();
+        let measured = BTreeMap::from([("unwrap|uqm::a::@file".into(), 2)]);
+        assert!(record(root.path(), &Options::default(), measured.clone()).is_err());
+        record(
+            root.path(),
+            &Options {
+                tighten: true,
+                ..Options::default()
+            },
+            measured.clone(),
+        )
+        .unwrap();
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "base",
+        ]);
+        let options = Options {
+            base: Some("HEAD".into()),
+            ..Options::default()
+        };
+        record(root.path(), &options, measured.clone()).unwrap();
+        let growth = BTreeMap::from([("unwrap|uqm::a::@file".into(), 3)]);
+        assert!(record(root.path(), &options, growth.clone()).is_err());
+        let mut inflated = Baseline::read(&path).unwrap();
+        inflated.lint = Some(growth.clone());
+        inflated.write(&path).unwrap();
+        assert!(record(root.path(), &options, measured.clone()).is_err());
+        assert!(record(root.path(), &options, growth.clone()).is_err());
+        record(
+            root.path(),
+            &Options {
+                allow_growth: true,
+                ..options
+            },
+            growth,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn file_moves_transfer_lints_without_duplicate_credit() {
         let moves = [("uqm::graphics".into(), "uqm-engine::graphics".into())].into();
         let before = [("unwrap_used|uqm::graphics::draw::@file".into(), 2)].into();
         let after = [("unwrap_used|uqm-engine::graphics::draw::@file".into(), 2)].into();
-        assert!(compare(&after, &before, &moves, false).is_ok());
+        assert!(compare(&after, &before, &moves).is_ok());
         let mut both = after.clone();
         both.extend(before.clone());
-        assert!(compare(&both, &before, &moves, false).is_err());
-        assert!(compare(&after, &before, &BTreeMap::new(), false).is_err());
+        assert!(compare(&both, &before, &moves).is_err());
+        assert!(compare(&after, &before, &BTreeMap::new()).is_err());
     }
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = root.join("cargo-fixture");
+    std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    path
+}
+
+#[cfg(test)]
+pub(crate) fn fixture_directory() -> tempfile::TempDir {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/quality-fixtures");
+    std::fs::create_dir_all(&directory).unwrap();
+    tempfile::tempdir_in(directory.canonicalize().unwrap()).unwrap()
 }
