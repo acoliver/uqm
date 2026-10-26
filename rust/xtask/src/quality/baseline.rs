@@ -9,6 +9,9 @@ use super::metrics::{limit, Measurement};
 pub struct Baseline {
     pub entries: BTreeMap<String, u64>,
     pub moved: BTreeMap<String, String>,
+    pub layers: bool,
+    pub lint: Option<BTreeMap<String, u64>>,
+    pub coverage: Option<BTreeMap<String, u64>>,
 }
 
 impl Baseline {
@@ -20,7 +23,31 @@ impl Baseline {
         let document = text
             .parse::<toml_edit::DocumentMut>()
             .map_err(|e| e.to_string())?;
-        let mut result = Self::default();
+        let mut result = Self {
+            layers: document
+                .get("layers")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            ..Self::default()
+        };
+        for (section, slot) in [
+            ("lint", &mut result.lint),
+            ("coverage", &mut result.coverage),
+        ] {
+            if let Some(table) = document.get(section).and_then(toml_edit::Item::as_table) {
+                let mut values = BTreeMap::new();
+                for (key, value) in table {
+                    values.insert(
+                        key.to_string(),
+                        value
+                            .as_integer()
+                            .and_then(|v| u64::try_from(v).ok())
+                            .ok_or_else(|| format!("invalid {section} value: {key}"))?,
+                    );
+                }
+                *slot = Some(values);
+            }
+        }
         if let Some(table) = document.get("entry").and_then(toml_edit::Item::as_table) {
             for (key, value) in table {
                 let value = value
@@ -43,6 +70,19 @@ impl Baseline {
     }
     pub fn write(&self, path: &Path) -> Result<(), String> {
         let mut document = toml_edit::DocumentMut::new();
+        document.insert("layers", toml_edit::value(self.layers));
+        for (name, values) in [("lint", &self.lint), ("coverage", &self.coverage)] {
+            if let Some(values) = values {
+                let mut table = toml_edit::Table::new();
+                for (key, value) in values {
+                    table.insert(
+                        key,
+                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
+                    );
+                }
+                document.insert(name, toml_edit::Item::Table(table));
+            }
+        }
         let mut entries = toml_edit::Table::new();
         for (key, value) in &self.entries {
             entries.insert(
@@ -86,42 +126,55 @@ impl Baseline {
         if old == new || old.is_empty() || new.is_empty() {
             return Err("move needs distinct nonempty identities".into());
         }
-        let source: Vec<_> = self
-            .entries
-            .iter()
-            .filter(|(key, _)| {
-                identity(key).is_some_and(|id| {
-                    if prefix {
-                        prefix_matches(id, old)
-                    } else {
-                        id == old
-                    }
-                })
-            })
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
-        if source.is_empty() {
-            return Err(format!("no baseline debt at {old}"));
-        }
-        for (key, value) in source {
-            let id = identity(&key).ok_or("invalid baseline identity")?;
-            let target = format!("{new}{}", &id[old.len()..]);
-            let key_prefix = key.rsplit_once('|').unwrap().0;
-            let target_key = format!("{key_prefix}|{target}");
-            if self.entries.contains_key(&target_key) {
-                return Err(format!("move would merge debt into {target_key}"));
-            }
-            self.entries.remove(&key);
-            self.entries.insert(target_key, value);
-        }
         if self.moved.values().any(|target| {
             target == new || prefix_matches(new, target) || prefix_matches(target, new)
         }) {
             return Err(format!("move target {new} already credited"));
         }
+        let entries = move_entries(&self.entries, old, new, prefix)?;
+        let lint = self
+            .lint
+            .as_ref()
+            .map(|m| move_entries(m, old, new, prefix))
+            .transpose()?;
+        let coverage = self
+            .coverage
+            .as_ref()
+            .map(|m| move_entries(m, old, new, prefix))
+            .transpose()?;
+        if entries == self.entries && lint == self.lint && coverage == self.coverage {
+            return Err(format!("no baseline debt at {old}"));
+        }
+        self.entries = entries;
+        self.lint = lint;
+        self.coverage = coverage;
         self.moved.insert(old.into(), new.into());
         Ok(())
     }
+}
+
+fn move_entries(
+    entries: &BTreeMap<String, u64>,
+    old: &str,
+    new: &str,
+    prefix: bool,
+) -> Result<BTreeMap<String, u64>, String> {
+    let mut result = entries.clone();
+    for (key, value) in entries {
+        let id = key.rsplit_once('|').map_or(key.as_str(), |(_, id)| id);
+        if (prefix && prefix_matches(id, old)) || (!prefix && id == old) {
+            let target_id = format!("{new}{}", &id[old.len()..]);
+            let target_key = key
+                .rsplit_once('|')
+                .map_or(target_id.clone(), |(head, _)| format!("{head}|{target_id}"));
+            if entries.contains_key(&target_key) {
+                return Err(format!("move would merge debt into {target_key}"));
+            }
+            result.remove(key);
+            result.insert(target_key, *value);
+        }
+    }
+    Ok(result)
 }
 
 fn identity(key: &str) -> Option<&str> {
@@ -419,6 +472,25 @@ mod tests {
         assert!(validate_transfers(&current, &base, &moves).is_err());
         current.findings.pop();
         assert!(validate_transfers(&current, &base, &moves).is_ok());
+    }
+    #[test]
+    fn prefix_move_rewrites_lint_and_coverage_sections_including_zero_floors() {
+        let mut baseline = Baseline {
+            lint: Some(entries(&[("unwrap_used|uqm::graphics::draw::@file", 2)])),
+            coverage: Some(entries(&[("uqm::graphics::draw::@file", 0)])),
+            ..Baseline::default()
+        };
+        baseline
+            .add_move("uqm::graphics", "uqm-engine::graphics", true)
+            .unwrap();
+        assert_eq!(
+            baseline.lint.unwrap(),
+            entries(&[("unwrap_used|uqm-engine::graphics::draw::@file", 2)])
+        );
+        assert_eq!(
+            baseline.coverage.unwrap(),
+            entries(&[("uqm-engine::graphics::draw::@file", 0)])
+        );
     }
     #[test]
     fn unsafe_transfers_use_each_workspace_metric_total() {

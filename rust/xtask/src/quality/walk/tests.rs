@@ -210,3 +210,26 @@ fn macro_handlers_expand_every_registered_definition() {
         );
     }
 }
+
+#[test]
+fn layers_follow_aliases_relative_imports_and_foreign_symbol_names() {
+    let measured = fixture(
+        &[(
+            "src/lib.rs",
+            r#"
+        mod mainloop { #[no_mangle] static mut CONTENT: u8 = 0; }
+        mod graphics {
+            use crate::mainloop::CONTENT as state;
+            fn read() { let _ = state; }
+            extern "C" { #[link_name = "CONTENT"] static content: u8; }
+            #[cfg(test)] fn excluded() { crate::mainloop::test_only(); }
+        }
+        mod comm { struct Mode; mod races { fn run() { let _ = super::Mode; } } }
+    "#,
+        )],
+        None,
+        false,
+    );
+    assert_eq!(measured.report("planned.uqm-engine", None).unwrap(), 3);
+    assert_eq!(measured.report("planned.uqm-content", None).unwrap(), 1);
+}
