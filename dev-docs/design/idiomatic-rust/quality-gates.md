@@ -74,20 +74,26 @@ the same PR, so no PR runs a debt lint under `-D warnings`.
   `-D warnings` today);
 - warnings from the **debt set** (`unsafe_op_in_unsafe_fn`,
   `clippy::undocumented_unsafe_blocks`, `clippy::unwrap_used`, `clippy::expect_used`)
-  are counted per file against the baseline `[lint]` section. `--force-warn`
+  are counted per file against the baseline `[lint.<target_os>]` section for the
+  host running Clippy (`[lint.linux]` or `[lint.macos]` in CI). `--force-warn`
   overrides in-source `allow`s, so a broad suppression such as
   `allow(clippy::all)` over the ABI include (`ships/native.rs:4-12`) cannot hide
   debt moved under it.
 
-Debt baselines are generated and checked by CI on Linux x86_64 with Rust 1.98.0
-and features `audio_heart,debug-process,native`. That target is the authority:
-Clippy sees only compiled `cfg` branches, so another host can report different
-counts. Local runs remain useful checks but must not raise the Linux baseline.
-Document or remove unsafe blocks behind target-specific branches, or use the CI
-measurement when tightening entries (decision [#708](https://github.com/acoliver/uqm/issues/708)).
-Without an approved growth label, CI runs Clippy with `--tighten` after checking
-the recorded limits and publishes `clippy-baseline-linux-x86_64`. Download that
-generated baseline when recording target-specific reductions; do not edit counts.
+Debt baselines are generated per host `target_os`, because Clippy sees only
+compiled `cfg` branches. CI checks Linux in the `rust` job and macOS in the
+`aarch64-apple-darwin` game-build job, with Rust 1.98.0 and features
+`audio_heart,debug-process,native`. Local runs check their own host section;
+`--tighten` updates only that section and preserves every other host's counts.
+A missing host section must be initialized with `--tighten`; existing counts
+cannot rise. The original unqualified baseline is read as Linux when comparing
+older base refs. File/crate moves transfer lint debt in every host section.
+Decision [#709](https://github.com/acoliver/uqm/issues/709) replaces the Linux-only
+measurement policy of [#708](https://github.com/acoliver/uqm/issues/708).
+Without an approved growth label, the Linux CI job runs Clippy with `--tighten`
+after checking the recorded limits and publishes `clippy-baseline-linux-x86_64`.
+Download that generated baseline when recording Linux reductions; use the same
+command on macOS for macOS reductions. Do not edit counts.
 
 In Phase 8 the debt set becomes `deny`. Where a compiler lint can enforce a rule it
 is used instead of a count: when a phase closes a subsystem, that subsystem's module
@@ -116,7 +122,7 @@ Production code is defined by the source walk of section 3.2.
 | `quality native-files` | Tracked files ending `.c .h .cc .cpp .hpp .m .mm .s .S .asm` (`git ls-files`) | 0, absolute |
 | `quality deps` | Section 3.4 | absolute |
 | `clippy` | Section 2.3 | deny set: 0; debt set: baseline |
-| `coverage` | `cargo llvm-cov --workspace --no-default-features --features audio_heart,debug-process,native --summary-only`; workspace and added production files (section 4 rule 4, [#708](https://github.com/acoliver/uqm/issues/708)) | workspace ≥ 70%; each added production file ≥ 70%, absolute |
+| `coverage` | `cargo llvm-cov --workspace --no-default-features --features audio_heart,debug-process,native --summary-only`; workspace and added production files (section 4 rule 4, [#708](https://github.com/acoliver/uqm/issues/708)) | workspace ≥ 70%; each added production file with executable lines ≥ 70%, absolute |
 | `deny` | `cargo deny --locked check advisories bans licenses sources` with `rust/deny.toml` | 0 findings |
 | `parity record\|check` | Replay corpus (plan.md section 2) against `rust/tests/golden/parity/` | exact match |
 | `quality report <counter>[:<scope>]` | Prints one counter for a subsystem, file or crate; `--expect N` fails unless it equals N, `--expect-only <scopes>` fails if any other scope is nonzero. Acceptance commands use it for zero checks | as asked |
@@ -332,10 +338,13 @@ Rules enforced by xtask:
      subsystems or crates (a caller's `unsafe` into an engine wrapper), the check is
      that the workspace total does not rise.
 4. **Coverage floors.** Workspace line coverage must be at least 70%, and each
-   production file added relative to `--base` must have at least 70% line coverage.
-   These are absolute checks, with no per-file baseline or growth override. Files
-   added by a move also count as added; an added production file absent from the
-   report fails. Existing files contribute to the workspace total without an exact
+   production file added relative to `--base` with instrumented executable lines
+   must have at least 70% line coverage. These are absolute checks, with no per-file
+   baseline or growth override. Files added by a move also count as added. Files
+   with zero instrumented lines, including declaration/re-export-only files that
+   LLVM omits from its report, are listed as `no executable lines` and do not fail
+   ([#711](https://github.com/acoliver/uqm/issues/711)). The workspace must still
+   contain executable lines. Existing files contribute to the workspace total without an exact
    per-file ratchet. Decision [#708](https://github.com/acoliver/uqm/issues/708)
    replaces that ratchet because correct subprocess tests exercise different
    timeout/poll branches under OS scheduling, changing measured coverage between
@@ -389,7 +398,7 @@ unlabeled]` so a label change re-runs. `GROWTH` and `GOLDEN` stand for
 | `supply` | ubuntu | install pinned cargo-deny (`--locked`); `cargo xtask deny` |
 | `coverage` | ubuntu | install Clippy, llvm-tools-preview and pinned cargo-llvm-cov; `cargo xtask coverage $BASE_ARG` under SDL dummy drivers |
 | `parity` | ubuntu | `cargo xtask parity check $BASE_ARG GOLDEN` and `parity counts check --all`; fails if a file under `rust/tests/golden/` that exists at base is modified or deleted without `parity-golden-update`, or a new golden arrives without its corpus manifest entry (U0-06 creates the first set with the owner's approval) |
-| `game-build` | 5 targets | unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
+| `game-build` | 5 targets | `aarch64-apple-darwin` also runs `cargo xtask clippy $BASE_ARG GROWTH` against the macOS baseline; release build and smoke checks unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
 | `failure-scenarios` | macOS | unchanged (4 scenarios) |
 | `release-tools` | ubuntu | unchanged |
 

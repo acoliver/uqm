@@ -10,7 +10,7 @@ pub struct Baseline {
     pub entries: BTreeMap<String, u64>,
     pub moved: BTreeMap<String, String>,
     pub layers: bool,
-    pub lint: Option<BTreeMap<String, u64>>,
+    pub lint: BTreeMap<String, BTreeMap<String, u64>>,
 }
 
 impl Baseline {
@@ -30,17 +30,17 @@ impl Baseline {
             ..Self::default()
         };
         if let Some(table) = document.get("lint").and_then(toml_edit::Item::as_table) {
-            let mut values = BTreeMap::new();
-            for (key, value) in table {
-                values.insert(
-                    key.to_string(),
-                    value
-                        .as_integer()
-                        .and_then(|v| u64::try_from(v).ok())
-                        .ok_or_else(|| format!("invalid lint value: {key}"))?,
-                );
+            // Baselines at older git refs were measured on Linux only.
+            if table.iter().all(|(_, value)| value.is_integer()) {
+                result.lint.insert("linux".into(), lint_values(table)?);
+            } else {
+                for (host, value) in table {
+                    let values = value
+                        .as_table()
+                        .ok_or_else(|| format!("invalid lint host section: {host}"))?;
+                    result.lint.insert(host.into(), lint_values(values)?);
+                }
             }
-            result.lint = Some(values);
         }
         if let Some(table) = document.get("entry").and_then(toml_edit::Item::as_table) {
             for (key, value) in table {
@@ -65,15 +65,20 @@ impl Baseline {
     pub fn write(&self, path: &Path) -> Result<(), String> {
         let mut document = toml_edit::DocumentMut::new();
         document.insert("layers", toml_edit::value(self.layers));
-        if let Some(values) = &self.lint {
-            let mut table = toml_edit::Table::new();
-            for (key, value) in values {
-                table.insert(
-                    key,
-                    toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
-                );
+        if !self.lint.is_empty() {
+            let mut hosts = toml_edit::Table::new();
+            hosts.set_implicit(true);
+            for (host, values) in &self.lint {
+                let mut table = toml_edit::Table::new();
+                for (key, value) in values {
+                    table.insert(
+                        key,
+                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
+                    );
+                }
+                hosts.insert(host, toml_edit::Item::Table(table));
             }
-            document.insert("lint", toml_edit::Item::Table(table));
+            document.insert("lint", toml_edit::Item::Table(hosts));
         }
         let mut entries = toml_edit::Table::new();
         for (key, value) in &self.entries {
@@ -126,9 +131,9 @@ impl Baseline {
         let entries = move_entries(&self.entries, old, new, prefix)?;
         let lint = self
             .lint
-            .as_ref()
-            .map(|m| move_entries(m, old, new, prefix))
-            .transpose()?;
+            .iter()
+            .map(|(host, values)| Ok((host.clone(), move_entries(values, old, new, prefix)?)))
+            .collect::<Result<_, String>>()?;
         if entries == self.entries && lint == self.lint {
             return Err(format!("no baseline debt at {old}"));
         }
@@ -137,6 +142,19 @@ impl Baseline {
         self.moved.insert(old.into(), new.into());
         Ok(())
     }
+}
+
+fn lint_values(table: &toml_edit::Table) -> Result<BTreeMap<String, u64>, String> {
+    table
+        .iter()
+        .map(|(key, value)| {
+            let count = value
+                .as_integer()
+                .and_then(|v| u64::try_from(v).ok())
+                .ok_or_else(|| format!("invalid lint value: {key}"))?;
+            Ok((key.into(), count))
+        })
+        .collect()
 }
 
 fn move_entries(
@@ -460,18 +478,58 @@ mod tests {
         assert!(validate_transfers(&current, &base, &moves).is_ok());
     }
     #[test]
+    fn legacy_baselines_are_linux_only_and_host_values_are_validated() {
+        let legacy = Baseline::parse(
+            r#"[lint]
+"unwrap|uqm::a" = 2
+"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.lint.len(), 1);
+        assert_eq!(legacy.lint["linux"], entries(&[("unwrap|uqm::a", 2)]));
+        assert!(Baseline::parse(
+            r#"[lint.macos]
+"unwrap|uqm::a" = -1
+"#
+        )
+        .is_err());
+        assert!(Baseline::parse(
+            r#"[lint]
+macos = "invalid"
+"#
+        )
+        .is_err());
+    }
+
+    #[test]
     fn prefix_move_rewrites_lint_section() {
         let mut baseline = Baseline {
-            lint: Some(entries(&[("unwrap_used|uqm::graphics::draw::@file", 2)])),
+            lint: [
+                (
+                    "linux".into(),
+                    entries(&[("unwrap_used|uqm::graphics::draw::@file", 2)]),
+                ),
+                (
+                    "macos".into(),
+                    entries(&[("unwrap_used|uqm::graphics::draw::@file", 3)]),
+                ),
+            ]
+            .into(),
             ..Baseline::default()
         };
         baseline
             .add_move("uqm::graphics", "uqm-engine::graphics", true)
             .unwrap();
-        assert_eq!(
-            baseline.lint.unwrap(),
-            entries(&[("unwrap_used|uqm-engine::graphics::draw::@file", 2)])
-        );
+        for (host, count) in [("linux", 2), ("macos", 3)] {
+            assert_eq!(
+                baseline.lint[host],
+                entries(&[("unwrap_used|uqm-engine::graphics::draw::@file", count)])
+            );
+        }
+        let root = super::super::tool::fixture_directory();
+        let path = root.path().join("baseline.toml");
+        baseline.write(&path).unwrap();
+        assert_eq!(Baseline::read(&path).unwrap(), baseline);
     }
     #[test]
     fn unsafe_transfers_use_each_workspace_metric_total() {

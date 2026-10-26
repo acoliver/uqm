@@ -136,7 +136,7 @@ fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result
     }
     for file in added {
         match measured.get(file) {
-            Some(lines) => {
+            Some(lines) if lines.count > 0 => {
                 println!(
                     "added production file {file}: {:.2}% ({}/{})",
                     lines.percent(),
@@ -147,9 +147,7 @@ fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result
                     errors.push(format!("{file}: {:.2}% is below 70%", lines.percent()));
                 }
             }
-            None => errors.push(format!(
-                "added production file missing from coverage: {file}"
-            )),
+            _ => println!("added production file {file}: no executable lines"),
         }
     }
     if errors.is_empty() {
@@ -260,7 +258,11 @@ mod tests {
             &added
         )
         .is_ok());
-        assert!(check(&measurements(&[("old.rs", 100, 100)]), &added).is_err());
+    }
+    #[test]
+    fn added_files_without_instrumented_lines_have_nothing_to_cover() {
+        let added = BTreeSet::from(["new.rs".into()]);
+        assert!(check(&measurements(&[("old.rs", 100, 100)]), &added).is_ok());
         assert!(check(
             &measurements(&[("old.rs", 100, 100), ("new.rs", 0, 0)]),
             &added
