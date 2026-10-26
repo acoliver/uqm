@@ -592,7 +592,7 @@ mod runtime {
         callback: unsafe fn(*mut STAR_DESC, *mut SOLARSYS_STATE, *mut PLANET_DESC, &mut T),
         arg: &mut T,
     ) {
-        assert!(CurStarDescPtr == star);
+        assert!(CurStarDescPtr == star.cast());
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].NumPlanets as usize {
             callback(
@@ -652,7 +652,7 @@ mod runtime {
     unsafe fn starRecurse<T>(star: *mut STAR_DESC, recurse: &mut UniverseRecurseArg<'_, T>) {
         let old_system = pSolarSysState;
         let old_star = CurStarDescPtr;
-        CurStarDescPtr = star;
+        CurStarDescPtr = star.cast();
         (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
         system.SunDesc[0].pPrevDesc = ptr::null_mut();
@@ -685,7 +685,7 @@ mod runtime {
         planet: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star);
+        assert!(CurStarDescPtr == star.cast());
         assert!(pSolarSysState == system);
         (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planetFuncPre {
@@ -713,7 +713,7 @@ mod runtime {
         moon: *mut PLANET_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(CurStarDescPtr == star);
+        assert!(CurStarDescPtr == star.cast());
         assert!(pSolarSysState == system);
         (*moon).pPrevDesc = planet;
         if let Some(cb) = recurse.moonFunc {

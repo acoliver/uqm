@@ -63,14 +63,14 @@ use crate::graphics::cmap_abi::TFB_ReturnColorMap;
 use crate::graphics::cmap_abi::GetFadeAmount;
 
 extern "C" {
-    static ScreenWidth: i32;
-    static ScreenHeight: i32;
-    static ScreenWidthActual: i32;
-    static ScreenHeightActual: i32;
-    static GraphicsDriver: i32;
-    static GfxFlags: i32;
-    static TFB_DEBUG_HALT: i32;
-    static TransitionAmount: i32;
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
+    static mut ScreenWidthActual: i32;
+    static mut ScreenHeightActual: i32;
+    static mut GraphicsDriver: i32;
+    static mut GfxFlags: i32;
+    static mut TFB_DEBUG_HALT: i32;
+    static mut TransitionAmount: i32;
 }
 fn synchronize(queue: &mut TFB_DrawCommandQueue) {
     if queue.Batching == 0 {

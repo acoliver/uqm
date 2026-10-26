@@ -161,7 +161,7 @@ pub(crate) mod runtime {
         let widget = &mut *ptr::addr_of_mut!(TEXTENTRIES[0]);
         libc::strncpy(
             widget.value.as_mut_ptr(),
-            input_templates[template as usize].name.as_ptr(),
+            input_templates[template as usize].as_ptr(),
             widget.maxlen as usize,
         );
         widget.value[(widget.maxlen - 1) as usize] = 0;
@@ -197,9 +197,7 @@ pub(crate) mod runtime {
         populate_editkeys((*widget).selected);
     }
     unsafe extern "C" fn rename_template(widget: *mut WIDGET_TEXTENTRY) {
-        let name = input_templates[CHOICES[20].selected as usize]
-            .name
-            .as_mut_ptr();
+        let name = input_templates[CHOICES[20].selected as usize].as_mut_ptr();
         libc::strncpy(name, (*widget).value.as_ptr(), 30);
         *name.add(29) = 0;
     }
@@ -1220,7 +1218,7 @@ pub(crate) mod runtime {
         .iter()
         .enumerate()
         {
-            res_PutString(key.as_ptr(), input_templates[i].name.as_ptr());
+            res_PutString(key.as_ptr(), input_templates[i].as_ptr());
         }
         SaveResourceIndex(
             (configDir).cast(),

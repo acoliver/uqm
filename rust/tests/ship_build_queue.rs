@@ -17,7 +17,8 @@ fn ship_construction_clears_payload_and_preserves_allocation_order() {
             object_size: 0,
             num_objects: 0,
         };
-        assert!(InitQueue(&mut queue, 2, size as u16));
+        // SAFETY: queue is uninitialized writable storage and both record sizes include Link.
+        assert!(unsafe { InitQueue(&mut queue, 2, size as u16) });
         unsafe {
             let prefix = mem::size_of::<Link>();
             for index in 0..2 {

@@ -16,7 +16,7 @@ pub(crate) mod live {
         global_state::{MENU_STATE, PLANET_INFO},
         live_queues, solar_system,
     };
-    use crate::comm::locdata::{CGlobData, CRect};
+    use crate::comm::locdata::CRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
@@ -91,11 +91,11 @@ pub(crate) mod live {
     use crate::mainloop::input_abi::live::SetInputCallback;
 
     extern "C" {
-        static GlobData: CGlobData;
-        static LastActivity: u16;
-        static SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        static Screen: *mut c_void;
-        static optWhichMenu: i32;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
+        static mut LastActivity: u16;
+        static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
+        static mut Screen: *mut crate::graphics::native_abi::frame_desc;
+        static mut optWhichMenu: i32;
     }
 
     fn black() -> crate::comm::locdata::CColor {
@@ -213,7 +213,7 @@ pub(crate) mod live {
             base::SetTransitionSource(std::ptr::null_mut());
             DrawSISFrame();
             DrawSISMessage(std::ptr::null());
-            DrawSISTitle(std::ptr::addr_of!(GlobData.sis_state.planet_name).cast());
+            DrawSISTitle(std::ptr::addr_of!(GlobData.SIS_state.PlanetName).cast());
             DrawStarBackGround();
             DrawPlanetSurfaceBorder();
         }
@@ -349,8 +349,8 @@ pub(crate) mod live {
     unsafe extern "C" fn do_orbit(menu: *mut MENU_STATE) -> u32 {
         use crate::c_bindings::controller_input::{PulsedInputState, KEY_MENU_SELECT};
         let mut selected = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0;
-        if GlobData.game_state.current_activity & (CHECK_ABORT | CHECK_LOAD) != 0
-            || GlobData.sis_state.crew_enlisted == u16::MAX
+        if GlobData.Game_state.CurrentActivity & (CHECK_ABORT | CHECK_LOAD) != 0
+            || GlobData.SIS_state.CrewEnlisted == u16::MAX
         {
             return 0;
         }
@@ -361,13 +361,13 @@ pub(crate) mod live {
         match (*menu).CurState {
             0 => {
                 ScanSystem();
-                if GlobData.game_state.current_activity & START_ENCOUNTER != 0 {
+                if GlobData.Game_state.CurrentActivity & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
             2 => {
                 selected = DevicesMenu() != 0;
-                if GlobData.game_state.current_activity & START_ENCOUNTER != 0 {
+                if GlobData.Game_state.CurrentActivity & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
@@ -382,7 +382,7 @@ pub(crate) mod live {
                 let old = SetInputCallback(None);
                 RepairSISBorder();
                 let autopilot = StarMap();
-                if GlobData.game_state.current_activity & CHECK_ABORT != 0 {
+                if GlobData.Game_state.CurrentActivity & CHECK_ABORT != 0 {
                     return 0;
                 }
                 SetInputCallback(old);
@@ -395,7 +395,7 @@ pub(crate) mod live {
             6 => return 0,
             _ => {}
         }
-        if GlobData.game_state.current_activity & CHECK_ABORT == 0 {
+        if GlobData.Game_state.CurrentActivity & CHECK_ABORT == 0 {
             if selected {
                 (*menu).CurState = submenu_selection((*menu).CurState, selected, optWhichMenu == 2);
                 DrawMenuStateStrings(0, i16::from((*menu).CurState));

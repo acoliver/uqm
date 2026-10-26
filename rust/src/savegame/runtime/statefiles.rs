@@ -735,8 +735,8 @@ fn commit(plan: &RestorePlan, state: &mut GameState, files: &mut StateFileManage
 /// Make the live state files, game-state singleton and `game` hold `sections`.
 ///
 /// Call after the game state of the save is installed (`restore_runtime`): the
-/// defined-group offsets of the new files are written over those bits. The C
-/// shadow of the game state in `game` and `BattleGroupRef` follow.
+/// defined-group offsets of the new files are written to the singleton.
+/// `BattleGroupRef` follows in the live game record.
 pub fn restore_state_files(
     game: &mut CGameState,
     sections: &StateFileSections,
@@ -747,7 +747,7 @@ pub fn restore_state_files(
         files.canned_nodes.clone_from(&sections.canned_nodes);
         Ok::<_, StateSectionError>(plan)
     })??;
-    game.game_state_bytes = plan.game_state;
+
     if let Some(reference) = plan.battle_group_ref {
         game.battle_group_ref = reference;
     }

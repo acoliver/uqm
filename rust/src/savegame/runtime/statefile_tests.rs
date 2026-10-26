@@ -129,7 +129,6 @@ fn seed_restores_to_the_images_the_c_loader_builds() {
     assert_eq!(game.battle_group_ref, 1);
     let state = snapshot_game_state().unwrap();
     assert_eq!(get_state_32_raw(&state, PROBE_OFFSET_BIT), 1);
-    assert_eq!(game.game_state_bytes, state);
 }
 
 #[test]
@@ -350,7 +349,6 @@ fn rejected_restore_leaves_files_and_state_alone() {
         file(RANDGRPINFO_FILE),
         file(DEFGRPINFO_FILE),
         snapshot_game_state().unwrap(),
-        game.game_state_bytes,
         game.battle_group_ref,
     );
 
@@ -447,7 +445,6 @@ fn rejected_restore_leaves_files_and_state_alone() {
             file(RANDGRPINFO_FILE),
             file(DEFGRPINFO_FILE),
             snapshot_game_state().unwrap(),
-            game.game_state_bytes,
             game.battle_group_ref,
         );
         assert_eq!(after, before, "state changed after {expected:?}");

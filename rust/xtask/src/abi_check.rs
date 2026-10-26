@@ -13,9 +13,11 @@ struct Scope {
     parent: Option<usize>,
     path: String,
     aliases: BTreeMap<String, Type>,
+    constants: BTreeMap<String, syn::Expr>,
     imports: BTreeMap<String, String>,
     globs: Vec<String>,
     types: BTreeSet<String>,
+    static_macros: BTreeMap<String, bool>,
 }
 
 struct Function {
@@ -26,11 +28,23 @@ struct Function {
     cfg: Vec<syn::Meta>,
 }
 
+struct Static {
+    symbol: String,
+    ty: Type,
+    mutable: bool,
+    scope: usize,
+    location: String,
+    cfg: Vec<syn::Meta>,
+}
+
 #[derive(Default)]
 struct Catalog {
     scopes: Vec<Scope>,
     modules: BTreeMap<String, usize>,
     definitions: Vec<Function>,
+    static_definitions: Vec<Static>,
+    static_declarations: Vec<Static>,
+    dependencies: BTreeMap<String, BTreeSet<String>>,
     declarations: Vec<Function>,
     files: BTreeSet<PathBuf>,
     unsupported_export_macros: BTreeSet<String>,
@@ -146,7 +160,7 @@ impl Catalog {
     fn absolute(&self, path: &str, scope: usize) -> String {
         let module = &self.scopes[scope].path;
         if let Some(rest) = path.strip_prefix("crate::") {
-            format!("crate::{rest}")
+            format!("{}::{rest}", module.split("::").next().unwrap())
         } else if let Some(rest) = path.strip_prefix("self::") {
             format!("{module}::{rest}")
         } else if let Some(rest) = path.strip_prefix("super::") {
@@ -189,7 +203,10 @@ impl Catalog {
                 return self.lookup(path, parent, seen);
             }
         } else {
-            if current.aliases.contains_key(path) || current.types.contains(path) {
+            if current.aliases.contains_key(path)
+                || current.types.contains(path)
+                || current.constants.contains_key(path)
+            {
                 return Some((scope, path.to_string()));
             }
             if let Some(import) = current.imports.get(path) {
@@ -342,7 +359,7 @@ impl Catalog {
             Type::Array(array) => format!(
                 "[{};{}]",
                 self.normalize(&array.elem, scope, stack),
-                array.len.to_token_stream()
+                self.array_length(&array.len, scope)
             ),
             Type::BareFn(function) => {
                 let inputs = function
@@ -372,6 +389,87 @@ impl Catalog {
                 )
             }
             _ => ty.to_token_stream().to_string(),
+        }
+    }
+
+    fn const_integer(
+        &self,
+        expression: &syn::Expr,
+        scope: usize,
+        seen: &mut BTreeSet<(usize, String)>,
+    ) -> Option<i128> {
+        match expression {
+            syn::Expr::Lit(literal) => match &literal.lit {
+                syn::Lit::Int(value) => value.base10_parse().ok(),
+                _ => None,
+            },
+            syn::Expr::Path(path) if path.qself.is_none() => {
+                let name = path.path.to_token_stream().to_string().replace(' ', "");
+                let (owner, ident) = self.lookup(&name, scope, &mut BTreeSet::new())?;
+                let key = (owner, ident.clone());
+                if !seen.insert(key.clone()) {
+                    return None;
+                }
+                let result = self.scopes[owner]
+                    .constants
+                    .get(&ident)
+                    .and_then(|value| self.const_integer(value, owner, seen));
+                seen.remove(&key);
+                result
+            }
+            syn::Expr::Paren(value) => self.const_integer(&value.expr, scope, seen),
+            syn::Expr::Group(value) => self.const_integer(&value.expr, scope, seen),
+            syn::Expr::Cast(value) => {
+                let integer = self.const_integer(&value.expr, scope, seen)?;
+                let ty = self.normalize(&value.ty, scope, &mut BTreeSet::new());
+                let fits = match ty.as_str() {
+                    "usize" => usize::try_from(integer).is_ok(),
+                    "u8" => u8::try_from(integer).is_ok(),
+                    "u16" => u16::try_from(integer).is_ok(),
+                    "u32" => u32::try_from(integer).is_ok(),
+                    "u64" => u64::try_from(integer).is_ok(),
+                    "isize" => isize::try_from(integer).is_ok(),
+                    "i8" => i8::try_from(integer).is_ok(),
+                    "i16" => i16::try_from(integer).is_ok(),
+                    "i32" => i32::try_from(integer).is_ok(),
+                    "i64" => i64::try_from(integer).is_ok(),
+                    "i128" => true,
+                    _ => false,
+                };
+                fits.then_some(integer)
+            }
+            syn::Expr::Unary(value) if matches!(value.op, syn::UnOp::Neg(_)) => {
+                self.const_integer(&value.expr, scope, seen)?.checked_neg()
+            }
+            syn::Expr::Binary(value) => {
+                let left = self.const_integer(&value.left, scope, seen)?;
+                let right = self.const_integer(&value.right, scope, seen)?;
+                match value.op {
+                    syn::BinOp::Add(_) => left.checked_add(right),
+                    syn::BinOp::Sub(_) => left.checked_sub(right),
+                    syn::BinOp::Mul(_) => left.checked_mul(right),
+                    syn::BinOp::Div(_) => left.checked_div(right),
+                    syn::BinOp::Rem(_) => left.checked_rem(right),
+                    syn::BinOp::Shl(_) => left.checked_shl(right.try_into().ok()?),
+                    syn::BinOp::Shr(_) => left.checked_shr(right.try_into().ok()?),
+                    syn::BinOp::BitOr(_) => Some(left | right),
+                    syn::BinOp::BitAnd(_) => Some(left & right),
+                    syn::BinOp::BitXor(_) => Some(left ^ right),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn array_length(&self, expression: &syn::Expr, scope: usize) -> String {
+        match self.const_integer(expression, scope, &mut BTreeSet::new()) {
+            Some(value) if value >= 0 => value.to_string(),
+            _ => format!(
+                "{}::{{{}}}",
+                self.scopes[scope].path,
+                expression.to_token_stream()
+            ),
         }
     }
 
@@ -550,6 +648,14 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.import(&item.tree, "");
         }
     }
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        if self.enabled_item(&item.attrs) {
+            self.catalog.scopes[self.scope]
+                .constants
+                .insert(item.ident.to_string(), *item.expr.clone());
+        }
+    }
+
     fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
         if self.enabled_item(&item.attrs) {
             self.catalog.scopes[self.scope]
@@ -573,6 +679,27 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             .insert(item.ident.to_string());
     }
 
+    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
+        if !self.enabled_item(&item.attrs) {
+            return;
+        }
+        let symbol = named_attribute(&item.attrs, "export_name")
+            .or_else(|| has_attribute(&item.attrs, "no_mangle").then(|| item.ident.to_string()));
+        if let Some(symbol) = symbol {
+            let mut cfg = self.cfg.clone();
+            cfg.extend(cfg_attributes(&item.attrs));
+            self.catalog.static_definitions.push(Static {
+                symbol,
+                ty: *item.ty.clone(),
+                mutable: matches!(item.mutability, syn::StaticMutability::Mut(_)),
+                scope: self.scope,
+                location: format!("{}:{}", self.file.display(), item.ident.span().start().line),
+                cfg,
+            });
+        }
+        visit::visit_item_static(self, item);
+    }
+
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
         let parent_cfg = self.cfg.clone();
         self.cfg.extend(cfg_attributes(&item.attrs));
@@ -592,6 +719,23 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         self.cfg.extend(cfg_attributes(&item.attrs));
         if is_c(&item.abi) {
             for item in &item.items {
+                if let ForeignItem::Static(item) = item {
+                    let mut cfg = self.cfg.clone();
+                    cfg.extend(cfg_attributes(&item.attrs));
+                    self.catalog.static_declarations.push(Static {
+                        symbol: named_attribute(&item.attrs, "link_name")
+                            .unwrap_or_else(|| item.ident.to_string()),
+                        ty: *item.ty.clone(),
+                        mutable: matches!(item.mutability, syn::StaticMutability::Mut(_)),
+                        scope: self.scope,
+                        location: format!(
+                            "{}:{}",
+                            self.file.display(),
+                            item.ident.span().start().line
+                        ),
+                        cfg,
+                    });
+                }
                 if let ForeignItem::Fn(function) = item {
                     let inherited = self.cfg.clone();
                     self.cfg.extend(cfg_attributes(&function.attrs));
@@ -610,14 +754,82 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_macro(&mut self, item: &'ast syn::ItemMacro) {
         if let Some(ident) = &item.ident {
             let tokens = item.mac.tokens.to_string();
+            let compact: String = tokens.chars().filter(|ch| !ch.is_whitespace()).collect();
+            let typed = compact == "($name:ident:$ty:ty)=>{#[no_mangle]pubstaticmut$name:$ty=unsafe{mem::zeroed()};};"
+                || compact == "($($name:ident:$ty:ty),*$(,)?)=>{$(#[no_mangle]pubstaticmut$name:$ty=unsafe{std::mem::zeroed()};)*};";
+            let screen =
+                compact == "($($name:ident),*)=>{$(#[no_mangle]pubstaticmut$name:i32=0;)*};";
+            if typed || screen {
+                self.catalog.scopes[self.scope]
+                    .static_macros
+                    .insert(ident.to_string(), typed);
+                return;
+            }
             if (tokens.contains("no_mangle") || tokens.contains("export_name"))
-                && tokens.contains("fn")
+                && (tokens.contains("fn") || tokens.contains("static"))
             {
                 self.catalog.unsupported_export_macros.insert(format!(
                     "{}:{} ({ident})",
                     self.file.display(),
                     item.mac.path.to_token_stream()
                 ));
+            }
+        }
+        if let Some(name) = item.mac.path.get_ident() {
+            let mut scope = Some(self.scope);
+            while let Some(owner) = scope {
+                if let Some(typed) = self.catalog.scopes[owner]
+                    .static_macros
+                    .get(&name.to_string())
+                {
+                    let typed = *typed;
+                    let entries = syn::parse::Parser::parse2(
+                        |input: syn::parse::ParseStream<'_>| {
+                            let mut entries = Vec::new();
+                            while !input.is_empty() {
+                                let ident: syn::Ident = input.parse()?;
+                                let ty: Type = if typed {
+                                    input.parse::<syn::Token![:]>()?;
+                                    input.parse()?
+                                } else {
+                                    syn::parse_quote!(i32)
+                                };
+                                entries.push((ident, ty));
+                                if input.is_empty() {
+                                    break;
+                                }
+                                input.parse::<syn::Token![,]>()?;
+                            }
+                            Ok(entries)
+                        },
+                        item.mac.tokens.clone(),
+                    );
+                    match entries {
+                        Ok(entries) => {
+                            for (ident, ty) in entries {
+                                let mut cfg = self.cfg.clone();
+                                cfg.extend(cfg_attributes(&item.attrs));
+                                self.catalog.static_definitions.push(Static {
+                                    symbol: ident.to_string(),
+                                    ty,
+                                    mutable: true,
+                                    scope: self.scope,
+                                    location: format!(
+                                        "{}:{}",
+                                        self.file.display(),
+                                        ident.span().start().line
+                                    ),
+                                    cfg,
+                                });
+                            }
+                        }
+                        Err(error) => self
+                            .errors
+                            .push(format!("{}: static macro: {error}", self.file.display())),
+                    }
+                    return;
+                }
+                scope = self.catalog.scopes[owner].parent;
             }
         }
         if item.mac.path.is_ident("include") {
@@ -930,9 +1142,16 @@ fn external_provider(symbol: &str) -> Option<(&'static str, &'static str)> {
             "CoreFoundation.framework",
             "macOS SDK CoreFoundation.framework/Headers; CoreFoundation public API",
         ),
-        "CGRectMakeWithDictionaryRepresentation" | "CGWindowListCopyWindowInfo" => (
+        "CGRectMakeWithDictionaryRepresentation"
+        | "CGWindowListCopyWindowInfo"
+        | "CGMainDisplayID"
+        | "CGDisplayBounds" => (
             "CoreGraphics.framework",
             "macOS SDK CoreGraphics.framework/Headers; CoreGraphics public API",
+        ),
+        "sel_registerName" | "objc_msgSend" | "objc_msgSend_stret" => (
+            "libobjc.A.dylib",
+            "macOS SDK objc/runtime.h and objc/message.h; Objective-C runtime API",
         ),
         "proc_pidpath" => (
             "libproc.dylib",
@@ -949,6 +1168,180 @@ fn external_provider(symbol: &str) -> Option<(&'static str, &'static str)> {
         _ => return None,
     };
     Some(entry)
+}
+
+fn external_static_provider(symbol: &str) -> Option<(&'static str, &'static str)> {
+    match symbol {
+        "__stderrp" | "__stdoutp" => Some((
+            "libSystem.B.dylib",
+            "macOS SDK stdio.h: FILE *__stderrp, *__stdoutp",
+        )),
+        "stderr" | "stdout" => Some(("libc", "POSIX stdio.h: FILE *stderr, *stdout")),
+        "kCGWindowOwnerPID"
+        | "kCGWindowNumber"
+        | "kCGWindowBounds"
+        | "kCGWindowIsOnscreen"
+        | "kCGWindowLayer" => Some((
+            "CoreGraphics.framework",
+            "macOS SDK CGWindow.h: const CFStringRef window information keys",
+        )),
+        _ => None,
+    }
+}
+
+fn dependency_allowed(
+    dependencies: &BTreeMap<String, BTreeSet<String>>,
+    caller: &str,
+    owner: &str,
+) -> bool {
+    let mut pending = vec![caller];
+    let mut visited = BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if name == owner {
+            return true;
+        }
+        if visited.insert(name) {
+            if let Some(edges) = dependencies.get(name) {
+                pending.extend(edges.iter().map(String::as_str));
+            }
+        }
+    }
+    false
+}
+
+impl Catalog {
+    fn direction_allowed(&self, declaration: usize, definition: usize) -> bool {
+        let owner = |scope: usize| self.scopes[scope].path.split("::").next().unwrap();
+        dependency_allowed(&self.dependencies, owner(declaration), owner(definition))
+    }
+
+    fn static_signature(&self, item: &Static) -> String {
+        format!(
+            "{}{}",
+            if item.mutable { "mut " } else { "" },
+            self.normalize(&item.ty, item.scope, &mut BTreeSet::new())
+        )
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct WorkspaceMetadata {
+    packages: Vec<WorkspacePackage>,
+    workspace_members: BTreeSet<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct WorkspacePackage {
+    id: String,
+    name: String,
+    targets: Vec<WorkspaceTarget>,
+    dependencies: Vec<WorkspaceDependency>,
+}
+
+#[derive(serde::Deserialize)]
+struct WorkspaceTarget {
+    name: String,
+    kind: Vec<String>,
+    src_path: PathBuf,
+    #[serde(default, rename = "required-features")]
+    required_features: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct WorkspaceDependency {
+    name: String,
+}
+
+fn workspace_metadata(root: &Path) -> Result<WorkspaceMetadata, String> {
+    let output = Command::new("cargo")
+        .args([
+            "metadata",
+            "--locked",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(root.join("rust/Cargo.toml"))
+        .output()
+        .map_err(|error| format!("cargo metadata: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo metadata: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    serde_json::from_slice(&output.stdout).map_err(|error| format!("cargo metadata: {error}"))
+}
+
+fn load_workspace(root: &Path, config: &BuildCfg) -> Result<Catalog, String> {
+    let metadata = workspace_metadata(root)?;
+    let packages: Vec<_> = metadata
+        .packages
+        .iter()
+        .filter(|package| metadata.workspace_members.contains(&package.id))
+        .collect();
+    let crate_name = |package: &WorkspacePackage| {
+        package
+            .targets
+            .iter()
+            .find(|target| {
+                target
+                    .kind
+                    .iter()
+                    .any(|kind| matches!(kind.as_str(), "lib" | "rlib" | "cdylib" | "staticlib"))
+            })
+            .map_or_else(
+                || package.name.replace('-', "_"),
+                |target| target.name.replace('-', "_"),
+            )
+    };
+    let mut catalog = Catalog::default();
+    for package in &packages {
+        let name = crate_name(package);
+        let dependencies = package
+            .dependencies
+            .iter()
+            .filter_map(|dependency| {
+                packages
+                    .iter()
+                    .find(|candidate| candidate.name == dependency.name)
+                    .map(|candidate| crate_name(candidate))
+            })
+            .collect();
+        catalog.dependencies.insert(name.clone(), dependencies);
+        // Load libraries before binaries so shared modules retain their library identity.
+        let mut targets: Vec<_> = package
+            .targets
+            .iter()
+            .filter(|target| {
+                target.kind.iter().any(|kind| {
+                    matches!(kind.as_str(), "lib" | "rlib" | "cdylib" | "staticlib")
+                        || kind == "bin"
+                })
+            })
+            .collect();
+        targets.sort_by_key(|target| {
+            !target
+                .kind
+                .iter()
+                .any(|kind| matches!(kind.as_str(), "lib" | "rlib" | "cdylib" | "staticlib"))
+        });
+        for target in targets {
+            if target.required_features.iter().any(|feature| {
+                feature != "audio_heart" && !(feature == "debug-process" && config.debug_process)
+            }) {
+                continue;
+            }
+            let scope = catalog
+                .modules
+                .get(&name)
+                .copied()
+                .unwrap_or_else(|| catalog.scope(None, name.clone()));
+            catalog.load(&target.src_path, scope, Vec::new(), Some(config))?;
+        }
+    }
+    Ok(catalog)
 }
 
 pub(crate) fn run(root: &Path) -> Result<(), String> {
@@ -978,14 +1371,7 @@ pub(crate) fn run(root: &Path) -> Result<(), String> {
     let mut external = BTreeMap::<String, (&str, &str)>::new();
     let mut batches: BTreeMap<String, usize> = BTreeMap::new();
     for config in configurations {
-        let mut catalog = Catalog::default();
-        let scope = catalog.scope(None, "crate".into());
-        catalog.load(
-            &root.join("rust/src/lib.rs"),
-            scope,
-            Vec::new(),
-            Some(&config),
-        )?;
+        let catalog = load_workspace(root, &config)?;
         let mut configuration_mismatches = 0;
         for declaration in &catalog.declarations {
             if !active(declaration, &config)? {
@@ -1020,7 +1406,12 @@ pub(crate) fn run(root: &Path) -> Result<(), String> {
                 .iter()
                 .map(|definition| catalog.signature(definition))
                 .collect();
-            if definition_signatures.len() > 1 || !definition_signatures.contains(&signature) {
+            if definition_signatures.len() > 1
+                || !definition_signatures.contains(&signature)
+                || definitions.iter().any(|definition| {
+                    !catalog.direction_allowed(declaration.scope, definition.scope)
+                })
+            {
                 configuration_mismatches += 1;
                 mismatch_sites.insert((declaration.symbol.clone(), declaration.location.clone()));
                 println!(
@@ -1037,6 +1428,67 @@ pub(crate) fn run(root: &Path) -> Result<(), String> {
                     println!(
                         "  defined  {} at {}",
                         catalog.signature(definition),
+                        definition.location
+                    );
+                }
+            }
+        }
+        for declaration in &catalog.static_declarations {
+            if !declaration
+                .cfg
+                .iter()
+                .map(|cfg| cfg_enabled(cfg, &config))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .all(|enabled| enabled)
+            {
+                continue;
+            }
+            let definitions: Vec<_> = catalog
+                .static_definitions
+                .iter()
+                .filter(|definition| definition.symbol == declaration.symbol)
+                .filter_map(|definition| {
+                    match definition
+                        .cfg
+                        .iter()
+                        .map(|cfg| cfg_enabled(cfg, &config))
+                        .collect::<Result<Vec<_>, _>>()
+                    {
+                        Ok(enabled) if enabled.iter().all(|enabled| *enabled) => {
+                            Some(Ok(definition))
+                        }
+                        Ok(_) => None,
+                        Err(error) => Some(Err(error)),
+                    }
+                })
+                .collect::<Result<_, _>>()?;
+            if definitions.is_empty() {
+                if let Some(provider) = external_static_provider(&declaration.symbol) {
+                    external.insert(declaration.symbol.clone(), provider);
+                } else {
+                    missing
+                        .entry(declaration.symbol.clone())
+                        .or_default()
+                        .insert(declaration.location.clone());
+                }
+                continue;
+            }
+            let signature = catalog.static_signature(declaration);
+            if definitions.iter().any(|definition| {
+                catalog.static_signature(definition) != signature
+                    || !catalog.direction_allowed(declaration.scope, definition.scope)
+            }) {
+                configuration_mismatches += 1;
+                mismatch_sites.insert((declaration.symbol.clone(), declaration.location.clone()));
+                println!(
+                    "MISMATCH static {} at {}\n  declared {signature}",
+                    declaration.symbol, declaration.location
+                );
+                for definition in definitions {
+                    println!(
+                        "  defined {} at {}",
+                        catalog.static_signature(definition),
                         definition.location
                     );
                 }
@@ -1121,6 +1573,73 @@ mod tests {
         }
         .visit_file(&syn::parse_file(source).unwrap());
         catalog
+    }
+
+    #[test]
+    fn array_lengths_resolve_scoped_constants_imports_casts_and_arithmetic() {
+        let collected = catalog(
+            r#"
+            mod sizes { pub const PLAYERS: u32 = 2; pub const EXTRA: usize = 3; }
+            use sizes::PLAYERS as COUNT;
+            extern "C" { static mut table: [u32; (COUNT as usize + sizes::EXTRA) * 2]; }
+            #[no_mangle] static mut table: [u32; 10usize] = [0; 10];
+        "#,
+        );
+        assert_eq!(
+            collected.static_signature(&collected.static_declarations[0]),
+            collected.static_signature(&collected.static_definitions[0])
+        );
+        let collected = catalog(
+            r#"
+            mod a { const N: usize = 2; extern "C" { static mut table: [u8; N]; } }
+            mod b { const N: usize = 3; #[no_mangle] static mut table: [u8; N] = [0; N]; }
+        "#,
+        );
+        assert_ne!(
+            collected.static_signature(&collected.static_declarations[0]),
+            collected.static_signature(&collected.static_definitions[0])
+        );
+    }
+
+    #[test]
+    fn foreign_statics_compare_nominal_types_mutability_and_array_lengths() {
+        for (declaration, definition, matches) in [
+            (
+                "static mut table: [u32; 150]",
+                "static mut table: [u32; 330] = [0; 330]",
+                false,
+            ),
+            ("static table: u32", "static mut table: u32 = 0", false),
+            (
+                "static mut table: *mut u32",
+                "static mut table: *const u32 = core::ptr::null()",
+                false,
+            ),
+            ("static mut table: Alias", "static mut table: u32 = 0", true),
+        ] {
+            let catalog = catalog(&format!(
+                "type Alias = u32; extern \"C\" {{ {declaration}; }} #[no_mangle] {definition};"
+            ));
+            assert_eq!(
+                catalog.static_signature(&catalog.static_declarations[0])
+                    == catalog.static_signature(&catalog.static_definitions[0]),
+                matches
+            );
+        }
+    }
+
+    #[test]
+    fn foreign_symbols_cannot_link_upward_or_across_unrelated_crates() {
+        let dependencies = BTreeMap::from([
+            ("app".into(), BTreeSet::from(["engine".into()])),
+            ("engine".into(), BTreeSet::from(["platform".into()])),
+        ]);
+        assert!(dependency_allowed(&dependencies, "app", "app"));
+        assert!(dependency_allowed(&dependencies, "app", "engine"));
+        assert!(dependency_allowed(&dependencies, "app", "platform"));
+        assert!(!dependency_allowed(&dependencies, "engine", "app"));
+        assert!(!dependency_allowed(&dependencies, "platform", "engine"));
+        assert!(!dependency_allowed(&dependencies, "other", "app"));
     }
 
     #[test]
@@ -1335,7 +1854,7 @@ mod tests {
             export_table!();
         "#,
         );
-        assert!(static_only.unsupported_export_macros.is_empty());
+        assert_eq!(static_only.unsupported_export_macros.len(), 1);
     }
 
     #[test]
@@ -1417,8 +1936,19 @@ mod tests {
     fn external_provider_is_an_exact_separate_classification() {
         assert_eq!(external_provider("SDL_Init").unwrap().0, "SDL2");
         assert!(external_provider("SDL_FutureInternalHelper").is_none());
-        let catalog = catalog(r#"extern "C" { fn missing_internal(); }"#);
-        assert!(external_provider(&catalog.declarations[0].symbol).is_none());
+        assert_eq!(
+            external_static_provider("__stderrp").unwrap().0,
+            "libSystem.B.dylib"
+        );
+        assert_eq!(
+            external_static_provider("kCGWindowBounds").unwrap().0,
+            "CoreGraphics.framework"
+        );
+        assert!(external_static_provider("kCGWindowUnknown").is_none());
+        assert!(external_static_provider("GlobData").is_none());
+        assert!(external_static_provider("SDL_Init").is_none());
+        let collected = catalog(r#"extern "C" { fn missing_internal(); }"#);
+        assert!(external_provider(&collected.declarations[0].symbol).is_none());
     }
 
     #[test]

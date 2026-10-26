@@ -53,8 +53,8 @@ pub extern "C" fn displayToLocation(pt: c::POINT, scale_radius: c::SIZE) -> c::P
 
 unsafe fn dimensions() -> (i32, i32) {
     extern "C" {
-        static ScreenWidth: i32;
-        static ScreenHeight: i32;
+        static mut ScreenWidth: i32;
+        static mut ScreenHeight: i32;
     }
     (
         ptr::addr_of!(ScreenWidth).read(),

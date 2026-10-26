@@ -77,11 +77,10 @@ unsafe fn get_link_addr(pq: *const Queue, i: u16) -> HLink {
 
 /// C: `BOOLEAN InitQueue(QUEUE *pq, COUNT num_elements, OBJ_SIZE size)`
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) -> bool {
+/// # Safety
+/// `pq` must be aligned, writable queue storage. `size` must fit a Link, and
+/// `num_elements` must fit the queue count. The queue must not own a live pool.
+pub unsafe extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) -> bool {
     unsafe {
         (*pq).head = std::ptr::null_mut();
         (*pq).tail = std::ptr::null_mut();
@@ -110,11 +109,10 @@ pub extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) ->
 
 /// C: `BOOLEAN UninitQueue(QUEUE *pq)`
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller.
+/// No element from its pool may be accessed after this call.
+pub unsafe extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
     unsafe {
         (*pq).head = std::ptr::null_mut();
         (*pq).tail = std::ptr::null_mut();
@@ -131,11 +129,10 @@ pub extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
 
 /// C: `void ReinitQueue(QUEUE *pq)` — empty the queue, rebuild free list
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn ReinitQueue(pq: *mut Queue) {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller.
+/// No outstanding element may be accessed while its links are rebuilt.
+pub unsafe extern "C" fn ReinitQueue(pq: *mut Queue) {
     unsafe {
         (*pq).head = std::ptr::null_mut();
         (*pq).tail = std::ptr::null_mut();
@@ -152,11 +149,10 @@ pub extern "C" fn ReinitQueue(pq: *mut Queue) {
 
 /// C: `HLINK AllocLink(QUEUE *pq)` — allocate from free list
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller.
+/// Its free-list links must belong to its live pool.
+pub unsafe extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
     unsafe {
         let h = (*pq).free_list;
         if !h.is_null() {
@@ -169,11 +165,10 @@ pub extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
 
 /// C: `void FreeLink(QUEUE *pq, HLINK hLink)` — return to free list
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller;
+/// `h_link` must be an allocated, unlinked element of that queue.
+pub unsafe extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
     unsafe {
         let lp = lock_link(pq, h_link);
         set_succ_link(lp, (*pq).free_list);
@@ -183,11 +178,10 @@ pub extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
 
 /// C: `void PutQueue(QUEUE *pq, HLINK hLink)` — append to tail
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller;
+/// `h_link` must be an allocated, unlinked element of that queue.
+pub unsafe extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
     unsafe {
         if (*pq).head.is_null() {
             (*pq).head = h_link;
@@ -207,11 +201,10 @@ pub extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
 
 /// C: `void InsertQueue(QUEUE *pq, HLINK hLink, HLINK hRefLink)` — insert before ref
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller.
+/// `h_link` must be allocated and unlinked; a nonnull `h_ref_link` must be in it.
+pub unsafe extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) {
     if h_ref_link.is_null() {
         PutQueue(pq, h_link);
         return;
@@ -239,11 +232,10 @@ pub extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) 
 
 /// C: `void RemoveQueue(QUEUE *pq, HLINK hLink)` — unlink from queue
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
+/// # Safety
+/// `pq` must point to an initialized queue exclusively owned by the caller;
+/// `h_link` must be a currently linked element of that queue.
+pub unsafe extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
     unsafe {
         let lp = lock_link(pq, h_link);
 
@@ -267,11 +259,10 @@ pub extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
 
 /// C: `COUNT CountLinks(QUEUE *pq)` — count elements
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn CountLinks(pq: *const Queue) -> u16 {
+/// # Safety
+/// `pq` must point to an initialized queue with valid linked elements.
+/// Neither the queue nor its links may be mutated during traversal.
+pub unsafe extern "C" fn CountLinks(pq: *const Queue) -> u16 {
     unsafe {
         let mut count: u16 = 0;
         let mut h = (*pq).head;
@@ -329,12 +320,18 @@ mod tests {
         }));
 
         // Use InitQueue to allocate the pool
-        InitQueue(pq, n, object_size);
+        unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(pq, n, object_size)
+        };
 
         // Alloc n elements
         let mut elems = Vec::new();
         for i in 0..n as i32 {
-            let h = AllocLink(pq);
+            let h = unsafe {
+                // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+                AllocLink(pq)
+            };
             assert!(!h.is_null());
             unsafe {
                 (*(h as *mut TestElement)).value = i;
@@ -362,7 +359,10 @@ mod tests {
     fn test_alloc_exhaustion() {
         let (pq, _) = setup_queue(3);
         // Pool of 3 exhausted
-        let h = AllocLink(pq);
+        let h = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(pq)
+        };
         assert!(
             h.is_null(),
             "AllocLink should return NULL when pool exhausted"
@@ -374,8 +374,14 @@ mod tests {
     fn test_free_realloc() {
         let (pq, elems) = setup_queue(2);
         // Free one, then alloc should succeed again
-        FreeLink(pq, elems[0] as HLink);
-        let h = AllocLink(pq);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            FreeLink(pq, elems[0] as HLink)
+        };
+        let h = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(pq)
+        };
         assert!(!h.is_null(), "AllocLink should succeed after FreeLink");
         teardown_queue(pq);
     }
@@ -404,17 +410,47 @@ mod tests {
     #[test]
     fn test_reinit() {
         let (pq, elems) = setup_queue(3);
-        PutQueue(pq, elems[0] as HLink);
-        PutQueue(pq, elems[1] as HLink);
-        assert_eq!(CountLinks(pq), 2);
-        ReinitQueue(pq);
-        assert_eq!(CountLinks(pq), 0);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(pq, elems[0] as HLink)
+        };
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(pq, elems[1] as HLink)
+        };
+        assert_eq!(
+            unsafe {
+                // SAFETY: The initialized queue and its links remain live and unchanged during traversal.
+                CountLinks(pq)
+            },
+            2
+        );
+        unsafe {
+            // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
+            ReinitQueue(pq)
+        };
+        assert_eq!(
+            unsafe {
+                // SAFETY: The initialized queue and its links remain live and unchanged during traversal.
+                CountLinks(pq)
+            },
+            0
+        );
         // After reinit, pool should be fully available again
-        let h = AllocLink(pq);
+        let h = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(pq)
+        };
         assert!(!h.is_null());
-        let h2 = AllocLink(pq);
+        let h2 = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(pq)
+        };
         assert!(!h2.is_null());
-        let h3 = AllocLink(pq);
+        let h3 = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(pq)
+        };
         assert!(!h3.is_null());
         teardown_queue(pq);
     }
@@ -472,9 +508,18 @@ mod tests {
     #[test]
     fn test_for_all_links() {
         let (pq, elems) = setup_queue(4);
-        PutQueue(pq, elems[0] as HLink);
-        PutQueue(pq, elems[1] as HLink);
-        PutQueue(pq, elems[2] as HLink);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(pq, elems[0] as HLink)
+        };
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(pq, elems[1] as HLink)
+        };
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(pq, elems[2] as HLink)
+        };
         let mut counter: u16 = 0;
         unsafe { for_all_links(pq, |_| counter += 1) };
         assert_eq!(counter, 3);

@@ -372,12 +372,10 @@ pub fn load_ship(species: SpeciesId, tier: LoadTier) -> Result<RaceDesc, ShipsEr
 /// - `free_battle_data`: If true, frees ship/weapon/special frames, captain, victory, sounds.
 ///
 /// # Behavior
-/// - Calls `desc.behavior.uninit()` first (teardown hook).
 /// - Frees requested asset tiers and zeroes out handles.
 /// - Safe to call multiple times (handles already zero are skipped).
 pub fn free_ship(desc: &mut RaceDesc, free_icon_data: bool, free_battle_data: bool) {
     // Call teardown hook first
-    desc.behavior.uninit();
 
     if free_battle_data {
         free_image(&mut desc.ship_data.ship);
@@ -614,46 +612,6 @@ mod tests {
     }
 
     // -- free_ship tests ----------------------------------------------------
-
-    #[test]
-    fn free_ship_calls_uninit() {
-        use crate::ships::traits::ShipBehavior;
-        use crate::ships::types::{Characteristics, FleetStuff, IntelStuff, RaceDescTemplate};
-        use std::sync::atomic::{AtomicBool, Ordering};
-        use std::sync::Arc;
-        #[derive(Debug)]
-        struct UninitTrackingBehavior {
-            uninit_called: Arc<AtomicBool>,
-        }
-        impl ShipBehavior for UninitTrackingBehavior {
-            fn descriptor_template(&self) -> RaceDescTemplate {
-                RaceDescTemplate {
-                    ship_info: Default::default(),
-                    fleet: FleetStuff::default(),
-                    characteristics: Characteristics::default(),
-                    ship_data: Default::default(),
-                    intel: IntelStuff::default(),
-                }
-            }
-            fn uninit(&mut self) {
-                self.uninit_called.store(true, Ordering::SeqCst);
-            }
-        }
-        let uninit_called = Arc::new(AtomicBool::new(false));
-        let mut desc = RaceDesc {
-            ship_info: Default::default(),
-            fleet: FleetStuff::default(),
-            characteristics: Characteristics::default(),
-            ship_data: Default::default(),
-            intel: IntelStuff::default(),
-            behavior: Box::new(UninitTrackingBehavior {
-                uninit_called: Arc::clone(&uninit_called),
-            }),
-            data: None,
-        };
-        free_ship(&mut desc, false, false);
-        assert!(uninit_called.load(Ordering::SeqCst));
-    }
 
     #[test]
     fn free_ship_metadata_only() {

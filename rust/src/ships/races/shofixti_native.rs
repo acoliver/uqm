@@ -30,9 +30,9 @@ pub(crate) mod engine {
 
     use crate::battle::tactrans_native::engine::RecordShipDeath;
 
-    use crate::ships::races::orz::native::engine::intruder_preprocess;
+    use crate::ships::races::orz_native::engine::intruder_preprocess;
 
-    use crate::ships::races::orz::native::engine::marine_collision;
+    use crate::ships::races::orz_native::engine::marine_collision;
 
     // BUILD_COLOR ignores the palette index; MAKE_RGB15 expands each channel.
     const fn rgb15(r: u8, g: u8, b: u8) -> Color {
@@ -111,11 +111,7 @@ pub(crate) mod engine {
             SHOFIXTI_DESC.cyborg_control.intelligence_func = Some(shofixti_intelligence);
             let mut d = SHOFIXTI_DESC;
             if GlobData.Game_state.CurrentActivity as u8 == IN_ENCOUNTER as u8
-                && getGameState(
-                    (&raw const GlobData.Game_state.GameState).cast(),
-                    SHOFIXTI_RECRUITED as i32,
-                    END_SHOFIXTI_RECRUITED as i32,
-                ) == 0
+                && getGameState(SHOFIXTI_RECRUITED as i32, END_SHOFIXTI_RECRUITED as i32) == 0
             {
                 d.ship_data.ship_rsc = [
                     c"ship.shofixti.graphics.oldscout.large".as_ptr(),

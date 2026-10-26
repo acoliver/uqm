@@ -51,7 +51,10 @@ impl LiveGame {
         let mut game = Self::bare();
         for race in 0..RACES {
             let queue = game.avail_ptr();
-            let link = AllocLink(queue);
+            let link = unsafe {
+                // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+                AllocLink(queue)
+            };
             assert!(!link.is_null());
             // SAFETY: `link` is a free slot of the `FLEET_INFO` pool.
             unsafe {
@@ -80,7 +83,10 @@ impl LiveGame {
                     dest_loc: CPoint { x: -5, y: -6 },
                 });
             }
-            PutQueue(queue, link);
+            unsafe {
+                // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+                PutQueue(queue, link)
+            };
         }
         game
     }
@@ -90,32 +96,47 @@ impl LiveGame {
         // SAFETY: `CGameState` is integers and raw pointers; all zeroes is a
         // valid value, and it is what C's static storage starts as.
         let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
-        assert!(InitQueue(
-            std::ptr::addr_of_mut!(game.avail_race_q).cast::<Queue>(),
-            RACES as u16,
-            size_of::<CFleetInfo>() as u16
-        ));
-        assert!(InitQueue(
-            std::ptr::addr_of_mut!(game.npc_built_ship_q).cast::<Queue>(),
-            NPC_SLOTS,
-            size_of::<CShipFragment>() as u16
-        ));
-        assert!(InitQueue(
-            std::ptr::addr_of_mut!(game.built_ship_q).cast::<Queue>(),
-            BUILT_SLOTS,
-            size_of::<CShipFragment>() as u16
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                std::ptr::addr_of_mut!(game.avail_race_q).cast::<Queue>(),
+                RACES as u16,
+                size_of::<CFleetInfo>() as u16,
+            )
+        });
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                std::ptr::addr_of_mut!(game.npc_built_ship_q).cast::<Queue>(),
+                NPC_SLOTS,
+                size_of::<CShipFragment>() as u16,
+            )
+        });
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                std::ptr::addr_of_mut!(game.built_ship_q).cast::<Queue>(),
+                BUILT_SLOTS,
+                size_of::<CShipFragment>() as u16,
+            )
+        });
         // `MAX_BATTLE_GROUPS` and `MAX_ENCOUNTERS`, as `InitGameStructures` sizes them.
-        assert!(InitQueue(
-            std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>(),
-            32,
-            size_of::<CIpGroup>() as u16
-        ));
-        assert!(InitQueue(
-            std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>(),
-            16,
-            size_of::<CEncounter>() as u16
-        ));
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>(),
+                32,
+                size_of::<CIpGroup>() as u16,
+            )
+        });
+        assert!(unsafe {
+            // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+            InitQueue(
+                std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>(),
+                16,
+                size_of::<CEncounter>() as u16,
+            )
+        });
         Self(game)
     }
 
@@ -145,7 +166,10 @@ impl LiveGame {
         } else {
             std::ptr::addr_of_mut!(self.0.built_ship_q).cast::<Queue>()
         };
-        let link = AllocLink(queue);
+        let link = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(queue)
+        };
         assert!(!link.is_null());
         // SAFETY: `link` is a free slot of a `SHIP_FRAGMENT` pool.
         unsafe {
@@ -157,7 +181,10 @@ impl LiveGame {
                 ..CShipFragment::default()
             });
         }
-        PutQueue(queue, link);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(queue, link)
+        };
     }
 }
 
@@ -170,7 +197,10 @@ impl Drop for LiveGame {
             std::ptr::addr_of_mut!(self.0.ip_group_q),
             std::ptr::addr_of_mut!(self.0.encounter_q),
         ] {
-            UninitQueue(queue.cast::<Queue>());
+            unsafe {
+                // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+                UninitQueue(queue.cast::<Queue>())
+            };
         }
     }
 }

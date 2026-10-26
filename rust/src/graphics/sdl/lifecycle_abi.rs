@@ -49,8 +49,8 @@ use crate::automation::input_ffi::rust_automation_presented_frame;
 use crate::graphics::cmap_abi::GetFadeAmount;
 
 extern "C" {
-    static TransitionAmount: c_int;
-    static TransitionClipRect: RECT;
+    static mut TransitionAmount: i32;
+    static mut TransitionClipRect: crate::graphics::native_abi::rect;
     static mut ScreenWidth: c_int;
     static mut ScreenHeight: c_int;
     static mut ScreenWidthActual: c_int;

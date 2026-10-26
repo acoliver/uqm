@@ -407,7 +407,7 @@ pub struct IntelStuff {
 // RaceDescTemplate  (static template -- no loaded assets or behavior)
 // ---------------------------------------------------------------------------
 
-/// Static template data returned by each ship behavior's `descriptor_template()`.
+/// Static per-species metadata used by the catalog and loader.
 ///
 /// Contains resource IDs but no loaded handles (all handles zero).
 /// The loader populates handles after receiving the template.
@@ -433,27 +433,19 @@ pub struct MasterShipInfo {
 }
 
 // ---------------------------------------------------------------------------
-// ShipBehavior trait  (re-exported from traits module)
-// ---------------------------------------------------------------------------
-
-pub use super::traits::ShipBehavior;
-
-// ---------------------------------------------------------------------------
 // RaceDesc  (C: RACE_DESC — full runtime descriptor with behavior)
 // ---------------------------------------------------------------------------
 
 /// Full runtime ship descriptor aggregating all sub-structures.
 ///
-/// Unlike `RaceDescTemplate`, this carries loaded asset handles and a
-/// boxed behavior trait object. Created by the loader (P05) from a
-/// template provided by the ship's `ShipBehavior` implementation.
+/// Unlike `RaceDescTemplate`, this carries loaded asset handles.
+/// The loader creates it from the plain species template.
 pub struct RaceDesc {
     pub ship_info: ShipInfo,
     pub fleet: FleetStuff,
     pub characteristics: Characteristics,
     pub ship_data: ShipData,
     pub intel: IntelStuff,
-    pub behavior: Box<dyn ShipBehavior>,
     /// Opaque private data owned by the race-specific behavior code.
     /// Matches C `void* data` in `RACE_DESC`.
     pub data: Option<Box<dyn std::any::Any + Send>>,
@@ -466,7 +458,6 @@ impl std::fmt::Debug for RaceDesc {
             .field("fleet", &self.fleet)
             .field("characteristics", &self.characteristics)
             .field("intel", &self.intel)
-            .field("behavior", &self.behavior)
             .finish_non_exhaustive()
     }
 }
@@ -1024,21 +1015,6 @@ mod tests {
 
     // -- RaceDesc ------------------------------------------------------------
 
-    #[derive(Debug)]
-    struct DummyBehavior;
-
-    impl ShipBehavior for DummyBehavior {
-        fn descriptor_template(&self) -> RaceDescTemplate {
-            RaceDescTemplate {
-                ship_info: ShipInfo::default(),
-                fleet: FleetStuff::default(),
-                characteristics: Characteristics::default(),
-                ship_data: ShipData::default(),
-                intel: IntelStuff::default(),
-            }
-        }
-    }
-
     #[test]
     fn race_desc_aggregates_all_fields() {
         let desc = RaceDesc {
@@ -1056,7 +1032,6 @@ mod tests {
                 weapon_range: 100,
                 ..IntelStuff::default()
             },
-            behavior: Box::new(DummyBehavior),
             data: None,
         };
         assert_eq!(desc.ship_info.ship_cost, 20);
@@ -1072,20 +1047,10 @@ mod tests {
             characteristics: Characteristics::default(),
             ship_data: ShipData::default(),
             intel: IntelStuff::default(),
-            behavior: Box::new(DummyBehavior),
             data: None,
         };
         let dbg = format!("{:?}", desc);
         assert!(dbg.contains("RaceDesc"));
-    }
-
-    // -- ShipBehavior trait ---------------------------------------------------
-
-    #[test]
-    fn ship_behavior_trait_object() {
-        let b: Box<dyn ShipBehavior> = Box::new(DummyBehavior);
-        let template = b.descriptor_template();
-        assert_eq!(template.ship_info.ship_cost, 0);
     }
 
     // -- ShipsError ----------------------------------------------------------

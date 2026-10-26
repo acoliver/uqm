@@ -22,10 +22,7 @@ use crate::strings::string_table::{
 };
 
 #[cfg(not(test))]
-extern "C" {
-    /// Root of the game content tree (`options.c`).
-    static contentDir: *mut c_void;
-}
+use crate::mainloop::options_abi::contentDir;
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
 static mut contentDir: *mut c_void = null_mut();
@@ -340,7 +337,7 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
     let (phrases, clip_dir, ts_path) = split_conversation_path(paths);
 
     let phrases_c = CString::new(phrases).expect("path has no NUL");
-    let fp = res_OpenResFile(contentDir, phrases_c.as_ptr(), c"rb".as_ptr());
+    let fp = res_OpenResFile(contentDir.cast(), phrases_c.as_ptr(), c"rb".as_ptr());
     if fp.is_null() {
         log_message(
             LOG_WARNING,

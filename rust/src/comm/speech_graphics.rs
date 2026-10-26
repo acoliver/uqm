@@ -162,7 +162,7 @@ mod c_bridge {
     pub use crate::comm::oscill_abi::runtime::DrawSlider;
 
     extern "C" {
-        pub static mut ActivityFrame: *mut std::ffi::c_void;
+        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
         pub static mut RadarContext: *mut crate::graphics::native_abi::context_desc;
         pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     }

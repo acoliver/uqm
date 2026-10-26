@@ -1,8 +1,45 @@
 //! Earthling Cruiser callbacks used by the live battle engine.
 
+#[cfg(not(test))]
+pub(super) const MAX_CREW: u16 = 18;
+#[cfg(not(test))]
+pub(super) const MAX_ENERGY: u8 = 18;
+#[cfg(not(test))]
+pub(super) const ENERGY_REGENERATION: u8 = 1;
+#[cfg(not(test))]
+pub(super) const ENERGY_WAIT: u8 = 8;
+pub(super) const MAX_THRUST: u16 = 24;
+#[cfg(not(test))]
+pub(super) const THRUST_INCREMENT: u16 = 3;
+#[cfg(not(test))]
+pub(super) const THRUST_WAIT: u8 = 4;
+#[cfg(not(test))]
+pub(super) const TURN_WAIT: u8 = 1;
+#[cfg(not(test))]
+pub(super) const SHIP_MASS: u8 = 6;
+
+#[cfg(not(test))]
+pub(super) const WEAPON_ENERGY_COST: u8 = 9;
+#[cfg(not(test))]
+pub(super) const WEAPON_WAIT: u8 = 10;
+#[cfg(not(test))]
+pub(super) const HUMAN_OFFSET: i16 = 42;
+#[cfg(not(test))]
+pub(super) const NUKE_OFFSET: i16 = 8;
+pub(super) const MISSILE_LIFE: u16 = 60;
+#[cfg(not(test))]
+pub(super) const MISSILE_HITS: i16 = 1;
+#[cfg(not(test))]
+pub(super) const MISSILE_DAMAGE: i16 = 4;
+
+#[cfg(not(test))]
+pub(super) const SPECIAL_ENERGY_COST: u8 = 4;
+#[cfg(not(test))]
+pub(super) const SPECIAL_WAIT: u8 = 9;
+
 fn nuke_speed(life: u16) -> i16 {
-    let initial = i32::from(super::MAX_THRUST).max(10 << 2);
-    (initial + (i32::from(super::MISSILE_LIFE) - i32::from(life)) * 4).min(20 << 2) as i16
+    let initial = i32::from(MAX_THRUST).max(10 << 2);
+    (initial + (i32::from(MISSILE_LIFE) - i32::from(life)) * 4).min(20 << 2) as i16
 }
 
 fn in_defense_range(dx: i32, dy: i32) -> bool {
@@ -18,11 +55,11 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use super::*;
     use super::{in_defense_range, nuke_speed, use_defense};
     use crate::ships::native::{
         abi::*, element, frame_index, object_cloaked, put_element, starship,
     };
-    use crate::ships::races::human::*;
     use std::ptr;
 
     const TRACK_WAIT: u8 = 3;

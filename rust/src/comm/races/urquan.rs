@@ -217,7 +217,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn init_urquan_comm() -> *mut CLocData {
         static mut DESCRIPTOR: Option<CLocData> = None;
         extern "C" {
-            static ScreenWidth: i32;
+            static mut ScreenWidth: i32;
         }
         let descriptor = (&mut *std::ptr::addr_of_mut!(DESCRIPTOR))
             .get_or_insert_with(|| super::descriptor(ScreenWidth));

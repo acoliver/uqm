@@ -7,7 +7,6 @@
     non_camel_case_types,
     non_snake_case,
     non_upper_case_globals,
-    clashing_extern_declarations,
     reason = "Rust-owned engine ABI declarations, including opaque resources"
 )]
 pub mod abi {

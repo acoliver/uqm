@@ -153,7 +153,7 @@ unsafe fn names(h: &mut Harness) {
             system, parent
         ));
         let name =
-            std::ptr::addr_of!(c_api::GLOB_DATA.sis_state.planet_name).cast::<std::ffi::c_char>();
+            std::ptr::addr_of!(c_api::GLOB_DATA.SIS_state.PlanetName).cast::<std::ffi::c_char>();
         assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
         assert_eq!(
             uqm_rust::state::game_state_keys::get_game_state("BATTLE_PLANET"),

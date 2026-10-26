@@ -59,8 +59,8 @@ impl Offscreen {
                 FORMAT_CONV_SURF.is_null() && SDL_SCREEN.is_null(),
                 "test must not replace active graphics"
             );
-            FORMAT_CONV_SURF = format.raw();
-            SDL_SCREEN = screen_format.raw();
+            FORMAT_CONV_SURF = format.raw().cast();
+            SDL_SCREEN = screen_format.raw().cast();
             let previous_screen = (ScreenWidth, ScreenHeight);
             ScreenWidth = screen.0;
             ScreenHeight = screen.1;

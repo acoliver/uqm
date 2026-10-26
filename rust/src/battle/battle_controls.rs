@@ -244,11 +244,10 @@ use crate::battle::tactrans_native::engine::battleEndReadyNetwork;
 
 /// C: `void InputContext_init(InputContext *context, BattleInputHandlers *handlers, COUNT playerNr)`
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn InputContext_init(
+/// # Safety
+/// `context` must point to aligned, writable InputContext storage.
+/// `handlers` must remain valid while the initialized context uses it.
+pub unsafe extern "C" fn InputContext_init(
     context: *mut InputContext,
     handlers: *const BattleInputHandlers,
     player_nr: Count,

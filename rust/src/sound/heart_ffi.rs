@@ -69,13 +69,11 @@ use crate::io::uio_bridge::uio_fseek;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_ftell;
 #[cfg(not(test))]
+use crate::mainloop::options_abi::contentDir;
+#[cfg(not(test))]
 use crate::strings::string_table::AllocStringTable;
 #[cfg(not(test))]
 use crate::strings::string_table::FreeStringTable;
-#[cfg(not(test))]
-extern "C" {
-    static contentDir: *mut c_void;
-}
 
 #[allow(
     non_snake_case,

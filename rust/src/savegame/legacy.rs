@@ -228,7 +228,7 @@ mod live {
     #[no_mangle]
     pub unsafe extern "C" fn LoadLegacyGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         let result = (|| -> anyhow::Result<()> {
-            let slots = SaveSlots::new(saveDir)?;
+            let slots = SaveSlots::new(saveDir.cast())?;
             let mut stream = slots
                 .open(&format!("starcon2.{slot:02}"), c"rb")
                 .ok_or_else(|| anyhow::anyhow!("no legacy save in slot {slot}"))?;
@@ -252,7 +252,9 @@ mod live {
             let mut len = 0;
             cfilelength(decoder.0, &mut len);
             let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-            let game = &mut (*std::ptr::addr_of_mut!(GLOB_DATA)).game_state;
+            // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
+            let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
+                .cast::<crate::comm::locdata::CGameState>();
             let save = legacy.save;
             super::super::runtime::restore_runtime(
                 game,
@@ -284,7 +286,9 @@ mod live {
                 }
             })?;
             game.battle_group_ref = legacy.battle_group_ref;
-            GLOB_DATA.sis_state = (&save.summary.sis).into();
+            std::ptr::addr_of_mut!(GLOB_DATA.SIS_state)
+                .cast::<crate::comm::locdata::CSisState>()
+                .write((&save.summary.sis).into());
             super::super::live::finish_load(&save.star, save.global.current_activity);
             Ok(())
         })();

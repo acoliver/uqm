@@ -15,7 +15,7 @@ use crate::c_bindings::controller_input::{
 use crate::c_bindings::global_state::STARSHIP;
 use crate::c_bindings::live_queues;
 use crate::comm::dispatch::production_captain_name;
-use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect, CStamp};
+use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
 use crate::mainloop::restart_menu::c_extern as base;
 use crate::mainloop::types::activity_flags::CHECK_ABORT;
@@ -82,10 +82,10 @@ use crate::navigation::globals::inHQSpace;
 
 extern "C" {
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    static mut StatusFrame: *mut c_void;
-    static mut StarConFont: *mut c_void;
-    static mut TinyFont: *mut c_void;
-    static mut GlobData: CGlobData;
+    static mut StatusFrame: *mut crate::graphics::native_abi::frame_desc;
+    static mut StarConFont: *mut crate::graphics::native_abi::font_desc;
+    static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
+    static mut GlobData: crate::ships::native::abi::GLOBDATA;
 }
 
 fn color(color: Rgba) -> CColor {
@@ -239,13 +239,13 @@ unsafe fn change_selection(state: &mut PickerState) {
         let ship = unsafe { &*state.chosen.cast::<STARSHIP>() };
         let (text, length, crew, max_crew) = if ship.captains_name_index == 0 {
             // SAFETY: the game thread owns `GlobData`.
-            let sis = unsafe { &*std::ptr::addr_of!(GlobData) }.sis_state;
+            let sis = unsafe { &*std::ptr::addr_of!(GlobData) }.SIS_state;
             // SAFETY: plain call.
             let capacity = unsafe { GetCrewPodCapacity() };
             (
-                sis.commander_name.as_ptr().cast::<c_char>(),
+                sis.CommanderName.as_ptr().cast::<c_char>(),
                 u16::MAX,
-                sis.crew_enlisted,
+                sis.CrewEnlisted,
                 capacity,
             )
         } else {
@@ -464,15 +464,15 @@ pub unsafe fn get_encounter_star_ship_with_picker(
             // SAFETY: `last` is a live `STARSHIP` and `GlobData` is owned by
             // the game thread.
             unsafe {
-                let sis = &mut (*std::ptr::addr_of_mut!(GlobData)).sis_state;
+                let sis = &mut (*std::ptr::addr_of_mut!(GlobData)).SIS_state;
                 if (*last).crew_level == 0 {
                     // Died in the line of duty
-                    sis.crew_enlisted = u16::MAX;
-                } else if sis.fuel_on_board > RUN_AWAY_FUEL_COST {
+                    sis.CrewEnlisted = u16::MAX;
+                } else if sis.FuelOnBoard > RUN_AWAY_FUEL_COST {
                     // Player ran away
-                    sis.fuel_on_board -= RUN_AWAY_FUEL_COST;
+                    sis.FuelOnBoard -= RUN_AWAY_FUEL_COST;
                 } else {
-                    sis.fuel_on_board = 0;
+                    sis.FuelOnBoard = 0;
                 }
             }
         }
@@ -578,7 +578,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
 
     // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = unsafe { (*std::ptr::addr_of!(GlobData)).sis_state.ship_name.as_ptr() };
+    let ship_name = unsafe { (*std::ptr::addr_of!(GlobData)).SIS_state.ShipName.as_ptr() };
     set_color(Rgba::rgb15(0x12, 0x12, 0x12));
     // SAFETY: font globals are set at startup.
     unsafe { SetContextFont((std::ptr::addr_of!(StarConFont).read()).cast()) };

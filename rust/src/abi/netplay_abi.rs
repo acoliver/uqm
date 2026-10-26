@@ -657,7 +657,7 @@ pub type PacketHandler = ::std::option::Option<
 >;
 pub use crate::ships::native::abi::PacketTypeData;
 extern "C" {
-    pub static mut packetTypeData: [PacketTypeData; 0usize];
+    pub static mut packetTypeData: [crate::ships::native::abi::PacketTypeData;18];
 }
 pub use crate::navigation::abi::Packet;
 pub use crate::navigation::abi::PacketHeader;
@@ -925,7 +925,7 @@ pub use crate::ships::native::abi::BattleInputHandlers;
 pub use crate::ships::native::abi::InputContext;
 pub use crate::ships::native::abi::NetworkInputContext;
 extern "C" {
-    pub static mut netConnections: [*mut NetConnection; 0usize];
+    pub static mut netConnections: [*mut crate::supermelee::netplay::abi::NetConnection;2];
 }
 pub type ForEachConnectionCallback = ::std::option::Option<
     unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void) -> bool,

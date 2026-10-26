@@ -7,7 +7,7 @@
 
 use crate::c_bindings::global_state::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
 #[cfg(not(test))]
-use crate::c_bindings::global_state::{FLEET_INFO, FONT, GLOBDATA, QUEUE, STRING, TEXT};
+use crate::c_bindings::global_state::{FLEET_INFO, FONT, QUEUE, STRING, TEXT};
 #[cfg(not(test))]
 use crate::graphics::context_abi::SetContextClipRect;
 #[cfg(not(test))]
@@ -135,9 +135,9 @@ extern "C" {
     #[cfg(not(test))]
     static mut star_array: *mut CStarDesc;
     #[cfg(not(test))]
-    static mut CurStarDescPtr: *mut CStarDesc;
+    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
     #[cfg(not(test))]
-    static mut GlobData: GLOBDATA;
+    static mut GlobData: crate::ships::native::abi::GLOBDATA;
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     #[cfg(not(test))]
     static mut MiscDataFrame: FRAME;
@@ -145,8 +145,8 @@ extern "C" {
     static mut TinyFont: FONT;
     #[cfg(not(test))]
     static mut GameStrings: STRING;
-    static ScreenWidth: i32;
-    static ScreenHeight: i32;
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
     #[cfg(not(test))]
     fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
 }
@@ -198,19 +198,11 @@ unsafe fn height() -> i32 {
 }
 #[cfg(not(test))]
 unsafe fn which_space() -> u8 {
-    getGameState(
-        ptr::addr_of_mut!(GlobData.Game_state.GameState).cast(),
-        42,
-        43,
-    )
+    getGameState(42, 43)
 }
 #[cfg(not(test))]
 unsafe fn portal_open() -> bool {
-    getGameState(
-        ptr::addr_of_mut!(GlobData.Game_state.GameState).cast(),
-        41,
-        41,
-    ) != 0
+    getGameState(41, 41) != 0
 }
 #[cfg(not(test))]
 unsafe fn game_string(index: u16) -> *const c_char {

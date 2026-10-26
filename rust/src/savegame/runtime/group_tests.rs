@@ -118,7 +118,10 @@ fn enc_queue(game: &mut LiveGame) -> *mut Queue {
 /// `BuildGroup` does, without the code under test.
 fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
     let queue = ip_queue(game);
-    let link = AllocLink(queue);
+    let link = unsafe {
+        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+        AllocLink(queue)
+    };
     assert!(!link.is_null());
     // SAFETY: `link` is a free slot of the `IP_GROUP` pool.
     unsafe {
@@ -137,13 +140,19 @@ fn push_group(game: &mut LiveGame, entry: &IpGroup, icon: usize) {
             melee_icon: icon as *mut std::ffi::c_void,
         });
     }
-    PutQueue(queue, link);
+    unsafe {
+        // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+        PutQueue(queue, link)
+    };
 }
 
 /// Append an encounter with a live `hElement` straight to `encounter_q`.
 fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
     let queue = enc_queue(game);
-    let link = AllocLink(queue);
+    let link = unsafe {
+        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+        AllocLink(queue)
+    };
     assert!(!link.is_null());
     // SAFETY: `link` is a free slot of the `ENCOUNTER` pool.
     unsafe {
@@ -168,7 +177,10 @@ fn push_encounter(game: &mut LiveGame, entry: &EncounterEntry, element: usize) {
             log_y: entry.log_y,
         });
     }
-    PutQueue(queue, link);
+    unsafe {
+        // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+        PutQueue(queue, link)
+    };
 }
 
 fn raw_groups(queue: &CQueue) -> Vec<&CIpGroup> {

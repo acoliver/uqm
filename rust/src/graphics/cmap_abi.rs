@@ -310,7 +310,7 @@ pub extern "C" fn GetFadeAmount() -> i32 {
     FADE.lock().amount_at(GetTimeCounter())
 }
 extern "C" {
-    static QuitPosted: i32;
+    static mut QuitPosted: i32;
 }
 fn fade_target(kind: u32) -> Option<i32> {
     match kind {

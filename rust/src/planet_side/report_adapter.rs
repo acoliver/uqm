@@ -55,7 +55,7 @@ use crate::strings::string_table::ReleaseStringTable;
 use crate::strings::string_table::SetRelStringTableIndex;
 #[cfg(not(test))]
 extern "C" {
-    static MenuSounds: *mut c_void;
+    static mut MenuSounds: *mut crate::strings::string_table::StringTableEntry;
 }
 
 impl DiscoveryReportPort for CffiDiscoveryReport {
@@ -73,7 +73,7 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
             // re-acquiring one level was an assumption of the retired native
             // lander loop and leaked a level against a Rust caller.
             REPORT_ACTIVE.store(true, Ordering::Release);
-            DoDiscoveryReport(MenuSounds);
+            DoDiscoveryReport(MenuSounds.cast());
             REPORT_ACTIVE.store(false, Ordering::Release);
 
             match disposition {

@@ -20,7 +20,6 @@ use super::queues::{QueueError, QueueKind};
 use crate::c_bindings::global_state::{ELEMENT, PLAYER_SHIP, RPG_PLAYER_NUM, STARSHIP};
 use crate::collections::queue::{AllocLink, InitQueue, PutQueue, Queue, UninitQueue};
 use crate::comm::locdata::{CGameState, CQueue};
-use crate::state::game_state::NUM_GAME_STATE_BYTES;
 
 /// `PLAYER_SHIP` (element.h), written out so the generated value is checked
 /// against the header's `1 << 2`.
@@ -37,16 +36,22 @@ fn zeroed_queue() -> Box<CQueue> {
 }
 
 fn init(queue: &mut CQueue, slots: u16, record_size: usize) {
-    assert!(InitQueue(
-        std::ptr::from_mut(queue).cast::<Queue>(),
-        slots,
-        record_size as u16
-    ));
+    assert!(unsafe {
+        // SAFETY: The queue storage is exclusive and its element layout matches this pool.
+        InitQueue(
+            std::ptr::from_mut(queue).cast::<Queue>(),
+            slots,
+            record_size as u16,
+        )
+    });
 }
 
 /// A free slot of `queue`, holding `record`, not linked into it.
 fn allocate<T>(queue: &mut CQueue, record: T) -> *mut T {
-    let link = AllocLink(std::ptr::from_mut(queue).cast::<Queue>());
+    let link = unsafe {
+        // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+        AllocLink(std::ptr::from_mut(queue).cast::<Queue>())
+    };
     assert!(!link.is_null(), "the pool has no free slot");
     // SAFETY: `link` is a free, aligned slot of a pool of `T`.
     unsafe { link.cast::<T>().write(record) };
@@ -56,7 +61,10 @@ fn allocate<T>(queue: &mut CQueue, record: T) -> *mut T {
 /// A slot holding `record`, appended to `queue` with `PutQueue`.
 fn push<T>(queue: &mut CQueue, record: T) -> *mut T {
     let slot = allocate(queue, record);
-    PutQueue(std::ptr::from_mut(queue).cast::<Queue>(), slot.cast());
+    unsafe {
+        // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+        PutQueue(std::ptr::from_mut(queue).cast::<Queue>(), slot.cast())
+    };
     slot
 }
 
@@ -133,7 +141,10 @@ impl Queues {
 impl Drop for Queues {
     fn drop(&mut self) {
         for queue in [&mut self.ships, &mut self.display] {
-            UninitQueue(std::ptr::from_mut::<CQueue>(queue).cast::<Queue>());
+            unsafe {
+                // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+                UninitQueue(std::ptr::from_mut::<CQueue>(queue).cast::<Queue>())
+            };
         }
     }
 }
@@ -154,7 +165,7 @@ fn game() -> Box<CGameState> {
     game.glob_flags = 9;
     game.current_activity = 0x0123;
     game.battle_group_ref = 0xDEAD_BEEF;
-    game.game_state_bytes = [0xA5; NUM_GAME_STATE_BYTES];
+
     game
 }
 
@@ -391,13 +402,19 @@ fn an_owner_that_is_not_a_link_of_the_player_queue_is_refused() {
         );
         assert_eq!(game.ship_facing, SENTINEL_FACING);
     }
-    UninitQueue(std::ptr::from_mut::<CQueue>(&mut other_side).cast::<Queue>());
+    unsafe {
+        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+        UninitQueue(std::ptr::from_mut::<CQueue>(&mut other_side).cast::<Queue>())
+    };
 }
 
 #[test]
 fn a_ship_queue_that_is_not_a_pool_of_starships_is_refused() {
     let mut queues = Queues::new();
-    UninitQueue(std::ptr::from_mut::<CQueue>(&mut queues.ships).cast::<Queue>());
+    unsafe {
+        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+        UninitQueue(std::ptr::from_mut::<CQueue>(&mut queues.ships).cast::<Queue>())
+    };
     init(&mut queues.ships, SHIP_SLOTS, size_of::<ELEMENT>());
     let mut game = game();
     assert_eq!(
@@ -452,7 +469,10 @@ fn a_display_list_that_is_not_a_pool_of_elements_is_refused() {
     // The ship queue still names an element that this queue does not hold.
     let result = queues.save(&mut game);
     std::mem::swap(&mut queues.display, &mut wrong);
-    UninitQueue(std::ptr::from_mut::<CQueue>(&mut wrong).cast::<Queue>());
+    unsafe {
+        // SAFETY: This scope owns the initialized pool and no element is used after teardown.
+        UninitQueue(std::ptr::from_mut::<CQueue>(&mut wrong).cast::<Queue>())
+    };
     assert_eq!(
         result,
         Err(HyperSaveError::Queue(QueueError::WrongObjectSize {

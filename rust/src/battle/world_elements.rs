@@ -48,8 +48,8 @@ pub(crate) mod engine {
     use std::mem;
 
     extern "C" {
-        static mut planet: [FRAME; 0];
-        static mut asteroid: [FRAME; 0];
+        static mut planet: [*mut crate::graphics::native_abi::frame_desc; 3];
+        static mut asteroid: [*mut crate::graphics::native_abi::frame_desc; 3];
     }
 
     unsafe fn primitive(e: *mut ELEMENT) -> *mut PRIMITIVE {

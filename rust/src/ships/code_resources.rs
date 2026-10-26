@@ -16,61 +16,61 @@ pub(crate) mod engine {
 
     type Initializer = unsafe extern "C" fn() -> *mut RACE_DESC;
 
-    use crate::ships::races::androsynth::native::engine::init_androsynth;
+    use crate::ships::races::androsynth_native::engine::init_androsynth;
 
-    use crate::ships::races::arilou::native::engine::init_arilou;
+    use crate::ships::races::arilou_native::engine::init_arilou;
 
-    use crate::ships::races::black_urquan::native::engine::init_black_urquan;
+    use crate::ships::races::blackurq_native::engine::init_black_urquan;
 
-    use crate::ships::races::chenjesu::native::engine::init_chenjesu;
+    use crate::ships::races::chenjesu_native::engine::init_chenjesu;
 
-    use crate::ships::races::chmmr::native::engine::init_chmmr;
+    use crate::ships::races::chmmr_native::engine::init_chmmr;
 
-    use crate::ships::races::druuge::native::engine::init_druuge;
+    use crate::ships::races::druuge_native::engine::init_druuge;
 
-    use crate::ships::races::human::native::engine::init_human;
+    use crate::ships::races::human_native::engine::init_human;
 
-    use crate::ships::races::ilwrath::native::engine::init_ilwrath;
+    use crate::ships::races::ilwrath_native::engine::init_ilwrath;
 
-    use crate::ships::races::melnorme::native::engine::init_melnorme;
+    use crate::ships::races::melnorme_native::engine::init_melnorme;
 
-    use crate::ships::races::mmrnmhrm::native::engine::init_mmrnmhrm;
+    use crate::ships::races::mmrnmhrm_native::engine::init_mmrnmhrm;
 
-    use crate::ships::races::mycon::native::engine::init_mycon;
+    use crate::ships::races::mycon_native::engine::init_mycon;
 
-    use crate::ships::races::orz::native::engine::init_orz;
+    use crate::ships::races::orz_native::engine::init_orz;
 
-    use crate::ships::races::pkunk::native::engine::init_pkunk;
+    use crate::ships::races::pkunk_native::engine::init_pkunk;
 
-    use crate::ships::races::shofixti::native::engine::init_shofixti;
+    use crate::ships::races::shofixti_native::engine::init_shofixti;
 
-    use crate::ships::races::slylandro::native::engine::init_slylandro;
+    use crate::ships::races::slylandro_native::engine::init_slylandro;
 
-    use crate::ships::races::spathi::native::engine::init_spathi;
+    use crate::ships::races::spathi_native::engine::init_spathi;
 
-    use crate::ships::races::supox::native::engine::init_supox;
+    use crate::ships::races::supox_native::engine::init_supox;
 
-    use crate::ships::races::syreen::native::engine::init_syreen;
+    use crate::ships::races::syreen_native::engine::init_syreen;
 
-    use crate::ships::races::thraddash::native::engine::init_thraddash;
+    use crate::ships::races::thraddash_native::engine::init_thraddash;
 
-    use crate::ships::races::umgah::native::engine::init_umgah;
+    use crate::ships::races::umgah_native::engine::init_umgah;
 
-    use crate::ships::races::urquan::native::engine::init_urquan;
+    use crate::ships::races::urquan_native::engine::init_urquan;
 
-    use crate::ships::races::utwig::native::engine::init_utwig;
+    use crate::ships::races::utwig_native::engine::init_utwig;
 
-    use crate::ships::races::vux::native::engine::init_vux;
+    use crate::ships::races::vux_native::engine::init_vux;
 
-    use crate::ships::races::yehat::native::engine::init_yehat;
+    use crate::ships::races::yehat_native::engine::init_yehat;
 
-    use crate::ships::races::zoqfotpik::native::engine::init_zoqfotpik;
+    use crate::ships::races::zoqfot_native::engine::init_zoqfotpik;
 
-    use crate::ships::races::samatra::native::engine::init_samatra;
+    use crate::ships::races::samatra::engine::init_samatra;
 
-    use crate::ships::races::sis_ship::native::engine::init_sis;
+    use crate::ships::races::sis_native::engine::init_sis;
 
-    use crate::ships::races::probe::native::engine::init_probe;
+    use crate::ships::races::probe_native::engine::init_probe;
     // Resource IDs follow uqm.rmp's SHIP values, not SPECIES_ID ordering.
     const INITIALIZERS: [Initializer; 28] = [
         init_androsynth,

@@ -35,7 +35,7 @@ pub(crate) mod engine {
     use std::{mem, ptr};
 
     extern "C" {
-        static mut blast: [FRAME; 0];
+        static mut blast: [*mut crate::graphics::native_abi::frame_desc; 3];
     }
 
     unsafe fn primitive(e: *mut ELEMENT) -> *mut PRIMITIVE {

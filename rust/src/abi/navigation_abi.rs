@@ -2857,16 +2857,16 @@ pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 extern "C" {
-    pub static mut CurrentInputState: CONTROLLER_INPUT_STATE;
+    pub static mut CurrentInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 extern "C" {
-    pub static mut PulsedInputState: CONTROLLER_INPUT_STATE;
+    pub static mut PulsedInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 extern "C" {
-    pub static mut ImmediateInputState: CONTROLLER_INPUT_STATE;
+    pub static mut ImmediateInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 extern "C" {
-    pub static mut PlayerControls: [CONTROL_TEMPLATE; 0usize];
+    pub static mut PlayerControls: [u32;2];
 }
 
 #[cfg(not(test))]
@@ -3800,10 +3800,10 @@ pub const CONVERSATION_INVALID_CONVERSATION: CONVERSATION = 26;
 pub type CONVERSATION = ::std::os::raw::c_uint;
 
 extern "C" {
-    pub static mut sliderDisabled: BOOLEAN;
+    pub static mut sliderDisabled: i32;
 }
 extern "C" {
-    pub static mut oscillDisabled: BOOLEAN;
+    pub static mut oscillDisabled: i32;
 }
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_22 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_22 = -999999;
@@ -3858,10 +3858,10 @@ extern "C" {
     pub static mut EncounterGroup: BYTE;
 }
 extern "C" {
-    pub static mut CurStarDescPtr: *mut STAR_DESC;
+    pub static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
 }
 extern "C" {
-    pub static mut star_array: *mut STAR_DESC;
+    pub static mut star_array: *mut crate::savegame::runtime::star::CStarDesc;
 }
 
 pub use crate::planets::starmap::FindStar;
@@ -3922,13 +3922,13 @@ extern "C" {
     pub static mut TinyFont: FONT;
 }
 extern "C" {
-    pub static mut race_q: [QUEUE; 0usize];
+    pub static mut race_q: [crate::collections::queue::Queue;2];
 }
 extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }
 extern "C" {
-    pub static mut PlayerControl: [BYTE; 0usize];
+    pub static mut PlayerControl: [u8;2];
 }
 #[cfg(not(test))]
 pub use crate::game_init::cleanup::FreeKernel;
@@ -4343,24 +4343,24 @@ extern "C" {
     pub static mut optGamma: f32;
 }
 extern "C" {
-    pub static mut contentDir: *mut uio_DirHandle;
+    pub static mut contentDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
-    pub static mut configDir: *mut uio_DirHandle;
+    pub static mut configDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
-    pub static mut saveDir: *mut uio_DirHandle;
+    pub static mut saveDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
-    pub static mut meleeDir: *mut uio_DirHandle;
+    pub static mut meleeDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
-    pub static mut baseContentPath: [::std::os::raw::c_char; 1024usize];
+    pub static mut baseContentPath: [std::ffi::c_char;4096];
 }
 pub use crate::ships::native::abi::_input_template;
 pub type INPUT_TEMPLATE = _input_template;
 extern "C" {
-    pub static mut input_templates: [INPUT_TEMPLATE; 6usize];
+    pub static mut input_templates: [[std::ffi::c_char;30];6];
 }
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::setGammaCorrection;
@@ -4836,7 +4836,7 @@ pub use crate::ui::shipyard::DoShipyard;
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
 extern "C" {
-    pub static mut status_y_offsets: [COORD; 0usize];
+    pub static mut status_y_offsets: [i16;2];
 }
 
 #[cfg(not(test))]

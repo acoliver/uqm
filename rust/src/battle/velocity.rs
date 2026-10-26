@@ -276,11 +276,10 @@ pub const fn world_to_velocity(l: i32) -> i32 {
 
 /// C: void GetCurrentVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *)
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn GetCurrentVelocityComponents(
+/// # Safety
+/// `velocityptr` must point to an initialized VelocityDesc; `pdx` and
+/// `pdy` must be writable, aligned i16 pointers that do not alias the velocity.
+pub unsafe extern "C" fn GetCurrentVelocityComponents(
     velocityptr: *mut VelocityDesc,
     pdx: *mut i16,
     pdy: *mut i16,
@@ -295,11 +294,10 @@ pub extern "C" fn GetCurrentVelocityComponents(
 
 /// C: void GetNextVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *, COUNT)
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn GetNextVelocityComponents(
+/// # Safety
+/// `velocityptr` must point to an exclusively owned VelocityDesc; `pdx`
+/// and `pdy` must be writable, aligned i16 pointers disjoint from the velocity.
+pub unsafe extern "C" fn GetNextVelocityComponents(
     velocityptr: *mut VelocityDesc,
     pdx: *mut i16,
     pdy: *mut i16,
@@ -320,22 +318,18 @@ pub fn set_velocity_vector(velocity: &mut VelocityDesc, magnitude: i16, facing: 
 
 /// C: void SetVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn SetVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
+/// # Safety
+/// `velocityptr` must point to an initialized, exclusively owned VelocityDesc.
+pub unsafe extern "C" fn SetVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
     let vel = unsafe { &mut *velocityptr };
     vel.set_components(dx as i32, dy as i32);
 }
 
 /// C: void DeltaVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
 #[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn DeltaVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
+/// # Safety
+/// `velocityptr` must point to an initialized, exclusively owned VelocityDesc.
+pub unsafe extern "C" fn DeltaVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
     let vel = unsafe { &mut *velocityptr };
     vel.delta_components(dx as i32, dy as i32);
 }

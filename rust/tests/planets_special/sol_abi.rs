@@ -2,7 +2,7 @@
 
 use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
-use uqm_rust::comm::locdata::CQueue;
+use uqm_rust::collections::queue::Queue;
 use uqm_rust::planets::c_api::GLOB_DATA as GlobData;
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
@@ -69,12 +69,12 @@ fn check_bomb_queue(h: &mut Harness) {
     set_game_state("CHMMR_BOMB_STATE", 3);
     set_game_state("PROBE_MESSAGE_DELIVERED", 1);
     unsafe {
-        let ip = &raw mut GlobData.game_state.ip_group_q;
-        let npc = &raw mut GlobData.game_state.npc_built_ship_q;
-        let reference = &raw mut GlobData.game_state.battle_group_ref;
+        let ip = &raw mut GlobData.Game_state.ip_group_q;
+        let npc = &raw mut GlobData.Game_state.npc_built_ship_q;
+        let reference = &raw mut GlobData.Game_state.BattleGroupRef;
         let saved = (ip.read(), npc.read(), reference.read());
-        ip.write(CQueue::default());
-        npc.write(CQueue::default());
+        ip.write(Queue::default());
+        npc.write(Queue::default());
         reference.write(0x12345678);
         assert!(GENERATE_SOL_FUNCTIONS.reinit_npcs.unwrap()(
             &raw mut *h.state
@@ -104,8 +104,8 @@ fn check_drawable_ownership(h: &mut Harness) {
     let old_format = unsafe { std::ptr::addr_of!(c_api::FORMAT_CONV_SURF).read() };
     let old_screen = unsafe { std::ptr::addr_of!(c_api::SDL_SCREEN).read() };
     unsafe {
-        std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(format.raw());
-        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(screen.raw());
+        std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(format.raw().cast());
+        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(screen.raw().cast());
         c_api::Init_DrawCommandQueue();
     }
     // Warm SDL's format cache before measuring resource-owned allocations.

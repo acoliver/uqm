@@ -19,11 +19,7 @@ use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
 #[cfg(not(test))]
 use super::types::{Characteristics, ShipData, ShipInfo};
 use super::types::{RaceDesc, SpeciesId, Starship};
-#[cfg(not(test))]
-use crate::battle::element::{Element, FrameHandle};
 use crate::collections::queue::{AllocLink, PutQueue, Queue};
-#[cfg(not(test))]
-use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
 use std::ptr;
@@ -45,7 +41,7 @@ static mut LAYOUT_ACCESSOR_MODE: bool = false;
 ///
 /// This is `true` when Rust's `RaceDesc` layout does not match C's
 /// `RACE_DESC` layout — which is the expected case because RaceDesc
-/// contains `Box<dyn ShipBehavior>` instead of C function pointers.
+/// uses owned Rust data instead of native callback pointers.
 #[inline]
 #[cfg(not(test))]
 #[expect(
@@ -60,8 +56,7 @@ fn is_accessor_mode() -> bool {
 /// Verify that Rust `RaceDesc` and C `RACE_DESC` have matching field offsets.
 ///
 /// Called once during `rust_ships_init()`. Since RaceDesc is NOT `#[repr(C)]`
-/// and contains `Box<dyn ShipBehavior>` (a wide pointer) where C has function
-/// pointers, the layouts are expected to differ. When they differ, this sets
+/// and owns Rust metadata rather than native callback pointers, the layouts are expected to differ. When they differ, this sets
 /// `LAYOUT_ACCESSOR_MODE = true` so that accessor functions are used instead
 /// of direct struct casts.
 ///
@@ -648,8 +643,7 @@ pub unsafe extern "C" fn rust_ships_uninit() {
 //
 // These functions allow C to read/write RaceDesc fields without depending on
 // struct layout compatibility. Since Rust's RaceDesc is NOT #[repr(C)] and
-// contains Box<dyn ShipBehavior> (a wide pointer) where C has function
-// pointers, direct struct casting is NOT safe. These accessors are the
+// owns Rust metadata rather than native callback pointers, direct struct casting is NOT safe. These accessors are the
 // correct path for all cross-language field access.
 //
 // C calls these via declarations in rust_bridge_ships.h.
@@ -725,300 +719,6 @@ pub unsafe extern "C" fn rust_race_desc_get_max_crew(rd: *const c_void) -> CCoun
     }
     let desc = &*(rd as *const RaceDesc);
     desc.ship_info.max_crew
-}
-
-// ===========================================================================
-// Runtime Callbacks FFI
-// ===========================================================================
-
-/// Builds a Rust Starship from C fields WITHOUT taking ownership of race_desc.
-///
-/// Returns `ManuallyDrop<Starship>` so that if a panic occurs during the
-/// callback, the Starship's Drop (which would free the Box<RaceDesc> inside)
-/// is never executed. The caller uses `&mut *starship` to work with it.
-/// When the ManuallyDrop goes out of scope, no destructors run and C's
-/// race_desc pointer remains valid.
-///
-/// # Safety
-/// `starship_c` must be a valid reference. `race_desc_ptr` must point to a
-/// Rust-allocated RaceDesc (from `rust_ships_load`).
-#[cfg(not(test))]
-unsafe fn borrow_starship_from_c(starship_c: &CStarship) -> Option<ManuallyDrop<Starship>> {
-    let species_id = SpeciesId::from_i32(starship_c.species_id)?;
-    // Box::from_raw reconstitutes the Box but ManuallyDrop prevents Drop
-    let race_desc_box = Box::from_raw(starship_c.race_desc_ptr as *mut RaceDesc);
-    Some(ManuallyDrop::new(Starship {
-        species_id,
-        captains_name_index: starship_c.captains_name_index,
-        race_desc: Some(race_desc_box),
-        crew_level: starship_c.crew_level,
-        max_crew: starship_c.max_crew,
-        ship_cost: starship_c.ship_cost,
-        index: starship_c.index,
-        race_strings: starship_c.race_strings as usize,
-        icons: starship_c.icons as usize,
-        weapon_counter: starship_c.weapon_counter,
-        special_counter: starship_c.special_counter,
-        energy_counter: starship_c.energy_counter,
-        ship_input_state: starship_c.ship_input_state,
-        cur_status_flags: super::types::StatusFlags(starship_c.cur_status_flags),
-        old_status_flags: super::types::StatusFlags(starship_c.old_status_flags),
-        h_ship: starship_c.h_ship as usize,
-        ship_facing: starship_c.ship_facing,
-        player_nr: starship_c.player_nr,
-        control: starship_c.control,
-        audio_stopped: false,
-    }))
-}
-
-/// Builds an ElementState from a C Element pointer.
-///
-/// Maps battle::element::Element fields to ships::runtime::ElementState,
-/// handling field naming differences (crew_or_hp→crew_level, thrust_or_blast,
-/// ElementFlags→u16, FrameHandle→u16).
-///
-/// # Safety
-/// `elem_ptr` must be a valid pointer to a C-owned ELEMENT struct.
-#[cfg(not(test))]
-unsafe fn build_element_state(elem_ptr: *const Element) -> super::runtime::ElementState {
-    super::runtime::ElementState {
-        state_flags: (*elem_ptr).state_flags.bits(),
-        life_span: (*elem_ptr).life_span,
-        crew_level: (*elem_ptr).crew_or_hp,
-        mass_points: (*elem_ptr).mass_points,
-        turn_wait: (*elem_ptr).turn_wait,
-        thrust_wait: (*elem_ptr).thrust_or_blast,
-        next_turn: 0, // next_turn shares storage with thrust_or_blast in C union
-        color_cycle_index: (*elem_ptr).color_cycle_index,
-        player_nr: (*elem_ptr).player_nr,
-        position: (
-            (*elem_ptr).current.location.x as i32,
-            (*elem_ptr).current.location.y as i32,
-        ),
-        next_position: (
-            (*elem_ptr).next.location.x as i32,
-            (*elem_ptr).next.location.y as i32,
-        ),
-        velocity: super::runtime::VelocityState::default(),
-        image_frame: (*elem_ptr).current.frame as u16,
-        prim_index: (*elem_ptr).prim_index,
-        h_target: (*elem_ptr).h_target as usize,
-    }
-}
-
-/// Writes back changed Starship fields to the C struct.
-///
-/// # Safety
-/// `starship_c` must be a valid mutable reference.
-#[cfg(not(test))]
-unsafe fn writeback_starship(starship_c: &mut CStarship, starship_rust: &Starship) {
-    starship_c.cur_status_flags = starship_rust.cur_status_flags.0;
-    starship_c.old_status_flags = starship_rust.old_status_flags.0;
-    starship_c.weapon_counter = starship_rust.weapon_counter;
-    starship_c.special_counter = starship_rust.special_counter;
-    starship_c.energy_counter = starship_rust.energy_counter;
-    starship_c.ship_input_state = starship_rust.ship_input_state;
-    starship_c.ship_facing = starship_rust.ship_facing;
-}
-
-/// Extracts the raw starship pointer from an element WITHOUT dereferencing it.
-///
-/// Reads the pointer VALUE from the element's `p_parent` field — does NOT
-/// follow the pointer. This is the "extraction-point check" required by
-/// REQ-REMED-CALLBACK-GUARD: null check must fire before any dereference.
-///
-/// # Safety
-/// `element` must be a valid pointer to a C-owned ELEMENT struct.
-#[cfg(not(test))]
-unsafe fn extract_raw_starship_ptr(element: *mut c_void) -> *mut CStarship {
-    let elem_ptr = element as *mut Element;
-    (*elem_ptr).p_parent as *mut CStarship
-}
-
-/// Extracts a mutable CStarship ref from an element's pParent, validating
-/// both the element pointer and the starship/race_desc pointers.
-///
-/// # Safety
-/// `element` must be a valid pointer to a C-owned ELEMENT struct.
-#[cfg(not(test))]
-unsafe fn extract_starship_from_element(
-    element: *mut c_void,
-) -> Option<(*mut Element, &'static mut CStarship)> {
-    let elem_ptr = element as *mut Element;
-    let starship_ptr = (*elem_ptr).p_parent as *mut CStarship;
-    if starship_ptr.is_null() {
-        return None;
-    }
-    let starship_c = &mut *starship_ptr;
-    if starship_c.race_desc_ptr.is_null() {
-        return None;
-    }
-    Some((elem_ptr, starship_c))
-}
-
-/// Ship preprocess callback (called once per frame before physics).
-///
-/// C: `void rust_ships_preprocess(ELEMENT *element);`
-///
-/// # Safety
-/// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if element.is_null() {
-            return;
-        }
-
-        #[cfg(test)]
-        {}
-
-        #[cfg(not(test))]
-        unsafe {
-            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
-            // The null check is UNCONDITIONAL (all builds). Only the
-            // logging is debug-only. Must fire before any dereference.
-            let starship_ptr = extract_raw_starship_ptr(element);
-            if starship_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_preprocess: null StarShipPtr at entry, skipping");
-                return;
-            }
-            if (*starship_ptr).race_desc_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_preprocess: null RaceDescPtr at entry, skipping");
-                return;
-            }
-
-            let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
-                Some(pair) => pair,
-                None => return,
-            };
-
-            let mut starship_md = match borrow_starship_from_c(starship_c) {
-                Some(s) => s,
-                None => return,
-            };
-
-            let mut element_state = build_element_state(elem_ptr);
-
-            // Deref ManuallyDrop to get &mut Starship — panic-safe because
-            // ManuallyDrop prevents Drop of the inner Starship (and its Box<RaceDesc>)
-            if super::runtime::ship_preprocess(&mut starship_md, &mut element_state).is_ok() {
-                writeback_starship(starship_c, &starship_md);
-                (*elem_ptr).state_flags = crate::battle::element::ElementFlags::from_bits_truncate(
-                    element_state.state_flags,
-                );
-                (*elem_ptr).turn_wait = element_state.turn_wait;
-                (*elem_ptr).thrust_or_blast = element_state.thrust_wait;
-                (*elem_ptr).crew_or_hp = element_state.crew_level;
-                (*elem_ptr).current.frame = element_state.image_frame as FrameHandle;
-            }
-            // starship_md drops here — ManuallyDrop prevents Box<RaceDesc> free
-        }
-    });
-}
-
-/// Ship postprocess callback (called once per frame after physics).
-///
-/// C: `void rust_ships_postprocess(ELEMENT *element);`
-///
-/// # Safety
-/// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if element.is_null() {
-            return;
-        }
-
-        #[cfg(test)]
-        {}
-
-        #[cfg(not(test))]
-        unsafe {
-            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
-            let starship_ptr = extract_raw_starship_ptr(element);
-            if starship_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_postprocess: null StarShipPtr at entry, skipping");
-                return;
-            }
-            if (*starship_ptr).race_desc_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_postprocess: null RaceDescPtr at entry, skipping");
-                return;
-            }
-
-            let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
-                Some(pair) => pair,
-                None => return,
-            };
-
-            let mut starship_md = match borrow_starship_from_c(starship_c) {
-                Some(s) => s,
-                None => return,
-            };
-
-            let mut element_state = build_element_state(elem_ptr);
-
-            if super::runtime::ship_postprocess(&mut starship_md, &mut element_state).is_ok() {
-                writeback_starship(starship_c, &starship_md);
-                (*elem_ptr).crew_or_hp = element_state.crew_level;
-            }
-        }
-    });
-}
-
-/// Ship death callback (called when crew reaches 0).
-///
-/// C: `void rust_ships_death(ELEMENT *element);`
-///
-/// # Safety
-/// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
-pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
-    let _ = catch_unwind(|| {
-        if element.is_null() {
-            return;
-        }
-
-        #[cfg(test)]
-        {}
-
-        #[cfg(not(test))]
-        unsafe {
-            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
-            let starship_ptr = extract_raw_starship_ptr(element);
-            if starship_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_death: null StarShipPtr at entry, skipping");
-                return;
-            }
-            if (*starship_ptr).race_desc_ptr.is_null() {
-                #[cfg(debug_assertions)]
-                eprintln!("rust_ships_death: null RaceDescPtr at entry, skipping");
-                return;
-            }
-
-            let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
-                Some(pair) => pair,
-                None => return,
-            };
-
-            let mut starship_md = match borrow_starship_from_c(starship_c) {
-                Some(s) => s,
-                None => return,
-            };
-
-            let _element_state = build_element_state(elem_ptr);
-
-            // ShipBehavior has uninit() for cleanup, not a death() method.
-            // Ship death orchestration (explosion, debris, winner) is battle engine scope.
-            // Here we just call uninit() for race-specific resource cleanup.
-            if let Some(ref mut desc) = starship_md.race_desc {
-                desc.behavior.uninit();
-            }
-
-            writeback_starship(starship_c, &starship_md);
-        }
-    });
 }
 
 // ===========================================================================
@@ -1118,9 +818,6 @@ mod tests {
             );
 
             // These should not crash
-            rust_ships_preprocess(ptr::null_mut());
-            rust_ships_postprocess(ptr::null_mut());
-            rust_ships_death(ptr::null_mut());
         }
     }
 

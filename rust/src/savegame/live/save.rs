@@ -15,17 +15,19 @@ use crate::navigation::groups::live::PutGroupInfo;
 
 unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
-    let point = GLOB_DATA.game_state.ip_location;
+    let point = GLOB_DATA.Game_state.ip_location;
     if inHQSpace() != 0 {
         live::prepare_live_hyper_state()?;
     } else if playerInSolarSystem() {
         live::prepare_live_solar_location()?;
     }
-    if groups::saves_ip_group_queue(GLOB_DATA.game_state.current_activity) {
+    if groups::saves_ip_group_queue(GLOB_DATA.Game_state.CurrentActivity) {
         PutGroupInfo(0, u8::MAX);
     }
     let summary = live::capture_live_summary(name)?;
-    let game = &mut (*std::ptr::addr_of_mut!(GLOB_DATA)).game_state;
+    // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
+    let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
+        .cast::<crate::comm::locdata::CGameState>();
     let runtime = runtime::capture_runtime(game)?;
     game.ip_location = point;
     game.in_orbit = 0;
@@ -59,7 +61,7 @@ pub unsafe extern "C" fn SaveGame(
     name: *const c_char,
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
-        let slots = SaveSlots::new(saveDir)?;
+        let slots = SaveSlots::new(saveDir.cast())?;
         let mut save = capture(CStr::from_ptr(name).to_bytes())?;
         summary.write(SummaryDesc::from(&save.summary));
         // save.c write_a16 never advanced its input pointer. Preserve the

@@ -38,8 +38,8 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
     let screen =
         sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
     unsafe {
-        FORMAT_CONV_SURF = format.raw();
-        SDL_SCREEN = screen.raw();
+        FORMAT_CONV_SURF = format.raw().cast();
+        SDL_SCREEN = screen.raw().cast();
         uio::uio_init();
         let repo = uio::uio_openRepository(0);
         let host = CString::new(base.to_str().unwrap()).unwrap();

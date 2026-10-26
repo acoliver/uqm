@@ -487,7 +487,10 @@ pub fn restore_queues_with(
         (npc, &sections.npc_ship_queue),
         (built, &sections.ship_queue),
     ] {
-        ReinitQueue(queue);
+        unsafe {
+            // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
+            ReinitQueue(queue)
+        };
         for entry in entries {
             // `race_index` fits a byte: it is below the number of fleets,
             // which is at most `u8::MAX`.

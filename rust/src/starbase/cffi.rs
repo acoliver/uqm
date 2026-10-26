@@ -25,7 +25,7 @@ use crate::c_bindings::controller_input::{
 };
 use crate::collections::queue::{FreeLink, InsertQueue, Queue, RemoveQueue};
 use crate::comm::dispatch::{CFleetInfo, CShipFragment};
-use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect, CStamp};
+use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
 use crate::mainloop::restart_menu::c_extern as base;
 use crate::mainloop::types::ActivityValue;
@@ -128,27 +128,27 @@ extern "C" {
     static mut ScreenContext: *mut crate::graphics::native_abi::context_desc;
     static mut StatusContext: *mut crate::graphics::native_abi::context_desc;
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-    static mut StarConFont: *mut c_void;
-    static mut TinyFont: *mut c_void;
-    static mut MicroFont: *mut c_void;
-    static mut FontGradFrame: *mut c_void;
-    static mut PlayFrame: *mut c_void;
-    static mut GameStrings: *mut c_void;
+    static mut StarConFont: *mut crate::graphics::native_abi::font_desc;
+    static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
+    static mut MicroFont: *mut crate::graphics::native_abi::font_desc;
+    static mut FontGradFrame: *mut crate::graphics::native_abi::frame_desc;
+    static mut PlayFrame: *mut crate::graphics::native_abi::frame_desc;
+    static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
     static mut optWhichMenu: c_int;
     static mut optWhichFonts: c_int;
-    static mut GlobData: CGlobData;
+    static mut GlobData: crate::ships::native::abi::GLOBDATA;
 }
 
 /// `&GLOBAL (built_ship_q)`.
 fn built_ship_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
-    unsafe { std::ptr::addr_of_mut!(GlobData.game_state.built_ship_q) as *mut Queue }
+    unsafe { std::ptr::addr_of_mut!(GlobData.Game_state.built_ship_q) }
 }
 
 /// `&GLOBAL (avail_race_q)`.
 fn avail_race_queue() -> *mut Queue {
     // SAFETY: only the address of the game thread's `GlobData` is taken.
-    unsafe { std::ptr::addr_of_mut!(GlobData.game_state.avail_race_q) as *mut Queue }
+    unsafe { std::ptr::addr_of_mut!(GlobData.Game_state.avail_race_q) }
 }
 
 /// The links of a queue of `T` in queue order.
@@ -241,9 +241,9 @@ impl CffiPlatform {
         // SAFETY: the font globals are set once at startup.
         unsafe {
             match font {
-                FontId::StarCon => std::ptr::addr_of!(StarConFont).read(),
-                FontId::Tiny => std::ptr::addr_of!(TinyFont).read(),
-                FontId::Micro => std::ptr::addr_of!(MicroFont).read(),
+                FontId::StarCon => std::ptr::addr_of!(StarConFont).read().cast(),
+                FontId::Tiny => std::ptr::addr_of!(TinyFont).read().cast(),
+                FontId::Micro => std::ptr::addr_of!(MicroFont).read().cast(),
             }
         }
     }
@@ -609,35 +609,31 @@ impl Platform for CffiPlatform {
         // SAFETY: the game thread owns `GlobData`; no other thread writes it
         // while a screen runs.
         let glob = unsafe { &*std::ptr::addr_of!(GlobData) };
-        let name_bytes = glob
-            .sis_state
-            .ship_name
-            .split(|byte| *byte == 0)
-            .next()
-            .unwrap_or_default();
+        let name = glob.SIS_state.ShipName.map(|byte| byte as u8);
+        let name_bytes = name.split(|byte| *byte == 0).next().unwrap_or_default();
         let ship_name = std::str::from_utf8(name_bytes)
             .map_err(|_| StarbaseError::ShipName)?
             .to_owned();
         let mut module_cost = [0u8; 20];
-        module_cost.copy_from_slice(&glob.game_state.module_cost);
+        module_cost.copy_from_slice(&glob.Game_state.ModuleCost);
         Ok(SisView {
-            res_units: glob.sis_state.res_units,
-            fuel_on_board: glob.sis_state.fuel_on_board,
-            crew_enlisted: glob.sis_state.crew_enlisted,
-            total_element_mass: glob.sis_state.total_element_mass,
-            module_slots: glob.sis_state.module_slots,
-            drive_slots: glob.sis_state.drive_slots,
-            jet_slots: glob.sis_state.jet_slots,
-            num_landers: glob.sis_state.num_landers,
+            res_units: glob.SIS_state.ResUnits,
+            fuel_on_board: glob.SIS_state.FuelOnBoard,
+            crew_enlisted: glob.SIS_state.CrewEnlisted,
+            total_element_mass: glob.SIS_state.TotalElementMass,
+            module_slots: glob.SIS_state.ModuleSlots,
+            drive_slots: glob.SIS_state.DriveSlots,
+            jet_slots: glob.SIS_state.JetSlots,
+            num_landers: glob.SIS_state.NumLanders,
             ship_name,
-            fuel_cost: glob.game_state.fuel_cost,
+            fuel_cost: glob.Game_state.FuelCost,
             module_cost,
         })
     }
 
     fn set_fuel_on_board(&self, fuel: u32) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.fuel_on_board = fuel };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.FuelOnBoard = fuel };
     }
 
     fn apply_gauge_delta(&self, delta: GaugeDelta) {
@@ -652,12 +648,12 @@ impl Platform for CffiPlatform {
 
     fn crew_cost(&self) -> u8 {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of!(GlobData)).game_state.crew_cost }
+        unsafe { (*std::ptr::addr_of!(GlobData)).Game_state.CrewCost }
     }
 
     fn set_crew_cost(&self, cost: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).game_state.crew_cost = cost };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).Game_state.CrewCost = cost };
     }
 
     fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError> {
@@ -738,30 +734,36 @@ impl Platform for CffiPlatform {
     fn remove_escort(&self, slot: u8) -> Result<(), StarbaseError> {
         let link = escort_link(slot)?;
         let queue = built_ship_queue();
-        RemoveQueue(queue, link);
-        FreeLink(queue, link);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            RemoveQueue(queue, link)
+        };
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            FreeLink(queue, link)
+        };
         Ok(())
     }
 
     fn set_drive_slot(&self, index: usize, piece: u8) {
         // SAFETY: the game thread owns `GlobData`; the caller bounds `index`
         // by `NUM_DRIVE_SLOTS`, and the array index checks it again.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.drive_slots[index] = piece };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.DriveSlots[index] = piece };
     }
 
     fn set_jet_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.jet_slots[index] = piece };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.JetSlots[index] = piece };
     }
 
     fn set_module_slot(&self, index: usize, piece: u8) {
         // SAFETY: as for `set_drive_slot`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.module_slots[index] = piece };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.ModuleSlots[index] = piece };
     }
 
     fn set_num_landers(&self, count: u8) {
         // SAFETY: the game thread owns `GlobData`.
-        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.num_landers = count };
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).SIS_state.NumLanders = count };
     }
 
     fn redraw_ship_status(&self, res_units: ResUnitsUpdate) {

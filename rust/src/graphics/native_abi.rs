@@ -5,7 +5,6 @@
     non_upper_case_globals,
     dead_code,
     clippy::all,
-    clashing_extern_declarations,
     reason = "Rust-owned engine ABI declarations"
 )]
 include!("../abi/graphics_abi.rs");

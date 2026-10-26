@@ -17,11 +17,15 @@ use crate::threading::legacy_abi::CreateMutex_Core;
 
 use crate::threading::legacy_abi::DestroyMutex;
 
-extern "C" {
-    static contentDir: *mut c_void;
+#[cfg(test)]
+use crate::mainloop::dir_prep::c_dir_globals::contentDir;
+#[cfg(not(test))]
+use crate::mainloop::options_abi::contentDir;
 
-    static ScreenWidth: c_int;
-    static ScreenHeight: c_int;
+extern "C" {
+
+    static mut ScreenWidth: i32;
+    static mut ScreenHeight: i32;
 }
 use crate::sound::heart_ffi::DestroyMusic;
 

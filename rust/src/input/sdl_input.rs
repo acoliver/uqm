@@ -300,12 +300,16 @@ pub unsafe extern "C" fn TFB_InitInput(_driver: c_int, _flags: c_int) -> c_int {
     }
     let count = state.num_templates * state.num_flight * ALTERNATES;
     state.controls = (0..count).map(|_| empty_gesture()).collect();
-    LoadResourceIndex(CONTENT_DIR, c"menu.key".as_ptr(), c"menu.".as_ptr());
-    LoadResourceIndex(CONFIG_DIR, c"override.cfg".as_ptr(), c"menu.".as_ptr());
+    LoadResourceIndex(CONTENT_DIR.cast(), c"menu.key".as_ptr(), c"menu.".as_ptr());
+    LoadResourceIndex(
+        CONFIG_DIR.cast(),
+        c"override.cfg".as_ptr(),
+        c"menu.".as_ptr(),
+    );
     state.register_controls();
-    LoadResourceIndex(CONFIG_DIR, c"flight.cfg".as_ptr(), c"keys.".as_ptr());
+    LoadResourceIndex(CONFIG_DIR.cast(), c"flight.cfg".as_ptr(), c"keys.".as_ptr());
     if res_HasKey(c"keys.1.name".as_ptr()) == 0 {
-        LoadResourceIndex(CONTENT_DIR, c"uqm.key".as_ptr(), c"keys.".as_ptr());
+        LoadResourceIndex(CONTENT_DIR.cast(), c"uqm.key".as_ptr(), c"keys.".as_ptr());
     }
     state.register_flight();
     ffi::rust_vcontrol_reset_input();

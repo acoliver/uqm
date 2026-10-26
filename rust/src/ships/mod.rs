@@ -14,8 +14,6 @@ pub mod native;
 pub mod queue;
 pub mod races;
 pub mod registry;
-pub mod runtime;
-pub mod traits;
 pub mod types;
 pub mod writeback;
 

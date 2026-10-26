@@ -321,7 +321,10 @@ fn restore_groups_with_icons(
     validate_encounters(&sections.encounters, fleets.len())?;
 
     let group_queue = std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>();
-    ReinitQueue(group_queue);
+    unsafe {
+        // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
+        ReinitQueue(group_queue)
+    };
     for entry in &sections.ip_group_queue {
         // SAFETY: `fleets` are the live slots of `avail_race_q` and the
         // validation above bounded `race_id` by their number.
@@ -331,7 +334,10 @@ fn restore_groups_with_icons(
             usize::from(entry.race_id)
         };
         let melee_icon = unsafe { (*fleets[icon_index]).melee_icon };
-        let link = AllocLink(group_queue);
+        let link = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(group_queue)
+        };
         assert!(
             !link.is_null(),
             "group queue ran out of slots after validation"
@@ -354,13 +360,22 @@ fn restore_groups_with_icons(
                 melee_icon,
             });
         }
-        PutQueue(group_queue, link);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(group_queue, link)
+        };
     }
 
     let encounter_queue = std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>();
-    ReinitQueue(encounter_queue);
+    unsafe {
+        // SAFETY: The queue is initialized and exclusively borrowed; its previous links are discarded.
+        ReinitQueue(encounter_queue)
+    };
     for entry in &sections.encounters {
-        let link = AllocLink(encounter_queue);
+        let link = unsafe {
+            // SAFETY: The initialized queue is exclusively borrowed and its free-list belongs to its pool.
+            AllocLink(encounter_queue)
+        };
         assert!(
             !link.is_null(),
             "encounter queue ran out of slots after validation"
@@ -392,7 +407,10 @@ fn restore_groups_with_icons(
                 log_y: entry.log_y,
             });
         }
-        PutQueue(encounter_queue, link);
+        unsafe {
+            // SAFETY: The queue is exclusively borrowed and the element was allocated from this pool.
+            PutQueue(encounter_queue, link)
+        };
     }
     Ok(())
 }

@@ -1134,23 +1134,27 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut optGamma: f32;
 }
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::contentDir;
+#[cfg(test)]
+pub use crate::mainloop::dir_prep::c_dir_globals::contentDir;
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::configDir;
+#[cfg(test)]
+pub use crate::mainloop::dir_prep::c_dir_globals::configDir;
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::saveDir;
+#[cfg(test)]
+pub use crate::mainloop::dir_prep::c_dir_globals::saveDir;
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::meleeDir;
+#[cfg(test)]
+pub use crate::mainloop::dir_prep::c_dir_globals::meleeDir;
 unsafe extern "C" {
-    pub static mut contentDir: *mut uio_DirHandle;
+    pub static mut baseContentPath: [std::ffi::c_char;4096];
 }
 unsafe extern "C" {
-    pub static mut configDir: *mut uio_DirHandle;
-}
-unsafe extern "C" {
-    pub static mut saveDir: *mut uio_DirHandle;
-}
-unsafe extern "C" {
-    pub static mut meleeDir: *mut uio_DirHandle;
-}
-unsafe extern "C" {
-    pub static mut baseContentPath: [::std::os::raw::c_char; 1024usize];
-}
-unsafe extern "C" {
-    pub static mut optAddons: *mut *const ::std::os::raw::c_char;
+    pub static mut optAddons: *const *const std::ffi::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1596,16 +1600,16 @@ pub type BATTLE_INPUT_STATE = UBYTE;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 unsafe extern "C" {
-    pub static mut CurrentInputState: CONTROLLER_INPUT_STATE;
+    pub static mut CurrentInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 unsafe extern "C" {
-    pub static mut PulsedInputState: CONTROLLER_INPUT_STATE;
+    pub static mut PulsedInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 unsafe extern "C" {
-    pub static mut ImmediateInputState: CONTROLLER_INPUT_STATE;
+    pub static mut ImmediateInputState: crate::c_bindings::controller_input::_controller_input_state;
 }
 unsafe extern "C" {
-    pub static mut PlayerControls: [CONTROL_TEMPLATE; 0usize];
+    pub static mut PlayerControls: [u32;2];
 }
 
 #[cfg(not(test))]
@@ -1959,7 +1963,7 @@ pub struct NetworkInputContext {
     pub playerNr: COUNT,
 }
 unsafe extern "C" {
-    pub static mut PlayerInput: [*mut InputContext; 0usize];
+    pub static mut PlayerInput: [*mut crate::battle::battle_controls::InputContext;2];
 }
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
@@ -1992,7 +1996,7 @@ pub use crate::battle::cyborg_native::engine::TurnShip;
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::ThrustShip;
 unsafe extern "C" {
-    pub static mut status_y_offsets: [COORD; 0usize];
+    pub static mut status_y_offsets: [i16;2];
 }
 
 #[cfg(not(test))]
@@ -3497,7 +3501,6 @@ pub struct GAME_STATE {
     pub ip_group_q: QUEUE,
     pub encounter_q: QUEUE,
     pub built_ship_q: QUEUE,
-    pub GameState: [BYTE; 155usize],
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -3529,7 +3532,7 @@ pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::navigation::globals::inQuasiSpace;
 unsafe extern "C" {
-    pub static mut hResIndex: RESOURCE_INDEX;
+    pub static mut hResIndex: *mut std::ffi::c_void;
 }
 unsafe extern "C" {
     pub static mut Screen: FRAME;
@@ -3577,13 +3580,13 @@ unsafe extern "C" {
     pub static mut TinyFont: FONT;
 }
 unsafe extern "C" {
-    pub static mut race_q: [QUEUE; 0usize];
+    pub static mut race_q: [crate::collections::queue::Queue;2];
 }
 unsafe extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }
 unsafe extern "C" {
-    pub static mut PlayerControl: [BYTE; 0usize];
+    pub static mut PlayerControl: [u8;2];
 }
 unsafe extern "C" {
     pub static mut usingSpeech: BOOLEAN;
@@ -4165,7 +4168,7 @@ pub use crate::supermelee::netplay::netinput::uninitBattleInputBuffers;
 pub use crate::supermelee::netplay::abi::getBattleInputBuffer;
 pub use crate::supermelee::netplay::netinput::BattleInputBuffer_pop;
 unsafe extern "C" {
-    pub static mut netConnections: [*mut NetConnection; 0usize];
+    pub static mut netConnections: [*mut crate::supermelee::netplay::abi::NetConnection;2];
 }
 
 pub use crate::supermelee::netplay::netmelee::getNumNetConnections;

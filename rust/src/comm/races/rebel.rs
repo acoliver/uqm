@@ -275,7 +275,7 @@ pub(crate) mod live {
     pub unsafe extern "C" fn init_rebel_yehat_comm() -> *mut CLocData {
         static mut D: Option<CLocData> = None;
         extern "C" {
-            static ScreenWidth: i32;
+            static mut ScreenWidth: i32;
         }
         let d = (&mut *std::ptr::addr_of_mut!(D)).get_or_insert_with(|| descriptor(ScreenWidth));
         (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);

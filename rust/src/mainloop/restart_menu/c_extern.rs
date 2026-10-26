@@ -470,7 +470,7 @@ pub use crate::ui::confirm::DoPopupWindow;
 
 extern "C" {
     /// The whole-screen drawing context created during graphics startup.
-    pub static ScreenContext: *mut crate::graphics::native_abi::context_desc;
+    pub static mut ScreenContext: *mut crate::graphics::native_abi::context_desc;
 }
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::sound::heart_ffi::DestroyMusic;

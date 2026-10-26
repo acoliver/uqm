@@ -210,8 +210,8 @@ impl Ram {
             sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
         let screen =
             sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
-        FORMAT_CONV_SURF = format.raw();
-        SDL_SCREEN = screen.raw();
+        FORMAT_CONV_SURF = format.raw().cast();
+        SDL_SCREEN = screen.raw().cast();
         TFB_DrawCanvas_Initialize();
         c_api::Init_DrawCommandQueue();
         let context = CreateContextAux(c"topography parity".as_ptr());

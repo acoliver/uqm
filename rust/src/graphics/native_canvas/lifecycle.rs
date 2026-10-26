@@ -17,8 +17,8 @@ const SDL_SWSURFACE: u32 = 0;
 use crate::graphics::sdl::platform_abi::TFB_DisplayFormatAlpha;
 
 extern "C" {
-    static SDL_Screen: *mut SDL_Surface;
-    static format_conv_surf: *mut SDL_Surface;
+    static mut SDL_Screen: *mut crate::graphics::ffi::SDL_Surface;
+    static mut format_conv_surf: *mut crate::graphics::ffi::SDL_Surface;
 }
 
 /// `btable` is a compile-time table in `scaling`, so there is nothing to
@@ -69,7 +69,13 @@ pub unsafe extern "C" fn TFB_DrawCanvas_New_TrueColor(
     h: c_int,
     hasalpha: BOOLEAN,
 ) -> TFB_Canvas {
-    new_true_color_like(&*(*format_conv_surf).format, w, h, hasalpha).cast()
+    new_true_color_like(
+        &*(*format_conv_surf).format.cast::<SDL_PixelFormat>(),
+        w,
+        h,
+        hasalpha,
+    )
+    .cast()
 }
 
 /// # Safety
@@ -80,13 +86,13 @@ pub unsafe extern "C" fn TFB_DrawCanvas_New_ForScreen(
     h: c_int,
     withalpha: BOOLEAN,
 ) -> TFB_Canvas {
-    let mut fmt: *const SDL_PixelFormat = (*SDL_Screen).format;
+    let mut fmt: *const SDL_PixelFormat = (*SDL_Screen).format.cast();
     let new_surf: *mut SDL_Surface = if !(*fmt).palette.is_null() {
         log::warn!("TFB_DrawCanvas_New_ForScreen() WARNING:Paletted display format will be slow");
         TFB_DrawCanvas_New_TrueColor(w, h, withalpha).cast()
     } else {
         if withalpha != FALSE && (*fmt).Amask == 0 {
-            fmt = (*format_conv_surf).format; // Screen has no alpha and we need it
+            fmt = (*format_conv_surf).format.cast(); // Screen has no alpha and we need it
         }
         create_like(
             &*fmt,
@@ -176,7 +182,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_New_ScaleTarget(
     } else {
         // The scaled image may in fact be larger by 1 pixel than the source
         // because of hotspot alignment and fractional edge pixels
-        newsurf = if (*(*SDL_Screen).format).BitsPerPixel == 32 {
+        newsurf = if (*(*SDL_Screen).format.cast::<SDL_PixelFormat>()).BitsPerPixel == 32 {
             TFB_DrawCanvas_New_ForScreen((*src).w + 1, (*src).h + 1, 1).cast()
         } else {
             TFB_DrawCanvas_New_TrueColor((*src).w + 1, (*src).h + 1, 1).cast()
@@ -286,7 +292,7 @@ pub(super) unsafe fn fill_pixel_format(sdl: &SDL_PixelFormat, fmt: *mut TFB_Pixe
 /// `SDL_Screen` must be initialized and `fmt` writable.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_DrawCanvas_GetScreenFormat(fmt: *mut TFB_PixelFormat) {
-    fill_pixel_format(&*(*SDL_Screen).format, fmt);
+    fill_pixel_format(&*(*SDL_Screen).format.cast::<SDL_PixelFormat>(), fmt);
 }
 
 /// # Safety

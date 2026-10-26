@@ -128,12 +128,12 @@ pub fn check() {
 
 fn check_live_queues(harness: &mut Harness) {
     use uqm_rust::c_bindings::global_state::IP_GROUP;
-    use uqm_rust::comm::locdata::{CGlobData, CQueue};
+    use uqm_rust::collections::queue::Queue;
     use uqm_rust::planets::c_api::LiveGame;
+    use uqm_rust::planets::c_api::GLOB_DATA as GlobData;
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
-        static mut GlobData: CGlobData;
-        static ScreenHeight: i32;
+        static mut ScreenHeight: i32;
     }
     let mut groups: [IP_GROUP; 3] = unsafe { std::mem::zeroed() };
     let first = groups.as_mut_ptr();
@@ -146,7 +146,7 @@ fn check_live_queues(harness: &mut Harness) {
             unsafe { first.add(i + 1).cast() }
         };
     }
-    let queue = CQueue {
+    let queue = Queue {
         head: first.cast(),
         tail: unsafe { first.add(2).cast() },
         pq_tab: first.cast(),
@@ -156,12 +156,12 @@ fn check_live_queues(harness: &mut Harness) {
     };
     // No references into GlobData or the group array cross either callback.
     unsafe {
-        let ip = std::ptr::addr_of_mut!(GlobData.game_state.ip_group_q);
-        let npc = std::ptr::addr_of_mut!(GlobData.game_state.npc_built_ship_q);
+        let ip = std::ptr::addr_of_mut!(GlobData.Game_state.ip_group_q);
+        let npc = std::ptr::addr_of_mut!(GlobData.Game_state.npc_built_ship_q);
         let saved_ip = ip.read();
         let saved_npc = npc.read();
         ip.write(queue);
-        npc.write(CQueue::default());
+        npc.write(Queue::default());
         let mut visited = Vec::new();
         GuardSite::for_each_ip_group(&mut LiveGame, &mut |group| {
             visited.push(group.group_id);
@@ -198,8 +198,8 @@ fn check_live_queues(harness: &mut Harness) {
         std::ptr::addr_of_mut!(EncounterRace).write(saved_race);
         std::ptr::addr_of_mut!(EncounterGroup).write(saved_group);
 
-        let saved_location = std::ptr::addr_of!(GlobData.game_state.ip_location).read();
-        let saved_origin = std::ptr::addr_of!(GlobData.game_state.ship_stamp.origin).read();
+        let saved_location = std::ptr::addr_of!(GlobData.Game_state.ip_location).read();
+        let saved_origin = std::ptr::addr_of!(GlobData.Game_state.ShipStamp.origin).read();
         let saved_sun = harness.state.SunDesc[0];
         let saved_planet = harness.state.PlanetDesc[4];
         // units.h and solarsys.c: SIS height = screen height - 13;
@@ -217,13 +217,13 @@ fn check_live_queues(harness: &mut Harness) {
         GuardSite::set_and_transform_ip_location(&mut LiveGame, outer);
         let location = GuardSite::ip_location(&LiveGame);
         assert_eq!((location.x, location.y), (120, -90));
-        let origin = std::ptr::addr_of!(GlobData.game_state.ship_stamp.origin).read();
+        let origin = std::ptr::addr_of!(GlobData.Game_state.ShipStamp.origin).read();
         assert_eq!(
             (i32::from(origin.x), i32::from(origin.y)),
             (half_width + 12, half_height - 9)
         );
-        std::ptr::addr_of_mut!(GlobData.game_state.ip_location).write(saved_location);
-        std::ptr::addr_of_mut!(GlobData.game_state.ship_stamp.origin).write(saved_origin);
+        std::ptr::addr_of_mut!(GlobData.Game_state.ip_location).write(saved_location);
+        std::ptr::addr_of_mut!(GlobData.Game_state.ShipStamp.origin).write(saved_origin);
         harness.state.SunDesc[0] = saved_sun;
         harness.state.PlanetDesc[4] = saved_planet;
         println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");

@@ -30,7 +30,7 @@ use crate::graphics::gfx_common_abi::ScreenTransition;
 extern "C" {
     static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
     static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
-    static CurStarDescPtr: *const c::STAR_DESC;
+    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
 }
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -181,10 +181,10 @@ pub(super) unsafe fn draw_inner_system() {
     validate_inner_orbits();
     draw_system((*planet).radius, true);
     extern "C" {
-        static mut GlobData: crate::comm::locdata::CGlobData;
+        static mut GlobData: crate::ships::native::abi::GLOBDATA;
     }
     DrawSISTitle(
-        std::ptr::addr_of_mut!((*std::ptr::addr_of_mut!(GlobData)).sis_state.planet_name).cast(),
+        std::ptr::addr_of_mut!((*std::ptr::addr_of_mut!(GlobData)).SIS_state.PlanetName).cast(),
     );
 }
 
@@ -257,7 +257,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
                 .as_mut_ptr()
                 .offset(i32::from(index) as isize);
             if current == (*s).SunDesc.as_mut_ptr() {
-                let star_color = ((*CurStarDescPtr).Type & 0xe0) >> 5;
+                let star_color = ((*CurStarDescPtr).star_type & 0xe0) >> 5;
                 SetColorMap(GetColorMapAddress(
                     (set_color_map_index(SUN_CMAP, u32::from(star_color))).cast(),
                 ));
@@ -292,7 +292,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
         a: 255,
     });
     ClearDrawable();
-    (*SysGenRNG).reseed(GetRandomSeedForStar(CurStarDescPtr));
+    (*SysGenRNG).reseed(GetRandomSeedForStar(CurStarDescPtr.cast()));
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {
         origin: c::POINT { x: 0, y: 0 },

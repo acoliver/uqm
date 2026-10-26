@@ -158,7 +158,6 @@ const KEY_MENU_RIGHT: usize = 8;
 
 #[cfg(not(test))]
 mod c_bridge {
-    use super::*;
     pub use crate::comm::ffi::rust_get_response_text;
 
     pub use crate::comm::comm_abi::comm_ClearSubtitles;
@@ -189,15 +188,16 @@ mod c_bridge {
     pub use crate::strings::string_table::GetStringAddress;
 
     pub use crate::strings::string_table::SetAbsStringTableIndex;
-    #[allow(clashing_extern_declarations)]
+
     extern "C" {
         #[allow(dead_code)]
-        pub static mut GlobData: crate::comm::locdata::CGlobData;
+        pub static mut GlobData: crate::ships::native::abi::GLOBDATA;
         pub static mut SpaceContext: *mut crate::graphics::native_abi::context_desc;
-        pub static mut ActivityFrame: *mut std::ffi::c_void;
-        pub static mut TinyFont: *mut std::ffi::c_void;
-        pub static mut PulsedInputState: CInputState;
-        pub static mut GameStrings: *mut std::ffi::c_void;
+        pub static mut ActivityFrame: *mut crate::graphics::native_abi::frame_desc;
+        pub static mut TinyFont: *mut crate::graphics::native_abi::font_desc;
+        pub static mut PulsedInputState:
+            crate::c_bindings::controller_input::_controller_input_state;
+        pub static mut GameStrings: *mut crate::strings::string_table::StringTableEntry;
     }
     pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub use crate::threading::pacing::linked::sleep_thread as SleepThread;

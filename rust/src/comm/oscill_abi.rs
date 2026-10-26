@@ -38,10 +38,10 @@ pub(crate) mod runtime {
     use crate::sound::heart_ffi::get_track_position as GetTrackPosition;
 
     use crate::sound::heart_ffi::GraphForegroundStream;
-    #[allow(clashing_extern_declarations)]
+
     extern "C" {
-        static OffScreenContext: *mut crate::graphics::native_abi::context_desc;
-        static usingSpeech: i32;
+        static mut OffScreenContext: *mut crate::graphics::native_abi::context_desc;
+        static mut usingSpeech: u32;
     }
     use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -116,7 +116,7 @@ pub(crate) mod runtime {
             data.as_mut_ptr(),
             SCOPE_WIDTH.into(),
             SCOPE_HEIGHT.into(),
-            usingSpeech,
+            usingSpeech as i32,
         ) != 0
         {
             let old = SetContext(OffScreenContext);

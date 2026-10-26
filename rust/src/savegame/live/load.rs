@@ -13,7 +13,7 @@ pub static mut NextActivity: u16 = 0;
 use crate::planets::starmap::FindStar;
 
 extern "C" {
-    static mut CurStarDescPtr: *mut runtime::star::CStarDesc;
+    static mut CurStarDescPtr: *mut crate::savegame::runtime::star::CStarDesc;
 }
 
 pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
@@ -37,7 +37,9 @@ pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, act
 }
 
 unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let game = &mut (*std::ptr::addr_of_mut!(GLOB_DATA)).game_state;
+    // SAFETY: CGameState's size, alignment and every field offset are asserted against GAME_STATE.
+    let game = &mut *std::ptr::addr_of_mut!(GLOB_DATA.Game_state)
+        .cast::<crate::comm::locdata::CGameState>();
     let restored = runtime::restore_runtime(game, &save.global, &save.game_state, &save.events)?;
     queues::restore_queues(
         game,
@@ -63,7 +65,9 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
             battle_groups: save.battle_groups,
         },
     )?;
-    GLOB_DATA.sis_state = (&save.summary.sis).into();
+    std::ptr::addr_of_mut!(GLOB_DATA.SIS_state)
+        .cast::<crate::comm::locdata::CSisState>()
+        .write((&save.summary.sis).into());
     finish_load(&save.star, restored.next_activity);
     Ok(())
 }
@@ -73,7 +77,7 @@ unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
 #[no_mangle]
 pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
     let result = (|| -> anyhow::Result<()> {
-        let slots = SaveSlots::new(saveDir)?;
+        let slots = SaveSlots::new(saveDir.cast())?;
         // C tries the old filename when opening or decoding the summary fails.
         let Ok(saved_summary) = slots.read_summary(usize::from(slot)) else {
             return if super::super::legacy::LoadLegacyGame(slot, summary) != 0 {
