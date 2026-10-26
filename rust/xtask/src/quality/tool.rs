@@ -195,7 +195,12 @@ fn compare_base(
 #[cfg(unix)]
 pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
-    let path = root.join("cargo-fixture");
+    let path = tempfile::Builder::new()
+        .prefix("cargo-fixture-")
+        .tempdir_in(root)
+        .unwrap()
+        .keep()
+        .join("cargo");
     std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
     path
@@ -211,6 +216,18 @@ pub(crate) fn fixture_directory() -> tempfile::TempDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn executable_fixtures_do_not_overwrite_earlier_commands() {
+        let root = fixture_directory();
+        let first = fixture_program(root.path(), "echo first");
+        let second = fixture_program(root.path(), "echo second");
+        assert_ne!(first, second);
+        assert!(std::fs::read_to_string(first)
+            .unwrap()
+            .contains("echo first"));
+    }
 
     #[test]
     fn options_and_workspace_file_paths_are_validated() {
