@@ -146,3 +146,12 @@ path = "tests/queue_native.rs"
 [[test]]
 name = "video_native"
 path = "tests/video_native.rs"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[lints]
+workspace = true

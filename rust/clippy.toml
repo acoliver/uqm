@@ -1,0 +1,5 @@
+msrv = "1.98"
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

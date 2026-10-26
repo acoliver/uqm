@@ -4,47 +4,72 @@
 //! Usage: `cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- <command>`
 //! with `debug`, `release`, `test` or `native`.
 
+#[cfg(feature = "native")]
 use std::collections::BTreeSet;
 use std::env;
+#[cfg(feature = "native")]
 use std::fs;
+#[cfg(feature = "native")]
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+#[cfg(feature = "native")]
+use std::process::Command;
+use std::process::ExitCode;
+#[cfg(feature = "native")]
 use std::time::Duration;
 
+#[cfg(feature = "native")]
 use sha2::{Digest, Sha256};
+#[cfg(feature = "native")]
 use uqm_rust::automation::native_runner as native_acceptance_runner;
+#[cfg(feature = "native")]
 use uqm_rust::automation::{
     NativeLinkedBuildReceipt, NativeRetainedInput, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
 };
 
 mod abi_check;
+#[cfg(feature = "native")]
 mod display_awake;
+#[cfg(feature = "native")]
 mod evidence;
+#[cfg(feature = "native")]
 pub mod native_cli;
+#[cfg(feature = "native")]
 mod native_config;
+#[cfg(feature = "native")]
 mod native_frames;
+#[cfg(feature = "native")]
 mod native_gallery;
+#[cfg(feature = "native")]
 mod native_save;
+#[cfg(feature = "native")]
 mod native_smoke;
+#[cfg(feature = "native")]
 mod native_suite;
+#[cfg(feature = "native")]
 mod process;
+pub mod quality;
 
 /// What the game is built with: Rust audio and the normal Cargo game target.
+#[cfg(feature = "native")]
 const BUILD_FEATURES: &str = "audio_heart";
+#[cfg(feature = "native")]
 const LINKED_TEST_FEATURES: &str = "audio_heart,debug-process";
 
 /// Subcommand the native-window controller re-invokes this binary with to run
 /// one scenario's game child.
+#[cfg(feature = "native")]
 const NATIVE_ACCEPTANCE_COMMAND: &str = "native-acceptance";
 
 #[derive(Debug)]
+#[cfg(feature = "native")]
 struct ProductionPaths {
     executable: PathBuf,
     rust_archive: PathBuf,
     out_dir: PathBuf,
 }
 
+#[cfg(feature = "native")]
 struct LinkedBuildProof {
     directory: tempfile::TempDir,
 }
@@ -63,6 +88,7 @@ pub fn entry() -> ExitCode {
 fn run() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
+    #[cfg(feature = "native")]
     if command == "observer-helper" || command == NATIVE_ACCEPTANCE_COMMAND {
         let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
         if command == "observer-helper" {
@@ -73,7 +99,7 @@ fn run() -> Result<(), String> {
     }
     let root = repository_root()?;
     let extra: Vec<_> = args.collect();
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, feature = "native"))]
     if command == "native" && matches!(extra.first().map(String::as_str), Some("run" | "smoke")) {
         return run_command(
             Command::new(cargo_program())
@@ -92,13 +118,18 @@ fn run() -> Result<(), String> {
         );
     }
     match command.as_str() {
+        "quality" => quality::run(&root, &extra),
+        #[cfg(feature = "native")]
         "native" => native_cli::run(&root, &extra),
         _ if !extra.is_empty() => Err(format!(
             "unexpected arguments for '{command}': {}",
             extra.join(" ")
         )),
+        #[cfg(feature = "native")]
         "debug" => build(&root, false),
+        #[cfg(feature = "native")]
         "release" => build(&root, true),
+        #[cfg(feature = "native")]
         "test" => test_linked(&root),
         "abi-check" => abi_check::run(&root),
         _ => Err(format!("unknown command '{command}'\n{}", usage())),
@@ -106,7 +137,7 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: cargo run --release --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|abi-check|native>".into()
+    "usage: cargo run --release --manifest-path rust/xtask/Cargo.toml -- <quality|abi-check|debug|release|test|native>".into()
 }
 
 fn repository_root() -> Result<PathBuf, String> {
@@ -118,6 +149,7 @@ fn repository_root() -> Result<PathBuf, String> {
 }
 
 /// Build the linked game binary the way a developer does.
+#[cfg(feature = "native")]
 fn build(root: &Path, release: bool) -> Result<(), String> {
     let mut command = Command::new(cargo_program());
     command
@@ -137,6 +169,7 @@ fn build(root: &Path, release: bool) -> Result<(), String> {
 }
 
 /// Integration tests against the production Rust providers.
+#[cfg(feature = "native")]
 fn test_linked(root: &Path) -> Result<(), String> {
     run_command(
         Command::new(cargo_program()).current_dir(root).args([
@@ -168,12 +201,14 @@ fn test_linked(root: &Path) -> Result<(), String> {
 
 /// Where one native acceptance run gets its selection, evidence and content.
 #[derive(Debug, Clone, Default)]
+#[cfg(feature = "native")]
 pub(crate) struct NativeRunRequest {
     pub scenarios: Option<String>,
     pub evidence_root: Option<PathBuf>,
     pub content_root: Option<PathBuf>,
 }
 
+#[cfg(feature = "native")]
 pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Result<(), String> {
     require_native_platform(cfg!(target_os = "macos"))?;
     let selected = native_config::select(root, request.scenarios.as_deref())?;
@@ -205,6 +240,7 @@ pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Resul
     }
 }
 
+#[cfg(feature = "native")]
 pub(crate) fn require_native_platform(is_macos: bool) -> Result<(), String> {
     if is_macos {
         Ok(())
@@ -215,6 +251,7 @@ pub(crate) fn require_native_platform(is_macos: bool) -> Result<(), String> {
 
 /// Build the release linked binary and stage everything the runner needs to
 /// check that the game it launches is the one this build produced.
+#[cfg(feature = "native")]
 fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
     let cargo = cargo_program();
     let (output, arguments, paths) = cargo_json_build(root, &cargo)?;
@@ -262,6 +299,7 @@ fn build_linked_test_proof(root: &Path) -> Result<LinkedBuildProof, String> {
     Ok(LinkedBuildProof { directory })
 }
 
+#[cfg(feature = "native")]
 fn path_text(path: &Path, label: &str) -> Result<String, String> {
     path.to_str()
         .map(str::to_string)
@@ -270,10 +308,12 @@ fn path_text(path: &Path, label: &str) -> Result<String, String> {
 
 /// The file's name inside the linked-build proof, and where the runner finds
 /// it relative to the bundle.
+#[cfg(feature = "native")]
 fn retained_linked_path(filename: &str) -> String {
     format!("inputs/linked-build/{filename}")
 }
 
+#[cfg(feature = "native")]
 fn retained_identity(relative_path: &str, bytes: &[u8]) -> NativeRetainedInput {
     NativeRetainedInput {
         relative_path: relative_path.to_string(),
@@ -282,6 +322,7 @@ fn retained_identity(relative_path: &str, bytes: &[u8]) -> NativeRetainedInput {
     }
 }
 
+#[cfg(feature = "native")]
 fn stage_linked_build_bytes(
     directory: &Path,
     filename: &str,
@@ -298,6 +339,7 @@ fn stage_linked_build_bytes(
     Ok(retained_identity(&retained_linked_path(filename), bytes))
 }
 
+#[cfg(feature = "native")]
 fn run_native_window_acceptance(
     root: &Path,
     linked_build_proof: &LinkedBuildProof,
@@ -343,6 +385,7 @@ fn run_native_window_acceptance(
 }
 
 /// Everything one serial native suite execution launches against.
+#[cfg(feature = "native")]
 pub(crate) struct NativeScenarioLaunch<'a> {
     /// Root whose scenario paths hold the script bytes.
     pub source: &'a Path,
@@ -356,6 +399,7 @@ pub(crate) struct NativeScenarioLaunch<'a> {
     pub requested: Option<&'a str>,
 }
 
+#[cfg(feature = "native")]
 pub(crate) fn execute_native_scenarios(
     launch: &NativeScenarioLaunch<'_>,
     selected: &[native_config::Scenario],
@@ -475,6 +519,7 @@ pub(crate) fn execute_native_scenarios(
     Ok(())
 }
 
+#[cfg(feature = "native")]
 fn echo_output(captured: &process::Captured) {
     let _ = std::io::stdout().write_all(&captured.stdout);
     let _ = std::io::stderr().write_all(&captured.stderr);
@@ -482,6 +527,7 @@ fn echo_output(captured: &process::Captured) {
 
 /// The running total of a native suite's retained evidence, against the native
 /// inventory limits.
+#[cfg(feature = "native")]
 fn check_native_suite_evidence(
     bytes: u64,
     files: u64,
@@ -507,6 +553,7 @@ fn check_native_suite_evidence(
 ///
 /// The order matters: a descendant left behind outranks the exit status of the
 /// process that left it.
+#[cfg(feature = "native")]
 fn classify_supervision(
     captured: &process::Captured,
     label: &str,
@@ -548,6 +595,7 @@ fn classify_supervision(
     }
 }
 
+#[cfg(feature = "native")]
 fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<String>, String> {
     let filename = Path::new(&scenario.path)
         .file_name()
@@ -575,6 +623,7 @@ fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<
     Ok(names)
 }
 
+#[cfg(feature = "native")]
 struct NativeSharedSources<'a> {
     source: &'a Path,
     executable: &'a Path,
@@ -582,6 +631,7 @@ struct NativeSharedSources<'a> {
     linked: &'a LinkedBuildProof,
 }
 
+#[cfg(feature = "native")]
 fn prepare_native_shared_inputs(
     evidence: &Path,
     sources: NativeSharedSources<'_>,
@@ -651,6 +701,7 @@ fn prepare_native_shared_inputs(
 ///
 /// Symbolic links are counted but not followed, so a link cannot inflate the
 /// measurement or walk the run out of its own evidence tree.
+#[cfg(feature = "native")]
 fn measure_tree(root: &Path) -> Result<(u64, u64), String> {
     let mut bytes = 0u64;
     let mut files = 0u64;
@@ -680,11 +731,13 @@ fn measure_tree(root: &Path) -> Result<(u64, u64), String> {
 // ---------------------------------------------------------------------------
 
 /// The cargo that launched this task, so builds use the same toolchain.
+#[cfg(feature = "native")]
 fn cargo_program() -> String {
     env::var("CARGO").unwrap_or_else(|_| "cargo".into())
 }
 
 /// Build `uqm` with `--message-format=json` and locate what it produced.
+#[cfg(feature = "native")]
 fn cargo_json_build(
     root: &Path,
     cargo: &str,
@@ -702,6 +755,7 @@ fn cargo_json_build(
     Ok((output.stdout, arguments, paths))
 }
 
+#[cfg(feature = "native")]
 fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPaths, String> {
     let text = std::str::from_utf8(messages)
         .map_err(|error| format!("Cargo JSON messages are not UTF-8: {error}"))?;
@@ -778,6 +832,7 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
     })
 }
 
+#[cfg(feature = "native")]
 fn message_source_is(message: &serde_json::Value, expected: &Path) -> bool {
     let Some(expected) = fs::canonicalize(expected).ok() else {
         return false;
@@ -788,12 +843,14 @@ fn message_source_is(message: &serde_json::Value, expected: &Path) -> bool {
         .is_some_and(|path| path == expected)
 }
 
+#[cfg(feature = "native")]
 fn cargo_message_has_target_kind(message: &serde_json::Value, expected: &str) -> bool {
     message["target"]["kind"]
         .as_array()
         .is_some_and(|kinds| kinds.iter().any(|kind| kind == expected))
 }
 
+#[cfg(feature = "native")]
 fn exactly_one<T: std::fmt::Debug + Ord>(paths: BTreeSet<T>, label: &str) -> Result<T, String> {
     if paths.len() != 1 {
         return Err(format!(
@@ -807,6 +864,7 @@ fn exactly_one<T: std::fmt::Debug + Ord>(paths: BTreeSet<T>, label: &str) -> Res
         .ok_or_else(|| format!("current Cargo invocation did not identify {label}"))
 }
 
+#[cfg(feature = "native")]
 fn git_text(root: &Path, arguments: &[&str], label: &str) -> Result<String, String> {
     let output = process::run(
         Command::new("git")
@@ -825,6 +883,7 @@ fn git_text(root: &Path, arguments: &[&str], label: &str) -> Result<String, Stri
 }
 
 /// Run a command with its output going straight to this terminal.
+#[cfg(feature = "native")]
 fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
     let status = command
         .status()
@@ -836,6 +895,7 @@ fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(feature = "native")]
 fn read_regular_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let metadata =
         fs::symlink_metadata(path).map_err(|error| format!("stat {}: {error}", path.display()))?;
@@ -852,6 +912,7 @@ fn read_regular_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String>
     fs::read(path).map_err(|error| format!("read {}: {error}", path.display()))
 }
 
+#[cfg(feature = "native")]
 fn hex_sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -860,6 +921,7 @@ fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
+#[cfg(feature = "native")]
 mod tests {
     use super::*;
 
