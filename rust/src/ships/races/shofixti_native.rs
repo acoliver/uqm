@@ -30,9 +30,9 @@ pub(crate) mod engine {
 
     use crate::battle::tactrans_native::engine::RecordShipDeath;
 
-    use crate::ships::races::orz::native::engine::intruder_preprocess;
+    use crate::ships::races::orz_native::engine::intruder_preprocess;
 
-    use crate::ships::races::orz::native::engine::marine_collision;
+    use crate::ships::races::orz_native::engine::marine_collision;
 
     // BUILD_COLOR ignores the palette index; MAKE_RGB15 expands each channel.
     const fn rgb15(r: u8, g: u8, b: u8) -> Color {

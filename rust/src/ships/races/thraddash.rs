@@ -1,6 +1,3 @@
-#[path = "thraddash_native.rs"]
-pub(crate) mod native;
-
 // Thraddash Torch - Ion blasters + afterburner trail
 // @plan PLAN-20260314-SHIPS.P11
 

@@ -1,6 +1,3 @@
-#[path = "pkunk_native.rs"]
-pub(crate) mod native;
-
 // Pkunk Fury - Triple minigun + taunt/insult energy restore + phoenix resurrection
 // @plan PLAN-20260314-SHIPS.P13
 

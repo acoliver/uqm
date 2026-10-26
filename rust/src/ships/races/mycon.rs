@@ -1,5 +1,3 @@
-#[path = "mycon_native.rs"]
-pub(crate) mod native;
 // Mycon Podship - Tracking plasmoid + regeneration
 // @plan PLAN-20260314-SHIPS.P11
 

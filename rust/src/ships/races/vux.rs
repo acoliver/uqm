@@ -1,6 +1,3 @@
-#[path = "vux_native.rs"]
-pub(crate) mod native;
-
 // VUX Intruder - Laser + limpet + aggressive warp-in
 // @plan PLAN-20260314-SHIPS.P11
 

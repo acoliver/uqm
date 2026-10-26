@@ -1,9 +1,6 @@
 // Androsynth Guardian - Tracking bubbles + blazer comet form
 // @plan PLAN-20260314-SHIPS.P11
 
-#[path = "androsynth_native.rs"]
-pub(crate) mod native;
-
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};

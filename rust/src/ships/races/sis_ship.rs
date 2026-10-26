@@ -1,5 +1,3 @@
-#[path = "sis_native.rs"]
-pub(crate) mod native;
 // SIS Flagship - Modular ship: configurable blasters + point defense
 // @plan PLAN-20260314-SHIPS.P13
 

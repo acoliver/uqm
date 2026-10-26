@@ -1,9 +1,6 @@
 // Human Cruiser - Tracking nuke + point-defense laser
 // @plan PLAN-20260314-SHIPS.P11
 
-#[path = "human_native.rs"]
-pub(crate) mod native;
-
 #[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
@@ -13,28 +10,7 @@ use crate::ships::types::{
 };
 
 // C: human.c constants
-const MAX_CREW: u16 = 18;
-const MAX_ENERGY: u8 = 18;
-const ENERGY_REGENERATION: u8 = 1;
-const ENERGY_WAIT: u8 = 8;
-const MAX_THRUST: u16 = 24;
-const THRUST_INCREMENT: u16 = 3;
-const THRUST_WAIT: u8 = 4;
-const TURN_WAIT: u8 = 1;
-const SHIP_MASS: u8 = 6;
-
-const WEAPON_ENERGY_COST: u8 = 9;
-const WEAPON_WAIT: u8 = 10;
-#[cfg(not(test))]
-const HUMAN_OFFSET: i16 = 42;
-#[cfg(not(test))]
-const NUKE_OFFSET: i16 = 8;
-const MISSILE_LIFE: u16 = 60;
-const MISSILE_HITS: i16 = 1;
-const MISSILE_DAMAGE: i16 = 4;
-
-const SPECIAL_ENERGY_COST: u8 = 4;
-const SPECIAL_WAIT: u8 = 9;
+use super::human_native::*;
 
 #[derive(Debug, Default)]
 pub struct HumanShip;

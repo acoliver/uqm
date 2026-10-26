@@ -1,6 +1,3 @@
-#[path = "zoqfot_native.rs"]
-pub(crate) mod native;
-
 // ZoqFotPik Stinger - Spit + tongue attack
 // @plan PLAN-20260314-SHIPS.P11
 

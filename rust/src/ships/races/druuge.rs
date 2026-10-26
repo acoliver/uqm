@@ -1,5 +1,3 @@
-#[path = "druuge_native.rs"]
-pub(crate) mod native;
 // Druuge Mauler - Mass driver cannon + crew furnace
 // @plan PLAN-20260314-SHIPS.P11
 

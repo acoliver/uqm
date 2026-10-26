@@ -1,6 +1,3 @@
-#[path = "orz_native.rs"]
-pub(crate) mod native;
-
 // Orz Nemesis - Rotating howitzer turret + space marine boarding
 // @plan PLAN-20260314-SHIPS.P13
 
