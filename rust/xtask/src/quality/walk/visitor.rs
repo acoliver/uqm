@@ -123,6 +123,7 @@ impl<'a> Visit<'a> for Walker {
             self.context.subsystem = item.ident.to_string();
         }
         if let Some((_, items)) = &item.content {
+            self.inline_imports(items);
             let directory = self.context.directory.clone();
             self.context.inline_depth += 1;
             self.context.directory.push(item.ident.to_string());
@@ -179,6 +180,7 @@ impl<'a> Visit<'a> for Walker {
         }
     }
     fn visit_item_fn(&mut self, item: &'a syn::ItemFn) {
+        self.exported_symbol(&item.attrs, &item.sig.ident);
         visit::visit_item_fn(self, item);
         self.function(&item.sig, &item.block);
     }
@@ -245,6 +247,7 @@ impl<'a> Visit<'a> for Walker {
         self.context = saved;
     }
     fn visit_item_static(&mut self, item: &'a syn::ItemStatic) {
+        self.exported_symbol(&item.attrs, &item.ident);
         if matches!(item.mutability, syn::StaticMutability::Mut(_)) {
             self.add("ffi", "static_mut", item.span(), 1);
         }
@@ -274,6 +277,18 @@ impl<'a> Visit<'a> for Walker {
         if self.enabled(attrs, item.span()) {
             self.attrs(attrs, item.to_token_stream());
             self.add("ffi", "foreign_items", item.span(), 1);
+            let ident = match item {
+                syn::ForeignItem::Fn(i) => Some(&i.sig.ident),
+                syn::ForeignItem::Static(i) => Some(&i.ident),
+                _ => None,
+            };
+            if let Some(ident) = ident {
+                let symbol = symbol_name(attrs, "link_name").unwrap_or_else(|| ident.to_string());
+                self.layer_declarations.push((
+                    self.finding("layers", "", self.context.module.clone(), 1),
+                    symbol,
+                ));
+            }
             visit::visit_foreign_item(self, item);
         }
         self.context = saved;
@@ -332,7 +347,12 @@ impl<'a> Visit<'a> for Walker {
         self.context = saved;
     }
     fn visit_item_use(&mut self, item: &'a syn::ItemUse) {
-        metrics::use_paths(&item.tree, "", &mut self.context.imports);
+        let mut imports = BTreeMap::new();
+        metrics::use_paths(&item.tree, "", &mut imports);
+        for target in imports.values() {
+            self.layer_path(target, item.span());
+        }
+        self.context.imports.extend(imports);
         // Pure re-exports carry no raw-record debt.
         if (self.names.is_some() && !self.defs_only)
             || (self.names.is_none() && matches!(item.vis, syn::Visibility::Inherited))
@@ -485,6 +505,7 @@ impl<'a> Visit<'a> for Walker {
         visit::visit_expr_call(self, expr);
     }
     fn visit_path(&mut self, path: &'a syn::Path) {
+        self.layer_path(&self.resolve(path), path.span());
         if !self.record_module()
             && !path
                 .segments
@@ -545,6 +566,14 @@ impl Walker {
 }
 
 impl Walker {
+    fn inline_imports(&mut self, items: &[Item]) {
+        self.context.lexical_module = self.context.module.clone();
+        for child in items {
+            if let Item::Use(u) = child {
+                metrics::use_paths(&u.tree, "", &mut self.context.imports);
+            }
+        }
+    }
     fn record_module(&self) -> bool {
         self.context.file == "src/engine/battle/record.rs"
             || self.context.file.ends_with("/engine/src/battle/record.rs")

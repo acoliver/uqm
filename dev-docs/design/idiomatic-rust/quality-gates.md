@@ -79,6 +79,16 @@ the same PR, so no PR runs a debt lint under `-D warnings`.
   `allow(clippy::all)` over the ABI include (`ships/native.rs:4-12`) cannot hide
   debt moved under it.
 
+Debt baselines are generated and checked by CI on Linux x86_64 with Rust 1.98.0
+and features `audio_heart,debug-process,native`. That target is the authority:
+Clippy sees only compiled `cfg` branches, so another host can report different
+counts. Local runs remain useful checks but must not raise the Linux baseline.
+Document or remove unsafe blocks behind target-specific branches, or use the CI
+measurement when tightening entries (decision [#708](https://github.com/acoliver/uqm/issues/708)).
+Without an approved growth label, CI runs Clippy with `--tighten` after checking
+the recorded limits and publishes `clippy-baseline-linux-x86_64`. Download that
+generated baseline when recording target-specific reductions; do not edit counts.
+
 In Phase 8 the debt set becomes `deny`. Where a compiler lint can enforce a rule it
 is used instead of a count: when a phase closes a subsystem, that subsystem's module
 root gets `#![deny(unsafe_code)]`, and a crate root gets `forbid` as above.
@@ -90,8 +100,10 @@ and make side-by-side review against the C original harder.
 
 ## 3. `cargo xtask` subcommands
 
-All accept `--base <git-ref>` (growth check, section 4) and `--tighten` (rewrite the
-baseline downward). Production code is defined by the source walk of section 3.2.
+Baseline-backed checks accept `--base <git-ref>` (growth check, section 4) and
+`--tighten` (rewrite the baseline downward). Coverage accepts `--base <git-ref>`
+to identify added production files and has no baseline or growth override.
+Production code is defined by the source walk of section 3.2.
 
 | Command | Checks | Limit |
 |---|---|---|
@@ -104,7 +116,7 @@ baseline downward). Production code is defined by the source walk of section 3.2
 | `quality native-files` | Tracked files ending `.c .h .cc .cpp .hpp .m .mm .s .S .asm` (`git ls-files`) | 0, absolute |
 | `quality deps` | Section 3.4 | absolute |
 | `clippy` | Section 2.3 | deny set: 0; debt set: baseline |
-| `coverage` | `cargo llvm-cov --workspace --no-default-features --features audio_heart,debug-process,native --summary-only`, compared per file (section 4) | floor from baseline; target 70 |
+| `coverage` | `cargo llvm-cov --workspace --no-default-features --features audio_heart,debug-process,native --summary-only`; workspace and added production files (section 4 rule 4, [#708](https://github.com/acoliver/uqm/issues/708)) | workspace ≥ 70%; each added production file ≥ 70%, absolute |
 | `deny` | `cargo deny --locked check advisories bans licenses sources` with `rust/deny.toml` | 0 findings |
 | `parity record\|check` | Replay corpus (plan.md section 2) against `rust/tests/golden/parity/` | exact match |
 | `quality report <counter>[:<scope>]` | Prints one counter for a subsystem, file or crate; `--expect N` fails unless it equals N, `--expect-only <scopes>` fails if any other scope is nonzero. Acceptance commands use it for zero checks | as asked |
@@ -150,7 +162,7 @@ functions only through `#[allow]`. Data tables (`hq_rules.rs::rules`,
   `<uqm::ships::races::arilou::Arilou as Race>::preprocess`. Moves and renames are
   debt transfers (section 4, rule 3). A crate split moves whole directories, so
   `cargo xtask quality move --prefix uqm::graphics uqm-engine::graphics` records one
-  `[moved]` prefix line that transfers every entry, coverage included, under it.
+  `[moved]` prefix line that transfers every counter and lint entry under it.
 - **Tests.** xtask unit tests cover those two `load` functions, the `include!` under
   `allow(clippy::all)` in `ships/native.rs:4-12`, `global!`, and a `cfg`-split item.
 
@@ -269,9 +281,6 @@ counters and the global limit for LOC/complexity. Values below are measured wher
 stated, otherwise placeholders until Phase 0 regenerates the file.
 
 ```toml
-[coverage."src/battle/process_native.rs"]
-lines_percent = 0.0          # per file; Phase 0 measurement
-
 [subsystem.battle]           # line-regex measurement at 0ba2845ad
 static_mut = 22
 extern_c_fn = 160
@@ -322,9 +331,15 @@ Rules enforced by xtask:
      target is already in the base baseline. For `unsafe` metrics moved across
      subsystems or crates (a caller's `unsafe` into an engine wrapper), the check is
      that the workspace total does not rise.
-4. **Coverage per file.** Covered-line percentage may not fall for files present at
-   both refs. Deleted files and files newly compiled under test are excluded, so
-   removing tested dead code or making a module testable is not a drop.
+4. **Coverage floors.** Workspace line coverage must be at least 70%, and each
+   production file added relative to `--base` must have at least 70% line coverage.
+   These are absolute checks, with no per-file baseline or growth override. Files
+   added by a move also count as added; an added production file absent from the
+   report fails. Existing files contribute to the workspace total without an exact
+   per-file ratchet. Decision [#708](https://github.com/acoliver/uqm/issues/708)
+   replaces that ratchet because correct subprocess tests exercise different
+   timeout/poll branches under OS scheduling, changing measured coverage between
+   passing runs. No files are excluded from the workspace measurement.
 5. **Owner sign-off.** Any other growth needs the label `quality-growth-approved`,
    applied only by the owner, with the reason in the PR description. Agents never
    apply it. Setting the `[budget]` counters (U1-01, U1-02) and U1-02's unsafe
@@ -372,7 +387,7 @@ unlabeled]` so a label change re-runs. `GROWTH` and `GOLDEN` stand for
 |---|---|---|
 | `rust` | ubuntu | `cargo fmt --all --check`; `cargo xtask quality $BASE_ARG GROWTH`; `cargo xtask clippy $BASE_ARG GROWTH` (replaces the raw clippy step in U0-03); `cargo test --workspace --locked --no-default-features --features audio_heart,debug-process,native`; `cargo xtask abi-check` until U8-01 |
 | `supply` | ubuntu | install pinned cargo-deny (`--locked`); `cargo xtask deny` |
-| `coverage` | ubuntu | install pinned cargo-llvm-cov; `cargo xtask coverage $BASE_ARG GROWTH` under SDL dummy drivers |
+| `coverage` | ubuntu | install Clippy, llvm-tools-preview and pinned cargo-llvm-cov; `cargo xtask coverage $BASE_ARG` under SDL dummy drivers |
 | `parity` | ubuntu | `cargo xtask parity check $BASE_ARG GOLDEN` and `parity counts check --all`; fails if a file under `rust/tests/golden/` that exists at base is modified or deleted without `parity-golden-update`, or a new golden arrives without its corpus manifest entry (U0-06 creates the first set with the owner's approval) |
 | `game-build` | 5 targets | unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
 | `failure-scenarios` | macOS | unchanged (4 scenarios) |

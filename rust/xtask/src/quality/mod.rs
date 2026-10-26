@@ -1,9 +1,12 @@
 //! Shrink-only source counters and identifier checks. No game code is linked.
-mod baseline;
+pub(crate) mod baseline;
 mod cfg;
+mod deps;
+mod layers;
 mod macros;
-mod metrics;
-mod walk;
+pub(crate) mod metrics;
+pub(crate) mod tool;
+pub(crate) mod walk;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -94,6 +97,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         let value = measurement.identifiers.iter().map(|f| f.value).sum();
         return report(value, &measurement.identifiers, &options);
     }
+    if command == "deps" {
+        return deps::check(root);
+    }
     let native_files = native_files(root)?;
     if command == "report"
         && options
@@ -130,6 +136,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         "unsafe",
         "allows",
         "native-files",
+        "layers",
     ]
     .contains(&command)
     {
@@ -141,6 +148,9 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if native_files != 0 {
         return Err(format!("native-files must be zero, found {native_files}"));
     }
+    if command == "check" {
+        deps::check(root)?;
+    }
     let existing = baseline_path.exists();
     let mut baseline = if existing {
         Baseline::read(&baseline_path)?
@@ -148,6 +158,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         Baseline::default()
     };
     let measured = measurement.baseline();
+    initialize_layers(root, &options, &mut baseline)?;
     if existing && !options.allow_growth {
         baseline::check_limits(&measured, &baseline.entries, &baseline.moved, false)?;
     }
@@ -160,41 +171,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         None
     };
     if let Some(reference) = &options.base {
-        let (base, recorded) = baseline::archived_measurement(root, reference)?;
-        let mut before = base.baseline();
-        let mut current = measured.clone();
-        if recorded.is_none() {
-            // U0-02 introduces the gate and its first tooling baseline. Existing
-            // game debt still cannot grow during this bootstrap.
-            before.retain(|k, _| !k.contains("uqm-xtask"));
-            current.retain(|k, _| !k.contains("uqm-xtask"));
-            println!("initial baseline: comparing game debt; recording new xtask tooling");
-        }
-        if !options.allow_growth {
-            baseline::validate_transfers(&measurement, &base, &baseline.moved)?;
-            baseline::check_limits(&current, &before, &baseline.moved, true)?;
-            if let Some(recorded) = &recorded {
-                baseline::check_limits(
-                    &baseline.entries,
-                    &recorded.entries,
-                    &baseline.moved,
-                    true,
-                )?;
-            }
-        }
-        for counter in ["loc", "ffi", "unsafe", "allows"] {
-            println!(
-                "base {counter}={} -> {}",
-                base.report(counter, None)?,
-                measurement.report(counter, None)?
-            );
-        }
-        println!(
-            "base {reference}: {} debt entries -> {}",
-            before.len(),
-            current.len()
-        );
-        base_baseline = recorded;
+        base_baseline = compare_base(root, reference, &measurement, &baseline, &options)?;
     }
     let headroom = baseline
         .entries
@@ -226,6 +203,75 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         baseline.write(&baseline_path)?;
     }
     Ok(())
+}
+
+fn initialize_layers(
+    root: &Path,
+    options: &Options,
+    baseline: &mut Baseline,
+) -> Result<(), String> {
+    // U0-03 introduces these counters. Seed only the new category from the base
+    // source tree, never from PR values, so bootstrap cannot hide growth.
+    if !baseline.layers {
+        let (before, _) =
+            baseline::archived_measurement(root, options.base.as_deref().unwrap_or("origin/main"))?;
+        baseline.entries.extend(
+            before
+                .baseline()
+                .into_iter()
+                .filter(|(k, _)| k.starts_with("layers|")),
+        );
+        baseline.layers = true;
+    }
+    Ok(())
+}
+fn compare_base(
+    root: &Path,
+    reference: &str,
+    measurement: &metrics::Measurement,
+    baseline: &Baseline,
+    options: &Options,
+) -> Result<Option<Baseline>, String> {
+    let measured = measurement.baseline();
+    let (base, recorded) = baseline::archived_measurement(root, reference)?;
+    let mut before = base.baseline();
+    let mut current = measured.clone();
+    if recorded.is_none() {
+        // U0-02 introduces the gate and its first tooling baseline. Existing
+        // game debt still cannot grow during this bootstrap.
+        before.retain(|k, _| !k.contains("uqm-xtask"));
+        current.retain(|k, _| !k.contains("uqm-xtask"));
+        println!("initial baseline: comparing game debt; recording new xtask tooling");
+    }
+    if !options.allow_growth {
+        baseline::validate_transfers(measurement, &base, &baseline.moved)?;
+        baseline::check_limits(&current, &before, &baseline.moved, true)?;
+        if let Some(recorded) = &recorded {
+            let mut recorded_entries = recorded.entries.clone();
+            if !recorded.layers {
+                recorded_entries.extend(
+                    before
+                        .iter()
+                        .filter(|(k, _)| k.starts_with("layers|"))
+                        .map(|(k, v)| (k.clone(), *v)),
+                );
+            }
+            baseline::check_limits(&baseline.entries, &recorded_entries, &baseline.moved, true)?;
+        }
+    }
+    for counter in ["loc", "ffi", "unsafe", "allows"] {
+        println!(
+            "base {counter}={} -> {}",
+            base.report(counter, None)?,
+            measurement.report(counter, None)?
+        );
+    }
+    println!(
+        "base {reference}: {} debt entries -> {}",
+        before.len(),
+        current.len()
+    );
+    Ok(recorded)
 }
 
 fn report(value: u64, findings: &[Finding], options: &Options) -> Result<(), String> {

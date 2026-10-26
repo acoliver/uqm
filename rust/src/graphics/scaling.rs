@@ -376,6 +376,7 @@ impl BilinearScaler {
     ) -> [u8; 4] {
         // SSE2 implementation for x86_64
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
+        // SAFETY: This branch requires SSE2, and the intrinsics operate only on local values.
         unsafe {
             // Expand all pixels to separate float lanes with shuffling
             // Load each pixel's RGBA components into separate lanes

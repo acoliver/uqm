@@ -35,6 +35,7 @@ impl Finding {
             "unsafe",
             "allows",
             "native-files",
+            "layers",
         ]
         .contains(&counter)
         {
@@ -64,6 +65,7 @@ impl Measurement {
             "unsafe",
             "allows",
             "native-files",
+            "layers",
         ]
         .contains(&counter)
             && !self.findings.iter().any(|f| f.metric == counter)

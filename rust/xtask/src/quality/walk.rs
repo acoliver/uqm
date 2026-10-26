@@ -45,6 +45,7 @@ struct Context {
     path: PathBuf,
     directory: PathBuf,
     module: String,
+    lexical_module: String,
     package: String,
     subsystem: String,
     configs: Vec<Rc<Configuration>>,
@@ -72,6 +73,8 @@ pub struct Walker {
     generated: bool,
     queue_functions: BTreeSet<String>,
     handlers: Vec<(String, String)>,
+    layer_declarations: Vec<(Finding, String)>,
+    layer_definitions: BTreeMap<String, BTreeSet<String>>,
 }
 
 pub fn measure(
@@ -142,6 +145,7 @@ pub fn measure(
             } else {
                 format!("{}::target::{}", package.name, target.name)
             };
+            walker.context.lexical_module = walker.context.module.clone();
             walker.context.subsystem = if package.name == "uqm" {
                 target.name.clone()
             } else {
@@ -150,7 +154,11 @@ pub fn measure(
             walker.load(&target.src_path, Some(package_root))?;
         }
     }
-    walker.finish(names.is_none())
+    let mut measurement = walker.finish(names.is_none())?;
+    if names.is_none() {
+        super::layers::graph(root, &mut measurement)?;
+    }
+    Ok(measurement)
 }
 
 impl Walker {
@@ -185,6 +193,8 @@ impl Walker {
             defs_only,
             generated: false,
             queue_functions,
+            layer_declarations: Vec::new(),
+            layer_definitions: BTreeMap::new(),
             handlers: macros::HANDLERS
                 .iter()
                 .map(|(f, n)| (f.to_string(), n.to_string()))
@@ -208,6 +218,7 @@ impl Walker {
             .to_string_lossy()
             .replace('\\', "/");
         self.context.path = path.clone();
+        self.context.lexical_module = self.context.module.clone();
         self.context.inline_depth = 0;
         let parent = path.parent().ok_or("source has no parent")?;
         let stem = path
@@ -317,7 +328,17 @@ impl Walker {
             f.value = lines.len() as u64;
             self.measurement.findings.push(f);
         }
-        for (key, files) in self.allow_lines {
+        self.finish_allows(&active_lines);
+        self.measurement.findings.extend(super::layers::symbols(
+            &self.layer_declarations,
+            &self.layer_definitions,
+        ));
+        super::layers::initialize_reports(&mut self.measurement);
+        Ok(self.measurement)
+    }
+
+    fn finish_allows(&mut self, active_lines: &BTreeMap<String, BTreeSet<usize>>) {
+        for (key, files) in std::mem::take(&mut self.allow_lines) {
             let value = files
                 .iter()
                 .map(|(file, lines)| {
@@ -336,7 +357,6 @@ impl Walker {
                 f.value = value;
             }
         }
-        Ok(self.measurement)
     }
 
     fn error(&mut self, error: String) {
@@ -704,6 +724,35 @@ impl Walker {
             .map(|alias| format!("{alias}{}", &text[head.len()..]))
             .unwrap_or(text)
     }
+    fn layer_path(&mut self, target: &str, span: Span) {
+        let target = super::layers::absolute(&self.context.lexical_module, target);
+        let target = target.as_str();
+        let event = format!(
+            "layer|{}|{}:{}|{target}",
+            self.context.file,
+            span.start().line,
+            span.start().column
+        );
+        if self.names.is_none() && self.events.insert(event) {
+            let source = self.finding("layers", "", self.context.module.clone(), 1);
+            self.measurement
+                .findings
+                .extend(super::layers::reference(&source, target));
+        }
+    }
+    fn exported_symbol(&mut self, attrs: &[Attribute], ident: &syn::Ident) {
+        let exported = attrs.iter().any(|a| a.path().is_ident("no_mangle"));
+        let symbol =
+            symbol_name(attrs, "export_name").or_else(|| exported.then(|| ident.to_string()));
+        if let Some(symbol) = symbol {
+            if let Some(module) = self.context.module.strip_prefix("uqm::") {
+                self.layer_definitions
+                    .entry(symbol)
+                    .or_default()
+                    .insert(format!("crate::{module}"));
+            }
+        }
+    }
     fn hook(&self, expr: &syn::Expr) -> bool {
         match expr {
             syn::Expr::Field(f) => {
@@ -723,3 +772,18 @@ impl Walker {
 #[cfg(test)]
 mod tests;
 mod visitor;
+
+fn symbol_name(attrs: &[Attribute], key: &str) -> Option<String> {
+    attrs.iter().find_map(|a| {
+        if a.path().is_ident(key) {
+            if let Meta::NameValue(v) = &a.meta {
+                if let syn::Expr::Lit(l) = &v.value {
+                    if let syn::Lit::Str(s) = &l.lit {
+                        return Some(s.value());
+                    }
+                }
+            }
+        }
+        None
+    })
+}

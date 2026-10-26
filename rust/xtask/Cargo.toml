@@ -3,6 +3,7 @@ name = "uqm-xtask"
 version.workspace = true
 edition = "2021"
 publish = false
+license.workspace = true
 default-run = "uqm-xtask"
 
 [lints]
