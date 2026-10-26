@@ -37,18 +37,28 @@ truth for its scope and acceptance.
 - Add no mutable global state: no new `static mut`, `thread_local!`, `OnceLock`,
   `LazyLock`, `lazy_static`, or `static` holding atomics, locks or cells. Immutable
   tables are fine. Moving an existing global, or adding a field to one, is allowed
-  when the unit says so. The plan adds exactly two: P0-06's set-once replay time
-  source (P7-08 removes it) and the `app::bridge` context slot of P1-02 (P6-04
-  removes it).
-- Delete the old path in the same PR, and only after every consumer of it has moved.
-  No second implementation, no compatibility shim, no "remove later" comment
-  survives a merge.
+  when the unit says so. The plan adds exactly two: U0-05's set-once replay time
+  source `TIME_SOURCE` in `time::source` (U1-04 moves it into `uqm-engine`, U7-05
+  removes it) and the `app::bridge` context slot of U1-02 (U6-04 removes it).
+- Change, migrate and delete in one PR; the PR is not done until the replaced code
+  is gone. Your unit introduces the new representation or API, moves every user of
+  the thing it replaces, and deletes the replaced code. Every item under the issue's
+  Deletes must be absent and its zero-count check must pass. No PR leaves code with
+  zero callers or two live implementations of the same thing; no compatibility shim
+  or "remove later" comment survives a merge.
+- Delete a path only after every consumer of it has moved, and in the same PR as the
+  last of them. Adding a new API in one PR and migrating its users in another is not
+  allowed.
+- Adapters: a transitional adapter may exist only while live, unconverted users of the
+  old path remain in code that a later unit owns. Use only the adapters listed in
+  work-items.md (Transitional adapters); the unit that converts an adapter's last user
+  deletes it. Do not add another; if your unit seems to need one, stop and file.
 - Gate counters only fall. Never edit `rust/xtask/quality-baseline.toml` by hand; use
   `cargo xtask quality --tighten` and `cargo xtask quality move`. Never apply
   `quality-growth-approved`.
 - Stay inside the unit's scope and out-of-scope lists. Mechanical moves and semantic
-  changes go in separate commits; a mechanical move changes nothing inside moved files
-  except visibility.
+  changes go in separate commits of the same PR; a mechanical move changes nothing
+  inside moved files except visibility, and a crate move is the unit's last commit.
 - Fail fast: a broken invariant panics with context; no defensive fallbacks for
   states our own code cannot produce.
 - Never enable Rust incremental compilation. `rust/.cargo/config.toml` keeps
@@ -67,18 +77,18 @@ The end state allows `unsafe` only in the `UNSAFE_ALLOWED` modules of `uqm-platf
   no `unsafe`. `uqm-save`, `uqm-content` and `uqm-modes` forbid it from creation.
 - `unsafe` may move: from a caller into a safe wrapper in `uqm-engine` (for example a
   C-style graphics or sound call needed by a mode), into the `src/engine/` staging
-  accessors, or into `engine::platform::os` (P7-09). The PR's workspace total of each
+  accessors, or into `engine::platform::os` (U7-06). The PR's workspace total of each
   `unsafe` metric must not rise; `cargo xtask quality --base origin/main` checks it.
 - New `unsafe` that is not such a move is allowed only where the unit states an
-  unsafe allowance (P1-02's staging accessors). Those units carry `owner-review`, and
+  unsafe allowance (U1-02's staging accessors). Those units carry `owner-review`, and
   the owner applies `quality-growth-approved`.
 - The soundness fixes that turn safe pointer-taking functions into `unsafe fn` land
-  in P0-01, before the first baseline (P0-03), so they are not growth.
-- `uqm-engine` becomes `forbid(unsafe_code)` in P7-10 and the root in P8-02.
+  in U0-01, before the first baseline (U0-02), so they are not growth.
+- `uqm-engine` becomes `forbid(unsafe_code)` in U7-06 and the root in U8-01.
 
 ### Goldens
 
-- `rust/tests/golden/` is created by P0-08: the parity corpus, the eight fixtures,
+- `rust/tests/golden/` is created by U0-06: the parity corpus, the eight fixtures,
   the per-scenario counts and the V3b save captures, each after three byte-identical
   recordings, with the owner's approval on that PR.
 - Later, a new golden file may be added only with the new corpus or fixture entry
@@ -94,23 +104,29 @@ bodies spell out each check bundle and the unit's V4 commands. Then:
 
 1. `cd rust && cargo xtask quality --base origin/main` shows no growth, and the exit
    numbers in the issue moved as stated.
-2. From P0-08 on, `cd rust && cargo xtask parity check --base origin/main` is
+2. Every item under Deletes is gone: its zero-count check (`quality report ...
+   --expect 0`, `quality ident ... --expect 0`, `test ! -e`, or an `rg` that must not
+   match) passes, and no adapter outside work-items.md's list remains.
+3. From U0-06 on, `cd rust && cargo xtask parity check --base origin/main` is
    identical.
-3. The four native scenarios pass (`V2`). If you cannot run macOS natively, say so in
+4. The four native scenarios pass (`V2`). If you cannot run macOS natively, say so in
    the PR and rely on the `failure-scenarios` job.
-4. For `V4`, inspect both galleries with the image-comparer, not by file size.
+5. For `V4`, inspect both galleries with the image-comparer, not by file size.
 
-Open the PR titled `<unit-id>: <title>` with `Closes #<issue>`, the exit numbers
-(base and PR values), the acceptance output summaries and, for crate splits, the
-`--timings` comparison. CI must be green on every job before review.
+Open the PR titled `<unit-id>: <title>` with `Closes #<issue>`, the Deletes list
+checked off item by item, the exit numbers (base and PR values), the acceptance output
+summaries and, for crate splits, the `--timings` comparison. CI must be green on every job before review.
 
 ## Stop and file an issue instead
 
 Stop, add `blocked` to the unit, and open an issue linked to it when:
 
 - a parity or save check differs and the cause is not a mistake in your own change;
-- the unit needs more than about 3,000 non-mechanical changed lines, or files outside
-  its `touches` and `shared` lists;
+- the unit needs more than about 6,000 non-mechanical changed lines (git mv for crate
+  splits, renames, accessor swaps and generated golden data do not count), or files
+  outside its `touches` and `shared` lists;
+- an item under Deletes cannot go in this PR, or the change needs an adapter that
+  work-items.md does not list;
 - a budget or baseline would have to rise, or a golden would have to change;
 - a consumer of something the unit deletes has not moved yet;
 - a dependency's result is missing or wrong (fix it in its own unit, not here);
