@@ -61,8 +61,8 @@ allow-expect-in-tests = true
 ```
 
 Phase 0 runs each `deny` lint once. Any lint with hits is either fixed in Phase 0
-(when the hits are few) or moved to the debt set. P0-03 adds the deny set only, while
-CI still runs raw clippy with `-D warnings`; the four debt lints arrive in P0-04
+(when the hits are few) or moved to the debt set. U0-02 adds the deny set only, while
+CI still runs raw clippy with `-D warnings`; the four debt lints arrive in U0-03
 together with `cargo xtask clippy`, which baselines them and replaces the raw step in
 the same PR, so no PR runs a debt lint under `-D warnings`.
 
@@ -108,7 +108,8 @@ baseline downward). Production code is defined by the source walk of section 3.2
 | `deny` | `cargo deny --locked check advisories bans licenses sources` with `rust/deny.toml` | 0 findings |
 | `parity record\|check` | Replay corpus (plan.md section 2) against `rust/tests/golden/parity/` | exact match |
 | `quality report <counter>[:<scope>]` | Prints one counter for a subsystem, file or crate; `--expect N` fails unless it equals N, `--expect-only <scopes>` fails if any other scope is nonzero. Acceptance commands use it for zero checks | as asked |
-| `abi-check` | Existing (`xtask/src/abi_check.rs`); extended in P0-01 to foreign `static` types and to every workspace crate; a foreign declaration whose definition is in a crate the declaring crate does not depend on fails | deleted in P8-01 |
+| `quality ident <Name>... [--defs]` | Counts the identifier and path tokens naming each argument, by syn tokens, in every target of every workspace member (test targets and `#[cfg(test)]` items included, unlike the counters), outside comments, doc comments and string literals; C traceability doc lines (`/// C: <name>`) do not count. With `--defs` it counts definitions only: a `fn` with a body, `struct`, `enum`, `union`, type alias, `trait`, `const`, `static` with an initializer, `mod`, `macro_rules!` or field; extern-block declarations and `use` re-exports are not definitions. `--expect N` and `--expect-only <scopes>` work as for `quality report`. Added in U0-02; every Deletes list uses it for zero-count checks | as asked |
+| `abi-check` | Existing (`xtask/src/abi_check.rs`); extended in U0-01 to foreign `static` types and to every workspace crate; a foreign declaration whose definition is in a crate the declaring crate does not depend on fails | deleted in U8-01 |
 
 ### 3.1 LOC and complexity
 
@@ -134,7 +135,7 @@ functions only through `#[allow]`. Data tables (`hq_rules.rs::rules`,
   first-party macro that expands to items, or a `cfg` predicate the walker cannot
   evaluate, fails the gate, as unsupported export macros already fail `abi-check`
   (`abi_check.rs:610-623,1075-1090`). At 35d33879b there are 16 such definitions, so
-  P0-03 ships 16 handlers: besides the three above, `accessor!`
+  U0-02 ships 16 handlers: besides the three above, `accessor!`
   (`mainloop/state_abi.rs:14`), `operation!` (`mainloop/main2_abi.rs:2`,
   `mainloop/restart_menu/menu_abi.rs:6`, `ships/native_adapters.rs:53`),
   `define_hash_table!` (`collections/hash_table.rs:396`), `energy_hook!`
@@ -163,7 +164,7 @@ const UNSAFE_ALLOWED: &[&str] = &[
     "crates/platform/src/macos",  // objc/CoreGraphics/CoreFoundation/sandbox
     "crates/platform/src/net",    // only if sockets stay on libc/WinSock
     "crates/platform/src/qos.rs", // pthread QoS, today threading/qos.rs
-    "crates/platform/src/os",     // process, descriptor, fd-relative file and errno calls (P7-09)
+    "crates/platform/src/os",     // process, descriptor, fd-relative file and errno calls (U7-06)
 ];
 ```
 
@@ -240,20 +241,20 @@ checks four things.
    `windows-sys`, `rodio` and `cpal` are allowed in `uqm-platform` and `uqm-xtask`.
    For `uqm-engine` and `uqm` they are baseline entries until Phase 7 and may only be
    removed.
-3. **Planned crates.** From P0-04, `PLANNED` lists, for every crate not yet split
+3. **Planned crates.** From U0-03, `PLANNED` lists, for every crate not yet split
    (`uqm-engine`, `uqm-content`, `uqm-modes`, `uqm-platform`), the root modules the
    layer table assigns to it (`uqm-engine`: `graphics`, `sound`, `resource`, `video`,
    `strings`, `threading`, `input`, `io`, `network`, `callback`, `collections`,
    `math`, `memory`, `logging`, `log_abi`, `bridge_log`, `platform`,
-   `time::counter_abi`). Each `crate::` path, and each foreign declaration that
+   `time::counter_abi`, `time::source`). Each `crate::` path, and each foreign declaration that
    `abi-check`'s resolver finds defined, from a planned member to a module that will
    not be in or below that crate counts against `planned.<crate>`. At 0ba2845ad
    `planned.uqm-engine` is 20 (13 paths, 7 foreign statics; architecture.md section
    2.2). The move PR requires 0. The staging module `rust/src/engine/` is counted the
-   same way but as the budget counter `planned_engine_core` (set in P1-01, 0 at
-   P4-07), because its Stage B code reaches `GlobData` until Phase 4.
-   `planned.uqm-content` and `planned.uqm-modes` must be 0 in P6-04, the semantic PR
-   before their move.
+   same way but as the budget counter `planned_engine_core` (set in U1-01, 0 at
+   U4-04), because its Stage B code reaches `GlobData` until Phase 4.
+   `planned.uqm-content` and `planned.uqm-modes` must be 0 in U6-04's semantic
+   commits, before its move commit.
 4. **Banned `std` APIs** in `uqm-save`, `uqm-content`, `uqm-modes`, and `uqm-engine`
    from Phase 7 exit: `std::time::{Instant, SystemTime}`, `std::thread`, `std::env`,
    `std::fs`, `std::net`, `std::process`. Per-file baseline, 0 when absent.
@@ -284,7 +285,7 @@ cyclomatic = 58              # placeholder
 [allow."src/ships/native.rs"."clippy::all"."ships::native::abi"]
 loc = 0                      # placeholder: effective LOC covered
 
-[budget]                     # set by the PR that creates each counter (P1-01, P1-02); limits only fall
+[budget]                     # set by the PR that creates each counter (U1-01, U1-02); limits only fall
 bridge_calls = { limit = 0, ends = "phase-6" }   # placeholder limit; 0 before the modes split
 legacy_hooks = { limit = 0, ends = "phase-2" }   # placeholder limit
 planned_engine_core = { limit = 0, ends = "phase-4" } # placeholder limit; staging module
@@ -326,7 +327,7 @@ Rules enforced by xtask:
    removing tested dead code or making a module testable is not a drop.
 5. **Owner sign-off.** Any other growth needs the label `quality-growth-approved`,
    applied only by the owner, with the reason in the PR description. Agents never
-   apply it. Setting the `[budget]` counters (P1-01, P1-02) and P1-02's unsafe
+   apply it. Setting the `[budget]` counters (U1-01, U1-02) and U1-02's unsafe
    allowance are such approvals.
 
 There is no hashing, no provenance bundle and no self-check of xtask.
@@ -369,11 +370,11 @@ unlabeled]` so a label change re-runs. `GROWTH` and `GOLDEN` stand for
 
 | Job | Runner | Steps |
 |---|---|---|
-| `rust` | ubuntu | `cargo fmt --all --check`; `cargo xtask quality $BASE_ARG GROWTH`; `cargo xtask clippy $BASE_ARG GROWTH` (replaces the raw clippy step in P0-04); `cargo test --workspace --locked --no-default-features --features audio_heart,debug-process,native`; `cargo xtask abi-check` until P8-01 |
+| `rust` | ubuntu | `cargo fmt --all --check`; `cargo xtask quality $BASE_ARG GROWTH`; `cargo xtask clippy $BASE_ARG GROWTH` (replaces the raw clippy step in U0-03); `cargo test --workspace --locked --no-default-features --features audio_heart,debug-process,native`; `cargo xtask abi-check` until U8-01 |
 | `supply` | ubuntu | install pinned cargo-deny (`--locked`); `cargo xtask deny` |
 | `coverage` | ubuntu | install pinned cargo-llvm-cov; `cargo xtask coverage $BASE_ARG GROWTH` under SDL dummy drivers |
-| `parity` | ubuntu | `cargo xtask parity check $BASE_ARG GOLDEN` and `parity counts check --all`; fails if a file under `rust/tests/golden/` that exists at base is modified or deleted without `parity-golden-update`, or a new golden arrives without its corpus manifest entry (P0-08 creates the first set with the owner's approval) |
-| `game-build` | 5 targets | unchanged until P7-10, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
+| `parity` | ubuntu | `cargo xtask parity check $BASE_ARG GOLDEN` and `parity counts check --all`; fails if a file under `rust/tests/golden/` that exists at base is modified or deleted without `parity-golden-update`, or a new golden arrives without its corpus manifest entry (U0-06 creates the first set with the owner's approval) |
+| `game-build` | 5 targets | unchanged until U7-06, which moves `examples/platform_smoke.rs` to `uqm-platform`: then `cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl` |
 | `failure-scenarios` | macOS | unchanged (4 scenarios) |
 | `release-tools` | ubuntu | unchanged |
 

@@ -3,8 +3,7 @@
 Nine phases (0-8), ordered by dependency and risk. Each phase is a series of PRs;
 `main` stays playable and green after every one. Target design:
 [architecture.md](architecture.md). Checks: [quality-gates.md](quality-gates.md).
-The PRs are listed as 63 work units in [work-items.md](work-items.md);
-work-items.yaml is the input for creating their issues.
+The PRs are listed as 40 work units in [work-items.md](work-items.md).
 Implementing agents follow [AGENTS.md](AGENTS.md).
 
 ## 1. Starting numbers
@@ -56,10 +55,12 @@ Fixed seeds (`automation/trace.rs:49`) and SDL dummy drivers leave real time
 (`comm/talk_segue.rs:411-451`) and pacing (`threading/pacing.rs:122-146`) variable.
 Replay mode (`uqm --replay <scenario>`) replaces exactly these inputs:
 
-1. **Clock.** `time::source` is chosen once at start: `Real` (SDL ticks) or `Replay`.
+1. **Clock.** `time::source` (`src/time/source.rs`, created by U0-05) is chosen once
+   at start: `Real` (SDL ticks) or `Replay`.
    `GetTimeCounter`, the replay `PacingEnv` (`pacing.rs:100`) and the callback alarm
-   queue (`callback/ffi.rs:12-14`, which reads `SDL_GetTicks` today) read it; the
-   choice moves into `Platform` in Phase 7. Replay time
+   queue (`callback/ffi.rs:12-14`, which reads `SDL_GetTicks` today) read it. The
+   module moves with the counter into `uqm-engine` (U1-04), and the choice moves into
+   `Platform` in Phase 7 (U7-05), which deletes the module. Replay time
    moves only when the game sleeps: `sleep_until(wake)` runs one `process_async` and
    `pump_and_flush` pass, then sets now to `max(now, wake)`; no real sleep happens.
    `TaskSwitch` and `Async_process` leave time unchanged, so alarms fire at fixed
@@ -131,7 +132,7 @@ a few hundred steps:
 | `frame-sets` | Arilou threat test against a weapon still flying after its ship died and a same-species ship entered; blast after ship teardown; trilinear resolution index |
 | `star-contact` | hyperspace star contact, repeat suppression, system exit, save and reload |
 
-Goldens are created once, by P0-08 with the owner's approval, together with a counts
+Goldens are created once, by U0-06 with the owner's approval, together with a counts
 golden (`input_seen`, `present_seen`, action-phase sequence) for every
 `rust/scripts/*.json`. Later PRs may add a golden only with a new corpus entry and the
 three-recording evidence, and may not modify or delete one. A deliberate behaviour
@@ -168,20 +169,26 @@ release builds.
 
 ## 3. How main stays green
 
-1. **One work unit per PR, old path deleted in the same PR, after its consumers.** A
-   unit is one coherent change: a queue, a module, a session, or a group of races
-   sized by their source and test lines. A representation is deleted only by the PR
-   that converts its last consumer, and a quality counter (`raw_records`,
-   `queue_calls`, `planned.<crate>`, `uio_*` callers) proves it. No dual
-   implementation survives a merge, and no PR relies on a later one to be correct.
+1. **One work unit per PR: change, migrate and delete together.** A unit is one
+   vertical slice: a queue, a module, a session, or a group of races sized by their
+   source and test lines. It introduces the new representation or API, migrates every
+   user of the thing it replaces, and deletes the replaced code; the PR is not done
+   until the replaced code is gone. Each unit's Deletes list names the items and a
+   zero-count check (`raw_records`, `queue_calls`, `planned.<crate>`,
+   `quality ident`, `uio_*` callers) proves them gone. No code with zero callers and
+   no dual implementation survives a merge, and no PR relies on a later one to be
+   correct. Transitional adapters exist only while live, unconverted users remain in
+   code a later unit owns; work-items.md lists each with the unit that deletes it.
 2. **One transition pattern.** The staged authority of architecture.md section 4.1,
    with `Hook::Legacy` and `app::bridge`. The counters `legacy_hooks` and
-   `bridge_calls` get finite budgets in P1-02, the PR that creates them (quality-gates.md
+   `bridge_calls` get finite budgets in U1-02, the PR that creates them (quality-gates.md
    section 4). Budgets only shrink; `legacy_hooks` reaches 0 at Phase 2 exit,
    `bridge_calls` at Phase 6 exit, before the `uqm-modes` split.
-3. **Mechanical and semantic changes in separate PRs.** Moving `GlobData.x` reads to
-   accessors, CamelCase renames and crate moves are mechanical; V1 is their oracle.
-4. **Size.** 500 to 3,000 changed lines per PR; mechanical PRs may be larger.
+3. **Mechanical and semantic changes in separate commits of the same PR.** Moving
+   `GlobData.x` reads to accessors, CamelCase renames and crate moves are mechanical;
+   V1 is the oracle for every commit.
+4. **Size.** Up to about 6,000 non-mechanical changed lines per PR; mechanical
+   commits (git mv, renames, accessor swaps, generated golden data) do not count.
 5. **Tests move with the code.** 34 of the 61 files in `rust/tests/` declare `extern
    "C"` symbols (for example `tests/arilou_native.rs:8-14`). A PR that removes a
    symbol rewrites its test against the Rust API and keeps the golden data (for
@@ -194,9 +201,10 @@ release builds.
 
 ### 3.1 Crate splits
 
-Crates follow the schedule of architecture.md section 2.2. Each split is two PRs: a
-semantic PR that brings the crate's `planned.<crate>` counter (quality-gates.md
-section 3.5) to 0, then a mechanical move PR:
+Crates follow the schedule of architecture.md section 2.2. Each split is one unit with
+two kinds of commit: semantic commits that bring the crate's `planned.<crate>`
+counter (quality-gates.md section 3.5) to 0, then a mechanical move commit, the last
+in the PR:
 
 1. `git mv` the directories to `rust/crates/<name>/src/`, keeping module paths; add the
    member's `Cargo.toml` (`version.workspace`, `publish = false`, `[lints] workspace =
@@ -208,8 +216,8 @@ section 3.5) to 0, then a mechanical move PR:
 4. Record `cargo build --release --timings` (clean) and the rebuild after `touch
    rust/src/comm/mod.rs`, before and after, in the PR description.
 
-The move PR changes no code inside a moved file except visibility, so V1 must be
-identical without re-recording.
+The move commit changes no code inside a moved file except visibility, so V1 must be
+identical across it without re-recording.
 
 ## 4. Pilot choice: battle core
 
@@ -237,8 +245,8 @@ Scope:
 - xtask: `quality` (ports of llxprt-code-rs `loc.rs` and `complexity.rs`, plus ffi,
   unsafe, allows, layers, native-files, deps), `clippy`, `coverage`, `deny`, `parity`;
   `abi-check` extended to foreign statics. The source walk has a handler for each of
-  the 16 item-generating first-party macros compiled today (P0-03 lists them), and the
-  debt lints arrive with the `xtask clippy` classifier that baselines them (P0-04).
+  the 16 item-generating first-party macros compiled today (U0-02 lists them), and the
+  debt lints arrive with the `xtask clippy` classifier that baselines them (U0-03).
   `[workspace.lints]`, `rust/clippy.toml`,
   `rust/deny.toml`, the `xtask` and `xtask-native` Cargo aliases, xtask's game
   dependency behind its `native` feature, `ci.yaml` (quality-gates.md section 5).
@@ -248,7 +256,7 @@ Scope:
 - Replay mode, migration trace, corpus and fixtures (V1), fed by the existing
   coordinator's input and presentation callbacks plus a checkpoint call at
   `rust_battle_frame_advance` and each mode's loop end; V3a and V3b goldens.
-- Soundness fixes, landed first (P0-01) so the first baseline already counts them:
+- Soundness fixes, landed first (U0-01) so the first baseline already counts them:
   - the 20 `clippy::not_unsafe_ptr_arg_deref` allows in 8 files become `unsafe fn`,
     starting with safe `InitQueue` (`collections/queue.rs:84-117`);
   - each foreign static gets its defining type: `DisplayArray`
@@ -279,7 +287,7 @@ Exit criteria:
   without compiling the game; `planned.uqm-engine` is measured (20 by the scan).
 
 Verification: V1, V2, V3, V5. Size: xtask +4k lines; src about -5k; about 60 files.
-Units: P0-01 to P0-08.
+Units: U0-01 to U0-06 (soundness with the dormant-code removal; the xtask foundation; the debt lints and gates; `uqm-save`; replay mode; parity tooling with the corpus and goldens).
 
 ### Phase 1 (pilot): battle core, Stage A and first Stage B consumers; `uqm-engine`
 
@@ -290,13 +298,14 @@ order:
 
 1. Stage A (architecture.md section 4.1): records and queue statics move to
    `engine::battle::{record, legacy}`; the ABI copies become re-exports. Layouts and
-   hook fields are unchanged.
-2. Stage B infrastructure in one transition: `ElementTable`, `ElementId`/`ShipId`,
-   `LinkQueue<T>` (the same view over any other `QUEUE`), `Cx`, `app::bridge`, and
-   the hook fields as `ElementHook`/`CollisionHook` with every call through
-   `invoke_*` (the legacy writes are one mechanical commit).
-3. Process loop and collisions on ids.
-4. Proof: VUX and Androsynth converted, and the hyperspace `star_collision` and
+   hook fields are unchanged (U1-01).
+2. Stage B in one transition with its first consumer: `ElementTable`,
+   `ElementId`/`ShipId`, `Cx`, `app::bridge`, the hook fields as
+   `ElementHook`/`CollisionHook` with every call through `invoke_*` (the legacy
+   writes are one mechanical commit), and the process loop and collisions on ids
+   (U1-02). `LinkQueue<T>` arrives with its first users in Phase 2 (U2-06).
+3. Proof (U1-03): the Native hook variant with its first users, VUX, Androsynth and
+   the battle core's own hooks, and the hyperspace `star_collision` and
    `star_death` callbacks (`navigation/hyper_transition.rs:191-229`) moved to `Cx`;
    `mixed-collision`, `death-spawn`, `androsynth-blazer`, `star-contact` and
    `chmmr-satellites` (unconverted, walking raw `pred` links on the shared storage)
@@ -304,17 +313,18 @@ order:
    battle test harness `tests/support/battle.rs` that every race test moves onto; no
    further conversion merges before this PR.
 
-A second lane, independent of the battle files, splits the first engine crate:
+A second lane, independent of the battle files, splits the first engine crate in one
+unit (U1-04), a semantic commit then the move commit:
 
-5. The 13 upward paths and 7 foreign statics of the former `libs/` layer
+4. The 13 upward paths and 7 foreign statics of the former `libs/` layer
    (architecture.md section 2.2) are inverted: graphics no longer names automation,
    the dir handles and `input_templates` are defined in `io` and `input`, the game
    registers the ship code resource type, and the game clock stays in the root.
-6. The mechanical move of that layer into `uqm-engine` (section 3.1).
+5. The mechanical move of that layer into `uqm-engine` (section 3.1).
 
 Arilou and the readers `supermelee/netplay/checksum.rs:55`,
 `savegame/runtime/hyper_save.rs:129` and `automation/battle_fight.rs:456` move to
-Phase 2, where they join a race group and the remaining-readers PR.
+Phase 2, where they join a race group and the reader units.
 
 Removes: the `ELEMENT`/`STARSHIP`/`RACE_DESC` copies in `navigation_abi.rs`,
 `netplay_abi.rs` and `global_state_abi.rs` with their layout assertions and
@@ -336,7 +346,7 @@ Exit criteria:
 
 Verification: V1 (corpus and fixtures identical); V2; V3; V4 with the battle and
 hyperspace scenarios listed per unit, plus `smoke.json`; `tests/netplay_packets.rs`.
-Size: about 45 files, 8-10k lines, plus the mechanical move. Units: P1-01 to P1-06.
+Size: about 45 files, 8-10k lines, plus the mechanical move. Units: U1-01 to U1-04.
 
 ### Phase 2: ships, combat AI, remaining record readers, Stage C
 
@@ -350,12 +360,15 @@ interplanetary}.rs`, `planet_side/collision_adapter.rs`, `front_end/uqmdebug.rs`
 `STARSHIP` and `RACE_DESC` readers in `pickship/ffi.rs`,
 `supermelee/native/battle_picker.rs`, the encounter build and the battle sound
 tracker (`battle/sounds.rs`, which keeps `*mut ELEMENT` and indexes `DisplayArray`).
-`OrderedPool` lands first in its own PR with its order tests. The races go in ten
-PRs sized by race plus test lines (at most about 2,800), with Melnorme, Chmmr, Pkunk
-and Orz each the only hard race of its PR and each fixture in the PR of its race.
-The ships infrastructure PR deletes `Hook::Legacy` after the last race. Stage C
-(architecture.md section 4.1) runs only when `raw_records` outside `engine::battle`
-is 0.
+The races go in six units sized by race plus test lines (at most about 5,400), with
+Melnorme, Chmmr, Pkunk and Orz each the only hard race of its unit and each fixture in
+the unit of its race. Orz goes last (U2-08), after every other race unit and both
+reader units; it converts the last legacy hook, replaces the race templates by
+`race(species)` and deletes `Hook::Legacy`, the `RACE_DESC` function-pointer
+dispatch and the battle entry points of `app::bridge`, whose only callers were legacy
+hooks. Stage C (architecture.md section 4.1, U2-09) lands `OrderedPool` with its
+order tests and its first users, and runs only when `raw_records` outside
+`engine::battle` is 0.
 
 Removes: 28 `static mut <RACE>_DESC` templates and `INITIALIZERS`
 (`ships/code_resources.rs:75`); `RaceDescPtr`; `data: *mut c_void`; `Hook::Legacy`;
@@ -367,7 +380,7 @@ Exit criteria: ships and battle have no `ffi` or `unsafe` baseline entries;
 for every race. Verification: V1, V2, V3, V4 subset (`campaign-s06c-utwig-bomb`,
 `samatra`, `load-connected-final-fleet-v1`), V5.
 Size: about 95 files, 35-40k lines including the rewritten race tests.
-Units: P2-01 to P2-16.
+Units: U2-01 to U2-09.
 
 ### Phase 3: Super Melee and netplay
 
@@ -375,20 +388,23 @@ Scope: `supermelee/` (setup, team files, picker, netplay), `pickship/`, `network
 `network.rs`, `battle/netplay.rs`.
 
 Removes: `packetTypeData` (`supermelee/netplay/packet.rs:29`) and `#[repr(C)]` packet
-structs (become `enum Packet` with explicit codec); `netConnections` and other
-netplay statics; supermelee `extern_c_fn` 267 → 0, `no_mangle` 221 → 0, `static_mut`
-16 → 0. Netplay reaches sockets through the `engine::host::Net` port; the socket
-code (std::net, or libc/WinSock kept as an audited module if non-blocking connect
-needs it) stays in `uqm-engine::network` until P7-10 moves it to `uqm-platform::net`.
-The `.mle` byte layout moves to `uqm-save`; team-file I/O moves to `Files` in P7-07.
-The pickers' record access was already converted in P2-14.
+structs (become `enum Packet` with explicit codec); `netConnections`, `netplayOptions`
+and the other netplay statics, whose readers in the melee menu, the connection dialog
+(`front_end/cnctdlg.rs`) and the battle move to the `NetplaySession` in the same unit;
+supermelee `extern_c_fn` 267 → 0, `no_mangle` 221 → 0, `static_mut` 16 → 0. Netplay
+reaches sockets through the `engine::host::Net` port; the socket code (std::net, or
+libc/WinSock kept as an audited module if non-blocking connect needs it) stays in
+`uqm-engine::network` until U7-06 moves it to `uqm-platform::net`. The `.mle` byte
+layout moves to `uqm-save`; team-file I/O moves to `Files` in U7-03. The pickers'
+record access was already converted in U2-06.
 
 Exit criteria: supermelee and pickship unsafe = 0; network unsafe only in the socket
 module; packet byte fixtures unchanged; a two-peer loopback battle over the in-memory
 `Net` agrees on checksums every interval and matches the `melee-input` golden; `.mle`
 team-file fixtures round-trip through `uqm-save`. Verification: V1, V2
-(`super-melee-v1`), V3, V5. Size: about 45 files, 6-8k lines. Units: P3-01 to P3-03;
-P3-01 depends only on Phase 0 and may run during Phases 1 and 2; P3-03 may run
+(`super-melee-v1`), V3, V5. Size: about 45 files, 6-8k lines. Units: U3-01 (packets, session and
+the `Net` port) and U3-02 (the melee session); U3-01 depends only on Stage B (U1-02) and
+the `uqm-engine` split and may run during Phase 2; U3-02 may run
 during Phase 4.
 
 ### Phase 4: world state and main loop
@@ -397,14 +413,15 @@ Scope: `navigation/globals.rs`, `state/`, `time/` (game clock and `event_q`),
 `mainloop/`, `game_init/`, `c_bindings.rs`, `comm/locdata.rs` (`CGlobData`),
 `savegame/runtime/*` live readers, `automation/campaign_state.rs` and the
 `Coordinator` statics (become the `Observer`), and every remaining `QUEUE` consumer.
-The GAME_STATE queues and `event_q` follow the accessor-first pattern: one mechanical
-PR moves every consumer in every subsystem (comm, planets, starbase, ui, front_end,
-battle, ships, navigation, savegame) to `LinkQueue` views (P4-03, `queue_calls` = 0),
-then one PR replaces the storage with `OrderedPool` and deletes `collections/queue.rs`
-(P4-04). `GlobData` goes through Stage B (readers moved to
-`World` accessors over the single definition, mechanical PRs per module, 689
-references in 111 files) and then Stage C (owned `World` in `Game`).
-`CurStarDescPtr` becomes `World::current_star` in the same series.
+`GlobData` goes through Stage B and Stage C in one unit (U4-01): a mechanical commit
+moves its 689 references in 111 files to `World` accessors and a semantic commit
+makes it the owned `World` in `Game`, so no accessor layer over the static survives;
+`CurStarDescPtr` becomes `World::current_star` in the same unit. The GAME_STATE
+queues and `event_q` then move to `OrderedPool` behind `LinkQueue` views together
+with every consumer in every subsystem (comm, planets, starbase, ui, front_end,
+battle, ships, navigation, savegame), and `collections/queue.rs` is deleted in the
+same unit with its `abi/` wrappers and re-exports and the queue accessors of
+`mainloop/state_abi.rs` (U4-02, `queue_calls` = 0).
 
 Removes: `GlobData`; `CurStarDescPtr`; `GLOBAL_GAME_STATE` and both
 `GLOBAL_STATE_FILES` (`state/ffi.rs:15-16`, `state/state_file.rs:321`); string-keyed
@@ -425,7 +442,7 @@ the root modules into `uqm-engine`; the state-file byte layouts move to `uqm-sav
 Verification: V1 (with `star-contact`), V2, V3b through `snapshot`/`apply` against
 the Phase 0 captures, full V4 (45 `load-*` scenarios and the connected campaign
 producers), V5. Size: about 130 files, 10-14k lines, mostly mechanical.
-Units: P4-01 to P4-07.
+Units: U4-01 to U4-04.
 
 ### Phase 5: navigation and planets
 
@@ -445,10 +462,12 @@ entries; `cfg_not_test_modules` ≤ 11. Verification: V1 (`hyperspace`,
 `solar-flight`, `lander`, `new-game`, `star-contact`), `tests/planets_parity.rs`
 against its C-captured fixtures through the new API, V2, V3, V4, V5.
 `abi/navigation_abi.rs` moves to Phase 6: 14 `ui` and 7 `front_end` files import it,
-plus 16 others that P6-04 switches. The solar system work is four PRs: the session
-and IP flight, then orbit, scan and starmap, then planet side with the
-`global_state` import swap (93 importers) and the ABI deletion.
-Size: about 110 files, 15-17k lines. Units: P5-01 to P5-06.
+plus 16 others that U6-04 switches. All generators convert in one unit (U5-01), so
+the vtable is never a second dispatch path. The solar system work is two units: the
+session with IP flight, orbit, scan, starmap and every `pSolarSysState` reader
+(U5-02), then planet side with the `global_state` import swap (93 importers) and the
+ABI deletion (U5-03).
+Size: about 110 files, 15-17k lines. Units: U5-01 to U5-04.
 
 ### Phase 6: comm, starbase and menus
 
@@ -461,21 +480,26 @@ ui and front_end `extern_c_fn` 119 → 0, `static_mut` 65 → 0; the ten `ui` mo
 `front_end/cnctdlg.rs` stop being `#![cfg(not(test))]`; `abi/navigation_abi.rs`;
 `app::bridge` and its budget. The last unit splits `uqm-content` and `uqm-modes`.
 
-The content split is prepared in a semantic PR (P6-02): `ScriptApi` becomes the
-content trait `DialogueHost`; the `CLocData`/`CommData` descriptors become content
-data; dispatch constants move to the engine; the `LiveScript` adapter, which calls
-comm and ui directly (`comm/races/script.rs:65-89`), becomes `modes::comm::Host {
-game, comm }`; each race's `live` module (`comm/races/orz.rs:846-875`) becomes an
-entry in a modes-side table. P6-04 then brings `planned.uqm-content` and
-`planned.uqm-modes` (counted from P0-04) to 0, so the move PR P6-05 finds nothing.
+The comm session comes first (U6-01): `COMM_STATE`, `COMM_DATA`, the oscilloscope
+and the other comm runtime statics become the `Comm` session, and every reader and
+writer moves to it in the same PR, including hail, the comm ABI helpers, the locdata
+copier, credits and the dialogue adapters, whose callbacks take the session. The
+dialogue host boundary follows (U6-02): `ScriptApi` becomes the content trait
+`DialogueHost`; the `CLocData`/`CommData` descriptors become content data; dispatch
+constants move to the engine; the `LiveScript` adapter, which calls comm and ui
+directly (`comm/races/script.rs:65-89`), becomes `modes::comm::Host { game, comm }`;
+each race's `live` module (`comm/races/orz.rs:846-875`) becomes an entry in a
+modes-side table. The last unit (U6-04) brings `planned.uqm-content` and
+`planned.uqm-modes` (counted from U0-03) to 0 in its semantic commits, so its move
+commit finds nothing.
 
 Exit criteria: comm, starbase, ui and front_end have no `ffi`/`unsafe` baseline
 entries; `cfg_not_test_modules` = 0; `bridge_calls` = 0; dialogue script bodies in
 `comm/races/*` are unchanged; `uqm-content` and `uqm-modes` are
 members with `#![forbid(unsafe_code)]`. Verification: V1 (`comm`, `new-game`),
 dialogue unit tests, `starbase-visit-v1`, `main-menu-v1`, V2, V3, V4, V5.
-Size: about 120 files, 12-15k lines, plus the mechanical moves. Units: P6-01 to P6-05;
-P6-03 depends only on Phase 4 and P6-01 on P5-01, so both may run during Phase 5.
+Size: about 120 files, 13-16k lines, plus the mechanical moves. Units: U6-01 to U6-04;
+U6-03 depends only on Phase 4 and U6-01 on U5-01, so both may run during Phase 5.
 
 ### Phase 7: platform and content
 
@@ -489,18 +513,20 @@ canvases (become Rust pixel buffers, SDL used only to present); the `uio_*` C-st
 API (becomes `uqm_platform::vfs::Vfs` behind the `Files` port, which covers read,
 write, remove and list); `res_*` (becomes
 `ResourceCache`); decoder vtables (become `trait Decoder`); `threading/legacy_abi.rs`;
-the present hook of P1-05 (the caller calls `Observer::presented`). Graphics
+the present hook of U1-04 (the caller calls `Observer::presented`). Graphics
 `no_mangle` 243 → 0, `extern_c_fn` 295 → 0.
 
-Order: video's canvas, surface and screen-format use moves with graphics (P7-01,
-P7-03), leaving decoding and audio to P7-06. The Files port with one Vfs comes first
-(P7-04), then resource, string and graphics loading (P7-05), decoders (P7-06), and
-saves, LZH and melee team files with the `uio_*` deletion (P7-07). Automation's POSIX
-process, descriptor and fd-relative file calls (`automation/child_session.rs`,
-`native_runner.rs`, `interrupt.rs`) and `platform.rs`'s descriptor and errno
-operations move behind `engine::platform::os` (P7-09). The last unit carves
-`uqm-platform` out of `uqm-engine`, with `os` and the CoreGraphics and sandbox parts
-of automation.
+Order: the render pipeline (canvases, present, DCQ, contexts) moves with video's
+canvas, surface and present use (U7-01). The Files port with one Vfs then arrives
+with every one of its callers (resource, strings, graphics loading, decoder streams,
+video, saves, LZH, melee team files) and deletes `uio_*` (U7-03). Drawables, frames,
+fonts and colour maps move with `ResourceCache` and video's screen-format call
+(U7-02), then decoders and the audio port (U7-04); input, threading and the clock
+run beside them (U7-05). Automation's POSIX process, descriptor and fd-relative file
+calls (`automation/child_session.rs`, `native_runner.rs`, `interrupt.rs`) and
+`platform.rs`'s descriptor and errno operations move behind `engine::platform::os`
+in the unit that then carves `uqm-platform` out of `uqm-engine`, with `os` and the
+CoreGraphics and sandbox parts of automation (U7-06).
 
 Exit criteria: `unsafe` only in `UNSAFE_ALLOWED` modules; `uqm-engine` carries
 `#![forbid(unsafe_code)]` and no OS crate dependency; `FrameSetRef` handles backed by
@@ -508,7 +534,7 @@ Exit criteria: `unsafe` only in `UNSAFE_ALLOWED` modules; `uqm-engine` carries
 Verification: V1 with canvas digests for every corpus entry, V2, V3, V4 including the
 intro presentation (`tests/intro_presentation.rs`) and real-window screenshots
 inspected for every smoke scenario, five release builds, V5.
-Size: about 170 files, 24-28k lines. Units: P7-01 to P7-10.
+Size: about 170 files, 24-28k lines. Units: U7-01 to U7-06.
 
 ### Phase 8: closeout
 
@@ -522,7 +548,7 @@ Exit criteria: crate-wide `static_mut` = 0, `extern_c_fn` = 0 outside platform,
 `bridge_calls` = 0, `allow` attributes only the platform `unsafe_code` allows,
 `unwrap`/`expect` in production = 0, coverage ≥ 70%. Remaining baseline entries are
 LOC and complexity only. Verification: full V1-V5, with the `S8` bundle once
-`abi-check` is gone. Size: about 40 files, net deletion. Units: P8-01, P8-02.
+`abi-check` is gone. Size: about 40 files, net deletion. Units: U8-01.
 
 ## 6. Review response
 
@@ -560,13 +586,12 @@ include all four:
 
 ## 7. Work units and agents
 
-[work-items.md](work-items.md) splits the phases into 63 work units (P0 8, P1 6,
-P2 16, P3 3, P4 7, P5 6, P6 5, P7 10, P8 2), each one PR with its dependencies,
-reserved and shared files, scope, acceptance commands (V4 scenario ids included),
-exit counters and risks, plus the waves, the critical path (34 units) and the label
-set. work-items.yaml holds the same data as the input for creating
-the issues; it is not committed, and the issues are the source of truth once they
-exist. Agents follow [AGENTS.md](AGENTS.md).
+[work-items.md](work-items.md) splits the phases into 40 work units (P0 6, P1 4,
+P2 9, P3 2, P4 4, P5 4, P6 4, P7 6, P8 1), each one PR with its dependencies,
+reserved and shared files, scope, deletes, acceptance commands (V4 scenario ids
+included), exit counters and risks, plus the transitional adapters, the waves (28),
+the critical path (24 units), the mapping from the earlier 63 units and the label
+set. The issues are the source of truth once they exist. Agents follow [AGENTS.md](AGENTS.md).
 
 ## 8. Review 2 response
 
@@ -599,3 +624,52 @@ pool, one graphics unit and two solar units. Merged: the corpus and the fixtures
 and Stage B infrastructure with the hook change. P6-02 was rewritten in place as the
 dialogue boundary. Merging further would join unrelated work or mix mechanical and
 semantic changes, so 63 is the count against the target of about 60.
+
+The unit ids in the table above are those of the 63-unit breakdown; the consolidation
+below maps each of them to one current unit (work-items.md, "Old units").
+
+### 8.1 Consolidation
+
+The owner's rule: the change and the migration happen in the same unit, and removing
+the dead code is part of its acceptance; 63 PRs were too many. Every unit is now a
+vertical slice that introduces the new representation or API, migrates every user and
+deletes the replaced code, with a Deletes list and a zero-count check per item
+(`cargo xtask quality ident`, added to U0-02 for this). A semantic unit may reach about
+6,000 changed lines; mechanical commits do not count.
+
+Unit count: 63 before, 40 now (P0 6, P1 4, P2 9, P3 2, P4 4, P5 4, P6 4, P7 6, P8 1).
+The merges join units that only separated adding from migrating or deleting: the pool
+with Stage C; Stage B with the process loop; queue views with the queue storage;
+`World` accessors with the owned `World`; the first generators with the vtable
+deletion; the solar session with orbit and scan; the Files port with its last callers and the `uio_*` deletion; each crate's
+semantic preparation with its move. Races pair into units of about 5,400 lines with at
+most one hard race each; Orz joins the ships infrastructure so that the unit converting
+the last legacy hook deletes `Hook::Legacy`. Seven transitional adapters remain, each
+with its deleting unit (work-items.md, "Transitional adapters"); the three-stage
+storage transition is kept only for the battle records, where unconverted races
+dereference them. The comm session and the dialogue boundary were merged at first and
+are two units again: once every comm-global reader (hail, the comm ABI helpers, the
+locdata copier, credits) and the comm runtime statics joined the session unit, it
+passed 6,000 lines. U6-01 moves every reader and writer, the dialogue adapters
+included, and U6-02 changes only the adapters' form, so no adapter sits between them.
+The critical path is 24 units over 28 waves.
+
+Each fix of the table above still holds:
+
+| # | Where it lives now |
+|---|---|
+| 1 | U0-02 handles all 16 macros with tests; debt lints arrive with their classifier in U0-03 |
+| 2 | U1-01 unifies records and statics only; U1-02 changes ids, `Cx`, bridge, hook enums and every call site in one transition |
+| 3 | U2-06 converts pickers, encounter build, sounds and the remaining battle files; U2-09 depends on it through U2-08 and asserts `raw_records` = 0 |
+| 4 | U4-02 moves every queue consumer, the `abi/` wrappers and the `mainloop/state_abi.rs` queue accessors included, and swaps the storage in one PR; `queue_calls` = 0 and `queue.rs` deleted |
+| 5 | U6-02 is the dialogue host boundary, after U6-01 moves every comm-global reader and writer into the session; U6-04 requires both planned counters at 0 before its move commit |
+| 6 | U7-03: one Vfs, `Files` with read, write, remove, list and stat, every caller converted, `uio_*` deleted last in the same PR |
+| 7 | video presentation moves in U7-01, the screen-format call in U7-02; U7-04 keeps decoding and audio |
+| 8 | U7-06 moves the POSIX process, descriptor and errno code behind `os` before its carve commit |
+| 9 | U0-05 routes `now_ms` through `time::source` with an order test |
+| 10 | U0-01 uses S0; U0-06 depends on U0-03, U0-04 and U0-05; `OrderedPool` (U2-09) depends on U1-04 |
+| 11 | race units sized by source plus test lines, one hard race each; semantic units at most about 6,000 lines |
+| 12 | AGENTS.md "Unsafe during the migration" and "Goldens" (creation by U0-06 only) |
+| 13 | one filter per invocation; `--expect` and `test $? -eq 1` forms; `S8` in U8-01; replay summary test in U0-05; `parity counts` and goldens in U0-06 |
+| 14 | every unit lists its exact V4 scenario ids, unions of the merged units' lists |
+| 15 | `touches` and `shared` per unit, the one shared-file rule, waves and critical path recomputed |
