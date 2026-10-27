@@ -140,12 +140,16 @@ pub(super) unsafe fn blit(
 ) {
     if mode.kind == DRAW_REPLACE {
         if src != dst
-            && super::alpha::blit(
-                sdl2::surface::SurfaceRef::from_ll(src),
-                src_r.as_ref().copied(),
-                sdl2::surface::SurfaceRef::from_ll_mut(dst),
-                dst_r.as_mut(),
-            )
+            // SAFETY: the caller owns live surfaces and rectangles; distinct surfaces permit
+            // an immutable source borrow alongside the exclusive destination borrow.
+            && unsafe {
+                super::alpha::blit(
+                    sdl2::surface::SurfaceRef::from_ll(src),
+                    src_r.as_ref().copied(),
+                    sdl2::surface::SurfaceRef::from_ll_mut(dst),
+                    dst_r.as_mut(),
+                )
+            }
         {
             return;
         }
