@@ -123,6 +123,7 @@ unsafe fn display_elements(queue: &CQueue) -> impl Iterator<Item = &Element> {
 }
 
 fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
+    let identity = journal.identity(std::ptr::from_ref(element) as usize);
     for (name, pointer) in [
         ("current.frame", element.current.frame),
         ("next.frame", element.next.frame),
@@ -131,7 +132,13 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
             element.intersect_control.intersect_stamp.frame,
         ),
     ] {
-        journal.write_frame(pointer as usize, fields, &format!("{prefix}.{name}"));
+        journal.write_element_frame(
+            &identity,
+            name,
+            pointer as usize,
+            fields,
+            &format!("{prefix}.{name}"),
+        );
     }
     for (name, array) in [
         ("current.farray", element.current.farray),
@@ -150,20 +157,13 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
                 format!("frame-single:{}", frame["frame.owner"]),
             );
         }
-        let frames = if address == 0 {
-            &[0][..]
-        } else {
-            journal
-                .frame_set(address)
-                .unwrap_or_else(|| panic!("frame set was not registered"))
-        };
-        journal.write_frame(frames[0], fields, &format!("{prefix}.{name}"));
-        if address != 0 {
-            fields.insert(format!("{prefix}.{name}.role"), journal.parent(address));
-            for (view, frame) in frames.iter().enumerate() {
-                journal.write_frame(*frame, fields, &format!("{prefix}.{name}.{view}"));
-            }
-        }
+        journal.write_element_frame_set(
+            &identity,
+            name,
+            address,
+            fields,
+            &format!("{prefix}.{name}"),
+        );
     }
 }
 
@@ -212,11 +212,55 @@ mod tests {
         element.current.frame = views[0];
         element.current.farray = views.as_mut_ptr();
         journal.register_frame(views[0] as usize, 0, frame.Index);
+        journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
         assert_eq!(fields["element.current.frame.index"], "7");
         assert_eq!(fields["element.current.farray.0.index"], "7");
         assert_eq!(fields["element.next.frame.owner"], "none");
+    }
+
+    #[test]
+    fn linked_element_keeps_retired_frame_binding_when_allocator_reuses_address() {
+        let directory = super::super::test_directory();
+        let mut journal = Journal::create(directory.path()).expect("journal");
+        // SAFETY: the local frame has only scalar and pointer fields and stays borrowed.
+        let mut frame: frame_desc = unsafe { std::mem::zeroed() };
+        frame.Index = 7;
+        let pointer = std::ptr::from_mut(&mut frame).cast();
+        let mut views = [pointer];
+        let mut element = Element::new();
+        element.current.frame = pointer;
+        element.current.farray = views.as_mut_ptr();
+        journal.allocate(std::ptr::from_ref(&element) as usize);
+        let owner = journal.register_resource(100, "drawable");
+        journal.register_frame(pointer as usize, 100, 7);
+        journal.register_frame_set(
+            views.as_ptr() as usize,
+            vec![pointer as usize],
+            "old-set".into(),
+        );
+        let mut fields = Fields::new();
+        visuals(&mut fields, "element", &element, &mut journal);
+        journal.retire_drawable(100);
+        journal.register_resource(100, "drawable");
+        journal.register_frame(pointer as usize, 100, 99);
+        journal.register_frame_set(
+            views.as_ptr() as usize,
+            vec![pointer as usize],
+            "new-set".into(),
+        );
+        visuals(&mut fields, "element", &element, &mut journal);
+        assert_eq!(fields["element.current.frame.owner"], owner);
+        assert_eq!(fields["element.current.frame.index"], "7");
+        assert_eq!(fields["element.current.frame.retired"], "true");
+        assert_eq!(fields["element.current.farray.0.owner"], owner);
+        assert_eq!(fields["element.current.farray.role"], "old-set");
+        journal.allocate(std::ptr::from_ref(&element) as usize);
+        visuals(&mut fields, "element", &element, &mut journal);
+        assert_eq!(fields["element.current.frame.index"], "99");
+        assert_eq!(fields["element.current.frame.retired"], "false");
+        assert_eq!(fields["element.current.farray.role"], "new-set");
     }
 
     #[test]

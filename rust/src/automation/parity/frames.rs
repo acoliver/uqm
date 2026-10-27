@@ -2,7 +2,7 @@
 use super::{Fields, Journal};
 
 impl Journal {
-    pub(super) fn retire_drawable(&mut self, address: usize) {
+    pub(in crate::automation) fn retire_drawable(&mut self, address: usize) {
         let owner = self.resource(address);
         self.retired_drawables.insert(owner.clone());
         self.events.push(format!("drawable-free {owner}"));
@@ -38,21 +38,7 @@ impl Journal {
         fields: &mut Fields,
         prefix: &str,
     ) {
-        let (owner, index) = if address == 0 {
-            ("none", 0)
-        } else {
-            let (owner, index) = self
-                .frames
-                .get(&address)
-                .unwrap_or_else(|| panic!("unobserved frame allocation at {address:#x}"));
-            (owner.as_str(), *index)
-        };
-        fields.insert(format!("{prefix}.owner"), owner.into());
-        fields.insert(format!("{prefix}.index"), index.to_string());
-        fields.insert(
-            format!("{prefix}.retired"),
-            self.retired_drawables.contains(owner).to_string(),
-        );
+        self.write_frame_identity(&self.frame_identity(address), fields, prefix);
     }
 }
 

@@ -6,6 +6,7 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
+mod bindings;
 mod frames;
 
 pub type Fields = BTreeMap<String, String>;
@@ -36,6 +37,7 @@ pub struct Journal {
     frames: BTreeMap<usize, (String, u16)>,
     frame_sets: BTreeMap<usize, Vec<usize>>,
     retired_drawables: std::collections::BTreeSet<String>,
+    bindings: bindings::Bindings,
 }
 
 impl Journal {
@@ -70,6 +72,7 @@ impl Journal {
             frames: BTreeMap::new(),
             frame_sets: BTreeMap::new(),
             retired_drawables: std::collections::BTreeSet::new(),
+            bindings: bindings::Bindings::default(),
         })
     }
 
@@ -85,6 +88,7 @@ impl Journal {
     }
 
     pub fn allocate(&mut self, address: usize) {
+        self.forget_element_images(address);
         if address == 0 {
             self.events.push("pool-full".into());
             return;
@@ -105,6 +109,7 @@ impl Journal {
     }
 
     pub fn reset_pool(&mut self) {
+        self.bindings = bindings::Bindings::default();
         self.slots.clear();
         self.next_slot = 0;
     }
@@ -188,7 +193,8 @@ impl Journal {
             match event {
                 Event::Allocate(address) => self.allocate(address),
                 Event::Free(address) => {
-                    self.events.push(format!("free {}", self.identity(address)))
+                    self.events.push(format!("free {}", self.identity(address)));
+                    self.forget_element_images(address);
                 }
                 Event::ResetPool => self.reset_pool(),
                 Event::SpaceActive(active) => {
