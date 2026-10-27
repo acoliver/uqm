@@ -3,6 +3,29 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 #[test]
+fn release_recording_uses_locked_sdl2_instead_of_a_system_sdl3_replacement() {
+    let command = recording::build_command(Path::new("/source"));
+    let args: Vec<_> = command
+        .get_args()
+        .map(|arg| arg.to_str().unwrap())
+        .collect();
+    assert_eq!(command.get_current_dir(), Some(Path::new("/source/rust")));
+    assert_eq!(
+        args,
+        [
+            "build",
+            "--release",
+            "--locked",
+            "--bin",
+            "uqm",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,bundled-sdl"
+        ]
+    );
+}
+
+#[test]
 fn save_runner_command_uses_actual_test_entry_and_clears_debug_filter() {
     let command = recording::saves::command(
         Path::new("/source"),

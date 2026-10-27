@@ -128,24 +128,24 @@ fn sibling(path: &Path, suffix: &str) -> Result<PathBuf> {
     Ok(path.with_file_name(format!("{name}{suffix}")))
 }
 
+pub(super) fn build_command(root: &Path) -> Command {
+    let mut command = Command::new(crate::quality::cargo());
+    command.current_dir(root.join("rust")).args([
+        "build",
+        "--release",
+        "--locked",
+        "--bin",
+        "uqm",
+        "--no-default-features",
+        "--features",
+        "audio_heart,debug-process,bundled-sdl",
+    ]);
+    command
+}
+
 fn build_game(root: &Path, diagnostics: &Path) -> Result<PathBuf> {
     let logs = diagnostics.join("build");
-    let result = process::run(
-        Command::new(crate::quality::cargo())
-            .current_dir(root.join("rust"))
-            .args([
-                "build",
-                "--release",
-                "--locked",
-                "--bin",
-                "uqm",
-                "--no-default-features",
-                "--features",
-                "audio_heart,debug-process",
-            ]),
-        Duration::from_secs(1800),
-        &logs,
-    )?;
+    let result = process::run(&mut build_command(root), Duration::from_secs(1800), &logs)?;
     process::require_success(result, "release debug-process game build", &logs)?;
     let target = match std::env::var_os("CARGO_TARGET_DIR") {
         Some(path) => {
