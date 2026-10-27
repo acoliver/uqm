@@ -246,7 +246,9 @@ fn planned_owner(module: &str) -> Option<&'static str> {
 fn below_planned(crate_name: &str, target: &str) -> bool {
     match crate_name {
         "uqm-engine" => {
-            PLANNED[0].1.iter().any(|r| prefix(target, r)) || layer(target) == Layer::Save
+            prefix(target, "engine")
+                || PLANNED[0].1.iter().any(|r| prefix(target, r))
+                || layer(target) == Layer::Save
         }
         "uqm-content" => matches!(layer(target), Layer::Content | Layer::Engine | Layer::Save),
         "uqm-modes" => matches!(
@@ -448,6 +450,31 @@ mod tests {
             subsystem: "example".into(),
             value: 0,
         }
+    }
+    #[test]
+    fn staging_engine_is_a_planned_target_with_its_own_outbound_budget() {
+        assert!(reference(
+            &source("graphics::native"),
+            "crate::engine::battle::record::Queue"
+        )
+        .is_empty());
+        assert!(reference(
+            &source("engine::battle::record"),
+            "crate::graphics::frame::Frame"
+        )
+        .is_empty());
+        let outbound = reference(
+            &source("engine::battle::legacy"),
+            "crate::mainloop::GlobData",
+        );
+        assert!(outbound.iter().any(|f| f.metric == "planned_engine_core"));
+        assert!(!outbound.iter().any(|f| f.metric == "planned.uqm-engine"));
+        assert!(outbound.iter().any(|f| f.metric == "module_edges"));
+        assert!(
+            reference(&source("graphics::native"), "crate::engine_extra::bad")
+                .iter()
+                .any(|f| f.metric == "planned.uqm-engine")
+        );
     }
     #[test]
     fn engine_paths_and_link_name_statics_block_the_split() {

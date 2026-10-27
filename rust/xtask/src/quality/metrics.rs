@@ -52,6 +52,7 @@ impl Finding {
 #[derive(Default, Debug)]
 pub struct Measurement {
     pub findings: Vec<Finding>,
+    pub declarations: Vec<Finding>,
     pub handlers: BTreeSet<(String, String)>,
     pub identifiers: Vec<Finding>,
 }

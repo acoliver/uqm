@@ -134,6 +134,8 @@ Production code is defined by the source walk of section 3.2.
 | `deny` | `cargo deny --locked check advisories bans licenses sources` with `rust/deny.toml` | 0 findings |
 | `parity record\|check` | Replay corpus (plan.md section 2) against `rust/tests/golden/parity/` | exact match |
 | `quality report <counter>[:<scope>]` | Prints one counter for a subsystem, file or crate; `--expect N` fails unless it equals N, `--expect-only <scopes>` fails if any other scope is nonzero. Acceptance commands use it for zero checks | as asked |
+| `quality budget <name> <value>` | Records a finite transition limit in `[budget]`; creates an absent budget or lowers an existing one. Raising requires `--allow-growth`; CI also checks new or raised limits against the base using the owner's `quality-growth-approved` label | sum of the named counter across production files ≤ limit |
+| `quality move [--prefix] <old identity> <new identity>` | Measures declarations at `--base` (default `origin/main`) and the working tree, then transfers their recorded debt. Without `--prefix`, the source must be an individual declaration; with it, a module/crate can move as a unit | source absent, destination present, no duplicate credit or metric growth |
 | `quality ident <Name>... [--defs]` | Counts the identifier and path tokens naming each argument, by syn tokens, in every target of every workspace member (test targets and `#[cfg(test)]` items included, unlike the counters), outside comments, doc comments and string literals; C traceability doc lines (`/// C: <name>`) do not count. With `--defs` it counts definitions only: a `fn` with a body, `struct`, `enum`, `union`, type alias, `trait`, `const`, `static` with an initializer, `mod`, `macro_rules!` or field; extern-block declarations and `use` re-exports are not definitions. `--expect N` and `--expect-only <scopes>` work as for `quality report`. Added in U0-02; every Deletes list uses it for zero-count checks | as asked |
 | `abi-check` | Existing (`xtask/src/abi_check.rs`); extended in U0-01 to foreign `static` types and to every workspace crate; a foreign declaration whose definition is in a crate the declaring crate does not depend on fails | deleted in U8-01 |
 
@@ -177,6 +179,12 @@ functions only through `#[allow]`. Data tables (`hq_rules.rs::rules`,
   debt transfers (section 4, rule 3). A crate split moves whole directories, so
   `cargo xtask quality move --prefix uqm::graphics uqm-engine::graphics` records one
   `[moved]` prefix line that transfers every counter and lint entry under it.
+  An individual declaration uses its full identity without `--prefix`, for example
+  `cargo xtask quality move uqm::game_init::kernel_abi::disp_q uqm::engine::battle::legacy::disp_q`.
+  FFI counters remain subsystem totals; xtask reaggregates the base findings with
+  only that declaration relocated. Other declarations in the source subsystem stay
+  in place and keep their remaining debt. Declarations with no remaining metric
+  findings are still tracked, so deleting an attribute cannot hide a retained source.
 - **Tests.** xtask unit tests cover those two `load` functions, the `include!` under
   `allow(clippy::all)` in `ships/native.rs:4-12`, `global!`, and a `cfg`-split item.
 
@@ -279,6 +287,9 @@ checks four things.
    2.2). The move PR requires 0. The staging module `rust/src/engine/` is counted the
    same way but as the budget counter `planned_engine_core` (set in U1-01, 0 at
    U4-04), because its Stage B code reaches `GlobData` until Phase 4.
+   References into `src/engine/` from planned engine members are inside the future
+   `uqm-engine` boundary. Outbound staging references still count separately against
+   `planned_engine_core`, and ordinary module-edge checks still apply.
    `planned.uqm-content` and `planned.uqm-modes` must be 0 in U6-04's semantic
    commits, before its move commit.
 4. **Banned `std` APIs** in `uqm-save`, `uqm-content`, `uqm-modes`, and `uqm-engine`
@@ -295,54 +306,60 @@ counters and the global limit for LOC/complexity. Values below are measured wher
 stated, otherwise placeholders until Phase 0 regenerates the file.
 
 ```toml
-[subsystem.battle]           # line-regex measurement at 0ba2845ad
-static_mut = 22
-extern_c_fn = 160
-no_mangle = 120
-unsafe_lines = 4263          # about 40% of 10,657 production lines
+layers = true
 
-[function."battle::process_native::process_collisions"]
-loc = 236                    # placeholder
-cyclomatic = 58              # placeholder
+[entry]                      # counter|metric|full identity
+"ffi|static_mut|uqm::battle" = 22                 # illustrative limits
+"complexity|loc|uqm::battle::process_native::process_collisions" = 236
+"allows|clippy::all|uqm::ships::native::abi" = 0
+"layers|planned.uqm-engine|uqm::graphics::ffi::@file" = 1
 
-[allow."src/ships/native.rs"."clippy::all"."ships::native::abi"]
-loc = 0                      # placeholder: effective LOC covered
+[budget]                     # generated when the planned transition starts
+bridge_calls = { limit = 0, ends = "phase-6" }       # illustrative limits
+legacy_hooks = { limit = 0, ends = "phase-2" }
+planned_engine_core = { limit = 0, ends = "phase-4" }
 
-[budget]                     # set by the PR that creates each counter (U1-01, U1-02); limits only fall
-bridge_calls = { limit = 0, ends = "phase-6" }   # placeholder limit; 0 before the modes split
-legacy_hooks = { limit = 0, ends = "phase-2" }   # placeholder limit
-planned_engine_core = { limit = 0, ends = "phase-4" } # placeholder limit; staging module
+[moved]                      # one source credits one destination
+"uqm::graphics" = "uqm-engine::graphics"           # prefix move
+"uqm::game_init::kernel_abi::disp_q" = "uqm::engine::battle::legacy::disp_q"
 
-[moved]                      # debt transfers, "old key" = "new key"; a split adds
-                             # prefix lines: "uqm::graphics" = "uqm-engine::graphics"
+[lint.linux]                 # independent debt counts for each CI host
+"clippy::unwrap_used|uqm::graphics::draw::@file" = 1
 
-[crate_os."uqm-engine"]      # OS crates outside uqm-platform; removable only
-deps = ["cpal", "gl", "libc", "rodio", "sdl2", "sdl2-sys", "windows-sys"]
-
-[planned]
-"uqm-engine" = 20            # references blocking the split; 0 before the move PR
-
-[counter]
-cfg_not_test_modules = 16
-advisory_ignores = 0
+[lint.macos]
+"clippy::unwrap_used|uqm::graphics::draw::@file" = 1
 ```
 
 Rules enforced by xtask:
 1. **Measured ≤ baseline.** A value above its entry, or a violator with no entry,
-   fails. A budget counter above its limit fails.
+   fails. A budget counter is summed across production files and fails above its
+   finite limit, including with `--allow-growth`. Budgeted transition counters use
+   this limit instead of the ordinary per-identity ratchet; unrelated metrics do not.
+   Supported transition names and end phases are `bridge_calls` (phase 6),
+   `legacy_hooks` (phase 2) and `planned_engine_core` (phase 4).
 2. **Headroom is reported, not failed.** A value below its entry prints a CI notice.
-   `cargo xtask quality --tighten` rewrites the baseline deterministically (sorted
-   keys, measured values) in one command; phase-exit PRs run it.
+   `cargo xtask quality --tighten` rewrites ordinary entries deterministically
+   (sorted keys, measured values) in one command; phase-exit PRs run it. It preserves
+   finite budgets. Use `cargo xtask quality budget <name> <value>` to set a missing
+   budget or lower one. A local raise needs `--allow-growth`; adding a positive
+   limit or raising an existing limit against `--base` needs owner approval in CI,
+   even if the measured counter is below the old limit.
 3. **No growth against the base.** With `--base <ref>`, syn-measured entries are
    compared with values measured from the base tree (`git archive <ref>` into
    `target/xtask-base`, no build), so headroom from an earlier PR cannot be spent;
    lint counts are compared with the base's baseline file. Allowed without a label:
    - a budget counter growing up to its limit (raising a limit is growth);
    - a debt transfer: `cargo xtask quality move <old> <new>` adds a `[moved]` line;
-     the new entry is accepted if its source existed at base and is now absent, each
-     source credits one target, and no metric's crate total rises. A moved function
-     keeps its own entry and is not split. `--tighten` drops `[moved]` lines whose
-     target is already in the base baseline. For `unsafe` metrics moved across
+     the new entry is accepted if its source existed at base and is now absent and
+     the destination exists. Individual statics, `repr(C)` records, exported
+     functions and raw-record declarations transfer their measured share of each
+     subsystem metric; the rest of the source subsystem need not disappear.
+     Sources and targets cannot overlap other transfers, an existing destination
+     cannot absorb a second source, and each metric's workspace total cannot rise.
+     A moved function keeps its own entry and is not split. `--tighten --base <ref>`
+     drops transfers whose destinations are already present at base, including
+     declarations below the ordinary debt thresholds. Item transfers retained after
+     landing do not receive another credit. For `unsafe` metrics moved across
      subsystems or crates (a caller's `unsafe` into an engine wrapper), the check is
      that the workspace total does not rise.
 4. **Coverage floors.** Workspace line coverage must be at least 70%, and each

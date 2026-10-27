@@ -233,3 +233,137 @@ fn layers_follow_aliases_relative_imports_and_foreign_symbol_names() {
     assert_eq!(measured.report("planned.uqm-engine", None).unwrap(), 3);
     assert_eq!(measured.report("planned.uqm-content", None).unwrap(), 1);
 }
+
+#[test]
+fn declaration_move_keeps_the_source_subsystem_live() {
+    let base = fixture(
+        &[(
+            "src/lib.rs",
+            "mod battle { #[no_mangle] static mut MOVED: u8 = 0; static mut KEPT: u8 = 0; }",
+        )],
+        None,
+        false,
+    );
+    let current = fixture(&[("src/lib.rs", "mod battle { static mut KEPT: u8 = 0; } mod engine { #[no_mangle] static mut MOVED: u8 = 0; }")], None, false);
+    let mut baseline = super::super::baseline::Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move("uqm::battle::MOVED", "uqm::engine::MOVED", &current, &base)
+        .unwrap();
+    super::super::baseline::validate_transfers(&current, &base, &baseline.moved).unwrap();
+}
+
+#[test]
+fn declaration_transfers_conserve_each_metric_and_cannot_reuse_credit() {
+    use super::super::baseline::{check_limits, Baseline};
+    let declarations = "#[no_mangle] static mut MOVED: u8 = 0; #[repr(C)] struct ELEMENT { value: u8 } #[no_mangle] extern \"C\" fn exported(value: *mut ELEMENT) {}";
+    let before = format!("mod battle {{ {declarations} static mut KEPT: u8 = 0; }}");
+    let after =
+        format!("mod battle {{ static mut KEPT: u8 = 0; }} mod engine {{ {declarations} }}");
+    let base = fixture(&[("src/lib.rs", &before)], None, false);
+    let current = fixture(&[("src/lib.rs", &after)], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    for name in ["MOVED", "ELEMENT", "exported"] {
+        baseline
+            .add_move(
+                &format!("uqm::battle::{name}"),
+                &format!("uqm::engine::{name}"),
+                &current,
+                &base,
+            )
+            .unwrap();
+    }
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    assert_eq!(baseline.entries["ffi|static_mut|uqm::battle"], 1);
+    assert_eq!(baseline.entries["ffi|static_mut|uqm::engine"], 1);
+    for metric in [
+        "static_mut",
+        "repr_c",
+        "no_mangle",
+        "extern_c_fn",
+        "raw_pointer_parameters",
+        "raw_records",
+    ] {
+        let total = |entries: &BTreeMap<String, u64>| {
+            entries
+                .iter()
+                .filter(|(k, _)| k.starts_with(&format!("ffi|{metric}|")))
+                .map(|(_, v)| v)
+                .sum::<u64>()
+        };
+        assert_eq!(
+            total(&base.baseline()),
+            total(&baseline.entries),
+            "{metric}"
+        );
+    }
+    assert!(baseline
+        .add_move(
+            "uqm::battle::MOVED",
+            "uqm::engine::another",
+            &current,
+            &base
+        )
+        .is_err());
+    let mut growth = current.baseline();
+    *growth.get_mut("ffi|static_mut|uqm::engine").unwrap() += 1;
+    assert!(check_limits(&growth, &baseline.entries, &BTreeMap::new(), true).is_err());
+    let retained = fixture(
+        &[("src/lib.rs", &format!("{after} mod duplicate {{}}"))],
+        None,
+        false,
+    );
+    let next =
+        super::super::transfers::limits(&baseline.entries, &retained, &current, &baseline.moved)
+            .unwrap();
+    assert_eq!(
+        next, baseline.entries,
+        "already landed moves do not credit twice"
+    );
+    super::super::transfers::retire(&mut baseline.moved, &current);
+    assert!(baseline.moved.is_empty());
+}
+
+#[test]
+fn a_source_declaration_cannot_remain_even_when_its_ffi_debt_disappears() {
+    use super::super::baseline::Baseline;
+    let base = fixture(
+        &[("src/lib.rs", "mod battle { #[repr(C)] struct Record; }")],
+        None,
+        false,
+    );
+    let current = fixture(
+        &[(
+            "src/lib.rs",
+            "mod battle { struct Record; } mod engine { #[repr(C)] struct Record; }",
+        )],
+        None,
+        false,
+    );
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    assert!(baseline
+        .add_move(
+            "uqm::battle::Record",
+            "uqm::engine::Record",
+            &current,
+            &base
+        )
+        .unwrap_err()
+        .contains("still exists"));
+    assert!(baseline.moved.is_empty());
+    assert_eq!(baseline.entries, base.baseline());
+}
