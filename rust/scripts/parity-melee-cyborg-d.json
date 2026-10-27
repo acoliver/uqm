@@ -1,0 +1,88 @@
+{
+  "version": 2,
+  "name": "parity-melee-cyborg-d",
+  "seed": 42,
+  "fixture": "parity-melee-cyborg-d",
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 420
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 3,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 90
+    },
+    {
+      "action": "configure_parity_melee",
+      "ships": [
+        [
+          21,
+          22,
+          23,
+          24,
+          0,
+          7,
+          14
+        ],
+        [
+          21,
+          22,
+          23,
+          24,
+          0,
+          7,
+          14
+        ]
+      ],
+      "cyborg": true
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 60,
+      "max_ticks": 1200
+    },
+    {
+      "action": "run_parity_corpus",
+      "fleet": 3
+    },
+    {
+      "action": "capture",
+      "label": "two-opponents-each"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

@@ -122,6 +122,9 @@ pub unsafe extern "C" fn AllocDrawable(count: u16) -> *mut drawable_desc {
             (*frame).parent = drawable;
         }
     }
+    crate::collections::observation::record(crate::collections::observation::Event::Drawable(
+        drawable as usize,
+    ));
     drawable
 }
 /// # Safety
@@ -153,6 +156,9 @@ pub unsafe extern "C" fn DestroyDrawable(drawable: *mut drawable_desc) -> BOOLEA
     if drawable.is_null() {
         return 0;
     }
+    crate::collections::observation::record(crate::collections::observation::Event::DrawableFree(
+        drawable as usize,
+    ));
     super::gfxload::release_cel_data(drawable.cast());
     1
 }
@@ -222,6 +228,9 @@ pub unsafe extern "C" fn RotateFrame(frame: *mut frame_desc, angle: i32) -> *mut
     }
     let rotated = CaptureDrawable(drawable);
     if rotated.is_null() {
+        crate::collections::observation::record(
+            crate::collections::observation::Event::DrawableFree(drawable as usize),
+        );
         super::gfxload::release_cel_data(drawable.cast());
         return ptr::null_mut();
     }
@@ -271,6 +280,9 @@ unsafe fn matching_frame(frame: *mut frame_desc, width: i32, height: i32) -> *mu
     }
     let new = CaptureDrawable(drawable);
     if new.is_null() {
+        crate::collections::observation::record(
+            crate::collections::observation::Event::DrawableFree(drawable as usize),
+        );
         super::gfxload::release_cel_data(drawable.cast());
     }
     new

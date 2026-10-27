@@ -236,6 +236,11 @@ impl VelocityDesc {
         self.set_components(dx, dy);
     }
 
+    /// Inspect displacement without consuming this record's error accumulators.
+    pub fn preview_next_components(mut self, num_frames: u16) -> (i32, i32) {
+        self.get_next_components(num_frames)
+    }
+
     /// Gets the travel angle (0-63)
     pub fn get_travel_angle(&self) -> u16 {
         self.travel_angle
@@ -343,6 +348,24 @@ mod tests {
     use super::*;
 
     // -- Size Assertions --
+
+    #[test]
+    fn preview_preserves_every_accumulator_and_matches_mutating_projection() {
+        for (dx, dy) in [(33, -65), (i16::MIN as i32, i16::MAX as i32), (0, 0)] {
+            let mut velocity = VelocityDesc::default();
+            velocity.set_components(dx, dy);
+            velocity.get_next_components(3);
+            for frames in [0, 1, 17, u16::MAX] {
+                let before = velocity;
+                let mut expected = velocity;
+                assert_eq!(
+                    velocity.preview_next_components(frames),
+                    expected.get_next_components(frames)
+                );
+                assert_eq!(velocity, before);
+            }
+        }
+    }
 
     #[test]
     fn extent_size() {

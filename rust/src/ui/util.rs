@@ -190,20 +190,18 @@ pub(crate) mod live {
             && GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 == 0
             && QuitPosted == 0
         {
-            if crate::automation::input_ffi::rust_automation_service_boundary() != 0 {
+            let Some(sampled) = crate::automation::input_ffi::nested_input(|| {
+                SleepThread(ONE_SECOND / 40);
+                AnyButtonPress(1)
+            }) else {
                 break;
-            }
-            SleepThread(ONE_SECOND / 40);
-            pressed = AnyButtonPress(1);
+            };
+            pressed = sampled;
         }
         if reset != 0 {
             FlushInput();
         }
-        if released {
-            u32::from(pressed == 0)
-        } else {
-            pressed
-        }
+        u32::from((pressed != 0) != released)
     }
 
     /// # Safety

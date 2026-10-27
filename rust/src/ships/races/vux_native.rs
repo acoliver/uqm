@@ -7,7 +7,7 @@ pub(crate) mod engine {
     };
     use std::{mem, ptr};
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags =
             (FIRES_FORE as i32 | SEEKING_SPECIAL as i32 | IMMEDIATE_WEAPON as i32) as _;
         d.ship_info.ship_cost = 12;
@@ -63,7 +63,7 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
         let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
         let mut face = original;
         let delta = TrackShip(e, &mut face);
@@ -74,7 +74,7 @@ pub(crate) mod engine {
         (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
         (*e).state_flags |= CHANGING as u16;
     }
-    unsafe extern "C" fn limpet_collision(
+    pub(crate) unsafe extern "C" fn limpet_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -118,7 +118,7 @@ pub(crate) mod engine {
         (*a).__bindgen_anon_1.life_span = 0;
         (*a).state_flags |= (COLLISION | DISAPPEARING) as u16;
     }
-    unsafe extern "C" fn spawn_limpets(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_limpets(e: *mut ELEMENT) {
         let ss = starship(e);
         let mut block = MISSILE_BLOCK {
             farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast(),
@@ -145,7 +145,7 @@ pub(crate) mod engine {
             put_element(h);
         }
     }
-    unsafe extern "C" fn initialize_horrific_laser(
+    pub(crate) unsafe extern "C" fn initialize_horrific_laser(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -170,7 +170,7 @@ pub(crate) mod engine {
         *out = initialize_laser(&mut block);
         1
     }
-    unsafe extern "C" fn vux_intelligence(
+    pub(crate) unsafe extern "C" fn vux_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -201,7 +201,7 @@ pub(crate) mod engine {
             (*ss).ship_input_state &= !(SPECIAL as u8);
         }
     }
-    unsafe extern "C" fn vux_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn vux_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0
@@ -215,7 +215,7 @@ pub(crate) mod engine {
             (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
         }
     }
-    unsafe extern "C" fn vux_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn vux_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 != 0 {
             let ss = starship(e);
             let mut face = (*ss).ShipFacing;

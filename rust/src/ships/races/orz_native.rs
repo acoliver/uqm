@@ -6,7 +6,7 @@ pub(crate) mod engine {
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, normalize_angle,
         normalize_facing, object_cloaked, put_element, sine, starship,
     };
-    use std::{mem, ptr};
+    use std::ptr;
 
     use crate::collections::queue::InsertQueue;
 
@@ -45,7 +45,7 @@ pub(crate) mod engine {
     ];
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | SEEKING_SPECIAL) as u16;
         d.ship_info.ship_cost = 23;
         d.ship_info.crew_level = MAX_CREW;
@@ -143,7 +143,7 @@ pub(crate) mod engine {
         )
     }
 
-    unsafe extern "C" fn howitzer_collision(
+    pub(crate) unsafe extern "C" fn howitzer_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -154,7 +154,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_turret_missile(
+    pub(crate) unsafe extern "C" fn initialize_turret_missile(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -229,7 +229,7 @@ pub(crate) mod engine {
         count
     }
 
-    unsafe extern "C" fn orz_intelligence(
+    pub(crate) unsafe extern "C" fn orz_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -305,7 +305,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn ion_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn ion_preprocess(e: *mut ELEMENT) {
         (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
         if usize::from((*e).colorCycleIndex) != ION_COLORS.len() {
             (*e).__bindgen_anon_1.life_span = u16::from((*e).__bindgen_anon_5.thrust_wait);
@@ -327,7 +327,7 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let owner = element((*ss).hShip);
         if (*owner).__bindgen_anon_2.crew_level == 0
@@ -433,7 +433,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn marine_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn marine_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let ship = element((*ss).hShip);
         if (*ship).__bindgen_anon_2.crew_level == 0
@@ -572,7 +572,7 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn marine_collision(
+    pub(crate) unsafe extern "C" fn marine_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -629,7 +629,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -639,7 +639,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn turret_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn turret_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_1.life_span != 0 {
             return;
         }
@@ -777,7 +777,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn orz_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn orz_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & APPEARING as u16 == 0 {
             if ((*ss).cur_status_flags | (*ss).old_status_flags) & SPECIAL as u16 != 0

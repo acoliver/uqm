@@ -79,7 +79,7 @@ pub(super) unsafe fn ambient() {
     }
     InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
 }
-unsafe extern "C" fn transition(element: *mut ELEMENT) {
+pub(crate) unsafe extern "C" fn transition(element: *mut ELEMENT) {
     (*element).state_flags &= !(DISAPPEARING as u16);
     (*element).__bindgen_anon_1.life_span = 1;
     if (*element).__bindgen_anon_4.turn_wait != 0 {
@@ -98,7 +98,7 @@ unsafe extern "C" fn transition(element: *mut ELEMENT) {
         (*element).__bindgen_anon_4.turn_wait = 1;
     }
 }
-unsafe extern "C" fn collision(
+pub(crate) unsafe extern "C" fn collision(
     source: *mut ELEMENT,
     _p0: *mut POINT,
     ship: *mut ELEMENT,

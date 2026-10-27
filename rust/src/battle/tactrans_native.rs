@@ -319,7 +319,7 @@ pub(crate) mod engine {
         true
     }
 
-    unsafe extern "C" fn preprocess_dead_ship(_ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn preprocess_dead_ship(_ship: *mut ELEMENT) {
         ProcessSound(usize::MAX as SOUND, ptr::null_mut());
     }
 
@@ -463,7 +463,7 @@ pub(crate) mod engine {
         BatchGraphics();
     }
 
-    unsafe extern "C" fn explosion_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn explosion_preprocess(ship: *mut ELEMENT) {
         let tick = ((NUM_EXPLOSION_FRAMES * 3) as u16)
             .wrapping_sub((*ship).__bindgen_anon_1.life_span) as u8;
         let step = explosion_step(tick);
@@ -614,7 +614,7 @@ pub(crate) mod engine {
         RecordShipDeath(ship);
     }
 
-    unsafe extern "C" fn cycle_ion_trail(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn cycle_ion_trail(e: *mut ELEMENT) {
         assert_eq!((*e).state_flags & PLAYER_SHIP as u16, 0);
         (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
         if (*e).colorCycleIndex as usize != ION_COLORS.len() {

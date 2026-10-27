@@ -13,91 +13,28 @@
 //! - every scenario either carries an assertion or is explicitly recorded as a
 //!   fixture that proves something other than gameplay.
 
-/// A gameplay domain the suite must cover.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Domain {
-    /// Reaching the main menu from a cold start.
-    BootMenu,
-    /// Beginning a new game.
-    NewGame,
-    /// Starbase arrival and interaction.
-    Starbase,
-    /// Choosing among alien conversation responses.
-    CommunicationChoices,
-    /// Interplanetary travel, orbit and scanning.
-    NavigationOrbitScan,
-    /// Surface operations and their outcomes.
-    PlanetSideResults,
-    /// Ship combat and its outcome.
-    BattleOutcomes,
-    /// Saving and restoring a game.
-    SaveLoad,
-    /// Leaving the game through the menu.
-    Quit,
-}
-
-impl Domain {
-    /// Every domain the suite is required to cover.
-    pub const ALL: [Self; 9] = [
-        Self::BootMenu,
-        Self::NewGame,
-        Self::Starbase,
-        Self::CommunicationChoices,
-        Self::NavigationOrbitScan,
-        Self::PlanetSideResults,
-        Self::BattleOutcomes,
-        Self::SaveLoad,
-        Self::Quit,
-    ];
-
-    /// The stable published name.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::BootMenu => "boot_menu",
-            Self::NewGame => "new_game",
-            Self::Starbase => "starbase",
-            Self::CommunicationChoices => "communication_choices",
-            Self::NavigationOrbitScan => "navigation_orbit_scan",
-            Self::PlanetSideResults => "planet_side_results",
-            Self::BattleOutcomes => "battle_outcomes",
-            Self::SaveLoad => "save_load",
-            Self::Quit => "quit",
-        }
-    }
-}
-
-/// Why a scenario carries no gameplay assertion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FixtureKind {
-    /// Uses granted development setup and cannot prove campaign ancestry.
-    DevelopmentSetup,
-    /// Deliberately hangs, to prove a watchdog fires.
-    HangFixture,
-    /// Deliberately idles, to prove the idle path is exercised.
-    IdleFixture,
-    /// Exercises the supervisor rather than the game.
-    SupervisionFixture,
-}
-
-/// One published row: a scenario, what it covers, and what it proves.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ScenarioRow {
-    /// File stem under `rust/scripts`.
-    pub scenario: &'static str,
-    /// Domains this scenario covers. Empty only for a declared fixture.
-    pub domains: &'static [Domain],
-    /// Set when the scenario proves something other than gameplay.
-    pub fixture: Option<FixtureKind>,
-    /// Whether this scenario is part of the composed end-to-end journey.
-    pub composed_journey: bool,
-}
+mod domain;
+pub use domain::{Domain, FixtureKind, ScenarioRow};
 
 /// The complete matrix.
 ///
 /// Adding a scenario file without adding a row here fails
 /// [`tests::every_scenario_on_disk_is_classified`], which is the point.
 pub const MATRIX: &[ScenarioRow] = &[
+    row("parity-new-game", &[Domain::BootMenu, Domain::NewGame]),
+    row("parity-melee-cyborg-a", &[Domain::BattleOutcomes]),
+    row("parity-melee-cyborg-b", &[Domain::BattleOutcomes]),
+    row("parity-melee-cyborg-c", &[Domain::BattleOutcomes]),
+    row("parity-melee-cyborg-d", &[Domain::BattleOutcomes]),
+    fixture("parity-androsynth-blazer", FixtureKind::DevelopmentSetup),
+    fixture("parity-pkunk-rebirth", FixtureKind::DevelopmentSetup),
+    fixture("parity-chmmr-satellites", FixtureKind::DevelopmentSetup),
+    fixture("parity-death-spawn", FixtureKind::DevelopmentSetup),
+    fixture("parity-mixed-collision", FixtureKind::DevelopmentSetup),
+    fixture("parity-pool-full", FixtureKind::DevelopmentSetup),
+    fixture("parity-frame-sets", FixtureKind::DevelopmentSetup),
+    fixture("parity-star-contact", FixtureKind::DevelopmentSetup),
+    fixture("parity-samatra", FixtureKind::DevelopmentSetup),
     row("load-war-cleared-v1", &[Domain::SaveLoad]),
     row(
         "campaign-s07f-portal-sol",

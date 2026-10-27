@@ -13,7 +13,7 @@ use crate::planets::solarsys::playerInSolarSystem;
 
 use crate::navigation::groups::live::PutGroupInfo;
 
-unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
+pub(crate) unsafe fn capture(name: &[u8]) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star()?;
     let point = GLOB_DATA.Game_state.ip_location;
     if inHQSpace() != 0 {
@@ -68,11 +68,5 @@ pub unsafe extern "C" fn SaveGame(
         slots.write(usize::from(slot), &save)?;
         Ok(())
     })();
-    match result {
-        Ok(()) => 1,
-        Err(error) => {
-            log::error!("SaveGame: {error}");
-            0
-        }
-    }
+    super::complete(result, "SaveGame", Some((slot, false)))
 }

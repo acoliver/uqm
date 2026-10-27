@@ -56,7 +56,7 @@ pub(crate) mod engine {
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = FIRES_FORE as u16;
         d.ship_info.ship_cost = 5;
         d.ship_info.crew_level = MAX_CREW;
@@ -146,7 +146,7 @@ pub(crate) mod engine {
         &raw mut NEW_SHOFIXTI_DESC
     }
 
-    unsafe extern "C" fn initialize_standard_missile(
+    pub(crate) unsafe extern "C" fn initialize_standard_missile(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -171,7 +171,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn destruct_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn destruct_preprocess(e: *mut ELEMENT) {
         let primitive = prim(e);
         (*e).state_flags |= CHANGING as u16;
         let life = (*e).__bindgen_anon_1.life_span;
@@ -225,7 +225,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn self_destruct_kill_objects(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn self_destruct_kill_objects(e: *mut ELEMENT) {
         let mut h = disp_q.head;
         while !h.is_null() {
             let obj = element(h);
@@ -277,7 +277,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn self_destruct(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn self_destruct(e: *mut ELEMENT) {
         let h = AllocElement();
         if !h.is_null() {
             let d = element(h);
@@ -296,7 +296,7 @@ pub(crate) mod engine {
         (*e).death_func = Some(shofixti_destruct_death);
     }
 
-    unsafe extern "C" fn shofixti_destruct_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn shofixti_destruct_death(e: *mut ELEMENT) {
         let ss = starship(e);
         StopAllBattleMusic();
         StartShipExplosion(e, false);
@@ -320,7 +320,7 @@ pub(crate) mod engine {
         RecordShipDeath(e);
     }
 
-    unsafe extern "C" fn shofixti_intelligence(
+    pub(crate) unsafe extern "C" fn shofixti_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -353,7 +353,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn shofixti_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn shofixti_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if ((*ss).cur_status_flags ^ (*ss).old_status_flags) & SPECIAL as u16 != 0 {
             let captain = &raw mut (*(*ss).RaceDescPtr).ship_data.captain_control.special;

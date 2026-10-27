@@ -172,6 +172,13 @@ pub(crate) mod engine {
         if let Some(uninit) = (*d).uninit_func {
             uninit(d);
         }
+        crate::collections::observation::record(
+            crate::collections::observation::Event::ResourcesFree {
+                descriptor: d as usize,
+                icons: icons != 0,
+                battle: battle != 0,
+            },
+        );
         if battle != 0 {
             let data = &mut (*d).ship_data;
             free_image((&raw mut data.special).cast());

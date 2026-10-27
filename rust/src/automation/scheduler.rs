@@ -6,6 +6,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P02
 //! @requirement REQ-SCHED-001..003, REQ-DET-001
 
+mod assertions;
+use assertions::reduce_capture_and_assertion;
+
 use crate::automation::script::{Action, MainMenuTransition, MenuKey, PlayerKey};
 
 // ===========================================================================
@@ -1451,128 +1454,6 @@ fn reduce_condition_wait(
             }
         }
         // capture: arm once, commit to WaitingCapture.
-        _ => return None,
-    })
-}
-
-/// Reduce a capture, assertion, fixture, or finish, or decline so the next family may answer.
-fn reduce_capture_and_assertion(
-    state: &SchedulerState,
-    config: &SchedulerConfig<'_>,
-    action: &Action,
-    sv: u64,
-) -> Option<SchedulerTransition> {
-    Some(match (action, state.phase) {
-        (Action::Capture(_), ActionPhase::WaitingForInput) => {
-            let new_gen = match state.capture_generation.next() {
-                Some(g) => g,
-                None => {
-                    return Some(SchedulerTransition {
-                        new_state: SchedulerState {
-                            terminal: Some(TerminalOutcome::CaptureGenerationOverflow),
-                            ..*state
-                        },
-                        effects: EffectPlan::none(),
-                    });
-                }
-            };
-            let effects = EffectPlan {
-                arm_capture: Some(new_gen),
-                ..EffectPlan::none()
-            };
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCapture {
-                        generation: new_gen,
-                    },
-                    state_version: sv,
-                    capture_generation: new_gen,
-                    ..*state
-                },
-                effects,
-            }
-        }
-
-        // WaitingCapture: input does not advance.
-        (Action::Capture(_), ActionPhase::WaitingCapture { .. }) => SchedulerTransition {
-            new_state: SchedulerState {
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
-
-        // WaitingSemantic: input does not advance.
-        (Action::AssertMainMenuTransition(_), ActionPhase::WaitingSemantic) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-
-        // AssertMainMenuTransition: enter WaitingSemantic on first input callback.
-        (Action::AssertMainMenuTransition(_), ActionPhase::WaitingForInput) => {
-            // Consume this input callback to enter WaitingSemantic.
-            // Do NOT advance step_index — we wait for a MenuTransition event.
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingSemantic,
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-
-        // AssertActivity: immediate advance (no callback needed).
-        (Action::AssertActivity(_), ActionPhase::WaitingForInput) => {
-            advance_to_next(state, config, sv, EffectPlan::none())
-        }
-
-        // AssertScene is validated by the runtime coordinator before the
-        // reducer advances it. Keeping it callback-bound prevents an earlier
-        // action from chaining past the semantic check.
-        (Action::AssertScene(_), ActionPhase::WaitingForInput)
-        | (Action::AssertMode(_), ActionPhase::WaitingForInput)
-        | (Action::AssertDispatch(_), ActionPhase::WaitingForInput)
-        | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
-        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)
-        | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
-        | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
-        | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
-        | (Action::AssertHyperspaceStationary(_), ActionPhase::WaitingForInput)
-        | (Action::RecordSavedHyperspacePosition(_), ActionPhase::WaitingForInput)
-        | (Action::AssertHyperspacePositionRestored(_), ActionPhase::WaitingForInput)
-        | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
-        | (Action::AssertState(_), ActionPhase::WaitingForInput)
-        | (Action::AssertShipElement(_), ActionPhase::WaitingForInput)
-        | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
-            advance_to_next(state, config, sv, EffectPlan::none())
-        }
-
-        // SetupPlanetSideCollisionFixture: the coordinator queues the
-        // one-shot fixture before the reducer advances it.
-        (
-            Action::SetupPlanetSideCollisionFixture(_)
-            | Action::SetupMeleeMutualLossFixture(_)
-            | Action::SetupPlanetSideMineralGallery(_),
-            ActionPhase::WaitingForInput,
-        ) => advance_to_next(state, config, sv, EffectPlan::none()),
-
-        // Finish: terminal success. Consumes the input callback.
-        (Action::Finish, ActionPhase::WaitingForInput) => SchedulerTransition {
-            new_state: SchedulerState {
-                terminal: Some(TerminalOutcome::FinishComplete),
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
-
-        // Any event/action pair not handled above is impossible for this phase.
         _ => return None,
     })
 }

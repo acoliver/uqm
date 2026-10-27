@@ -24,7 +24,7 @@ pub(crate) mod engine {
     const NUM_NAPALM_FADES: u16 = 6;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = FIRES_FORE as u16;
         d.ship_info.ship_cost = 10;
         d.ship_info.crew_level = MAX_CREW;
@@ -83,7 +83,7 @@ pub(crate) mod engine {
         &raw mut THRADDASH_DESC
     }
 
-    unsafe extern "C" fn flame_napalm_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn flame_napalm_preprocess(e: *mut ELEMENT) {
         (*e).velocity = mem::zeroed();
         if (*e).state_flags & NONSOLID as u16 != 0 {
             (*e).state_flags &= !(NONSOLID as u16);
@@ -123,7 +123,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_horn(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_horn(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut b = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -145,7 +148,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn thraddash_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn thraddash_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 == 0 {
             if (*ss).old_status_flags & SPECIAL as u16 != 0
@@ -210,7 +213,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn thraddash_intelligence(
+    pub(crate) unsafe extern "C" fn thraddash_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,

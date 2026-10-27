@@ -97,7 +97,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = IMMEDIATE_WEAPON as u16;
         d.ship_info.ship_cost = 16;
         d.ship_info.crew_level = MAX_CREW;
@@ -161,7 +161,7 @@ pub(crate) mod engine {
         sine(angle + QUADRANT as i32, magnitude)
     }
 
-    unsafe extern "C" fn initialize_autoaim_laser(
+    pub(crate) unsafe extern "C" fn initialize_autoaim_laser(
         ship: *mut ELEMENT,
         lasers: *mut HELEMENT,
     ) -> COUNT {
@@ -197,7 +197,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn arilou_intelligence(
+    pub(crate) unsafe extern "C" fn arilou_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -257,7 +257,7 @@ pub(crate) mod engine {
         (*origin).y = (i32::from((*element).current.location.y) >> ONE_SHIFT) as COORD;
     }
 
-    unsafe extern "C" fn arilou_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn arilou_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let race = (*ss).RaceDescPtr;
         let special_frames = (&raw mut (*race).ship_data.special).cast::<FRAME>();

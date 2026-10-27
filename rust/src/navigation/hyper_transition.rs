@@ -95,7 +95,7 @@ unsafe fn arilou() {
     }
     CurStarDescPtr = ptr::null_mut();
 }
-unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
+pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
     (*element).state_flags |= CHANGING as u16;
     let mut index = GetFrameIndex((*element).current.image.frame.cast());
     if index == 0 {
@@ -138,7 +138,7 @@ pub(super) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, k
     }
     SetVelocityComponents(&mut (*ship).velocity, dx / turns, dy / turns);
 }
-unsafe extern "C" fn hyper_preprocess(element: *mut ELEMENT) {
+pub(crate) unsafe extern "C" fn hyper_preprocess(element: *mut ELEMENT) {
     hyper_transition(element);
 }
 
@@ -188,7 +188,7 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
     }
     1
 }
-pub(super) unsafe extern "C" fn star_collision(
+pub(crate) unsafe extern "C" fn star_collision(
     source: *mut ELEMENT,
     _p0: *mut POINT,
     ship: *mut ELEMENT,
@@ -222,14 +222,14 @@ pub(super) unsafe extern "C" fn star_collision(
         init_transition(source, ship, 1);
     }
 }
-pub(super) unsafe extern "C" fn star_death(element: *mut ELEMENT) {
+pub(crate) unsafe extern "C" fn star_death(element: *mut ELEMENT) {
     if (*element).state_flags & DEFY_PHYSICS as u16 == 0
         && GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0
     {
         CurStarDescPtr = ptr::null_mut();
     }
 }
-pub(super) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
+pub(crate) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
     if (*element).state_flags & DEFY_PHYSICS as u16 == 0 || get("ARILOU_SPACE_COUNTER") == 0 {
         set(
             "ARILOU_SPACE_SIDE",
@@ -237,7 +237,7 @@ pub(super) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
         );
     }
 }
-pub(super) unsafe extern "C" fn portal_collision(
+pub(crate) unsafe extern "C" fn portal_collision(
     source: *mut ELEMENT,
     _p0: *mut POINT,
     ship: *mut ELEMENT,

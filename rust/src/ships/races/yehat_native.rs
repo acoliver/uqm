@@ -2,9 +2,9 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine, starship};
-    use std::{mem, ptr};
+    use std::ptr;
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE as i32 | SHIELD_DEFENSE as i32) as _;
         d.ship_info.ship_cost = 23;
         d.ship_info.crew_level = 20;
@@ -59,7 +59,7 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn initialize_standard_missiles(
+    pub(crate) unsafe extern "C" fn initialize_standard_missiles(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -90,7 +90,7 @@ pub(crate) mod engine {
         *out.add(1) = initialize_missile(&mut block);
         2
     }
-    unsafe extern "C" fn yehat_intelligence(
+    pub(crate) unsafe extern "C" fn yehat_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -151,7 +151,7 @@ pub(crate) mod engine {
         }
         ship_intelligence(ship, concerns, count);
     }
-    unsafe extern "C" fn yehat_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn yehat_postprocess(e: *mut ELEMENT) {
         if (*e).state_flags & NONSOLID as u16 == 0 {
             let ss = starship(e);
             if (*ss).special_counter > 0 {
@@ -167,7 +167,7 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn yehat_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn yehat_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 == 0 {
             let ss = starship(e);
             let expired = if u32::from((*e).__bindgen_anon_1.life_span) > NORMAL_LIFE {

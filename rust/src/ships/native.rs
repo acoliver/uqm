@@ -1,6 +1,8 @@
 //! Live engine ABI for race ports. Unlike `types::RaceDesc`, these records can
 //! be returned directly to the engine's `init_<race>` callers.
 
+mod descriptor;
+
 #[allow(
     non_camel_case_types,
     non_snake_case,
@@ -483,35 +485,9 @@ pub const fn normalize_facing(facing: i32) -> u16 {
     (facing & ((1 << abi::FACING_SHIFT) - 1)) as u16
 }
 
-/// C `SINE`, including its signed long product and SIZE truncation.
-///
-/// # Safety
-/// The engine sine table must have been initialized.
-pub unsafe fn sine(angle: i32, magnitude: i32) -> i16 {
-    let value = *(&raw const abi::sinetab)
-        .cast::<abi::SIZE>()
-        .add(normalize_angle(angle) as usize);
-    ((i64::from(value) * i64::from(magnitude)) >> abi::SIN_SHIFT) as i16
-}
+pub use crate::math::{cosine, sine};
 
-/// C `COSINE`.
-///
-/// # Safety
-/// The engine sine table must have been initialized.
-pub unsafe fn cosine(angle: i32, magnitude: i32) -> i16 {
-    sine(angle + abi::QUADRANT as i32, magnitude)
-}
-
-/// C WRAP_DELTA, after assignment to SIZE.
-pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
-    if (delta as i32).abs() <= extent >> 1 {
-        delta
-    } else if delta < 0 {
-        (extent + delta as i32) as i16
-    } else {
-        (delta as i32 - extent) as i16
-    }
-}
+pub use crate::math::wrap_delta;
 
 /// Initialize collision endpoints using C WORLD_TO_DISPLAY truncation.
 ///
@@ -527,6 +503,21 @@ pub unsafe fn init_intersect_points(e: *mut abi::ELEMENT) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_trigonometry_uses_the_immutable_table_with_size_truncation() {
+        for angle in -128..128 {
+            for magnitude in [i32::MIN, -65537, -1, 0, 1, 32767, 65537, i32::MAX] {
+                let value = crate::math::sinetab[(angle & 63) as usize];
+                let expected = ((i64::from(value) * i64::from(magnitude)) >> 14) as i16;
+                assert_eq!(sine(angle, magnitude), expected);
+                assert_eq!(cosine(angle - 16, magnitude), expected);
+            }
+        }
+        assert_eq!(sine(0, 4096), -4096);
+        assert_eq!(sine(32, 4096), 4096);
+        assert_eq!(cosine(16, 4096), 4096);
+    }
 
     #[test]
     fn c_angle_rounding_and_wrap_boundaries() {

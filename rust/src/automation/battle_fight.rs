@@ -437,50 +437,19 @@ impl BattleSnapshot {
     /// the game's own queue is broken and no fight can be judged from it.
     #[must_use]
     pub fn live() -> Self {
-        use crate::c_bindings::global_state::{ELEMENT, PLAYER_SHIP, STARSHIP};
-        use crate::c_bindings::live_queues;
-        use crate::mainloop::types::activity_flags::IN_BATTLE;
-        use crate::savegame::runtime::queues::{walk, QueueKind};
-
         let (width, height) = crate::automation::input_ffi::screen_size();
         let arena = arena_size(width, height);
         let activity = crate::mainloop::ffi::get_current_activity().0;
-        if activity & IN_BATTLE == 0 {
+        if activity & crate::mainloop::types::activity_flags::IN_BATTLE == 0 {
             return Self::none(arena);
         }
-        // SAFETY: the production game invokes the automation hooks
-        // synchronously on the game thread, so neither the battle counters nor
-        // the display queue change during this read.
-        unsafe {
-            let display_list = &*live_queues::display_list();
-            let elements = walk::<ELEMENT>(display_list, QueueKind::DisplayList)
-                .expect("disp_q is an element pool while a battle runs");
-            let (mut player, mut enemy) = (None, None);
-            for link in elements {
-                let element = &*link;
-                if u32::from(element.state_flags) & PLAYER_SHIP == 0 || element.pParent.is_null() {
-                    continue;
-                }
-                let owner = &*element.pParent.cast::<STARSHIP>();
-                let ship = ShipState {
-                    x: i32::from(element.current.location.x),
-                    y: i32::from(element.current.location.y),
-                    facing: u8::try_from(owner.ShipFacing % 16).expect("a facing below 16"),
-                    crew: element.__bindgen_anon_2.crew_level,
-                };
-                match element.playerNr {
-                    0 => player = Some(ship),
-                    1 => enemy = Some(ship),
-                    _ => {}
-                }
-            }
-            Self {
-                in_battle: true,
-                counters: crate::battle::ffi::live_counters::battle_counters(),
-                player,
-                enemy,
-                arena,
-            }
+        let ([player, enemy], counters) = super::parity_state::fighters();
+        Self {
+            in_battle: true,
+            counters,
+            player,
+            enemy,
+            arena,
         }
     }
 }

@@ -3,6 +3,27 @@
 //! Park-Miller minimal standard RNG (CACM 1988) + integer square root.
 //! The game uses these providers directly through Rust imports.
 
+/// Native fixed-point SINE: normalize to the 64-entry table, multiply in i64,
+/// then retain the original signed SIZE truncation.
+pub fn sine(angle: i32, magnitude: i32) -> i16 {
+    ((i64::from(sinetab[(angle & 63) as usize]) * i64::from(magnitude)) >> 14) as i16
+}
+
+pub fn cosine(angle: i32, magnitude: i32) -> i16 {
+    sine(angle + 16, magnitude)
+}
+
+/// Signed shortest displacement after assignment to the native i16 coordinate.
+pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
+    if (delta as i32).abs() <= extent >> 1 {
+        delta
+    } else if delta < 0 {
+        (extent + delta as i32) as i16
+    } else {
+        (delta as i32 - extent) as i16
+    }
+}
+
 use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
 

@@ -3,10 +3,9 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::abi::RACE_DESC;
-    use std::mem;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.crew_level = 1;
         d.ship_info.max_crew = 1;
         d.ship_info.energy_level = 1;

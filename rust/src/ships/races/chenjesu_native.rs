@@ -43,7 +43,7 @@ pub(crate) mod engine {
     const FRAGMENT_RANGE: i32 = FRAGMENT_LIFE as i32 * MISSILE_SPEED as i32;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | SEEKING_SPECIAL | SEEKING_WEAPON) as u16;
         d.ship_info.ship_cost = 28;
         d.ship_info.crew_level = MAX_CREW;
@@ -106,7 +106,7 @@ pub(crate) mod engine {
         ProcessSound(SetAbsStringTableIndex(sounds, index), source);
     }
 
-    unsafe extern "C" fn crystal_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn crystal_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let mut block = MISSILE_BLOCK {
             cx: (*e).next.location.x,
@@ -136,7 +136,7 @@ pub(crate) mod engine {
         sound(ss, 1, e);
     }
 
-    unsafe extern "C" fn crystal_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn crystal_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & WEAPON as u16 != 0 {
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
@@ -146,7 +146,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -156,7 +156,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn crystal_collision(
+    pub(crate) unsafe extern "C" fn crystal_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -176,7 +176,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn doggy_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn doggy_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         (*ss).special_counter = (*ss).special_counter.wrapping_add(1);
         if (*e).__bindgen_anon_5.thrust_wait > 0 {
@@ -215,7 +215,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn doggy_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn doggy_death(e: *mut ELEMENT) {
         sound(starship(e), 3, e);
         (*e).state_flags &= !(DISAPPEARING as u16);
         (*e).state_flags |= (NONSOLID | FINITE_LIFE) as u16;
@@ -228,7 +228,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_5.next_turn = 0;
     }
 
-    unsafe extern "C" fn doggy_collision(
+    pub(crate) unsafe extern "C" fn doggy_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -247,7 +247,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spawn_doggy(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_doggy(e: *mut ELEMENT) {
         let h = AllocElement();
         if !h.is_null() {
             (*e).state_flags |= DEFY_PHYSICS as u16;
@@ -290,7 +290,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn chenjesu_intelligence(
+    pub(crate) unsafe extern "C" fn chenjesu_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -384,7 +384,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_crystal(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_crystal(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -409,7 +412,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn chenjesu_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn chenjesu_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter < MAX_DOGGIES
@@ -420,7 +423,7 @@ pub(crate) mod engine {
         (*ss).special_counter = 1;
     }
 
-    unsafe extern "C" fn chenjesu_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn chenjesu_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).special_counter > 1 {
             (*ss).special_counter = (*ss).special_counter.wrapping_add(MAX_DOGGIES);

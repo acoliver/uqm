@@ -8,14 +8,14 @@ pub(crate) mod engine {
     use std::{mem, ptr};
 
     #[derive(Clone, Copy)]
-    struct SisData {
-        num_trackers: COUNT,
-        num_blasters: COUNT,
-        missiles: [MISSILE_BLOCK; 6],
+    pub(crate) struct SisData {
+        pub(crate) num_trackers: COUNT,
+        pub(crate) num_blasters: COUNT,
+        pub(crate) missiles: [MISSILE_BLOCK; 6],
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_cost = 16;
         d.ship_info.crew_level = MAX_CREW_SIZE as COUNT;
         d.ship_info.max_crew = MAX_CREW_SIZE as COUNT;
@@ -62,7 +62,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn sis_hyper_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn sis_hyper_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & APPEARING as u16 != 0 {
             (*e).velocity = GlobData.Game_state.velocity;
@@ -190,7 +190,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn sis_hyper_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn sis_hyper_postprocess(e: *mut ELEMENT) {
         GlobData.Game_state.velocity = (*e).velocity;
         let ss = starship(e);
         if ((*ss).cur_status_flags & WEAPON as u16 != 0
@@ -203,7 +203,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spawn_point_defense(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_point_defense(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
             let h = AllocElement();
@@ -295,7 +295,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn sis_battle_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn sis_battle_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*(*ss).RaceDescPtr).characteristics.special_energy_cost == 0 {
             (*ss).cur_status_flags &= !(SPECIAL as u16);
@@ -309,7 +309,7 @@ pub(crate) mod engine {
             (*ss).weapon_counter = 2;
         }
     }
-    unsafe extern "C" fn sis_battle_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn sis_battle_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0
@@ -318,7 +318,7 @@ pub(crate) mod engine {
             spawn_point_defense(e);
         }
     }
-    unsafe extern "C" fn blaster_collision(
+    pub(crate) unsafe extern "C" fn blaster_collision(
         e: *mut ELEMENT,
         p: *mut POINT,
         o: *mut ELEMENT,
@@ -345,7 +345,7 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn blaster_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn blaster_preprocess(e: *mut ELEMENT) {
         let frame = crate::ships::native::frame_index((*e).current.image.frame);
         match (*e).__bindgen_anon_3.mass_points {
             2 if frame < 8 => {
@@ -375,7 +375,10 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn initialize_blasters(e: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_blasters(
+        e: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(e);
         let data = data((*ss).RaceDescPtr);
         let nt = (4 - (*data).num_trackers) as u8 & 3;
@@ -396,7 +399,7 @@ pub(crate) mod engine {
         }
         (*data).num_blasters
     }
-    unsafe extern "C" fn sis_intelligence(
+    pub(crate) unsafe extern "C" fn sis_intelligence(
         e: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -600,7 +603,7 @@ pub(crate) mod engine {
         (*d).ship_info.energy_level = (*d).ship_info.max_energy;
         d
     }
-    unsafe extern "C" fn uninit_sis(d: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_sis(d: *mut RACE_DESC) {
         if inHQSpace() == 0 {
             GlobData.SIS_state.CrewEnlisted = (*d).ship_info.crew_level;
             if (*d).ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0 {

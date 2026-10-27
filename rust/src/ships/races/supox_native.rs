@@ -6,7 +6,6 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, starship};
-    use std::mem;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -62,7 +61,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = FIRES_FORE as u16;
         desc.ship_info.ship_cost = 16;
         desc.ship_info.crew_level = MAX_CREW;
@@ -119,7 +118,7 @@ pub(crate) mod engine {
         &raw mut SUPOX_DESC
     }
 
-    unsafe extern "C" fn supox_intelligence(
+    pub(crate) unsafe extern "C" fn supox_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -180,7 +179,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_horn(ship: *mut ELEMENT, horns: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_horn(
+        ship: *mut ELEMENT,
+        horns: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -202,7 +204,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn supox_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn supox_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 == 0 {
             return;

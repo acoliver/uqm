@@ -66,7 +66,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON | POINT_DEFENSE) as u16;
         desc.ship_info.ship_cost = 11;
         desc.ship_info.crew_level = MAX_CREW;
@@ -118,7 +118,7 @@ pub(crate) mod engine {
         &raw mut HUMAN_DESC
     }
 
-    unsafe extern "C" fn nuke_preprocess(missile: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn nuke_preprocess(missile: *mut ELEMENT) {
         let mut facing = frame_index((*missile).next.image.frame);
         if (*missile).__bindgen_anon_4.turn_wait > 0 {
             (*missile).__bindgen_anon_4.turn_wait -= 1;
@@ -136,7 +136,10 @@ pub(crate) mod engine {
         );
     }
 
-    unsafe extern "C" fn initialize_nuke(ship: *mut ELEMENT, weapons: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_nuke(
+        ship: *mut ELEMENT,
+        weapons: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -162,7 +165,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn spawn_point_defense(source: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_point_defense(source: *mut ELEMENT) {
         let ss = starship(source);
         if (*source).state_flags & PLAYER_SHIP as u16 != 0 {
             let defense = AllocElement();
@@ -231,14 +234,14 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn human_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn human_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0 && (*ss).special_counter == 0 {
             spawn_point_defense(ship);
         }
     }
 
-    unsafe extern "C" fn human_intelligence(
+    pub(crate) unsafe extern "C" fn human_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,

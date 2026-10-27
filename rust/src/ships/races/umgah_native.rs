@@ -19,12 +19,12 @@ pub(crate) mod engine {
 
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct UmgahData {
-        prev_facing: u16,
+    pub(crate) struct UmgahData {
+        pub(crate) prev_facing: u16,
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
         d.ship_info.ship_cost = 7;
         d.ship_info.crew_level = MAX_CREW;
@@ -100,7 +100,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         (*(*ss).RaceDescPtr).ship_data.special[0] = rel_frame_index(
             (*(*ss).RaceDescPtr).ship_data.special[0],
@@ -109,7 +109,7 @@ pub(crate) mod engine {
         (*e).state_flags |= APPEARING as u16;
     }
 
-    unsafe extern "C" fn cone_collision(
+    pub(crate) unsafe extern "C" fn cone_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -123,7 +123,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_cone(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_cone(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
         let facing = (*ss).ShipFacing;
@@ -173,7 +176,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn umgah_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn umgah_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & APPEARING as u16 != 0 {
             set_data((*ss).RaceDescPtr, None);
@@ -197,7 +200,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn umgah_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn umgah_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).special_counter > 0 {
             (*ss).special_counter = 0;
@@ -205,11 +208,11 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn uninit_umgah(desc: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_umgah(desc: *mut RACE_DESC) {
         set_data(desc, None);
     }
 
-    unsafe extern "C" fn umgah_intelligence(
+    pub(crate) unsafe extern "C" fn umgah_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,

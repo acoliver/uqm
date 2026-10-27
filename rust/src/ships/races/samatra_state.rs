@@ -42,6 +42,23 @@ pub struct Snapshot {
     pub velocity: (i32, i32),
 }
 
+impl Snapshot {
+    pub(crate) fn initial(arena: (i32, i32)) -> Self {
+        Self {
+            remaining: 8,
+            generators: Vec::new(),
+            hazards: Vec::new(),
+            gate_open: false,
+            gate: (arena.0 / 2, arena.1 / 2),
+            bomb_carrier: false,
+            selected_species: None,
+            player: None,
+            arena,
+            velocity: (0, 0),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Events {
     pub generation: u64,
@@ -110,6 +127,18 @@ pub(super) fn generator_id(identity: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn initial_snapshot_keeps_the_gate_closed_at_the_arena_center() {
+        let snapshot = super::Snapshot::initial((8192, 7680));
+        assert_eq!(snapshot.gate, (4096, 3840));
+        assert_eq!(snapshot.arena, (8192, 7680));
+        assert_eq!(snapshot.remaining, 8);
+        assert!(!snapshot.gate_open && !snapshot.bomb_carrier);
+        assert!(snapshot.player.is_none() && snapshot.selected_species.is_none());
+        assert!(snapshot.generators.is_empty() && snapshot.hazards.is_empty());
+        assert_eq!(snapshot.velocity, (0, 0));
+    }
+
     use super::*;
 
     #[test]

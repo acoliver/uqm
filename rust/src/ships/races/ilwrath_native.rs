@@ -105,7 +105,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = FIRES_FORE as u16;
         d.ship_info.ship_cost = 10;
         d.ship_info.crew_level = MAX_CREW;
@@ -174,7 +174,7 @@ pub(crate) mod engine {
                 && same_color((*prim).color, BLACK_COLOR))
     }
 
-    unsafe extern "C" fn flame_preprocess(flame: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn flame_preprocess(flame: *mut ELEMENT) {
         if (*flame).__bindgen_anon_4.turn_wait > 0 {
             (*flame).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -185,7 +185,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn flame_collision(
+    pub(crate) unsafe extern "C" fn flame_collision(
         flame: *mut ELEMENT,
         flame_point: *mut POINT,
         other: *mut ELEMENT,
@@ -196,7 +196,7 @@ pub(crate) mod engine {
         (*flame).state_flags |= NONSOLID as u16;
     }
 
-    unsafe extern "C" fn ilwrath_intelligence(
+    pub(crate) unsafe extern "C" fn ilwrath_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -235,7 +235,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_flame(ship: *mut ELEMENT, flames: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_flame(
+        ship: *mut ELEMENT,
+        flames: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -303,7 +306,7 @@ pub(crate) mod engine {
         (*ship).hTarget = std::ptr::null_mut();
     }
 
-    unsafe extern "C" fn ilwrath_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn ilwrath_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let race = (*ss).RaceDescPtr;
         // Local copy: clearing SPECIAL below must not touch cur_status_flags.

@@ -7,7 +7,7 @@ pub(crate) mod engine {
     };
     use std::mem;
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE as i32) as _;
         d.ship_info.ship_cost = 6;
         d.ship_info.crew_level = 10;
@@ -61,7 +61,7 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn spit_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spit_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -85,7 +85,10 @@ pub(crate) mod engine {
             (*e).state_flags |= CHANGING as u16;
         }
     }
-    unsafe extern "C" fn initialize_spit(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_spit(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -107,12 +110,12 @@ pub(crate) mod engine {
         *out = initialize_missile(&mut block);
         1
     }
-    unsafe extern "C" fn tongue_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn tongue_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait != 0 {
             spawn_tongue(e);
         }
     }
-    unsafe extern "C" fn tongue_collision(
+    pub(crate) unsafe extern "C" fn tongue_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -128,7 +131,7 @@ pub(crate) mod engine {
         (*a).__bindgen_anon_4.turn_wait = 0;
         (*a).state_flags |= NONSOLID as u16;
     }
-    unsafe extern "C" fn spawn_tongue(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_tongue(e: *mut ELEMENT) {
         let ss = starship(e);
         let mut block = MISSILE_BLOCK {
             cx: (*e).next.location.x,
@@ -176,7 +179,7 @@ pub(crate) mod engine {
             put_element(h);
         }
     }
-    unsafe extern "C" fn zoqfotpik_intelligence(
+    pub(crate) unsafe extern "C" fn zoqfotpik_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         mut count: COUNT,
@@ -228,7 +231,7 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn zoqfotpik_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn zoqfotpik_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0

@@ -198,13 +198,8 @@ unsafe fn read_flight_state(solar_system: &SOLARSYS_STATE, snapshot: &mut Naviga
 pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    unsafe {
-        let sis_state = std::ptr::addr_of!(GLOB_DATA.SIS_state);
-        Some((
-            std::ptr::addr_of!((*sis_state).log_x).read(),
-            std::ptr::addr_of!((*sis_state).log_y).read(),
-        ))
-    }
+    let sis_state = unsafe { &*std::ptr::addr_of!(GLOB_DATA.SIS_state) };
+    Some((sis_state.log_x, sis_state.log_y))
 }
 
 /// Without the linked game there is no position to read.
@@ -261,13 +256,8 @@ pub(crate) fn hyperspace_facing() -> Option<u8> {
 pub(crate) fn ship_resources() -> Option<(u32, u32)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    unsafe {
-        let sis_state = std::ptr::addr_of!(GLOB_DATA.SIS_state);
-        Some((
-            std::ptr::addr_of!((*sis_state).FuelOnBoard).read(),
-            std::ptr::addr_of!((*sis_state).ResUnits).read(),
-        ))
-    }
+    let sis_state = unsafe { &*std::ptr::addr_of!(GLOB_DATA.SIS_state) };
+    Some((sis_state.FuelOnBoard, sis_state.ResUnits))
 }
 
 /// Without the linked game there is no flagship state to read.
@@ -281,13 +271,8 @@ pub(crate) fn ship_resources() -> Option<(u32, u32)> {
 pub(crate) fn sis_crew_and_landers() -> Option<(u16, u8)> {
     // SAFETY: the production game invokes the automation hooks synchronously
     // on the game thread, so `GlobData` cannot change during this read.
-    unsafe {
-        let sis_state = std::ptr::addr_of!(GLOB_DATA.SIS_state);
-        Some((
-            std::ptr::addr_of!((*sis_state).CrewEnlisted).read(),
-            std::ptr::addr_of!((*sis_state).NumLanders).read(),
-        ))
-    }
+    let sis_state = unsafe { &*std::ptr::addr_of!(GLOB_DATA.SIS_state) };
+    Some((sis_state.CrewEnlisted, sis_state.NumLanders))
 }
 
 /// Without the linked game there is no flagship state to read.
@@ -519,42 +504,41 @@ pub(crate) fn navigation_snapshot(
         ..NavigationSnapshot::default()
     };
 
-    unsafe {
-        // The production game invokes this hook synchronously on the game
-        // thread, so these mutable C globals cannot change during a snapshot.
-        let solar_system_ptr = crate::c_bindings::solar_system::current();
-        let Some(solar_system) = solar_system_ptr.as_ref() else {
-            return snapshot;
-        };
-        if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].NumPlanets) {
-            return snapshot;
-        }
-        read_flight_state(solar_system, &mut snapshot);
-
-        if let Some(moon) = target_moon {
-            if snapshot.inner_planet == target_planet
-                && moon >= 0
-                && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].NumPlanets)
-            {
-                let target = &solar_system.MoonDesc[moon as usize];
-                snapshot.target_data_index = i32::from(target.data_index);
-                let target_origin = target.image.origin;
-                snapshot.target_x = i32::from(target_origin.x);
-                snapshot.target_y = i32::from(target_origin.y);
-                return snapshot;
-            }
-        }
-
-        let target_origin = solar_system.PlanetDesc[target_planet as usize].image.origin;
-        let (target_x, target_y) = planet_display_target(
-            snapshot.inner_planet == target_planet,
-            (i32::from(target_origin.x), i32::from(target_origin.y)),
-            i32::from(solar_system.SunDesc[0].radius),
-            &geometry,
-        );
-        snapshot.target_x = target_x;
-        snapshot.target_y = target_y;
+    // SAFETY: this synchronous snapshot borrows the current solar system until
+    // return, without callbacks or any mutation of its planet arrays.
+    let solar = unsafe { crate::c_bindings::solar_system::current().as_ref() };
+    let Some(solar_system) = solar else {
+        return snapshot;
+    };
+    if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].NumPlanets) {
+        return snapshot;
     }
+    // SAFETY: the live synchronous solar borrow also keeps its global flight state live.
+    unsafe { read_flight_state(solar_system, &mut snapshot) };
+
+    if let Some(moon) = target_moon {
+        if snapshot.inner_planet == target_planet
+            && moon >= 0
+            && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].NumPlanets)
+        {
+            let target = &solar_system.MoonDesc[moon as usize];
+            snapshot.target_data_index = i32::from(target.data_index);
+            let target_origin = target.image.origin;
+            snapshot.target_x = i32::from(target_origin.x);
+            snapshot.target_y = i32::from(target_origin.y);
+            return snapshot;
+        }
+    }
+
+    let target_origin = solar_system.PlanetDesc[target_planet as usize].image.origin;
+    let (target_x, target_y) = planet_display_target(
+        snapshot.inner_planet == target_planet,
+        (i32::from(target_origin.x), i32::from(target_origin.y)),
+        i32::from(solar_system.SunDesc[0].radius),
+        &geometry,
+    );
+    snapshot.target_x = target_x;
+    snapshot.target_y = target_y;
     snapshot
 }
 
@@ -710,17 +694,18 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
 
     // Step 3: Commit the scripted player-input observation at the exact
     // production boundary that follows UpdateInputState.
+    Coordinator::parity_input();
     Coordinator::process_player_input_observation().into()
 }
 
-/// Admit input for nested button waits outside `DoInput`.
-///
-/// Both callers sample production input immediately after this hook:
-/// `ui::util::wait_until` through `AnyButtonPress`, and `MeleeGameOver`
-/// through `UpdateInputState`. Semantic notifications do not call it.
-#[no_mangle]
-pub extern "C" fn rust_automation_service_boundary() -> i32 {
-    service_input(true)
+/// Admit and observe one nested input sample without changing its polling order.
+pub fn nested_input<R>(sample: impl FnOnce() -> R) -> Option<R> {
+    if service_input(true) != 0 {
+        return None;
+    }
+    let sampled = sample();
+    Coordinator::parity_input();
+    Some(sampled)
 }
 // ===========================================================================
 //  Bounds-checked production setter (REQ-INJECT-003)
@@ -858,6 +843,19 @@ pub extern "C" fn rust_automation_presented_frame() -> i32 {
 //  Production getters (REQ-INJECT-006)
 // ===========================================================================
 
+#[cfg(not(test))]
+pub(crate) fn current_inputs() -> crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
+    // SAFETY: automation admission is synchronous on the game thread.
+    unsafe { std::ptr::addr_of!(CurrentInputState).read() }
+}
+#[cfg(test)]
+pub(crate) fn current_inputs() -> crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
+    crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
+        key: [[0; 7]; 6],
+        menu: [0; 24],
+    }
+}
+
 /// C-callable getter for `CurrentInputState.menu[index]`.
 ///
 /// Returns the value (0 or 1) or -1 on invalid index.
@@ -869,7 +867,7 @@ pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
     }
-    unsafe { CurrentInputState.menu[index as usize] }
+    current_inputs().menu[index as usize]
 }
 
 /// C-callable getter for `CurrentInputState.menu[index]` (stub for tests).

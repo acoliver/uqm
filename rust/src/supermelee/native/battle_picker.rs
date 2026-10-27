@@ -430,7 +430,7 @@ pub(crate) mod live {
         value(frame, (*ship).playerNr as usize);
     }
 
-    use crate::automation::input_ffi::rust_automation_service_boundary;
+    use crate::automation::input_ffi::nested_input;
 
     use crate::mainloop::input_abi::live::UpdateInputState;
     /// # Safety
@@ -445,10 +445,9 @@ pub(crate) mod live {
         let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
             || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
         loop {
-            if rust_automation_service_boundary() != 0 {
+            if nested_input(|| UpdateInputState()).is_none() {
                 break;
             }
-            UpdateInputState();
             let mut button = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
                 || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
             if pressed {

@@ -41,7 +41,7 @@ pub(crate) mod engine {
     const MAX_UNIVERSE: i16 = 9999;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = FIRES_FORE as u16;
         d.ship_info.ship_cost = 18;
         d.ship_info.crew_level = MAX_CREW;
@@ -102,7 +102,7 @@ pub(crate) mod engine {
         &raw mut MELNORME_DESC
     }
 
-    unsafe extern "C" fn pump_up_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn pump_up_preprocess(e: *mut ELEMENT) {
         (*e).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
         if (*e).__bindgen_anon_5.thrust_wait & 1 != 0 {
             let mut idx = frame_index((*e).current.image.frame);
@@ -121,7 +121,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn pump_up_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn pump_up_postprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 != 0 {
             (*e).velocity = mem::zeroed();
             return;
@@ -197,7 +197,7 @@ pub(crate) mod engine {
         (*e).state_flags |= NONSOLID as u16;
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -207,7 +207,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn pump_up_collision(
+    pub(crate) unsafe extern "C" fn pump_up_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -234,7 +234,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_pump_up(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_pump_up(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -262,7 +265,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn confuse_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn confuse_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & NONSOLID as u16 == 0 {
             (*e).next.image.frame = SetAbsFrameIndex(
                 (*e).current.image.frame,
@@ -307,7 +310,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn confusion_collision(
+    pub(crate) unsafe extern "C" fn confusion_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -361,7 +364,10 @@ pub(crate) mod engine {
         (*a).state_flags |= (DISAPPEARING | COLLISION | NONSOLID) as u16;
     }
 
-    unsafe extern "C" fn initialize_confusion(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_confusion(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -388,7 +394,10 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn initialize_test_pump_up(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_test_pump_up(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -410,7 +419,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn melnorme_intelligence(
+    pub(crate) unsafe extern "C" fn melnorme_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -465,7 +474,7 @@ pub(crate) mod engine {
         (*desc).init_weapon_func = Some(initialize_pump_up);
     }
 
-    unsafe extern "C" fn melnorme_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn melnorme_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0

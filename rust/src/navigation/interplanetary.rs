@@ -115,7 +115,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe extern "C" fn group_preprocess(element: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn group_preprocess(element: *mut ELEMENT) {
         (*element).state_flags &= !((DISAPPEARING | NONSOLID) as u16);
         (*element).__bindgen_anon_1.life_span =
             (*element).__bindgen_anon_1.life_span.wrapping_add(1);
@@ -368,7 +368,7 @@ pub(crate) mod live {
             GlobData.Game_state.CurrentActivity |= START_ENCOUNTER as u16;
         }
     }
-    unsafe extern "C" fn flagship_collision(
+    pub(crate) unsafe extern "C" fn flagship_collision(
         first: *mut ELEMENT,
         _p0: *mut POINT,
         second: *mut ELEMENT,
@@ -379,7 +379,7 @@ pub(crate) mod live {
         }
         collide_flagship(first, second);
     }
-    unsafe extern "C" fn group_collision(
+    pub(crate) unsafe extern "C" fn group_collision(
         first: *mut ELEMENT,
         _p0: *mut POINT,
         second: *mut ELEMENT,
@@ -430,7 +430,7 @@ pub(crate) mod live {
         (*element).IntersectControl.IntersectStamp.frame = DecFrameIndex(stars_in_space);
         PutQueue(ptr::addr_of_mut!(disp_q), handle);
     }
-    unsafe extern "C" fn flagship_preprocess(element: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn flagship_preprocess(element: *mut ELEMENT) {
         (*element).__bindgen_anon_5.thrust_wait =
             (*element).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
         if (*element).__bindgen_anon_5.thrust_wait == 0 {

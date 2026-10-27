@@ -3,6 +3,42 @@
 use super::*;
 
 impl Coordinator {
+    pub(super) fn activate_input_runtime() -> &'static RuntimeModel {
+        input_ffi::init_automation_runtime();
+        let Some(runtime) = input_ffi::get_runtime() else {
+            panic!("automation runtime initialization did not publish its runtime");
+        };
+        runtime.activate();
+        runtime
+    }
+
+    pub(super) fn admit_boundary(&self, inner: &mut CoordInner, kind: CallbackKind) -> bool {
+        let now = Instant::now();
+        let entry = WatchdogEntry {
+            kind,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed: now.duration_since(self.started_at),
+            ready: inner.ready,
+            idle: now.saturating_duration_since(inner.last_progress),
+            clock: ClockSample {
+                started_at: self.started_at,
+                last_observed: inner.last_observed,
+                now,
+            },
+        };
+        let result = watchdog_reduce(&entry, &self.watchdog_limits);
+        inner.last_observed = now;
+        inner.input_seen = result.candidate_input_seen;
+        inner.present_seen = result.candidate_present_seen;
+        if let Some(class) = watchdog_terminal_class(result.outcome) {
+            self.set_terminal(inner, class);
+            return true;
+        }
+        inner.last_progress = now;
+        false
+    }
+
     pub(super) fn process_input_at_boundary(&self, button_wait: bool) -> bool {
         let mut inner = self.inner.lock();
 
@@ -25,47 +61,14 @@ impl Coordinator {
         let orbit_transition_pending = inner.orbit_transition_pending;
         inner.orbit_transition_pending = false;
 
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.started_at);
-
-        // Step 1: Watchdog check.
-        let entry = WatchdogEntry {
-            kind: CallbackKind::Input,
-            input_seen: inner.input_seen,
-            present_seen: inner.present_seen,
-            elapsed,
-            ready: inner.ready,
-            idle: now.saturating_duration_since(inner.last_progress),
-            clock: ClockSample {
-                started_at: self.started_at,
-                last_observed: inner.last_observed,
-                now,
-            },
-        };
-
-        let wd_result = watchdog_reduce(&entry, &self.watchdog_limits);
-        inner.last_observed = now;
-
-        // Update counters from watchdog result (post-increment values).
-        inner.input_seen = wd_result.candidate_input_seen;
-        inner.present_seen = wd_result.candidate_present_seen;
-
-        if let Some(class) = watchdog_terminal_class(wd_result.outcome) {
-            self.set_terminal(&mut inner, class);
+        if self.admit_boundary(&mut inner, CallbackKind::Input) {
             return true;
         }
-        // Admitted: this callback is progress for the idle watchdog.
-        inner.last_progress = now;
+        if self.save_input(&mut inner, button_wait) {
+            return true;
+        }
 
-        // A synchronous scan's button polls cannot deliver menu selections.
-        // Release the previous select and check run budgets above, but reserve
-        // the menu action's admission budget for its actual DoInput consumer.
-        if button_wait
-            && matches!(
-                self.actions.get(inner.sched_state.step_index),
-                Some(Action::SelectPlanetMenu(_))
-            )
-        {
+        if self.reserve_nested_button_poll(&inner, button_wait) {
             return false;
         }
 
@@ -98,10 +101,21 @@ impl Coordinator {
         if inner.terminal_class.is_some() {
             return true;
         }
-        if self.queue_input_fixture(&mut inner, scheduler_event) {
+        if self.parity_fixture_input(&mut inner, scheduler_event)
+            || self.queue_input_fixture(&mut inner, scheduler_event)
+        {
             return true;
         }
         self.commit_input_event(&mut inner, scheduler_event)
+    }
+
+    fn reserve_nested_button_poll(&self, inner: &CoordInner, button_wait: bool) -> bool {
+        // Autoscan polls release keys and spend run budgets, but cannot select a menu item.
+        button_wait
+            && matches!(
+                self.actions.get(inner.sched_state.step_index),
+                Some(Action::SelectPlanetMenu(_))
+            )
     }
 
     fn queue_input_fixture(&self, inner: &mut CoordInner, scheduler_event: SchedulerEvent) -> bool {

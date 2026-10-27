@@ -13,6 +13,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
 //! @requirement REQ-SCRIPT-001..006
 
+mod assertions;
+use assertions::validate_assertion_step;
+
 use crate::automation::campaign_state::StatePredicate;
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
@@ -964,6 +967,11 @@ pub enum Action {
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
     SetupMeleeMutualLossFixture(SetupMeleeMutualLossFixtureStep),
+    ConfigureParityMelee(crate::automation::melee_fixture::MeleeSetupRequest),
+    RunParityFixture(crate::automation::melee_fixture::FixtureRequest),
+    RunParityCorpus(crate::automation::melee_fixture::CorpusRequest),
+    AssertParityFixture,
+
     SetupPlanetSideMineralGallery(SetupPlanetSideCollisionFixtureStep),
     ExpectQuit(ExpectQuitStep),
     Finish,
@@ -1773,7 +1781,7 @@ const SPLASH_POLL_TICKS: u64 = ONE_SECOND as u64 / 40;
 /// Automation service points the splash wait can reach, with no key pressed.
 ///
 /// `WaitForAnyButtonUntil` (`util.c:222-249`) calls
-/// `rust_automation_service_boundary` once per loop pass (`util.c:239`),
+/// `input_ffi::nested_input` once per loop pass,
 /// which is one admitted input callback, and `AnyButtonPress` before the loop
 /// services nothing. The loop runs while `GetTimeCounter () < timeOut`, and
 /// pass `k` starts no earlier than `k * SPLASH_POLL_TICKS` after `timeOut` was
@@ -2286,117 +2294,6 @@ fn validate_navigation_step(
         _ => return None,
     };
     Some(requirements.add_bounded_wait(max_ticks, index, path))
-}
-
-/// Validate captures, assertions, and terminal steps.
-fn validate_assertion_step(
-    step: &Action,
-    index: usize,
-    path: &str,
-    requirements: &mut StepRequirements,
-) -> Result<(), AutomationError> {
-    match step {
-        Action::Capture(capture) => {
-            if !is_valid_label(&capture.label) {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    format!(
-                        "capture label '{}' is invalid: must be nonempty and reject separators, '..', and control characters",
-                        capture.label
-                    ),
-                ));
-            }
-        }
-        Action::AssertActivity(assertion) => {
-            // REQ-SCRIPT-004: equals & !mask == 0
-            if (assertion.equals & !assertion.mask) != 0 {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    format!(
-                        "assert_activity: equals (0x{:04X}) has bits outside mask (0x{:04X})",
-                        assertion.equals, assertion.mask
-                    ),
-                ));
-            }
-        }
-        Action::AssertCommunicationResponses(assertion) => {
-            if assertion.minimum == 0 {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_communication_responses: minimum must be greater than zero",
-                ));
-            }
-        }
-        Action::AssertBattleFrames(assertion) => {
-            if assertion.minimum == 0 {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_battle_frames: minimum must be greater than zero",
-                ));
-            }
-        }
-        Action::AssertHyperspaceDisplacement(assertion) => {
-            if assertion.minimum_logical_units == 0 {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_hyperspace_displacement: minimum_logical_units must be greater than zero",
-                ));
-            }
-        }
-        Action::AssertShipResources(assertion) => {
-            if assertion.fuel_on_board.is_none() && assertion.res_units.is_none() {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_ship_resources: state fuel_on_board, res_units or both",
-                ));
-            }
-        }
-        Action::AssertState(predicate) => {
-            if let Err(reason) = predicate.validate() {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    format!("assert_state: {reason}"),
-                ));
-            }
-        }
-        Action::AssertShipElement(assertion) => {
-            if assertion.minimum == 0 {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_ship_element: minimum must be greater than zero",
-                ));
-            }
-        }
-        Action::AssertPlanetSideCollisions(assertion) => {
-            if assertion.mineral_pickups == 0
-                && assertion.creature_hits == 0
-                && assertion.seam_hits == 0
-            {
-                return Err(AutomationError::step(
-                    path,
-                    index,
-                    "assert_planet_side_collisions: at least one of mineral_pickups, creature_hits, seam_hits must be positive",
-                ));
-            }
-        }
-        Action::AssertMainMenuTransition(transition) => {
-            let from = parse_menu_item(&transition.from, index, path)?;
-            let to = parse_menu_item(&transition.to, index, path)?;
-            requirements
-                .transitions
-                .push(MainMenuTransition::new(from, to));
-        }
-        _ => {}
-    }
-    Ok(())
 }
 
 /// Enforce `max >= required + 1` using checked arithmetic.

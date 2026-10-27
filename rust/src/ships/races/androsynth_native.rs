@@ -60,8 +60,8 @@ pub(crate) mod engine {
     /// Per-instance data kept in `RACE_DESC.data`: the collision function the
     /// ship had before it became a blazer.
     #[repr(C)]
-    struct AndrosynthData {
-        collision_func: ElementCollisionFunc,
+    pub(crate) struct AndrosynthData {
+        pub(crate) collision_func: ElementCollisionFunc,
     }
 
     /// units.h ANGLE_TO_FACING; evaluated in `int` like the C macro.
@@ -82,7 +82,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
         desc.ship_info.ship_cost = 15;
         desc.ship_info.crew_level = MAX_CREW;
@@ -173,7 +173,7 @@ pub(crate) mod engine {
         (&raw mut (*desc).ship_data.weapon).cast()
     }
 
-    unsafe extern "C" fn blazer_collision(
+    pub(crate) unsafe extern "C" fn blazer_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -194,7 +194,7 @@ pub(crate) mod engine {
         collision(a, pa, b, pb);
     }
 
-    unsafe extern "C" fn bubble_preprocess(missile: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn bubble_preprocess(missile: *mut ELEMENT) {
         let packed = (*missile).__bindgen_anon_4.turn_wait;
         let mut thrust_wait = packed >> 4;
         let mut turn_wait = packed & 0x0f;
@@ -231,7 +231,10 @@ pub(crate) mod engine {
         (*missile).__bindgen_anon_4.turn_wait = make_byte(turn_wait, thrust_wait);
     }
 
-    unsafe extern "C" fn initialize_bubble(ship: *mut ELEMENT, bubbles: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_bubble(
+        ship: *mut ELEMENT,
+        bubbles: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -258,7 +261,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn androsynth_intelligence(
+    pub(crate) unsafe extern "C" fn androsynth_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -364,7 +367,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn androsynth_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn androsynth_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
 
@@ -407,7 +410,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn androsynth_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn androsynth_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
 
@@ -477,7 +480,7 @@ pub(crate) mod engine {
         (*ss).cur_status_flags = cur_status_flags;
     }
 
-    unsafe extern "C" fn uninit_androsynth(desc: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_androsynth(desc: *mut RACE_DESC) {
         set_custom_ship_data(desc, None);
     }
 }

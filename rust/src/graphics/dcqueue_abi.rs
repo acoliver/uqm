@@ -15,7 +15,13 @@ pub static mut DCQ: [TFB_DrawCommand; MAX as usize] = unsafe { std::mem::zeroed(
 #[no_mangle]
 pub static mut DrawCommandQueue: TFB_DrawCommandQueue = unsafe { std::mem::zeroed() };
 pub static mut RENDERED_FRAMES: i32 = 0;
-static mut SCISSOR: RECT = unsafe { std::mem::zeroed() };
+static mut SCISSOR: RECT = RECT {
+    corner: POINT { x: 0, y: 0 },
+    extent: EXTENT {
+        width: 0,
+        height: 0,
+    },
+};
 static mut LAST_FADE: i32 = 255;
 static mut LAST_TRANSITION: i32 = 255;
 static mut LAST_TIME: u32 = 0;
