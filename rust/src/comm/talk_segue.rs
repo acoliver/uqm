@@ -53,6 +53,7 @@ pub enum ScrollMode {
 #[allow(dead_code)]
 pub(super) mod c_bridge {
     pub const ONE_SECOND_TICKS: i32 = 840;
+    pub use crate::time::source as clock;
 
     pub fn play_alien_music() {}
     pub fn set_color_map_from_comm_data() {}
@@ -79,7 +80,7 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::play_track as PlayTrack;
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
-    pub use crate::time::counter_abi::GetTimeCounter;
+    pub use crate::time::source as clock;
 
     pub use crate::comm::comm_abi::comm_CheckSubtitles;
 
@@ -410,7 +411,7 @@ pub mod dinput {
         ts.ended = (ts.seeking == 0 && cur_track == 0) as c_int;
 
         unsafe { SleepThreadUntil(ts.next_time) };
-        ts.next_time = c_bridge::GetTimeCounter() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+        ts.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
 
         (ts.seeking != 0 || (cur_track != 0 && cur_track <= ts.wait_track)) as c_int
     }
@@ -483,7 +484,7 @@ pub mod dinput {
             return 0;
         }
 
-        if c_bridge::GetTimeCounter() > lrs.time_out {
+        if c_bridge::clock::now_ticks() > lrs.time_out {
             return 0;
         }
 
@@ -523,7 +524,7 @@ pub mod dinput {
         unsafe { super::do_update_animations(false) };
 
         unsafe { SleepThreadUntil(lrs.next_time) };
-        lrs.next_time = c_bridge::GetTimeCounter() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
+        lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
 
         1
     }
@@ -1384,7 +1385,7 @@ fn update_speech_graphics(state: &mut CommState) {
         // Ported from c_UpdateSpeechGraphics in rust_comm.c
         // Rate-limited to ONE_SECOND/32 ticks
         static mut NEXT_TIME: u32 = 0;
-        let now = c_bridge::GetTimeCounter();
+        let now = c_bridge::clock::now_ticks();
         if now < NEXT_TIME {
             return;
         }

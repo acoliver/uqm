@@ -63,7 +63,9 @@ Replay mode (`uqm --replay <scenario>`) replaces exactly these inputs:
    `Platform` in Phase 7 (U7-05), which deletes the module. Replay time
    moves only when the game sleeps: `sleep_until(wake)` runs one `process_async` and
    `pump_and_flush` pass, then sets now to `max(now, wake)`; no real sleep happens.
-   `TaskSwitch` and `Async_process` leave time unchanged, so alarms fire at fixed
+   `DoInput` virtualizes its native 1 ms yield as one game tick without an extra
+   graphics flush. Other `TaskSwitch` calls and `Async_process` leave replay time
+   unchanged. Alarms fire at fixed
    replay times. A loop that reads the clock 10,000 times without sleeping panics
    with its caller instead of hanging.
 2. **Audio and speech.** The rodio thread is not started. `ReplayAudio` takes the same

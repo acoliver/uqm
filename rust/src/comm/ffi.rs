@@ -1004,7 +1004,7 @@ pub fn rust_update_speech_graphics() {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
+        .map(|d| super::speech_graphics::update_timestamp(d.as_millis() as u64))
         .unwrap_or(0);
     let mut state = COMM_STATE.write();
     // We need split borrows: call update with the oscilloscope as a reference.

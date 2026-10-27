@@ -15,6 +15,8 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+mod input;
+
 use crate::automation::battle_fight::{
     BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
 };
@@ -637,6 +639,14 @@ impl Coordinator {
         coord.process_input_inner()
     }
 
+    /// Service a nested button wait, which cannot accept planet-menu selections.
+    pub fn process_button_wait() -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        coord.process_input_at_boundary(true)
+    }
+
     /// Observe a scripted player input after production updates current and pulsed state.
     pub fn process_player_input_observation() -> bool {
         let Some(coord) = Self::get() else {
@@ -769,9 +779,6 @@ impl Coordinator {
     /// whether a pending semantic response action now requires speech skipping.
     #[must_use]
     pub fn service_and_should_skip_pending_communication_speech() -> bool {
-        if crate::time::source::is_replay() {
-            return Self::should_skip_pending_communication_speech();
-        }
         for _ in 0..4 {
             if Self::should_skip_pending_communication_speech() {
                 return true;
@@ -798,9 +805,6 @@ impl Coordinator {
     /// Consume an already-observed communication completion after hail teardown
     /// and expose the next action before returning to the outer game loop.
     pub fn service_communication_completion_boundary() -> bool {
-        if crate::time::source::is_replay() {
-            return false;
-        }
         for _ in 0..2 {
             let Some(coord) = Self::get() else {
                 return false;
@@ -2146,204 +2150,7 @@ impl Coordinator {
     }
 
     fn process_input_inner(&self) -> bool {
-        let mut inner = self.inner.lock();
-
-        if inner.terminal_class.is_some() {
-            return true;
-        }
-        if self.reject_unobserved_player_input(&mut inner) {
-            return true;
-        }
-
-        let released_semantic_select = inner.release_semantic_select;
-        if released_semantic_select {
-            let index = i32::from(crate::automation::script::MenuKey::Select.index());
-            if !inject_menu_key(index, 0) {
-                self.reject_input(&mut inner, "menu", index, 0);
-                return true;
-            }
-            inner.release_semantic_select = false;
-        }
-        let orbit_transition_pending = inner.orbit_transition_pending;
-        inner.orbit_transition_pending = false;
-
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.started_at);
-
-        // Step 1: Watchdog check.
-        let entry = WatchdogEntry {
-            kind: CallbackKind::Input,
-            input_seen: inner.input_seen,
-            present_seen: inner.present_seen,
-            elapsed,
-            ready: inner.ready,
-            idle: now.saturating_duration_since(inner.last_progress),
-            clock: ClockSample {
-                started_at: self.started_at,
-                last_observed: inner.last_observed,
-                now,
-            },
-        };
-
-        let wd_result = watchdog_reduce(&entry, &self.watchdog_limits);
-        inner.last_observed = now;
-
-        // Update counters from watchdog result (post-increment values).
-        inner.input_seen = wd_result.candidate_input_seen;
-        inner.present_seen = wd_result.candidate_present_seen;
-
-        if let Some(class) = watchdog_terminal_class(wd_result.outcome) {
-            self.set_terminal(&mut inner, class);
-            return true;
-        }
-        // Admitted: this callback is progress for the idle watchdog.
-        inner.last_progress = now;
-
-        // Keep the next action behind the committed-presentation barrier.
-        if self.native_checkpoint_pending(&inner) {
-            return false;
-        }
-        if inner.pending_main_menu_ready {
-            inner.pending_main_menu_ready = false;
-            return self.apply_main_menu_ready(&mut inner);
-        }
-        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
-        {
-            return true;
-        }
-
-        // Step 2: Feed to scheduler. Runtime waits are satisfied only by
-        // observed production state, never by injected input.
-        let mut scheduler_event = self.service_semantic_waits(
-            &mut inner,
-            released_semantic_select,
-            orbit_transition_pending,
-        );
-        if inner.terminal_class.is_some() {
-            return true;
-        }
-
-        scheduler_event = self.service_navigation(&mut inner, scheduler_event);
-
-        if inner.terminal_class.is_some() {
-            return true;
-        }
-        if matches!(
-            self.actions.get(inner.sched_state.step_index),
-            Some(Action::SetupMeleeMutualLossFixture(_))
-        ) && inner.sched_state.phase == ActionPhase::WaitingForInput
-            && scheduler_event == SchedulerEvent::AdmittedInput
-        {
-            match super::melee_fixture::trigger() {
-                Ok(()) => self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    "melee_mutual_loss_fixture_triggered".to_string(),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        format!("melee_mutual_loss_fixture_failed:{error}"),
-                    );
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
-        }
-        // The setup_planet_side_collision_fixture action is explicit and
-        // one-shot: only the current action queues, only once.  A duplicate
-        // while a request is still pending is a fail-fast semantic
-        // mismatch instead of an idempotent success.
-        if matches!(
-            self.actions.get(inner.sched_state.step_index),
-            Some(
-                Action::SetupPlanetSideCollisionFixture(_)
-                    | Action::SetupPlanetSideMineralGallery(_)
-            )
-        ) && inner.sched_state.phase == ActionPhase::WaitingForInput
-            && scheduler_event == SchedulerEvent::AdmittedInput
-        {
-            let gallery = matches!(
-                self.actions.get(inner.sched_state.step_index),
-                Some(Action::SetupPlanetSideMineralGallery(_))
-            );
-            let request = if gallery {
-                crate::planet_side::automation_fixture::coordinator_queues_mineral_gallery_request()
-            } else {
-                crate::planet_side::automation_fixture::coordinator_queues_fixture_request()
-            };
-            match request {
-                Ok(()) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        if gallery {
-                            "planet_side_mineral_gallery_queued"
-                        } else {
-                            "planet_side_collision_fixture_queued"
-                        }
-                        .to_string(),
-                    );
-                }
-                Err(error) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        format!(
-                            "planet_side_collision_fixture_duplicate:{}",
-                            error.operation
-                        ),
-                    );
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
-        }
-
-        let config = SchedulerConfig {
-            actions: &self.actions,
-            transitions: &self.transitions,
-        };
-        let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
-        let previous_state = inner.sched_state;
-        inner.sched_state = transition.new_state;
-
-        // Step 3: Apply effects.
-        if !self.apply_effects(&mut inner, &transition.effects, None) {
-            inner.sched_state =
-                scheduler_state_after_effects(previous_state, transition.new_state, false);
-            return true;
-        }
-
-        // Step 4: Write trace.
-        self.write_trace(&mut inner, RecordKind::InputTick);
-
-        // Step 4b: Replay menu transitions that arrived before the scheduler
-        // was ready for them.
-        self.replay_pending_transitions(&mut inner);
-
-        // Step 5: Check terminal.
-        if inner.sched_state.is_terminal() {
-            if terminal_waits_for_player_input_observation(
-                inner.sched_state,
-                inner.pending_player_input.is_some(),
-            ) {
-                return false;
-            }
-            let class = map_scheduler_terminal(inner.sched_state.terminal);
-            eprintln!(
-                "[automation] scheduler terminal: {:?} -> class={:?}",
-                inner.sched_state.terminal, class
-            );
-            if class == TerminalClass::SemanticMismatch {
-                self.trace_unsatisfied_planet_side_wait(&mut inner);
-            }
-            self.set_terminal(&mut inner, class);
-            return true;
-        }
-
-        false
+        self.process_input_at_boundary(false)
     }
 
     /// When a `wait_for_planet_side_end` ran out of ticks, record the last
@@ -4097,6 +3904,56 @@ mod tests {
             };
             assert!(labels.contains(&expected), "{labels:?}");
         }
+    }
+
+    #[test]
+    fn autoscan_button_polls_do_not_consume_dispatch_menu_budget() {
+        const CHILD: &str = "UQM_AUTOSCAN_ADMISSION_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::autoscan_button_polls_do_not_consume_dispatch_menu_budget", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}
+{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"autoscan-admission","budgets":{"max_input_ticks":2000,"max_presentations":2000,"max_wallclock_seconds":60},"steps":[{"action":"select_planet_menu","phase":"dispatch","max_ticks":200},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        Coordinator::init(script, temp.path().into());
+        let coord = Coordinator::get().unwrap();
+        // AutoScan has already selected, and its synchronous callback owns
+        // three scans of 84 lines. Dispatch cannot accept input yet.
+        coord.inner.lock().release_semantic_select = true;
+        for _ in 0..252 {
+            assert!(!coord.process_input_at_boundary(true));
+        }
+        {
+            let inner = coord.inner.lock();
+            assert!(!inner.release_semantic_select);
+            assert_eq!(
+                inner.input_seen, 252,
+                "polls still count against the run watchdog"
+            );
+            assert_eq!(inner.sched_state, SchedulerState::initial());
+        }
+        use crate::automation::ui_observation::{
+            rust_automation_observe_planet_menu, PlanetMenuPhase,
+        };
+        rust_automation_observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
+        assert!(!coord.process_input_inner());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 1);
+        assert!(coord.process_input_inner());
+        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
     }
 
     #[test]
