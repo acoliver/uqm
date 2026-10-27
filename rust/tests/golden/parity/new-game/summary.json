@@ -1,0 +1,1743 @@
+{
+  "replay": {
+    "completed": true,
+    "inputs_admitted": 164,
+    "presents": 80,
+    "steps": 212,
+    "final_activity": 4
+  },
+  "counts": {
+    "input_seen": 164,
+    "present_seen": 80,
+    "terminal": "success",
+    "completed": true,
+    "exit_code": 0,
+    "classification": "success",
+    "issue": null,
+    "action_phases": [
+      {
+        "input_seen": 0,
+        "present_seen": 0,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 0,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 1,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 2,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 3,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 4,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 5,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 6,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 7,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 8,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 9,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 10,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 11,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 12,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 13,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 14,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 15,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 16,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 17,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 18,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 19,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 20,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 21,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 22,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 23,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 24,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 25,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 26,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 27,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 28,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 29,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 30,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 31,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 32,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 33,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 34,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 35,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 36,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 37,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 38,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 39,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 40,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 41,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 42,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 43,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 44,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 45,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 46,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 47,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 48,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 49,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 50,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 51,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 52,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 53,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 54,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 55,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 56,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 57,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 58,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 59,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 60,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 61,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 62,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 63,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 64,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 65,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 66,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 67,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 68,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 69,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 70,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 71,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 72,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 73,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 74,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 75,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 76,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 77,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 78,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 79,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 80,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 81,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 82,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 83,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 84,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 85,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 86,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 87,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 88,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 89,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 90,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 91,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 92,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 93,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 94,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 95,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 96,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 97,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 98,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 99,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 100,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 101,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 102,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 103,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 104,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 105,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 106,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 107,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 108,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 109,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 110,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 111,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 112,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 113,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 114,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 115,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 116,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 117,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 118,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 119,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 120,
+        "present_seen": 1,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 120,
+        "present_seen": 2,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 120,
+        "present_seen": 3,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 121,
+        "present_seen": 3,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 121,
+        "present_seen": 4,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 121,
+        "present_seen": 5,
+        "step": 0,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 121,
+        "present_seen": 6,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 121,
+        "present_seen": 7,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 122,
+        "present_seen": 7,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 122,
+        "present_seen": 8,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 122,
+        "present_seen": 9,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 122,
+        "present_seen": 10,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 123,
+        "present_seen": 10,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 123,
+        "present_seen": 11,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 124,
+        "present_seen": 11,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 124,
+        "present_seen": 12,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 125,
+        "present_seen": 12,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 10 }"
+      },
+      {
+        "input_seen": 125,
+        "present_seen": 13,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 10 }"
+      },
+      {
+        "input_seen": 126,
+        "present_seen": 13,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 9 }"
+      },
+      {
+        "input_seen": 126,
+        "present_seen": 14,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 9 }"
+      },
+      {
+        "input_seen": 127,
+        "present_seen": 14,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 8 }"
+      },
+      {
+        "input_seen": 127,
+        "present_seen": 15,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 8 }"
+      },
+      {
+        "input_seen": 128,
+        "present_seen": 15,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 7 }"
+      },
+      {
+        "input_seen": 128,
+        "present_seen": 16,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 7 }"
+      },
+      {
+        "input_seen": 129,
+        "present_seen": 16,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 6 }"
+      },
+      {
+        "input_seen": 129,
+        "present_seen": 17,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 6 }"
+      },
+      {
+        "input_seen": 130,
+        "present_seen": 17,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 5 }"
+      },
+      {
+        "input_seen": 130,
+        "present_seen": 18,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 5 }"
+      },
+      {
+        "input_seen": 131,
+        "present_seen": 18,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
+      },
+      {
+        "input_seen": 131,
+        "present_seen": 19,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 4 }"
+      },
+      {
+        "input_seen": 132,
+        "present_seen": 19,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
+        "input_seen": 132,
+        "present_seen": 20,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 3 }"
+      },
+      {
+        "input_seen": 133,
+        "present_seen": 20,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 2 }"
+      },
+      {
+        "input_seen": 133,
+        "present_seen": 21,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 2 }"
+      },
+      {
+        "input_seen": 134,
+        "present_seen": 21,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 134,
+        "present_seen": 22,
+        "step": 1,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 135,
+        "present_seen": 22,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 135,
+        "present_seen": 23,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 136,
+        "present_seen": 23,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 136,
+        "present_seen": 24,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 136,
+        "present_seen": 25,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 136,
+        "present_seen": 26,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 2 }"
+      },
+      {
+        "input_seen": 137,
+        "present_seen": 26,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 137,
+        "present_seen": 27,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 137,
+        "present_seen": 28,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapHolding { remaining: 1 }"
+      },
+      {
+        "input_seen": 138,
+        "present_seen": 28,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 138,
+        "present_seen": 29,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 138,
+        "present_seen": 30,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapReleasePending"
+      },
+      {
+        "input_seen": 139,
+        "present_seen": 30,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 139,
+        "present_seen": 31,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 139,
+        "present_seen": 32,
+        "step": 2,
+        "action": "tap_menu_key",
+        "phase": "TapSettling { remaining: 1 }"
+      },
+      {
+        "input_seen": 140,
+        "present_seen": 32,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 140,
+        "present_seen": 33,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 140,
+        "present_seen": 34,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 141,
+        "present_seen": 34,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 19 }"
+      },
+      {
+        "input_seen": 141,
+        "present_seen": 35,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 19 }"
+      },
+      {
+        "input_seen": 141,
+        "present_seen": 36,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 19 }"
+      },
+      {
+        "input_seen": 142,
+        "present_seen": 36,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 18 }"
+      },
+      {
+        "input_seen": 142,
+        "present_seen": 37,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 18 }"
+      },
+      {
+        "input_seen": 142,
+        "present_seen": 38,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 18 }"
+      },
+      {
+        "input_seen": 143,
+        "present_seen": 38,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 17 }"
+      },
+      {
+        "input_seen": 143,
+        "present_seen": 39,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 17 }"
+      },
+      {
+        "input_seen": 143,
+        "present_seen": 40,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 17 }"
+      },
+      {
+        "input_seen": 144,
+        "present_seen": 40,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 16 }"
+      },
+      {
+        "input_seen": 144,
+        "present_seen": 41,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 16 }"
+      },
+      {
+        "input_seen": 144,
+        "present_seen": 42,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 16 }"
+      },
+      {
+        "input_seen": 145,
+        "present_seen": 42,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 15 }"
+      },
+      {
+        "input_seen": 145,
+        "present_seen": 43,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 15 }"
+      },
+      {
+        "input_seen": 145,
+        "present_seen": 44,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 15 }"
+      },
+      {
+        "input_seen": 146,
+        "present_seen": 44,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 14 }"
+      },
+      {
+        "input_seen": 146,
+        "present_seen": 45,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 14 }"
+      },
+      {
+        "input_seen": 146,
+        "present_seen": 46,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 14 }"
+      },
+      {
+        "input_seen": 147,
+        "present_seen": 46,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 13 }"
+      },
+      {
+        "input_seen": 147,
+        "present_seen": 47,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 13 }"
+      },
+      {
+        "input_seen": 147,
+        "present_seen": 48,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 13 }"
+      },
+      {
+        "input_seen": 148,
+        "present_seen": 48,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 12 }"
+      },
+      {
+        "input_seen": 148,
+        "present_seen": 49,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 12 }"
+      },
+      {
+        "input_seen": 148,
+        "present_seen": 50,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 12 }"
+      },
+      {
+        "input_seen": 149,
+        "present_seen": 50,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 11 }"
+      },
+      {
+        "input_seen": 149,
+        "present_seen": 51,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 11 }"
+      },
+      {
+        "input_seen": 149,
+        "present_seen": 52,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 11 }"
+      },
+      {
+        "input_seen": 150,
+        "present_seen": 52,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 10 }"
+      },
+      {
+        "input_seen": 150,
+        "present_seen": 53,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 10 }"
+      },
+      {
+        "input_seen": 150,
+        "present_seen": 54,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 10 }"
+      },
+      {
+        "input_seen": 151,
+        "present_seen": 54,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 9 }"
+      },
+      {
+        "input_seen": 151,
+        "present_seen": 55,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 9 }"
+      },
+      {
+        "input_seen": 151,
+        "present_seen": 56,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 9 }"
+      },
+      {
+        "input_seen": 152,
+        "present_seen": 56,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 8 }"
+      },
+      {
+        "input_seen": 152,
+        "present_seen": 57,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 8 }"
+      },
+      {
+        "input_seen": 152,
+        "present_seen": 58,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 8 }"
+      },
+      {
+        "input_seen": 153,
+        "present_seen": 58,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 7 }"
+      },
+      {
+        "input_seen": 153,
+        "present_seen": 59,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 7 }"
+      },
+      {
+        "input_seen": 153,
+        "present_seen": 60,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 7 }"
+      },
+      {
+        "input_seen": 154,
+        "present_seen": 60,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 6 }"
+      },
+      {
+        "input_seen": 154,
+        "present_seen": 61,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 6 }"
+      },
+      {
+        "input_seen": 154,
+        "present_seen": 62,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 6 }"
+      },
+      {
+        "input_seen": 155,
+        "present_seen": 62,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 5 }"
+      },
+      {
+        "input_seen": 155,
+        "present_seen": 63,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 5 }"
+      },
+      {
+        "input_seen": 155,
+        "present_seen": 64,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 5 }"
+      },
+      {
+        "input_seen": 156,
+        "present_seen": 64,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 4 }"
+      },
+      {
+        "input_seen": 156,
+        "present_seen": 65,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 4 }"
+      },
+      {
+        "input_seen": 156,
+        "present_seen": 66,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 4 }"
+      },
+      {
+        "input_seen": 157,
+        "present_seen": 66,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 3 }"
+      },
+      {
+        "input_seen": 157,
+        "present_seen": 67,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 3 }"
+      },
+      {
+        "input_seen": 157,
+        "present_seen": 68,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 3 }"
+      },
+      {
+        "input_seen": 158,
+        "present_seen": 68,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 2 }"
+      },
+      {
+        "input_seen": 158,
+        "present_seen": 69,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 2 }"
+      },
+      {
+        "input_seen": 158,
+        "present_seen": 70,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 2 }"
+      },
+      {
+        "input_seen": 159,
+        "present_seen": 70,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 1 }"
+      },
+      {
+        "input_seen": 159,
+        "present_seen": 71,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 1 }"
+      },
+      {
+        "input_seen": 159,
+        "present_seen": 72,
+        "step": 3,
+        "action": "wait_input_ticks",
+        "phase": "WaitCounting { remaining: 1 }"
+      },
+      {
+        "input_seen": 160,
+        "present_seen": 72,
+        "step": 4,
+        "action": "assert_activity",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 160,
+        "present_seen": 73,
+        "step": 4,
+        "action": "assert_activity",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 160,
+        "present_seen": 74,
+        "step": 4,
+        "action": "assert_activity",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 161,
+        "present_seen": 74,
+        "step": 5,
+        "action": "assert_ship_resources",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 161,
+        "present_seen": 75,
+        "step": 5,
+        "action": "assert_ship_resources",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 161,
+        "present_seen": 76,
+        "step": 5,
+        "action": "assert_ship_resources",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 162,
+        "present_seen": 76,
+        "step": 6,
+        "action": "capture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 162,
+        "present_seen": 77,
+        "step": 6,
+        "action": "capture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 162,
+        "present_seen": 78,
+        "step": 6,
+        "action": "capture",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 163,
+        "present_seen": 78,
+        "step": 6,
+        "action": "capture",
+        "phase": "WaitingCapture { generation: CaptureGeneration(1) }"
+      },
+      {
+        "input_seen": 163,
+        "present_seen": 79,
+        "step": 7,
+        "action": "finish",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 163,
+        "present_seen": 80,
+        "step": 7,
+        "action": "finish",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 164,
+        "present_seen": 80,
+        "step": 7,
+        "action": "finish",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 164,
+        "present_seen": 80,
+        "step": 7,
+        "action": "finish",
+        "phase": "WaitingForInput"
+      }
+    ],
+    "failures": []
+  }
+}
