@@ -138,32 +138,38 @@ pub(super) unsafe fn blit(
     mut dst_r: *mut SDL_Rect,
     mode: DrawMode,
 ) {
-    if mode.kind == DRAW_REPLACE {
-        if src != dst
-            // SAFETY: the caller owns live surfaces and rectangles; distinct surfaces permit
-            // an immutable source borrow alongside the exclusive destination borrow.
-            && unsafe {
-                super::alpha::blit(
+    let surface_alpha = mode.kind == DRAW_ALPHA && format(src).Amask == 0;
+    let override_alpha = surface_alpha.then_some(mode.factor as u8);
+    if mode.kind == DRAW_REPLACE || surface_alpha {
+        if src != dst {
+            // SAFETY: distinct live canvases own disjoint pixel storage; rectangles
+            // remain borrowed only for this synchronous blit.
+            let (source, source_rect, destination, destination_rect) = unsafe {
+                (
                     sdl2::surface::SurfaceRef::from_ll(src),
                     src_r.as_ref().copied(),
                     sdl2::surface::SurfaceRef::from_ll_mut(dst),
                     dst_r.as_mut(),
                 )
+            };
+            if super::alpha::blit(
+                source,
+                source_rect,
+                destination,
+                destination_rect,
+                override_alpha,
+            ) {
+                return;
             }
-        {
-            return;
+        }
+        if surface_alpha {
+            assert!(!has_surface_alpha_mod(src));
+            set_surface_alpha_mod(src, mode.factor as u8);
         }
         SDL_UpperBlit(src, src_r, dst, dst_r);
-    } else if mode.kind == DRAW_ALPHA && format(src).Amask == 0 {
-        // Standard SDL surface-alpha blit
-        // Note that surface alpha and per-pixel alpha cannot work
-        // at the same time, which is why the Amask test
-        let has_alpha = has_surface_alpha_mod(src);
-        assert!(!has_alpha);
-        // Set surface alpha temporarily
-        set_surface_alpha_mod(src, mode.factor as u8);
-        SDL_UpperBlit(src, src_r, dst, dst_r);
-        disable_surface_alpha_mod(src);
+        if surface_alpha {
+            disable_surface_alpha_mod(src);
+        }
     } else {
         // Custom blit
         let mut loc_src_r = SDL_Rect {
@@ -348,21 +354,7 @@ pub(super) unsafe fn fill(src: *mut SDL_Surface, mut fillcolor: u32, dst: *mut S
             for x in 0..width as isize {
                 let s = src_p.offset(y * slen as isize + x);
                 let d = dst_p.offset(y * dlen as isize + x);
-                let mut p = *s & amask;
-
-                if p == 0 {
-                    // fully transparent pixel
-                    *d = dstkey;
-                } else if alpha == 0xff {
-                    // not for DRAW_ALPHA; use alpha chan directly
-                    *d = p | fillcolor;
-                } else {
-                    // for DRAW_ALPHA; modulate the alpha channel
-                    p >>= srcfmt.Ashift;
-                    p = (p * alpha) >> 8;
-                    p <<= srcfmt.Ashift;
-                    *d = p | fillcolor;
-                }
+                *d = super::alpha::fill_pixel(*s, amask, srcfmt.Ashift, fillcolor, dstkey, alpha);
             }
         }
     } else if get_color_key(src, &mut srckey) == 0 {
