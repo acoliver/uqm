@@ -2,6 +2,7 @@ use super::*;
 
 mod counts_tests;
 mod coverage_tests;
+mod parallel_tests;
 mod protection_tests;
 mod quality_tests;
 mod runner_tests;

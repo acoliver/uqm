@@ -13,6 +13,10 @@ const INPUT_BUDGET: u64 = 5700;
 const WALL_SECONDS: u64 = 300;
 const WAIT_TICKS: u64 = 5000;
 
+// Share the parity recorder's bounded queue without linking the game into xtask.
+#[path = "../xtask/src/parity/parallel.rs"]
+mod parallel;
+
 struct Normalization {
     field: &'static str,
     reason: &'static str,
@@ -331,6 +335,44 @@ fn release_binary(temporary: &Path) -> Result<PathBuf> {
         .context("resolve built release uqm")
 }
 
+fn check_capture(
+    binary: &Path,
+    content: &Path,
+    temporary: &Path,
+    source: &Path,
+    record: Option<&Path>,
+    goldens: &Path,
+) -> Result<()> {
+    let name = source
+        .file_name()
+        .context("source basename")?
+        .to_string_lossy();
+    let original = decode_save(&fs::read(source)?)?;
+    let (bytes, metadata) = run_capture(binary, content, temporary, source)?;
+    let captured = decode_save(&bytes).with_context(|| format!("{name}: decode live capture"))?;
+    ensure!(
+        captured.summary.save_name.as_bytes() == b"runtime-capture",
+        "{name}: wrong capture name"
+    );
+    compare_bytes(
+        &bytes,
+        &encode_save(&captured)?,
+        &format!("{name}: capture codec"),
+    )?;
+    validate_metadata(&metadata, &original, &captured)
+        .with_context(|| format!("{name}: capture boundary"))?;
+    for change in normalization_changes(&original, &captured) {
+        eprintln!("{name}: {change}");
+    }
+    if let Some(directory) = record {
+        fs::write(directory.join(format!("{name}.capture")), &bytes)?;
+        fs::write(directory.join(format!("{name}.capture.json")), &metadata)?;
+    } else {
+        compare_golden(&goldens.join(format!("{name}.capture")), &bytes)?;
+    }
+    Ok(())
+}
+
 #[test]
 fn all_saves_match_runtime_captures() -> Result<()> {
     let mut inputs = sources()?;
@@ -382,45 +424,26 @@ fn all_saves_match_runtime_captures() -> Result<()> {
         .tempdir_in(temporary)?;
     let binary = release_binary(temporary.path())?;
     let content = install_content(temporary.path())?;
-    for (index, source) in inputs.iter().enumerate() {
-        let name = source
-            .file_name()
-            .context("source basename")?
-            .to_string_lossy();
-        let original = decode_save(&fs::read(source)?)?;
-        let (bytes, metadata) = run_capture(&binary, &content, temporary.path(), source)?;
-        let captured =
-            decode_save(&bytes).with_context(|| format!("{name}: decode live capture"))?;
-        ensure!(
-            captured.summary.save_name.as_bytes() == b"runtime-capture",
-            "{name}: wrong capture name"
+    let results = parallel::map(&inputs, parallel::workers(), |source| {
+        let started = Instant::now();
+        let result = check_capture(
+            &binary,
+            &content,
+            temporary.path(),
+            source,
+            record.as_deref(),
+            &goldens,
         );
-        compare_bytes(
-            &bytes,
-            &encode_save(&captured)?,
-            &format!("{name}: capture codec"),
-        )?;
-        validate_metadata(&metadata, &original, &captured)
-            .with_context(|| format!("{name}: capture boundary"))?;
-        for change in normalization_changes(&original, &captured) {
-            eprintln!("{name}: {change}");
-        }
-        if let Some(directory) = &record {
-            fs::write(directory.join(format!("{name}.capture")), &bytes)?;
-            fs::write(directory.join(format!("{name}.capture.json")), &metadata)?;
-        } else {
-            compare_golden(&goldens.join(format!("{name}.capture")), &bytes)?;
-        }
         eprintln!(
-            "V3b {} {}/{}: {name}",
-            if record.is_some() {
-                "recorded"
-            } else {
-                "matched"
-            },
-            index + 1,
-            inputs.len()
+            "V3b {}: {:.3}s ({})",
+            source.display(),
+            started.elapsed().as_secs_f64(),
+            if result.is_ok() { "passed" } else { "failed" }
         );
+        result
+    });
+    for result in results {
+        result?;
     }
     println!(
         "V3b: {}/74 saves {}{}",

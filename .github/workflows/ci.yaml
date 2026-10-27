@@ -5,6 +5,8 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
+  schedule:
+    - cron: '23 7 * * *'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -155,35 +157,20 @@ jobs:
           target/${{ matrix.target }}/release/${{ matrix.binary }} --check-content --contentdir=../sc2/content
           cargo run --release --locked --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
 
-  parity:
-    name: Parity (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-14
-            platform: macos
-          - runner: ubuntu-24.04
-            platform: ubuntu
-    defaults:
-      run:
-        working-directory: rust
-        shell: bash
-    env:
-      SDL_VIDEODRIVER: dummy
-      SDL_AUDIODRIVER: dummy
-      PARITY_DIR: ${{ github.workspace }}/tmp/verify/parity-${{ matrix.platform }}
+  parity-policy:
+    name: Select parity recording scope
+    runs-on: ubuntu-24.04
+    outputs:
+      base: ${{ steps.policy.outputs.base }}
+      update: ${{ steps.policy.outputs.update }}
+      record: ${{ steps.policy.outputs.record }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Start parity duration accounting
-        run: |
-          mkdir -p "$PARITY_DIR"
-          python3 -c 'import time,os,pathlib; pathlib.Path(os.environ["PARITY_DIR"],"started.txt").write_text(str(time.time()))'
+      - run: node --test .github/scripts/parity-policy.test.cjs
       - name: Resolve base and owner-authorized golden updates
+        id: policy
         uses: actions/github-script@v7
         with:
           script: |
@@ -209,15 +196,98 @@ jobs:
               allow = present && last?.event === 'labeled' && last.actor?.login === owner;
               if (present && !allow) core.setFailed('parity-golden-update must be applied by the repository owner');
             }
+            if (context.eventName === 'schedule') {
+              base = (await exec.getExecOutput('git', ['rev-parse', 'HEAD^'])).stdout.trim();
+            }
             if (!base || /^0+$/.test(base)) throw new Error('Parity requires an existing git base commit');
-            core.exportVariable('PARITY_BASE', base);
-            core.exportVariable('PARITY_UPDATE', allow ? '--allow-golden-update' : '');
+            const diff = await exec.getExecOutput('git', ['diff', '--no-renames', '--name-only', '-z', base, 'HEAD'], {silent: true});
+            const { needsRecording } = require('./.github/scripts/parity-policy.cjs');
+            core.setOutput('base', base);
+            core.setOutput('update', allow ? '--allow-golden-update' : '');
+            core.setOutput('record', needsRecording(context.eventName, diff.stdout.split('\0').filter(Boolean)));
+
+  parity-check:
+    name: Parity check (Linux, full goldens)
+    needs: parity-policy
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PARITY_BASE: ${{ needs.parity-policy.outputs.base }}
+      PARITY_UPDATE: ${{ needs.parity-policy.outputs.update }}
+      PARITY_DIR: ${{ github.workspace }}/tmp/verify/parity-check
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install bundled SDL build and replay dependencies
+        run: sudo apt-get update && sudo apt-get install --yes cmake libasound2-dev pkg-config unzip
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          key: parity-ubuntu
+      - name: Compare one complete fresh recording with committed goldens
+        run: |
+          set -euo pipefail
+          mkdir -p "$PARITY_DIR"
+          update=()
+          if [ "$PARITY_UPDATE" = '--allow-golden-update' ]; then update+=("$PARITY_UPDATE"); fi
+          SECONDS=0
+          cargo xtask parity check --base "$PARITY_BASE" "${update[@]}" --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/check.log"
+          echo "Full Linux parity check: ${SECONDS}s (build, content, all scenarios and 74 runtime saves)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parity-check-diagnostics
+          path: tmp/verify/parity-check
+          if-no-files-found: error
+          retention-days: 3
+
+  parity:
+    needs: parity-policy
+    if: needs.parity-policy.outputs.record == 'true'
+    name: Parity (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            platform: macos
+          - runner: ubuntu-24.04
+            platform: ubuntu
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
+    env:
+      PARITY_BASE: ${{ needs.parity-policy.outputs.base }}
+      PARITY_UPDATE: ${{ needs.parity-policy.outputs.update }}
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PARITY_DIR: ${{ github.workspace }}/tmp/verify/parity-${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Start parity duration accounting
+        run: |
+          mkdir -p "$PARITY_DIR"
+          python3 -c 'import time,os,pathlib; pathlib.Path(os.environ["PARITY_DIR"],"started.txt").write_text(str(time.time()))'
       - name: Install macOS replay dependencies
         if: runner.os == 'macOS'
-        run: brew install pkg-config sdl2
+        run: brew install pkg-config cmake
       - name: Install Ubuntu replay dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes libasound2-dev libsdl2-dev pkg-config unzip
+        run: sudo apt-get update && sudo apt-get install --yes cmake libasound2-dev pkg-config unzip
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
         with:
@@ -227,7 +297,6 @@ jobs:
         run: 'cargo test -p uqm-xtask --no-default-features --locked parity::'
       - name: Record all corpus, fixtures, scenario counts and 74 runtime saves
         id: recording
-        if: always()
         run: |
           set -o pipefail
           cargo xtask parity record --all --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/record.log"
@@ -272,11 +341,12 @@ jobs:
           name: parity-record-${{ matrix.platform }}
           path: tmp/verify/parity-${{ matrix.platform }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
   parity-platform-compare:
     name: Compare macOS, Ubuntu and loaded jitter parity payloads
-    needs: parity
+    needs: [parity-policy, parity]
+    if: needs.parity-policy.outputs.record == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

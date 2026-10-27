@@ -38,7 +38,11 @@ pub(in crate::parity) fn command(
         .current_dir(root.join("rust"))
         .args([
             "test",
+            "--release",
             "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,bundled-sdl",
             "--test",
             "save_runtime_capture",
             "--",

@@ -31,8 +31,11 @@ pub(super) fn record(
     let mut errors = Vec::new();
     let mut cached = BTreeMap::new();
     let mut failed = BTreeSet::new();
-    for entry in selected {
-        match replay::record_entry(&context, entry) {
+    let results = parallel::map(selected, parallel::workers(), |entry| {
+        replay::record_entry(&context, entry)
+    });
+    for (entry, result) in selected.iter().zip(results) {
+        match result {
             Ok(recorded) => {
                 collect_error(
                     &mut errors,
@@ -88,6 +91,8 @@ impl<'a> Context<'a> {
             .prefix("parity-work-")
             .tempdir_in(parent)
             .map_err(|error| error.to_string())?;
+        let started = Instant::now();
+        eprintln!("parity workers: {}", parallel::workers());
         let executable = match &options.game_bin {
             Some(binary) => absolute(binary)?
                 .canonicalize()
@@ -103,7 +108,7 @@ impl<'a> Context<'a> {
             content,
             executable,
             jitter: std::env::var_os("UQM_REPLAY_JITTER"),
-            started: Instant::now(),
+            started,
         })
     }
 
@@ -204,37 +209,19 @@ fn counts_with_cache(
         .iter()
         .filter(|name| !rows.contains_key(*name))
         .collect();
-    for batch in pending.chunks(4) {
-        let results = std::thread::scope(|scope| {
-            let children: Vec<_> = batch
-                .iter()
-                .map(|name| {
-                    scope.spawn(|| {
-                        let result = if failed.contains(*name) {
-                            Err("preceding corpus replay failed; not retried".into())
-                        } else {
-                            replay::replay(context, name, false).map(|(_, counts)| counts)
-                        };
-                        ((*name).clone(), result)
-                    })
-                })
-                .collect();
-            children
-                .into_iter()
-                .map(|child| {
-                    child
-                        .join()
-                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-                })
-                .collect::<Vec<_>>()
-        });
-        for (name, result) in results {
-            match result {
-                Ok(counts) => {
-                    rows.insert(name, counts);
-                }
-                Err(error) => errors.push(format!("counts {name}: {error}")),
+    let results = parallel::map(&pending, parallel::workers(), |name| {
+        if failed.contains(*name) {
+            Err("preceding corpus replay failed; not retried".into())
+        } else {
+            replay::replay(context, name, false).map(|(_, counts)| counts)
+        }
+    });
+    for (name, result) in pending.into_iter().zip(results) {
+        match result {
+            Ok(counts) => {
+                rows.insert(name.clone(), counts);
             }
+            Err(error) => errors.push(format!("counts {name}: {error}")),
         }
     }
     for name in &names {
