@@ -322,3 +322,70 @@ fn element_field_assignment_is_not_an_array_edit_at_reused_storage() {
         observed["current.frame.owner"]
     );
 }
+
+#[test]
+#[serial_test::serial]
+fn unsampled_whole_element_clones_keep_all_image_owners_after_storage_reuse() {
+    assert_eq!(whole_element_clone(false), whole_element_clone(true));
+}
+
+fn whole_element_clone(reuse: bool) -> Fields {
+    observation::enable();
+    observation::drain();
+    let directory = crate::automation::parity_state::test_directory();
+    let mut journal = Journal::create(directory.path()).expect("journal");
+    let mut source = Element::new();
+    let mut cloned = Element::new();
+    let pointer = 200usize as *mut std::ffi::c_void;
+    let mut views = [pointer; 3];
+    observation::record(Event::Allocate(std::ptr::from_ref(&source) as usize));
+    drawable(100, pointer as usize, 7);
+    observation::observe_views(&views, "old-clone-set", |p| *p as usize);
+    image!(frame; source.current.frame, pointer);
+    image!(set; source.current.farray, views.as_mut_ptr());
+    image!(copy; source.next, source.current);
+    image!(frame; source.intersect_control.intersect_stamp.frame, pointer);
+    observation::record(Event::Allocate(std::ptr::from_ref(&cloned) as usize));
+    image!(copy; cloned, source);
+    journal.drain_events(&[]);
+    let generation = journal.identity(std::ptr::from_ref(&cloned) as usize);
+    observation::record(Event::DrawableFree(100));
+    let replacement = if reuse {
+        pointer
+    } else {
+        300usize as *mut std::ffi::c_void
+    };
+    drawable(100, replacement as usize, 99);
+    views.fill(replacement);
+    observation::observe_views(&views, "replacement-clone-set", |p| *p as usize);
+    journal.drain_events(&[]);
+    let mut observed = fields(&mut journal, &cloned);
+    journal.write_element_frame(
+        &generation,
+        "intersect.frame",
+        cloned.intersect_control.intersect_stamp.frame as usize,
+        &mut observed,
+        "intersect",
+    );
+    for name in [
+        "current.frame",
+        "next.frame",
+        "intersect",
+        "current.farray.0",
+        "current.farray.1",
+        "current.farray.2",
+        "next.farray.0",
+        "next.farray.1",
+        "next.farray.2",
+    ] {
+        assert_eq!(observed[&format!("{name}.index")], "7");
+        assert_eq!(observed[&format!("{name}.retired")], "true");
+    }
+    assert_eq!(observed["current.farray.role"], "old-clone-set");
+    assert_eq!(observed["next.farray.role"], "old-clone-set");
+    assert_eq!(
+        generation,
+        journal.identity(std::ptr::from_ref(&cloned) as usize)
+    );
+    observed
+}

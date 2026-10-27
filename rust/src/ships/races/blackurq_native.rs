@@ -185,7 +185,7 @@ pub(crate) mod engine {
         if !h.is_null() {
             let list = element(h);
             let index = (*list).PrimIndex;
-            *list = *e;
+            image!(copy; *list, *e);
             (*list).PrimIndex = index;
             *GlobData.Game_state.DisplayArray.add(index as usize) = *GlobData
                 .Game_state

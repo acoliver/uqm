@@ -223,7 +223,7 @@ pub(crate) mod engine {
             if !h.is_null() {
                 let fighter = element(h);
                 let index = (*fighter).PrimIndex;
-                *fighter = *a;
+                image!(copy; *fighter, *a);
                 (*fighter).PrimIndex = index;
                 *GlobData.Game_state.DisplayArray.add(index as usize) = *GlobData
                     .Game_state
