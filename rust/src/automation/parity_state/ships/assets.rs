@@ -72,7 +72,11 @@ impl<'a> Assets<'a> {
         journal.register_resource(self.sounds.address(), "sounds");
         journal.register_resource(self.music, "music");
         for (role, views) in self.sets {
-            journal.register_parent(views.as_ptr() as usize, format!("frame-set:{owner}:{role}"));
+            journal.register_frame_set(
+                views.as_ptr() as usize,
+                views.iter().map(|frame| *frame as usize).collect(),
+                format!("frame-set:{owner}:{role}"),
+            );
         }
     }
 

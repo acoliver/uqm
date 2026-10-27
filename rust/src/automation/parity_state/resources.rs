@@ -83,6 +83,25 @@ impl<'a> FrameSet<'a> {
 mod tests {
     use super::*;
     #[test]
+    fn borrowed_live_frame_set_preserves_view_order_and_owner() {
+        let directory = super::super::test_directory();
+        let mut journal =
+            Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
+        // SAFETY: frame_desc contains only scalar, pointer and optional callback fields.
+        let mut frame: frame_desc = unsafe { std::mem::zeroed() };
+        frame.Index = 4;
+        let views = [std::ptr::from_mut(&mut frame).cast(), std::ptr::null_mut()];
+        journal.register_parent(views.as_ptr() as usize, "test-views".into());
+        // SAFETY: the local frame and views remain live through serialization.
+        let set = unsafe { FrameSet::borrow(&views) };
+        let mut fields = Fields::new();
+        set.write(&mut fields, "views", &journal);
+        assert_eq!(fields["views.role"], "test-views");
+        assert_eq!(fields["views.0.index"], "4");
+        assert_eq!(fields["views.1.index"], "0");
+    }
+
+    #[test]
     fn borrowed_null_and_named_resources_have_separate_scalar_fields() {
         let directory = super::super::test_directory();
         let journal = Journal::create(directory.path())

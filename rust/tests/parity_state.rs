@@ -88,6 +88,7 @@ fn exercise_live_callers(directory: &Path) {
     unsafe {
         uqm_rust::state::ffi::rust_init_game_state();
     }
+    observation::record(Event::SpaceActive(true));
     descriptor_fields(directory);
     elements_and_fighters(directory);
     descriptor_assets(directory);
@@ -97,6 +98,7 @@ fn exercise_live_callers(directory: &Path) {
     non_ship_parent_fields(directory);
     reused_owner_and_group_identities(directory);
     frameset_and_media_identity(directory);
+    retired_space_does_not_borrow_released_frames(directory);
 }
 
 fn snapshot(directory: &Path) -> (Fields, String) {
@@ -514,6 +516,11 @@ fn descriptor_assets(directory: &Path) {
         install_ship(&mut ship);
     }
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
+    observation::record(Event::Frame {
+        address: ptr::from_mut(&mut frame) as usize,
+        owner: ptr::from_mut(&mut drawable) as usize,
+        index: frame.Index,
+    });
     let (fields, _) = snapshot(directory);
     assert_eq!(fields["ships.0.0.race.icons.resource"], "test.icons");
     assert_eq!(fields["ships.0.0.race.strings.resource"], "test.strings");
@@ -634,6 +641,13 @@ fn frameset_and_media_identity(directory: &Path) {
     }
     observation::record(Event::Allocate(ptr::from_mut(&mut element) as usize));
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
+    for frame in [&mut first, &mut second] {
+        observation::record(Event::Frame {
+            address: ptr::from_mut(frame) as usize,
+            owner: ptr::from_mut(&mut drawable) as usize,
+            index: frame.Index,
+        });
+    }
     let (before, _) = snapshot(directory);
     descriptor.ship_data.ship[1] = ptr::from_mut(&mut second).cast();
     let (after, _) = snapshot(directory);
@@ -697,4 +711,41 @@ fn media_identity(directory: &Path, descriptor: &mut RACE_DESC) {
     );
     descriptor.ship_info.race_strings = ptr::null_mut();
     descriptor.ship_data.victory_ditty = ptr::null_mut();
+}
+
+fn retired_space_does_not_borrow_released_frames(directory: &Path) {
+    let mut element = Element::new();
+    element.current.frame = ptr::dangling_mut();
+    element.next.frame = ptr::dangling_mut();
+    element.current.farray = ptr::null_mut();
+    // SAFETY: only the element pool is retained after space teardown; the frame
+    // graph is deliberately invalid and must not be traversed by the observer.
+    unsafe {
+        clear_queues();
+        attach_elements(std::slice::from_mut(&mut element));
+        disp_q.head = ptr::from_mut(&mut element).cast();
+        disp_q.tail = disp_q.head;
+    }
+    observation::record(Event::Allocate(ptr::from_mut(&mut element) as usize));
+    observation::record(Event::Drawable(17));
+    observation::record(Event::Frame {
+        address: element.current.frame as usize,
+        owner: 17,
+        index: 23,
+    });
+    observation::record(Event::DrawableFree(17));
+    observation::record(Event::SpaceActive(false));
+    let (fields, _) = snapshot(directory);
+    assert_eq!(fields["mode.space_active"], "false");
+    assert_eq!(fields["elements.0.current.frame.index"], "23");
+    assert_eq!(fields["elements.0.next.frame.index"], "23");
+    assert_eq!(fields["elements.0.current.frame.retired"], "true");
+    assert_eq!(
+        fields["elements.0.flags"],
+        element.state_flags.bits().to_string()
+    );
+    // SAFETY: detach the stack element before it is dropped.
+    unsafe {
+        clear_queues();
+    }
 }

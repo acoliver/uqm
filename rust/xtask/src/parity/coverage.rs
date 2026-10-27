@@ -65,6 +65,7 @@ impl Coverage {
             ["free", identity] => cleanup_identity(identity, false)?,
             ["drawable-free", identity] => cleanup_identity(identity, true)?,
             ["pool-full"] => (),
+            ["space-active", "true" | "false"] => (),
             _ => return Err(format!("malformed parity event: {words:?}")),
         }
         Ok(())

@@ -46,6 +46,8 @@ impl Observations {
                     | Event::Drawable(_)
                     | Event::Free(_)
                     | Event::ResetPool
+                    | Event::SpaceActive(_)
+                    | Event::Frame { .. }
                     | Event::DrawableFree(_)
                     | Event::ResourcesFree { .. } => {}
                 }

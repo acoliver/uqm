@@ -41,7 +41,7 @@ fn trace_difference_reads_both_side_files_at_first_state_boundary() {
     assert!(error.contains("missing/malformed side fields"), "{error}");
 }
 
-fn root() -> PathBuf {
+pub(super) fn root() -> PathBuf {
     crate::cli::repository_root().unwrap()
 }
 
@@ -54,7 +54,7 @@ pub(super) fn temporary() -> tempfile::TempDir {
         .unwrap()
 }
 
-fn corpus_text() -> String {
+pub(super) fn corpus_text() -> String {
     fs::read_to_string(root().join("rust/xtask/parity-corpus.toml")).unwrap()
 }
 

@@ -203,3 +203,58 @@ fn recordings_never_write_goldens_and_reject_symlink_output() {
         assert!(reject_golden_output(root, &root.join("alias/out")).is_err());
     }
 }
+
+#[test]
+fn public_parity_commands_validate_protection_and_selected_existing_recordings() {
+    let directory = temporary();
+    let root = directory.path();
+    write(&root.join("seed.txt"), b"base").unwrap();
+    commit_base(root);
+    let _manifest = fixture(root);
+    write(
+        &root.join("rust/xtask/parity-corpus.toml"),
+        corpus_text().as_bytes(),
+    )
+    .unwrap();
+    let args = |values: &[&str]| values.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    super::super::run(root, &args(&["protect", "--base", "HEAD"])).unwrap();
+    assert!(super::super::run(root, &[]).is_err());
+    assert!(super::super::run(root, &args(&["invalid"])).is_err());
+    assert!(super::super::run(root, &args(&["counts"])).is_err());
+    assert!(super::super::run(root, &args(&["counts", "invalid"])).is_err());
+    let recording = root.join("existing");
+    for name in [TRACE, FIELDS, "summary.json"] {
+        let relative = format!("parity/comm/{name}");
+        write(
+            &recording.join(&relative),
+            &read(&root.join(GOLDEN).join(&relative)).unwrap(),
+        )
+        .unwrap();
+    }
+    inventory::create(&recording).unwrap();
+    super::super::run(
+        root,
+        &args(&[
+            "check",
+            "--entry",
+            "comm",
+            "--recording",
+            recording.to_str().unwrap(),
+            "--base",
+            "HEAD",
+        ]),
+    )
+    .unwrap();
+    write(&recording.join("parity/comm/parity.trace"), b"different").unwrap();
+    assert!(super::super::run(
+        root,
+        &args(&[
+            "check",
+            "--entry",
+            "comm",
+            "--recording",
+            recording.to_str().unwrap()
+        ])
+    )
+    .is_err());
+}

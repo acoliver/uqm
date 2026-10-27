@@ -6,6 +6,7 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
+mod frames;
 
 pub type Fields = BTreeMap<String, String>;
 
@@ -31,6 +32,10 @@ pub struct Journal {
     resource_groups: BTreeMap<usize, [usize; 3]>,
     next_resource: u64,
     spawn_count: [u64; 2],
+    pub(super) space_active: bool,
+    frames: BTreeMap<usize, (String, u16)>,
+    frame_sets: BTreeMap<usize, Vec<usize>>,
+    retired_drawables: std::collections::BTreeSet<String>,
 }
 
 impl Journal {
@@ -61,6 +66,10 @@ impl Journal {
             resource_groups: BTreeMap::new(),
             next_resource: 0,
             spawn_count: [0; 2],
+            space_active: false,
+            frames: BTreeMap::new(),
+            frame_sets: BTreeMap::new(),
+            retired_drawables: std::collections::BTreeSet::new(),
         })
     }
 
@@ -182,6 +191,10 @@ impl Journal {
                     self.events.push(format!("free {}", self.identity(address)))
                 }
                 Event::ResetPool => self.reset_pool(),
+                Event::SpaceActive(active) => {
+                    self.space_active = active;
+                    self.events.push(format!("space-active {active}"));
+                }
                 Event::ResourcesFree {
                     descriptor,
                     icons,
@@ -189,9 +202,16 @@ impl Journal {
                 } => {
                     self.release_resource_group(descriptor, icons, battle);
                 }
-                Event::DrawableFree(address) => self
-                    .events
-                    .push(format!("drawable-free {}", self.resource(address))),
+                Event::Frame {
+                    address,
+                    owner,
+                    index,
+                } => self.register_frame(address, owner, index),
+                Event::DrawableFree(address) => {
+                    self.retired_drawables.insert(self.resource(address));
+                    self.events
+                        .push(format!("drawable-free {}", self.resource(address)));
+                }
                 Event::Drawable(address) => {
                     if address != 0 {
                         self.resources

@@ -23,10 +23,27 @@ pub fn checkpoint(_journal: &mut super::parity::Journal, _boundary: &str) -> std
 }
 
 #[cfg(test)]
-fn test_directory() -> tempfile::TempDir {
+pub(super) fn test_directory() -> tempfile::TempDir {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify");
     std::fs::create_dir_all(root)
         .unwrap_or_else(|error| panic!("create state unit-test root: {error}"));
     tempfile::tempdir_in(root)
         .unwrap_or_else(|error| panic!("create state unit-test directory: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn unlinked_checkpoint_is_inert_and_does_not_write_a_fake_state() {
+        let directory = super::test_directory();
+        let mut journal = crate::automation::parity::Journal::create(directory.path()).unwrap();
+        super::checkpoint(&mut journal, "unlinked").unwrap();
+        journal.flush().unwrap();
+        assert!(std::fs::read(directory.path().join("parity.trace"))
+            .unwrap()
+            .is_empty());
+        assert!(std::fs::read(directory.path().join("parity.fields"))
+            .unwrap()
+            .is_empty());
+    }
 }

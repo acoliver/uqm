@@ -3,6 +3,24 @@
 use crate::graphics::native_abi::frame_desc;
 use std::ptr;
 
+const SPACE_ANIMATION_KEYS: [[&std::ffi::CStr; 3]; 3] = [
+    [
+        c"graphics.boom.large",
+        c"graphics.boom.medium",
+        c"graphics.boom.small",
+    ],
+    [
+        c"graphics.blast.large",
+        c"graphics.blast.medium",
+        c"graphics.blast.small",
+    ],
+    [
+        c"graphics.asteroid.large",
+        c"graphics.asteroid.medium",
+        c"graphics.asteroid.small",
+    ],
+];
+
 fn release_images(
     frames: &mut [*mut frame_desc; 3],
     mut destroy: impl FnMut(*mut frame_desc) -> bool,
@@ -96,31 +114,13 @@ pub(crate) mod live {
                 return 0;
             }
             for (frames, keys) in [
-                (
-                    ptr::addr_of_mut!(explosion),
-                    [
-                        c"graphics.boom.large",
-                        c"graphics.boom.medium",
-                        c"graphics.boom.small",
-                    ],
-                ),
-                (
-                    ptr::addr_of_mut!(blast),
-                    [
-                        c"graphics.blast.large",
-                        c"graphics.blast.medium",
-                        c"graphics.blast.small",
-                    ],
-                ),
-                (
-                    ptr::addr_of_mut!(asteroid),
-                    [
-                        c"graphics.asteroid.large",
-                        c"graphics.asteroid.medium",
-                        c"graphics.asteroid.small",
-                    ],
-                ),
-            ] {
+                ptr::addr_of_mut!(explosion),
+                ptr::addr_of_mut!(blast),
+                ptr::addr_of_mut!(asteroid),
+            ]
+            .into_iter()
+            .zip(SPACE_ANIMATION_KEYS)
+            {
                 if load_animation(
                     frames.cast(),
                     keys[0].as_ptr(),
@@ -132,6 +132,9 @@ pub(crate) mod live {
                 }
             }
         }
+        crate::collections::observation::record(
+            crate::collections::observation::Event::SpaceActive(true),
+        );
         1
     }
 
@@ -142,6 +145,9 @@ pub(crate) mod live {
         if SPACE_INIT_COUNT != 0 {
             SPACE_INIT_COUNT -= 1;
             if SPACE_INIT_COUNT == 0 {
+                crate::collections::observation::record(
+                    crate::collections::observation::Event::SpaceActive(false),
+                );
                 free_image(ptr::addr_of_mut!(blast));
                 free_image(ptr::addr_of_mut!(explosion));
                 free_image(ptr::addr_of_mut!(asteroid));
@@ -178,6 +184,12 @@ mod tests {
         }));
         assert_eq!(destroyed, [a, b]);
         assert_eq!(frames, [ptr::null_mut(); 3]);
+    }
+    #[test]
+    fn animation_keys_keep_explosion_blast_asteroid_order_and_three_sizes() {
+        assert_eq!(SPACE_ANIMATION_KEYS[0][0], c"graphics.boom.large");
+        assert_eq!(SPACE_ANIMATION_KEYS[1][1], c"graphics.blast.medium");
+        assert_eq!(SPACE_ANIMATION_KEYS[2][2], c"graphics.asteroid.small");
     }
     #[test]
     fn null_slots_do_not_own_resources() {

@@ -19,6 +19,7 @@ mod fixtures;
 mod input;
 mod parity;
 mod save_capture;
+mod terminal;
 
 use crate::automation::battle_fight::{
     BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
@@ -2989,29 +2990,6 @@ impl Coordinator {
     // -----------------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------------
-    /// Set a terminal outcome on both the coordinator and the runtime mirror.
-    /// Also propagates the stop to the game loop by setting CHECK_ABORT
-    /// and MainExited to force the game loop to exit.
-    fn set_terminal(&self, inner: &mut CoordInner, class: TerminalClass) {
-        if !record_first_terminal(&mut inner.terminal_class, class) {
-            return;
-        }
-        inner.replay_final_activity = crate::mainloop::ffi::get_current_activity().0;
-        self.runtime.mirror.terminal.try_set(class);
-
-        // Propagate stop to the C game loop: set CHECK_ABORT so the
-        // activity state machine exits, and set MainExited so the
-        // outer game loop stops requesting new games.
-        // CHECK_ABORT = 0x4000 (setup.h).
-        #[cfg(not(test))]
-        unsafe {
-            crate::mainloop::c_extern::set_current_activity(
-                crate::mainloop::c_extern::get_current_activity() | 0x4000,
-            );
-            crate::mainloop::ffi::set_main_exited(true);
-        }
-    }
-
     /// Service whichever planet-side wait is the current action.
     ///
     /// Returns `None` when the current action is not a planet-side wait, so the

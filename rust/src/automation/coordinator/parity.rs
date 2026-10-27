@@ -72,7 +72,12 @@ impl Coordinator {
 
     fn parity_failure(&self, boundary: &str, error: std::io::Error) {
         eprintln!("automation: parity {boundary} failed: {error}");
-        self.set_terminal(&mut self.inner.lock(), TerminalClass::TraceFailure);
+        // A fixture checkpoint can run while the input boundary owns CoordInner.
+        // Publish through the existing first-writer terminal mirror instead.
+        self.runtime
+            .mirror
+            .terminal
+            .try_set(TerminalClass::TraceFailure);
     }
 
     pub fn parity_checkpoint(boundary: &str) {
@@ -108,5 +113,49 @@ impl Coordinator {
         if let Err(error) = result {
             coord.parity_failure("input", error);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reentrant_checkpoint_failure_publishes_before_another_boundary_can_succeed() {
+        const CHILD: &str = "UQM_REENTRANT_PARITY_FAILURE";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::parity::tests::reentrant_checkpoint_failure_publishes_before_another_boundary_can_succeed"])
+                .env(CHILD, "1").status().unwrap();
+            assert!(status.success());
+            return;
+        }
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version":1,"name":"failure","steps":[{"action":"finish"}],
+            "budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":10}
+        }))
+        .unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        Coordinator::init(script, directory.path().into());
+        let coord = Coordinator::get().unwrap();
+        let mut inner = coord.inner.lock();
+        coord.parity_failure(
+            "fixture",
+            std::io::Error::new(std::io::ErrorKind::WriteZero, "injected output failure"),
+        );
+        assert_eq!(
+            coord.runtime.mirror.terminal.load(),
+            Some(TerminalClass::TraceFailure)
+        );
+        coord.set_terminal(&mut inner, TerminalClass::Success);
+        assert_eq!(inner.terminal_class, Some(TerminalClass::TraceFailure));
+        assert!(coord.admit_boundary(&mut inner, CallbackKind::Input));
+        drop(inner);
+        assert_ne!(Coordinator::finalize(0).unwrap(), 0);
     }
 }

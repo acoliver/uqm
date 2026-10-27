@@ -200,21 +200,44 @@ fn counts_with_cache(
 ) -> Result<()> {
     let names = script_names(context.root)?;
     let mut errors = Vec::new();
-    for name in &names {
-        if failed.contains(name) {
-            errors.push(format!(
-                "counts {name}: preceding corpus replay failed; not retried"
-            ));
-            continue;
-        }
-        if !rows.contains_key(name) {
-            match replay::replay(context, name, false) {
-                Ok((_, counts)) => {
-                    rows.insert(name.clone(), counts);
+    let pending: Vec<_> = names
+        .iter()
+        .filter(|name| !rows.contains_key(*name))
+        .collect();
+    for batch in pending.chunks(4) {
+        let results = std::thread::scope(|scope| {
+            let children: Vec<_> = batch
+                .iter()
+                .map(|name| {
+                    scope.spawn(|| {
+                        let result = if failed.contains(*name) {
+                            Err("preceding corpus replay failed; not retried".into())
+                        } else {
+                            replay::replay(context, name, false).map(|(_, counts)| counts)
+                        };
+                        ((*name).clone(), result)
+                    })
+                })
+                .collect();
+            children
+                .into_iter()
+                .map(|child| {
+                    child
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                })
+                .collect::<Vec<_>>()
+        });
+        for (name, result) in results {
+            match result {
+                Ok(counts) => {
+                    rows.insert(name, counts);
                 }
                 Err(error) => errors.push(format!("counts {name}: {error}")),
             }
         }
+    }
+    for name in &names {
         if let Some(row) = rows.get_mut(name) {
             collect_error(
                 &mut errors,

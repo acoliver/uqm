@@ -116,15 +116,22 @@ pub unsafe extern "C" fn AllocDrawable(count: u16) -> *mut drawable_desc {
             rust_hfree(drawable.cast());
             return ptr::null_mut();
         }
+        crate::collections::observation::record(crate::collections::observation::Event::Drawable(
+            drawable as usize,
+        ));
         for i in 0..count {
             let frame = (*drawable).Frame.add(i as usize);
             ptr::write(frame, std::mem::zeroed());
             (*frame).parent = drawable;
+            crate::collections::observation::record(
+                crate::collections::observation::Event::Frame {
+                    address: frame as usize,
+                    owner: drawable as usize,
+                    index: i,
+                },
+            );
         }
     }
-    crate::collections::observation::record(crate::collections::observation::Event::Drawable(
-        drawable as usize,
-    ));
     drawable
 }
 /// # Safety

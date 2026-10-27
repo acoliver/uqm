@@ -504,3 +504,83 @@ fn normalization_missing_golden_fails_without_creating_it() -> Result<()> {
     ensure!(!absent.exists());
     Ok(())
 }
+
+#[test]
+fn linked_game_captures_at_production_mode_entry() -> Result<()> {
+    let root = manifest().join("../tmp/verify");
+    fs::create_dir_all(&root)?;
+    let temporary = tempfile::Builder::new()
+        .prefix("linked-capture-")
+        .tempdir_in(root)?;
+    let content = install_content(temporary.path())?;
+    let binary = Path::new(env!("CARGO_BIN_EXE_uqm"));
+    for source in sources()?.into_iter().take(2) {
+        let original = decode_save(&fs::read(&source)?)?;
+        let (bytes, metadata) = run_capture(binary, &content, temporary.path(), &source)?;
+        let captured = decode_save(&bytes)?;
+        validate_metadata(&metadata, &original, &captured)?;
+        ensure!(captured.summary.save_name.as_bytes() == b"runtime-capture");
+        ensure!(captured.global.current_activity & 0x1000 == 0);
+        compare_bytes(
+            &bytes,
+            &encode_save(&captured)?,
+            "linked production capture",
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn linked_game_reports_missing_capture_source_without_success_or_capture() -> Result<()> {
+    let root = manifest().join("../tmp/verify");
+    fs::create_dir_all(&root)?;
+    let temporary = tempfile::Builder::new()
+        .prefix("failed-capture-")
+        .tempdir_in(root)?;
+    let work = temporary.path().canonicalize()?;
+    let content = install_content(&work)?;
+    let script = work.join("scenario.json");
+    fs::write(&script, serde_json::to_vec(&scenario())?)?;
+    let log = fs::File::create(work.join("game.log"))?;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_uqm"))
+        .args(["--replay"])
+        .arg(&script)
+        .arg("--replay-summary")
+        .arg(work.join("summary.json"))
+        .arg("--automation-output")
+        .arg(work.join("automation"))
+        .arg("--configdir")
+        .arg(work.join("config"))
+        .arg("--contentdir")
+        .arg(content)
+        .args(["--res", "320x240", "--scale", "none"])
+        .env("SDL_VIDEODRIVER", "dummy")
+        .env("SDL_AUDIODRIVER", "dummy")
+        .env("UQM_SAVE_CAPTURE_SOURCE", work.join("missing.sav"))
+        .env("UQM_SAVE_CAPTURE_OUT", work.join("failed.capture"))
+        .stdout(Stdio::from(log.try_clone()?))
+        .stderr(Stdio::from(log))
+        .spawn()?;
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            ensure!(
+                !status.success(),
+                "missing source was reported as successful"
+            );
+            break;
+        }
+        if started.elapsed() >= Duration::from_secs(WALL_SECONDS) {
+            child.kill()?;
+            child.wait()?;
+            bail!("missing-source run exceeded existing budget");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let summary: Value = serde_json::from_slice(&fs::read(work.join("summary.json"))?)?;
+    ensure!(summary["completed"] == false);
+    ensure!(!work.join("failed.capture").exists());
+    ensure!(fs::read_to_string(work.join("automation/trace.jsonl"))?
+        .contains("save_capture_load_failed"));
+    Ok(())
+}

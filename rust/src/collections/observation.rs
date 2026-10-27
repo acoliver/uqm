@@ -30,6 +30,7 @@ pub enum Event {
     Allocate(usize),
     Free(usize),
     ResetPool,
+    SpaceActive(bool),
     DrawableFree(usize),
     ResourcesFree {
         descriptor: usize,
@@ -37,6 +38,11 @@ pub enum Event {
         battle: bool,
     },
     Drawable(usize),
+    Frame {
+        address: usize,
+        owner: usize,
+        index: u16,
+    },
     Spawn {
         address: usize,
         side: i16,

@@ -1,19 +1,13 @@
 //! Synchronous game-thread graph borrowing and journal orchestration.
+use super::Fields;
 #[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
-use super::{
-    resources::{Frame, FrameSet},
-    Fields,
-};
 #[cfg(not(test))]
 use crate::{
     automation::battle_fight::ShipState, battle::netplay::CrcState, comm::locdata::CGameState,
     ships::native::abi::GlobData,
 };
-use crate::{
-    automation::parity::Journal, battle::element::Element, comm::locdata::CQueue,
-    graphics::native_abi::frame_desc,
-};
+use crate::{automation::parity::Journal, battle::element::Element, comm::locdata::CQueue};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
@@ -47,6 +41,8 @@ pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> 
         }
     }
     journal.drain_events(&hooks);
+    let space_active = journal.space_active;
+    value(&mut fields, "mode", "space_active", space_active);
     for side in &ships {
         for (prefix, ship) in side {
             ship.write(&mut fields, prefix, journal);
@@ -135,38 +131,38 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
             element.intersect_control.intersect_stamp.frame,
         ),
     ] {
-        // SAFETY: the synchronous element borrow includes its live graphics frames.
-        let frame = Frame(unsafe { pointer.cast::<frame_desc>().as_ref() });
-        frame.write(fields, &format!("{prefix}.{name}"), journal);
+        journal.write_frame(pointer as usize, fields, &format!("{prefix}.{name}"));
     }
     for (name, array) in [
         ("current.farray", element.current.farray),
         ("next.farray", element.next.farray),
     ] {
-        // SAFETY: a non-null live frame array has a first entry, borrowed for this read.
-        let (first, frame) = unsafe {
-            let first = array.as_ref();
-            (
-                first,
-                first.and_then(|pointer| pointer.cast::<frame_desc>().as_ref()),
-            )
-        };
-        let frame = Frame(frame);
-        frame.write(fields, &format!("{prefix}.{name}"), journal);
-        if let Some(first) = first {
-            let owner = frame.0.map_or(0, |frame| frame.parent as usize);
-            journal.register_parent(
-                array as usize,
-                format!("frame-single:{}", journal.resource(owner)),
+        let address = array as usize;
+        if address != 0 && journal.frame_set(address).is_none() {
+            // SAFETY: descriptor arrays are registered while owned by their ship.
+            // Remaining first-seen arrays are the live engine's fixed frame globals.
+            let first = unsafe { *array };
+            let mut frame = Fields::new();
+            journal.write_frame(first as usize, &mut frame, "frame");
+            journal.register_frame_set(
+                address,
+                vec![first as usize],
+                format!("frame-single:{}", frame["frame.owner"]),
             );
-            let role = journal.parent(array as usize);
-            let count = if role.starts_with("frame-set:") { 3 } else { 1 };
-            // SAFETY: registered descriptor roles prove a three-view array. Other
-            // engine frame globals are observed as their single borrowed entry.
-            let set = unsafe {
-                FrameSet::borrow(std::slice::from_raw_parts(std::ptr::from_ref(first), count))
-            };
-            set.write(fields, &format!("{prefix}.{name}"), journal);
+        }
+        let frames = if address == 0 {
+            &[0][..]
+        } else {
+            journal
+                .frame_set(address)
+                .unwrap_or_else(|| panic!("frame set was not registered"))
+        };
+        journal.write_frame(frames[0], fields, &format!("{prefix}.{name}"));
+        if address != 0 {
+            fields.insert(format!("{prefix}.{name}.role"), journal.parent(address));
+            for (view, frame) in frames.iter().enumerate() {
+                journal.write_frame(*frame, fields, &format!("{prefix}.{name}.{view}"));
+            }
         }
     }
 }
@@ -174,6 +170,7 @@ fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut J
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphics::native_abi::frame_desc;
     fn pool(elements: &mut [Element]) -> CQueue {
         let base = elements.as_mut_ptr();
         for index in 0..elements.len() {
@@ -214,6 +211,7 @@ mod tests {
         let mut element = Element::new();
         element.current.frame = views[0];
         element.current.farray = views.as_mut_ptr();
+        journal.register_frame(views[0] as usize, 0, frame.Index);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
         assert_eq!(fields["element.current.frame.index"], "7");

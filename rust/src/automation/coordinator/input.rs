@@ -13,6 +13,10 @@ impl Coordinator {
     }
 
     pub(super) fn admit_boundary(&self, inner: &mut CoordInner, kind: CallbackKind) -> bool {
+        if let Some(class) = self.runtime.mirror.terminal.load() {
+            self.set_terminal(inner, class);
+            return true;
+        }
         let now = Instant::now();
         let entry = WatchdogEntry {
             kind,

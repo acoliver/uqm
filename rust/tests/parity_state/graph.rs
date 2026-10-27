@@ -149,6 +149,11 @@ pub(super) fn frame_fields(
     first.next.farray = array.as_mut_ptr();
     first.intersect_control.intersect_stamp.frame = pointer;
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
+    observation::record(Event::Frame {
+        address: ptr::from_mut(&mut frame) as usize,
+        owner: ptr::from_mut(&mut drawable) as usize,
+        index: frame.Index,
+    });
     let (fields, _) = snapshot(directory);
     for name in [
         "current.frame",
