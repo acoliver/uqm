@@ -12,6 +12,7 @@ const DEBT: &[&str] = &[
     "clippy::undocumented_unsafe_blocks",
     "clippy::unwrap_used",
     "clippy::expect_used",
+    "clippy::mem_forget",
 ];
 
 #[derive(Default)]
@@ -226,35 +227,62 @@ mod tests {
             "[package]\nname=\"debt-fixture\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[workspace]\n",
         )
         .unwrap();
-        std::fs::write(fixture.path().join("src/main.rs"), "#![allow(clippy::all)]\nfn value(x: Option<u8>) -> u8 { x.unwrap() }\nfn main() { value(Some(1)); }\n").unwrap();
-        let output = Command::new(crate::quality::cargo())
-            .current_dir(fixture.path())
-            .args([
-                "clippy",
-                "--offline",
-                "--message-format=json",
-                "--",
-                "-D",
-                "warnings",
-                "--force-warn",
-                "clippy::unwrap_used",
-            ])
-            .output()
-            .unwrap();
+        std::fs::write(fixture.path().join("src/main.rs"), "#![allow(clippy::all)]\nfn value(x: Option<u8>) -> u8 { x.unwrap() }\nfn main() { value(Some(1)); std::mem::forget(String::from(\"owned\")); }\n").unwrap();
+        let mut command = Command::new(crate::quality::cargo());
+        command.current_dir(fixture.path()).args([
+            "clippy",
+            "--offline",
+            "--message-format=json",
+            "--",
+            "-D",
+            "warnings",
+        ]);
+        for lint in DEBT {
+            command.args(["--force-warn", lint]);
+        }
+        let output = command.output().unwrap();
         assert!(
             output.status.success(),
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let found = String::from_utf8(output.stdout)
+        let warnings: BTreeSet<String> = String::from_utf8(output.stdout)
             .unwrap()
             .lines()
             .map(|line| serde_json::from_str::<Value>(line).unwrap())
-            .any(|message| {
-                message["message"]["code"]["code"] == "clippy::unwrap_used"
-                    && message["message"]["level"] == "warning"
-            });
-        assert!(found, "source allow must not hide debt");
+            .filter(|message| message["message"]["level"] == "warning")
+            .map(|message| message["message"]["code"]["code"].as_str().unwrap().into())
+            .collect();
+        assert_eq!(
+            warnings,
+            ["clippy::unwrap_used".into(), "clippy::mem_forget".into()].into(),
+            "source allow must not hide debt"
+        );
+    }
+
+    #[test]
+    fn mem_forget_is_counted_and_an_additional_hit_fails() {
+        let mut diagnostics = Diagnostics::default();
+        let root = Path::new("/repo");
+        let ids = [(
+            "src/savegame/encode.rs".into(),
+            "uqm::savegame::encode::@file".into(),
+        )]
+        .into();
+        let mut hit = message("warning", "clippy::mem_forget");
+        diagnostics.message(root, &hit, &ids).unwrap();
+        let key = "clippy::mem_forget|uqm::savegame::encode::@file";
+        assert!(diagnostics.errors.is_empty());
+        assert_eq!(diagnostics.counts.get(key), Some(&1));
+        let baseline = diagnostics.counts.clone();
+        assert!(tool::compare(&baseline, &BTreeMap::new(), &BTreeMap::new()).is_err());
+        tool::compare(&diagnostics.counts, &baseline, &BTreeMap::new()).unwrap();
+
+        hit["message"]["spans"][0]["line_start"] = 45.into();
+        diagnostics.message(root, &hit, &ids).unwrap();
+        assert_eq!(diagnostics.counts.get(key), Some(&2));
+        let error = tool::compare(&diagnostics.counts, &baseline, &BTreeMap::new()).unwrap_err();
+        assert!(error.contains(&format!("{key}: 1 -> 2")), "{error}");
     }
 
     #[test]

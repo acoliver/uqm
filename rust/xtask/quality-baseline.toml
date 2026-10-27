@@ -2,6 +2,7 @@
 layers = true
 
 [lint.linux]
+"clippy::mem_forget|uqm::planets::c_api::surface::@file" = 1
 "clippy::expect_used|uqm-save::decode::@file" = 1
 "clippy::expect_used|uqm-save::encode::@file" = 1
 "clippy::expect_used|uqm-xtask::abi_check::@file" = 4
@@ -962,6 +963,7 @@ layers = true
 "unsafe_op_in_unsafe_fn|uqm::video::registry::@file" = 97
 
 [lint.macos]
+"clippy::mem_forget|uqm::planets::c_api::surface::@file" = 1
 "clippy::expect_used|uqm-save::decode::@file" = 1
 "clippy::expect_used|uqm-save::encode::@file" = 1
 "clippy::expect_used|uqm-xtask::abi_check::@file" = 4

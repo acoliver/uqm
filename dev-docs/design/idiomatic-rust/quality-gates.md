@@ -36,7 +36,7 @@ all = { level = "deny", priority = -1 }
 dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
-mem_forget = "deny"
+mem_forget = "warn"                     # debt lint (ownership transfers)
 undocumented_unsafe_blocks = "warn"      # debt lint
 unwrap_used = "warn"                     # debt lint
 expect_used = "warn"                     # debt lint
@@ -73,7 +73,8 @@ the same PR, so no PR runs a debt lint under `-D warnings`.
 - an error, or a warning from any lint outside the debt set, fails (the effect of
   `-D warnings` today);
 - warnings from the **debt set** (`unsafe_op_in_unsafe_fn`,
-  `clippy::undocumented_unsafe_blocks`, `clippy::unwrap_used`, `clippy::expect_used`)
+  `clippy::undocumented_unsafe_blocks`, `clippy::unwrap_used`, `clippy::expect_used`,
+  `clippy::mem_forget`)
   are counted per file against the baseline `[lint.<target_os>]` section for the
   host running Clippy (`[lint.linux]` or `[lint.macos]` in CI). `--force-warn`
   overrides in-source `allow`s, so a broad suppression such as
@@ -94,6 +95,13 @@ Without an approved growth label, the Linux CI job runs Clippy with `--tighten`
 after checking the recorded limits and publishes `clippy-baseline-linux-x86_64`.
 Download that generated baseline when recording Linux reductions; use the same
 command on macOS for macOS reductions. Do not edit counts.
+
+When introducing a previously unenforced lint, the base comparison accepts its
+initial game-only counts only if the base manifest and classifier did not enable
+it, game sources are unchanged, and the host's recorded counts equal its Clippy
+measurement. Previously enabled zero-hit lints still have a zero limit. The
+`mem_forget` ownership-transfer hit deferred in #663 is counted this way; it is not
+an exception to later regression checks.
 
 In Phase 8 the debt set becomes `deny`. Where a compiler lint can enforce a rule it
 is used instead of a count: when a phase closes a subsystem, that subsystem's module
