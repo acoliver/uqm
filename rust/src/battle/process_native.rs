@@ -242,14 +242,9 @@ pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
     use crate::ships::native::frame_index;
-    use std::{mem, ptr};
+    use std::ptr;
 
-    #[no_mangle]
-    pub static mut DisplayFreeList: COUNT = 0;
-    #[no_mangle]
-    pub static mut DisplayArray: [PRIMITIVE; MAX_DISPLAY_PRIMS as usize] = unsafe { mem::zeroed() };
-    #[no_mangle]
-    pub static mut DisplayLinks: PRIM_LINKS = 0;
+    pub use crate::engine::battle::legacy::{DisplayArray, DisplayFreeList, DisplayLinks};
     #[no_mangle]
     pub static mut zoom_out: SIZE = 1 << ZOOM_SHIFT;
     #[no_mangle]

@@ -238,14 +238,14 @@ pub use crate::battle::netplay::CrcState as crc_State;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
 pub use crate::ships::native::abi::velocity_desc;
-pub use crate::ships::native::abi::QUEUE;
+pub use crate::engine::battle::record::QUEUE;
 pub type VELOCITY_DESC = velocity_desc;
 pub type HELEMENT = HLINK;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::ships::native::abi::state;
-pub use crate::ships::native::abi::state__bindgen_ty_1;
+pub use crate::engine::battle::record::state;
+pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub type ELEMENT = element;
+pub use crate::engine::battle::record::ELEMENT;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type ElementCollisionFunc = ::std::option::Option<
     unsafe extern "C" fn(
@@ -255,15 +255,13 @@ pub type ElementCollisionFunc = ::std::option::Option<
         pPt1: *mut POINT,
     ),
 >;
-pub use crate::ships::native::abi::element;
-pub use crate::ships::native::abi::element__bindgen_ty_1;
-pub use crate::ships::native::abi::element__bindgen_ty_2;
-pub use crate::ships::native::abi::element__bindgen_ty_3;
-pub use crate::ships::native::abi::element__bindgen_ty_4;
-pub use crate::ships::native::abi::element__bindgen_ty_5;
-extern "C" {
-    pub static mut disp_q: QUEUE;
-}
+pub use crate::engine::battle::record::element;
+pub use crate::engine::battle::record::element__bindgen_ty_1;
+pub use crate::engine::battle::record::element__bindgen_ty_2;
+pub use crate::engine::battle::record::element__bindgen_ty_3;
+pub use crate::engine::battle::record::element__bindgen_ty_4;
+pub use crate::engine::battle::record::element__bindgen_ty_5;
+pub use crate::engine::battle::legacy::disp_q;
 pub use crate::navigation::abi::ChecksumBuffer;
 pub use crate::navigation::abi::ChecksumEntry;
 pub use crate::navigation::abi::NetConnectionError;
@@ -896,15 +894,15 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub type RACE_DESC = race_desc;
+pub use crate::engine::battle::record::RACE_DESC;
 pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type INIT_WEAPON_FUNC = ::std::option::Option<
     unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT,
 >;
 pub type UNINIT_FUNC = ::std::option::Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
-pub use crate::ships::native::abi::race_desc;
-pub use crate::ships::native::abi::STARSHIP;
+pub use crate::engine::battle::record::race_desc;
+pub use crate::engine::battle::record::STARSHIP;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::updateMeleeSelection;

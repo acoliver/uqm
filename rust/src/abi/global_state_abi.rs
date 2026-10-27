@@ -29,7 +29,7 @@ pub type BOOLEAN = ::std::os::raw::c_uint;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
 pub type HLINK = QUEUE_HANDLE;
 pub use crate::ships::native::abi::CLOCK_STATE;
-pub use crate::ships::native::abi::QUEUE;
+pub use crate::engine::battle::record::QUEUE;
 pub type HEVENT = HLINK;
 pub use crate::navigation::abi::event;
 pub type EVENT = event;
@@ -78,7 +78,7 @@ pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
 pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-pub use crate::graphics::native_abi::PRIMITIVE;
+pub use crate::engine::battle::record::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
 pub use crate::ships::native::abi::INTERSECT_CONTROL;
 pub type INTERSECT_CODE = BYTE;
@@ -133,10 +133,10 @@ extern "C" {
 }
 pub type HELEMENT = HLINK;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::ships::native::abi::state;
-pub use crate::ships::native::abi::state__bindgen_ty_1;
+pub use crate::engine::battle::record::state;
+pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub type ELEMENT = element;
+pub use crate::engine::battle::record::ELEMENT;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type ElementCollisionFunc = ::std::option::Option<
     unsafe extern "C" fn(
@@ -146,12 +146,12 @@ pub type ElementCollisionFunc = ::std::option::Option<
         pPt1: *mut POINT,
     ),
 >;
-pub use crate::ships::native::abi::element;
-pub use crate::ships::native::abi::element__bindgen_ty_1;
-pub use crate::ships::native::abi::element__bindgen_ty_2;
-pub use crate::ships::native::abi::element__bindgen_ty_3;
-pub use crate::ships::native::abi::element__bindgen_ty_4;
-pub use crate::ships::native::abi::element__bindgen_ty_5;
+pub use crate::engine::battle::record::element;
+pub use crate::engine::battle::record::element__bindgen_ty_1;
+pub use crate::engine::battle::record::element__bindgen_ty_2;
+pub use crate::engine::battle::record::element__bindgen_ty_3;
+pub use crate::engine::battle::record::element__bindgen_ty_4;
+pub use crate::engine::battle::record::element__bindgen_ty_5;
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -185,9 +185,9 @@ pub const SPECIES_ID_SA_MATRA_ID: SPECIES_ID = 27;
 pub const SPECIES_ID_UR_QUAN_PROBE_ID: SPECIES_ID = 28;
 pub const SPECIES_ID_NUM_SPECIES_ID: SPECIES_ID = 29;
 pub type SPECIES_ID = ::std::os::raw::c_uint;
-pub type RACE_DESC = [u128; 24usize];
+pub use crate::engine::battle::record::RACE_DESC;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
-pub use crate::ships::native::abi::STARSHIP;
+pub use crate::engine::battle::record::STARSHIP;
 pub type HFLEETINFO = HLINK;
 pub use crate::ships::native::abi::FLEET_INFO;
 pub type HIPGROUP = HLINK;

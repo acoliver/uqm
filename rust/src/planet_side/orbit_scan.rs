@@ -64,9 +64,10 @@ mod production {
 
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
+    use crate::engine::battle::legacy::DisplayArray;
+
     extern "C" {
         static mut MiscDataFrame: *mut crate::graphics::native_abi::frame_desc;
-        static mut DisplayArray: [crate::ships::native::abi::PRIMITIVE; 330];
         #[cfg(test)]
         #[link_name = "rust_bridge_LockElement"]
         fn rust_bridge_lock_element(element: usize, pointer: *mut *mut c_void);

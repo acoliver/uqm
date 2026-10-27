@@ -60,46 +60,32 @@ pub mod solar_system {
     }
 }
 
-/// The C-owned ship and display queues of the running battle or flight:
-/// `race_q` (setup.c, one `STARSHIP` pool per side) and `disp_q` (setup.c, the
-/// `ELEMENT` pool of everything on screen).
-///
-/// Both are `QUEUE_TABLE` pools that C initialises with `InitQueue`; Rust only
-/// borrows them, through [`player_ships`] and [`display_list`], so each symbol
-/// is declared once, here. What the slots hold is checked by the reader, which
-/// walks the queue against its pool before it follows a link.
-///
-/// The declaration is available to the running game and integration tests.
+/// The running battle or flight's shared queues, borrowed on the game thread.
 #[cfg(not(test))]
 pub mod live_queues {
     use crate::battle::battle_controls::NUM_PLAYERS;
     use crate::comm::locdata::CQueue;
 
-    extern "C" {
-        #[link_name = "race_q"]
-        static mut RACE_Q: [crate::collections::queue::Queue; 2];
-        #[link_name = "disp_q"]
-        static mut DISP_Q: crate::collections::queue::Queue;
-    }
+    use crate::engine::battle::legacy::{disp_q, race_q};
 
     /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
     /// the human player's).
     ///
     /// # Safety
-    /// Game thread only. The caller may read the queue only while C is not
+    /// Game thread only. The caller may read the queue only while no other code is
     /// changing it.
     pub unsafe fn player_ships(player: usize) -> *const CQueue {
         assert!(player < NUM_PLAYERS, "race_q has no side {player}");
-        std::ptr::addr_of!(RACE_Q).cast::<CQueue>().add(player)
+        std::ptr::addr_of!(race_q).cast::<CQueue>().add(player)
     }
 
     /// `&disp_q`, the queue of every live `ELEMENT`.
     ///
     /// # Safety
-    /// Game thread only. The caller may read the queue only while C is not
+    /// Game thread only. The caller may read the queue only while no other code is
     /// changing it.
     pub unsafe fn display_list() -> *const CQueue {
-        std::ptr::addr_of!(DISP_Q).cast()
+        std::ptr::addr_of!(disp_q).cast()
     }
 }
 

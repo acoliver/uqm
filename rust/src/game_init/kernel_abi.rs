@@ -1,6 +1,7 @@
 //! Live game kernel and resource globals, ported from setup.c.
 #![allow(non_snake_case)]
 
+pub use crate::engine::battle::legacy::{disp_q, race_q};
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
 use crate::io::uio_bridge as uio;
@@ -33,14 +34,12 @@ global!(Screen: FRAME);
 global!(StarConFont: FONT);
 global!(MicroFont: FONT);
 global!(TinyFont: FONT);
-global!(race_q: [QUEUE; 2]);
 global!(ActivityFrame: FRAME);
 global!(StatusFrame: FRAME);
 global!(FlagStatFrame: FRAME);
 global!(MiscDataFrame: FRAME);
 global!(FontGradFrame: FRAME);
 global!(GameStrings: STRING);
-global!(disp_q: QUEUE);
 global!(repository: *mut uio::uio_Repository);
 global!(rootDir: *mut uio::uio_DirHandle);
 global!(usingSpeech: u32);
