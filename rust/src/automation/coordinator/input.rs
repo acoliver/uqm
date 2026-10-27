@@ -227,3 +227,80 @@ impl Coordinator {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_failures_and_button_wait_watchdog_are_terminal(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        const CHILD: &str = "UQM_INPUT_BOUNDARY_FAILURE";
+        let Some(case) = std::env::var_os(CHILD) else {
+            for case in ["melee", "collision", "gallery", "watchdog"] {
+                let status = std::process::Command::new(std::env::current_exe()?)
+                    .args(["--exact", "automation::coordinator::input::tests::fixture_failures_and_button_wait_watchdog_are_terminal"])
+                    .env(CHILD, case)
+                    .status()?;
+                assert!(status.success(), "{case}");
+            }
+            return Ok(());
+        };
+        let case = case.to_string_lossy();
+        let steps = match case.as_ref() {
+            "melee" => serde_json::json!([
+                {"action": "setup_melee_mutual_loss_fixture"}, {"action": "finish"}
+            ]),
+            "collision" | "gallery" => {
+                let action = if case == "collision" {
+                    "setup_planet_side_collision_fixture"
+                } else {
+                    "setup_planet_side_mineral_gallery"
+                };
+                serde_json::json!([{"action": action}, {"action": action}, {"action": "finish"}])
+            }
+            "watchdog" => serde_json::json!([
+                {"action": "select_planet_menu", "phase": "dispatch", "max_ticks": 2},
+                {"action": "finish"}
+            ]),
+            _ => unreachable!(),
+        };
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version": 1, "name": "input-failure", "steps": steps,
+            "budgets": {"max_input_ticks": 10, "max_presentations": 100, "max_wallclock_seconds": 60}
+        }))?;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json")?,
+            "test.json",
+        )?;
+        let temp = tempfile::tempdir()?;
+        Coordinator::init(script, temp.path().into());
+        let coord = Coordinator::get().ok_or("coordinator not initialized")?;
+        if case == "watchdog" {
+            let mut stopped = false;
+            for _ in 0..11 {
+                if coord.process_input_at_boundary(true) {
+                    stopped = true;
+                    break;
+                }
+            }
+            assert!(
+                stopped,
+                "nested waits must not bypass the global input budget"
+            );
+            assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
+        } else {
+            if case != "melee" {
+                assert!(!coord.process_input_inner());
+                assert_eq!(coord.inner.lock().sched_state.step_index, 1);
+            }
+            assert!(coord.process_input_inner());
+            assert_eq!(
+                coord.inner.lock().terminal_class,
+                Some(TerminalClass::SemanticMismatch)
+            );
+        }
+        assert!(Coordinator::finalize(0)? != 0);
+        Ok(())
+    }
+}
