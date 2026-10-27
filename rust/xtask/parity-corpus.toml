@@ -217,12 +217,6 @@ issue = 719
 
 # Existing encounter/scene failures reproduced on pristine main; see issue 720.
 [[expectation]]
-scenario = "cyborg-encounter-v1"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
 scenario = "probe-encounter-v1"
 classification = "known_bug"
 terminal = "semantic_mismatch"
