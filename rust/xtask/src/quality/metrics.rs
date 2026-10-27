@@ -49,10 +49,20 @@ impl Finding {
     }
 }
 
+#[derive(Debug)]
+pub struct AllowCoverage {
+    pub item: String,
+    pub scope: String,
+    pub file: String,
+    pub lines: BTreeSet<usize>,
+}
+
 #[derive(Default, Debug)]
 pub struct Measurement {
     pub findings: Vec<Finding>,
     pub declarations: Vec<Finding>,
+    pub allow_coverage: Vec<AllowCoverage>,
+    pub identity_renames: BTreeMap<String, String>,
     pub handlers: BTreeSet<(String, String)>,
     pub identifiers: Vec<Finding>,
 }

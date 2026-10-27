@@ -68,6 +68,8 @@ pub struct Walker {
     line_metrics: Vec<(usize, TokenStream, bool)>,
     excluded: BTreeMap<String, Vec<Span>>,
     allow_lines: BTreeMap<String, BTreeMap<String, BTreeSet<usize>>>,
+    allow_items: Vec<(String, String, TokenStream, Vec<String>)>,
+    anonymous: BTreeMap<String, usize>,
     names: Option<BTreeSet<String>>,
     defs_only: bool,
     generated: bool,
@@ -189,6 +191,8 @@ impl Walker {
             line_metrics: Vec::new(),
             excluded: BTreeMap::new(),
             allow_lines: BTreeMap::new(),
+            allow_items: Vec::new(),
+            anonymous: BTreeMap::new(),
             names: names.map(|n| n.iter().cloned().collect()),
             defs_only,
             generated: false,
@@ -328,6 +332,7 @@ impl Walker {
             f.value = lines.len() as u64;
             self.measurement.findings.push(f);
         }
+        self.finish_allow_items(&excluded_by_file);
         self.finish_allows(&active_lines);
         self.measurement.findings.extend(super::layers::symbols(
             &self.layer_declarations,
@@ -337,26 +342,28 @@ impl Walker {
         Ok(self.measurement)
     }
 
-    fn finish_allows(&mut self, active_lines: &BTreeMap<String, BTreeSet<usize>>) {
-        for (key, files) in std::mem::take(&mut self.allow_lines) {
-            let value = files
-                .iter()
-                .map(|(file, lines)| {
-                    lines
-                        .iter()
-                        .filter(|line| active_lines.get(file).is_some_and(|e| e.contains(line)))
-                        .count() as u64
-                })
-                .sum();
-            if let Some(f) = self
-                .measurement
-                .findings
-                .iter_mut()
-                .find(|f| f.key() == key)
-            {
-                f.value = value;
-            }
-        }
+    fn anonymous_identity(&mut self, kind: &str, legacy: &str) {
+        let parent = self.context.module.clone();
+        let ordinal = self
+            .anonymous
+            .entry(format!("{parent}::{kind}"))
+            .or_default();
+        *ordinal += 1;
+        let identity = format!("{parent}::{kind}#{ordinal}");
+        let old = self
+            .measurement
+            .identity_renames
+            .iter()
+            .filter(|(_, target)| super::layers::prefix(&parent, target))
+            .max_by_key(|(_, target)| target.len())
+            .map_or_else(
+                || parent.clone(),
+                |(source, target)| format!("{source}{}", &parent[target.len()..]),
+            );
+        self.measurement
+            .identity_renames
+            .insert(format!("{old}::{legacy}"), identity.clone());
+        self.context.module = identity;
     }
 
     fn error(&mut self, error: String) {
@@ -626,17 +633,7 @@ impl Walker {
                 Ok(file) => {
                     let previous = self.generated;
                     let module = self.context.module.clone();
-                    if file
-                        .items
-                        .iter()
-                        .any(|i| matches!(i, Item::Const(c) if c.ident == "_"))
-                    {
-                        self.context.module.push_str(&format!(
-                            "::macro@{}:{}",
-                            mac.span().start().line,
-                            mac.span().start().column
-                        ));
-                    }
+                    self.macro_identity(&file, mac);
                     self.generated = true;
                     for item in &file.items {
                         self.visit_item(item);
@@ -673,6 +670,23 @@ impl Walker {
                 }
                 Err(e) => self.error(e),
             }
+        }
+    }
+
+    fn macro_identity(&mut self, file: &syn::File, mac: &syn::Macro) {
+        if file
+            .items
+            .iter()
+            .any(|i| matches!(i, Item::Const(c) if c.ident == "_"))
+        {
+            self.anonymous_identity(
+                "macro",
+                &format!(
+                    "macro@{}:{}",
+                    mac.span().start().line,
+                    mac.span().start().column
+                ),
+            );
         }
     }
 
@@ -769,6 +783,7 @@ impl Walker {
     }
 }
 
+mod allowances;
 #[cfg(test)]
 mod tests;
 mod visitor;

@@ -78,7 +78,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         .map(String::as_str)
         .unwrap_or("check");
     let baseline_path = root.join("rust/xtask/quality-baseline.toml");
-    if command == "move" || command == "budget" {
+    if matches!(command, "move" | "budget" | "rekey") {
         return edit_baseline(root, &baseline_path, command, &options);
     }
     if command == "ident" {
@@ -205,6 +205,15 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 }
 
 fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> Result<(), String> {
+    if command == "rekey" {
+        if options.positional.len() != 1 {
+            return Err("usage: quality rekey".into());
+        }
+        let measurement = walk::measure(root, None, false)?;
+        let mut baseline = Baseline::read(path)?;
+        baseline.rekey(&measurement.identity_renames)?;
+        return baseline.write(path);
+    }
     if command == "move" {
         if options.positional.len() != 3 {
             return Err("usage: quality move [--prefix] <old identity> <new identity>".into());

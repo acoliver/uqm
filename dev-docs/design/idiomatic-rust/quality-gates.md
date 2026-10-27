@@ -176,7 +176,12 @@ functions only through `#[allow]`. Data tables (`hq_rules.rs::rules`,
   with the impl self type and trait: `uqm::graphics::filegfx::load` and
   `uqm::graphics::sdl::png2sdl::load` are distinct;
   `<uqm::ships::races::arilou::Arilou as Race>::preprocess`. Moves and renames are
-  debt transfers (section 4, rule 3). A crate split moves whole directories, so
+  debt transfers (section 4, rule 3). Anonymous items use their enclosing item path
+  plus an ordinal (`::_#1`); item-generating macro calls use `::macro#1`. Neither
+  depends on source line or column. `cargo xtask quality rekey` renames the old
+  position-based baseline keys without changing values. Base-tree comparisons
+  apply the same renaming using that tree's source positions.
+  A crate split moves whole directories, so
   `cargo xtask quality move --prefix uqm::graphics uqm-engine::graphics` records one
   `[moved]` prefix line that transfers every counter and lint entry under it.
   An individual declaration uses its full identity without `--prefix`, for example
@@ -354,6 +359,11 @@ Rules enforced by xtask:
      the destination exists. Individual statics, `repr(C)` records, exported
      functions and raw-record declarations transfer their measured share of each
      subsystem metric; the rest of the source subsystem need not disappear.
+     Inherited allows transfer the declaration's covered effective lines to the
+     destination scope for the same lint, leaving the remainder at the source.
+     Shared source lines credit only one destination scope, and each lint's total
+     is conserved. New wrapper lines, extra allows and per-file layer imports do
+     not receive free credit.
      Sources and targets cannot overlap other transfers, an existing destination
      cannot absorb a second source, and each metric's workspace total cannot rise.
      A moved function keeps its own entry and is not split. `--tighten --base <ref>`

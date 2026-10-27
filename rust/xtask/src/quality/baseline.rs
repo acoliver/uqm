@@ -110,6 +110,13 @@ impl Baseline {
         )
         .map_err(|e| e.to_string())
     }
+    pub fn rekey(&mut self, renames: &BTreeMap<String, String>) -> Result<(), String> {
+        for (old, new) in renames.iter().rev() {
+            self.entries = move_entries(&self.entries, old, new, true)?;
+        }
+        Ok(())
+    }
+
     pub fn tighten(
         &mut self,
         measurement: &Measurement,
@@ -146,8 +153,9 @@ impl Baseline {
         let mut moves = self.moved.clone();
         super::transfers::register(&mut moves, old, new)?;
         super::transfers::validate(current, base, &moves)?;
-        let one = [(old.into(), new.into())].into();
-        let entries = super::transfers::limits(&self.entries, current, base, &one)?;
+        let before = super::transfers::limits(&base.baseline(), current, base, &self.moved)?;
+        let after = super::transfers::limits(&base.baseline(), current, base, &moves)?;
+        let entries = super::transfers::adjust(&self.entries, &before, &after)?;
         let lint = self
             .lint
             .iter()
@@ -382,12 +390,15 @@ pub fn archived_measurement(
         ));
     }
     let baseline_path = archive.path().join("rust/xtask/quality-baseline.toml");
-    let baseline = if baseline_path.exists() {
+    let mut baseline = if baseline_path.exists() {
         Some(Baseline::read(&baseline_path)?)
     } else {
         None
     };
     let measurement = super::walk::measure(archive.path(), None, false)?;
+    if let Some(baseline) = &mut baseline {
+        baseline.rekey(&measurement.identity_renames)?;
+    }
     Ok((measurement, baseline))
 }
 

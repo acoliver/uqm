@@ -93,7 +93,16 @@ pub fn limits(
         relocated.findings.push(finding);
     }
     let before = base.baseline();
-    let after = relocated.baseline();
+    let mut after = relocated.baseline();
+    transfer_allows(&mut after, current, base, moves)?;
+    adjust(entries, &before, &after)
+}
+
+pub fn adjust(
+    entries: &BTreeMap<String, u64>,
+    before: &BTreeMap<String, u64>,
+    after: &BTreeMap<String, u64>,
+) -> Result<BTreeMap<String, u64>, String> {
     let mut result = entries.clone();
     for key in before.keys().chain(after.keys()).collect::<BTreeSet<_>>() {
         let old = before.get(key).copied().unwrap_or(0);
@@ -112,4 +121,55 @@ pub fn limits(
         }
     }
     Ok(result)
+}
+
+fn transfer_allows(
+    entries: &mut BTreeMap<String, u64>,
+    current: &Measurement,
+    base: &Measurement,
+    moves: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let mut credited = BTreeMap::<(String, String, usize), String>::new();
+    for (old, new) in moves {
+        for coverage in base.allow_coverage.iter().filter(|c| prefix(&c.item, old)) {
+            let scope = coverage.scope.splitn(3, '|').nth(2).unwrap();
+            if prefix(scope, old) {
+                continue; // Direct allows already relocate with their finding.
+            }
+            let target_item = format!("{new}{}", &coverage.item[old.len()..]);
+            let lint = coverage.scope.split('|').nth(1).unwrap();
+            let target_scope = current
+                .allow_coverage
+                .iter()
+                .filter(|c| c.item == target_item && c.scope.split('|').nth(1) == Some(lint))
+                .max_by_key(|c| c.scope.len())
+                .map(|c| &c.scope);
+            let Some(target_scope) = target_scope else {
+                continue;
+            };
+            if target_scope == &coverage.scope {
+                continue;
+            }
+            for line in &coverage.lines {
+                let key = (coverage.scope.clone(), coverage.file.clone(), *line);
+                if let Some(previous) = credited.insert(key, target_scope.clone()) {
+                    if previous != *target_scope {
+                        return Err(format!(
+                            "allow source line credited to both {previous} and {target_scope}"
+                        ));
+                    }
+                    continue;
+                }
+                let source = entries
+                    .get_mut(&coverage.scope)
+                    .ok_or_else(|| format!("missing allow scope {}", coverage.scope))?;
+                *source = source
+                    .checked_sub(1)
+                    .ok_or("insufficient inherited allow debt")?;
+                *entries.entry(target_scope.clone()).or_default() += 1;
+            }
+        }
+    }
+    entries.retain(|_, value| *value != 0);
+    Ok(())
 }
