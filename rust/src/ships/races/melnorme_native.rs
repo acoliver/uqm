@@ -197,16 +197,6 @@ pub(crate) mod engine {
         (*e).state_flags |= NONSOLID as u16;
     }
 
-    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
     pub(crate) unsafe extern "C" fn pump_up_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
@@ -225,7 +215,7 @@ pub(crate) mod engine {
                 MIN_PUMPITUDE_ANIMS + u16::from((*a).__bindgen_anon_4.turn_wait & !REVERSE_DIR);
             (*p).__bindgen_anon_4.turn_wait = 0;
             (*p).__bindgen_anon_5.next_turn = 0;
-            (*p).preprocess_func = Some(animate);
+            (*p).preprocess_func = Some(animation_preprocess);
             (*p).current.image.farray = (*a).next.image.farray;
             (*p).current.image.frame = SetAbsFrameIndex(
                 *(*p).current.image.farray,

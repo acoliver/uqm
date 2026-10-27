@@ -629,16 +629,6 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
     pub(crate) unsafe extern "C" fn turret_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_1.life_span != 0 {
             return;
@@ -722,7 +712,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.special[0],
                             angle_to_facing(FULL_CIRCLE as i32) as COUNT,
                         );
-                        (*effect).preprocess_func = Some(animate);
+                        (*effect).preprocess_func = Some(animation_preprocess);
                         (*effect).pParent = ss.cast();
                         (*prim(effect)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                         put_element(effect_h);

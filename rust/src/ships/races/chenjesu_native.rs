@@ -146,16 +146,6 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
     pub(crate) unsafe extern "C" fn crystal_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
@@ -169,7 +159,7 @@ pub(crate) mod engine {
             (*blast).__bindgen_anon_1.life_span = NUM_SPARKLES;
             (*blast).__bindgen_anon_4.turn_wait = 0;
             (*blast).__bindgen_anon_5.next_turn = 0;
-            (*blast).preprocess_func = Some(animate);
+            (*blast).preprocess_func = Some(animation_preprocess);
             (*blast).current.image.farray = (*a).next.image.farray;
             (*blast).current.image.frame =
                 SetAbsFrameIndex((*blast).current.image.farray.read(), 2);
@@ -220,7 +210,7 @@ pub(crate) mod engine {
         (*e).state_flags &= !(DISAPPEARING as u16);
         (*e).state_flags |= (NONSOLID | FINITE_LIFE) as u16;
         (*e).__bindgen_anon_1.life_span = 6;
-        (*e).preprocess_func = Some(animate);
+        (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = None;
         (*e).collision_func = None;
         (*e).velocity = mem::zeroed();

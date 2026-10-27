@@ -26,10 +26,6 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::ships::races::orz_native::engine::animate as *const () as usize,
-            "ships::races::orz_native::animate",
-        ),
-        (
             crate::ships::races::orz_native::engine::howitzer_collision as *const () as usize,
             "ships::races::orz_native::howitzer_collision",
         ),
@@ -263,10 +259,6 @@ fn part5() -> Vec<(usize, &'static str)> {
             "ships::races::utwig_native::utwig_preprocess",
         ),
         (
-            crate::ships::races::chenjesu_native::engine::animate as *const () as usize,
-            "ships::races::chenjesu_native::animate",
-        ),
-        (
             crate::ships::races::chenjesu_native::engine::chenjesu_preprocess as *const () as usize,
             "ships::races::chenjesu_native::chenjesu_preprocess",
         ),
@@ -316,10 +308,6 @@ fn part6() -> Vec<(usize, &'static str)> {
             "ships::races::mmrnmhrm_native::mmrnmhrm_preprocess",
         ),
         (
-            crate::ships::races::melnorme_native::engine::animate as *const () as usize,
-            "ships::races::melnorme_native::animate",
-        ),
-        (
             crate::ships::races::melnorme_native::engine::confuse_preprocess as *const () as usize,
             "ships::races::melnorme_native::confuse_preprocess",
         ),
@@ -355,10 +343,6 @@ fn part7() -> Vec<(usize, &'static str)> {
         (
             crate::ships::races::shofixti_native::engine::self_destruct as *const () as usize,
             "ships::races::shofixti_native::self_destruct",
-        ),
-        (
-            crate::ships::races::chmmr_native::engine::animate as *const () as usize,
-            "ships::races::chmmr_native::animate",
         ),
         (
             crate::ships::races::chmmr_native::engine::chmmr_intelligence as *const () as usize,

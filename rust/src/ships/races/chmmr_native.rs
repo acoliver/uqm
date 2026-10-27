@@ -107,16 +107,6 @@ pub(crate) mod engine {
         &raw mut CHMMR_DESC
     }
 
-    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
     pub(crate) unsafe extern "C" fn laser_death(e: *mut ELEMENT) {
         let ss = starship(e);
         (*ss).special_counter = (*e).__bindgen_anon_4.turn_wait;
@@ -165,7 +155,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
                         );
-                        (*spot).preprocess_func = Some(animate);
+                        (*spot).preprocess_func = Some(animation_preprocess);
                         (*spot).pParent = ss.cast();
                         (*GlobData
                             .Game_state
@@ -550,7 +540,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
         (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, 8);
-        (*e).preprocess_func = Some(animate);
+        (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = None;
         (*e).postprocess_func = None;
         (*e).collision_func = None;
