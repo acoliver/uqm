@@ -2,7 +2,7 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine, starship};
-    use std::{mem, ptr};
+    use std::ptr;
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -12,7 +12,7 @@ pub(crate) mod engine {
         }
     }
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags =
             (FIRES_FORE as i32 | POINT_DEFENSE as i32 | SHIELD_DEFENSE as i32) as _;
         d.ship_info.ship_cost = 22;
@@ -63,7 +63,10 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn initialize_lance(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_lance(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
@@ -101,7 +104,7 @@ pub(crate) mod engine {
         6
     }
 
-    unsafe extern "C" fn utwig_intelligence(
+    pub(crate) unsafe extern "C" fn utwig_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -158,7 +161,7 @@ pub(crate) mod engine {
         ship_intelligence(ship, concerns, count);
     }
 
-    unsafe extern "C" fn utwig_collision(
+    pub(crate) unsafe extern "C" fn utwig_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -176,7 +179,7 @@ pub(crate) mod engine {
         collision(a, pa, b, pb);
     }
 
-    unsafe extern "C" fn utwig_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn utwig_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 != 0 {
             (*e).collision_func = Some(utwig_collision);
         }

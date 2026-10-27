@@ -5,7 +5,7 @@ pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, cosine, element, facing_to_angle, frame_index, sine, starship,
     };
-    use std::{mem, ptr};
+    use std::ptr;
 
     const MAX_CREW: u16 = 14;
     const MAX_ENERGY: u8 = 32;
@@ -31,7 +31,7 @@ pub(crate) mod engine {
     const SPECIAL_WAIT: u8 = 30;
 
     const fn descriptor() -> RACE_DESC {
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = FIRES_FORE as u16;
         desc.ship_info.ship_cost = 17;
         desc.ship_info.crew_level = MAX_CREW;
@@ -90,7 +90,10 @@ pub(crate) mod engine {
         &raw mut DRUUGE_DESC
     }
 
-    unsafe extern "C" fn initialize_cannon(ship: *mut ELEMENT, cannons: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_cannon(
+        ship: *mut ELEMENT,
+        cannons: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -116,7 +119,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn cannon_collision(
+    pub(crate) unsafe extern "C" fn cannon_collision(
         cannon: *mut ELEMENT,
         point0: *mut POINT,
         other: *mut ELEMENT,
@@ -153,7 +156,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn druuge_intelligence(
+    pub(crate) unsafe extern "C" fn druuge_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -202,7 +205,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn druuge_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn druuge_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & WEAPON as u16 == 0
             || (*ss).weapon_counter != (*(*ss).RaceDescPtr).characteristics.weapon_wait
@@ -232,7 +235,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn druuge_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn druuge_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 == 0 {
             return;

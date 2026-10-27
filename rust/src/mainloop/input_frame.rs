@@ -81,6 +81,7 @@ pub extern "C" fn rust_complete_input_frame(keep_running: i32) -> i32 {
         unsafe { present_complete_transaction() };
     }
 
+    crate::automation::Coordinator::parity_checkpoint("input-loop");
     i32::from(result.keep_running)
 }
 

@@ -2,6 +2,8 @@
 
 use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
 
+mod projectile;
+
 fn blast_index(angle: u16) -> u16 {
     let facing = normalize_facing(angle_to_facing(i32::from(angle) + HALF_CIRCLE as i32));
     ((facing >> 2) << 1) + u16::from(facing & 3 != 0)
@@ -28,9 +30,9 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::world_elements::do_damage;
+    use crate::collections::observation::image;
     use crate::ships::native::{
-        cosine, element, facing_to_angle, frame_count, object_cloaked, put_element, sine, starship,
-        wrap_delta,
+        cosine, element, frame_count, object_cloaked, put_element, sine, starship, wrap_delta,
     };
     use std::{mem, ptr};
 
@@ -44,7 +46,7 @@ pub(crate) mod engine {
             .add((*e).PrimIndex as usize)
     }
 
-    unsafe extern "C" fn collision_cb(
+    pub(crate) unsafe extern "C" fn collision_cb(
         w: *mut ELEMENT,
         wp: *mut POINT,
         h: *mut ELEMENT,
@@ -67,24 +69,15 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_1.life_span = 1;
             (*e).collision_func = Some(collision_cb);
             (*e).__bindgen_anon_5.blast_offset = 1;
-            let angle = facing_to_angle(b.face as i32);
-            (*e).current.location.x = (i32::from(b.cx)
-                + i32::from(cosine(angle, i32::from(b.pixoffs) << ONE_SHIFT)))
-                as i16;
-            (*e).current.location.y = (i32::from(b.cy)
-                + i32::from(sine(angle, i32::from(b.pixoffs) << ONE_SHIFT)))
-                as i16;
+            let (position, velocity) =
+                projectile::laser((b.cx, b.cy), b.face, b.pixoffs, (b.ex, b.ey));
+            (*e).current.location.x = position.0;
+            (*e).current.location.y = position.1;
             (*primitive(e)).Type = gfx_object_LINE_PRIM as u8;
             (*primitive(e)).color = b.color;
-            (*e).current.image.frame = DecFrameIndex(stars_in_space);
-            (*e).current.image.farray = &raw mut stars_in_space;
-            SetVelocityComponents(
-                &raw mut (*e).velocity,
-                ((i32::from(b.cx) + i32::from(b.ex) - i32::from((*e).current.location.x))
-                    << VELOCITY_SHIFT) as i16,
-                ((i32::from(b.cy) + i32::from(b.ey) - i32::from((*e).current.location.y))
-                    << VELOCITY_SHIFT) as i16,
-            );
+            image!(frame; (*e).current.image.frame, DecFrameIndex(stars_in_space));
+            image!(set; (*e).current.image.farray, &raw mut stars_in_space);
+            SetVelocityComponents(&raw mut (*e).velocity, velocity.0, velocity.1);
         }
         handle
     }
@@ -102,23 +95,16 @@ pub(crate) mod engine {
             (*e).state_flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
             (*e).__bindgen_anon_1.life_span = b.life;
             (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-            (*e).current.image.farray = b.farray;
-            (*e).current.image.frame = SetAbsFrameIndex(*b.farray, b.index);
+            image!(set; (*e).current.image.farray, b.farray);
+            image!(frame; (*e).current.image.frame, SetAbsFrameIndex(*b.farray, b.index));
             (*e).preprocess_func = b.preprocess_func;
             (*e).collision_func = Some(collision_cb);
             (*e).__bindgen_anon_5.blast_offset = b.blast_offs as u8;
-            let angle = facing_to_angle(b.face as i32) as u16;
-            (*e).current.location.x = (i32::from(b.cx)
-                + i32::from(cosine(angle as i32, i32::from(b.pixoffs) << ONE_SHIFT)))
-                as i16;
-            (*e).current.location.y = (i32::from(b.cy)
-                + i32::from(sine(angle as i32, i32::from(b.pixoffs) << ONE_SHIFT)))
-                as i16;
-            let dx = cosine(angle as i32, i32::from(b.speed) << VELOCITY_SHIFT);
-            let dy = sine(angle as i32, i32::from(b.speed) << VELOCITY_SHIFT);
-            SetVelocityComponents(&raw mut (*e).velocity, dx, dy);
-            (*e).current.location.x = (*e).current.location.x.wrapping_sub(dx >> VELOCITY_SHIFT);
-            (*e).current.location.y = (*e).current.location.y.wrapping_sub(dy >> VELOCITY_SHIFT);
+            let (position, velocity) =
+                projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
+            (*e).current.location.x = position.0;
+            (*e).current.location.y = position.1;
+            SetVelocityComponents(&raw mut (*e).velocity, velocity.0, velocity.1);
         }
         handle
     }
@@ -185,17 +171,15 @@ pub(crate) mod engine {
                 let facings = angle_to_facing(FULL_CIRCLE as i32) as u16;
                 if frames <= facings {
                     (*b).__bindgen_anon_1.life_span = 2;
-                    (*b).current.image.farray = (&raw mut blast).cast::<FRAME>();
-                    (*b).current.image.frame =
-                        SetAbsFrameIndex(*(*b).current.image.farray, blast_index(angle));
+                    image!(set; (*b).current.image.farray, (&raw mut blast).cast::<FRAME>());
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, blast_index(angle)));
                 } else {
                     (*b).__bindgen_anon_1.life_span = frames - facings;
                     (*b).__bindgen_anon_4.turn_wait = 0;
                     (*b).__bindgen_anon_5.next_turn = 0;
                     (*b).preprocess_func = Some(animation_preprocess);
-                    (*b).current.image.farray = (*w).next.image.farray;
-                    (*b).current.image.frame =
-                        SetAbsFrameIndex(*(*b).current.image.farray, facings);
+                    image!(copy; (*b).current.image.farray, (*w).next.image.farray);
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, facings));
                 }
                 return handle;
             }
@@ -218,8 +202,7 @@ pub(crate) mod engine {
         let ship = starship(e);
         if flags & MODIFY_IMAGE as u8 != 0 {
             let mut ship_intersect: INTERSECT_CONTROL = mem::zeroed();
-            ship_intersect.IntersectStamp.frame =
-                SetAbsFrameIndex((*(*ship).RaceDescPtr).ship_info.icons, 1);
+            image!(frame; ship_intersect.IntersectStamp.frame, SetAbsFrameIndex((*(*ship).RaceDescPtr).ship_info.icons, 1));
             if ship_intersect.IntersectStamp.frame.is_null() {
                 return ptr::null_mut();
             }

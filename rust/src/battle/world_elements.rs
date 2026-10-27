@@ -2,19 +2,30 @@
 
 use crate::ships::native::abi::*;
 
-fn damage_object(element: &mut ELEMENT, damage: i16) {
-    unsafe {
-        if element.__bindgen_anon_3.mass_points > (MAX_SHIP_MASS * 10) as u8 {
-            return;
-        }
-        if (damage as u8 as u16) < element.__bindgen_anon_2.hit_points {
-            element.__bindgen_anon_2.hit_points -= damage as u8 as u16;
-        } else {
-            element.__bindgen_anon_2.hit_points = 0;
-            element.__bindgen_anon_1.life_span = 0;
-            element.state_flags |= NONSOLID as u16;
-        }
+fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {
+    if mass > 100 {
+        return;
     }
+    if (damage as u8 as u16) < *hp {
+        *hp -= damage as u8 as u16;
+    } else {
+        *hp = 0;
+        *life = 0;
+        *flags |= 1 << 6;
+    }
+}
+
+fn crew_step(
+    current: (i16, i16),
+    next_x: &mut i16,
+    next_y: &mut i16,
+    target: (i16, i16),
+    dimensions: (i32, i32),
+) {
+    let dx = crate::math::wrap_delta(target.0.wrapping_sub(current.0), dimensions.0);
+    *next_x = next_x.wrapping_add(dx.signum() * 4);
+    let dy = crate::math::wrap_delta(target.1.wrapping_sub(current.1), dimensions.1);
+    *next_y = next_y.wrapping_add(dy.signum() * 4);
 }
 
 const fn crew_color(high: bool) -> Color {
@@ -41,9 +52,10 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::weapon_native::TrackShip;
+    use crate::collections::observation::image;
     use crate::ships::native::{
         angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,
-        starship, wrap_delta,
+        starship,
     };
     use std::mem;
 
@@ -57,17 +69,17 @@ pub(crate) mod engine {
             .cast::<PRIMITIVE>()
             .add((*e).PrimIndex as usize)
     }
-    unsafe fn width() -> i32 {
-        (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
+    fn width(pixels: i32) -> i32 {
+        (pixels - 64) << (ONE_SHIFT + MAX_REDUCTION)
     }
-    unsafe fn height() -> i32 {
-        ScreenHeight << (ONE_SHIFT + MAX_REDUCTION)
+    fn height(pixels: i32) -> i32 {
+        pixels << (ONE_SHIFT + MAX_REDUCTION)
     }
     fn aligned_random(random: u32, extent: i32) -> i16 {
         ((i32::from(random as u16) % extent) as i16) & !((1 << ONE_SHIFT) - 1)
     }
 
-    unsafe extern "C" fn gravity_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn gravity_postprocess(e: *mut ELEMENT) {
         CalculateGravity(e);
     }
 
@@ -85,14 +97,14 @@ pub(crate) mod engine {
         (*e).state_flags = APPEARING as u16;
         (*e).__bindgen_anon_1.life_span = (NORMAL_LIFE + 1) as u16;
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-        (*e).current.image.farray = (&raw mut planet).cast::<FRAME>();
-        (*e).current.image.frame = *(*e).current.image.farray;
+        image!(set; (*e).current.image.farray, (&raw mut planet).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, *(*e).current.image.farray);
         (*e).collision_func = Some(collision);
         (*e).postprocess_func = Some(gravity_postprocess);
         (*e).velocity = mem::zeroed();
         loop {
-            (*e).current.location.x = aligned_random(TFB_Random(), width());
-            (*e).current.location.y = aligned_random(TFB_Random(), height());
+            (*e).current.location.x = aligned_random(TFB_Random(), width(ScreenWidth));
+            (*e).current.location.y = aligned_random(TFB_Random(), height(ScreenHeight));
             if CalculateGravity(e) == 0 && TimeSpaceMatterConflict(e) == 0 {
                 break;
             }
@@ -101,7 +113,7 @@ pub(crate) mod engine {
         put_element(handle);
     }
 
-    unsafe extern "C" fn spawn_rubble(source: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_rubble(source: *mut ELEMENT) {
         let handle = AllocElement();
         if handle.is_null() {
             return;
@@ -114,17 +126,17 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 0;
         (*e).__bindgen_anon_5.next_turn = 0;
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-        (*e).current.image.farray = (&raw mut asteroid).cast::<FRAME>();
-        (*e).current.image.frame = SetAbsFrameIndex(
+        image!(set; (*e).current.image.farray, (&raw mut asteroid).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex(
             *(*e).current.image.farray,
             angle_to_facing(FULL_CIRCLE as i32) as u16,
-        );
+        ));
         (*e).current.location = (*source).current.location;
         (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = Some(spawn_asteroid);
     }
 
-    unsafe extern "C" fn asteroid_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn asteroid_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
@@ -134,8 +146,7 @@ pub(crate) mod engine {
             } else {
                 index.wrapping_add(1)
             };
-            (*e).next.image.frame =
-                SetAbsFrameIndex((*e).current.image.frame, normalize_facing(index as i32));
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, normalize_facing(index as i32)));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.thrust_wait & 127;
         }
@@ -163,20 +174,28 @@ pub(crate) mod engine {
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
         let value = TFB_Random() as u16;
         if value & 1 != 0 {
-            (*e).current.location.x = if value & 2 == 0 { 0 } else { width() as i16 };
-            (*e).current.location.y = aligned_random(TFB_Random(), height());
+            (*e).current.location.x = if value & 2 == 0 {
+                0
+            } else {
+                width(ScreenWidth) as i16
+            };
+            (*e).current.location.y = aligned_random(TFB_Random(), height(ScreenHeight));
         } else {
-            (*e).current.location.x = aligned_random(TFB_Random(), width());
-            (*e).current.location.y = if value & 2 == 0 { 0 } else { height() as i16 };
+            (*e).current.location.x = aligned_random(TFB_Random(), width(ScreenWidth));
+            (*e).current.location.y = if value & 2 == 0 {
+                0
+            } else {
+                height(ScreenHeight) as i16
+            };
         }
         let magnitude = (((TFB_Random() as i16 & 7) + 4) as i32) << ONE_SHIFT;
         let facing = TFB_Random() as u16;
         SetVelocityVector(&raw mut (*e).velocity, magnitude as i16, facing);
-        (*e).current.image.farray = (&raw mut asteroid).cast::<FRAME>();
-        (*e).current.image.frame = SetAbsFrameIndex(
+        image!(set; (*e).current.image.farray, (&raw mut asteroid).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex(
             *(*e).current.image.farray,
             normalize_facing(TFB_Random() as i32),
-        );
+        ));
         let wait = TFB_Random() as u8 & 3;
         (*e).__bindgen_anon_4.turn_wait = wait;
         (*e).__bindgen_anon_5.thrust_wait = wait;
@@ -197,7 +216,13 @@ pub(crate) mod engine {
                 (*e).state_flags |= NONSOLID as u16;
             }
         } else {
-            damage_object(&mut *e, damage);
+            damage_object(
+                (*e).__bindgen_anon_3.mass_points,
+                &mut (*e).__bindgen_anon_2.hit_points,
+                &mut (*e).__bindgen_anon_1.life_span,
+                &mut (*e).state_flags,
+                damage,
+            );
         }
     }
 
@@ -222,32 +247,13 @@ pub(crate) mod engine {
         }
         if !target.is_null() {
             let ship = element(target);
-            let dx = wrap_delta(
-                (*ship)
-                    .current
-                    .location
-                    .x
-                    .wrapping_sub((*e).current.location.x),
-                width(),
+            crew_step(
+                ((*e).current.location.x, (*e).current.location.y),
+                &mut (*e).next.location.x,
+                &mut (*e).next.location.y,
+                ((*ship).current.location.x, (*ship).current.location.y),
+                (width(ScreenWidth), height(ScreenHeight)),
             );
-            (*e).next.location.x = (*e)
-                .next
-                .location
-                .x
-                .wrapping_add(dx.signum() * (1 << ONE_SHIFT));
-            let dy = wrap_delta(
-                (*ship)
-                    .current
-                    .location
-                    .y
-                    .wrapping_sub((*e).current.location.y),
-                height(),
-            );
-            (*e).next.location.y = (*e)
-                .next
-                .location
-                .y
-                .wrapping_add(dy.signum() * (1 << ONE_SHIFT));
         }
     }
 
@@ -308,8 +314,8 @@ pub(crate) mod engine {
             (*crew).__bindgen_anon_1.life_span = 300;
             (*primitive(crew)).Type = gfx_object_POINT_PRIM as u8;
             (*primitive(crew)).color = crew_color(false);
-            (*crew).current.image.frame = DecFrameIndex(stars_in_space);
-            (*crew).current.image.farray = &raw mut stars_in_space;
+            image!(frame; (*crew).current.image.frame, DecFrameIndex(stars_in_space));
+            image!(set; (*crew).current.image.farray, &raw mut stars_in_space);
             (*crew).preprocess_func = Some(crew_preprocess);
             (*crew).collision_func = Some(crew_collision);
             (*crew).pParent = owner.cast();
@@ -321,7 +327,7 @@ pub(crate) mod engine {
             let h = (i32::from(TFB_Random() as u16) % i32::from(rect.extent.height)) as i16;
             let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
             crew_intersect.EndPoint = intersect.EndPoint;
-            crew_intersect.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(stars_in_space));
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
                     .EndPoint
@@ -374,17 +380,60 @@ mod tests {
             e.__bindgen_anon_2.hit_points = 200;
             e.__bindgen_anon_3.mass_points = 100;
             e.__bindgen_anon_1.life_span = 7;
-            damage_object(&mut e, 257);
+            damage_object(
+                e.__bindgen_anon_3.mass_points,
+                &mut e.__bindgen_anon_2.hit_points,
+                &mut e.__bindgen_anon_1.life_span,
+                &mut e.state_flags,
+                257,
+            );
             assert_eq!(e.__bindgen_anon_2.hit_points, 199);
             e.__bindgen_anon_3.mass_points = 101;
-            damage_object(&mut e, 255);
+            damage_object(
+                e.__bindgen_anon_3.mass_points,
+                &mut e.__bindgen_anon_2.hit_points,
+                &mut e.__bindgen_anon_1.life_span,
+                &mut e.state_flags,
+                255,
+            );
             assert_eq!(e.__bindgen_anon_2.hit_points, 199);
             assert_eq!(e.__bindgen_anon_1.life_span, 7);
             e.__bindgen_anon_3.mass_points = 3;
-            damage_object(&mut e, 199);
+            damage_object(
+                e.__bindgen_anon_3.mass_points,
+                &mut e.__bindgen_anon_2.hit_points,
+                &mut e.__bindgen_anon_1.life_span,
+                &mut e.state_flags,
+                199,
+            );
             assert_eq!(e.__bindgen_anon_2.hit_points, 0);
             assert_eq!(e.__bindgen_anon_1.life_span, 0);
             assert_eq!(e.state_flags, NONSOLID as u16);
+        }
+    }
+
+    #[test]
+    fn crew_motion_preserves_signed_wrapping_and_exact_half_extent_ties() {
+        use crate::battle::element::Point;
+        for (from, target, expected) in [
+            (Point::new(0, 0), Point::new(1, -1), Point::new(4, -4)),
+            (Point::new(0, 0), Point::new(512, -512), Point::new(4, -4)),
+            (Point::new(0, 0), Point::new(513, -513), Point::new(-4, 4)),
+            (
+                Point::new(i16::MAX, i16::MIN),
+                Point::new(i16::MIN, i16::MAX),
+                Point::new(-32765, 32764),
+            ),
+        ] {
+            let mut next = from;
+            crew_step(
+                (from.x, from.y),
+                &mut next.x,
+                &mut next.y,
+                (target.x, target.y),
+                (1024, 1024),
+            );
+            assert_eq!(next, expected, "from={from:?} target={target:?}");
         }
     }
 

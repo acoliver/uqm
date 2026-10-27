@@ -155,6 +155,140 @@ jobs:
           target/${{ matrix.target }}/release/${{ matrix.binary }} --check-content --contentdir=../sc2/content
           cargo run --release --locked --example platform_smoke --features bundled-sdl --target ${{ matrix.target }}
 
+  parity:
+    name: Parity (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            platform: macos
+          - runner: ubuntu-24.04
+            platform: ubuntu
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+      PARITY_DIR: ${{ github.workspace }}/tmp/verify/parity-${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Start parity duration accounting
+        run: |
+          mkdir -p "$PARITY_DIR"
+          python3 -c 'import time,os,pathlib; pathlib.Path(os.environ["PARITY_DIR"],"started.txt").write_text(str(time.time()))'
+      - name: Resolve base and owner-authorized golden updates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            let allow = false;
+            let base = context.payload.before;
+            let pull = context.payload.pull_request;
+            if (context.eventName === 'pull_request') {
+              base = pull.base.sha;
+            } else {
+              const associated = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+                ...context.repo, commit_sha: context.sha, per_page: 100
+              });
+              pull = associated.find(p => p.merged_at && p.merge_commit_sha === context.sha && p.base.ref === 'main');
+            }
+            if (pull) {
+              const events = await github.paginate(github.rest.issues.listEvents, {
+                ...context.repo, issue_number: pull.number, per_page: 100
+              });
+              const changes = events.filter(e => ['labeled', 'unlabeled'].includes(e.event) && e.label?.name === 'parity-golden-update');
+              const last = changes[changes.length - 1];
+              const present = pull.labels.some(l => l.name === 'parity-golden-update');
+              allow = present && last?.event === 'labeled' && last.actor?.login === owner;
+              if (present && !allow) core.setFailed('parity-golden-update must be applied by the repository owner');
+            }
+            if (!base || /^0+$/.test(base)) throw new Error('Parity requires an existing git base commit');
+            core.exportVariable('PARITY_BASE', base);
+            core.exportVariable('PARITY_UPDATE', allow ? '--allow-golden-update' : '');
+      - name: Install macOS replay dependencies
+        if: runner.os == 'macOS'
+        run: brew install pkg-config sdl2
+      - name: Install Ubuntu replay dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes libasound2-dev libsdl2-dev pkg-config unzip
+      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          key: parity-${{ matrix.platform }}
+      - name: Test parity tooling without linking the game
+        run: 'cargo test -p uqm-xtask --no-default-features --locked parity::'
+      - name: Record all corpus, fixtures, scenario counts and 74 runtime saves
+        id: recording
+        if: always()
+        run: |
+          set -o pipefail
+          cargo xtask parity record --all --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/record.log"
+      - name: Retain initial candidates before golden admission and loaded jitter
+        if: ${{ always() && steps.recording.outcome == 'success' && hashFiles('rust/tests/golden/manifest.json') == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-initial-${{ matrix.platform }}
+          path: tmp/verify/parity-${{ matrix.platform }}/record
+          if-no-files-found: error
+          retention-days: 3
+      - name: Check base protection, full manifest and fresh recording against goldens
+        if: ${{ always() && steps.recording.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          update=()
+          if [ "$PARITY_UPDATE" = '--allow-golden-update' ]; then update+=("$PARITY_UPDATE"); fi
+          cargo xtask parity check --base "$PARITY_BASE" "${update[@]}" --recording "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/check.log"
+      - name: Record jitter under CPU load and compare every payload byte
+        if: ${{ always() && matrix.platform == 'ubuntu' && steps.recording.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          yes > /dev/null &
+          load=$!
+          trap 'kill "$load" 2>/dev/null || true; wait "$load" 2>/dev/null || true' EXIT
+          UQM_REPLAY_JITTER=7 cargo xtask parity record --all --game-bin "$PWD/target/release/uqm" --out "$PARITY_DIR/jitter" 2>&1 | tee "$PARITY_DIR/jitter.log"
+          diff -r "$PARITY_DIR/record" "$PARITY_DIR/jitter" | tee "$PARITY_DIR/jitter-diff.log"
+      - name: Report actual parity job duration
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, pathlib, time
+          directory = pathlib.Path(os.environ['PARITY_DIR'])
+          seconds = time.time() - float((directory / 'started.txt').read_text())
+          (directory / 'duration.json').write_text(json.dumps({'elapsed_seconds': seconds}) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Parity {os.environ['RUNNER_OS']}: actual elapsed {seconds:.3f} seconds\n")
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parity-record-${{ matrix.platform }}
+          path: tmp/verify/parity-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+
+  parity-platform-compare:
+    name: Compare macOS, Ubuntu and loaded jitter parity payloads
+    needs: parity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: parity-record-*
+          path: tmp/parity-platforms
+      - name: Compare full deterministic trees including SHA256 inventories
+        run: |
+          set -euo pipefail
+          diff -r tmp/parity-platforms/parity-record-macos/record tmp/parity-platforms/parity-record-ubuntu/record
+          diff -r tmp/parity-platforms/parity-record-ubuntu/record tmp/parity-platforms/parity-record-ubuntu/jitter
+
   failure-scenarios:
     name: Failure scenario (${{ matrix.scenario }})
     runs-on: macos-latest

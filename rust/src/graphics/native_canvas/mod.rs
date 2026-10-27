@@ -13,6 +13,7 @@
 //! * `rotation`     rotated extents and rotation
 //! * `pixels`       pixel access, collision tests and bulk transfers
 
+mod alpha;
 pub mod drawing;
 pub mod lifecycle;
 pub mod pixels;

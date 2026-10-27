@@ -1,6 +1,7 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
     use std::{mem, ptr};
 
@@ -56,7 +57,7 @@ pub(crate) mod engine {
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = FIRES_FORE as u16;
         d.ship_info.ship_cost = 5;
         d.ship_info.crew_level = MAX_CREW;
@@ -146,7 +147,7 @@ pub(crate) mod engine {
         &raw mut NEW_SHOFIXTI_DESC
     }
 
-    unsafe extern "C" fn initialize_standard_missile(
+    pub(crate) unsafe extern "C" fn initialize_standard_missile(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -171,7 +172,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn destruct_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn destruct_preprocess(e: *mut ELEMENT) {
         let primitive = prim(e);
         (*e).state_flags |= CHANGING as u16;
         let life = (*e).__bindgen_anon_1.life_span;
@@ -184,7 +185,7 @@ pub(crate) mod engine {
             };
         } else if life < DESTRUCT_SWITCH {
             let color = (*primitive).color;
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             for (from, to) in [
                 (rgb15(31, 31, 31), rgb15(31, 31, 10)),
                 (rgb15(31, 31, 10), rgb15(31, 10, 10)),
@@ -212,9 +213,8 @@ pub(crate) mod engine {
                 (*prim(d)).Type = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
                 (*prim(d)).color = rgb15(31, 31, 31);
                 let frame = (*(*ss).RaceDescPtr).ship_data.special[0];
-                (*d).current.image.farray =
-                    (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                (*d).current.image.frame = frame;
+                image!(set; (*d).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                image!(frame; (*d).current.image.frame, frame);
                 (*d).__bindgen_anon_1.life_span = GetFrameCount(frame.cast());
                 (*d).current.location = (*e).current.location;
                 (*d).preprocess_func = Some(destruct_preprocess);
@@ -225,7 +225,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn self_destruct_kill_objects(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn self_destruct_kill_objects(e: *mut ELEMENT) {
         let mut h = disp_q.head;
         while !h.is_null() {
             let obj = element(h);
@@ -277,7 +277,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn self_destruct(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn self_destruct(e: *mut ELEMENT) {
         let h = AllocElement();
         if !h.is_null() {
             let d = element(h);
@@ -296,7 +296,7 @@ pub(crate) mod engine {
         (*e).death_func = Some(shofixti_destruct_death);
     }
 
-    unsafe extern "C" fn shofixti_destruct_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn shofixti_destruct_death(e: *mut ELEMENT) {
         let ss = starship(e);
         StopAllBattleMusic();
         StartShipExplosion(e, false);
@@ -320,7 +320,7 @@ pub(crate) mod engine {
         RecordShipDeath(e);
     }
 
-    unsafe extern "C" fn shofixti_intelligence(
+    pub(crate) unsafe extern "C" fn shofixti_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -353,7 +353,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn shofixti_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn shofixti_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if ((*ss).cur_status_flags ^ (*ss).old_status_flags) & SPECIAL as u16 != 0 {
             let captain = &raw mut (*(*ss).RaceDescPtr).ship_data.captain_control.special;

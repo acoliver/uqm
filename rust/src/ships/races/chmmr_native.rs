@@ -1,7 +1,33 @@
 //! Chmmr callbacks for the live engine, ported from `ships/chmmr/chmmr.c`.
 
+fn tractor_shadow_flags() -> u16 {
+    use crate::ships::native::abi::{
+        CHANGING, FINITE_LIFE, IGNORE_SIMILAR, NONSOLID, POST_PROCESS,
+    };
+    // POST_PROCESS shadows skip preprocessing. Their first projection must not
+    // reuse the previous occupant's primitive frame, even at zero velocity.
+    (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn stationary_new_tractor_shadow_projects_a_fresh_primitive() {
+        use crate::ships::native::abi::{APPEARING, CHANGING, POST_PROCESS};
+        let flags = super::tractor_shadow_flags();
+        assert_ne!(
+            flags & POST_PROCESS as u16,
+            0,
+            "the shadow already bypassed preprocessing"
+        );
+        assert_ne!(flags & (APPEARING | CHANGING) as u16, 0,
+            "a stationary first-use shadow must project its own frame before drawing a recycled primitive");
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         object_cloaked, put_element, sine, starship,
@@ -25,7 +51,7 @@ pub(crate) mod engine {
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags =
             (FIRES_FORE | IMMEDIATE_WEAPON | SEEKING_SPECIAL | POINT_DEFENSE) as u16;
         d.ship_info.ship_cost = 30;
@@ -82,17 +108,7 @@ pub(crate) mod engine {
         &raw mut CHMMR_DESC
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
-    unsafe extern "C" fn laser_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn laser_death(e: *mut ELEMENT) {
         let ss = starship(e);
         (*ss).special_counter = (*e).__bindgen_anon_4.turn_wait;
         if !(*ss).hShip.is_null() {
@@ -134,13 +150,12 @@ pub(crate) mod engine {
                             .location
                             .y
                             .wrapping_add(sine(angle, i32::from(magnitude)));
-                        (*spot).current.image.farray =
-                            (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr();
-                        (*spot).current.image.frame = SetAbsFrameIndex(
+                        image!(set; (*spot).current.image.farray, (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr());
+                        image!(frame; (*spot).current.image.frame, SetAbsFrameIndex(
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
-                        );
-                        (*spot).preprocess_func = Some(animate);
+                        ));
+                        (*spot).preprocess_func = Some(animation_preprocess);
                         (*spot).pParent = ss.cast();
                         (*GlobData
                             .Game_state
@@ -154,7 +169,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_megawatt_laser(
+    pub(crate) unsafe extern "C" fn initialize_megawatt_laser(
         ship: *mut ELEMENT,
         lasers: *mut HELEMENT,
     ) -> COUNT {
@@ -194,7 +209,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn chmmr_intelligence(
+    pub(crate) unsafe extern "C" fn chmmr_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -217,7 +232,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn chmmr_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn chmmr_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & WEAPON as u16 != 0 {
             let last = element(disp_q.tail);
@@ -239,13 +254,12 @@ pub(crate) mod engine {
                     (*flash).state_flags =
                         (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16;
                     (*flash).__bindgen_anon_1.life_span = 1;
-                    (*flash).current = (*ship).next;
-                    (*flash).current.image.farray =
-                        (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr();
-                    (*flash).current.image.frame = SetAbsFrameIndex(
+                    image!(copy; (*flash).current, (*ship).next);
+                    image!(set; (*flash).current.image.farray, (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr());
+                    image!(frame; (*flash).current.image.frame, SetAbsFrameIndex(
                         (*(*ss).RaceDescPtr).ship_data.weapon[0],
                         ((*ss).ShipFacing as i32 + angle_to_facing(FULL_CIRCLE as i32)) as COUNT,
-                    );
+                    ));
                     (*flash).pParent = ss.cast();
                     (*GlobData
                         .Game_state
@@ -310,10 +324,9 @@ pub(crate) mod engine {
                         if !h.is_null() {
                             let shadow = element(h);
                             (*shadow).playerNr = (*target).playerNr;
-                            (*shadow).state_flags =
-                                (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS) as u16;
+                            (*shadow).state_flags = super::tractor_shadow_flags();
                             (*shadow).__bindgen_anon_1.life_span = 1;
-                            (*shadow).current = (*target).next;
+                            image!(copy; (*shadow).current, (*target).next);
                             (*shadow).current.location.x = (*shadow)
                                 .current
                                 .location
@@ -324,7 +337,7 @@ pub(crate) mod engine {
                                 .location
                                 .y
                                 .wrapping_add(sine(angle, offsets[i] << ONE_SHIFT));
-                            (*shadow).next = (*shadow).current;
+                            image!(copy; (*shadow).next, (*shadow).current);
                             (*shadow).pParent = enemy_ss.cast();
                             SetVelocityComponents(&mut (*shadow).velocity, vx, vy);
                             let prim = GlobData
@@ -342,12 +355,12 @@ pub(crate) mod engine {
         (*ss).special_counter = 0;
     }
 
-    unsafe extern "C" fn satellite_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn satellite_preprocess(e: *mut ELEMENT) {
         (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-        (*e).next.image.frame = SetAbsFrameIndex(
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
             (*e).current.image.frame,
             (frame_index((*e).current.image.frame).wrapping_add(1)) & 7,
-        );
+        ));
         (*e).state_flags |= CHANGING as u16;
         (*e).__bindgen_anon_4.turn_wait =
             normalize_angle(i32::from((*e).__bindgen_anon_4.turn_wait) + 1) as u8;
@@ -403,7 +416,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spawn_point_defense(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_point_defense(e: *mut ELEMENT) {
         let ss = starship(e);
         let ship = element((*ss).hShip);
         let satellite = element((*e).hTarget);
@@ -491,7 +504,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn satellite_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn satellite_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_5.thrust_wait != 0 || (*e).__bindgen_anon_1.life_span == 0 {
             (*e).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
         } else {
@@ -509,7 +522,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn satellite_collision(
+    pub(crate) unsafe extern "C" fn satellite_collision(
         _: *mut ELEMENT,
         _: *mut POINT,
         _: *mut ELEMENT,
@@ -517,7 +530,7 @@ pub(crate) mod engine {
     ) {
     }
 
-    unsafe extern "C" fn satellite_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn satellite_death(e: *mut ELEMENT) {
         let ss = starship(e);
         (*(*ss).RaceDescPtr).ship_info.ship_flags &= !(POINT_DEFENSE as u16);
         (*e).state_flags &= !(DISAPPEARING as u16);
@@ -525,14 +538,14 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_1.life_span = 4;
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
-        (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, 8);
-        (*e).preprocess_func = Some(animate);
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, 8));
+        (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = None;
         (*e).postprocess_func = None;
         (*e).collision_func = None;
     }
 
-    unsafe extern "C" fn spawn_satellites(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_satellites(e: *mut ELEMENT) {
         let ss = starship(e);
         if !(*ss).hShip.is_null() {
             let ship = element((*ss).hShip);
@@ -557,12 +570,11 @@ pub(crate) mod engine {
                         .location
                         .y
                         .wrapping_add(sine(angle, SATELLITE_OFFSET));
-                    (*satellite).current.image.farray =
-                        (*(*ss).RaceDescPtr).ship_data.special.as_mut_ptr();
-                    (*satellite).current.image.frame = SetAbsFrameIndex(
+                    image!(set; (*satellite).current.image.farray, (*(*ss).RaceDescPtr).ship_data.special.as_mut_ptr());
+                    image!(frame; (*satellite).current.image.frame, SetAbsFrameIndex(
                         (*(*ss).RaceDescPtr).ship_data.special[0],
                         TFB_Random() as COUNT & 7,
-                    );
+                    ));
                     (*satellite).preprocess_func = Some(satellite_preprocess);
                     (*satellite).postprocess_func = Some(satellite_postprocess);
                     (*satellite).death_func = Some(satellite_death);
@@ -579,7 +591,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn chmmr_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn chmmr_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let h = AllocElement();
         if !h.is_null() {

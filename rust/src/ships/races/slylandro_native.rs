@@ -1,11 +1,12 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,
         sine, starship,
     };
-    use std::{mem, ptr};
+    use std::ptr;
 
     const MAX_CREW: u16 = 12;
     const MAX_ENERGY: u8 = 20;
@@ -15,7 +16,7 @@ pub(crate) mod engine {
     const CLOSE_RANGE_WEAPON: u16 = 50 << ONE_SHIFT;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (SEEKING_WEAPON | CREW_IMMUNE) as u16;
         d.ship_info.ship_cost = 17;
         d.ship_info.crew_level = MAX_CREW;
@@ -81,7 +82,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn lightning_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn lightning_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait != 0 && (*e).state_flags & COLLISION as u16 == 0 {
             let mut h = ptr::null_mut();
             initialize_lightning(e, &mut h);
@@ -91,7 +92,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn lightning_collision(
+    pub(crate) unsafe extern "C" fn lightning_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -108,7 +109,10 @@ pub(crate) mod engine {
         weapon_collision(a, pa, b, pb);
     }
 
-    unsafe extern "C" fn initialize_lightning(e: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_lightning(
+        e: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let mut block = LASER_BLOCK {
             cx: (*e).next.location.x,
             cy: (*e).next.location.y,
@@ -187,7 +191,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn slylandro_intelligence(
+    pub(crate) unsafe extern "C" fn slylandro_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         mut count: COUNT,
@@ -283,7 +287,7 @@ pub(crate) mod engine {
         found
     }
 
-    unsafe extern "C" fn slylandro_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn slylandro_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).weapon_counter != 0 && (*ss).weapon_counter < WEAPON_WAIT {
             let mut h = ptr::null_mut();
@@ -300,7 +304,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn slylandro_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn slylandro_preprocess(ship: *mut ELEMENT) {
         if (*ship).state_flags & (APPEARING | NONSOLID) as u16 == 0 {
             let ss = starship(ship);
             if (*ss).cur_status_flags & THRUST as u16 != 0
@@ -334,7 +338,7 @@ pub(crate) mod engine {
                 (*ss).cur_status_flags |= SHIP_AT_MAX_SPEED as u16;
                 (*ss).cur_status_flags &= !(SHIP_IN_GRAVITY_WELL as u16);
             }
-            (*ship).next.image.frame = IncFrameIndex((*ship).next.image.frame);
+            image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).next.image.frame));
             (*ship).state_flags |= CHANGING as u16;
         }
     }

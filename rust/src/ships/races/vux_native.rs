@@ -1,13 +1,14 @@
 //! Live vux callbacks translated from ships/vux/vux.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, init_intersect_points,
         normalize_facing, put_element, sine, starship,
     };
     use std::{mem, ptr};
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags =
             (FIRES_FORE as i32 | SEEKING_SPECIAL as i32 | IMMEDIATE_WEAPON as i32) as _;
         d.ship_info.ship_cost = 12;
@@ -63,7 +64,7 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
         let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
         let mut face = original;
         let delta = TrackShip(e, &mut face);
@@ -71,10 +72,10 @@ pub(crate) mod engine {
             face = (i32::from(original) + i32::from(delta)) as COUNT;
             SetVelocityVector(&raw mut (*e).velocity, 25, face);
         }
-        (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
+        image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
         (*e).state_flags |= CHANGING as u16;
     }
-    unsafe extern "C" fn limpet_collision(
+    pub(crate) unsafe extern "C" fn limpet_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -118,7 +119,7 @@ pub(crate) mod engine {
         (*a).__bindgen_anon_1.life_span = 0;
         (*a).state_flags |= (COLLISION | DISAPPEARING) as u16;
     }
-    unsafe extern "C" fn spawn_limpets(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_limpets(e: *mut ELEMENT) {
         let ss = starship(e);
         let mut block = MISSILE_BLOCK {
             farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast(),
@@ -145,7 +146,7 @@ pub(crate) mod engine {
             put_element(h);
         }
     }
-    unsafe extern "C" fn initialize_horrific_laser(
+    pub(crate) unsafe extern "C" fn initialize_horrific_laser(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -170,7 +171,7 @@ pub(crate) mod engine {
         *out = initialize_laser(&mut block);
         1
     }
-    unsafe extern "C" fn vux_intelligence(
+    pub(crate) unsafe extern "C" fn vux_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -201,7 +202,7 @@ pub(crate) mod engine {
             (*ss).ship_input_state &= !(SPECIAL as u8);
         }
     }
-    unsafe extern "C" fn vux_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn vux_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0
@@ -215,7 +216,7 @@ pub(crate) mod engine {
             (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
         }
     }
-    unsafe extern "C" fn vux_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn vux_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 != 0 {
             let ss = starship(e);
             let mut face = (*ss).ShipFacing;
@@ -244,7 +245,7 @@ pub(crate) mod engine {
                         .y
                         .wrapping_sub((*e).current.location.y);
                     face = normalize_facing(angle_to_facing(i32::from(ARCTAN(dx, dy))));
-                    (*e).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, face);
+                    image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, face));
                     let x = i32::from((*e).current.location.x) & !((1 << ONE_SHIFT) - 1);
                     let y = i32::from((*e).current.location.y) & !((1 << ONE_SHIFT) - 1);
                     let width = (ScreenWidth - 64) << (ONE_SHIFT + 3);
@@ -268,10 +269,9 @@ pub(crate) mod engine {
                     }
                 }
                 (*e).hTarget = ptr::null_mut();
-                (*e).next = (*e).current;
+                image!(copy; (*e).next, (*e).current);
                 init_intersect_points(e);
-                (*e).IntersectControl.IntersectStamp.frame =
-                    SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+                image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
                 (*ss).ShipFacing = face;
             }
             (*(*ss).RaceDescPtr).preprocess_func = None;

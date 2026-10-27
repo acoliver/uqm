@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "name": "parity-new-game",
+  "seed": 42,
+  "fixture": "parity-new-game",
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 420
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 1
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 20
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "assert_ship_resources",
+      "fuel_on_board": 1000,
+      "res_units": 0
+    },
+    {
+      "action": "capture",
+      "label": "production-new-game-started"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

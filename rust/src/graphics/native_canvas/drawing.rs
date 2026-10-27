@@ -30,10 +30,10 @@ fn same_color(c1: Color, c2: Color) -> bool {
 }
 
 /// Primitives may draw `DRAW_ALPHA` onto non-alpha surfaces via `Color.a`.
-unsafe fn check_primitive_mode(surf: *mut SDL_Surface, color: &mut Color, mode: &mut DrawMode) {
+fn check_primitive_mode(alpha_mask: u32, color: &mut Color, mode: &mut DrawMode) {
     // Special case: We support DRAW_ALPHA mode to non-alpha surfaces
     // for primitives via Color.a
-    if mode.kind == DRAW_REPLACE && format(surf).Amask == 0 && color.a != 0xff {
+    if mode.kind == DRAW_REPLACE && alpha_mask == 0 && color.a != 0xff {
         mode.kind = DRAW_ALPHA;
         mode.factor = i16::from(color.a);
         color.a = 0xff;
@@ -54,7 +54,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_Line(
 ) {
     let dst: *mut SDL_Surface = target.cast();
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
     let sdl_color = SDL_MapRGBA(format(dst), color.r, color.g, color.b, color.a);
 
     let plot_fn = renderpixel_for(dst, u32::from(mode.kind));
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_Rect(
         (*rect).extent.height,
     );
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
     let mut sdl_color = SDL_MapRGBA(fmt, color.r, color.g, color.b, color.a);
 
     if mode.kind == DRAW_REPLACE {
@@ -138,19 +138,38 @@ pub(super) unsafe fn blit(
     mut dst_r: *mut SDL_Rect,
     mode: DrawMode,
 ) {
-    if mode.kind == DRAW_REPLACE {
-        // Standard SDL simple blit
+    let surface_alpha = mode.kind == DRAW_ALPHA && format(src).Amask == 0;
+    let override_alpha = surface_alpha.then_some(mode.factor as u8);
+    if mode.kind == DRAW_REPLACE || surface_alpha {
+        if src != dst {
+            // SAFETY: distinct live canvases own disjoint pixel storage; rectangles
+            // remain borrowed only for this synchronous blit.
+            let (source, source_rect, destination, destination_rect) = unsafe {
+                (
+                    sdl2::surface::SurfaceRef::from_ll(src),
+                    src_r.as_ref().copied(),
+                    sdl2::surface::SurfaceRef::from_ll_mut(dst),
+                    dst_r.as_mut(),
+                )
+            };
+            if super::alpha::blit(
+                source,
+                source_rect,
+                destination,
+                destination_rect,
+                override_alpha,
+            ) {
+                return;
+            }
+        }
+        if surface_alpha {
+            assert!(!has_surface_alpha_mod(src));
+            set_surface_alpha_mod(src, mode.factor as u8);
+        }
         SDL_UpperBlit(src, src_r, dst, dst_r);
-    } else if mode.kind == DRAW_ALPHA && format(src).Amask == 0 {
-        // Standard SDL surface-alpha blit
-        // Note that surface alpha and per-pixel alpha cannot work
-        // at the same time, which is why the Amask test
-        let has_alpha = has_surface_alpha_mod(src);
-        assert!(!has_alpha);
-        // Set surface alpha temporarily
-        set_surface_alpha_mod(src, mode.factor as u8);
-        SDL_UpperBlit(src, src_r, dst, dst_r);
-        disable_surface_alpha_mod(src);
+        if surface_alpha {
+            disable_surface_alpha_mod(src);
+        }
     } else {
         // Custom blit
         let mut loc_src_r = SDL_Rect {
@@ -335,21 +354,7 @@ pub(super) unsafe fn fill(src: *mut SDL_Surface, mut fillcolor: u32, dst: *mut S
             for x in 0..width as isize {
                 let s = src_p.offset(y * slen as isize + x);
                 let d = dst_p.offset(y * dlen as isize + x);
-                let mut p = *s & amask;
-
-                if p == 0 {
-                    // fully transparent pixel
-                    *d = dstkey;
-                } else if alpha == 0xff {
-                    // not for DRAW_ALPHA; use alpha chan directly
-                    *d = p | fillcolor;
-                } else {
-                    // for DRAW_ALPHA; modulate the alpha channel
-                    p >>= srcfmt.Ashift;
-                    p = (p * alpha) >> 8;
-                    p <<= srcfmt.Ashift;
-                    *d = p | fillcolor;
-                }
+                *d = super::alpha::fill_pixel(*s, amask, srcfmt.Ashift, fillcolor, dstkey, alpha);
             }
         }
     } else if get_color_key(src, &mut srckey) == 0 {
@@ -394,7 +399,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_FilledImage(
         return;
     }
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
 
     LockMutex((*img).mutex);
     draw_filled_image_locked(img, x, y, scale, scale_mode, color, mode, dst);

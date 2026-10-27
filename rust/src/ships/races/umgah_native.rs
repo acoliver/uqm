@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
@@ -19,12 +20,12 @@ pub(crate) mod engine {
 
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct UmgahData {
-        prev_facing: u16,
+    pub(crate) struct UmgahData {
+        pub(crate) prev_facing: u16,
     }
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
         d.ship_info.ship_cost = 7;
         d.ship_info.crew_level = MAX_CREW;
@@ -100,16 +101,16 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
-        (*(*ss).RaceDescPtr).ship_data.special[0] = rel_frame_index(
+        image!(view; (*(*ss).RaceDescPtr).ship_data.special[0], rel_frame_index(
             (*(*ss).RaceDescPtr).ship_data.special[0],
             angle_to_facing(FULL_CIRCLE as i32) as i16,
-        );
+        ));
         (*e).state_flags |= APPEARING as u16;
     }
 
-    unsafe extern "C" fn cone_collision(
+    pub(crate) unsafe extern "C" fn cone_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -123,7 +124,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_cone(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_cone(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
         let facing = (*ss).ShipFacing;
@@ -151,7 +155,7 @@ pub(crate) mod engine {
                     prev_facing: facing,
                 }),
             );
-            (*desc).ship_data.special[0] = SetAbsFrameIndex((*desc).ship_data.special[0], facing);
+            image!(view; (*desc).ship_data.special[0], SetAbsFrameIndex((*desc).ship_data.special[0], facing));
         }
         b.index = frame_index((*desc).ship_data.special[0]);
         *out = initialize_missile(&mut b);
@@ -159,7 +163,7 @@ pub(crate) mod engine {
             let cone = element(*out);
             (*cone).collision_func = Some(cone_collision);
             (*cone).state_flags &= !(APPEARING as u16);
-            (*cone).next = (*cone).current;
+            image!(copy; (*cone).next, (*cone).current);
             (*cone).IntersectControl.IntersectStamp.origin = POINT {
                 x: (*cone).current.location.x >> ONE_SHIFT,
                 y: (*cone).current.location.y >> ONE_SHIFT,
@@ -168,12 +172,12 @@ pub(crate) mod engine {
                 x: (*cone).next.location.x >> ONE_SHIFT,
                 y: (*cone).next.location.y >> ONE_SHIFT,
             };
-            (*cone).IntersectControl.IntersectStamp.frame = (*desc).ship_data.special[0];
+            image!(frame; (*cone).IntersectControl.IntersectStamp.frame, (*desc).ship_data.special[0]);
         }
         1
     }
 
-    unsafe extern "C" fn umgah_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn umgah_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & APPEARING as u16 != 0 {
             set_data((*ss).RaceDescPtr, None);
@@ -197,7 +201,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn umgah_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn umgah_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).special_counter > 0 {
             (*ss).special_counter = 0;
@@ -205,11 +209,11 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn uninit_umgah(desc: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_umgah(desc: *mut RACE_DESC) {
         set_data(desc, None);
     }
 
-    unsafe extern "C" fn umgah_intelligence(
+    pub(crate) unsafe extern "C" fn umgah_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,

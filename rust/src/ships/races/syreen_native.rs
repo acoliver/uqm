@@ -6,7 +6,7 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, element, put_element, starship};
-    use std::{mem, ptr};
+    use std::ptr;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -43,7 +43,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = FIRES_FORE as u16;
         desc.ship_info.ship_cost = 13;
         desc.ship_info.crew_level = MAX_CREW;
@@ -99,7 +99,10 @@ pub(crate) mod engine {
         &raw mut SYREEN_DESC
     }
 
-    unsafe extern "C" fn initialize_dagger(ship: *mut ELEMENT, daggers: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_dagger(
+        ship: *mut ELEMENT,
+        daggers: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -124,7 +127,7 @@ pub(crate) mod engine {
 
     /// Queued by the song's first pass and run again as the element's death
     /// function, which is when the nearby enemy ships actually lose crew.
-    unsafe extern "C" fn spawn_crew(source: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_crew(source: *mut ELEMENT) {
         if (*source).state_flags & PLAYER_SHIP as u16 != 0 {
             let crew_handle = AllocElement();
             if !crew_handle.is_null() {
@@ -190,7 +193,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn syreen_intelligence(
+    pub(crate) unsafe extern "C" fn syreen_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -213,7 +216,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn syreen_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn syreen_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0

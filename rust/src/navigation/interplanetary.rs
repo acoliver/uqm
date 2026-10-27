@@ -16,6 +16,16 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
 }
 
 #[cfg(not(test))]
+fn sine(angle: u16, magnitude: i32) -> i16 {
+    ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64)
+        >> crate::navigation::abi::SIN_SHIFT) as i16
+}
+#[cfg(not(test))]
+fn cosine(angle: u16, magnitude: i32) -> i16 {
+    sine(angle.wrapping_add(16), magnitude)
+}
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod live {
     use super::*;
@@ -29,13 +39,6 @@ pub(crate) mod live {
         60, 180,
     ];
 
-    unsafe fn sine(angle: u16, magnitude: i32) -> i16 {
-        ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
-            as i16
-    }
-    unsafe fn cosine(angle: u16, magnitude: i32) -> i16 {
-        sine(angle.wrapping_add(16), magnitude)
-    }
     unsafe fn primitive(element: *mut ELEMENT) -> *mut PRIMITIVE {
         ptr::addr_of_mut!(DisplayArray)
             .cast::<PRIMITIVE>()
@@ -115,7 +118,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe extern "C" fn group_preprocess(element: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn group_preprocess(element: *mut ELEMENT) {
         (*element).state_flags &= !((DISAPPEARING | NONSOLID) as u16);
         (*element).__bindgen_anon_1.life_span =
             (*element).__bindgen_anon_1.life_span.wrapping_add(1);
@@ -368,7 +371,7 @@ pub(crate) mod live {
             GlobData.Game_state.CurrentActivity |= START_ENCOUNTER as u16;
         }
     }
-    unsafe extern "C" fn flagship_collision(
+    pub(crate) unsafe extern "C" fn flagship_collision(
         first: *mut ELEMENT,
         _p0: *mut POINT,
         second: *mut ELEMENT,
@@ -379,7 +382,7 @@ pub(crate) mod live {
         }
         collide_flagship(first, second);
     }
-    unsafe extern "C" fn group_collision(
+    pub(crate) unsafe extern "C" fn group_collision(
         first: *mut ELEMENT,
         _p0: *mut POINT,
         second: *mut ELEMENT,
@@ -419,18 +422,19 @@ pub(crate) mod live {
         (*element).__bindgen_anon_2.hit_points = 1;
         (*element).state_flags = (CHANGING | FINITE_LIFE | IGNORE_VELOCITY) as u16;
         (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-        (*element).current.image.farray = ptr::addr_of_mut!((*group).melee_icon);
-        (*element).current.image.frame = SetAbsFrameIndex((*group).melee_icon, 1);
+        let icon = (*group).melee_icon;
+        crate::collections::observation::image!(single; (*element).current.image.farray, ptr::addr_of_mut!((*group).melee_icon), icon);
+        crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(icon, 1));
         (*element).death_func = Some(group_preprocess);
         (*element).collision_func = Some(group_collision);
         (*element).current.location =
             world(locationToDisplay((*group).loc, radius((*group).sys_loc)));
         (*element).pParent = group.cast();
         SetUpElement(element);
-        (*element).IntersectControl.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+        crate::collections::observation::image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
         PutQueue(ptr::addr_of_mut!(disp_q), handle);
     }
-    unsafe extern "C" fn flagship_preprocess(element: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn flagship_preprocess(element: *mut ELEMENT) {
         (*element).__bindgen_anon_5.thrust_wait =
             (*element).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
         if (*element).__bindgen_anon_5.thrust_wait == 0 {
@@ -458,7 +462,7 @@ pub(crate) mod live {
         let point = locationToDisplay(GlobData.Game_state.ip_location, zoom);
         (*element).next.location = world(point);
         GlobData.Game_state.ShipStamp.origin = point;
-        (*element).next.image.frame = GlobData.Game_state.ShipStamp.frame;
+        crate::collections::observation::image!(frame; (*element).next.image.frame, GlobData.Game_state.ShipStamp.frame);
         if (*element).__bindgen_anon_4.sys_loc == flagship {
             (*element).state_flags &= !(NONSOLID as u16);
         } else {
@@ -488,8 +492,9 @@ pub(crate) mod live {
         (*element).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
         (*element).__bindgen_anon_5.thrust_wait = 42;
         (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-        (*element).current.image.farray = ptr::addr_of_mut!(GlobData.Game_state.ShipStamp.frame);
-        (*element).current.image.frame = GlobData.Game_state.ShipStamp.frame;
+        let frame = GlobData.Game_state.ShipStamp.frame;
+        crate::collections::observation::image!(single; (*element).current.image.farray, ptr::addr_of_mut!(GlobData.Game_state.ShipStamp.frame), frame);
+        crate::collections::observation::image!(frame; (*element).current.image.frame, frame);
         (*element).preprocess_func = Some(flagship_preprocess);
         (*element).collision_func = Some(flagship_collision);
         (*element).current.location = world(GlobData.Game_state.ShipStamp.origin);

@@ -66,104 +66,95 @@ fn is_accessor_mode() -> bool {
 fn verify_race_desc_layout() {
     use crate::ships::ffi_contract::{rust_bridge_get_race_desc_layout, RaceDescLayout};
 
+    let mut c_layout = RaceDescLayout {
+        race_desc_size: 0,
+        ship_data_offset: 0,
+        ship_info_offset: 0,
+        characteristics_offset: 0,
+        ship_data_ship_offset: 0,
+        ship_info_crew_offset: 0,
+        ship_info_max_crew_offset: 0,
+        characteristics_mass_offset: 0,
+    };
+    // SAFETY: the provider initializes this live writable layout record.
     unsafe {
-        let mut c_layout = std::mem::zeroed::<RaceDescLayout>();
         rust_bridge_get_race_desc_layout(&mut c_layout);
+    }
 
-        let rust_size = std::mem::size_of::<RaceDesc>();
-        let mut mismatches: Vec<String> = Vec::new();
+    let mismatches: Vec<String> = [
+        (
+            "RACE_DESC size",
+            c_layout.race_desc_size,
+            std::mem::size_of::<RaceDesc>(),
+        ),
+        (
+            "ship_info",
+            c_layout.ship_info_offset,
+            std::mem::offset_of!(RaceDesc, ship_info),
+        ),
+        (
+            "characteristics",
+            c_layout.characteristics_offset,
+            std::mem::offset_of!(RaceDesc, characteristics),
+        ),
+        (
+            "ship_data",
+            c_layout.ship_data_offset,
+            std::mem::offset_of!(RaceDesc, ship_data),
+        ),
+        (
+            "ship_data.ship",
+            c_layout.ship_data_ship_offset,
+            std::mem::offset_of!(ShipData, ship),
+        ),
+        (
+            "ship_info.crew_level",
+            c_layout.ship_info_crew_offset,
+            std::mem::offset_of!(ShipInfo, crew_level),
+        ),
+        (
+            "ship_info.max_crew",
+            c_layout.ship_info_max_crew_offset,
+            std::mem::offset_of!(ShipInfo, max_crew),
+        ),
+        (
+            "characteristics.ship_mass",
+            c_layout.characteristics_mass_offset,
+            std::mem::offset_of!(Characteristics, ship_mass),
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, native, owned)| native != owned)
+    .map(|(name, native, owned)| format!("{name}: C={native} Rust={owned}"))
+    .collect();
 
-        // --- Size check ---
-        if c_layout.race_desc_size != rust_size {
-            mismatches.push(format!(
-                "RACE_DESC size: C={} Rust={}",
-                c_layout.race_desc_size, rust_size
-            ));
-        }
-
-        // --- Top-level field offset checks ---
-        let rust_ship_info_offset = std::mem::offset_of!(RaceDesc, ship_info);
-        if rust_ship_info_offset != c_layout.ship_info_offset {
-            mismatches.push(format!(
-                "ship_info: C={} Rust={}",
-                c_layout.ship_info_offset, rust_ship_info_offset
-            ));
-        }
-
-        let rust_char_offset = std::mem::offset_of!(RaceDesc, characteristics);
-        if rust_char_offset != c_layout.characteristics_offset {
-            mismatches.push(format!(
-                "characteristics: C={} Rust={}",
-                c_layout.characteristics_offset, rust_char_offset
-            ));
-        }
-
-        let rust_ship_data_offset = std::mem::offset_of!(RaceDesc, ship_data);
-        if rust_ship_data_offset != c_layout.ship_data_offset {
-            mismatches.push(format!(
-                "ship_data: C={} Rust={}",
-                c_layout.ship_data_offset, rust_ship_data_offset
-            ));
-        }
-
-        // --- Nested field offset checks ---
-        let rust_ship_data_ship_offset = std::mem::offset_of!(ShipData, ship);
-        if rust_ship_data_ship_offset != c_layout.ship_data_ship_offset {
-            mismatches.push(format!(
-                "ship_data.ship: C={} Rust={}",
-                c_layout.ship_data_ship_offset, rust_ship_data_ship_offset
-            ));
-        }
-
-        let rust_crew_offset = std::mem::offset_of!(ShipInfo, crew_level);
-        if rust_crew_offset != c_layout.ship_info_crew_offset {
-            mismatches.push(format!(
-                "ship_info.crew_level: C={} Rust={}",
-                c_layout.ship_info_crew_offset, rust_crew_offset
-            ));
-        }
-
-        let rust_max_crew_offset = std::mem::offset_of!(ShipInfo, max_crew);
-        if rust_max_crew_offset != c_layout.ship_info_max_crew_offset {
-            mismatches.push(format!(
-                "ship_info.max_crew: C={} Rust={}",
-                c_layout.ship_info_max_crew_offset, rust_max_crew_offset
-            ));
-        }
-
-        let rust_mass_offset = std::mem::offset_of!(Characteristics, ship_mass);
-        if rust_mass_offset != c_layout.characteristics_mass_offset {
-            mismatches.push(format!(
-                "characteristics.ship_mass: C={} Rust={}",
-                c_layout.characteristics_mass_offset, rust_mass_offset
-            ));
-        }
-
-        if mismatches.is_empty() {
-            eprintln!(
-                "rust_ships: RaceDesc/RACE_DESC layout verified — \
-                 direct cast is safe."
-            );
-        } else {
-            // Layouts differ (expected) — switch to accessor mode.
-            // Do NOT abort: accessor functions handle field access safely.
+    if mismatches.is_empty() {
+        eprintln!(
+            "rust_ships: RaceDesc/RACE_DESC layout verified — \
+             direct cast is safe."
+        );
+    } else {
+        // Layouts differ (expected) — switch to accessor mode.
+        // Do NOT abort: accessor functions handle field access safely.
+        // SAFETY: initialization runs before callbacks or concurrent access.
+        unsafe {
             LAYOUT_ACCESSOR_MODE = true;
-            eprintln!(
-                "rust_ships: RaceDesc/RACE_DESC layout mismatch detected \
-                 (expected — RaceDesc is not #[repr(C)]). \
-                 Switching to accessor-function mode.
+        }
+        eprintln!(
+            "rust_ships: RaceDesc/RACE_DESC layout mismatch detected \
+             (expected — RaceDesc is not #[repr(C)]). \
+             Switching to accessor-function mode.
 \
-                 Mismatches:
+             Mismatches:
   {}
 \
-                 Accessor functions will be used for all cross-language \
-                 RaceDesc field access.",
-                mismatches.join(
-                    "
+             Accessor functions will be used for all cross-language \
+             RaceDesc field access.",
+            mismatches.join(
+                "
   "
-                )
-            );
-        }
+            )
+        );
     }
 }
 

@@ -15,7 +15,11 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+mod fixtures;
 mod input;
+mod parity;
+mod save_capture;
+mod terminal;
 
 use crate::automation::battle_fight::{
     BattleFightTracker, BattleSnapshot, FightControl, FightProgress,
@@ -347,6 +351,8 @@ struct CoordInner {
     /// Release a semantically injected Select key on the next callback.
     release_semantic_select: bool,
     replay_final_activity: u16,
+    parity_fixture: Option<crate::automation::melee_fixture::FixtureRun>,
+    save_capture: Option<super::save_capture::Request>,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -360,6 +366,7 @@ pub struct Coordinator {
     #[cfg(feature = "debug-process")]
     native_linked_floors: bool,
     native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
+    parity: Option<Mutex<super::parity::Journal>>,
     /// The typed main-menu transition assertions from the script.
     transitions: Vec<crate::automation::script::MainMenuTransition>,
     /// Watchdog limits from the script budgets.
@@ -420,31 +427,18 @@ impl Coordinator {
         let actions = script.steps().to_vec();
         let transitions = script.transitions().to_vec();
 
-        let watchdog_limits = WatchdogLimits {
-            max_input_ticks: budgets.max_input_ticks,
-            max_presentations: budgets.max_presentations,
-            max_wallclock: Duration::from_secs(budgets.max_wallclock_seconds),
-            max_startup: Duration::from_secs(budgets.startup_seconds()),
-            max_idle: Duration::from_secs(budgets.idle_seconds()),
-        };
+        let watchdog_limits = Self::watchdog_limits(&budgets);
 
         let now = Instant::now();
 
-        // Initialize the runtime model via input_ffi.
-        input_ffi::init_automation_runtime();
-
-        let runtime = input_ffi::get_runtime().expect("runtime initialized");
-
-        // Activate the runtime.
-        runtime.activate();
+        let runtime = Self::activate_input_runtime();
 
         let (_, consumed_communication_completions) =
             crate::automation::ui_observation::communication_lifecycle();
 
-        let native_trace_failed = native_trace.is_err();
-        if let Err(error) = &native_trace {
-            eprintln!("automation: cannot create native trace journal: {error}");
-        }
+        let parity = Self::create_parity(&output_root);
+        let parity_failed = Self::trace_initialization_failed(&parity, "parity");
+        let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = Coordinator {
             seed: script.seed(),
             actions,
@@ -452,6 +446,7 @@ impl Coordinator {
             #[cfg(feature = "debug-process")]
             native_linked_floors: script.name() == "linked-playable-v1",
             native_trace: native_trace.ok().flatten(),
+            parity: parity.ok().flatten(),
             transitions,
             watchdog_limits,
             started_at: now,
@@ -502,6 +497,8 @@ impl Coordinator {
                 consumed_ship_picker_generation: 0,
                 release_semantic_select: false,
                 replay_final_activity: 0,
+                parity_fixture: None,
+                save_capture: super::save_capture::Request::from_environment(),
                 orbit_transition_pending: false,
                 hyperspace_flight_observed: false,
             }),
@@ -511,7 +508,11 @@ impl Coordinator {
         {
             let mut init_inner = coord.inner.lock();
             coord.write_trace(&mut init_inner, RecordKind::RunStart);
-            if resolved_result.is_err() || checkpoint_plan.is_err() || native_trace_failed {
+            if resolved_result.is_err()
+                || checkpoint_plan.is_err()
+                || native_trace_failed
+                || parity_failed
+            {
                 coord.set_terminal(&mut init_inner, TerminalClass::TraceFailure);
             }
         }
@@ -531,6 +532,9 @@ impl Coordinator {
     pub fn write_replay_summary(path: &std::path::Path) -> Result<(), String> {
         let coord = Self::get().ok_or("replay coordinator not initialized")?;
         let inner = coord.inner.lock();
+        if let Some(journal) = &coord.parity {
+            journal.lock().flush().map_err(|e| e.to_string())?;
+        }
         let summary = serde_json::json!({
             "completed": inner.terminal_class == Some(TerminalClass::Success),
             "inputs_admitted": inner.input_seen,
@@ -578,6 +582,7 @@ impl Coordinator {
     /// Activate the script's start scene after game structures and initial
     /// events are initialized, before the first activity dispatch.
     pub fn activate_start_scene() {
+        Self::activate_save_capture();
         let Some(coord) = Self::get() else {
             return;
         };
@@ -2730,61 +2735,8 @@ impl Coordinator {
             return true;
         }
 
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.started_at);
-
-        // Watchdog check for present callback.
-        let entry = WatchdogEntry {
-            kind: CallbackKind::Present,
-            input_seen: inner.input_seen,
-            present_seen: inner.present_seen,
-            elapsed,
-            ready: inner.ready,
-            idle: now.saturating_duration_since(inner.last_progress),
-            clock: ClockSample {
-                started_at: self.started_at,
-                last_observed: inner.last_observed,
-                now,
-            },
-        };
-
-        let wd_result = watchdog_reduce(&entry, &self.watchdog_limits);
-        inner.last_observed = now;
-
-        inner.input_seen = wd_result.candidate_input_seen;
-        inner.present_seen = wd_result.candidate_present_seen;
-
-        match wd_result.outcome {
-            WatchdogOutcome::Admit => inner.last_progress = now,
-            WatchdogOutcome::InputCounterOverflow
-            | WatchdogOutcome::PresentationCounterOverflow => {
-                self.set_terminal(&mut inner, TerminalClass::CounterOverflow);
-                return true;
-            }
-            WatchdogOutcome::InputTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::InputTimeout);
-                return true;
-            }
-            WatchdogOutcome::PresentationTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::PresentationTimeout);
-                return true;
-            }
-            WatchdogOutcome::WallTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::WallTimeout);
-                return true;
-            }
-            WatchdogOutcome::StartupTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::StartupTimeout);
-                return true;
-            }
-            WatchdogOutcome::IdleTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::IdleTimeout);
-                return true;
-            }
-            WatchdogOutcome::ClockRegression => {
-                self.set_terminal(&mut inner, TerminalClass::ClockRegression);
-                return true;
-            }
+        if self.admit_boundary(&mut inner, CallbackKind::Present) {
+            return true;
         }
 
         let Some(frame) = frame else {
@@ -3038,29 +2990,6 @@ impl Coordinator {
     // -----------------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------------
-    /// Set a terminal outcome on both the coordinator and the runtime mirror.
-    /// Also propagates the stop to the game loop by setting CHECK_ABORT
-    /// and MainExited to force the game loop to exit.
-    fn set_terminal(&self, inner: &mut CoordInner, class: TerminalClass) {
-        if !record_first_terminal(&mut inner.terminal_class, class) {
-            return;
-        }
-        inner.replay_final_activity = crate::mainloop::ffi::get_current_activity().0;
-        self.runtime.mirror.terminal.try_set(class);
-
-        // Propagate stop to the C game loop: set CHECK_ABORT so the
-        // activity state machine exits, and set MainExited so the
-        // outer game loop stops requesting new games.
-        // CHECK_ABORT = 0x4000 (setup.h).
-        #[cfg(not(test))]
-        unsafe {
-            crate::mainloop::c_extern::set_current_activity(
-                crate::mainloop::c_extern::get_current_activity() | 0x4000,
-            );
-            crate::mainloop::ffi::set_main_exited(true);
-        }
-    }
-
     /// Service whichever planet-side wait is the current action.
     ///
     /// Returns `None` when the current action is not a planet-side wait, so the
@@ -3320,6 +3249,7 @@ impl Coordinator {
 
     /// Write a trace record through the ordered commit.
     fn write_trace(&self, inner: &mut CoordInner, kind: RecordKind) {
+        self.write_action_phase(inner);
         let reservation = self.runtime.commit.reserve();
         let seq = reservation.sequence();
 
@@ -3350,6 +3280,7 @@ impl Coordinator {
     }
 
     fn write_terminal_trace(&self, inner: &mut CoordInner) {
+        self.write_action_phase(inner);
         let reservation = self.runtime.commit.reserve();
         let seq = reservation.sequence();
         let terminal_reason = inner
@@ -3452,6 +3383,11 @@ impl Coordinator {
         inner: &mut CoordInner,
         frame: &crate::automation::capture::PresentedFrame,
     ) -> bool {
+        if let Err(error) = self.parity_present(frame) {
+            self.capture_failure(inner, format!("parity presentation: {error}"));
+            return true;
+        }
+        self.write_action_phase(inner);
         let reservation = self.runtime.commit.reserve();
         let seq = reservation.sequence();
         let record = TraceRecord {

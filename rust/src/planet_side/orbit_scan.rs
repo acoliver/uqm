@@ -38,6 +38,7 @@ pub(crate) fn sync_node_position(
 
 #[cfg(not(test))]
 mod production {
+    use crate::collections::observation::image;
     use std::ffi::c_void;
 
     use crate::battle::element::{Element, ElementFlags};
@@ -204,26 +205,21 @@ mod production {
                 element.mass_points = fine_quantity as u8;
                 let dot = mineral_scan_dot(category, gross_size)?;
                 let surface = mineral_surface_sprite(category, gross_size)?;
-                element.current.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)).cast();
-                element.next.frame = (SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)).cast();
+                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), dot.current)).cast());
+                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), dot.next)).cast());
                 primitive.Object.Stamp.frame =
                     (SetAbsFrameIndex((MiscDataFrame).cast(), surface)).cast();
             }
             super::super::generation::GeneratedNodeKind::Energy => {
-                element.current.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.current)).cast();
-                element.next.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.next)).cast();
+                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.current)).cast());
+                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), ENERGY_SCAN_DOT.next)).cast());
                 element.turn_wait = 0x44;
                 element.mass_points = MAX_SCROUNGED;
                 primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[1].cast();
             }
             super::super::generation::GeneratedNodeKind::CannedBiological { value } => {
-                element.current.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast();
-                element.next.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast();
+                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast());
+                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast());
                 element.mass_points = value as u8;
                 element.crew_or_hp = 0;
                 primitive.Object.Stamp.frame = (*solar).PlanetSideFrame[0].cast();
@@ -233,10 +229,8 @@ mod production {
                 hit_points,
                 ..
             } => {
-                element.current.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast();
-                element.next.frame =
-                    (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast();
+                image!(frame; element.current.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.current)).cast());
+                image!(frame; element.next.frame, (SetAbsFrameIndex((MiscDataFrame).cast(), BIO_SCAN_DOT.next)).cast());
                 element.turn_wait = 0x44;
                 element.mass_points = creature.index();
                 element.crew_or_hp = u16::from(hit_points);

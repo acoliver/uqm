@@ -32,9 +32,9 @@ pub(crate) mod engine {
 
     use crate::sound::resource_types::LoadSoundInstance;
 
-    use crate::game_init::space_resources::live::load_animation;
+    use crate::game_init::space_resources::load_animation;
 
-    use crate::game_init::space_resources::live::free_image;
+    use crate::game_init::space_resources::free_image;
     use crate::sound::heart_ffi::DestroyMusic;
     use crate::sound::heart_ffi::DestroySound;
 
@@ -172,6 +172,13 @@ pub(crate) mod engine {
         if let Some(uninit) = (*d).uninit_func {
             uninit(d);
         }
+        crate::collections::observation::record(
+            crate::collections::observation::Event::ResourcesFree {
+                descriptor: d as usize,
+                icons: icons != 0,
+                battle: battle != 0,
+            },
+        );
         if battle != 0 {
             let data = &mut (*d).ship_data;
             free_image((&raw mut data.special).cast());

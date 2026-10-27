@@ -132,6 +132,7 @@ pub(crate) mod engine {
     };
     use crate::battle::battle_native::{battleFrameCount, battle_counter, BattleSong};
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
+    use crate::collections::observation::image;
     use crate::ships::native::{
         cosine, facing_to_angle, init_intersect_points, put_element, sine, starship,
     };
@@ -319,7 +320,7 @@ pub(crate) mod engine {
         true
     }
 
-    unsafe extern "C" fn preprocess_dead_ship(_ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn preprocess_dead_ship(_ship: *mut ELEMENT) {
         ProcessSound(usize::MAX as SOUND, ptr::null_mut());
     }
 
@@ -463,7 +464,7 @@ pub(crate) mod engine {
         BatchGraphics();
     }
 
-    unsafe extern "C" fn explosion_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn explosion_preprocess(ship: *mut ELEMENT) {
         let tick = ((NUM_EXPLOSION_FRAMES * 3) as u16)
             .wrapping_sub((*ship).__bindgen_anon_1.life_span) as u8;
         let step = explosion_step(tick);
@@ -485,8 +486,8 @@ pub(crate) mod engine {
             (*e).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
             (*e).__bindgen_anon_1.life_span = 9;
             (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-            (*e).current.image.farray = (&raw mut explosion).cast();
-            (*e).current.image.frame = explosion[0];
+            image!(set; (*e).current.image.farray, (&raw mut explosion).cast());
+            image!(frame; (*e).current.image.frame, explosion[0]);
             let (angle, dist) = explosion_position_random(TFB_Random());
             (*e).current.location.x = (*ship)
                 .current
@@ -614,7 +615,7 @@ pub(crate) mod engine {
         RecordShipDeath(ship);
     }
 
-    unsafe extern "C" fn cycle_ion_trail(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn cycle_ion_trail(e: *mut ELEMENT) {
         assert_eq!((*e).state_flags & PLAYER_SHIP as u16, 0);
         (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
         if (*e).colorCycleIndex as usize != ION_COLORS.len() {
@@ -649,8 +650,8 @@ pub(crate) mod engine {
         (*primitive(e)).Type = gfx_object_POINT_PRIM as u8;
         (*primitive(e)).color = rgb15(31, 21, 0);
         (*e).colorCycleIndex = 0;
-        (*e).current.image.frame = DecFrameIndex(stars_in_space);
-        (*e).current.image.farray = &raw mut stars_in_space;
+        image!(frame; (*e).current.image.frame, DecFrameIndex(stars_in_space));
+        image!(set; (*e).current.image.farray, &raw mut stars_in_space);
         (*e).current.location = (*ship).current.location;
         (*e).current.location.x = (*e)
             .current
@@ -664,7 +665,7 @@ pub(crate) mod engine {
             .wrapping_add(sine(angle, rect.extent.height as i32));
         (*e).death_func = Some(cycle_ion_trail);
         (*e).pParent = owner.cast();
-        (*e).next = (*e).current;
+        image!(copy; (*e).next, (*e).current);
         (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_sub(1);
         (*e).state_flags |= PRE_PROCESS as u16;
     }
@@ -686,12 +687,11 @@ pub(crate) mod engine {
                 {
                     let frame =
                         SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame);
-                    (*e).current.image.frame = frame;
-                    (*e).next.image.frame = frame;
+                    image!(frame; (*e).current.image.frame, frame);
+                    image!(frame; (*e).next.image.frame, frame);
                     (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
                     init_intersect_points(e);
-                    (*e).IntersectControl.IntersectStamp.frame =
-                        SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+                    image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
                     (*e).velocity = mem::zeroed();
                     (*e).state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
                     (*e).state_flags |= CHANGING as u16;
@@ -718,7 +718,7 @@ pub(crate) mod engine {
                 (*primitive(image)).Type = gfx_object_STAMPFILL_PRIM as u8;
                 (*primitive(image)).color = rgb15(31, 21, 0);
                 (*image).colorCycleIndex = 0;
-                (*image).current.image = (*e).current.image;
+                image!(copy; (*image).current.image, (*e).current.image);
                 (*image).current.location = (*e).current.location;
                 let x = cosine(angle, 40 << ONE_SHIFT) as i32;
                 let y = sine(angle, 40 << ONE_SHIFT) as i32;

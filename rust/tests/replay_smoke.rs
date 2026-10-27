@@ -12,7 +12,12 @@ fn install_content(root: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_replay(root: &Path, scenario: &str, run: &str) -> Result<serde_json::Value, Box<dyn Error>> {
+fn run_replay(
+    root: &Path,
+    scenario: &str,
+    run: &str,
+    parity: bool,
+) -> Result<serde_json::Value, Box<dyn Error>> {
     let directory = root.join(run);
     std::fs::create_dir(&directory)?;
     let directory = directory.canonicalize()?;
@@ -30,9 +35,17 @@ fn run_replay(root: &Path, scenario: &str, run: &str) -> Result<serde_json::Valu
     }
     let summary = directory.join("summary.json");
     let log = std::fs::File::create(directory.join("game.log"))?;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_uqm"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_uqm"));
+    if parity {
+        command.env("UQM_PARITY", "1");
+    } else {
+        command.env_remove("UQM_PARITY");
+    }
+    let mut child = command
         .args(["--replay", scenario, "--replay-summary"])
         .arg(&summary)
+        .arg("--automation-output")
+        .arg(directory.join("automation"))
         .arg("--configdir")
         .arg(directory.join("config"))
         .arg("--contentdir")
@@ -74,8 +87,8 @@ fn super_melee_replays_complete_with_equal_nonempty_summaries() -> Result<(), Bo
         .prefix("replay-smoke-")
         .tempdir_in(temporary)?;
     install_content(root.path())?;
-    let first = run_replay(root.path(), "super-melee-v1", "first")?;
-    let second = run_replay(root.path(), "super-melee-v1", "second")?;
+    let first = run_replay(root.path(), "super-melee-v1", "first", false)?;
+    let second = run_replay(root.path(), "super-melee-v1", "second", false)?;
     for summary in [&first, &second] {
         assert_eq!(summary["completed"], true);
         for counter in ["inputs_admitted", "steps", "presents"] {
@@ -104,11 +117,54 @@ fn campaign_failure_replays_complete_twice_with_identical_summaries() -> Result<
         .tempdir_in(temporary)?;
     install_content(root.path())?;
     for scenario in ["lost-battle-v1", "lander-destroyed-v1"] {
-        let first = run_replay(root.path(), scenario, &format!("{scenario}-first"))?;
-        let second = run_replay(root.path(), scenario, &format!("{scenario}-second"))?;
+        let first = run_replay(root.path(), scenario, &format!("{scenario}-first"), false)?;
+        let second = run_replay(root.path(), scenario, &format!("{scenario}-second"), false)?;
         assert_eq!(first["completed"], true, "{scenario}: {first}");
         assert_eq!(first, second, "{scenario}");
         eprintln!("{scenario} replay summaries match: {first}");
+    }
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "debug-process")]
+fn bounded_parity_scenarios_exercise_the_production_observer() -> Result<(), Box<dyn Error>> {
+    let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&temporary)?;
+    let root = tempfile::Builder::new()
+        .prefix("parity-runtime-")
+        .tempdir_in(temporary)?;
+    install_content(root.path())?;
+    for name in [
+        "androsynth-blazer",
+        "pkunk-rebirth",
+        "chmmr-satellites",
+        "death-spawn",
+        "mixed-collision",
+        "pool-full",
+        "frame-sets",
+        "star-contact",
+        "melee-cyborg-a",
+        "melee-cyborg-b",
+        "melee-cyborg-c",
+        "melee-cyborg-d",
+        "new-game",
+        "samatra",
+    ] {
+        let scenario = format!("parity-{name}");
+        let summary = run_replay(root.path(), &scenario, name, true)?;
+        assert_eq!(summary["completed"], true, "{name}: {summary}");
+        let trace =
+            std::fs::read_to_string(root.path().join(name).join("automation/parity.trace"))?;
+        for boundary in ["I ", "S ", "P "] {
+            assert!(
+                trace.lines().any(|line| line.starts_with(boundary)),
+                "{name} lacks {boundary}"
+            );
+        }
+        let fields =
+            std::fs::read_to_string(root.path().join(name).join("automation/parity.fields"))?;
+        assert!(fields.contains("mode.boundary"), "{name} lacks mode fields");
     }
     Ok(())
 }

@@ -139,6 +139,8 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::process_native::dispatch::{battle_input, invoke};
+    use crate::collections::observation::image;
     use crate::ships::native::abi::*;
     const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
     const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
@@ -234,8 +236,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn InitIntersectFrame(element: *mut ELEMENT) {
-        (*element).IntersectControl.IntersectStamp.frame =
-            SetEquFrameIndex(*(*element).next.image.farray, (*element).next.image.frame);
+        image!(frame; (*element).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*element).next.image.farray, (*element).next.image.frame));
     }
 
     unsafe fn GetElementStarShip(element: *mut ELEMENT, ship: *mut *mut STARSHIP) {
@@ -397,11 +398,11 @@ pub(crate) mod engine {
         if delta < angle_to_facing(HALF_CIRCLE as i32) as u16 {
             (*starship).ship_input_state |= RIGHT as u8;
             f += 1;
-            (*ship).next.image.frame = IncFrameIndex((*ship).current.image.frame);
+            image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).current.image.frame));
         } else {
             (*starship).ship_input_state |= LEFT as u8;
             f -= 1;
-            (*ship).next.image.frame = DecFrameIndex((*ship).current.image.frame);
+            image!(frame; (*ship).next.image.frame, DecFrameIndex((*ship).current.image.frame));
         }
         (*starship).ShipFacing = normalize_facing(f);
         1
@@ -466,8 +467,10 @@ pub(crate) mod engine {
         let mut owner = std::ptr::null_mut();
         GetElementStarShip(&mut moved, &mut owner);
         let mut weapons = [std::ptr::null_mut(); 6];
-        let count =
-            ((*(*owner).RaceDescPtr).init_weapon_func.unwrap())(&mut moved, weapons.as_mut_ptr());
+        let initialize = (*(*owner).RaceDescPtr).init_weapon_func.unwrap();
+        let count = invoke(initialize as usize, owner as usize, || {
+            initialize(&mut moved, weapons.as_mut_ptr())
+        });
         let mut remaining = count;
         let mut index = 0usize;
         while remaining != 0 {
@@ -480,7 +483,7 @@ pub(crate) mod engine {
             let mut weapon = std::ptr::null_mut();
             LockElement(handle, &mut weapon);
             if (*weapon).state_flags & APPEARING as u16 != 0 {
-                (*weapon).next = (*weapon).current;
+                image!(copy; (*weapon).next, (*weapon).current);
                 InitIntersectStartPoint(weapon);
                 InitIntersectEndPoint(weapon);
                 InitIntersectFrame(weapon);
@@ -610,8 +613,8 @@ pub(crate) mod engine {
             && (*other).__bindgen_anon_3.mass_points <= MAX_SHIP_MASS as u8
         {
             let mut us = std::ptr::null_mut();
-            let mut enemy = std::ptr::null_mut();
             GetElementStarShip(ship, &mut us);
+            let mut enemy = std::ptr::null_mut();
             GetElementStarShip(other, &mut enemy);
             let ur = (*us).RaceDescPtr;
             let er = (*enemy).RaceDescPtr;
@@ -1183,29 +1186,17 @@ pub(crate) mod engine {
             UnlockElement(h);
             h = next;
         }
+
         let intelligence = (*rd).cyborg_control.intelligence_func.unwrap();
-        intelligence(
-            &mut ship_copy,
-            concerns.as_mut_ptr(),
-            FIRST_EMPTY_INDEX as u16,
-        );
+        invoke(intelligence as usize, owner as usize, || {
+            intelligence(
+                &mut ship_copy,
+                concerns.as_mut_ptr(),
+                FIRST_EMPTY_INDEX as u16,
+            )
+        });
         (*owner).ShipFacing = original_facing;
-        let mut input = 0;
-        if (*owner).ship_input_state & LEFT as u8 != 0 {
-            input |= BATTLE_LEFT;
-        } else if (*owner).ship_input_state & RIGHT as u8 != 0 {
-            input |= BATTLE_RIGHT;
-        }
-        if (*owner).ship_input_state & THRUST as u8 != 0 {
-            input |= BATTLE_THRUST;
-        }
-        if (*owner).ship_input_state & WEAPON as u8 != 0 {
-            input |= BATTLE_WEAPON;
-        }
-        if (*owner).ship_input_state & SPECIAL as u8 != 0 {
-            input |= BATTLE_SPECIAL;
-        }
-        input
+        battle_input((*owner).ship_input_state)
     }
 
     #[cfg(test)]

@@ -1,0 +1,283 @@
+[[entry]]
+name = "melee-cyborg-a"
+scenario = "parity-melee-cyborg-a"
+outcome = "success"
+
+[[entry]]
+name = "melee-cyborg-b"
+scenario = "parity-melee-cyborg-b"
+outcome = "success"
+
+[[entry]]
+name = "melee-cyborg-c"
+scenario = "parity-melee-cyborg-c"
+outcome = "success"
+
+[[entry]]
+name = "melee-cyborg-d"
+scenario = "parity-melee-cyborg-d"
+outcome = "success"
+
+[[entry]]
+name = "melee-input"
+scenario = "super-melee-v1"
+outcome = "success"
+
+[[entry]]
+name = "campaign-battle"
+scenario = "lost-battle-v1"
+outcome = "success"
+
+[[entry]]
+name = "samatra"
+scenario = "parity-samatra"
+outcome = "success"
+
+[[entry]]
+name = "hyperspace"
+scenario = "out-of-fuel-v1"
+outcome = "success"
+
+[[entry]]
+name = "solar-flight"
+scenario = "real-sol-starbase-to-mars"
+outcome = "success"
+
+[[entry]]
+name = "lander"
+scenario = "lander-destroyed-v1"
+outcome = "success"
+
+[[entry]]
+name = "comm"
+scenario = "comm-encounter-v1"
+outcome = "success"
+
+[[entry]]
+name = "new-game"
+scenario = "parity-new-game"
+outcome = "success"
+
+[[entry]]
+name = "androsynth-blazer"
+scenario = "parity-androsynth-blazer"
+outcome = "success"
+
+[[entry]]
+name = "pkunk-rebirth"
+scenario = "parity-pkunk-rebirth"
+outcome = "success"
+
+[[entry]]
+name = "chmmr-satellites"
+scenario = "parity-chmmr-satellites"
+outcome = "success"
+
+[[entry]]
+name = "death-spawn"
+scenario = "parity-death-spawn"
+outcome = "success"
+
+[[entry]]
+name = "mixed-collision"
+scenario = "parity-mixed-collision"
+outcome = "success"
+
+[[entry]]
+name = "pool-full"
+scenario = "parity-pool-full"
+outcome = "success"
+
+[[entry]]
+name = "frame-sets"
+scenario = "parity-frame-sets"
+outcome = "success"
+
+[[entry]]
+name = "star-contact"
+scenario = "parity-star-contact"
+outcome = "success"
+
+# This existing development replay fails in the controller, not by test design.
+[[expectation]]
+scenario = "samatra-dev-fixture-v1"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 718
+
+# Existing campaign failures reproduced on pristine main; see issue 719.
+[[expectation]]
+scenario = "campaign-s02-spindle-pkunk"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s03b-broken-ultron"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s04a-north-refueled"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s04b-burvixese-caster"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s04c-ilwrath-approach"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s05a-south-refueled"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s05b-repaired-ultron"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s06c-utwig-bomb"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s07-taalo-protected"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s07b-west-refueled"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s08j-connected-talking-pet"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s09a-shattered-knowledge"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s09b-syreen-shuttle"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s09e-funded-knowledge"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s09g-funded-vault"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s09i-refueled-ambush"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s10d-sun-device"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+[[expectation]]
+scenario = "campaign-s13-connected-ending"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 719
+
+
+# Existing encounter/scene failures reproduced on pristine main; see issue 720.
+[[expectation]]
+scenario = "cyborg-encounter-v1"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "probe-encounter-v1"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "probe-encounter-v2"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "probe-encounter-v5"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "probe-encounter-v6"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "probe-encounter-v7"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "real-sol-starbase-alliance"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "repro-comm-menu-initial"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "repro-sol-probe-comm-ui"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "sol-probe-scene-v1"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720
+
+[[expectation]]
+scenario = "thraddash-guard-v1"
+classification = "known_bug"
+terminal = "semantic_mismatch"
+issue = 720

@@ -50,6 +50,7 @@ mod native_save;
 mod native_smoke;
 #[cfg(feature = "native")]
 mod native_suite;
+mod parity;
 #[cfg(feature = "native")]
 mod process;
 pub mod quality;

@@ -1,7 +1,12 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
+use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
+
+mod collision_motion;
+pub(super) mod dispatch;
+mod queue_view;
 
 const SKIP_COLLISION: u16 = NONSOLID as u16 | DISAPPEARING as u16;
 const COLLISION_BIT: u16 = COLLISION as u16;
@@ -22,21 +27,6 @@ enum ViewState {
 
 fn display_align(value: i32) -> i16 {
     (value as COORD) & !((1 << ONE_SHIFT) - 1)
-}
-
-fn wrap_delta(delta: i16, extent: i32) -> i16 {
-    let delta = i32::from(delta);
-    (if delta < 0 {
-        if -delta <= extent >> 1 {
-            delta
-        } else {
-            extent + delta
-        }
-    } else if delta <= extent >> 1 {
-        delta
-    } else {
-        delta - extent
-    }) as i16
 }
 
 fn wrap_value(value: i32, extent: i32) -> i16 {
@@ -250,7 +240,8 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::ships::native::{cosine, frame_index, sine};
+    use crate::collections::observation::image;
+    use crate::ships::native::frame_index;
     use std::{mem, ptr};
 
     #[no_mangle]
@@ -270,11 +261,11 @@ pub(crate) mod engine {
 
     }
 
-    unsafe fn width() -> i32 {
-        (ScreenWidth - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)
+    fn width(pixels: i32) -> i32 {
+        (pixels - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)
     }
-    unsafe fn height() -> i32 {
-        ScreenHeight << (ONE_SHIFT + MAX_REDUCTION)
+    fn height(pixels: i32) -> i32 {
+        pixels << (ONE_SHIFT + MAX_REDUCTION)
     }
     unsafe fn primitive(index: COUNT) -> *mut PRIMITIVE {
         (&raw mut DisplayArray)
@@ -297,36 +288,27 @@ pub(crate) mod engine {
         handle.cast()
     }
     #[inline]
-    unsafe fn unlock(handle: HELEMENT) {
-        let _ = locked(handle);
-    }
-    #[inline]
-    unsafe fn successor(e: *mut ELEMENT) -> HELEMENT {
-        (*e).succ
-    }
-    #[inline]
     unsafe fn head() -> HELEMENT {
         disp_q.head
     }
 
     #[inline]
-    unsafe fn colliding(e: *mut ELEMENT) -> bool {
-        (*e).state_flags & SKIP_COLLISION == 0
+    fn colliding(e: &ELEMENT) -> bool {
+        e.state_flags & SKIP_COLLISION == 0
     }
     #[inline]
-    unsafe fn init_intersect_start(e: *mut ELEMENT) {
-        (*e).IntersectControl.IntersectStamp.origin.x = (*e).current.location.x >> ONE_SHIFT;
-        (*e).IntersectControl.IntersectStamp.origin.y = (*e).current.location.y >> ONE_SHIFT;
+    fn init_intersect_start(e: &mut ELEMENT) {
+        e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> ONE_SHIFT;
+        e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> ONE_SHIFT;
     }
     #[inline]
-    unsafe fn init_intersect_end(e: *mut ELEMENT) {
-        (*e).IntersectControl.EndPoint.x = (*e).next.location.x >> ONE_SHIFT;
-        (*e).IntersectControl.EndPoint.y = (*e).next.location.y >> ONE_SHIFT;
+    fn init_intersect_end(e: &mut ELEMENT) {
+        e.IntersectControl.EndPoint.x = e.next.location.x >> ONE_SHIFT;
+        e.IntersectControl.EndPoint.y = e.next.location.y >> ONE_SHIFT;
     }
     #[inline]
     unsafe fn init_intersect_frame(e: *mut ELEMENT) {
-        (*e).IntersectControl.IntersectStamp.frame =
-            SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+        image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
     }
 
     unsafe fn preprocess(e: *mut ELEMENT) {
@@ -336,16 +318,16 @@ pub(crate) mod engine {
             }
             (*e).state_flags |= DISAPPEARING as ELEMENT_FLAGS;
             if let Some(death) = (*e).death_func {
-                death(e);
+                dispatch::invoke(death as usize, (*e).pParent as usize, || death(e));
             }
         }
         let mut flags = (*e).state_flags;
         if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
             if flags & APPEARING as ELEMENT_FLAGS != 0 {
-                (*e).next = (*e).current;
-                if colliding(e) {
-                    init_intersect_start(e);
-                    init_intersect_end(e);
+                image!(copy; (*e).next, (*e).current);
+                if colliding(&*e) {
+                    init_intersect_start(&mut *e);
+                    init_intersect_end(&mut *e);
                     init_intersect_frame(e);
                 }
                 if flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
@@ -354,9 +336,9 @@ pub(crate) mod engine {
             }
             if let Some(pre) = (*e).preprocess_func {
                 if flags & APPEARING as ELEMENT_FLAGS == 0 {
-                    pre(e);
+                    dispatch::invoke(pre as usize, (*e).pParent as usize, || pre(e));
                     flags = (*e).state_flags;
-                    if flags & CHANGING as ELEMENT_FLAGS != 0 && colliding(e) {
+                    if flags & CHANGING as ELEMENT_FLAGS != 0 && colliding(&*e) {
                         init_intersect_frame(e);
                     }
                 }
@@ -370,8 +352,8 @@ pub(crate) mod engine {
                     (*e).next.location.y = (*e).next.location.y.wrapping_add(dy);
                 }
             }
-            if colliding(e) {
-                init_intersect_end(e);
+            if colliding(&*e) {
+                init_intersect_end(&mut *e);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
                 (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_sub(1);
@@ -380,92 +362,54 @@ pub(crate) mod engine {
         (*e).state_flags =
             (flags & !((POST_PROCESS | COLLISION) as ELEMENT_FLAGS)) | PRE_PROCESS as ELEMENT_FLAGS;
     }
-    // The older battle::collision entry point uses the standalone Element model,
-    // which has a different layout. Keep the live collide.c calculation on ABI
-    // records, including STARSHIP status flags and SIZE assignment boundaries.
     unsafe fn collide_native(a: *mut ELEMENT, b: *mut ELEMENT) {
-        let dx = (*a).next.location.x.wrapping_sub((*b).next.location.x);
-        let dy = (*a).next.location.y.wrapping_sub((*b).next.location.y);
-        let mut impact_a = ARCTAN(dx, dy) as SIZE;
-        let mut impact_b =
-            ((i32::from(impact_a) + HALF_CIRCLE as i32) & (FULL_CIRCLE as i32 - 1)) as SIZE;
-        let (mut dx0, mut dy0, mut dx1, mut dy1) = (0, 0, 0, 0);
-        GetCurrentVelocityComponents(&mut (*a).velocity, &mut dx0, &mut dy0);
-        let travel_a = (*a).velocity.travel_angle as SIZE;
-        GetCurrentVelocityComponents(&mut (*b).velocity, &mut dx1, &mut dy1);
-        let travel_b = (*b).velocity.travel_angle as SIZE;
-        let rel_x = dx0.wrapping_sub(dx1);
-        let rel_y = dy0.wrapping_sub(dy1);
-        let relative_angle = ARCTAN(rel_x, rel_y) as SIZE;
-        let speed = square_root(
-            (i64::from(rel_x) * i64::from(rel_x) + i64::from(rel_y) * i64::from(rel_y)) as DWORD,
-        ) as SIZE;
-        let mut directness =
-            ((i32::from(relative_angle) - i32::from(impact_a)) & (FULL_CIRCLE as i32 - 1)) as SIZE;
-        if i32::from(directness) <= QUADRANT as i32
-            || i32::from(directness) >= (HALF_CIRCLE + QUADRANT) as i32
-        {
-            directness = HALF_CIRCLE as SIZE;
-            impact_a = (i32::from(travel_a) + HALF_CIRCLE as i32) as SIZE;
-            impact_b = (i32::from(travel_b) + HALF_CIRCLE as i32) as SIZE;
-        }
-        if (*a).next.location.x == (*a).current.location.x
-            && (*a).next.location.y == (*a).current.location.y
-            && (*b).next.location.x == (*b).current.location.x
-            && (*b).next.location.y == (*b).current.location.y
-        {
-            if (*a).state_flags & (*b).state_flags & DEFY_PHYSICS as ELEMENT_FLAGS != 0 {
-                impact_a = (i32::from(travel_a) + (HALF_CIRCLE - OCTANT) as i32) as SIZE;
-                impact_b = (i32::from(travel_b) + (HALF_CIRCLE - OCTANT) as i32) as SIZE;
-                (*a).velocity = mem::zeroed();
-                (*b).velocity = mem::zeroed();
-            }
-            (*a).state_flags |= (DEFY_PHYSICS | COLLISION) as ELEMENT_FLAGS;
-            (*b).state_flags |= (DEFY_PHYSICS | COLLISION) as ELEMENT_FLAGS;
-        }
-        let mass_a = SIZE::from((*a).__bindgen_anon_3.mass_points);
-        let mass_b = SIZE::from((*b).__bindgen_anon_3.mass_points);
-        let scalar = i64::from(sine(i32::from(directness), i32::from(speed) << 1))
-            * i64::from(i32::from(mass_a) * i32::from(mass_b));
-        for (e, mass, angle) in [(a, mass_a, impact_a), (b, mass_b, impact_b)] {
-            if i32::from((*e).__bindgen_anon_3.mass_points) + 1 > (MAX_SHIP_MASS * 10) as i32 {
+        let masses = [
+            (*a).__bindgen_anon_3.mass_points,
+            (*b).__bindgen_anon_3.mass_points,
+        ];
+        let locations = [
+            ((*a).current.location, (*a).next.location),
+            ((*b).current.location, (*b).next.location),
+        ];
+        let (scalar, angles) = collision_motion::impulse(
+            &mut collision_motion::Motion {
+                flags: &mut (*a).state_flags,
+                velocity: &mut (*a).velocity,
+            },
+            &mut collision_motion::Motion {
+                flags: &mut (*b).state_flags,
+                velocity: &mut (*b).velocity,
+            },
+            locations,
+            masses,
+        );
+        let total = SIZE::from(masses[0]) + SIZE::from(masses[1]);
+        for (e, mass, angle) in [(a, masses[0], angles[0]), (b, masses[1], angles[1])] {
+            if !collision_motion::movable(mass) {
                 continue;
             }
             if (*e).state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                 let ship = (*e).pParent.cast::<STARSHIP>();
                 (*ship).cur_status_flags &=
                     !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS);
-                if (*e).state_flags & DEFY_PHYSICS as ELEMENT_FLAGS == 0 {
-                    if (*e).__bindgen_anon_4.turn_wait < 1 {
-                        (*e).__bindgen_anon_4.turn_wait =
-                            (*e).__bindgen_anon_4.turn_wait.wrapping_add(1);
-                    }
-                    if (*e).__bindgen_anon_5.thrust_wait < 3 {
-                        (*e).__bindgen_anon_5.thrust_wait =
-                            (*e).__bindgen_anon_5.thrust_wait.wrapping_add(3);
-                    }
-                }
             }
-            let speed =
-                (scalar / (i64::from(mass) * (i64::from(mass_a) + i64::from(mass_b)))) as SIZE;
-            // DeltaVelocityComponents assigns its sums to SIZE before calling
-            // SetVelocityComponents. Preserve that narrowing at the API call.
-            let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&mut (*e).velocity, &mut dx, &mut dy);
-            dx = dx.wrapping_add(cosine(i32::from(angle), i32::from(speed)));
-            dy = dy.wrapping_add(sine(i32::from(angle), i32::from(speed)));
-            SetVelocityComponents(&mut (*e).velocity, dx, dy);
-            GetCurrentVelocityComponents(&mut (*e).velocity, &mut dx, &mut dy);
-            dx = dx.wrapping_abs();
-            dy = dy.wrapping_abs();
-            if (i32::from(dx) + i32::from(dy)) >> VELOCITY_SHIFT < 1 << ONE_SHIFT {
-                let minimum = ((1 << ONE_SHIFT) << VELOCITY_SHIFT) - 1;
-                SetVelocityComponents(
-                    &mut (*e).velocity,
-                    cosine(i32::from(angle), minimum),
-                    sine(i32::from(angle), minimum),
-                );
-            }
+            let mut waits = (
+                (*e).__bindgen_anon_4.turn_wait,
+                (*e).__bindgen_anon_5.thrust_wait,
+            );
+            collision_motion::respond(
+                &mut collision_motion::Motion {
+                    flags: &mut (*e).state_flags,
+                    velocity: &mut (*e).velocity,
+                },
+                mass,
+                total,
+                angle,
+                scalar,
+                &mut waits,
+            );
+            (*e).__bindgen_anon_4.turn_wait = waits.0;
+            (*e).__bindgen_anon_5.thrust_wait = waits.1;
         }
     }
 
@@ -486,14 +430,14 @@ pub(crate) mod engine {
             }
             // A death callback can retire every element owned by its ship,
             // including the active projectile, and clear their callbacks.
-            if !colliding(element_ptr) {
+            if !colliding(&*element_ptr) {
                 (*element_ptr).state_flags |= COLLISION as ELEMENT_FLAGS;
-                unlock(test_handle);
+                let _ = locked(test_handle);
                 return COLLISION as ELEMENT_FLAGS;
             }
-            next_test = successor(test);
+            next_test = (*test).succ;
             if test == element_ptr {
-                unlock(test_handle);
+                let _ = locked(test_handle);
                 continue;
             }
             if collision_eligible(
@@ -525,7 +469,7 @@ pub(crate) mod engine {
                             break;
                         }
                         if state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
-                            init_intersect_end(test);
+                            init_intersect_end(&mut *test);
                             (*test).IntersectControl.IntersectStamp.origin =
                                 (*test).IntersectControl.EndPoint;
                             time_value = DrawablesIntersect(
@@ -533,7 +477,7 @@ pub(crate) mod engine {
                                 &mut (*test).IntersectControl,
                                 1,
                             );
-                            init_intersect_start(test);
+                            init_intersect_start(&mut *test);
                         }
                         if time_value == 1 {
                             let cur = (*element_ptr).current.image.frame;
@@ -549,7 +493,11 @@ pub(crate) mod engine {
                                     (*test).state_flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = (*test).death_func {
-                                        death(test);
+                                        dispatch::invoke(
+                                            death as usize,
+                                            (*test).pParent as usize,
+                                            || death(test),
+                                        );
                                     }
                                 }
                                 if state_flags & APPEARING as ELEMENT_FLAGS != 0 {
@@ -563,17 +511,21 @@ pub(crate) mod engine {
                                     (*element_ptr).state_flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
                                     if let Some(death) = (*element_ptr).death_func {
-                                        death(element_ptr);
+                                        dispatch::invoke(
+                                            death as usize,
+                                            (*element_ptr).pParent as usize,
+                                            || death(element_ptr),
+                                        );
                                     }
-                                    unlock(test_handle);
+                                    let _ = locked(test_handle);
                                     return COLLISION_BIT as ELEMENT_FLAGS;
                                 }
                                 time_value = 0;
                             } else {
                                 if frame_index(cur) != frame_index(next) {
-                                    (*element_ptr).next.image.frame = SetEquFrameIndex(next, cur);
+                                    image!(frame; (*element_ptr).next.image.frame, SetEquFrameIndex(next, cur));
                                 } else if next != cur {
-                                    (*element_ptr).next.image = (*element_ptr).current.image;
+                                    image!(copy; (*element_ptr).next.image, (*element_ptr).current.image);
                                     if (*element_ptr).__bindgen_anon_1.life_span
                                         > NORMAL_LIFE as COUNT
                                     {
@@ -582,22 +534,22 @@ pub(crate) mod engine {
                                     }
                                 }
                                 if frame_index(tcur) != frame_index(tnext) {
-                                    (*test).next.image.frame = SetEquFrameIndex(tnext, tcur);
+                                    image!(frame; (*test).next.image.frame, SetEquFrameIndex(tnext, tcur));
                                 } else if tnext != tcur {
-                                    (*test).next.image = (*test).current.image;
+                                    image!(copy; (*test).next.image, (*test).current.image);
                                     if (*test).__bindgen_anon_1.life_span > NORMAL_LIFE as COUNT {
                                         (*test).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
                                     }
                                 }
-                                init_intersect_start(element_ptr);
-                                init_intersect_end(element_ptr);
+                                init_intersect_start(&mut *element_ptr);
+                                init_intersect_end(&mut *element_ptr);
                                 init_intersect_frame(element_ptr);
                                 if state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                                     (*((*element_ptr).pParent as *mut STARSHIP)).ShipFacing =
                                         frame_index((*element_ptr).next.image.frame);
                                 }
-                                init_intersect_start(test);
-                                init_intersect_end(test);
+                                init_intersect_start(&mut *test);
+                                init_intersect_end(&mut *test);
                                 init_intersect_frame(test);
                                 if test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                                     (*((*test).pParent as *mut STARSHIP)).ShipFacing =
@@ -606,8 +558,8 @@ pub(crate) mod engine {
                             }
                         }
                         if time_value == 0 {
-                            init_intersect_end(element_ptr);
-                            init_intersect_end(test);
+                            init_intersect_end(&mut *element_ptr);
+                            init_intersect_end(&mut *test);
                             break;
                         }
                     }
@@ -615,8 +567,8 @@ pub(crate) mod engine {
                 if time_value > 0 {
                     let mut save = (*element_ptr).IntersectControl.EndPoint;
                     let mut test_save = (*test).IntersectControl.EndPoint;
-                    init_intersect_end(element_ptr);
-                    init_intersect_end(test);
+                    init_intersect_end(&mut *element_ptr);
+                    init_intersect_end(&mut *test);
                     let collided = time_value == 1
                         || ((state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             || process_collisions(
@@ -628,7 +580,7 @@ pub(crate) mod engine {
                             && (test_state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                                 || process_collisions(
                                     if (*test).state_flags & APPEARING as ELEMENT_FLAGS == 0 {
-                                        successor(element_ptr)
+                                        (*element_ptr).succ
                                     } else {
                                         head()
                                     },
@@ -639,32 +591,18 @@ pub(crate) mod engine {
                     if collided {
                         state_flags = (*element_ptr).state_flags;
                         test_state_flags = (*test).state_flags;
-                        if test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
-                            ((*test).collision_func.unwrap())(
-                                test,
-                                &mut test_save,
-                                element_ptr,
-                                &mut save,
-                            );
-                            ((*element_ptr).collision_func.unwrap())(
-                                element_ptr,
-                                &mut save,
-                                test,
-                                &mut test_save,
-                            );
-                        } else {
-                            ((*element_ptr).collision_func.unwrap())(
-                                element_ptr,
-                                &mut save,
-                                test,
-                                &mut test_save,
-                            );
-                            ((*test).collision_func.unwrap())(
-                                test,
-                                &mut test_save,
-                                element_ptr,
-                                &mut save,
-                            );
+                        let pairs = [
+                            (element_ptr, &raw mut save, test, &raw mut test_save),
+                            (test, &raw mut test_save, element_ptr, &raw mut save),
+                        ];
+                        for index in dispatch::collision_order(
+                            test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0,
+                        ) {
+                            let (first, point, second, other_point) = pairs[index];
+                            let hook = (*first).collision_func.unwrap();
+                            dispatch::invoke(hook as usize, (*first).pParent as usize, || {
+                                hook(first, point, second, other_point)
+                            });
                         }
                         if (*test).state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             && test_state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0
@@ -672,14 +610,14 @@ pub(crate) mod engine {
                             (*test).IntersectControl.IntersectStamp.origin = test_save;
                             (*test).next.location.x = test_save.x << ONE_SHIFT;
                             (*test).next.location.y = test_save.y << ONE_SHIFT;
-                            init_intersect_end(test);
+                            init_intersect_end(&mut *test);
                         }
                         if (*element_ptr).state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             if state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0 {
                                 (*element_ptr).IntersectControl.IntersectStamp.origin = save;
                                 (*element_ptr).next.location.x = save.x << ONE_SHIFT;
                                 (*element_ptr).next.location.y = save.y << ONE_SHIFT;
-                                init_intersect_end(element_ptr);
+                                init_intersect_end(&mut *element_ptr);
                                 if state_flags & finite_life == 0
                                     && test_state_flags & finite_life == 0
                                 {
@@ -698,128 +636,74 @@ pub(crate) mod engine {
                                     );
                                 }
                             }
-                            unlock(test_handle);
+                            let _ = locked(test_handle);
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
-                        if !colliding(element_ptr) {
+                        if !colliding(&*element_ptr) {
                             (*element_ptr).state_flags |= COLLISION_BIT as ELEMENT_FLAGS;
-                            unlock(test_handle);
+                            let _ = locked(test_handle);
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                     }
                 }
             }
-            unlock(test_handle);
+            let _ = locked(test_handle);
         }
         (*element_ptr).state_flags & COLLISION_BIT as ELEMENT_FLAGS
-    }
-
-    unsafe fn calc_reduction_engine(dx: SIZE, dy: SIZE) -> COUNT {
-        calc_reduction(
-            dx,
-            dy,
-            zoom_out,
-            optMeleeScale == SCALE_STEP,
-            GlobData.Game_state.CurrentActivity as u8,
-            width(),
-            height(),
-        )
     }
 
     unsafe fn preprocess_queue(scroll_x: *mut SIZE, scroll_y: *mut SIZE) -> ViewState {
         let active_sides =
             COUNT::from(battle_counter[0] != 0) + COUNT::from(battle_counter[1] != 0);
-        let mut minimum = if optMeleeScale == SCALE_STEP {
-            (MAX_VIS_REDUCTION + 1) as SIZE
-        } else {
-            (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE
-        };
-        let mut maximum = minimum;
-        let mut origin = POINT {
-            x: (width() >> 1) as COORD,
-            y: (height() >> 1) as COORD,
-        };
-        let mut ships_alive: COUNT = 0;
+        let mut bounds = queue_view::CameraBounds::new(
+            optMeleeScale == SCALE_STEP,
+            (width(ScreenWidth), height(ScreenHeight)),
+        );
         let mut handle = head();
         while !handle.is_null() {
             let e = locked(handle);
             if (*e).state_flags & PRE_PROCESS_BIT == 0 {
                 preprocess(e);
             }
-            let next = successor(e);
-            if colliding(e) && (*e).state_flags & COLLISION_BIT == 0 {
+            let next = (*e).succ;
+            if colliding(&*e) && (*e).state_flags & COLLISION_BIT == 0 {
                 process_collisions(next, e, MAX_TIME_VALUE as TIME_VALUE, PRE_PROCESS_BIT);
             }
             if (*e).state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
-                ships_alive = ships_alive.wrapping_add(1);
-                if maximum > OPT_MAX_ZOOM_OUT && minimum > OPT_MAX_ZOOM_OUT {
-                    origin.x = display_align(i32::from((*e).next.location.x));
-                    origin.y = display_align(i32::from((*e).next.location.y));
-                }
-                let mut dx = wrap_delta(
-                    (i32::from(display_align(i32::from((*e).next.location.x)))
-                        - i32::from(origin.x)) as SIZE,
-                    width(),
+                bounds.include(
+                    (*e).next.location,
+                    (*e).playerNr,
+                    active_sides,
+                    &queue_view::ViewConfig {
+                        limit: OPT_MAX_ZOOM_OUT,
+                        zoom: zoom_out,
+                        step: optMeleeScale == SCALE_STEP,
+                        activity: GlobData.Game_state.CurrentActivity as BYTE,
+                        dimensions: (width(ScreenWidth), height(ScreenHeight)),
+                    },
                 );
-                let mut dy = wrap_delta(
-                    (i32::from(display_align(i32::from((*e).next.location.y)))
-                        - i32::from(origin.y)) as SIZE,
-                    height(),
-                );
-                if active_sides <= 2 || (*e).playerNr == 0 {
-                    origin.x = display_align(i32::from(origin.x) + i32::from(dx >> 1));
-                    origin.y = display_align(i32::from(origin.y) + i32::from(dy >> 1));
-                    dx = dx.wrapping_abs();
-                    dy = dy.wrapping_abs();
-                    maximum = calc_reduction_engine(dx, dy) as SIZE;
-                } else if maximum > OPT_MAX_ZOOM_OUT && minimum <= OPT_MAX_ZOOM_OUT {
-                    origin.x = display_align(i32::from(origin.x) + i32::from(dx >> 1));
-                    origin.y = display_align(i32::from(origin.y) + i32::from(dy >> 1));
-                    dx = dx.wrapping_abs();
-                    dy = dy.wrapping_abs();
-                    minimum = calc_reduction_engine(dx, dy) as SIZE;
-                } else {
-                    dx = dx.wrapping_abs();
-                    dy = dy.wrapping_abs();
-                    let reduction = calc_reduction_engine(
-                        (i32::from(dx) << 1) as SIZE,
-                        (i32::from(dy) << 1) as SIZE,
-                    ) as SIZE;
-                    if minimum > OPT_MAX_ZOOM_OUT || reduction < minimum {
-                        minimum = reduction;
-                    }
-                }
             }
-            unlock(handle);
+            let _ = locked(handle);
             handle = next;
         }
-        if (minimum > OPT_MAX_ZOOM_OUT || minimum <= maximum)
-            && {
-                minimum = maximum;
-                minimum > OPT_MAX_ZOOM_OUT
-            }
-            && {
-                minimum = zoom_out;
-                minimum > OPT_MAX_ZOOM_OUT
-            }
-        {
-            minimum = if optMeleeScale == SCALE_STEP {
-                0
-            } else {
-                1 << ZOOM_SHIFT
-            };
-        }
-        calc_view_engine(&mut origin, minimum, scroll_x, scroll_y, ships_alive)
+        let minimum = bounds.finish(OPT_MAX_ZOOM_OUT, zoom_out, optMeleeScale == SCALE_STEP);
+        calc_view_engine(
+            &mut bounds.origin,
+            minimum,
+            scroll_x,
+            scroll_y,
+            bounds.ships_alive,
+        )
     }
 
     unsafe fn postprocess(e: *mut ELEMENT) {
         if let Some(post) = (*e).postprocess_func {
-            post(e);
+            dispatch::invoke(post as usize, (*e).pParent as usize, || post(e));
         }
-        (*e).current = (*e).next;
-        if colliding(e) {
-            init_intersect_start(e);
-            init_intersect_end(e);
+        image!(copy; (*e).current, (*e).next);
+        if colliding(&*e) {
+            init_intersect_start(&mut *e);
+            init_intersect_end(&mut *e);
         }
         (*e).state_flags = ((*e).state_flags
             & !((PRE_PROCESS | CHANGING | APPEARING) as ELEMENT_FLAGS))
@@ -842,8 +726,11 @@ pub(crate) mod engine {
             (*e).PrimIndex =
                 alloc_display_prim((&raw mut DisplayArray).cast(), &raw mut DisplayFreeList);
             (*primitive((*e).PrimIndex)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-            unlock(handle);
+            let _ = locked(handle);
         }
+        crate::collections::observation::record(crate::collections::observation::Event::Allocate(
+            handle as usize,
+        ));
         handle
     }
 
@@ -858,7 +745,10 @@ pub(crate) mod engine {
                 &raw mut DisplayFreeList,
                 (*e).PrimIndex,
             );
-            unlock(handle);
+            let _ = locked(handle);
+            crate::collections::observation::record(crate::collections::observation::Event::Free(
+                handle as usize,
+            ));
             FreeLink(&raw mut disp_q, handle);
         }
     }
@@ -870,7 +760,12 @@ pub(crate) mod engine {
         scroll_y: *mut SIZE,
         ships_alive: COUNT,
     ) -> ViewState {
-        let (mut dx, mut dy) = view_scroll(*origin, ships_alive, width(), height());
+        let (mut dx, mut dy) = view_scroll(
+            *origin,
+            ships_alive,
+            width(ScreenWidth),
+            height(ScreenHeight),
+        );
         if (dx != 0 || dy != 0) && inHQSpace() != 0 {
             MoveSIS(&mut dx, &mut dy);
         }
@@ -886,8 +781,8 @@ pub(crate) mod engine {
                 next_reduction,
                 ships_alive,
                 optMeleeScale == SCALE_STEP,
-                width(),
-                height(),
+                width(ScreenWidth),
+                height(ScreenHeight),
             );
             SpaceOrg = new_origin;
             zoom_out = reduction;
@@ -905,10 +800,10 @@ pub(crate) mod engine {
     /// `e` is live, with a valid image array if it is collidable.
     #[no_mangle]
     pub unsafe extern "C" fn SetUpElement(e: *mut ELEMENT) {
-        (*e).next = (*e).current;
-        if colliding(e) {
-            init_intersect_start(e);
-            init_intersect_end(e);
+        image!(copy; (*e).next, (*e).current);
+        if colliding(&*e) {
+            init_intersect_start(&mut *e);
+            init_intersect_end(&mut *e);
             init_intersect_frame(e);
         }
     }
@@ -931,6 +826,7 @@ pub(crate) mod engine {
             zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
             OPT_MAX_ZOOM_OUT = MAX_ZOOM_OUT as SIZE;
         }
+        crate::collections::observation::record(crate::collections::observation::Event::ResetPool);
         ReinitQueue(&raw mut disp_q);
         for i in 0..MAX_DISPLAY_PRIMS as COUNT {
             (*primitive(i)).Links = make_links(END, i + 1);
@@ -949,7 +845,7 @@ pub(crate) mod engine {
             if !e.is_null() {
                 RemoveSoundsForObject(e);
             }
-            unlock(handle);
+            let _ = locked(handle);
         }
         RemoveQueue(&raw mut disp_q, handle);
     }
@@ -961,16 +857,16 @@ pub(crate) mod engine {
         let mut handle = head();
         while !handle.is_null() {
             let e = locked(handle);
-            let next = successor(e);
+            let next = (*e).succ;
             let target = (*e).hTarget;
             if !target.is_null() {
                 let target_element = locked(target);
                 if target_element == dead {
                     (*e).hTarget = ptr::null_mut();
                 }
-                unlock(target);
+                let _ = locked(target);
             }
-            unlock(handle);
+            let _ = locked(handle);
             handle = next;
         }
     }
@@ -1007,8 +903,8 @@ pub(crate) mod engine {
                     if (*post).state_flags & PRE_PROCESS_BIT == 0 {
                         preprocess(post);
                     }
-                    let next = successor(post);
-                    if colliding(post) && (*post).state_flags & COLLISION_BIT == 0 {
+                    let next = (*post).succ;
+                    if colliding(&*post) && (*post).state_flags & COLLISION_BIT == 0 {
                         process_collisions(
                             head(),
                             post,
@@ -1016,7 +912,7 @@ pub(crate) mod engine {
                             PRE_PROCESS_BIT | POST_PROCESS_BIT,
                         );
                     }
-                    unlock(pending);
+                    let _ = locked(pending);
                     pending = next;
                     if pending.is_null() {
                         break;
@@ -1029,77 +925,33 @@ pub(crate) mod engine {
                 flags = (*e).state_flags;
             }
             if flags & DISAPPEARING as ELEMENT_FLAGS != 0 {
-                next_handle = successor(e);
-                unlock(handle);
+                next_handle = (*e).succ;
+                let _ = locked(handle);
                 RemoveElement(handle);
                 FreeElement(handle);
             } else {
                 let primitive = primitive((*e).PrimIndex);
                 let kind = (*primitive).Type;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
-                    let mut next;
+                    let projection = queue_view::Projection {
+                        dimensions: (width(ScreenWidth), height(ScreenHeight)),
+                        origin: SpaceOrg,
+                        reduction,
+                        step: optMeleeScale == SCALE_STEP,
+                    };
+                    let next;
                     if kind == gfx_object_LINE_PRIM as GRAPHICS_PRIM {
-                        let dx = (*e).next.location.x.wrapping_sub((*e).current.location.x);
-                        let dy = (*e).next.location.y.wrapping_sub((*e).current.location.y);
-                        next = POINT {
-                            x: wrap_value(
-                                i32::from((*e).current.location.x) + i32::from(delta_x),
-                                width(),
-                            ),
-                            y: wrap_value(
-                                i32::from((*e).current.location.y) + i32::from(delta_y),
-                                height(),
-                            ),
-                        };
-                        (*primitive).Object.Line.first.x = calc_display_coord(
-                            next.x,
-                            SpaceOrg.x,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
+                        let (location, first, second) = projection.line(
+                            (*e).current.location,
+                            (*e).next.location,
+                            (delta_x, delta_y),
                         );
-                        (*primitive).Object.Line.first.y = calc_display_coord(
-                            next.y,
-                            SpaceOrg.y,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
-                        );
-                        next.x = next.x.wrapping_add(dx);
-                        next.y = next.y.wrapping_add(dy);
-                        (*primitive).Object.Line.second.x = calc_display_coord(
-                            next.x,
-                            SpaceOrg.x,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
-                        );
-                        (*primitive).Object.Line.second.y = calc_display_coord(
-                            next.y,
-                            SpaceOrg.y,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
-                        );
+                        next = location;
+                        (*primitive).Object.Line.first = first;
+                        (*primitive).Object.Line.second = second;
                     } else {
-                        next = POINT {
-                            x: wrap_value(
-                                i32::from((*e).next.location.x) + i32::from(delta_x),
-                                width(),
-                            ),
-                            y: wrap_value(
-                                i32::from((*e).next.location.y) + i32::from(delta_y),
-                                height(),
-                            ),
-                        };
-                        (*primitive).Object.Point.x = calc_display_coord(
-                            next.x,
-                            SpaceOrg.x,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
-                        );
-                        (*primitive).Object.Point.y = calc_display_coord(
-                            next.y,
-                            SpaceOrg.y,
-                            reduction,
-                            optMeleeScale == SCALE_STEP,
-                        );
+                        next = projection.scroll((*e).next.location, (delta_x, delta_y));
+                        (*primitive).Object.Point = projection.display(next);
                         if kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM
                             || kind == gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
                         {
@@ -1109,10 +961,10 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(zoom_out)
                                 };
-                                (*e).next.image.frame = SetEquFrameIndex(
+                                image!(frame; (*e).next.image.frame, SetEquFrameIndex(
                                     *(*e).next.image.farray.add(usize::from(index)),
                                     (*e).next.image.frame,
-                                );
+                                ));
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
@@ -1142,8 +994,8 @@ pub(crate) mod engine {
                 if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {
                     InsertPrim(&raw mut DisplayLinks, (*e).PrimIndex, END);
                 }
-                next_handle = successor(e);
-                unlock(handle);
+                next_handle = (*e).succ;
+                let _ = locked(handle);
             }
             handle = next_handle;
         }

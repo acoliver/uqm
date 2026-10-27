@@ -5,6 +5,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{abi::*, element, starship};
     use std::{mem, ptr};
@@ -60,8 +61,8 @@ pub(crate) mod engine {
     /// Per-instance data kept in `RACE_DESC.data`: the collision function the
     /// ship had before it became a blazer.
     #[repr(C)]
-    struct AndrosynthData {
-        collision_func: ElementCollisionFunc,
+    pub(crate) struct AndrosynthData {
+        pub(crate) collision_func: ElementCollisionFunc,
     }
 
     /// units.h ANGLE_TO_FACING; evaluated in `int` like the C macro.
@@ -82,7 +83,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
         desc.ship_info.ship_cost = 15;
         desc.ship_info.crew_level = MAX_CREW;
@@ -173,7 +174,7 @@ pub(crate) mod engine {
         (&raw mut (*desc).ship_data.weapon).cast()
     }
 
-    unsafe extern "C" fn blazer_collision(
+    pub(crate) unsafe extern "C" fn blazer_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -194,14 +195,14 @@ pub(crate) mod engine {
         collision(a, pa, b, pb);
     }
 
-    unsafe extern "C" fn bubble_preprocess(missile: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn bubble_preprocess(missile: *mut ELEMENT) {
         let packed = (*missile).__bindgen_anon_4.turn_wait;
         let mut thrust_wait = packed >> 4;
         let mut turn_wait = packed & 0x0f;
         if thrust_wait > 0 {
             thrust_wait -= 1;
         } else {
-            (*missile).next.image.frame = IncFrameIndex((*missile).current.image.frame);
+            image!(frame; (*missile).next.image.frame, IncFrameIndex((*missile).current.image.frame));
             (*missile).state_flags |= CHANGING as u16;
 
             thrust_wait = (TFB_Random() as u16 & 3) as u8;
@@ -231,7 +232,10 @@ pub(crate) mod engine {
         (*missile).__bindgen_anon_4.turn_wait = make_byte(turn_wait, thrust_wait);
     }
 
-    unsafe extern "C" fn initialize_bubble(ship: *mut ELEMENT, bubbles: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_bubble(
+        ship: *mut ELEMENT,
+        bubbles: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -258,7 +262,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn androsynth_intelligence(
+    pub(crate) unsafe extern "C" fn androsynth_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -364,7 +368,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn androsynth_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn androsynth_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
 
@@ -407,7 +411,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn androsynth_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn androsynth_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let desc = (*ss).RaceDescPtr;
 
@@ -420,9 +424,8 @@ pub(crate) mod engine {
                 } else {
                     cur_status_flags &= !(WEAPON as u16);
 
-                    (*ship).next.image.farray = special_frames(desc);
-                    (*ship).next.image.frame =
-                        SetEquFrameIndex((*desc).ship_data.special[0], (*ship).next.image.frame);
+                    image!(set; (*ship).next.image.farray, special_frames(desc));
+                    image!(frame; (*ship).next.image.frame, SetEquFrameIndex((*desc).ship_data.special[0], (*ship).next.image.frame));
                     (*ship).state_flags |= CHANGING as u16;
                 }
             }
@@ -448,9 +451,8 @@ pub(crate) mod engine {
                 (*desc).characteristics.energy_regeneration = ENERGY_REGENERATION;
                 (*ship).__bindgen_anon_3.mass_points = SHIP_MASS;
                 (*ship).collision_func = (*(*desc).data.cast::<AndrosynthData>()).collision_func;
-                (*ship).next.image.farray = ship_frames(desc);
-                (*ship).next.image.frame =
-                    SetEquFrameIndex((*desc).ship_data.ship[0], (*ship).next.image.frame);
+                image!(set; (*ship).next.image.farray, ship_frames(desc));
+                image!(frame; (*ship).next.image.frame, SetEquFrameIndex((*desc).ship_data.ship[0], (*ship).next.image.frame));
                 (*ship).state_flags |= CHANGING as u16;
             } else if (*ship).__bindgen_anon_5.thrust_wait != 0 {
                 (*ship).__bindgen_anon_5.thrust_wait -= 1;
@@ -477,7 +479,7 @@ pub(crate) mod engine {
         (*ss).cur_status_flags = cur_status_flags;
     }
 
-    unsafe extern "C" fn uninit_androsynth(desc: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_androsynth(desc: *mut RACE_DESC) {
         set_custom_ship_data(desc, None);
     }
 }

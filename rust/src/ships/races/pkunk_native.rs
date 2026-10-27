@@ -9,6 +9,7 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::battle::gravity::{CalculateGravity, TimeSpaceMatterConflict};
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,
@@ -104,11 +105,11 @@ pub(crate) mod engine {
     #[repr(C)]
     #[derive(Clone, Copy)]
     #[allow(non_snake_case, reason = "field names follow PKUNK_DATA in pkunk.c")]
-    struct PkunkData {
-        hPhoenix: HELEMENT,
-        saved_preprocess_func: ElementProcessFunc,
-        saved_postprocess_func: ElementProcessFunc,
-        saved_death_func: ElementProcessFunc,
+    pub(crate) struct PkunkData {
+        pub(crate) hPhoenix: HELEMENT,
+        pub(crate) saved_preprocess_func: ElementProcessFunc,
+        pub(crate) saved_postprocess_func: ElementProcessFunc,
+        pub(crate) saved_death_func: ElementProcessFunc,
     }
 
     impl PkunkData {
@@ -123,7 +124,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as UWORD;
         d.ship_info.ship_cost = 20;
         d.ship_info.crew_level = MAX_CREW;
@@ -169,9 +170,9 @@ pub(crate) mod engine {
     /// `pkunk_desc`: the template whose callbacks `init_pkunk` fills in.
     static mut PKUNK_DESC: RACE_DESC = descriptor();
     /// `new_pkunk_desc`: the copy `init_pkunk` hands out, which owns the data.
-    static mut NEW_PKUNK_DESC: RACE_DESC = unsafe { mem::zeroed() };
+    static mut NEW_PKUNK_DESC: RACE_DESC = RACE_DESC::EMPTY;
     /// `LastSound`
-    static LAST_SOUND: AtomicU16 = AtomicU16::new(0);
+    pub(crate) static LAST_SOUND: AtomicU16 = AtomicU16::new(0);
 
     #[no_mangle]
     pub extern "C" fn init_pkunk() -> *mut RACE_DESC {
@@ -287,8 +288,7 @@ pub(crate) mod engine {
 
     /// `InitIntersectFrame`
     unsafe fn init_intersect_frame(e: *mut ELEMENT) {
-        (*e).IntersectControl.IntersectStamp.frame =
-            SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+        image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
     }
 
     /// `ZeroVelocityComponents`: a memset of the whole VELOCITY_DESC.
@@ -301,18 +301,18 @@ pub(crate) mod engine {
         mass > MAX_SHIP_MASS as i32 * 10
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn animate(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             (*e).state_flags |= CHANGING as ELEMENT_FLAGS;
 
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
         }
     }
 
-    unsafe extern "C" fn initialize_bug_missile(
+    pub(crate) unsafe extern "C" fn initialize_bug_missile(
         ship: *mut ELEMENT,
         missiles: *mut HELEMENT,
     ) -> COUNT {
@@ -364,7 +364,7 @@ pub(crate) mod engine {
         3
     }
 
-    unsafe extern "C" fn pkunk_intelligence(
+    pub(crate) unsafe extern "C" fn pkunk_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -388,7 +388,7 @@ pub(crate) mod engine {
         ship_intelligence(ship, concerns, count);
     }
 
-    unsafe extern "C" fn new_pkunk(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn new_pkunk(e: *mut ELEMENT) {
         let ss = starship(e);
         let desc = (*ss).RaceDescPtr;
         let data = get_custom_ship_data(desc);
@@ -425,8 +425,8 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
 
         (*ss).ShipFacing = normalize_facing(TFB_Random() as i32);
-        (*e).current.image.farray = (&raw mut (*desc).ship_data.ship).cast();
-        (*e).current.image.frame = SetAbsFrameIndex((*desc).ship_data.ship[0], (*ss).ShipFacing);
+        image!(set; (*e).current.image.farray, (&raw mut (*desc).ship_data.ship).cast());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*desc).ship_data.ship[0], (*ss).ShipFacing));
         (*display_prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
 
         loop {
@@ -444,7 +444,7 @@ pub(crate) mod engine {
 
     // This function is called when the ship dies but reincarnates.
     // The generic ship_death() function is not called for the ship in this case.
-    unsafe extern "C" fn pkunk_reincarnation_death(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn pkunk_reincarnation_death(ship: *mut ELEMENT) {
         // Simulate ship death
         StopAllBattleMusic();
         StartShipExplosion(ship, true);
@@ -452,7 +452,7 @@ pub(crate) mod engine {
         (*ship).death_func = Some(new_pkunk);
     }
 
-    unsafe extern "C" fn intercept_pkunk_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn intercept_pkunk_death(e: *mut ELEMENT) {
         let ss = starship(e);
         let desc = (*ss).RaceDescPtr;
         let data = get_custom_ship_data(desc);
@@ -483,7 +483,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spawn_phoenix_trail(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_phoenix_trail(e: *mut ELEMENT) {
         (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
         if usize::from((*e).colorCycleIndex) != PHOENIX_TRAIL_COLORS.len() {
             (*e).__bindgen_anon_1.life_span = TRANSITION_LIFE;
@@ -495,7 +495,7 @@ pub(crate) mod engine {
         } // else, the element disappears.
     }
 
-    unsafe extern "C" fn phoenix_transition(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn phoenix_transition(e: *mut ELEMENT) {
         let ss = starship(e);
         let ship = element((*ss).hShip);
 
@@ -513,7 +513,7 @@ pub(crate) mod engine {
                 (*display_prim(image)).Type = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
                 (*display_prim(image)).color = START_PHOENIX_COLOR;
                 (*image).colorCycleIndex = 0;
-                (*image).current.image = (*e).current.image;
+                image!(copy; (*image).current.image, (*e).current.image);
                 (*image).current.location = (*e).current.location;
 
                 let angle: COUNT;
@@ -554,7 +554,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn pkunk_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn pkunk_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let desc = (*ss).RaceDescPtr;
         let data = get_custom_ship_data(desc);
@@ -614,9 +614,8 @@ pub(crate) mod engine {
             (*ss).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS);
 
             if (*e).__bindgen_anon_1.life_span == NORMAL_LIFE as COUNT {
-                (*e).current.image.frame =
-                    SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame);
-                (*e).next.image.frame = (*e).current.image.frame;
+                image!(frame; (*e).current.image.frame, SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame));
+                image!(copy; (*e).next.image.frame, (*e).current.image.frame);
                 (*display_prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 init_intersect_start_point(e);
                 init_intersect_end_point(e);
@@ -630,7 +629,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn pkunk_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn pkunk_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let desc = (*ss).RaceDescPtr;
 
@@ -662,7 +661,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn uninit_pkunk(desc: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_pkunk(desc: *mut RACE_DESC) {
         set_custom_ship_data(desc, ptr::null());
     }
 }

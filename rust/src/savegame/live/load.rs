@@ -92,11 +92,9 @@ pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
         }
         install(slots.read(usize::from(slot))?)
     })();
-    match result {
-        Ok(()) => 1,
-        Err(error) => {
-            log::error!("LoadGame: {error}");
-            0
-        }
-    }
+    super::complete(
+        result,
+        "LoadGame",
+        summary.is_null().then_some((slot, true)),
+    )
 }

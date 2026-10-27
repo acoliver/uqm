@@ -3,6 +3,7 @@
 pub use super::samatra_state as observation;
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,
         starship, wrap_delta,
@@ -18,7 +19,7 @@ pub(crate) mod engine {
     const MAX_RECOIL: i32 = RECOIL * 4;
     const SHIP_MASS: u8 = (MAX_SHIP_MASS * 10) as u8;
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (IMMEDIATE_WEAPON | CREW_IMMUNE) as u16;
         d.ship_info.ship_cost = 16;
         d.ship_info.crew_level = 1;
@@ -68,7 +69,7 @@ pub(crate) mod engine {
     unsafe fn insert(h: HELEMENT, before: HELEMENT) {
         InsertQueue((&raw mut disp_q).cast(), h, before);
     }
-    unsafe extern "C" fn comet_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn comet_preprocess(e: *mut ELEMENT) {
         let index = frame_index((*e).current.image.frame) + 1;
         if index < 29 {
             if index == 25 {
@@ -85,10 +86,10 @@ pub(crate) mod engine {
             }
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
         }
-        (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, index);
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, index));
         (*e).state_flags |= CHANGING as u16;
     }
-    unsafe extern "C" fn comet_collision(
+    pub(crate) unsafe extern "C" fn comet_collision(
         e: *mut ELEMENT,
         p: *mut POINT,
         o: *mut ELEMENT,
@@ -169,19 +170,19 @@ pub(crate) mod engine {
         }
         h
     }
-    unsafe extern "C" fn turret_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn turret_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = SetAbsFrameIndex(
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                 (*e).current.image.frame,
                 frame_index((*e).current.image.frame) % 10 + 1,
-            );
+            ));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = 0;
         }
     }
-    unsafe extern "C" fn gate_collision(
+    pub(crate) unsafe extern "C" fn gate_collision(
         e: *mut ELEMENT,
         p: *mut POINT,
         o: *mut ELEMENT,
@@ -217,7 +218,7 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn gate_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn gate_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*(*ss).RaceDescPtr).characteristics.max_thrust == 0 {
             (*e).__bindgen_anon_3.mass_points = SHIP_MASS;
@@ -233,14 +234,14 @@ pub(crate) mod engine {
             (*primitive(e)).Type = gfx_object_STAMPFILL_PRIM as u8;
         } else {
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             if frame_index((*e).next.image.frame) == 0 {
-                (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, 11);
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, 11));
             }
             (*e).state_flags |= CHANGING as u16;
         }
     }
-    unsafe extern "C" fn generator_death(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn generator_death(e: *mut ELEMENT) {
         if (*e).state_flags & FINITE_LIFE as u16 == 0 {
             observation::generator_destroyed(observation::generator_id(e as usize));
             let ss = starship(e);
@@ -252,7 +253,7 @@ pub(crate) mod engine {
             (*e).preprocess_func = None;
             (*e).__bindgen_anon_4.turn_wait = 12;
             (*e).__bindgen_anon_5.thrust_wait = 0;
-            (*e).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, 9);
+            image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, 9));
         }
         if (*e).__bindgen_anon_5.thrust_wait != 0 {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
@@ -266,27 +267,27 @@ pub(crate) mod engine {
                 (*e).state_flags &= !(DISAPPEARING as u16);
                 (*e).state_flags |= CHANGING as u16;
                 (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-                (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+                image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
                 (*e).__bindgen_anon_5.thrust_wait = 1;
             }
         }
     }
-    unsafe extern "C" fn generator_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn generator_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
             (*e).__bindgen_anon_4.turn_wait =
                 ((15 - i32::from((*e).__bindgen_anon_2.hit_points)) / 5) as u8;
             if (*e).__bindgen_anon_4.turn_wait < 3 {
-                (*e).next.image.frame = SetAbsFrameIndex(
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                     (*e).current.image.frame,
                     (frame_index((*e).current.image.frame) + 1) % 10,
-                );
+                ));
                 (*e).state_flags |= CHANGING as u16;
             }
         }
     }
-    unsafe extern "C" fn generator_collision(
+    pub(crate) unsafe extern "C" fn generator_collision(
         e: *mut ELEMENT,
         _p: *mut POINT,
         o: *mut ELEMENT,
@@ -296,7 +297,7 @@ pub(crate) mod engine {
             (*e).state_flags |= COLLISION as u16;
         }
     }
-    unsafe extern "C" fn sentinel_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn sentinel_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         (*(*ss).RaceDescPtr).characteristics.special_wait = (*(*ss).RaceDescPtr)
             .characteristics
@@ -306,10 +307,10 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_5.thrust_wait != 0 {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
         } else {
-            (*e).next.image.frame = SetAbsFrameIndex(
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                 (*e).current.image.frame,
                 (frame_index((*e).current.image.frame) + 1) % 6,
-            );
+            ));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_5.thrust_wait = 1;
         }
@@ -418,7 +419,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_4.turn_wait = 1;
         }
     }
-    unsafe extern "C" fn sentinel_collision(
+    pub(crate) unsafe extern "C" fn sentinel_collision(
         e: *mut ELEMENT,
         p: *mut POINT,
         o: *mut ELEMENT,
@@ -497,15 +498,19 @@ pub(crate) mod engine {
                 if !blast.is_null() {
                     let b = element(blast);
                     (*b).__bindgen_anon_1.life_span = 6;
-                    (*b).current.image.frame = SetAbsFrameIndex(*(*b).current.image.farray, 6);
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, 6));
                 }
             }
         }
     }
-    unsafe extern "C" fn samatra_intelligence(e: *mut ELEMENT, c: *mut EVALUATE_DESC, n: COUNT) {
+    pub(crate) unsafe extern "C" fn samatra_intelligence(
+        e: *mut ELEMENT,
+        c: *mut EVALUATE_DESC,
+        n: COUNT,
+    ) {
         ship_intelligence(e, c, n);
     }
-    unsafe extern "C" fn samatra_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn samatra_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let d = (*ss).RaceDescPtr;
         if (*d).characteristics.max_thrust != 0 {
@@ -544,7 +549,7 @@ pub(crate) mod engine {
             }
         }
     }
-    unsafe extern "C" fn samatra_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn samatra_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let d = (*ss).RaceDescPtr;
         (*d).characteristics.weapon_wait = 0;
@@ -574,11 +579,11 @@ pub(crate) mod engine {
                         x: ((center_x + (x << ONE_SHIFT)) & !15) as i16,
                         y: ((center_y + (y << ONE_SHIFT)) & !15) as i16,
                     };
-                    (*g).current.image.farray = (&raw mut (*d).ship_data.special).cast();
-                    (*g).current.image.frame = SetAbsFrameIndex(
+                    image!(set; (*g).current.image.farray, (&raw mut (*d).ship_data.special).cast());
+                    image!(frame; (*g).current.image.frame, SetAbsFrameIndex(
                         (*d).ship_data.special[0],
                         u16::from(TFB_Random() as u8 % 10),
-                    );
+                    ));
                     (*g).preprocess_func = Some(generator_preprocess);
                     (*g).collision_func = Some(generator_collision);
                     (*g).death_func = Some(generator_death);
@@ -599,8 +604,8 @@ pub(crate) mod engine {
                     x: center_x as i16,
                     y: center_y as i16,
                 };
-                (*t).current.image.farray = (&raw mut (*d).ship_data.ship).cast();
-                (*t).current.image.frame = SetAbsFrameIndex((*d).ship_data.ship[0], 1);
+                image!(set; (*t).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
+                image!(frame; (*t).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 1));
                 (*t).preprocess_func = Some(turret_preprocess);
                 (*t).pParent = ss.cast();
                 insert(h, (*e).succ);
@@ -618,8 +623,8 @@ pub(crate) mod engine {
                     x: center_x as i16,
                     y: center_y as i16,
                 };
-                (*g).current.image.farray = (&raw mut (*d).ship_data.ship).cast();
-                (*g).current.image.frame = SetAbsFrameIndex((*d).ship_data.ship[0], 11);
+                image!(set; (*g).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
+                image!(frame; (*g).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 11));
                 (*g).preprocess_func = Some(gate_preprocess);
                 (*g).collision_func = Some(gate_collision);
                 (*g).pParent = ss.cast();
@@ -631,98 +636,103 @@ pub(crate) mod engine {
     }
     pub fn snapshot() -> Option<observation::Snapshot> {
         use crate::automation::battle_fight::ShipState;
-        // The input service runs synchronously on the owning game thread.
-        unsafe {
-            if GlobData.Game_state.CurrentActivity & (0xff | IN_BATTLE as u16)
-                != IN_LAST_BATTLE as u16 | IN_BATTLE as u16
-            {
-                return None;
-            }
-            let arena = (
-                (ScreenWidth - 64) << (ONE_SHIFT + 3),
-                ScreenHeight << (ONE_SHIFT + 3),
-            );
-            let mut result = observation::Snapshot {
-                remaining: 8,
-                generators: Vec::new(),
-                hazards: Vec::new(),
-                gate_open: false,
-                gate: (arena.0 / 2, arena.1 / 2),
-                bomb_carrier: false,
-                selected_species: None,
-                player: None,
-                arena,
-                velocity: (0, 0),
+        // SAFETY: the input service runs synchronously on the owning game thread.
+        let (activity, screen, mut h) = unsafe {
+            (
+                GlobData.Game_state.CurrentActivity,
+                (ScreenWidth, ScreenHeight),
+                disp_q.head,
+            )
+        };
+        if activity & (0xff | IN_BATTLE as u16) != IN_LAST_BATTLE as u16 | IN_BATTLE as u16 {
+            return None;
+        }
+        let arena = (
+            (screen.0 - 64) << (ONE_SHIFT + 3),
+            screen.1 << (ONE_SHIFT + 3),
+        );
+        let mut result = observation::Snapshot::initial(arena);
+        let mut boss = false;
+        while !h.is_null() {
+            // SAFETY: the synchronous display graph keeps elements, their ship
+            // parents, descriptors and primitives live and immutable for this pass.
+            let (e, hp) = unsafe {
+                let e = &*element(h);
+                (e, e.__bindgen_anon_2.hit_points)
             };
-            let mut boss = false;
-            let mut h = disp_q.head;
-            while !h.is_null() {
-                let e = element(h);
-                if (*e).state_flags & PLAYER_SHIP as u16 != 0 && !(*e).pParent.is_null() {
-                    let owner = starship(e);
-                    if (*e).playerNr == RPG_PLAYER_NUM as SIZE {
-                        result.selected_species = Some((*owner).SpeciesID);
-                        result.bomb_carrier = (*owner).SpeciesID == SPECIES_ID_SIS_SHIP_ID
-                            && get_game_state("BOMB_CARRIER") != 0;
-                        let mut velocity = (*e).velocity;
-                        let (mut vx, mut vy) = (0, 0);
-                        GetNextVelocityComponents(&mut velocity, &mut vx, &mut vy, 1);
-                        result.velocity = (i32::from(vx), i32::from(vy));
-                        result.player = Some(ShipState {
-                            x: i32::from((*e).current.location.x),
-                            y: i32::from((*e).current.location.y),
-                            facing: ((*owner).ShipFacing % 16) as u8,
-                            crew: (*e).__bindgen_anon_2.crew_level,
-                        });
-                    } else if (*(*owner).RaceDescPtr).preprocess_func.map(|f| f as usize)
+            let ship = if e.state_flags & PLAYER_SHIP as u16 != 0 && !e.pParent.is_null() {
+                // SAFETY: PLAYER_SHIP's parent is the native STARSHIP in this
+                // immutable graph. Only NPC ship logic below uses its descriptor.
+                let (owner, race) = unsafe {
+                    let owner = &*starship(h.cast());
+                    (owner, owner.RaceDescPtr.as_ref())
+                };
+                Some((owner, race))
+            } else {
+                None
+            };
+            if let Some((owner, race)) = ship {
+                if e.playerNr == RPG_PLAYER_NUM as SIZE {
+                    let (vx, vy) = e.velocity.preview_next_components(1);
+                    result.selected_species = Some(owner.SpeciesID);
+                    result.bomb_carrier = owner.SpeciesID == SPECIES_ID_SIS_SHIP_ID
+                        && get_game_state("BOMB_CARRIER") != 0;
+                    result.velocity = (i32::from(vx as i16), i32::from(vy as i16));
+                    result.player = Some(ShipState {
+                        x: i32::from(e.current.location.x),
+                        y: i32::from(e.current.location.y),
+                        facing: (owner.ShipFacing % 16) as u8,
+                        crew: hp,
+                    });
+                } else {
+                    let descriptor =
+                        race.unwrap_or_else(|| panic!("opponent ship has no race descriptor"));
+                    if descriptor.preprocess_func.map(|f| f as usize)
                         == Some(samatra_preprocess as *const () as usize)
                     {
                         boss = true;
-                        result.remaining = (*(*owner).RaceDescPtr).characteristics.max_thrust as u8;
+                        result.remaining = descriptor.characteristics.max_thrust as u8;
                     }
                 }
-                if (*e).death_func.map(|f| f as usize)
-                    == Some(generator_death as *const () as usize)
-                    && (*e).state_flags & FINITE_LIFE as u16 == 0
-                {
-                    let x = i32::from((*e).current.location.x);
-                    let y = i32::from((*e).current.location.y);
-                    result.generators.push(observation::Generator {
-                        id: observation::generator_id(e as usize) as u8,
-                        x,
-                        y,
-                        hit_points: (*e).__bindgen_anon_2.hit_points,
-                    });
-                }
-                if [
-                    comet_collision as *const () as usize,
-                    sentinel_collision as *const () as usize,
-                ]
-                .contains(&(*e).collision_func.map_or(0, |f| f as usize))
-                    && (*e).state_flags & DISAPPEARING as u16 == 0
-                {
-                    let mut velocity = (*e).velocity;
-                    let (mut vx, mut vy) = (0, 0);
-                    GetNextVelocityComponents(&mut velocity, &mut vx, &mut vy, 1);
-                    result.hazards.push(observation::Hazard {
-                        x: i32::from((*e).current.location.x),
-                        y: i32::from((*e).current.location.y),
-                        velocity: (i32::from(vx), i32::from(vy)),
-                    });
-                }
-                if (*e).collision_func.map(|f| f as usize)
-                    == Some(gate_collision as *const () as usize)
-                {
-                    result.gate_open = (*primitive(e)).Type == gfx_object_STAMPFILL_PRIM as u8;
-                    result.gate = (
-                        i32::from((*e).current.location.x),
-                        i32::from((*e).current.location.y),
-                    );
-                }
-                h = (*e).succ;
             }
-            (boss && observation::events().generation != 0).then_some(result)
+            if e.death_func.map(|f| f as usize) == Some(generator_death as *const () as usize)
+                && e.state_flags & FINITE_LIFE as u16 == 0
+            {
+                let x = i32::from(e.current.location.x);
+                let y = i32::from(e.current.location.y);
+                result.generators.push(observation::Generator {
+                    id: observation::generator_id(h as usize) as u8,
+                    x,
+                    y,
+                    hit_points: hp,
+                });
+            }
+            if [
+                comet_collision as *const () as usize,
+                sentinel_collision as *const () as usize,
+            ]
+            .contains(&e.collision_func.map_or(0, |f| f as usize))
+                && e.state_flags & DISAPPEARING as u16 == 0
+            {
+                let (vx, vy) = e.velocity.preview_next_components(1);
+                result.hazards.push(observation::Hazard {
+                    x: i32::from(e.current.location.x),
+                    y: i32::from(e.current.location.y),
+                    velocity: (i32::from(vx as i16), i32::from(vy as i16)),
+                });
+            }
+            if e.collision_func.map(|f| f as usize) == Some(gate_collision as *const () as usize) {
+                // SAFETY: the gate's primitive is live in this immutable display graph.
+                result.gate_open =
+                    unsafe { (*primitive(h.cast())).Type } == gfx_object_STAMPFILL_PRIM as u8;
+                result.gate = (
+                    i32::from(e.current.location.x),
+                    i32::from(e.current.location.y),
+                );
+            }
+            h = e.succ;
         }
+        (boss && observation::events().generation != 0).then_some(result)
     }
 }
 

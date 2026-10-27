@@ -376,7 +376,7 @@ impl Element {
     /// Copies next state → current state
     /// Used at end of each frame to commit the next frame state
     pub fn commit_state(&mut self) {
-        self.current = self.next;
+        crate::collections::observation::image!(copy; self.current, self.next);
     }
 
     /// Safe accessor for stamp visual (when using STAMP primitive)

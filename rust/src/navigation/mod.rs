@@ -40,3 +40,29 @@ pub(crate) fn set(name: &str, value: u8) {
         .expect("navigation state key exists");
     unsafe { crate::state::ffi::rust_set_game_state_bits(start as i32, end as i32, value) }
 }
+
+fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {
+    crate::graphics::native_abi::Color {
+        r: (r << 3) | (r >> 2),
+        g: (g << 3) | (g >> 2),
+        b: (b << 3) | (b >> 2),
+        a: 255,
+    }
+}
+
+#[cfg(test)]
+mod color_tests {
+    #[test]
+    fn five_bit_channels_expand_without_changing_hyperspace_colors() {
+        for value in 0..32 {
+            let color = super::color(value, value, value);
+            let channel = (value << 3) | (value >> 2);
+            assert_eq!(
+                (color.r, color.g, color.b, color.a),
+                (channel, channel, channel, 255)
+            );
+        }
+        let color = super::color(0, 14, 31);
+        assert_eq!((color.r, color.g, color.b, color.a), (0, 115, 255, 255));
+    }
+}

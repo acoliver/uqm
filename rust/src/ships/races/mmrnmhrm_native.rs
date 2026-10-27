@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine, starship,
@@ -51,7 +52,7 @@ pub(crate) mod engine {
     };
 
     const fn descriptor() -> RACE_DESC {
-        let mut desc: RACE_DESC = unsafe { mem::zeroed() };
+        let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = (FIRES_FORE | IMMEDIATE_WEAPON) as u16;
         desc.ship_info.ship_cost = 19;
         desc.ship_info.crew_level = MAX_CREW;
@@ -125,13 +126,13 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn missile_preprocess(element: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn missile_preprocess(element: *mut ELEMENT) {
         if (*element).__bindgen_anon_4.turn_wait > 0 {
             (*element).__bindgen_anon_4.turn_wait -= 1;
         } else {
             let mut facing = crate::ships::native::frame_index((*element).next.image.frame);
             if TrackShip(element, &mut facing) > 0 {
-                (*element).next.image.frame = SetAbsFrameIndex((*element).next.image.frame, facing);
+                image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).next.image.frame, facing));
                 (*element).state_flags |= CHANGING as u16;
                 SetVelocityVector(&mut (*element).velocity, 20 << ONE_SHIFT, facing);
             }
@@ -139,7 +140,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn mmrnmhrm_intelligence(
+    pub(crate) unsafe extern "C" fn mmrnmhrm_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -221,7 +222,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn twin_laser_collision(
+    pub(crate) unsafe extern "C" fn twin_laser_collision(
         e0: *mut ELEMENT,
         p0: *mut POINT,
         e1: *mut ELEMENT,
@@ -232,7 +233,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_dual_weapons(
+    pub(crate) unsafe extern "C" fn initialize_dual_weapons(
         ship: *mut ELEMENT,
         weapons: *mut HELEMENT,
     ) -> COUNT {
@@ -315,7 +316,7 @@ pub(crate) mod engine {
         2
     }
 
-    unsafe extern "C" fn mmrnmhrm_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn mmrnmhrm_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ship).next.image.farray == (*ship).current.image.farray {
             return;
@@ -353,7 +354,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn mmrnmhrm_preprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn mmrnmhrm_preprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ship).state_flags & APPEARING as u16 == 0
             && (*ss).cur_status_flags & SPECIAL as u16 != 0
@@ -365,18 +366,17 @@ pub(crate) mod engine {
         {
             let race = (*ss).RaceDescPtr;
             if (*ship).next.image.farray == (*race).ship_data.ship.as_mut_ptr() {
-                (*ship).next.image.farray = (*race).ship_data.special.as_mut_ptr();
+                image!(set; (*ship).next.image.farray, (*race).ship_data.special.as_mut_ptr());
             } else {
-                (*ship).next.image.farray = (*race).ship_data.ship.as_mut_ptr();
+                image!(set; (*ship).next.image.farray, (*race).ship_data.ship.as_mut_ptr());
             }
-            (*ship).next.image.frame =
-                SetEquFrameIndex(*(*ship).next.image.farray, (*ship).next.image.frame);
+            image!(frame; (*ship).next.image.frame, SetEquFrameIndex(*(*ship).next.image.farray, (*ship).next.image.frame));
             (*ship).state_flags |= CHANGING as u16;
             (*ss).special_counter = (*race).characteristics.special_wait;
         }
     }
 
-    unsafe extern "C" fn uninit_mmrnmhrm(race: *mut RACE_DESC) {
+    pub(crate) unsafe extern "C" fn uninit_mmrnmhrm(race: *mut RACE_DESC) {
         set_custom_ship_data(race, None);
     }
 }

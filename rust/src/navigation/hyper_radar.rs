@@ -3,11 +3,11 @@
 #![allow(non_snake_case)]
 use super::abi::*;
 use super::globals::{GlobData, RadarContext};
-use super::hyper_data::{color, HYPERSTARS};
+use super::hyper_data::HYPERSTARS;
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
 use super::hyperspace::live::{universe_x, universe_y};
-use super::{get, set};
+use super::{color, get, set};
 use crate::planets::starmap::CurStarDescPtr;
 use std::ptr;
 
@@ -146,10 +146,10 @@ pub unsafe fn SeedUniverse() {
                 continue;
             }
             let element = handle.cast::<ELEMENT>();
-            (*element).current.image.frame = SetAbsFrameIndex(
+            crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(
                 HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
                 index,
-            );
+            ));
             (*element).preprocess_func = None;
             (*element).postprocess_func = None;
             (*element).collision_func = Some(portal_collision);
@@ -158,7 +158,7 @@ pub unsafe fn SeedUniverse() {
                 (*element).death_func = Some(portal_death);
             } else {
                 (*element).death_func = None;
-                (*element).IntersectControl.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+                crate::collections::observation::image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
             }
             InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
         }
@@ -181,10 +181,10 @@ pub unsafe fn SeedUniverse() {
         }
         let element = handle.cast::<ELEMENT>();
         let kind = (*star).star_type;
-        (*element).current.image.frame = SetAbsFrameIndex(
+        crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(
             HYPERSTARS[1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize],
             (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
-        );
+        ));
         (*element).preprocess_func = None;
         (*element).postprocess_func = None;
         (*element).collision_func = Some(star_collision);
@@ -193,7 +193,7 @@ pub unsafe fn SeedUniverse() {
             (*element).death_func = Some(star_death);
         } else {
             (*element).death_func = None;
-            (*element).IntersectControl.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+            crate::collections::observation::image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
         }
         InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
     }

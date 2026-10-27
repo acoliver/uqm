@@ -1,0 +1,74 @@
+{
+  "version": 2,
+  "name": "parity-samatra",
+  "seed": 42,
+  "fixture": "parity-samatra",
+  "budgets": {
+    "max_input_ticks": 12000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 420
+  },
+  "start_scene": "samatra_dev_fixture",
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 3,
+      "settle": 30
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 20
+    },
+    {
+      "action": "wait_for_communication_end",
+      "minimum_completions": 1,
+      "max_ticks": 9000
+    },
+    {
+      "action": "capture",
+      "label": "DEV-FIXTURE-not-campaign-before-boss"
+    },
+    {
+      "action": "fight_samatra",
+      "max_ticks": 1500,
+      "until": "ready"
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 96,
+      "max_ticks": 1200
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "samatra:remaining",
+          "op": "eq",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "action": "capture",
+      "label": "bounded-production-boss"
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

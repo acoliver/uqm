@@ -31,6 +31,7 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
 
     // Core characteristics
@@ -74,7 +75,7 @@ pub(crate) mod engine {
 
     const fn descriptor() -> RACE_DESC {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d: RACE_DESC = unsafe { std::mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | FIRES_AFT | SEEKING_SPECIAL | DONT_CHASE) as u16;
         d.ship_info.ship_cost = 18;
         d.ship_info.crew_level = MAX_CREW;
@@ -132,13 +133,13 @@ pub(crate) mod engine {
         &raw mut SPATHI_DESC
     }
 
-    unsafe extern "C" fn butt_missile_preprocess(missile: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn butt_missile_preprocess(missile: *mut ELEMENT) {
         if (*missile).__bindgen_anon_4.turn_wait > 0 {
             (*missile).__bindgen_anon_4.turn_wait -= 1;
         } else {
             let mut facing = frame_index((*missile).next.image.frame);
             if TrackShip(missile, &mut facing) > 0 {
-                (*missile).next.image.frame = SetAbsFrameIndex((*missile).next.image.frame, facing);
+                image!(frame; (*missile).next.image.frame, SetAbsFrameIndex((*missile).next.image.frame, facing));
                 (*missile).state_flags |= CHANGING as u16;
 
                 SetVelocityVector(&raw mut (*missile).velocity, DISCRIMINATOR_SPEED, facing);
@@ -148,7 +149,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spawn_butt_missile(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_butt_missile(ship: *mut ELEMENT) {
         let ss = starship(ship);
         let race = (*ss).RaceDescPtr;
         let face = normalize_facing((*ss).ShipFacing as i32 + HALF_FACING);
@@ -184,7 +185,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn spathi_intelligence(
+    pub(crate) unsafe extern "C" fn spathi_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -223,7 +224,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_standard_missile(
+    pub(crate) unsafe extern "C" fn initialize_standard_missile(
         ship: *mut ELEMENT,
         weapons: *mut HELEMENT,
     ) -> COUNT {
@@ -249,7 +250,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn spathi_postprocess(ship: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spathi_postprocess(ship: *mut ELEMENT) {
         let ss = starship(ship);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0

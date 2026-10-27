@@ -64,6 +64,10 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::SelectResponse(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_)
+        | Action::ConfigureParityMelee(_)
+        | Action::RunParityFixture(_)
+        | Action::RunParityCorpus(_)
+        | Action::AssertParityFixture
         | Action::SetupMeleeMutualLossFixture(_)
         | Action::SetupPlanetSideMineralGallery(_) => Some(CheckpointClass::Navigation),
         Action::WaitInputTicks(_)

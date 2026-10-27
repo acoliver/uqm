@@ -2,8 +2,9 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, angle_to_facing, element, normalize_facing, starship};
-    use std::{mem, ptr};
+    use std::ptr;
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 40;
@@ -29,7 +30,7 @@ pub(crate) mod engine {
     const REGENERATION_AMOUNT: i32 = 4;
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
         d.ship_info.ship_cost = 21;
         d.ship_info.crew_level = MAX_CREW;
@@ -86,7 +87,7 @@ pub(crate) mod engine {
         &raw mut MYCON_DESC
     }
 
-    unsafe extern "C" fn plasma_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn plasma_preprocess(e: *mut ELEMENT) {
         if u16::from((*e).__bindgen_anon_3.mass_points) > (*e).__bindgen_anon_2.hit_points {
             (*e).__bindgen_anon_1.life_span =
                 (*e).__bindgen_anon_2.hit_points * PLASMA_DURATION as u16;
@@ -100,7 +101,7 @@ pub(crate) mod engine {
             - ((i32::from((*e).__bindgen_anon_1.life_span) + PLASMA_DURATION - 1)
                 / PLASMA_DURATION)) as u16;
         if index != crate::ships::native::frame_index((*e).next.image.frame) {
-            (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, index);
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, index));
             (*e).state_flags |= CHANGING as u16;
         }
         if (*e).__bindgen_anon_4.turn_wait > 0 {
@@ -114,11 +115,11 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn plasma_blast_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn plasma_blast_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_1.life_span >= u16::from((*e).__bindgen_anon_5.thrust_wait) {
-            (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
         } else {
-            (*e).next.image.frame = DecFrameIndex((*e).next.image.frame);
+            image!(frame; (*e).next.image.frame, DecFrameIndex((*e).next.image.frame));
         }
         if !(*e).hTarget.is_null() {
             let target = element((*e).hTarget);
@@ -127,7 +128,7 @@ pub(crate) mod engine {
         (*e).state_flags |= CHANGING as u16;
     }
 
-    unsafe extern "C" fn plasma_collision(
+    pub(crate) unsafe extern "C" fn plasma_collision(
         e0: *mut ELEMENT,
         p0: *mut POINT,
         e1: *mut ELEMENT,
@@ -158,12 +159,11 @@ pub(crate) mod engine {
         (*blast).__bindgen_anon_5.thrust_wait = animations as u8;
         (*blast).__bindgen_anon_1.life_span = (animations << 1) - 1;
         (*blast).preprocess_func = Some(plasma_blast_preprocess);
-        (*blast).current.image.farray = (*e0).next.image.farray;
-        (*blast).current.image.frame =
-            SetAbsFrameIndex(*(*blast).current.image.farray, NUM_PLASMAS as u16);
+        image!(copy; (*blast).current.image.farray, (*e0).next.image.farray);
+        image!(frame; (*blast).current.image.frame, SetAbsFrameIndex(*(*blast).current.image.farray, NUM_PLASMAS as u16));
     }
 
-    unsafe extern "C" fn mycon_intelligence(
+    pub(crate) unsafe extern "C" fn mycon_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -228,7 +228,10 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_plasma(ship: *mut ELEMENT, array: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_plasma(
+        ship: *mut ELEMENT,
+        array: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -255,7 +258,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe extern "C" fn mycon_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn mycon_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*ss).special_counter == 0

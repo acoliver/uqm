@@ -65,18 +65,112 @@ fn acceleration(
     }
 }
 
+fn thrust(
+    velocity: &mut crate::battle::velocity::VelocityDesc,
+    facing: u16,
+    status: u16,
+    increment: u16,
+    maximum: u16,
+) -> u16 {
+    const MAX_SPEED: u16 = 1 << 7;
+    const BEYOND_SPEED: u16 = 1 << 6;
+    const GRAVITY: u16 = 1 << 8;
+    let current_angle = (i32::from(facing) << 2) as u16 as i32;
+    let travel_angle = velocity.travel_angle;
+    let mut thrust = increment;
+    let maximum_thrust = maximum;
+    if thrust == maximum_thrust {
+        velocity.set_vector(i32::from(maximum_thrust as i16), facing);
+        return MAX_SPEED;
+    }
+    if travel_angle == current_angle as u16
+        && status & (MAX_SPEED | BEYOND_SPEED) != 0
+        && status & GRAVITY == 0
+    {
+        return status & (MAX_SPEED | BEYOND_SPEED);
+    }
+    thrust = (i32::from(thrust) << 5) as u16;
+    let (dx, dy) = velocity.get_current_components();
+    let (mut dx, mut dy) = (dx as i16, dy as i16);
+    let current_speed = velocity_squared(dx, dy);
+    let next_dx = dx.wrapping_add(crate::math::cosine(current_angle, i32::from(thrust)));
+    let next_dy = dy.wrapping_add(crate::math::sine(current_angle, i32::from(thrust)));
+    let desired = velocity_squared(next_dx, next_dy);
+    let max_speed = velocity_squared((i32::from(maximum_thrust) << 5) as i16, 0);
+    match acceleration(
+        desired,
+        max_speed,
+        current_speed,
+        status & GRAVITY != 0,
+        travel_angle == current_angle as u16,
+    ) {
+        Acceleration::Normal => {
+            velocity.set_components(i32::from(next_dx), i32::from(next_dy));
+        }
+        Acceleration::Beyond => {
+            velocity.set_components(i32::from(next_dx), i32::from(next_dy));
+            return MAX_SPEED | BEYOND_SPEED;
+        }
+        Acceleration::Aligned => {
+            if current_speed <= max_speed {
+                velocity.set_vector(i32::from(maximum_thrust as i16), facing);
+            }
+            return MAX_SPEED;
+        }
+        Acceleration::Redirect => {
+            let mut next_velocity = *velocity;
+            next_velocity.delta_components(
+                i32::from(
+                    crate::math::cosine(current_angle, i32::from(thrust >> 1)).wrapping_sub(
+                        crate::math::cosine(i32::from(travel_angle), i32::from(thrust)),
+                    ),
+                ),
+                i32::from(
+                    crate::math::sine(current_angle, i32::from(thrust >> 1)).wrapping_sub(
+                        crate::math::sine(i32::from(travel_angle), i32::from(thrust)),
+                    ),
+                ),
+            );
+            let components = next_velocity.get_current_components();
+            (dx, dy) = (components.0 as i16, components.1 as i16);
+            let desired = velocity_squared(dx, dy);
+            if desired > max_speed {
+                if desired < current_speed {
+                    *velocity = next_velocity;
+                }
+                return MAX_SPEED | BEYOND_SPEED;
+            }
+            *velocity = next_velocity;
+        }
+    }
+    0
+}
+
+#[cfg(not(test))]
+fn install_ship_hooks(e: &mut ELEMENT, parent: *mut std::ffi::c_void, side: SIZE, species: u32) {
+    e.preprocess_func = Some(engine::ship_preprocess);
+    e.postprocess_func = Some(engine::ship_postprocess);
+    e.death_func = Some(ship_death);
+    e.collision_func = Some(engine::collision);
+    e.velocity.zero();
+    e.pParent = parent;
+    crate::battle::process_native::dispatch::record_spawn(parent as usize, side, species);
+    e.hTarget = std::ptr::null_mut();
+}
+
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::process_native::dispatch::invoke;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::status_native::{
         DeltaEnergy, DrawCaptainsWindow, PostProcessStatus, PreProcessStatus,
     };
     use crate::battle::world_elements::do_damage;
+    use crate::collections::observation::image;
     use crate::ships::native::{
-        cosine, element, facing_to_angle, init_intersect_points, normalize_facing, object_cloaked,
-        put_element, sine, starship,
+        element, init_intersect_points, normalize_facing, object_cloaked, put_element, starship,
     };
     use std::{mem, ptr};
 
@@ -91,7 +185,7 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
         }
@@ -103,74 +197,13 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn inertial_thrust(e: *mut ELEMENT) -> STATUS_FLAGS {
         let ship = starship(e);
         let desc = (*ship).RaceDescPtr;
-        let facing = (*ship).ShipFacing;
-        let current_angle = facing_to_angle(i32::from(facing)) as COUNT as i32;
-        let travel_angle = (*e).velocity.travel_angle;
-        let mut thrust = (*desc).characteristics.thrust_increment;
-        let maximum_thrust = (*desc).characteristics.max_thrust;
-        if thrust == maximum_thrust {
-            SetVelocityVector(&raw mut (*e).velocity, maximum_thrust as i16, facing);
-            return SHIP_AT_MAX_SPEED as STATUS_FLAGS;
-        }
-        if travel_angle == current_angle as u16
-            && (*ship).cur_status_flags
-                & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS
-                != 0
-            && (*ship).cur_status_flags & SHIP_IN_GRAVITY_WELL as STATUS_FLAGS == 0
-        {
-            return (*ship).cur_status_flags
-                & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS;
-        }
-        thrust = (i32::from(thrust) << VELOCITY_SHIFT) as u16;
-        let mut dx = 0;
-        let mut dy = 0;
-        GetCurrentVelocityComponents(&raw mut (*e).velocity, &mut dx, &mut dy);
-        let current_speed = velocity_squared(dx, dy);
-        let next_dx = dx.wrapping_add(cosine(current_angle, i32::from(thrust)));
-        let next_dy = dy.wrapping_add(sine(current_angle, i32::from(thrust)));
-        let desired = velocity_squared(next_dx, next_dy);
-        let max_speed = velocity_squared((i32::from(maximum_thrust) << VELOCITY_SHIFT) as i16, 0);
-        match acceleration(
-            desired,
-            max_speed,
-            current_speed,
-            (*ship).cur_status_flags & SHIP_IN_GRAVITY_WELL as STATUS_FLAGS != 0,
-            travel_angle == current_angle as COUNT,
-        ) {
-            Acceleration::Normal => {
-                SetVelocityComponents(&raw mut (*e).velocity, next_dx, next_dy);
-            }
-            Acceleration::Beyond => {
-                SetVelocityComponents(&raw mut (*e).velocity, next_dx, next_dy);
-                return (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS;
-            }
-            Acceleration::Aligned => {
-                if current_speed <= max_speed {
-                    SetVelocityVector(&raw mut (*e).velocity, maximum_thrust as i16, facing);
-                }
-                return SHIP_AT_MAX_SPEED as STATUS_FLAGS;
-            }
-            Acceleration::Redirect => {
-                let mut velocity = (*e).velocity;
-                DeltaVelocityComponents(
-                    &mut velocity,
-                    cosine(current_angle, i32::from(thrust >> 1))
-                        .wrapping_sub(cosine(i32::from(travel_angle), i32::from(thrust))),
-                    sine(current_angle, i32::from(thrust >> 1))
-                        .wrapping_sub(sine(i32::from(travel_angle), i32::from(thrust))),
-                );
-                GetCurrentVelocityComponents(&raw mut velocity, &mut dx, &mut dy);
-                let desired = velocity_squared(dx, dy);
-                if desired > max_speed {
-                    if desired < current_speed {
-                        (*e).velocity = velocity;
-                    }
-                    return (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as STATUS_FLAGS;
-                }
-                (*e).velocity = velocity;
-            }
-        }
-        0
+        thrust(
+            &mut (*e).velocity,
+            (*ship).ShipFacing,
+            (*ship).cur_status_flags,
+            (*desc).characteristics.thrust_increment,
+            (*desc).characteristics.max_thrust,
+        )
     }
 
     /// # Safety
@@ -203,7 +236,7 @@ pub(crate) mod engine {
                 DrawCaptainsWindow(ship);
                 SetContext(old);
                 if let Some(preprocess) = (*rd).preprocess_func {
-                    preprocess(e);
+                    invoke(preprocess as usize, (*e).pParent as usize, || preprocess(e));
                 }
                 if (*e).hTarget.is_null() {
                     ship_transition(e);
@@ -236,7 +269,7 @@ pub(crate) mod engine {
             DeltaEnergy(e, (*rd).characteristics.energy_regeneration as i8 as SIZE);
         }
         if let Some(preprocess) = (*rd).preprocess_func {
-            preprocess(e);
+            invoke(preprocess as usize, (*e).pParent as usize, || preprocess(e));
             flags = (*ship).cur_status_flags;
         }
         if (*e).__bindgen_anon_4.turn_wait != 0 {
@@ -245,7 +278,7 @@ pub(crate) mod engine {
             (*ship).ShipFacing = normalize_facing(
                 i32::from((*ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
-            (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, (*ship).ShipFacing);
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, (*ship).ShipFacing));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*rd).characteristics.turn_wait;
         }
@@ -283,8 +316,10 @@ pub(crate) mod engine {
             && DeltaEnergy(e, -SIZE::from((*rd).characteristics.weapon_energy_cost)) != 0
         {
             let mut weapons = [ptr::null_mut(); 6];
-            let count =
-                ((*rd).init_weapon_func.expect("ship weapon initializer"))(e, weapons.as_mut_ptr());
+            let initialize = (*rd).init_weapon_func.expect("ship weapon initializer");
+            let count = invoke(initialize as usize, (*e).pParent as usize, || {
+                initialize(e, weapons.as_mut_ptr())
+            });
             if count != 0 {
                 let owner = starship(e);
                 let mut played = false;
@@ -309,7 +344,9 @@ pub(crate) mod engine {
             (*ship).special_counter -= 1;
         }
         if let Some(postprocess) = (*rd).postprocess_func {
-            postprocess(e);
+            invoke(postprocess as usize, (*e).pParent as usize, || {
+                postprocess(e)
+            });
         }
         if GlobData.Game_state.CurrentActivity as BYTE <= IN_ENCOUNTER as BYTE {
             PostProcessStatus(e);
@@ -358,15 +395,14 @@ pub(crate) mod engine {
                 .cast::<PRIMITIVE>()
                 .add((*e).PrimIndex as usize))
             .Type = gfx_object_STAMP_PRIM as u8;
-            (*e).current.image.farray = (&raw mut (*rd).ship_data.ship).cast();
+            image!(set; (*e).current.image.farray, (&raw mut (*rd).ship_data.ship).cast());
             let width = (ScreenWidth - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION);
             let height = ScreenHeight << (ONE_SHIFT + MAX_REDUCTION);
             if (*e).playerNr == NPC_PLAYER_NUM as SIZE
                 && GlobData.Game_state.CurrentActivity as BYTE == IN_LAST_BATTLE as BYTE
             {
                 (*ship).ShipFacing = 0;
-                (*e).current.image.frame =
-                    SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing);
+                image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing));
                 (*e).current.location = POINT {
                     x: (width >> 1) as COORD,
                     y: (height >> 1) as COORD,
@@ -378,8 +414,7 @@ pub(crate) mod engine {
                     let facing = GlobData.Game_state.ShipFacing;
                     (*ship).ShipFacing = if facing > 0 { facing - 1 } else { facing };
                 }
-                (*e).current.image.frame =
-                    SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing);
+                image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing));
                 loop {
                     (*e).current.location.x = spawn_coordinate(TFB_Random(), width);
                     (*e).current.location.y = spawn_coordinate(TFB_Random(), height);
@@ -388,13 +423,7 @@ pub(crate) mod engine {
                     }
                 }
             }
-            (*e).preprocess_func = Some(ship_preprocess);
-            (*e).postprocess_func = Some(ship_postprocess);
-            (*e).death_func = Some(ship_death);
-            (*e).collision_func = Some(collision);
-            (*e).velocity = mem::zeroed();
-            (*e).pParent = ship.cast();
-            (*e).hTarget = ptr::null_mut();
+            install_ship_hooks(&mut *e, ship.cast(), (*ship).playerNr, (*ship).SpeciesID);
         }
         (!handle.is_null()) as BOOLEAN
     }
@@ -487,6 +516,39 @@ pub use engine::{
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn inertial_thrust_preserves_speed_flags_and_complete_velocity_state() {
+        use crate::battle::velocity::VelocityDesc;
+        for facing in 0..16 {
+            let mut instant = VelocityDesc::new();
+            let mut expected = instant;
+            expected.set_vector(24, facing);
+            assert_eq!(
+                super::thrust(&mut instant, facing, 0, 24, 24),
+                super::SHIP_AT_MAX_SPEED as u16
+            );
+            assert_eq!(instant, expected);
+            for flags in [
+                super::SHIP_AT_MAX_SPEED as u16,
+                super::SHIP_BEYOND_MAX_SPEED as u16,
+                (super::SHIP_AT_MAX_SPEED | super::SHIP_BEYOND_MAX_SPEED) as u16,
+            ] {
+                let before = instant;
+                assert_eq!(super::thrust(&mut instant, facing, flags, 2, 24), flags);
+                assert_eq!(instant, before);
+            }
+            let mut accelerating = VelocityDesc::new();
+            assert_eq!(super::thrust(&mut accelerating, facing, 0, 2, 24), 0);
+            let angle = i32::from(facing) << 2;
+            let mut expected = VelocityDesc::new();
+            expected.set_components(
+                i32::from(crate::math::cosine(angle, 64)),
+                i32::from(crate::math::sine(angle, 64)),
+            );
+            assert_eq!(accelerating, expected);
+        }
+    }
+
     use super::*;
 
     #[test]
@@ -507,6 +569,35 @@ mod tests {
         assert_eq!(spawn_crew(IN_ENCOUNTER as BYTE, 0, 90, 42), 42);
         assert_eq!(spawn_crew(IN_LAST_BATTLE as BYTE, 5, 90, 42), 5);
         assert_eq!(spawn_crew(SUPER_MELEE as BYTE, 5, 90, 42), 90);
+    }
+
+    #[test]
+    fn inertial_thrust_gravity_redirect_and_native_widths_keep_complete_state() {
+        use crate::battle::velocity::VelocityDesc;
+        for (initial, facing, status, increment, maximum, components, flags) in [
+            ((0, -768), 0, 1 << 8, 2, 24, (0, -832), 192),
+            ((0, -768), 4, 0, 2, 24, (32, -704), 0),
+            ((0, -2000), 4, 0, 2, 24, (32, -1936), 192),
+            (
+                (i16::MIN as i32, i16::MAX as i32),
+                4,
+                0,
+                u16::MAX - 1,
+                u16::MAX,
+                (32704, 32767),
+                192,
+            ),
+        ] {
+            let mut actual = VelocityDesc::default();
+            actual.set_components(initial.0, initial.1);
+            let mut expected = VelocityDesc::default();
+            expected.set_components(components.0, components.1);
+            assert_eq!(
+                thrust(&mut actual, facing, status, increment, maximum),
+                flags
+            );
+            assert_eq!(actual, expected, "initial={initial:?}, facing={facing}");
+        }
     }
 
     #[test]

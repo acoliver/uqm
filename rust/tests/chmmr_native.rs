@@ -949,7 +949,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
                 assert_eq!((*shadow).pParent, (&raw mut *enemy.ss).cast());
                 assert_eq!(
                     (*shadow).state_flags,
-                    (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS) as u16
+                    (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | POST_PROCESS | CHANGING) as u16
                 );
                 assert_eq!((*shadow).__bindgen_anon_1.life_span, 1);
                 assert_eq!(point((*shadow).current.location), (3000 + offset * 4, 3728));

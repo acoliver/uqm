@@ -41,6 +41,7 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
         "clippy" => clippy::run(&root, &extra),
         "coverage" => coverage::run(&root, &extra),
         "deny" => deny::run(&root, &extra),
+        "parity" => parity::run(&root, &extra),
         #[cfg(feature = "native")]
         "native" => native_cli::run(&root, &extra),
         _ if !extra.is_empty() => Err(format!(
@@ -59,7 +60,7 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
 }
 
 fn usage() -> String {
-    "usage: cargo xtask <quality|clippy|coverage|deny|abi-check> or cargo xtask-native <debug|release|test|native>".into()
+    "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity> or cargo xtask-native <debug|release|test|native>".into()
 }
 
 pub(super) fn repository_root() -> Result<PathBuf, String> {

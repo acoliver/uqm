@@ -1,11 +1,12 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         normalize_facing, put_element, sine, starship, wrap_delta,
     };
-    use std::{mem, ptr};
+    use std::ptr;
     const fn color(r: u8, g: u8, b: u8) -> Color {
         Color {
             r: (r << 3) | (r >> 2),
@@ -15,7 +16,7 @@ pub(crate) mod engine {
         }
     }
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE as i32 | SEEKING_SPECIAL as i32) as _;
         d.ship_info.ship_cost = 30;
         d.ship_info.crew_level = (MAX_CREW_SIZE as i32) as _;
@@ -69,7 +70,10 @@ pub(crate) mod engine {
         }
         &raw mut DESC
     }
-    unsafe extern "C" fn initialize_fusion(ship: *mut ELEMENT, out: *mut HELEMENT) -> COUNT {
+    pub(crate) unsafe extern "C" fn initialize_fusion(
+        ship: *mut ELEMENT,
+        out: *mut HELEMENT,
+    ) -> COUNT {
         let ss = starship(ship);
         let mut block = MISSILE_BLOCK {
             cx: (*ship).next.location.x,
@@ -90,7 +94,7 @@ pub(crate) mod engine {
         *out = initialize_missile(&mut block);
         1
     }
-    unsafe extern "C" fn fighter_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn fighter_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let face = COUNT::from((*e).__bindgen_anon_5.thrust_wait);
         let mut block = LASER_BLOCK {
@@ -117,7 +121,7 @@ pub(crate) mod engine {
         (*e).postprocess_func = None;
         (*e).__bindgen_anon_5.thrust_wait = 8;
     }
-    unsafe extern "C" fn fighter_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn fighter_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         (*(*ss).RaceDescPtr).characteristics.special_wait = (*(*ss).RaceDescPtr)
             .characteristics
@@ -202,12 +206,12 @@ pub(crate) mod engine {
             }
             (*e).state_flags |= CHANGING as u16;
             if face != orig {
-                (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, face);
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, face));
             }
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, face);
         }
     }
-    unsafe extern "C" fn fighter_collision(
+    pub(crate) unsafe extern "C" fn fighter_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -219,7 +223,7 @@ pub(crate) mod engine {
             if !h.is_null() {
                 let fighter = element(h);
                 let index = (*fighter).PrimIndex;
-                *fighter = *a;
+                image!(copy; *fighter, *a);
                 (*fighter).PrimIndex = index;
                 *GlobData.Game_state.DisplayArray.add(index as usize) = *GlobData
                     .Game_state
@@ -227,7 +231,7 @@ pub(crate) mod engine {
                     .add((*a).PrimIndex as usize);
                 (*fighter).state_flags &= !(PRE_PROCESS as u16);
                 (*fighter).state_flags |= CHANGING as u16;
-                (*fighter).next = (*fighter).current;
+                image!(copy; (*fighter).next, (*fighter).current);
                 let mut travel = (*fighter).velocity.travel_angle;
                 let delta = normalize_angle(
                     i32::from(ARCTAN(
@@ -243,7 +247,7 @@ pub(crate) mod engine {
                     travel = travel.wrapping_add(QUADRANT as COUNT);
                 }
                 travel = normalize_facing(angle_to_facing(normalize_angle(i32::from(travel))));
-                (*fighter).next.image.frame = SetAbsFrameIndex((*fighter).next.image.frame, travel);
+                image!(frame; (*fighter).next.image.frame, SetAbsFrameIndex((*fighter).next.image.frame, travel));
                 SetVelocityVector(&raw mut (*fighter).velocity, 8 << ONE_SHIFT, travel);
                 put_element(h);
             }
@@ -271,7 +275,7 @@ pub(crate) mod engine {
                 .wrapping_sub(1);
         }
     }
-    unsafe extern "C" fn spawn_fighters(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn spawn_fighters(e: *mut ELEMENT) {
         let ss = starship(e);
         let face = (i32::from((*ss).ShipFacing) + angle_to_facing(HALF_CIRCLE as i32)) as COUNT;
         let dx = cosine(facing_to_angle(i32::from(face)), 14 << ONE_SHIFT);
@@ -346,14 +350,12 @@ pub(crate) mod engine {
                 .location
                 .y
                 .wrapping_sub(sy >> VELOCITY_SHIFT);
-            (*fighter).current.image.farray =
-                (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-            (*fighter).current.image.frame =
-                SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], fighter_face);
+            image!(set; (*fighter).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+            image!(frame; (*fighter).current.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], fighter_face));
             (*fighter).pParent = ss.cast();
         }
     }
-    unsafe extern "C" fn urquan_intelligence(
+    pub(crate) unsafe extern "C" fn urquan_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -399,7 +401,7 @@ pub(crate) mod engine {
         }
         (*(*ss).RaceDescPtr).characteristics.special_wait = 0;
     }
-    unsafe extern "C" fn urquan_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn urquan_postprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & SPECIAL as u16 != 0
             && (*e).__bindgen_anon_2.crew_level > 1

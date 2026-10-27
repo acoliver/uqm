@@ -1,0 +1,841 @@
+{
+  "schema": 1,
+  "files": {
+    "parity/androsynth-blazer/parity.fields": {
+      "bytes": 8626925,
+      "sha256": "4b3e3d3c942d3a14719f62ff1ad6c30e4b2c17c718fb0de41ed1b2f2fb8d9126"
+    },
+    "parity/androsynth-blazer/parity.trace": {
+      "bytes": 178062,
+      "sha256": "ba2115227c7eef67215ad620b3eb22c6df3ec7e483bcf30e6ea17c30e8cb932f"
+    },
+    "parity/androsynth-blazer/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/campaign-battle/parity.fields": {
+      "bytes": 67428282,
+      "sha256": "afdf1840dd29909544591ccf5a6d75b4c78d5f03d08d57a8594c57df47593e50"
+    },
+    "parity/campaign-battle/parity.trace": {
+      "bytes": 1350923,
+      "sha256": "5ff8e8b83732de924051461a15e262ec991649eaf0a21e6e66781cbe0d27a2fa"
+    },
+    "parity/campaign-battle/summary.json": {
+      "bytes": 1497323,
+      "sha256": "fc2017202a5ca40055768e948eda0d68b6976d7300f7b9a18daf27522a5d4bde"
+    },
+    "parity/chmmr-satellites/parity.fields": {
+      "bytes": 11367386,
+      "sha256": "78a236657693c58438475eaaaa18f514f3ea0b61a19df8bfdac5fcc6ca2dd9fc"
+    },
+    "parity/chmmr-satellites/parity.trace": {
+      "bytes": 222078,
+      "sha256": "68fb51eb7534bc30ab3d1368cda8e1f0855aab6b6be2cf2efa02eb46d75c2cab"
+    },
+    "parity/chmmr-satellites/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/comm/parity.fields": {
+      "bytes": 40924685,
+      "sha256": "1517325a93394fb445acb7d794c8ab7d90541055eddc7b29d3e8eedc267e3fe6"
+    },
+    "parity/comm/parity.trace": {
+      "bytes": 1500852,
+      "sha256": "c55e7402f623fe71ddbb2941ed15b61a90adeec34422c4b6327d2c235bb20612"
+    },
+    "parity/comm/summary.json": {
+      "bytes": 2406079,
+      "sha256": "74e93d0955403d538f77e6bd857a9d2bbef8c8d41bad9d8372a72321c113ce12"
+    },
+    "parity/counts.toml": {
+      "bytes": 74314450,
+      "sha256": "731f13ba5abd5975c1e8ffd1092dea2b28c1f709e819e8c947e263f9e0c46b87"
+    },
+    "parity/death-spawn/parity.fields": {
+      "bytes": 11489072,
+      "sha256": "005ee3d54a6718399a86653e8d63568a5123fa6be57bb1ffbbfdce49459a2403"
+    },
+    "parity/death-spawn/parity.trace": {
+      "bytes": 210111,
+      "sha256": "dcdee040033ebb53b168fbc9c8bc9fded2c43747f6e3d5c1717e7a9f24d1702f"
+    },
+    "parity/death-spawn/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/frame-sets/parity.fields": {
+      "bytes": 12813311,
+      "sha256": "d9b8713511eec84fdfc97c11a520941bd71e26b06e584bd2615d0da6cbdc712e"
+    },
+    "parity/frame-sets/parity.trace": {
+      "bytes": 239151,
+      "sha256": "acaf0c14c2cc2862071f59650215783791a914f3d68ae14644cf0812a239c5c2"
+    },
+    "parity/frame-sets/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/hyperspace/parity.fields": {
+      "bytes": 34797407,
+      "sha256": "64cac226d1d73af231f60a766112fded914bc37ab91abf43881b799f2bc7c983"
+    },
+    "parity/hyperspace/parity.trace": {
+      "bytes": 1102625,
+      "sha256": "b0c842bc555ec5a45f4d3c763dc92fcea2d66a4b3ba6e8e21840d5b28ac3d6d2"
+    },
+    "parity/hyperspace/summary.json": {
+      "bytes": 1474052,
+      "sha256": "5cfa0cc1dacef554397d5d320331f789130d7ec03ef4f04fe610d4f314658011"
+    },
+    "parity/lander/parity.fields": {
+      "bytes": 9765061,
+      "sha256": "703f76aa594dbb2ecde8c187d34187d9d6e99239fecc9e90235deb70544228de"
+    },
+    "parity/lander/parity.trace": {
+      "bytes": 2500031,
+      "sha256": "4b83fcd86eb8cccf3d66d3772bc1e557a66c74010f4184cab1c24142c00f8ce8"
+    },
+    "parity/lander/summary.json": {
+      "bytes": 3431219,
+      "sha256": "4340f7c25a9f574b1b9cac4716ef441bdfa48481d92f602c0b88fc0c1ebc91d9"
+    },
+    "parity/melee-cyborg-a/parity.fields": {
+      "bytes": 93809867,
+      "sha256": "6eca99b0b6ce16471b70b325277f0bdf4c13e1658e6849defcbfd0aebf261824"
+    },
+    "parity/melee-cyborg-a/parity.trace": {
+      "bytes": 2049339,
+      "sha256": "30691de6a05506a290b8d735f7f616fd6e147af6032ed858ed4ea7147817b12d"
+    },
+    "parity/melee-cyborg-a/summary.json": {
+      "bytes": 131032,
+      "sha256": "06ea88c56bee068faf03ba2337869a005ca788e998e138f029d1fc7f81b67274"
+    },
+    "parity/melee-cyborg-b/parity.fields": {
+      "bytes": 94775666,
+      "sha256": "7895b2aa082b17373a6975040e3e9171d14f3501901f66a5b97f1e7c07eb5bab"
+    },
+    "parity/melee-cyborg-b/parity.trace": {
+      "bytes": 1994056,
+      "sha256": "bb913e4f270d8984bfb6e454faf100c1d04ceda0607ff8b27ebad7ce40c9985f"
+    },
+    "parity/melee-cyborg-b/summary.json": {
+      "bytes": 131032,
+      "sha256": "06ea88c56bee068faf03ba2337869a005ca788e998e138f029d1fc7f81b67274"
+    },
+    "parity/melee-cyborg-c/parity.fields": {
+      "bytes": 93471891,
+      "sha256": "181ded0eca05aaf98cbcf5319fc31d661d691d4c7ba8d6d012baf8e204832538"
+    },
+    "parity/melee-cyborg-c/parity.trace": {
+      "bytes": 1937118,
+      "sha256": "4fdcb3bb3249538567a7d2626d083ab7084c89c6888c17fc2675b0b6a8103caf"
+    },
+    "parity/melee-cyborg-c/summary.json": {
+      "bytes": 131032,
+      "sha256": "06ea88c56bee068faf03ba2337869a005ca788e998e138f029d1fc7f81b67274"
+    },
+    "parity/melee-cyborg-d/parity.fields": {
+      "bytes": 92883603,
+      "sha256": "d0416a7b058f00f59da311cb84caa39edcf64aeb54ee631992b4f5726c41f18b"
+    },
+    "parity/melee-cyborg-d/parity.trace": {
+      "bytes": 1991917,
+      "sha256": "2b499ec893bbfb9b66163dbe230abc76b1d308d597cad13052b1353431db3e3d"
+    },
+    "parity/melee-cyborg-d/summary.json": {
+      "bytes": 131032,
+      "sha256": "06ea88c56bee068faf03ba2337869a005ca788e998e138f029d1fc7f81b67274"
+    },
+    "parity/melee-input/parity.fields": {
+      "bytes": 83634073,
+      "sha256": "4a5958cd6b56fcab2c34b04d88b129d98c94bb3cc2f5a8b5117cefba956de93c"
+    },
+    "parity/melee-input/parity.trace": {
+      "bytes": 1416905,
+      "sha256": "5efe4c055412836048125cf660913d7e01f2290a2494907258a69b4d3a204ba3"
+    },
+    "parity/melee-input/summary.json": {
+      "bytes": 742381,
+      "sha256": "24db6e38fe0901f81e92794cc062613b9f56ae5b598098a49a8f212dcdeb4a0d"
+    },
+    "parity/mixed-collision/parity.fields": {
+      "bytes": 11919103,
+      "sha256": "7f7f3e464c1323fd1306e4722a4b7f0be467c1e392f39f87867e5b04ca159b65"
+    },
+    "parity/mixed-collision/parity.trace": {
+      "bytes": 225699,
+      "sha256": "62eb40a5dbc2c0978daaa879ac2c55156b65a0d80871452bfb3fe99a2f60b41d"
+    },
+    "parity/mixed-collision/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/new-game/parity.fields": {
+      "bytes": 295269,
+      "sha256": "f697a51c37c972b25e1ab2cda5518a16285c48b44d23af2cf40d38786c79beb9"
+    },
+    "parity/new-game/parity.trace": {
+      "bytes": 44458,
+      "sha256": "5a82d877d2c5904d65620948611ab8b0dbaba33f3af9e2f352f895cfee5b9aba"
+    },
+    "parity/new-game/summary.json": {
+      "bytes": 42574,
+      "sha256": "7e31a6bcb21d01443414228237666a6d8238d5d251790451d7cc2f266873273d"
+    },
+    "parity/pkunk-rebirth/parity.fields": {
+      "bytes": 16161435,
+      "sha256": "a078d93a7174c73ed5b9925f9e6a9d7a68b1dad8c9bca8853385f0138dfdb16e"
+    },
+    "parity/pkunk-rebirth/parity.trace": {
+      "bytes": 302099,
+      "sha256": "a32fd8bdef1cb5a04c4d25bb55a90eedd6da8fe24cae773228b300a8024b49bf"
+    },
+    "parity/pkunk-rebirth/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/pool-full/parity.fields": {
+      "bytes": 11608432,
+      "sha256": "8933f4faed5caa3df7e13d33d0afdd35082a6d57c89b0b69b0fe7976796d719e"
+    },
+    "parity/pool-full/parity.trace": {
+      "bytes": 214684,
+      "sha256": "08791705732c1bb3e63ca30b3c632fedfbd7121e386c9cc0c119a830a0b0a2d6"
+    },
+    "parity/pool-full/summary.json": {
+      "bytes": 131549,
+      "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
+    },
+    "parity/samatra/parity.fields": {
+      "bytes": 43923397,
+      "sha256": "9e0f4868b5620dff78d6003f27c38bdafb5ddda51d286b61838404ff0f510358"
+    },
+    "parity/samatra/parity.trace": {
+      "bytes": 1850751,
+      "sha256": "96972bd745be1c9735ac9f7f75effcfc7362296b3b4a37c335d72a0434e3a12f"
+    },
+    "parity/samatra/summary.json": {
+      "bytes": 2879477,
+      "sha256": "60a3ea6fb4133f9f15c575e10eab0b593039d1f0ba63957e330787913a6fd723"
+    },
+    "parity/solar-flight/parity.fields": {
+      "bytes": 18672270,
+      "sha256": "84120014911934478c7657f4bf537d1ed499e43342527511f3ea3e692c675d87"
+    },
+    "parity/solar-flight/parity.trace": {
+      "bytes": 907023,
+      "sha256": "9f398b1e4e46e44f3bface6be85953473ae29f08fbb5d999a899298113724c52"
+    },
+    "parity/solar-flight/summary.json": {
+      "bytes": 1321577,
+      "sha256": "3b573f72c8e047014d1ede7f1f7a23af5616b63e47f9250155aa0f2572f839a7"
+    },
+    "parity/star-contact/parity.fields": {
+      "bytes": 27891036,
+      "sha256": "e76ae0816b3b3cf9e61d60e88327c1c9e0af613037e856465d5dc20cc8f6a1c2"
+    },
+    "parity/star-contact/parity.trace": {
+      "bytes": 488586,
+      "sha256": "8e559187184ae266c303d00370363989b9e2e49c19fafdb4cd2c2157c5963fc5"
+    },
+    "parity/star-contact/summary.json": {
+      "bytes": 552560,
+      "sha256": "a6e17a0ab64cf122b62ac28b7e1415d394fcd483e0c138f9c7f07eee7c220622"
+    },
+    "saves/alliance-after-luna.sav.capture": {
+      "bytes": 3291,
+      "sha256": "91e6a9838bd80b702c86bd3224c2aea3ca9952aed746c4f257571e7df26aebe1"
+    },
+    "saves/alliance-after-luna.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/alliance-after-mercury.sav.capture": {
+      "bytes": 3291,
+      "sha256": "29f66a6e1276e824eaab11374e03e89cd53855cbd8c876e58c034c5f52746d41"
+    },
+    "saves/alliance-after-mercury.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/allied-starbase.sav.capture": {
+      "bytes": 3291,
+      "sha256": "2d8d8d864c31362c7df5fe7c7c610b11ad9f05d741640428e91ca4d7b237ebb6"
+    },
+    "saves/allied-starbase.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/at-alpha-centauri.sav.capture": {
+      "bytes": 3358,
+      "sha256": "6701876bf3ba7fcc829cbc0aaa4dda95e4c805824cbb505a0b3fb458ff9cbb4e"
+    },
+    "saves/at-alpha-centauri.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/bomb-preguard.sav.capture": {
+      "bytes": 4028,
+      "sha256": "56beeb78cee0327ae0f37b8effc44adc58de5e7de03ef19e98fe178d4017a1ae"
+    },
+    "saves/bomb-preguard.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/bomb-refueled.sav.capture": {
+      "bytes": 3408,
+      "sha256": "f05ef2cc7e71732e59a5a944fa3e8031de6c1bd082af3511f0ecbe4346fd1b99"
+    },
+    "saves/bomb-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/broken-ultron.sav.capture": {
+      "bytes": 3642,
+      "sha256": "0121461b82124c60a7fa791826c3fae7d7f57b020f8d6caad48da95268197cf9"
+    },
+    "saves/broken-ultron.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/burvixese-caster.sav.capture": {
+      "bytes": 3361,
+      "sha256": "2fc8795710e02005b45428e84a62aa987db18a1059e9b173659b69daf4a01439"
+    },
+    "saves/burvixese-caster.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/caster-diversion.sav.capture": {
+      "bytes": 4480,
+      "sha256": "a3917a38a5c2f4a57aaf47509ebad15a85d7e33be33bdeecc645adbe048c161a"
+    },
+    "saves/caster-diversion.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-ambush.sav.capture": {
+      "bytes": 3585,
+      "sha256": "5b9e1fcc54f926a3582b93bdf2ac916c92af483f599aa5290b2a60f9dac7b2f2"
+    },
+    "saves/connected-ambush.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-arilou.sav.capture": {
+      "bytes": 5414,
+      "sha256": "49fd845f02f42bd721f934b63d22bc1727930a0c736443e98e2e5b40090827e7"
+    },
+    "saves/connected-arilou.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-chmmr-bomb.sav.capture": {
+      "bytes": 3514,
+      "sha256": "37fe1b10070f8aec8d802c4937c082b67624c4d126eb6046e6ca57388463c417"
+    },
+    "saves/connected-chmmr-bomb.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-combat-prep.sav.capture": {
+      "bytes": 3616,
+      "sha256": "097d640e1ad71378ab32b39324e38ef0aa9b6a60e4d9e71c9e256ce10e796f59"
+    },
+    "saves/connected-combat-prep.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-final-fleet.sav.capture": {
+      "bytes": 3635,
+      "sha256": "f86f56800b0b7386d48ffcc1a1fb103e32720bb9ded21766e5dc9abcbc9e97dd"
+    },
+    "saves/connected-final-fleet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-full-drives.sav.capture": {
+      "bytes": 3465,
+      "sha256": "75c6f7a8cd04135c7c6af40bce045f6528e5b9f8e0bd4425c38925de69e2675e"
+    },
+    "saves/connected-full-drives.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-funded-fleet.sav.capture": {
+      "bytes": 3465,
+      "sha256": "c0abb069b73f4a8e9cd7f99f55f3e993b476a85bcbd4bcb41235dc46c85eaba9"
+    },
+    "saves/connected-funded-fleet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-jugger-prep.sav.capture": {
+      "bytes": 3605,
+      "sha256": "de4b4da133c772f3381a812a132ec571d25bfbed1ae35ccd6fc4b0d298897dfa"
+    },
+    "saves/connected-jugger-prep.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-lure-prep.sav.capture": {
+      "bytes": 3583,
+      "sha256": "99b2898fa86611b98aa7a870446bfb0f24d2e7ec7443578f3406512eac1210fa"
+    },
+    "saves/connected-lure-prep.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-lure.sav.capture": {
+      "bytes": 4607,
+      "sha256": "92d6a423d48e38ebb516d425742d40581b2ff34e63dea80fbc5454c2b21aff7e"
+    },
+    "saves/connected-lure.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-rainbow-funded.sav.capture": {
+      "bytes": 3465,
+      "sha256": "cb62c2b1d14b77d15e1e90e6cd5221e6d3600a0181360f96568a454a4eb235e6"
+    },
+    "saves/connected-rainbow-funded.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-samatra-distraction.sav.capture": {
+      "bytes": 6479,
+      "sha256": "fed25ee51d13729118d01bc392e605f387d94c3bcbd12be023f525af3924a056"
+    },
+    "saves/connected-samatra-distraction.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-samatra-remnants.sav.capture": {
+      "bytes": 3763,
+      "sha256": "5987a7edc1f1a008f68c5739641121be4b01c0d0d2e89fe9a193e8b44fabe308"
+    },
+    "saves/connected-samatra-remnants.sav.capture.json": {
+      "bytes": 217,
+      "sha256": "f8ff82a9540005beab76faae01162bb7de90750ef496d86d48b1b49dbd84c3c6"
+    },
+    "saves/connected-shattered.sav.capture": {
+      "bytes": 3541,
+      "sha256": "8757278ee8262800d514f944029d4e6d19e0ea38ee23311eec1c8bb8a66e78d5"
+    },
+    "saves/connected-shattered.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-sun-device.sav.capture": {
+      "bytes": 3724,
+      "sha256": "525781094e3690a62dc4208f4b2f23df9e81812b50558e64552fd991035107e2"
+    },
+    "saves/connected-sun-device.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/connected-syreen.sav.capture": {
+      "bytes": 3518,
+      "sha256": "49debea197e05ff703975d548e5db84376b25fd52695190d780bed1dae29d34e"
+    },
+    "saves/connected-syreen.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-taalo.sav.capture": {
+      "bytes": 3387,
+      "sha256": "294eb596639cf9f839962da15ff3ed1d2606adb171ba03b5ef30c0fefaa8afc5"
+    },
+    "saves/connected-taalo.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/connected-talking-pet.sav.capture": {
+      "bytes": 3792,
+      "sha256": "776c9b1d7f5af4969e2066df1d926950df9026f06f4bdd2c263095459efd338f"
+    },
+    "saves/connected-talking-pet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-umgah-fleet.sav.capture": {
+      "bytes": 3498,
+      "sha256": "6027119cf61630096cfa97e5850fce341481eb5cb6aeb55faa89ed9818cb88a1"
+    },
+    "saves/connected-umgah-fleet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-vault-resupply.sav.capture": {
+      "bytes": 3616,
+      "sha256": "336a6a5c0d2df498c136787d798c8d1e6edc51c4348081b9d659398793557a41"
+    },
+    "saves/connected-vault-resupply.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/connected-vault.sav.capture": {
+      "bytes": 3876,
+      "sha256": "35fa981658c76a8feb50cd5910d12d2e8ff8ad9fe08ac90f69fbe7098f01f5c7"
+    },
+    "saves/connected-vault.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/dev-ambush-crew.sav.capture": {
+      "bytes": 3409,
+      "sha256": "6a840bc9533a761a678961867c6b05493e52d625aa0bc3aa81b476e5a16bb4a0"
+    },
+    "saves/dev-ambush-crew.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-ambush-drives.sav.capture": {
+      "bytes": 3398,
+      "sha256": "4be63387413cc399a7bea72291b56479023ca9324835c1604713b4f619ebf159"
+    },
+    "saves/dev-ambush-drives.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-arilou-home.sav.capture": {
+      "bytes": 3851,
+      "sha256": "680afa92673724b63459f3810e5533c4d64f2279ee25fe577438c963e041c999"
+    },
+    "saves/dev-arilou-home.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-armed-flagship.sav.capture": {
+      "bytes": 3471,
+      "sha256": "efde8cb89124e7a96b4d88e6fbb38686d94fc9de480b4ec9d4b926862d283b09"
+    },
+    "saves/dev-armed-flagship.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-crew-ready.sav.capture": {
+      "bytes": 3366,
+      "sha256": "f5e385e2684e8091f4b1b26977e5fb001e62174734613b351324c9edb8108661"
+    },
+    "saves/dev-crew-ready.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-driven-ambush.sav.capture": {
+      "bytes": 3518,
+      "sha256": "59386ad77c9ec178471c9db043f1563b031b1b78fc15c1554660a87e61caa2ca"
+    },
+    "saves/dev-driven-ambush.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-fueled-crew.sav.capture": {
+      "bytes": 3377,
+      "sha256": "001bb54b995d40345b1d127cb174f8f98b49e158ae7b0e368a4657dfbad651b9"
+    },
+    "saves/dev-fueled-crew.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-fueled-mycon-lure.sav.capture": {
+      "bytes": 3754,
+      "sha256": "6cb15c3da83b73d45fa78e498a9898db965b747176d7c50168933b9c12cd2903"
+    },
+    "saves/dev-fueled-mycon-lure.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-funded-knowledge.sav.capture": {
+      "bytes": 3778,
+      "sha256": "50948eba2ec19d67a0c8024c9cb7dbff43d89c2227520dc3f2f66d1e290ba11c"
+    },
+    "saves/dev-funded-knowledge.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-funded-shuttle.sav.capture": {
+      "bytes": 3377,
+      "sha256": "e3ceeba85f637b48663497ffe61644d6fd8a0472975e98c777aa513f361ce790"
+    },
+    "saves/dev-funded-shuttle.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-funded-vault.sav.capture": {
+      "bytes": 3645,
+      "sha256": "3c5f6aa9a8e39dcd609e0cb7ca7085ea799216084d1fd710a8ce55af87310263"
+    },
+    "saves/dev-funded-vault.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/dev-lure-refueled.sav.capture": {
+      "bytes": 3433,
+      "sha256": "1563cdcb6de0a1a3e8059933918fde598e716b688288476e60db8c6e0d3914d6"
+    },
+    "saves/dev-lure-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-mycon-lure.sav.capture": {
+      "bytes": 4620,
+      "sha256": "3e7320ec7fc6bd789ec630cabffd2a4b2f8e09426a1a48736376c79adebd1ba8"
+    },
+    "saves/dev-mycon-lure.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-pkunk-resupply.sav.capture": {
+      "bytes": 4577,
+      "sha256": "5ba4a8ece6da91f49a5c58523c558fa62a3e1bc6d02c7e61645eba547b0944f9"
+    },
+    "saves/dev-pkunk-resupply.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-portal-approach.sav.capture": {
+      "bytes": 3377,
+      "sha256": "c5512b5e2053ff424026f870eef57fc30e50d5418fe57a9c38f965717a152244"
+    },
+    "saves/dev-portal-approach.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-rainbow-refueled.sav.capture": {
+      "bytes": 3444,
+      "sha256": "f654a1ae0d563b19a35faf781c4ae27d7f79a959f001269ec0067da4fb92576e"
+    },
+    "saves/dev-rainbow-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-refitted.sav.capture": {
+      "bytes": 3401,
+      "sha256": "f3be925d173182e0f24f3371b96619f6885b8b12e18c9bb718328a032265df91"
+    },
+    "saves/dev-refitted.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-refueled-ambush.sav.capture": {
+      "bytes": 3612,
+      "sha256": "c319dd8bab38afac7bfcf84622fc4f7f672fdd6e52f56e0661f496c352028653"
+    },
+    "saves/dev-refueled-ambush.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-shattered-knowledge.sav.capture": {
+      "bytes": 3681,
+      "sha256": "b3f8e39d51cd1c4c20af0af0efea86943ee7d945c0ba58040dfc831ebbb0b5a5"
+    },
+    "saves/dev-shattered-knowledge.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-sun-device.sav.capture": {
+      "bytes": 3422,
+      "sha256": "6177a08147ce256da7bdad6ec38ca54eaeaa0425c5e8410d60575f1310277149"
+    },
+    "saves/dev-sun-device.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/dev-sun-fleet.sav.capture": {
+      "bytes": 3515,
+      "sha256": "2084e7fdf5b46f64169b9391cadbf07fb74f9654f66d91404004301ecbb7e2ae"
+    },
+    "saves/dev-sun-fleet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-syreen-ambush.sav.capture": {
+      "bytes": 3562,
+      "sha256": "ed38e149152d6dfdcdfeec8cf38b4696c42f736c744343c2197b0fef6b63c5fc"
+    },
+    "saves/dev-syreen-ambush.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-syreen-shuttle.sav.capture": {
+      "bytes": 3388,
+      "sha256": "f4e4c71e03e3462d6141b72000c15f3597e1ebd437179a48fa9a6015efb73afb"
+    },
+    "saves/dev-syreen-shuttle.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-taalo-protected.sav.capture": {
+      "bytes": 3393,
+      "sha256": "a30e7789071e50d79f977edc19af53297d32b2b4515b5c9e885506aa9a34ebf6"
+    },
+    "saves/dev-taalo-protected.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/dev-talking-pet.sav.capture": {
+      "bytes": 3810,
+      "sha256": "8f89ddefe030427d3d01f041e09efc907cfa9fcf11df50aa98912db27efdfa92"
+    },
+    "saves/dev-talking-pet.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/dev-vault-open.sav.capture": {
+      "bytes": 4111,
+      "sha256": "67a1887a21fac750afc92b2a75b6fcfffe7a57bd0b239357d3b27d51ca864dc2"
+    },
+    "saves/dev-vault-open.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/funded-sol.sav.capture": {
+      "bytes": 3291,
+      "sha256": "0b81219570104f51640111a3bb74bcca88abf7e0b753953d0994fa0c6acb02cf"
+    },
+    "saves/funded-sol.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/ilwrath-approach.sav.capture": {
+      "bytes": 4480,
+      "sha256": "1fd70c9c04e5b30212200445e63fcda362a447c132fe6e8f04127f3823c97f65"
+    },
+    "saves/ilwrath-approach.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/legacy-save.00.capture": {
+      "bytes": 3336,
+      "sha256": "78d1102e091649719ac33756246e477cdce462e4335c498173784032a84b0f83"
+    },
+    "saves/legacy-save.00.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/north-artifacts.sav.capture": {
+      "bytes": 3329,
+      "sha256": "c3cbbf97470d08fd3f29736bbc15ba6cfe52e2b867818a6796b4b6b38914e87c"
+    },
+    "saves/north-artifacts.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/north-ready.sav.capture": {
+      "bytes": 3329,
+      "sha256": "2aa492814ca1980be690ab2815875f362fb2e8012b2f6d752e97d2289110a3eb"
+    },
+    "saves/north-ready.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/north-refueled.sav.capture": {
+      "bytes": 3396,
+      "sha256": "32374bdbce16e47cf3951dc3054b96d51d81de0f546e4cc8d53f3c07af1e2e2f"
+    },
+    "saves/north-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/portal-sol.sav.capture": {
+      "bytes": 3368,
+      "sha256": "eae3da2372541abf6b81912e1a1ce3f5195a3f9b17fc0864537d80154e25d5ec"
+    },
+    "saves/portal-sol.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/portal-staging.sav.capture": {
+      "bytes": 3368,
+      "sha256": "a1e11d479b1fb5a7e794eda6906a8528572854a8c1ffa4648cd12d9a35e9f517"
+    },
+    "saves/portal-staging.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/repaired-ultron.sav.capture": {
+      "bytes": 3686,
+      "sha256": "6f7af3560f7ceb362cab5c6c3aa47e6796690421d4198669205d39e3f2cb6bda"
+    },
+    "saves/repaired-ultron.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/south-refueled.sav.capture": {
+      "bytes": 3428,
+      "sha256": "ff100f4ce41ae58d59a7bbdaab606aff88d696414f086dccc39140bda8cbd6c9"
+    },
+    "saves/south-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/southeast-staging.sav.capture": {
+      "bytes": 3506,
+      "sha256": "dbdbd38732dcc5506effaaffb04e17a6f09ae971b2914ac3f30fcc5b96bbfdc8"
+    },
+    "saves/southeast-staging.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/spindle-pkunk.sav.capture": {
+      "bytes": 4125,
+      "sha256": "5be048197101ba974f4d7afb8def06026fdeab216d1dd679d02b1b039428f42e"
+    },
+    "saves/spindle-pkunk.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/starbase-armed.sav.capture": {
+      "bytes": 3387,
+      "sha256": "06afd7057be3a7ff6c4e07d031d1b69f0bc51bd3a1c7f3b2ae4b2ff2cbe22038"
+    },
+    "saves/starbase-armed.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/thraddash-diverted.sav.capture": {
+      "bytes": 5255,
+      "sha256": "831db121f04e8f2e16931a60f8f7107888502374c244a54275899b35123ccc45"
+    },
+    "saves/thraddash-diverted.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/utwig-alliance.sav.capture": {
+      "bytes": 4335,
+      "sha256": "9070c0c8d70cea4421b340cd7a2733e38ca13d0e42a55ff37efecd410af35c39"
+    },
+    "saves/utwig-alliance.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/utwig-bomb.sav.capture": {
+      "bytes": 3976,
+      "sha256": "b9ee575af89028a18d0d85fc449ecbcd989c88849bc1f0b523195726438fbb97"
+    },
+    "saves/utwig-bomb.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "ad48b95ce248eba6c8e4a7002b8ef609f09aead5f0209cee33f6df78f78e042e"
+    },
+    "saves/war-cleared.sav.capture": {
+      "bytes": 3476,
+      "sha256": "e13ba85defc343d37ccc9bf2ab65e527cf911c91442f4da4b56e19510c83315b"
+    },
+    "saves/war-cleared.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    },
+    "saves/west-bomb-refueled.sav.capture": {
+      "bytes": 3481,
+      "sha256": "e80186716c14ca8d2c3d5968cc1520c336bd1bd05aadcf3f8ef53e62ac3c6298"
+    },
+    "saves/west-bomb-refueled.sav.capture.json": {
+      "bytes": 213,
+      "sha256": "4d5fea4d4db74fb1e2f00ccb33ea3f44fc3650034fcadac7247e2ccb6b7a192d"
+    }
+  }
+}

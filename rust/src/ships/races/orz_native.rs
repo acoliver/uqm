@@ -2,11 +2,12 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, normalize_angle,
         normalize_facing, object_cloaked, put_element, sine, starship,
     };
-    use std::{mem, ptr};
+    use std::ptr;
 
     use crate::collections::queue::InsertQueue;
 
@@ -45,7 +46,7 @@ pub(crate) mod engine {
     ];
 
     const fn descriptor() -> RACE_DESC {
-        let mut d: RACE_DESC = unsafe { mem::zeroed() };
+        let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags = (FIRES_FORE | SEEKING_SPECIAL) as u16;
         d.ship_info.ship_cost = 23;
         d.ship_info.crew_level = MAX_CREW;
@@ -143,7 +144,7 @@ pub(crate) mod engine {
         )
     }
 
-    unsafe extern "C" fn howitzer_collision(
+    pub(crate) unsafe extern "C" fn howitzer_collision(
         a: *mut ELEMENT,
         pa: *mut POINT,
         b: *mut ELEMENT,
@@ -154,7 +155,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn initialize_turret_missile(
+    pub(crate) unsafe extern "C" fn initialize_turret_missile(
         ship: *mut ELEMENT,
         out: *mut HELEMENT,
     ) -> COUNT {
@@ -229,7 +230,7 @@ pub(crate) mod engine {
         count
     }
 
-    unsafe extern "C" fn orz_intelligence(
+    pub(crate) unsafe extern "C" fn orz_intelligence(
         ship: *mut ELEMENT,
         concerns: *mut EVALUATE_DESC,
         count: COUNT,
@@ -305,7 +306,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn ion_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn ion_preprocess(e: *mut ELEMENT) {
         (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
         if usize::from((*e).colorCycleIndex) != ION_COLORS.len() {
             (*e).__bindgen_anon_1.life_span = u16::from((*e).__bindgen_anon_5.thrust_wait);
@@ -327,7 +328,7 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let owner = element((*ss).hShip);
         if (*owner).__bindgen_anon_2.crew_level == 0
@@ -396,8 +397,8 @@ pub(crate) mod engine {
             (*e).state_flags |= (CHANGING | CREW_OBJECT) as u16;
             (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
             let frame = SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], 21);
-            (*e).current.image.frame = frame;
-            (*e).next.image.frame = frame;
+            image!(frame; (*e).current.image.frame, frame);
+            image!(frame; (*e).next.image.frame, frame);
             (*e).__bindgen_anon_5.thrust_wait = 0;
             (*e).__bindgen_anon_4.turn_wait =
                 (normalize_facing(i32::from(TFB_Random() as BYTE)) << 4) as BYTE;
@@ -427,13 +428,13 @@ pub(crate) mod engine {
                 as COORD;
             (*ion).death_func = Some(ion_preprocess);
             (*ion).pParent = ss.cast();
-            (*ion).next = (*ion).current;
+            image!(copy; (*ion).next, (*ion).current);
             (*ion).__bindgen_anon_1.life_span -= 1;
             (*ion).state_flags |= PRE_PROCESS as u16;
         }
     }
 
-    unsafe extern "C" fn marine_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn marine_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let ship = element((*ss).hShip);
         if (*ship).__bindgen_anon_2.crew_level == 0
@@ -511,8 +512,7 @@ pub(crate) mod engine {
                 if (*object).playerNr == (*e).playerNr
                     && (*e).state_flags & IGNORE_SIMILAR as u16 != 0
                 {
-                    (*e).next.image.frame =
-                        SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], 21);
+                    image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], 21));
                     (*e).state_flags &= !(IGNORE_SIMILAR as u16);
                     (*e).state_flags |= CHANGING as u16;
                 }
@@ -572,7 +572,7 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn marine_collision(
+    pub(crate) unsafe extern "C" fn marine_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -613,10 +613,10 @@ pub(crate) mod engine {
                 } else {
                     (*a).__bindgen_anon_4.turn_wait = count_marines(ss, true);
                     (*a).__bindgen_anon_5.thrust_wait = MARINE_WAIT;
-                    (*a).next.image.frame = SetAbsFrameIndex(
+                    image!(frame; (*a).next.image.frame, SetAbsFrameIndex(
                         *(*a).next.image.farray,
                         22 + u16::from((*a).__bindgen_anon_4.turn_wait),
-                    );
+                    ));
                     (*a).state_flags |= NONSOLID as u16;
                     (*a).state_flags &= !(CREW_OBJECT as u16);
                     (*prim(a)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
@@ -629,17 +629,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn animate(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
-        } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
-        }
-    }
-
-    unsafe extern "C" fn turret_postprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn turret_postprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_1.life_span != 0 {
             return;
         }
@@ -660,7 +650,7 @@ pub(crate) mod engine {
                 (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | CHANGING | PRE_PROCESS | POST_PROCESS)
                     as u16;
             (*turret).__bindgen_anon_1.life_span = 1;
-            (*turret).current.image = (*e).current.image;
+            image!(copy; (*turret).current.image, (*e).current.image);
             (*turret).current.location = (*ship).next.location;
             (*turret).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait;
             (*turret).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait;
@@ -688,7 +678,7 @@ pub(crate) mod engine {
                     i32::from(facing) + angle_to_facing(OCTANT as i32),
                 )) / angle_to_facing(QUADRANT as i32)))
                 as u16;
-            (*turret).current.image.frame = SetAbsFrameIndex((*turret).current.image.frame, facing);
+            image!(frame; (*turret).current.image.frame, SetAbsFrameIndex((*turret).current.image.frame, facing));
             facing = facing_to_angle(i32::from(facing)) as COUNT;
             if (*ss).cur_status_flags & WEAPON as u16 != 0 {
                 let effect = element(disp_q.tail);
@@ -716,20 +706,19 @@ pub(crate) mod engine {
                         (*effect).current.location.y = (i32::from((*turret).current.location.y)
                             + i32::from(sine(i32::from(facing), TURRET_OFFSET << ONE_SHIFT)))
                             as COORD;
-                        (*effect).current.image.farray =
-                            (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                        (*effect).current.image.frame = SetAbsFrameIndex(
+                        image!(set; (*effect).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                        image!(frame; (*effect).current.image.frame, SetAbsFrameIndex(
                             (*(*ss).RaceDescPtr).ship_data.special[0],
                             angle_to_facing(FULL_CIRCLE as i32) as COUNT,
-                        );
-                        (*effect).preprocess_func = Some(animate);
+                        ));
+                        (*effect).preprocess_func = Some(animation_preprocess);
                         (*effect).pParent = ss.cast();
                         (*prim(effect)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                         put_element(effect_h);
                     }
                 }
             }
-            (*turret).next = (*turret).current;
+            image!(copy; (*turret).next, (*turret).current);
             (*prim(turret)).Type = (*prim(ship)).Type;
             (*prim(turret)).color = (*prim(ship)).color;
             (*turret).postprocess_func = (*e).postprocess_func;
@@ -758,10 +747,8 @@ pub(crate) mod engine {
                 (*marine).current.location.y = (i32::from((*ship).current.location.y)
                     - i32::from(sine(i32::from(facing), TURRET_OFFSET << ONE_SHIFT)))
                     as COORD;
-                (*marine).current.image.farray =
-                    (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                (*marine).current.image.frame =
-                    SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], 20);
+                image!(set; (*marine).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                image!(frame; (*marine).current.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], 20));
                 (*marine).__bindgen_anon_4.turn_wait = (normalize_facing(angle_to_facing(
                     i32::from(facing) + HALF_CIRCLE as i32,
                 )) << 4) as BYTE;
@@ -777,7 +764,7 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe extern "C" fn orz_preprocess(e: *mut ELEMENT) {
+    pub(crate) unsafe extern "C" fn orz_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*e).state_flags & APPEARING as u16 == 0 {
             if ((*ss).cur_status_flags | (*ss).old_status_flags) & SPECIAL as u16 != 0
@@ -799,10 +786,8 @@ pub(crate) mod engine {
                 (*turret).playerNr = (*e).playerNr;
                 (*turret).state_flags = (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as u16;
                 (*turret).__bindgen_anon_1.life_span = 1;
-                (*turret).current.image.farray =
-                    (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                (*turret).current.image.frame =
-                    SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], (*ss).ShipFacing);
+                image!(set; (*turret).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                image!(frame; (*turret).current.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], (*ss).ShipFacing));
                 (*turret).postprocess_func = Some(turret_postprocess);
                 (*turret).pParent = ss.cast();
                 InsertQueue((&raw mut disp_q).cast(), h, (*e).succ);
