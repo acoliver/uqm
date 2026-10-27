@@ -33,6 +33,16 @@ impl Repeat {
     }
 }
 
+/// Wait at DoInput's native yield boundary without flushing partial draws.
+pub fn yield_input_loop(native_yield: impl FnOnce()) {
+    if crate::time::source::is_replay() {
+        // The native 1 ms sleep rounds up to one 840-Hz replay tick.
+        crate::time::source::advance_to(crate::time::source::now_ticks().saturating_add(1));
+    } else {
+        native_yield();
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
@@ -248,7 +258,7 @@ pub(crate) mod live {
             crate::callback::ffi::Async_process();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
             crate::mainloop::lifecycle_abi::ProcessUtilityKeys();
-            crate::threading::legacy_abi::TaskSwitch();
+            super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
             if crate::automation::input_ffi::rust_automation_service_do_input() != 0 {
                 break;
             }

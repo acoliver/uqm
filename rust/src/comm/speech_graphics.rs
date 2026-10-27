@@ -8,6 +8,16 @@
 
 use super::oscilloscope::Oscilloscope;
 
+// Host-time rate limiting otherwise changes whether a speech frame queues a
+// drawing command, which changes replay presentation counts.
+pub(super) fn update_timestamp(real_ms: u64) -> u64 {
+    if super::talk_segue::c_bridge::clock::is_replay() {
+        u64::from(super::talk_segue::c_bridge::clock::now_ms())
+    } else {
+        real_ms
+    }
+}
+
 /// Update rate for oscilloscope: 1/32 second in milliseconds.
 const OSCILLOSCOPE_RATE_MS: u64 = 1000 / 32;
 
@@ -175,6 +185,28 @@ mod c_bridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replay_speech_redraw_clock_ignores_host_timestamp() -> Result<(), Box<dyn std::error::Error>>
+    {
+        const CHILD: &str = "UQM_REPLAY_SPEECH_REDRAW_CLOCK";
+        if std::env::var_os(CHILD).is_none() {
+            assert_eq!(update_timestamp(1234), 1234);
+            let status = std::process::Command::new(std::env::current_exe()?)
+                .args(["--exact", "comm::speech_graphics::tests::replay_speech_redraw_clock_ignores_host_timestamp"])
+                .env(CHILD, "1")
+                .status()?;
+            assert!(status.success());
+            return Ok(());
+        }
+        crate::time::source::install(true);
+        crate::time::source::advance_to(42);
+        assert_eq!(update_timestamp(0), 50);
+        assert_eq!(update_timestamp(1_000_000), 50);
+        crate::time::source::advance_to(84);
+        assert_eq!(update_timestamp(1_000_000), 100);
+        Ok(())
+    }
 
     #[test]
     fn test_not_initialized_by_default() {

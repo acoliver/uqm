@@ -620,6 +620,10 @@ pub fn get_runtime() -> Option<&'static RuntimeModel> {
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-001, REQ-INJECT-002
 pub extern "C" fn rust_automation_service_do_input() -> i32 {
+    service_input(false)
+}
+
+fn service_input(button_wait: bool) -> i32 {
     // Step 1: ABI entry (saturating).
     if let Some(rt) = with_runtime() {
         rt.record_abi_entry();
@@ -656,8 +660,15 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
     }
 
     // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
-    if Coordinator::is_active() && Coordinator::process_input() {
-        return 1; // Stop requested by scheduler or watchdog.
+    if Coordinator::is_active() {
+        let stop = if button_wait {
+            Coordinator::process_button_wait()
+        } else {
+            Coordinator::process_input()
+        };
+        if stop {
+            return 1;
+        }
     }
 
     0
@@ -709,7 +720,7 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
 /// through `UpdateInputState`. Semantic notifications do not call it.
 #[no_mangle]
 pub extern "C" fn rust_automation_service_boundary() -> i32 {
-    rust_automation_service_do_input()
+    service_input(true)
 }
 // ===========================================================================
 //  Bounds-checked production setter (REQ-INJECT-003)
