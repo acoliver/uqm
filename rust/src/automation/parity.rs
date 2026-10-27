@@ -207,11 +207,7 @@ impl Journal {
                     owner,
                     index,
                 } => self.register_frame(address, owner, index),
-                Event::DrawableFree(address) => {
-                    self.retired_drawables.insert(self.resource(address));
-                    self.events
-                        .push(format!("drawable-free {}", self.resource(address)));
-                }
+                Event::DrawableFree(address) => self.retire_drawable(address),
                 Event::Drawable(address) => {
                     if address != 0 {
                         self.resources

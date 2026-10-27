@@ -2,6 +2,13 @@
 use super::{Fields, Journal};
 
 impl Journal {
+    pub(super) fn retire_drawable(&mut self, address: usize) {
+        let owner = self.resource(address);
+        self.retired_drawables.insert(owner.clone());
+        self.events.push(format!("drawable-free {owner}"));
+        self.resources.remove(&address);
+    }
+
     pub(in crate::automation) fn register_frame(
         &mut self,
         address: usize,
@@ -66,9 +73,12 @@ mod tests {
         assert_eq!(fields["frame.owner"], owner);
         assert_eq!(fields["frame.index"], "7");
         assert_eq!(fields["frame.retired"], "false");
-        journal.retired_drawables.insert(owner.clone());
-        journal.resources.remove(&100);
-        journal.register_resource(100, "different-allocation");
+        journal.retire_drawable(100);
+        let strings = journal.register_resource(100, "strings");
+        let fresh = journal.register_resource(999, "strings");
+        assert!(strings.starts_with("strings:"));
+        assert_ne!(strings, owner);
+        assert!(fresh.starts_with("strings:"));
         journal.write_frame(200, &mut fields, "frame");
         assert_eq!(fields["frame.owner"], owner);
         assert_eq!(fields["frame.retired"], "true");

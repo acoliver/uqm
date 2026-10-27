@@ -30,10 +30,10 @@ fn same_color(c1: Color, c2: Color) -> bool {
 }
 
 /// Primitives may draw `DRAW_ALPHA` onto non-alpha surfaces via `Color.a`.
-unsafe fn check_primitive_mode(surf: *mut SDL_Surface, color: &mut Color, mode: &mut DrawMode) {
+fn check_primitive_mode(alpha_mask: u32, color: &mut Color, mode: &mut DrawMode) {
     // Special case: We support DRAW_ALPHA mode to non-alpha surfaces
     // for primitives via Color.a
-    if mode.kind == DRAW_REPLACE && format(surf).Amask == 0 && color.a != 0xff {
+    if mode.kind == DRAW_REPLACE && alpha_mask == 0 && color.a != 0xff {
         mode.kind = DRAW_ALPHA;
         mode.factor = i16::from(color.a);
         color.a = 0xff;
@@ -54,7 +54,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_Line(
 ) {
     let dst: *mut SDL_Surface = target.cast();
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
     let sdl_color = SDL_MapRGBA(format(dst), color.r, color.g, color.b, color.a);
 
     let plot_fn = renderpixel_for(dst, u32::from(mode.kind));
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_Rect(
         (*rect).extent.height,
     );
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
     let mut sdl_color = SDL_MapRGBA(fmt, color.r, color.g, color.b, color.a);
 
     if mode.kind == DRAW_REPLACE {
@@ -139,7 +139,16 @@ pub(super) unsafe fn blit(
     mode: DrawMode,
 ) {
     if mode.kind == DRAW_REPLACE {
-        // Standard SDL simple blit
+        if src != dst
+            && super::alpha::blit(
+                sdl2::surface::SurfaceRef::from_ll(src),
+                src_r.as_ref().copied(),
+                sdl2::surface::SurfaceRef::from_ll_mut(dst),
+                dst_r.as_mut(),
+            )
+        {
+            return;
+        }
         SDL_UpperBlit(src, src_r, dst, dst_r);
     } else if mode.kind == DRAW_ALPHA && format(src).Amask == 0 {
         // Standard SDL surface-alpha blit
@@ -394,7 +403,7 @@ pub unsafe extern "C" fn TFB_DrawCanvas_FilledImage(
         return;
     }
 
-    check_primitive_mode(dst, &mut color, &mut mode);
+    check_primitive_mode(format(dst).Amask, &mut color, &mut mode);
 
     LockMutex((*img).mutex);
     draw_filled_image_locked(img, x, y, scale, scale_mode, color, mode, dst);
