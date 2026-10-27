@@ -3,6 +3,7 @@
 pub use super::samatra_state as observation;
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,
         starship, wrap_delta,
@@ -85,7 +86,7 @@ pub(crate) mod engine {
             }
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
         }
-        (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, index);
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, index));
         (*e).state_flags |= CHANGING as u16;
     }
     pub(crate) unsafe extern "C" fn comet_collision(
@@ -173,10 +174,10 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = SetAbsFrameIndex(
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                 (*e).current.image.frame,
                 frame_index((*e).current.image.frame) % 10 + 1,
-            );
+            ));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = 0;
         }
@@ -233,9 +234,9 @@ pub(crate) mod engine {
             (*primitive(e)).Type = gfx_object_STAMPFILL_PRIM as u8;
         } else {
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             if frame_index((*e).next.image.frame) == 0 {
-                (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, 11);
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, 11));
             }
             (*e).state_flags |= CHANGING as u16;
         }
@@ -252,7 +253,7 @@ pub(crate) mod engine {
             (*e).preprocess_func = None;
             (*e).__bindgen_anon_4.turn_wait = 12;
             (*e).__bindgen_anon_5.thrust_wait = 0;
-            (*e).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, 9);
+            image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, 9));
         }
         if (*e).__bindgen_anon_5.thrust_wait != 0 {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
@@ -266,7 +267,7 @@ pub(crate) mod engine {
                 (*e).state_flags &= !(DISAPPEARING as u16);
                 (*e).state_flags |= CHANGING as u16;
                 (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-                (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+                image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
                 (*e).__bindgen_anon_5.thrust_wait = 1;
             }
         }
@@ -278,10 +279,10 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_4.turn_wait =
                 ((15 - i32::from((*e).__bindgen_anon_2.hit_points)) / 5) as u8;
             if (*e).__bindgen_anon_4.turn_wait < 3 {
-                (*e).next.image.frame = SetAbsFrameIndex(
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                     (*e).current.image.frame,
                     (frame_index((*e).current.image.frame) + 1) % 10,
-                );
+                ));
                 (*e).state_flags |= CHANGING as u16;
             }
         }
@@ -306,10 +307,10 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_5.thrust_wait != 0 {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
         } else {
-            (*e).next.image.frame = SetAbsFrameIndex(
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                 (*e).current.image.frame,
                 (frame_index((*e).current.image.frame) + 1) % 6,
-            );
+            ));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_5.thrust_wait = 1;
         }
@@ -497,7 +498,7 @@ pub(crate) mod engine {
                 if !blast.is_null() {
                     let b = element(blast);
                     (*b).__bindgen_anon_1.life_span = 6;
-                    (*b).current.image.frame = SetAbsFrameIndex(*(*b).current.image.farray, 6);
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, 6));
                 }
             }
         }
@@ -578,11 +579,11 @@ pub(crate) mod engine {
                         x: ((center_x + (x << ONE_SHIFT)) & !15) as i16,
                         y: ((center_y + (y << ONE_SHIFT)) & !15) as i16,
                     };
-                    (*g).current.image.farray = (&raw mut (*d).ship_data.special).cast();
-                    (*g).current.image.frame = SetAbsFrameIndex(
+                    image!(set; (*g).current.image.farray, (&raw mut (*d).ship_data.special).cast());
+                    image!(frame; (*g).current.image.frame, SetAbsFrameIndex(
                         (*d).ship_data.special[0],
                         u16::from(TFB_Random() as u8 % 10),
-                    );
+                    ));
                     (*g).preprocess_func = Some(generator_preprocess);
                     (*g).collision_func = Some(generator_collision);
                     (*g).death_func = Some(generator_death);
@@ -603,8 +604,8 @@ pub(crate) mod engine {
                     x: center_x as i16,
                     y: center_y as i16,
                 };
-                (*t).current.image.farray = (&raw mut (*d).ship_data.ship).cast();
-                (*t).current.image.frame = SetAbsFrameIndex((*d).ship_data.ship[0], 1);
+                image!(set; (*t).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
+                image!(frame; (*t).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 1));
                 (*t).preprocess_func = Some(turret_preprocess);
                 (*t).pParent = ss.cast();
                 insert(h, (*e).succ);
@@ -622,8 +623,8 @@ pub(crate) mod engine {
                     x: center_x as i16,
                     y: center_y as i16,
                 };
-                (*g).current.image.farray = (&raw mut (*d).ship_data.ship).cast();
-                (*g).current.image.frame = SetAbsFrameIndex((*d).ship_data.ship[0], 11);
+                image!(set; (*g).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
+                image!(frame; (*g).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 11));
                 (*g).preprocess_func = Some(gate_preprocess);
                 (*g).collision_func = Some(gate_collision);
                 (*g).pParent = ss.cast();

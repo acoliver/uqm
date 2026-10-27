@@ -31,6 +31,7 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
 
     // Core characteristics
@@ -138,7 +139,7 @@ pub(crate) mod engine {
         } else {
             let mut facing = frame_index((*missile).next.image.frame);
             if TrackShip(missile, &mut facing) > 0 {
-                (*missile).next.image.frame = SetAbsFrameIndex((*missile).next.image.frame, facing);
+                image!(frame; (*missile).next.image.frame, SetAbsFrameIndex((*missile).next.image.frame, facing));
                 (*missile).state_flags |= CHANGING as u16;
 
                 SetVelocityVector(&raw mut (*missile).velocity, DISCRIMINATOR_SPEED, facing);

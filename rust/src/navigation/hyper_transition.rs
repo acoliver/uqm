@@ -121,7 +121,7 @@ pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
             return;
         }
     }
-    (*element).next.image.frame = SetAbsFrameIndex((*element).current.image.frame, index);
+    crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).current.image.frame, index));
 }
 pub(super) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, kind: u8) {
     let dx = (((*source).next.location.x as i32 - (*ship).next.location.x as i32) << 5) as i16;
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
     if (*element).state_flags & APPEARING as u16 != 0 {
         if LastActivity & CHECK_LOAD as u16 != 0 {
             LastActivity &= !(CHECK_LOAD as u16);
-            (*element).current = (*element).next;
+            crate::collections::observation::image!(copy; (*element).current, (*element).next);
             SetUpElement(element);
             (*element).state_flags |= DEFY_PHYSICS as u16;
             return 0;
@@ -157,10 +157,10 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             (*element).preprocess_func = Some(hyper_preprocess);
             (*element).postprocess_func = None;
             (*element).state_flags |= NONSOLID as u16;
-            (*element).next.image.frame = SetAbsFrameIndex(
+            crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex(
                 (*element).current.image.frame,
                 GetFrameCount((*element).current.image.frame) - 1,
-            );
+            ));
         }
     } else {
         let old = GetFrameIndex((*element).current.image.frame.cast());
@@ -179,9 +179,9 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             }
         }
         (*element).state_flags |= CHANGING as u16;
-        (*element).next.image.frame = SetAbsFrameIndex((*element).current.image.frame, index);
+        crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).current.image.frame, index));
         if (*element).state_flags & NONSOLID as u16 == 0 {
-            (*element).current = (*element).next;
+            crate::collections::observation::image!(copy; (*element).current, (*element).next);
             SetUpElement(element);
             (*element).state_flags |= DEFY_PHYSICS as u16;
         }

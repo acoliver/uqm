@@ -1,6 +1,7 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         normalize_facing, put_element, sine, starship, wrap_delta,
@@ -205,7 +206,7 @@ pub(crate) mod engine {
             }
             (*e).state_flags |= CHANGING as u16;
             if face != orig {
-                (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, face);
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, face));
             }
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, face);
         }
@@ -230,7 +231,7 @@ pub(crate) mod engine {
                     .add((*a).PrimIndex as usize);
                 (*fighter).state_flags &= !(PRE_PROCESS as u16);
                 (*fighter).state_flags |= CHANGING as u16;
-                (*fighter).next = (*fighter).current;
+                image!(copy; (*fighter).next, (*fighter).current);
                 let mut travel = (*fighter).velocity.travel_angle;
                 let delta = normalize_angle(
                     i32::from(ARCTAN(
@@ -246,7 +247,7 @@ pub(crate) mod engine {
                     travel = travel.wrapping_add(QUADRANT as COUNT);
                 }
                 travel = normalize_facing(angle_to_facing(normalize_angle(i32::from(travel))));
-                (*fighter).next.image.frame = SetAbsFrameIndex((*fighter).next.image.frame, travel);
+                image!(frame; (*fighter).next.image.frame, SetAbsFrameIndex((*fighter).next.image.frame, travel));
                 SetVelocityVector(&raw mut (*fighter).velocity, 8 << ONE_SHIFT, travel);
                 put_element(h);
             }
@@ -349,10 +350,8 @@ pub(crate) mod engine {
                 .location
                 .y
                 .wrapping_sub(sy >> VELOCITY_SHIFT);
-            (*fighter).current.image.farray =
-                (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-            (*fighter).current.image.frame =
-                SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], fighter_face);
+            image!(set; (*fighter).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+            image!(frame; (*fighter).current.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], fighter_face));
             (*fighter).pParent = ss.cast();
         }
     }

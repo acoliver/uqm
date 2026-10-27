@@ -211,7 +211,9 @@ impl FixtureRun {
                 "same-species-entry",
                 "arilou-threat",
                 "blast-teardown",
-                "trilinear-index",
+                "trilinear-large",
+                "trilinear-medium",
+                "trilinear-small",
             ],
             FixtureName::StarContact => &[
                 "star-contact",

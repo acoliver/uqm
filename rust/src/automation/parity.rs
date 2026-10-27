@@ -109,7 +109,7 @@ impl Journal {
     }
 
     pub fn reset_pool(&mut self) {
-        self.bindings = bindings::Bindings::default();
+        self.bindings.clear_elements();
         self.slots.clear();
         self.next_slot = 0;
     }
@@ -213,6 +213,10 @@ impl Journal {
                     owner,
                     index,
                 } => self.register_frame(address, owner, index),
+                event @ (Event::FrameSet { .. }
+                | Event::ImageFrame { .. }
+                | Event::ImageSet { .. }
+                | Event::ImageCopy { .. }) => self.observe_image_event(event),
                 Event::DrawableFree(address) => self.retire_drawable(address),
                 Event::Drawable(address) => {
                     if address != 0 {

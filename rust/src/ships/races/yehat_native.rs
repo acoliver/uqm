@@ -1,6 +1,7 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine, starship};
     use std::ptr;
     const fn descriptor() -> RACE_DESC {
@@ -181,11 +182,11 @@ pub(crate) mod engine {
                     && (*e).next.image.farray
                         == (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast())
             {
-                (*e).next.image.farray = (&raw mut (*(*ss).RaceDescPtr).ship_data.ship).cast();
-                (*e).next.image.frame = SetEquFrameIndex(
+                image!(set; (*e).next.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.ship).cast());
+                image!(frame; (*e).next.image.frame, SetEquFrameIndex(
                     (*(*ss).RaceDescPtr).ship_data.ship[0],
                     (*e).next.image.frame,
-                );
+                ));
                 (*e).state_flags |= CHANGING as u16;
             }
             if (*ss).cur_status_flags & SPECIAL as u16 != 0 && (*ss).special_counter == 0 {
@@ -193,12 +194,11 @@ pub(crate) mod engine {
                     DeltaEnergy(e, -3);
                 } else {
                     (*e).__bindgen_anon_1.life_span = (10 + NORMAL_LIFE) as COUNT;
-                    (*e).next.image.farray =
-                        (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                    (*e).next.image.frame = SetEquFrameIndex(
+                    image!(set; (*e).next.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                    image!(frame; (*e).next.image.frame, SetEquFrameIndex(
                         (*(*ss).RaceDescPtr).ship_data.special[0],
                         (*e).next.image.frame,
-                    );
+                    ));
                     (*e).state_flags |= CHANGING as u16;
                     (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
                 }

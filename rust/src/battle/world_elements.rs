@@ -52,6 +52,7 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::weapon_native::TrackShip;
+    use crate::collections::observation::image;
     use crate::ships::native::{
         angle_to_facing, cosine, element, frame_index, normalize_facing, put_element, sine,
         starship,
@@ -96,8 +97,8 @@ pub(crate) mod engine {
         (*e).state_flags = APPEARING as u16;
         (*e).__bindgen_anon_1.life_span = (NORMAL_LIFE + 1) as u16;
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-        (*e).current.image.farray = (&raw mut planet).cast::<FRAME>();
-        (*e).current.image.frame = *(*e).current.image.farray;
+        image!(set; (*e).current.image.farray, (&raw mut planet).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, *(*e).current.image.farray);
         (*e).collision_func = Some(collision);
         (*e).postprocess_func = Some(gravity_postprocess);
         (*e).velocity = mem::zeroed();
@@ -125,11 +126,11 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 0;
         (*e).__bindgen_anon_5.next_turn = 0;
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-        (*e).current.image.farray = (&raw mut asteroid).cast::<FRAME>();
-        (*e).current.image.frame = SetAbsFrameIndex(
+        image!(set; (*e).current.image.farray, (&raw mut asteroid).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex(
             *(*e).current.image.farray,
             angle_to_facing(FULL_CIRCLE as i32) as u16,
-        );
+        ));
         (*e).current.location = (*source).current.location;
         (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = Some(spawn_asteroid);
@@ -145,8 +146,7 @@ pub(crate) mod engine {
             } else {
                 index.wrapping_add(1)
             };
-            (*e).next.image.frame =
-                SetAbsFrameIndex((*e).current.image.frame, normalize_facing(index as i32));
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, normalize_facing(index as i32)));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.thrust_wait & 127;
         }
@@ -191,11 +191,11 @@ pub(crate) mod engine {
         let magnitude = (((TFB_Random() as i16 & 7) + 4) as i32) << ONE_SHIFT;
         let facing = TFB_Random() as u16;
         SetVelocityVector(&raw mut (*e).velocity, magnitude as i16, facing);
-        (*e).current.image.farray = (&raw mut asteroid).cast::<FRAME>();
-        (*e).current.image.frame = SetAbsFrameIndex(
+        image!(set; (*e).current.image.farray, (&raw mut asteroid).cast::<FRAME>());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex(
             *(*e).current.image.farray,
             normalize_facing(TFB_Random() as i32),
-        );
+        ));
         let wait = TFB_Random() as u8 & 3;
         (*e).__bindgen_anon_4.turn_wait = wait;
         (*e).__bindgen_anon_5.thrust_wait = wait;
@@ -314,8 +314,8 @@ pub(crate) mod engine {
             (*crew).__bindgen_anon_1.life_span = 300;
             (*primitive(crew)).Type = gfx_object_POINT_PRIM as u8;
             (*primitive(crew)).color = crew_color(false);
-            (*crew).current.image.frame = DecFrameIndex(stars_in_space);
-            (*crew).current.image.farray = &raw mut stars_in_space;
+            image!(frame; (*crew).current.image.frame, DecFrameIndex(stars_in_space));
+            image!(set; (*crew).current.image.farray, &raw mut stars_in_space);
             (*crew).preprocess_func = Some(crew_preprocess);
             (*crew).collision_func = Some(crew_collision);
             (*crew).pParent = owner.cast();
@@ -327,7 +327,7 @@ pub(crate) mod engine {
             let h = (i32::from(TFB_Random() as u16) % i32::from(rect.extent.height)) as i16;
             let mut crew_intersect: INTERSECT_CONTROL = mem::zeroed();
             crew_intersect.EndPoint = intersect.EndPoint;
-            crew_intersect.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+            image!(frame; crew_intersect.IntersectStamp.frame, DecFrameIndex(stars_in_space));
             if dx == 0 && dy == 0 {
                 crew_intersect.EndPoint.x = crew_intersect
                     .EndPoint

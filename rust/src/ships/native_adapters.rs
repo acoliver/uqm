@@ -116,17 +116,17 @@ mod live {
         let primitive = display_primitive(ptr::addr_of!(crate::navigation::globals::GlobData.Game_state), (*element).PrimIndex);
         (*primitive).Type = gfx_object_STAMP_PRIM as u8;
         let frames = crate::ships::ffi::rust_race_desc_get_ship_frames(descriptor.cast()).cast::<FRAME>();
-        (*element).current.image.farray = frames;
+        crate::collections::observation::image!(set; (*element).current.image.farray, frames);
         if (*element).playerNr == NPC_PLAYER_NUM as i16 && activity == IN_LAST_BATTLE as u8 {
             (*ship).ShipFacing = 0;
-            (*element).current.image.frame = SetAbsFrameIndex(*frames, 0);
+            crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(*frames, 0));
             (*element).current.location.x = (width() >> 1) as i16;
             (*element).current.location.y = (height() >> 1) as i16;
             (*element).__bindgen_anon_1.life_span += 1;
         } else {
             (*ship).ShipFacing = normalize_facing(i32::from(crate::math::random() as u16));
             if inHQSpace() != 0 { (*ship).ShipFacing = crate::navigation::globals::GlobData.Game_state.ShipFacing.saturating_sub(1); }
-            (*element).current.image.frame = SetAbsFrameIndex(*frames, (*ship).ShipFacing);
+            crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(*frames, (*ship).ShipFacing));
             loop {
                 (*element).current.location.x = wrap(((i32::from(crate::math::random() as u16) % width()) as i16 & !3) as i32, width()) as i16;
                 (*element).current.location.y = wrap(((i32::from(crate::math::random() as u16) % height()) as i16 & !3) as i32, height()) as i16;

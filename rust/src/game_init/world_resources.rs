@@ -97,14 +97,18 @@ pub(crate) mod live {
     /// Called on the game thread with a valid planet selector and initialized resources.
     #[no_mangle]
     pub unsafe extern "C" fn load_gravity_well(selector: u8) {
-        for (i, key) in gravity_keys(selector).into_iter().enumerate() {
-            planet[i] = match key {
+        let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(planet).cast(), 3);
+        for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
+            *frame = match key {
                 Some(key) => {
                     CaptureDrawable(LoadGraphicInstance(CString::new(key).unwrap().as_ptr()).cast())
                 }
                 None => ptr::null_mut(),
             };
         }
+        crate::collections::observation::observe_views(frames, "engine-global:planet", |frame| {
+            *frame as usize
+        });
     }
 
     /// # Safety
@@ -112,10 +116,13 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn free_gravity_well() {
         let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(planet).cast(), 3);
-        for frame in frames {
+        for frame in frames.iter_mut() {
             DestroyDrawable(ReleaseDrawable(*frame));
             *frame = ptr::null_mut();
         }
+        crate::collections::observation::observe_views(frames, "engine-global:planet", |frame| {
+            *frame as usize
+        });
     }
 
     /// # Safety

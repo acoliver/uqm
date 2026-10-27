@@ -9,6 +9,7 @@
 #[cfg(not(test))]
 pub(crate) mod engine {
     use crate::battle::gravity::{CalculateGravity, TimeSpaceMatterConflict};
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,
@@ -287,8 +288,7 @@ pub(crate) mod engine {
 
     /// `InitIntersectFrame`
     unsafe fn init_intersect_frame(e: *mut ELEMENT) {
-        (*e).IntersectControl.IntersectStamp.frame =
-            SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+        image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
     }
 
     /// `ZeroVelocityComponents`: a memset of the whole VELOCITY_DESC.
@@ -305,7 +305,7 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             (*e).state_flags |= CHANGING as ELEMENT_FLAGS;
 
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
@@ -425,8 +425,8 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
 
         (*ss).ShipFacing = normalize_facing(TFB_Random() as i32);
-        (*e).current.image.farray = (&raw mut (*desc).ship_data.ship).cast();
-        (*e).current.image.frame = SetAbsFrameIndex((*desc).ship_data.ship[0], (*ss).ShipFacing);
+        image!(set; (*e).current.image.farray, (&raw mut (*desc).ship_data.ship).cast());
+        image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*desc).ship_data.ship[0], (*ss).ShipFacing));
         (*display_prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
 
         loop {
@@ -513,7 +513,7 @@ pub(crate) mod engine {
                 (*display_prim(image)).Type = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
                 (*display_prim(image)).color = START_PHOENIX_COLOR;
                 (*image).colorCycleIndex = 0;
-                (*image).current.image = (*e).current.image;
+                image!(copy; (*image).current.image, (*e).current.image);
                 (*image).current.location = (*e).current.location;
 
                 let angle: COUNT;
@@ -614,9 +614,8 @@ pub(crate) mod engine {
             (*ss).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS);
 
             if (*e).__bindgen_anon_1.life_span == NORMAL_LIFE as COUNT {
-                (*e).current.image.frame =
-                    SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame);
-                (*e).next.image.frame = (*e).current.image.frame;
+                image!(frame; (*e).current.image.frame, SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame));
+                image!(copy; (*e).next.image.frame, (*e).current.image.frame);
                 (*display_prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 init_intersect_start_point(e);
                 init_intersect_end_point(e);

@@ -187,7 +187,7 @@ enum Effect {
     Intelligence(IntelligenceFunc, HElement, [EVALUATE_DESC; 10]),
     Scale(i32),
     RestoreScale,
-    ZoomProof([FRAME; 3], crate::battle::element::FrameHandle),
+    ZoomProof([FRAME; 3], HElement, usize, u16),
     Captain(FRAME),
     ClearStar,
 }

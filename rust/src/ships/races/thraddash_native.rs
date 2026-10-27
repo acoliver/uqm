@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, element, facing_to_angle, frame_index, normalize_angle,
         normalize_facing, starship,
@@ -101,22 +102,21 @@ pub(crate) mod engine {
                 x: (*e).next.location.x >> ONE_SHIFT,
                 y: (*e).next.location.y >> ONE_SHIFT,
             };
-            (*e).IntersectControl.IntersectStamp.frame =
-                SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+            image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
         } else if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
             if (*e).__bindgen_anon_1.life_span <= NUM_NAPALM_FADES * (NAPALM_DECAY_RATE as u16 + 1)
                 || frame_index((*e).current.image.frame) != NUM_NAPALM_FADES
             {
-                (*e).next.image.frame = DecFrameIndex((*e).current.image.frame);
+                image!(frame; (*e).next.image.frame, DecFrameIndex((*e).current.image.frame));
             } else if (*e).__bindgen_anon_1.life_span
                 > NUM_NAPALM_FADES * (NAPALM_DECAY_RATE as u16 + 1)
             {
-                (*e).next.image.frame = SetAbsFrameIndex(
+                image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                     (*e).current.image.frame,
                     GetFrameCount((*e).current.image.frame).wrapping_sub(1),
-                );
+                ));
             }
             (*e).__bindgen_anon_4.turn_wait = NAPALM_DECAY_RATE;
             (*e).state_flags |= CHANGING as u16;
@@ -206,7 +206,7 @@ pub(crate) mod engine {
                 .DisplayArray
                 .add(usize::from((*trail).PrimIndex)))
             .Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-            (*trail).next = (*trail).current;
+            image!(copy; (*trail).next, (*trail).current);
             (*trail).state_flags |= PRE_PROCESS as u16;
             InsertQueue((&raw mut disp_q).cast(), h, disp_q.head);
             ProcessSound(SetAbsStringTableIndex((*desc).ship_data.ship_sounds, 1), e);

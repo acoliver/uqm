@@ -240,6 +240,7 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::collections::observation::image;
     use crate::ships::native::frame_index;
     use std::{mem, ptr};
 
@@ -307,8 +308,7 @@ pub(crate) mod engine {
     }
     #[inline]
     unsafe fn init_intersect_frame(e: *mut ELEMENT) {
-        (*e).IntersectControl.IntersectStamp.frame =
-            SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+        image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
     }
 
     unsafe fn preprocess(e: *mut ELEMENT) {
@@ -324,7 +324,7 @@ pub(crate) mod engine {
         let mut flags = (*e).state_flags;
         if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
             if flags & APPEARING as ELEMENT_FLAGS != 0 {
-                (*e).next = (*e).current;
+                image!(copy; (*e).next, (*e).current);
                 if colliding(&*e) {
                     init_intersect_start(&mut *e);
                     init_intersect_end(&mut *e);
@@ -523,9 +523,9 @@ pub(crate) mod engine {
                                 time_value = 0;
                             } else {
                                 if frame_index(cur) != frame_index(next) {
-                                    (*element_ptr).next.image.frame = SetEquFrameIndex(next, cur);
+                                    image!(frame; (*element_ptr).next.image.frame, SetEquFrameIndex(next, cur));
                                 } else if next != cur {
-                                    (*element_ptr).next.image = (*element_ptr).current.image;
+                                    image!(copy; (*element_ptr).next.image, (*element_ptr).current.image);
                                     if (*element_ptr).__bindgen_anon_1.life_span
                                         > NORMAL_LIFE as COUNT
                                     {
@@ -534,9 +534,9 @@ pub(crate) mod engine {
                                     }
                                 }
                                 if frame_index(tcur) != frame_index(tnext) {
-                                    (*test).next.image.frame = SetEquFrameIndex(tnext, tcur);
+                                    image!(frame; (*test).next.image.frame, SetEquFrameIndex(tnext, tcur));
                                 } else if tnext != tcur {
-                                    (*test).next.image = (*test).current.image;
+                                    image!(copy; (*test).next.image, (*test).current.image);
                                     if (*test).__bindgen_anon_1.life_span > NORMAL_LIFE as COUNT {
                                         (*test).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
                                     }
@@ -700,7 +700,7 @@ pub(crate) mod engine {
         if let Some(post) = (*e).postprocess_func {
             dispatch::invoke(post as usize, (*e).pParent as usize, || post(e));
         }
-        (*e).current = (*e).next;
+        image!(copy; (*e).current, (*e).next);
         if colliding(&*e) {
             init_intersect_start(&mut *e);
             init_intersect_end(&mut *e);
@@ -800,7 +800,7 @@ pub(crate) mod engine {
     /// `e` is live, with a valid image array if it is collidable.
     #[no_mangle]
     pub unsafe extern "C" fn SetUpElement(e: *mut ELEMENT) {
-        (*e).next = (*e).current;
+        image!(copy; (*e).next, (*e).current);
         if colliding(&*e) {
             init_intersect_start(&mut *e);
             init_intersect_end(&mut *e);
@@ -961,10 +961,10 @@ pub(crate) mod engine {
                                 } else {
                                     calc_zoom_stuff(zoom_out)
                                 };
-                                (*e).next.image.frame = SetEquFrameIndex(
+                                image!(frame; (*e).next.image.frame, SetEquFrameIndex(
                                     *(*e).next.image.farray.add(usize::from(index)),
                                     (*e).next.image.frame,
-                                );
+                                ));
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT

@@ -1,6 +1,7 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, element, frame_count, frame_index, init_intersect_points,
         normalize_facing, put_element, starship, wrap_delta,
@@ -79,11 +80,11 @@ pub(crate) mod engine {
             if (*e).__bindgen_anon_4.turn_wait != 0 {
                 (*e).__bindgen_anon_4.turn_wait -= 1;
             } else {
-                (*e).next.image.frame = if frame_index((*e).current.image.frame) < 1 {
+                image!(frame; (*e).next.image.frame, if frame_index((*e).current.image.frame) < 1 {
                     IncFrameIndex((*e).current.image.frame)
                 } else {
                     SetAbsFrameIndex((*e).current.image.frame, 0)
-                };
+                });
                 (*e).state_flags |= CHANGING as u16;
                 (*e).__bindgen_anon_4.turn_wait = 0;
             }
@@ -152,7 +153,7 @@ pub(crate) mod engine {
         spin_preprocess(e);
     }
     pub(crate) unsafe extern "C" fn splinter_preprocess(e: *mut ELEMENT) {
-        (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+        image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
         (*e).state_flags |= CHANGING as u16;
     }
     pub(crate) unsafe extern "C" fn buzzsaw_collision(
@@ -166,7 +167,7 @@ pub(crate) mod engine {
             (*a).state_flags &= !(DISAPPEARING as u16);
             (*a).state_flags |= (NONSOLID | CHANGING) as u16;
             (*a).__bindgen_anon_1.life_span = 5;
-            (*a).next.image.frame = SetAbsFrameIndex((*a).current.image.frame, 2);
+            image!(frame; (*a).next.image.frame, SetAbsFrameIndex((*a).current.image.frame, 2));
             (*a).preprocess_func = Some(splinter_preprocess);
         }
     }
@@ -190,7 +191,7 @@ pub(crate) mod engine {
                 .Game_state
                 .DisplayArray
                 .add((*e).PrimIndex as usize);
-            (*list).current = (*list).next;
+            image!(copy; (*list).current, (*list).next);
             init_intersect_points(list);
             (*list).state_flags = ((*list).state_flags
                 & !((PRE_PROCESS | CHANGING | APPEARING) as u16))
@@ -308,7 +309,7 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait != 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = 2;
         }

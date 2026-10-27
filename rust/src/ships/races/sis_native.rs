@@ -1,6 +1,7 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, element, normalize_facing, object_cloaked, put_element, starship,
     };
@@ -330,16 +331,16 @@ pub(crate) mod engine {
             match (*e).__bindgen_anon_3.mass_points {
                 2 => {
                     (*b).__bindgen_anon_1.life_span = 2;
-                    (*b).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, 0);
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, 0));
                     (*b).preprocess_func = None;
                 }
                 4 => {
                     (*b).__bindgen_anon_1.life_span = 6;
-                    (*b).current.image.frame = IncFrameIndex((*e).current.image.frame);
+                    image!(frame; (*b).current.image.frame, IncFrameIndex((*e).current.image.frame));
                 }
                 6 => {
                     (*b).__bindgen_anon_1.life_span = 7;
-                    (*b).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, 20);
+                    image!(frame; (*b).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, 20));
                 }
                 _ => {}
             }
@@ -349,15 +350,15 @@ pub(crate) mod engine {
         let frame = crate::ships::native::frame_index((*e).current.image.frame);
         match (*e).__bindgen_anon_3.mass_points {
             2 if frame < 8 => {
-                (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+                image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
                 (*e).state_flags |= CHANGING as u16;
             }
             6 => {
-                (*e).next.image.frame = if frame < 19 {
+                image!(frame; (*e).next.image.frame, if frame < 19 {
                     IncFrameIndex((*e).current.image.frame)
                 } else {
                     SetAbsFrameIndex((*e).current.image.frame, 16)
-                };
+                });
                 (*e).state_flags |= CHANGING as u16;
             }
             _ => {}

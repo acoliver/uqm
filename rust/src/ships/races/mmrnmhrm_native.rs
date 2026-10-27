@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine, starship,
@@ -131,7 +132,7 @@ pub(crate) mod engine {
         } else {
             let mut facing = crate::ships::native::frame_index((*element).next.image.frame);
             if TrackShip(element, &mut facing) > 0 {
-                (*element).next.image.frame = SetAbsFrameIndex((*element).next.image.frame, facing);
+                image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).next.image.frame, facing));
                 (*element).state_flags |= CHANGING as u16;
                 SetVelocityVector(&mut (*element).velocity, 20 << ONE_SHIFT, facing);
             }
@@ -365,12 +366,11 @@ pub(crate) mod engine {
         {
             let race = (*ss).RaceDescPtr;
             if (*ship).next.image.farray == (*race).ship_data.ship.as_mut_ptr() {
-                (*ship).next.image.farray = (*race).ship_data.special.as_mut_ptr();
+                image!(set; (*ship).next.image.farray, (*race).ship_data.special.as_mut_ptr());
             } else {
-                (*ship).next.image.farray = (*race).ship_data.ship.as_mut_ptr();
+                image!(set; (*ship).next.image.farray, (*race).ship_data.ship.as_mut_ptr());
             }
-            (*ship).next.image.frame =
-                SetEquFrameIndex(*(*ship).next.image.farray, (*ship).next.image.frame);
+            image!(frame; (*ship).next.image.frame, SetEquFrameIndex(*(*ship).next.image.farray, (*ship).next.image.frame));
             (*ship).state_flags |= CHANGING as u16;
             (*ss).special_counter = (*race).characteristics.special_wait;
         }

@@ -61,7 +61,7 @@ unsafe extern "C" fn input(state: *mut MENU_STATE) -> BOOLEAN {
 pub unsafe fn HyperspaceMenu() {
     UnbatchGraphics();
     let old_context = SetContext(SpaceContext);
-    let old_color = SetContextBackGroundColor(super::hyper_data::color(0, 0, 0));
+    let old_color = SetContextBackGroundColor(super::color(0, 0, 0));
     let mut state: MENU_STATE = mem::zeroed();
     state.InputFunc = Some(input);
     state.Initialized = 1;

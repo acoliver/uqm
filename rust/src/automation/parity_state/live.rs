@@ -204,14 +204,12 @@ mod tests {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path())
             .unwrap_or_else(|error| panic!("create visual test journal: {error}"));
-        // SAFETY: frame_desc has only integer, pointer and optional callback fields.
-        let mut frame: frame_desc = unsafe { std::mem::zeroed() };
-        frame.Index = 7;
-        let mut views = [std::ptr::from_mut(&mut frame).cast()];
+        let mut storage = 0u8;
+        let mut views = [std::ptr::from_mut(&mut storage).cast()];
         let mut element = Element::new();
         element.current.frame = views[0];
         element.current.farray = views.as_mut_ptr();
-        journal.register_frame(views[0] as usize, 0, frame.Index);
+        journal.register_frame(views[0] as usize, 0, 7);
         journal.allocate(std::ptr::from_ref(&element) as usize);
         let mut fields = Fields::new();
         visuals(&mut fields, "element", &element, &mut journal);
@@ -224,10 +222,8 @@ mod tests {
     fn linked_element_keeps_retired_frame_binding_when_allocator_reuses_address() {
         let directory = super::super::test_directory();
         let mut journal = Journal::create(directory.path()).expect("journal");
-        // SAFETY: the local frame has only scalar and pointer fields and stays borrowed.
-        let mut frame: frame_desc = unsafe { std::mem::zeroed() };
-        frame.Index = 7;
-        let pointer = std::ptr::from_mut(&mut frame).cast();
+        let mut storage = 0u8;
+        let pointer = std::ptr::from_mut(&mut storage).cast();
         let mut views = [pointer];
         let mut element = Element::new();
         element.current.frame = pointer;
@@ -261,6 +257,84 @@ mod tests {
         assert_eq!(fields["element.current.frame.index"], "99");
         assert_eq!(fields["element.current.frame.retired"], "false");
         assert_eq!(fields["element.current.farray.role"], "new-set");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn space_arrays_reload_all_views_with_fresh_and_reused_storage() {
+        use crate::collections::observation::observe_views;
+        use crate::collections::observation::{self, Event};
+        observation::enable();
+        observation::drain();
+        for reuse in [false, true] {
+            let directory = super::super::test_directory();
+            let mut journal = Journal::create(directory.path()).expect("journal");
+            let mut views = [std::ptr::null_mut(); 3];
+            let mut element = Element::new();
+            journal.allocate(std::ptr::from_ref(&element) as usize);
+            let generation = journal.identity(std::ptr::from_ref(&element) as usize);
+            for cycle in 0..2 {
+                let mut owners = Vec::new();
+                for (view, frame) in views.iter_mut().enumerate() {
+                    let owner = 100 + view + if reuse { 0 } else { cycle * 10 };
+                    let address = 200 + view + if reuse { 0 } else { cycle * 10 };
+                    observation::record(Event::Drawable(owner));
+                    observation::record(Event::Frame {
+                        address,
+                        owner,
+                        index: 0,
+                    });
+                    *frame = address as *mut frame_desc;
+                    owners.push(owner);
+                }
+                observe_views(&views, "engine-global:test-animation", |frame| {
+                    *frame as usize
+                });
+                observation::assign_frame(&mut element.current.frame, views[0].cast());
+                if cycle == 0 {
+                    observation::assign_set(
+                        &mut element.current.farray,
+                        views.as_mut_ptr().cast(),
+                        None,
+                    );
+                }
+                journal.drain_events(&[]);
+                assert_eq!(
+                    journal.identity(std::ptr::from_ref(&element) as usize),
+                    generation
+                );
+                let mut fields = Fields::new();
+                visuals(&mut fields, "element", &element, &mut journal);
+                for (view, owner) in owners.into_iter().enumerate() {
+                    assert_eq!(
+                        fields[&format!("element.current.farray.{view}.owner")],
+                        journal.resource(owner)
+                    );
+                    assert_eq!(
+                        fields[&format!("element.current.farray.{view}.retired")],
+                        "false"
+                    );
+                    observation::record(Event::DrawableFree(owner));
+                }
+                views.fill(std::ptr::null_mut());
+                observe_views(&views, "engine-global:test-animation", |frame| {
+                    *frame as usize
+                });
+                journal.drain_events(&[]);
+                visuals(&mut fields, "element", &element, &mut journal);
+                assert_eq!(fields["element.current.frame.retired"], "true");
+                for view in 0..3 {
+                    assert_eq!(
+                        fields[&format!("element.current.farray.{view}.owner")],
+                        "none"
+                    );
+                }
+                assert_eq!(
+                    journal.frame_set(views.as_ptr() as usize),
+                    Some([0, 0, 0].as_slice())
+                );
+            }
+        }
     }
 
     #[test]

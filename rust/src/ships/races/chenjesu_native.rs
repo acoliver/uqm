@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_facing,
         put_element, sine, starship,
@@ -160,9 +161,8 @@ pub(crate) mod engine {
             (*blast).__bindgen_anon_4.turn_wait = 0;
             (*blast).__bindgen_anon_5.next_turn = 0;
             (*blast).preprocess_func = Some(animation_preprocess);
-            (*blast).current.image.farray = (*a).next.image.farray;
-            (*blast).current.image.frame =
-                SetAbsFrameIndex((*blast).current.image.farray.read(), 2);
+            image!(copy; (*blast).current.image.farray, (*a).next.image.farray);
+            image!(frame; (*blast).current.image.frame, SetAbsFrameIndex((*blast).current.image.farray.read(), 2));
         }
     }
 
@@ -268,8 +268,8 @@ pub(crate) mod engine {
             (*dog).current.location.y = (i32::from((*e).next.location.y)
                 + i32::from(sine(i32::from(angle), offset)))
                 as COORD;
-            (*dog).current.image.farray = (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-            (*dog).current.image.frame = (*(*ss).RaceDescPtr).ship_data.special[0];
+            image!(set; (*dog).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+            image!(frame; (*dog).current.image.frame, (*(*ss).RaceDescPtr).ship_data.special[0]);
             SetVelocityVector(
                 &raw mut (*dog).velocity,
                 DOGGY_SPEED,

@@ -1,6 +1,7 @@
 //! Live vux callbacks translated from ships/vux/vux.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, init_intersect_points,
         normalize_facing, put_element, sine, starship,
@@ -71,7 +72,7 @@ pub(crate) mod engine {
             face = (i32::from(original) + i32::from(delta)) as COUNT;
             SetVelocityVector(&raw mut (*e).velocity, 25, face);
         }
-        (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
+        image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
         (*e).state_flags |= CHANGING as u16;
     }
     pub(crate) unsafe extern "C" fn limpet_collision(
@@ -244,7 +245,7 @@ pub(crate) mod engine {
                         .y
                         .wrapping_sub((*e).current.location.y);
                     face = normalize_facing(angle_to_facing(i32::from(ARCTAN(dx, dy))));
-                    (*e).current.image.frame = SetAbsFrameIndex((*e).current.image.frame, face);
+                    image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, face));
                     let x = i32::from((*e).current.location.x) & !((1 << ONE_SHIFT) - 1);
                     let y = i32::from((*e).current.location.y) & !((1 << ONE_SHIFT) - 1);
                     let width = (ScreenWidth - 64) << (ONE_SHIFT + 3);
@@ -268,10 +269,9 @@ pub(crate) mod engine {
                     }
                 }
                 (*e).hTarget = ptr::null_mut();
-                (*e).next = (*e).current;
+                image!(copy; (*e).next, (*e).current);
                 init_intersect_points(e);
-                (*e).IntersectControl.IntersectStamp.frame =
-                    SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame);
+                image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
                 (*ss).ShipFacing = face;
             }
             (*(*ss).RaceDescPtr).preprocess_func = None;

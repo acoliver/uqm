@@ -43,6 +43,26 @@ pub enum Event {
         owner: usize,
         index: u16,
     },
+    FrameSet {
+        address: usize,
+        frames: Vec<usize>,
+        role: String,
+    },
+    ImageFrame {
+        slot: usize,
+        address: usize,
+        source_view: bool,
+    },
+    ImageSet {
+        slot: usize,
+        address: usize,
+        single: Option<usize>,
+    },
+    ImageCopy {
+        target: usize,
+        source: usize,
+        bytes: usize,
+    },
     Spawn {
         address: usize,
         side: i16,
@@ -53,6 +73,14 @@ pub enum Event {
         callback: usize,
     },
 }
+pub(crate) fn observe_views<T>(frames: &[T], role: &str, address: impl Fn(&T) -> usize) {
+    crate::collections::observation::record(crate::collections::observation::Event::FrameSet {
+        address: frames.as_ptr() as usize,
+        frames: frames.iter().map(address).collect(),
+        role: role.into(),
+    });
+}
+
 pub fn enable() {
     BATTLE_FRAME_COUNT.enabled.store(true, Ordering::Release);
 }
@@ -89,6 +117,86 @@ pub fn drain() -> Vec<Event> {
 pub fn reset() {
     BATTLE_FRAME_COUNT.frames.store(0, Ordering::Release);
 }
+
+pub trait ImagePointer: Copy {
+    fn address(self) -> usize;
+}
+impl<T> ImagePointer for *mut T {
+    fn address(self) -> usize {
+        self as usize
+    }
+}
+
+/// Assignments are observed even when the numeric pointer does not change.
+pub fn assign_frame<T: ImagePointer>(slot: &mut T, frame: T) {
+    assign_frame_slot(slot, frame, false);
+}
+
+pub fn assign_view<T: ImagePointer>(slot: &mut T, frame: T) {
+    assign_frame_slot(slot, frame, true);
+}
+
+fn assign_frame_slot<T: ImagePointer>(slot: &mut T, frame: T, source_view: bool) {
+    record(Event::ImageFrame {
+        slot: std::ptr::from_mut(slot) as usize,
+        address: frame.address(),
+        source_view,
+    });
+    *slot = frame;
+}
+
+pub fn assign_set<T: ImagePointer>(slot: &mut T, array: T, single: Option<usize>) {
+    record(Event::ImageSet {
+        slot: std::ptr::from_mut(slot) as usize,
+        address: array.address(),
+        single,
+    });
+    *slot = array;
+}
+
+pub(crate) fn swap_image_view<T: ImagePointer>(ambient: &mut T, view: &mut T) {
+    let previous = *ambient;
+    assign_frame(ambient, *view);
+    assign_view(view, previous);
+}
+
+/// Copy provenance with the value, without resolving its pointers again.
+pub fn copy_image<T: Copy>(slot: &mut T, value: T, source: usize) {
+    record(Event::ImageCopy {
+        target: std::ptr::from_mut(slot) as usize,
+        source,
+        bytes: std::mem::size_of::<T>(),
+    });
+    *slot = value;
+}
+
+// Evaluate the RHS before borrowing the destination, as an ordinary assignment does.
+macro_rules! image {
+    (frame; $slot:expr, $value:expr) => {{
+        let value = $value;
+        $crate::collections::observation::assign_frame(&mut $slot, value);
+    }};
+    (view; $slot:expr, $value:expr) => {{
+        let value = $value;
+        $crate::collections::observation::assign_view(&mut $slot, value);
+    }};
+    (set; $slot:expr, $value:expr) => {{
+        let value = $value;
+        $crate::collections::observation::assign_set(&mut $slot, value, None);
+    }};
+    (single; $slot:expr, $value:expr, $frame:expr) => {{
+        let value = $value;
+        let frame = $frame as usize;
+        $crate::collections::observation::assign_set(&mut $slot, value, Some(frame));
+    }};
+    (copy; $slot:expr, $source:expr) => {{
+        let source = &$source;
+        let value = *source;
+        let address = std::ptr::from_ref(source) as usize;
+        $crate::collections::observation::copy_image(&mut $slot, value, address);
+    }};
+}
+pub(crate) use image;
 
 /// Advance the battle-frame counter by one.
 ///

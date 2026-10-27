@@ -143,17 +143,22 @@ pub(super) fn frame_fields(
     frame.Index = 7;
     let pointer = ptr::from_mut(&mut frame).cast();
     let mut array = [pointer; 3];
-    first.current.frame = pointer;
-    first.current.farray = array.as_mut_ptr();
-    first.next.frame = pointer;
-    first.next.farray = array.as_mut_ptr();
-    first.intersect_control.intersect_stamp.frame = pointer;
     observation::record(Event::Drawable(ptr::from_mut(&mut drawable) as usize));
     observation::record(Event::Frame {
         address: ptr::from_mut(&mut frame) as usize,
         owner: ptr::from_mut(&mut drawable) as usize,
         index: frame.Index,
     });
+    observation::record(Event::FrameSet {
+        address: array.as_ptr() as usize,
+        frames: vec![pointer as usize; 3],
+        role: "test-views".into(),
+    });
+    observation::assign_frame(&mut first.current.frame, pointer);
+    observation::assign_set(&mut first.current.farray, array.as_mut_ptr(), None);
+    observation::assign_frame(&mut first.next.frame, pointer);
+    observation::assign_set(&mut first.next.farray, array.as_mut_ptr(), None);
+    observation::assign_frame(&mut first.intersect_control.intersect_stamp.frame, pointer);
     let (fields, _) = snapshot(directory);
     for name in [
         "current.frame",
@@ -170,11 +175,14 @@ pub(super) fn frame_fields(
     }
     assert_eq!(fields["elements.1.current.frame.owner"], "none");
     assert_eq!(fields["elements.2.current.farray.index"], "0");
-    first.current.frame = ptr::null_mut();
-    first.current.farray = ptr::null_mut();
-    first.next.frame = ptr::null_mut();
-    first.next.farray = ptr::null_mut();
-    first.intersect_control.intersect_stamp.frame = ptr::null_mut();
+    observation::assign_frame(&mut first.current.frame, ptr::null_mut());
+    observation::assign_set(&mut first.current.farray, ptr::null_mut(), None);
+    observation::assign_frame(&mut first.next.frame, ptr::null_mut());
+    observation::assign_set(&mut first.next.farray, ptr::null_mut(), None);
+    observation::assign_frame(
+        &mut first.intersect_control.intersect_stamp.frame,
+        ptr::null_mut(),
+    );
     // Keep node borrows explicit until the last graph read.
     assert_eq!(second.succ, ptr::from_mut(neutral));
 }

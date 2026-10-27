@@ -1,6 +1,7 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, normalize_facing, put_element,
         sine, starship,
@@ -337,7 +338,7 @@ pub(crate) mod engine {
                 (*ss).cur_status_flags |= SHIP_AT_MAX_SPEED as u16;
                 (*ss).cur_status_flags &= !(SHIP_IN_GRAVITY_WELL as u16);
             }
-            (*ship).next.image.frame = IncFrameIndex((*ship).next.image.frame);
+            image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).next.image.frame));
             (*ship).state_flags |= CHANGING as u16;
         }
     }

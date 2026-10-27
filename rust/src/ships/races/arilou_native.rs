@@ -70,6 +70,7 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, starship};
     use std::ptr;
 
@@ -279,8 +280,8 @@ pub(crate) mod engine {
                 (*ship).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
                 (*ship).__bindgen_anon_1.life_span = HYPER_LIFE;
 
-                (*ship).next.image.farray = special_frames;
-                (*ship).next.image.frame = (*race).ship_data.special[0];
+                image!(set; (*ship).next.image.farray, special_frames);
+                image!(frame; (*ship).next.image.frame, (*race).ship_data.special[0]);
 
                 // HYPERJUMP
                 ProcessSound(
@@ -308,20 +309,20 @@ pub(crate) mod engine {
                 (*ship).state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
                 (*ship).state_flags |= APPEARING as u16;
                 let ship_frames = (&raw mut (*race).ship_data.ship).cast::<FRAME>();
-                (*ship).current.image.farray = ship_frames;
-                (*ship).next.image.farray = ship_frames;
+                image!(set; (*ship).current.image.farray, ship_frames);
+                image!(set; (*ship).next.image.farray, ship_frames);
                 let frame = SetAbsFrameIndex((*race).ship_data.ship[0], (*ss).ShipFacing);
-                (*ship).current.image.frame = frame;
-                (*ship).next.image.frame = frame;
+                image!(frame; (*ship).current.image.frame, frame);
+                image!(frame; (*ship).next.image.frame, frame);
                 init_intersect_start_point(ship);
             } else {
                 // Teleporting in progress
                 life_span = life_span.wrapping_sub(1);
                 if life_span != 2 {
                     if life_span < 2 {
-                        (*ship).next.image.frame = DecFrameIndex((*ship).next.image.frame);
+                        image!(frame; (*ship).next.image.frame, DecFrameIndex((*ship).next.image.frame));
                     } else {
-                        (*ship).next.image.frame = IncFrameIndex((*ship).next.image.frame);
+                        image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).next.image.frame));
                     }
                 } else {
                     let log_width = log_space_width(ScreenWidth);

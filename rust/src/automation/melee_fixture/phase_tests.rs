@@ -133,15 +133,16 @@ fn outgoing_descriptor_is_retained_until_frame_users_retire_and_zoom_restores_sc
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true)] if *a == run.a && *b == run.b)
+        matches!(effects.as_slice(), [Effect::Intersect(a), Effect::Intersect(b), Effect::Redraw(true), Effect::ZoomProof(views, element, 0, 0)] if *a == run.a && *b == run.b && *element == run.a && views == &[ptr::null_mut(); 3])
     );
     run.wait = 3;
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()
         .unwrap();
-    assert!(
-        matches!(effects.as_slice(), [Effect::RestoreScale, Effect::ZoomProof(frames, frame), Effect::Redraw(true)] if frames == &[ptr::null_mut(); 3] && frame.is_null())
-    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::RestoreScale, Effect::Redraw(true)]
+    ));
 }
 
 #[test]

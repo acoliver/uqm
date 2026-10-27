@@ -5,6 +5,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{abi::*, element, starship};
     use std::{mem, ptr};
@@ -201,7 +202,7 @@ pub(crate) mod engine {
         if thrust_wait > 0 {
             thrust_wait -= 1;
         } else {
-            (*missile).next.image.frame = IncFrameIndex((*missile).current.image.frame);
+            image!(frame; (*missile).next.image.frame, IncFrameIndex((*missile).current.image.frame));
             (*missile).state_flags |= CHANGING as u16;
 
             thrust_wait = (TFB_Random() as u16 & 3) as u8;
@@ -423,9 +424,8 @@ pub(crate) mod engine {
                 } else {
                     cur_status_flags &= !(WEAPON as u16);
 
-                    (*ship).next.image.farray = special_frames(desc);
-                    (*ship).next.image.frame =
-                        SetEquFrameIndex((*desc).ship_data.special[0], (*ship).next.image.frame);
+                    image!(set; (*ship).next.image.farray, special_frames(desc));
+                    image!(frame; (*ship).next.image.frame, SetEquFrameIndex((*desc).ship_data.special[0], (*ship).next.image.frame));
                     (*ship).state_flags |= CHANGING as u16;
                 }
             }
@@ -451,9 +451,8 @@ pub(crate) mod engine {
                 (*desc).characteristics.energy_regeneration = ENERGY_REGENERATION;
                 (*ship).__bindgen_anon_3.mass_points = SHIP_MASS;
                 (*ship).collision_func = (*(*desc).data.cast::<AndrosynthData>()).collision_func;
-                (*ship).next.image.farray = ship_frames(desc);
-                (*ship).next.image.frame =
-                    SetEquFrameIndex((*desc).ship_data.ship[0], (*ship).next.image.frame);
+                image!(set; (*ship).next.image.farray, ship_frames(desc));
+                image!(frame; (*ship).next.image.frame, SetEquFrameIndex((*desc).ship_data.ship[0], (*ship).next.image.frame));
                 (*ship).state_flags |= CHANGING as u16;
             } else if (*ship).__bindgen_anon_5.thrust_wait != 0 {
                 (*ship).__bindgen_anon_5.thrust_wait -= 1;

@@ -168,6 +168,7 @@ pub(crate) mod engine {
         DeltaEnergy, DrawCaptainsWindow, PostProcessStatus, PreProcessStatus,
     };
     use crate::battle::world_elements::do_damage;
+    use crate::collections::observation::image;
     use crate::ships::native::{
         element, init_intersect_points, normalize_facing, object_cloaked, put_element, starship,
     };
@@ -184,7 +185,7 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
         }
@@ -277,7 +278,7 @@ pub(crate) mod engine {
             (*ship).ShipFacing = normalize_facing(
                 i32::from((*ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
-            (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, (*ship).ShipFacing);
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, (*ship).ShipFacing));
             (*e).state_flags |= CHANGING as u16;
             (*e).__bindgen_anon_4.turn_wait = (*rd).characteristics.turn_wait;
         }
@@ -394,15 +395,14 @@ pub(crate) mod engine {
                 .cast::<PRIMITIVE>()
                 .add((*e).PrimIndex as usize))
             .Type = gfx_object_STAMP_PRIM as u8;
-            (*e).current.image.farray = (&raw mut (*rd).ship_data.ship).cast();
+            image!(set; (*e).current.image.farray, (&raw mut (*rd).ship_data.ship).cast());
             let width = (ScreenWidth - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION);
             let height = ScreenHeight << (ONE_SHIFT + MAX_REDUCTION);
             if (*e).playerNr == NPC_PLAYER_NUM as SIZE
                 && GlobData.Game_state.CurrentActivity as BYTE == IN_LAST_BATTLE as BYTE
             {
                 (*ship).ShipFacing = 0;
-                (*e).current.image.frame =
-                    SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing);
+                image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing));
                 (*e).current.location = POINT {
                     x: (width >> 1) as COORD,
                     y: (height >> 1) as COORD,
@@ -414,8 +414,7 @@ pub(crate) mod engine {
                     let facing = GlobData.Game_state.ShipFacing;
                     (*ship).ShipFacing = if facing > 0 { facing - 1 } else { facing };
                 }
-                (*e).current.image.frame =
-                    SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing);
+                image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*rd).ship_data.ship[0], (*ship).ShipFacing));
                 loop {
                     (*e).current.location.x = spawn_coordinate(TFB_Random(), width);
                     (*e).current.location.y = spawn_coordinate(TFB_Random(), height);

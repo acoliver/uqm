@@ -1,6 +1,45 @@
 //! The synchronous boundary owns raw traversal, resource retirement and callbacks.
 
 use super::*;
+#[cfg(not(test))]
+use crate::{battle::process_native::engine::zoom_out, graphics::native_abi::frame_desc};
+
+fn zoom_matches(
+    view: usize,
+    zoom: i16,
+    selected: (usize, u16),
+    expected: (usize, u16),
+    mipmap: Option<(usize, usize)>,
+) -> bool {
+    selected == expected
+        && selected.0 != 0
+        && zoom == [256, 700, 1024][view]
+        && (view != 1 || mipmap.is_some_and(|(actual, adjacent)| actual != 0 && actual == adjacent))
+}
+
+#[cfg(not(test))]
+fn zoom_proof(
+    view: usize,
+    zoom: i16,
+    index: u16,
+    frame: &crate::graphics::native_abi::frame_desc,
+    expected: &crate::graphics::native_abi::frame_desc,
+    mipmap: Option<(
+        &crate::graphics::native_abi::TFB_Image,
+        &crate::graphics::native_abi::TFB_Image,
+    )>,
+) -> Reply {
+    Reply::Check(
+        ["trilinear-large", "trilinear-medium", "trilinear-small"][view],
+        zoom_matches(
+            view,
+            zoom,
+            (frame.parent as usize, frame.Index),
+            (expected.parent as usize, index),
+            mipmap.map(|(image, adjacent)| (image.MipmapImg as usize, adjacent.NormalImg as usize)),
+        ),
+    )
+}
 
 #[cfg(not(test))]
 fn hooks() -> Hooks {
@@ -137,6 +176,16 @@ fn drive(
 #[cfg(not(test))]
 unsafe fn borrow_world<'a>() -> World<'a> {
     use crate::ships::races::pkunk_native::engine::PkunkData;
+    let ship_record = |state| Ship {
+        state,
+        info: None,
+        data: None,
+        characteristics: None,
+        preprocess: None,
+        postprocess: None,
+        intelligence: None,
+        phoenix: None,
+    };
     // SAFETY: the caller holds the synchronous game-thread boundary, with no callbacks.
     unsafe {
         let mut world = World::new(
@@ -153,16 +202,7 @@ unsafe fn borrow_world<'a>() -> World<'a> {
         for side in 0..2 {
             let mut owner = (*crate::c_bindings::live_queues::player_ships(side)).head;
             while !owner.is_null() {
-                let next = world.insert_ship(Ship {
-                    state: &mut *owner.cast(),
-                    info: None,
-                    data: None,
-                    characteristics: None,
-                    preprocess: None,
-                    postprocess: None,
-                    intelligence: None,
-                    phoenix: None,
-                });
+                let next = world.insert_ship(ship_record(&mut *owner.cast()));
                 let slot = world.descriptors[&owner];
                 let Some(ship) = world.ships.get_mut(&owner) else {
                     panic!("projected fixture owner {owner:p} disappeared from its graph");
@@ -249,13 +289,21 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
                 }
                 return Ok(Reply::Check("pool-recovered", recovered));
             }
-            Effect::ZoomProof(frames, frame) => {
-                return Ok(Reply::Check(
-                    "trilinear-index",
-                    frames.iter().any(|&base| {
-                        !base.is_null() && SetEquFrameIndex(base, frame.cast()) == frame.cast()
-                    }),
-                ))
+            Effect::ZoomProof(frames, element, view, index) => {
+                crate::mainloop::input_frame::drain_committed_draws();
+                let frame = &*(*element).current.frame.cast::<frame_desc>();
+                let mipmap = (view == 1).then(|| {
+                    let adjacent = &*SetAbsFrameIndex(frames[view + 1], index);
+                    (&*frame.image, &*adjacent.image)
+                });
+                return Ok(zoom_proof(
+                    view,
+                    zoom_out,
+                    index,
+                    frame,
+                    &*frames[view],
+                    mipmap,
+                ));
             }
             Effect::Captain(frame) => {
                 return Ok(Reply::Captain(SetAbsFrameIndex(
@@ -288,11 +336,13 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
             .as_mut()
             .ok_or("configure_parity_melee requires the live Super Melee menu")?;
         configure_menu(
-            state,
+            state.meleeStarted != 0,
             &mut *controls,
             GlobData.Game_state.CurrentActivity,
             request.cyborg,
         )?;
+        state.MeleeOption = 4;
+        state.InputFunc = Some(crate::supermelee::native::menu::live::DoMelee);
         for (side, slot, ship) in ships {
             crate::supermelee::native::teams::MeleeSetup_setShip(
                 state.meleeSetup,
@@ -305,19 +355,16 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(test))]
 fn configure_menu(
-    state: &mut MELEE_STATE,
+    started: bool,
     controls: &mut [u8; 2],
     activity: u16,
     cyborg: bool,
 ) -> Result<(), String> {
-    if activity & IN_BATTLE as u16 != 0 || state.meleeStarted != 0 {
+    if activity & IN_BATTLE as u16 != 0 || started {
         return Err("cannot replace a fleet during battle".into());
     }
     controls.fill(if cyborg { 2 | 64 } else { 1 | 16 });
-    state.MeleeOption = 4;
-    state.InputFunc = Some(crate::supermelee::native::menu::live::DoMelee);
     Ok(())
 }
 
@@ -454,5 +501,69 @@ fn phoenix(data: &crate::ships::races::pkunk_native::engine::PkunkData) -> Phoen
             data.saved_postprocess_func.map_or(0, |f| f as usize),
             data.saved_death_func.map_or(0, |f| f as usize),
         ],
+    }
+}
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::zoom_matches;
+
+    #[test]
+    fn menu_configuration_validates_before_changing_controls() {
+        let mut controls = [99; 2];
+        assert!(super::configure_menu(true, &mut controls, 0, true).is_err());
+        assert!(
+            super::configure_menu(false, &mut controls, super::IN_BATTLE as u16, true).is_err()
+        );
+        assert_eq!(controls, [99; 2]);
+        super::configure_menu(false, &mut controls, 0, true).unwrap();
+        assert_eq!(controls, [66; 2]);
+        super::configure_menu(false, &mut controls, 0, false).unwrap();
+        assert_eq!(controls, [17; 2]);
+    }
+
+    #[test]
+    fn a_receipt_requires_all_three_zoom_checkpoints() {
+        use crate::automation::melee_fixture::{FixtureName, FixtureRun};
+        let mut proof = FixtureRun::new(FixtureName::FrameSets);
+        proof.steps = 3;
+        for check in [
+            "orphan-weapon",
+            "same-species-entry",
+            "arilou-threat",
+            "blast-teardown",
+            "trilinear-large",
+            "trilinear-small",
+        ] {
+            proof.require(true, check).unwrap();
+        }
+        assert!(proof.verify().is_err());
+        proof.require(true, "trilinear-medium").unwrap();
+        assert!(proof.verify().is_ok());
+    }
+
+    #[test]
+    fn every_checkpoint_requires_its_exact_view_and_animation_index() {
+        for (view, zoom) in [256, 700, 1024].into_iter().enumerate() {
+            let expected = (10 + view, 5);
+            let mipmap = (view == 1).then_some((99, 99));
+            assert!(zoom_matches(view, zoom, expected, expected, mipmap));
+            assert!(!zoom_matches(view, zoom, (expected.0, 6), expected, mipmap));
+            assert!(!zoom_matches(view, zoom + 1, expected, expected, mipmap));
+            if view != 0 {
+                assert!(
+                    !zoom_matches(view, zoom, (10, 5), expected, mipmap),
+                    "constant view zero must fail"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fractional_checkpoint_requires_the_adjacent_mipmap_binding() {
+        for mipmap in [None, Some((0, 0)), Some((98, 99))] {
+            assert!(!zoom_matches(1, 700, (11, 5), (11, 5), mipmap));
+        }
+        assert!(zoom_matches(1, 700, (11, 5), (11, 5), Some((99, 99))));
     }
 }

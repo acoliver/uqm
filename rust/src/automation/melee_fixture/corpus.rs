@@ -48,6 +48,10 @@ impl Observations {
                     | Event::ResetPool
                     | Event::SpaceActive(_)
                     | Event::Frame { .. }
+                    | Event::FrameSet { .. }
+                    | Event::ImageFrame { .. }
+                    | Event::ImageSet { .. }
+                    | Event::ImageCopy { .. }
                     | Event::DrawableFree(_)
                     | Event::ResourcesFree { .. } => {}
                 }

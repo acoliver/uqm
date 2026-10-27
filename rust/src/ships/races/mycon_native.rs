@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, angle_to_facing, element, normalize_facing, starship};
     use std::ptr;
 
@@ -100,7 +101,7 @@ pub(crate) mod engine {
             - ((i32::from((*e).__bindgen_anon_1.life_span) + PLASMA_DURATION - 1)
                 / PLASMA_DURATION)) as u16;
         if index != crate::ships::native::frame_index((*e).next.image.frame) {
-            (*e).next.image.frame = SetAbsFrameIndex((*e).next.image.frame, index);
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, index));
             (*e).state_flags |= CHANGING as u16;
         }
         if (*e).__bindgen_anon_4.turn_wait > 0 {
@@ -116,9 +117,9 @@ pub(crate) mod engine {
 
     pub(crate) unsafe extern "C" fn plasma_blast_preprocess(e: *mut ELEMENT) {
         if (*e).__bindgen_anon_1.life_span >= u16::from((*e).__bindgen_anon_5.thrust_wait) {
-            (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
         } else {
-            (*e).next.image.frame = DecFrameIndex((*e).next.image.frame);
+            image!(frame; (*e).next.image.frame, DecFrameIndex((*e).next.image.frame));
         }
         if !(*e).hTarget.is_null() {
             let target = element((*e).hTarget);
@@ -158,9 +159,8 @@ pub(crate) mod engine {
         (*blast).__bindgen_anon_5.thrust_wait = animations as u8;
         (*blast).__bindgen_anon_1.life_span = (animations << 1) - 1;
         (*blast).preprocess_func = Some(plasma_blast_preprocess);
-        (*blast).current.image.farray = (*e0).next.image.farray;
-        (*blast).current.image.frame =
-            SetAbsFrameIndex(*(*blast).current.image.farray, NUM_PLASMAS as u16);
+        image!(copy; (*blast).current.image.farray, (*e0).next.image.farray);
+        image!(frame; (*blast).current.image.frame, SetAbsFrameIndex(*(*blast).current.image.farray, NUM_PLASMAS as u16));
     }
 
     pub(crate) unsafe extern "C" fn mycon_intelligence(

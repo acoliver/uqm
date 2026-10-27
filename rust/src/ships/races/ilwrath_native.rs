@@ -66,6 +66,7 @@ const fn decloak_step(color: Color) -> Option<Color> {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, element, starship};
 
     // Core characteristics
@@ -178,7 +179,7 @@ pub(crate) mod engine {
         if (*flame).__bindgen_anon_4.turn_wait > 0 {
             (*flame).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*flame).next.image.frame = IncFrameIndex((*flame).current.image.frame);
+            image!(frame; (*flame).next.image.frame, IncFrameIndex((*flame).current.image.frame));
             (*flame).state_flags |= CHANGING as u16;
 
             (*flame).__bindgen_anon_4.turn_wait = (*flame).__bindgen_anon_5.next_turn;
@@ -301,7 +302,7 @@ pub(crate) mod engine {
             if (*ship).__bindgen_anon_4.turn_wait == 0 {
                 (*ship).__bindgen_anon_4.turn_wait += 1;
             }
-            (*ship).next.image.frame = SetAbsFrameIndex((*ship).next.image.frame, (*ss).ShipFacing);
+            image!(frame; (*ship).next.image.frame, SetAbsFrameIndex((*ship).next.image.frame, (*ss).ShipFacing));
         }
         (*ship).hTarget = std::ptr::null_mut();
     }

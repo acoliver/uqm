@@ -3,6 +3,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine, starship,
     };
@@ -116,7 +117,7 @@ pub(crate) mod engine {
                 idx = idx.wrapping_add(1);
                 (*e).__bindgen_anon_4.turn_wait &= !REVERSE_DIR;
             }
-            (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, idx);
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, idx));
             (*e).state_flags |= CHANGING as u16;
         }
     }
@@ -134,17 +135,17 @@ pub(crate) mod engine {
         DeltaEnergy(ship, 0);
         let h = handles[0];
         let p = element(h);
-        (*p).current.image.frame = (*e).current.image.frame;
+        image!(copy; (*p).current.image.frame, (*e).current.image.frame);
         (*p).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait;
         (*p).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait;
         (*p).__bindgen_anon_5.thrust_wait = (*p).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
         if (*p).__bindgen_anon_5.thrust_wait == 0 {
             if ((*p).__bindgen_anon_4.turn_wait & !REVERSE_DIR) < MAX_PUMP - 1 {
                 (*p).__bindgen_anon_4.turn_wait += 1;
-                (*p).current.image.frame = crate::ships::native::rel_frame_index(
+                image!(frame; (*p).current.image.frame, crate::ships::native::rel_frame_index(
                     (*p).current.image.frame,
                     NUM_PUMP_ANIMS as i16,
-                );
+                ));
                 ProcessSound(
                     SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 2),
                     p,
@@ -169,7 +170,7 @@ pub(crate) mod engine {
                 idx = idx.wrapping_add(1);
                 (*p).__bindgen_anon_4.turn_wait &= !REVERSE_DIR;
             }
-            (*p).current.image.frame = SetAbsFrameIndex((*p).current.image.frame, idx);
+            image!(frame; (*p).current.image.frame, SetAbsFrameIndex((*p).current.image.frame, idx));
         }
         if (*ss).cur_status_flags & (*ss).old_status_flags & WEAPON as u16 != 0 {
             (*ss).weapon_counter = WEAPON_WAIT;
@@ -216,11 +217,11 @@ pub(crate) mod engine {
             (*p).__bindgen_anon_4.turn_wait = 0;
             (*p).__bindgen_anon_5.next_turn = 0;
             (*p).preprocess_func = Some(animation_preprocess);
-            (*p).current.image.farray = (*a).next.image.farray;
-            (*p).current.image.frame = SetAbsFrameIndex(
+            image!(copy; (*p).current.image.farray, (*a).next.image.farray);
+            image!(frame; (*p).current.image.frame, SetAbsFrameIndex(
                 *(*p).current.image.farray,
                 u16::from(MAX_PUMP) * NUM_PUMP_ANIMS,
-            );
+            ));
         }
     }
 
@@ -257,10 +258,10 @@ pub(crate) mod engine {
 
     pub(crate) unsafe extern "C" fn confuse_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & NONSOLID as u16 == 0 {
-            (*e).next.image.frame = SetAbsFrameIndex(
+            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
                 (*e).current.image.frame,
                 (frame_index((*e).current.image.frame).wrapping_add(1)) & 7,
-            );
+            ));
             (*e).state_flags |= CHANGING as u16;
         } else if (*e).hTarget.is_null() {
             (*e).__bindgen_anon_1.life_span = 0;
@@ -273,7 +274,7 @@ pub(crate) mod engine {
                 if frame_index(next) == 0 {
                     next = crate::ships::native::rel_frame_index(next, -8);
                 }
-                (*e).next.image.frame = next;
+                image!(frame; (*e).next.image.frame, next);
                 let target_ss = starship(target);
                 (*target_ss).ship_input_state = ((*target_ss).ship_input_state
                     & !((LEFT | RIGHT | SPECIAL) as u8))
@@ -284,8 +285,8 @@ pub(crate) mod engine {
                     (*p).playerNr = (*e).playerNr;
                     (*p).state_flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
                     (*p).__bindgen_anon_1.life_span = 1;
-                    (*p).current = (*e).next;
-                    (*p).next = (*e).next;
+                    image!(copy; (*p).current, (*e).next);
+                    image!(copy; (*p).next, (*e).next);
                     (*p).preprocess_func = Some(confuse_preprocess);
                     (*GlobData
                         .Game_state
@@ -331,9 +332,9 @@ pub(crate) mod engine {
             let p = element(found);
             if (*p).state_flags == 0 {
                 InsertQueue((&raw mut disp_q).cast(), found, disp_q.head);
-                (*p).current = (*a).next;
-                (*p).current.image.frame = SetAbsFrameIndex((*p).current.image.frame, 8);
-                (*p).next = (*p).current;
+                image!(copy; (*p).current, (*a).next);
+                image!(frame; (*p).current.image.frame, SetAbsFrameIndex((*p).current.image.frame, 8));
+                image!(copy; (*p).next, (*p).current);
                 (*p).playerNr = (*a).playerNr;
                 (*p).state_flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
                 (*p).preprocess_func = Some(confuse_preprocess);

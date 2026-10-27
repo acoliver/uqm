@@ -32,9 +32,9 @@ pub(crate) mod engine {
 
     use crate::sound::resource_types::LoadSoundInstance;
 
-    use crate::game_init::space_resources::live::load_animation;
+    use crate::game_init::space_resources::load_animation;
 
-    use crate::game_init::space_resources::live::free_image;
+    use crate::game_init::space_resources::free_image;
     use crate::sound::heart_ffi::DestroyMusic;
     use crate::sound::heart_ffi::DestroySound;
 

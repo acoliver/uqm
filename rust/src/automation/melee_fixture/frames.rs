@@ -219,7 +219,16 @@ fn retire(run: &mut Battle, world: &World<'_>) -> Result<Option<Vec<Effect>>, St
 
 fn zoom(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>, String> {
     if run.wait < 3 {
-        let distance = [160, 1400, 3000][usize::from(run.wait)];
+        let view = usize::from(run.wait);
+        let distance = [160, 1400, 3000][view];
+        let ship = world.ship_mut(run.a);
+        ship.state.ship_input_state = 0;
+        let index = ship.state.ShipFacing;
+        let frames = ship
+            .data
+            .as_ref()
+            .ok_or("fixture requires loaded descriptor fields")?
+            .ship;
         place(
             world
                 .elements
@@ -242,24 +251,13 @@ fn zoom(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>, 
             Effect::Intersect(run.a),
             Effect::Intersect(run.replacement),
             Effect::Redraw(true),
+            Effect::ZoomProof(frames, run.a, view, index),
         ]));
     }
     if run.wait == 3 {
         run.wait += 1;
         run.proof.steps += 1;
-        return Ok(Some(vec![
-            Effect::RestoreScale,
-            Effect::ZoomProof(
-                world
-                    .ship(run.a)
-                    .data
-                    .as_ref()
-                    .ok_or("fixture requires loaded descriptor fields")?
-                    .ship,
-                world.elements[&run.a].next.frame,
-            ),
-            Effect::Redraw(true),
-        ]));
+        return Ok(Some(vec![Effect::RestoreScale, Effect::Redraw(true)]));
     }
     Ok(None)
 }

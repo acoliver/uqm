@@ -27,6 +27,7 @@ mod tests {
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
         object_cloaked, put_element, sine, starship,
@@ -149,12 +150,11 @@ pub(crate) mod engine {
                             .location
                             .y
                             .wrapping_add(sine(angle, i32::from(magnitude)));
-                        (*spot).current.image.farray =
-                            (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr();
-                        (*spot).current.image.frame = SetAbsFrameIndex(
+                        image!(set; (*spot).current.image.farray, (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr());
+                        image!(frame; (*spot).current.image.frame, SetAbsFrameIndex(
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
-                        );
+                        ));
                         (*spot).preprocess_func = Some(animation_preprocess);
                         (*spot).pParent = ss.cast();
                         (*GlobData
@@ -254,13 +254,12 @@ pub(crate) mod engine {
                     (*flash).state_flags =
                         (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16;
                     (*flash).__bindgen_anon_1.life_span = 1;
-                    (*flash).current = (*ship).next;
-                    (*flash).current.image.farray =
-                        (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr();
-                    (*flash).current.image.frame = SetAbsFrameIndex(
+                    image!(copy; (*flash).current, (*ship).next);
+                    image!(set; (*flash).current.image.farray, (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr());
+                    image!(frame; (*flash).current.image.frame, SetAbsFrameIndex(
                         (*(*ss).RaceDescPtr).ship_data.weapon[0],
                         ((*ss).ShipFacing as i32 + angle_to_facing(FULL_CIRCLE as i32)) as COUNT,
-                    );
+                    ));
                     (*flash).pParent = ss.cast();
                     (*GlobData
                         .Game_state
@@ -327,7 +326,7 @@ pub(crate) mod engine {
                             (*shadow).playerNr = (*target).playerNr;
                             (*shadow).state_flags = super::tractor_shadow_flags();
                             (*shadow).__bindgen_anon_1.life_span = 1;
-                            (*shadow).current = (*target).next;
+                            image!(copy; (*shadow).current, (*target).next);
                             (*shadow).current.location.x = (*shadow)
                                 .current
                                 .location
@@ -338,7 +337,7 @@ pub(crate) mod engine {
                                 .location
                                 .y
                                 .wrapping_add(sine(angle, offsets[i] << ONE_SHIFT));
-                            (*shadow).next = (*shadow).current;
+                            image!(copy; (*shadow).next, (*shadow).current);
                             (*shadow).pParent = enemy_ss.cast();
                             SetVelocityComponents(&mut (*shadow).velocity, vx, vy);
                             let prim = GlobData
@@ -358,10 +357,10 @@ pub(crate) mod engine {
 
     pub(crate) unsafe extern "C" fn satellite_preprocess(e: *mut ELEMENT) {
         (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
-        (*e).next.image.frame = SetAbsFrameIndex(
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
             (*e).current.image.frame,
             (frame_index((*e).current.image.frame).wrapping_add(1)) & 7,
-        );
+        ));
         (*e).state_flags |= CHANGING as u16;
         (*e).__bindgen_anon_4.turn_wait =
             normalize_angle(i32::from((*e).__bindgen_anon_4.turn_wait) + 1) as u8;
@@ -539,7 +538,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_1.life_span = 4;
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
-        (*e).next.image.frame = SetAbsFrameIndex((*e).current.image.frame, 8);
+        image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, 8));
         (*e).preprocess_func = Some(animation_preprocess);
         (*e).death_func = None;
         (*e).postprocess_func = None;
@@ -571,12 +570,11 @@ pub(crate) mod engine {
                         .location
                         .y
                         .wrapping_add(sine(angle, SATELLITE_OFFSET));
-                    (*satellite).current.image.farray =
-                        (*(*ss).RaceDescPtr).ship_data.special.as_mut_ptr();
-                    (*satellite).current.image.frame = SetAbsFrameIndex(
+                    image!(set; (*satellite).current.image.farray, (*(*ss).RaceDescPtr).ship_data.special.as_mut_ptr());
+                    image!(frame; (*satellite).current.image.frame, SetAbsFrameIndex(
                         (*(*ss).RaceDescPtr).ship_data.special[0],
                         TFB_Random() as COUNT & 7,
-                    );
+                    ));
                     (*satellite).preprocess_func = Some(satellite_preprocess);
                     (*satellite).postprocess_func = Some(satellite_postprocess);
                     (*satellite).death_func = Some(satellite_death);

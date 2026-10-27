@@ -1,6 +1,7 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{abi::*, element, frame_index, put_element, starship};
     use std::{mem, ptr};
 
@@ -184,7 +185,7 @@ pub(crate) mod engine {
             };
         } else if life < DESTRUCT_SWITCH {
             let color = (*primitive).color;
-            (*e).next.image.frame = IncFrameIndex((*e).current.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
             for (from, to) in [
                 (rgb15(31, 31, 31), rgb15(31, 31, 10)),
                 (rgb15(31, 31, 10), rgb15(31, 10, 10)),
@@ -212,9 +213,8 @@ pub(crate) mod engine {
                 (*prim(d)).Type = gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM;
                 (*prim(d)).color = rgb15(31, 31, 31);
                 let frame = (*(*ss).RaceDescPtr).ship_data.special[0];
-                (*d).current.image.farray =
-                    (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast();
-                (*d).current.image.frame = frame;
+                image!(set; (*d).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
+                image!(frame; (*d).current.image.frame, frame);
                 (*d).__bindgen_anon_1.life_span = GetFrameCount(frame.cast());
                 (*d).current.location = (*e).current.location;
                 (*d).preprocess_func = Some(destruct_preprocess);

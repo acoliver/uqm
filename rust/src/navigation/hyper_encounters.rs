@@ -8,6 +8,7 @@ use super::hyper_transition::{init_transition, sis_element};
 use super::hyperspace::live::{
     cosine, height, logx, logy, primitive, sine, universe_x, universe_y, width,
 };
+use crate::collections::observation::image;
 use std::ptr;
 
 const MAKEUP: [u8; 23] = [
@@ -37,9 +38,10 @@ pub(super) unsafe fn allocate(point: POINT) -> HELEMENT {
         y: wrap(ly, height()),
     };
     (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-    (*element).current.image.farray = ptr::addr_of_mut!(HYPERSTARS)
+    let frames = ptr::addr_of_mut!(HYPERSTARS)
         .cast::<FRAME>()
-        .add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
+        .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
+    image!(single; (*element).current.image.farray, frames, *frames);
     handle
 }
 fn wrap(value: i32, limit: i32) -> i16 {
@@ -69,13 +71,14 @@ pub(super) unsafe fn ambient() {
         x: ((width() >> 1) + (dx << 2)) as i16,
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
-    (*element).current.image.farray = ptr::addr_of_mut!(stars_in_space);
+    let stars = stars_in_space;
+    image!(single; (*element).current.image.farray, ptr::addr_of_mut!(stars_in_space), stars);
     if (random >> 16) & 7 != 0 {
         (*element).__bindgen_anon_1.life_span = 14;
-        (*element).current.image.frame = stars_in_space;
+        image!(frame; (*element).current.image.frame, stars);
     } else {
         (*element).__bindgen_anon_1.life_span = 12;
-        (*element).current.image.frame = SetAbsFrameIndex(stars_in_space, 14);
+        image!(frame; (*element).current.image.frame, SetAbsFrameIndex(stars, 14));
     }
     InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
 }
@@ -86,11 +89,11 @@ pub(crate) unsafe extern "C" fn transition(element: *mut ELEMENT) {
         (*element).__bindgen_anon_4.turn_wait -= 1;
     } else {
         if (*element).__bindgen_anon_2.hit_points != 0 {
-            (*element).next.image.frame = DecFrameIndex((*element).current.image.frame);
+            image!(frame; (*element).next.image.frame, DecFrameIndex((*element).current.image.frame));
         } else {
             let frame = IncFrameIndex((*element).current.image.frame);
             if frame != *(*element).current.image.farray {
-                (*element).next.image.frame = frame;
+                image!(frame; (*element).next.image.frame, frame);
             } else {
                 (*element).death_func = None;
             }
@@ -188,17 +191,17 @@ unsafe fn add(encounter: *mut ENCOUNTER, universe: POINT) -> HELEMENT {
             if i == 0 || i > 9 {
                 i = 9;
             }
-            (*element).current.image.frame = SetRelFrameIndex(*(*element).current.image.farray, -i);
+            image!(frame; (*element).current.image.frame, SetRelFrameIndex(*(*element).current.image.farray, -i));
             (*element).death_func = Some(transition);
         } else {
-            (*element).current.image.frame = DecFrameIndex(*(*element).current.image.farray);
+            image!(frame; (*element).current.image.frame, DecFrameIndex(*(*element).current.image.farray));
         }
         (*element).__bindgen_anon_4.turn_wait = 1;
         (*element).preprocess_func = None;
         (*element).postprocess_func = None;
         (*element).collision_func = Some(collision);
         SetUpElement(element);
-        (*element).IntersectControl.IntersectStamp.frame = DecFrameIndex(stars_in_space);
+        image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
         (*primitive(element)).Type = gfx_object_NUM_PRIMS as u8;
         (*element).state_flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
         InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.tail);

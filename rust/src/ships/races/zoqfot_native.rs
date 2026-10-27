@@ -1,6 +1,7 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, frame_index,
         normalize_facing, put_element, sine, starship,
@@ -65,7 +66,7 @@ pub(crate) mod engine {
         if (*e).__bindgen_anon_4.turn_wait > 0 {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            (*e).next.image.frame = IncFrameIndex((*e).next.image.frame);
+            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
             let mut angle = (*e).velocity.travel_angle;
             let index = frame_index((*e).next.image.frame);
             if index == 1 {

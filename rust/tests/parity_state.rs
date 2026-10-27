@@ -613,6 +613,14 @@ fn reused_owner_and_group_identities(directory: &Path) {
     }
 }
 
+fn observe_test_frames(views: &[FRAME], role: &str) {
+    observation::record(Event::FrameSet {
+        address: views.as_ptr() as usize,
+        frames: views.iter().map(|frame| *frame as usize).collect(),
+        role: role.into(),
+    });
+}
+
 fn frameset_and_media_identity(directory: &Path) {
     // SAFETY: RACE_DESC contains integers, pointers and optional callbacks.
     let mut descriptor: RACE_DESC = unsafe { std::mem::zeroed() };
@@ -630,7 +638,6 @@ fn frameset_and_media_identity(directory: &Path) {
     second.Index = 2;
     descriptor.ship_data.ship = [ptr::from_mut(&mut first).cast(); 3];
     let mut element = Element::new();
-    element.current.farray = descriptor.ship_data.ship.as_mut_ptr().cast();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     ship.RaceDescPtr = &mut descriptor;
     element.p_parent = ptr::from_mut(&mut ship).cast();
@@ -648,8 +655,17 @@ fn frameset_and_media_identity(directory: &Path) {
             index: frame.Index,
         });
     }
+    observe_test_frames(&descriptor.ship_data.ship, "test-ship");
+    observation::assign_set(
+        &mut element.current.farray,
+        descriptor.ship_data.ship.as_mut_ptr().cast(),
+        None,
+    );
     let (before, _) = snapshot(directory);
-    descriptor.ship_data.ship[1] = ptr::from_mut(&mut second).cast();
+    observation::assign_view(
+        &mut descriptor.ship_data.ship[1],
+        ptr::from_mut(&mut second).cast(),
+    );
     let (after, _) = snapshot(directory);
     assert_eq!(before["elements.0.current.farray.0.index"], "1");
     assert_eq!(after["elements.0.current.farray.0.index"], "1");
@@ -659,7 +675,12 @@ fn frameset_and_media_identity(directory: &Path) {
     let ship = &mut ship;
     ship.RaceDescPtr = &mut replacement;
     let element = &mut element;
-    element.next.farray = replacement.ship_data.ship.as_mut_ptr().cast();
+    observe_test_frames(&replacement.ship_data.ship, "replacement-ship");
+    observation::assign_set(
+        &mut element.next.farray,
+        replacement.ship_data.ship.as_mut_ptr().cast(),
+        None,
+    );
     let (outgoing, _) = snapshot(directory);
     assert_eq!(
         outgoing["elements.0.current.farray.role"],

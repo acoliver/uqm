@@ -2,6 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::collections::observation::image;
     use crate::memory::{rust_hfree, rust_hmalloc};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_index, normalize_angle,
@@ -102,10 +103,10 @@ pub(crate) mod engine {
 
     pub(crate) unsafe extern "C" fn cone_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
-        (*(*ss).RaceDescPtr).ship_data.special[0] = rel_frame_index(
+        image!(view; (*(*ss).RaceDescPtr).ship_data.special[0], rel_frame_index(
             (*(*ss).RaceDescPtr).ship_data.special[0],
             angle_to_facing(FULL_CIRCLE as i32) as i16,
-        );
+        ));
         (*e).state_flags |= APPEARING as u16;
     }
 
@@ -154,7 +155,7 @@ pub(crate) mod engine {
                     prev_facing: facing,
                 }),
             );
-            (*desc).ship_data.special[0] = SetAbsFrameIndex((*desc).ship_data.special[0], facing);
+            image!(view; (*desc).ship_data.special[0], SetAbsFrameIndex((*desc).ship_data.special[0], facing));
         }
         b.index = frame_index((*desc).ship_data.special[0]);
         *out = initialize_missile(&mut b);
@@ -162,7 +163,7 @@ pub(crate) mod engine {
             let cone = element(*out);
             (*cone).collision_func = Some(cone_collision);
             (*cone).state_flags &= !(APPEARING as u16);
-            (*cone).next = (*cone).current;
+            image!(copy; (*cone).next, (*cone).current);
             (*cone).IntersectControl.IntersectStamp.origin = POINT {
                 x: (*cone).current.location.x >> ONE_SHIFT,
                 y: (*cone).current.location.y >> ONE_SHIFT,
@@ -171,7 +172,7 @@ pub(crate) mod engine {
                 x: (*cone).next.location.x >> ONE_SHIFT,
                 y: (*cone).next.location.y >> ONE_SHIFT,
             };
-            (*cone).IntersectControl.IntersectStamp.frame = (*desc).ship_data.special[0];
+            image!(frame; (*cone).IntersectControl.IntersectStamp.frame, (*desc).ship_data.special[0]);
         }
         1
     }

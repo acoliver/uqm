@@ -57,6 +57,7 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 pub(crate) mod engine {
     use super::*;
     use super::{in_defense_range, nuke_speed, use_defense};
+    use crate::collections::observation::image;
     use crate::ships::native::{
         abi::*, element, frame_index, object_cloaked, put_element, starship,
     };
@@ -124,7 +125,7 @@ pub(crate) mod engine {
             (*missile).__bindgen_anon_4.turn_wait -= 1;
         } else {
             if TrackShip(missile, &mut facing) > 0 {
-                (*missile).next.image.frame = SetAbsFrameIndex((*missile).next.image.frame, facing);
+                image!(frame; (*missile).next.image.frame, SetAbsFrameIndex((*missile).next.image.frame, facing));
                 (*missile).state_flags |= CHANGING as u16;
             }
             (*missile).__bindgen_anon_4.turn_wait = TRACK_WAIT;
