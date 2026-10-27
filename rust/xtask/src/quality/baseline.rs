@@ -9,6 +9,7 @@ use super::metrics::{limit, Measurement};
 pub struct Baseline {
     pub entries: BTreeMap<String, u64>,
     pub moved: BTreeMap<String, String>,
+    pub budget: BTreeMap<String, super::budgets::Budget>,
     pub layers: bool,
     pub lint: BTreeMap<String, BTreeMap<String, u64>>,
 }
@@ -41,6 +42,10 @@ impl Baseline {
                     result.lint.insert(host.into(), lint_values(values)?);
                 }
             }
+        }
+        if let Some(item) = document.get("budget") {
+            result.budget =
+                super::budgets::parse(item.as_table().ok_or("invalid budget section")?)?;
         }
         if let Some(table) = document.get("entry").and_then(toml_edit::Item::as_table) {
             for (key, value) in table {
@@ -80,6 +85,12 @@ impl Baseline {
             }
             document.insert("lint", toml_edit::Item::Table(hosts));
         }
+        if !self.budget.is_empty() {
+            document.insert(
+                "budget",
+                toml_edit::Item::Table(super::budgets::write(&self.budget)?),
+            );
+        }
         let mut entries = toml_edit::Table::new();
         for (key, value) in &self.entries {
             entries.insert(
@@ -105,8 +116,14 @@ impl Baseline {
         base: Option<&Baseline>,
     ) -> Result<(), String> {
         let measured = measurement.baseline();
+        super::budgets::check(measurement, &self.budget)?;
         if !self.entries.is_empty() {
-            check_limits(&measured, &self.entries, &self.moved, false)?;
+            check_limits(
+                &super::budgets::without_budgeted(&measured, &self.budget),
+                &super::budgets::without_budgeted(&self.entries, &self.budget),
+                &self.moved,
+                false,
+            )?;
         }
         self.entries = measured;
         if let Some(base) = base {
@@ -119,27 +136,26 @@ impl Baseline {
         }
         Ok(())
     }
-    pub fn add_move(&mut self, old: &str, new: &str, prefix: bool) -> Result<(), String> {
-        if old == new || old.is_empty() || new.is_empty() {
-            return Err("move needs distinct nonempty identities".into());
-        }
-        if self.moved.values().any(|target| {
-            target == new || prefix_matches(new, target) || prefix_matches(target, new)
-        }) {
-            return Err(format!("move target {new} already credited"));
-        }
-        let entries = move_entries(&self.entries, old, new, prefix)?;
+    pub fn add_move(
+        &mut self,
+        old: &str,
+        new: &str,
+        current: &Measurement,
+        base: &Measurement,
+    ) -> Result<(), String> {
+        let mut moves = self.moved.clone();
+        super::transfers::register(&mut moves, old, new)?;
+        super::transfers::validate(current, base, &moves)?;
+        let one = [(old.into(), new.into())].into();
+        let entries = super::transfers::limits(&self.entries, current, base, &one)?;
         let lint = self
             .lint
             .iter()
-            .map(|(host, values)| Ok((host.clone(), move_entries(values, old, new, prefix)?)))
+            .map(|(host, values)| Ok((host.clone(), move_entries(values, old, new, true)?)))
             .collect::<Result<_, String>>()?;
-        if entries == self.entries && lint == self.lint {
-            return Err(format!("no baseline debt at {old}"));
-        }
         self.entries = entries;
         self.lint = lint;
-        self.moved.insert(old.into(), new.into());
+        self.moved = moves;
         Ok(())
     }
 }
@@ -306,42 +322,7 @@ pub fn validate_transfers(
     base: &Measurement,
     moves: &BTreeMap<String, String>,
 ) -> Result<(), String> {
-    for (old, new) in moves {
-        let sources: BTreeSet<_> = base
-            .findings
-            .iter()
-            .filter(|f| prefix_matches(&f.identity, old))
-            .map(|f| f.identity.as_str())
-            .collect();
-        // A transfer retained from an earlier PR has already been credited at base.
-        if sources.is_empty()
-            && base
-                .findings
-                .iter()
-                .any(|f| prefix_matches(&f.identity, new))
-        {
-            continue;
-        }
-        if sources.is_empty() {
-            return Err(format!("move source {old} does not exist at base"));
-        }
-        if current
-            .findings
-            .iter()
-            .any(|f| prefix_matches(&f.identity, old))
-        {
-            return Err(format!("move source {old} still exists"));
-        }
-        for source in sources {
-            let target = format!("{new}{}", &source[old.len()..]);
-            if !current.findings.iter().any(|f| f.identity == target) {
-                return Err(format!(
-                    "move target {target} is absent; function transfers cannot split"
-                ));
-            }
-        }
-    }
-    Ok(())
+    super::transfers::validate(current, base, moves)
 }
 
 pub fn baseline_at_ref(root: &Path, reference: &str) -> Result<Option<Baseline>, String> {
@@ -416,6 +397,41 @@ mod tests {
     fn entries(rows: &[(&str, u64)]) -> BTreeMap<String, u64> {
         rows.iter().map(|(k, v)| (k.to_string(), *v)).collect()
     }
+    fn move_baseline(baseline: &mut Baseline, old: &str, new: &str) -> Result<(), String> {
+        use super::super::metrics::Finding;
+        let mut base = Measurement::default();
+        for key in baseline
+            .entries
+            .keys()
+            .chain(baseline.lint.values().flat_map(|v| v.keys()))
+        {
+            let id = key.rsplit_once('|').unwrap().1;
+            let parts: Vec<_> = key.split('|').collect();
+            base.findings.push(Finding {
+                counter: if parts.len() == 3 { parts[0] } else { "loc" }.into(),
+                metric: if parts.len() == 3 { parts[1] } else { "loc" }.into(),
+                identity: id.into(),
+                file: "src/lib.rs".into(),
+                package: id.split("::").next().unwrap().into(),
+                subsystem: id.split("::").nth(1).unwrap().into(),
+                value: baseline.entries.get(key).copied().unwrap_or(0),
+            });
+        }
+        let current = Measurement {
+            findings: base
+                .findings
+                .iter()
+                .map(|f| {
+                    let mut f = f.clone();
+                    f.identity = f.identity.replacen(old, new, 1);
+                    f.package = new.split("::").next().unwrap().into();
+                    f
+                })
+                .collect(),
+            ..Default::default()
+        };
+        baseline.add_move(old, new, &current, &base)
+    }
     #[test]
     fn baseline_roundtrip_tightening_and_growth() {
         let b = Baseline {
@@ -442,14 +458,18 @@ mod tests {
             entries: before.clone(),
             ..Baseline::default()
         };
-        b.add_move("uqm::graphics", "uqm-engine::graphics", true)
-            .unwrap();
+        move_baseline(&mut b, "uqm::graphics", "uqm-engine::graphics").unwrap();
         assert!(check_limits(&b.entries, &before, &b.moved, true).is_ok());
         let mut both = b.entries.clone();
         both.extend(before.clone());
         assert!(check_limits(&both, &before, &b.moved, true).is_err());
         assert!(b
-            .add_move("uqm-engine::graphics", "uqm-engine::graphics", true)
+            .add_move(
+                "uqm-engine::graphics",
+                "uqm-engine::graphics",
+                &Measurement::default(),
+                &Measurement::default()
+            )
             .is_err());
     }
     #[test]
@@ -517,9 +537,7 @@ macos = "invalid"
             .into(),
             ..Baseline::default()
         };
-        baseline
-            .add_move("uqm::graphics", "uqm-engine::graphics", true)
-            .unwrap();
+        move_baseline(&mut baseline, "uqm::graphics", "uqm-engine::graphics").unwrap();
         for (host, count) in [("linux", 2), ("macos", 3)] {
             assert_eq!(
                 baseline.lint[host],

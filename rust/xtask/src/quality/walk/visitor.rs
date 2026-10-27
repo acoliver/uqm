@@ -84,6 +84,25 @@ impl<'a> Visit<'a> for Walker {
             }
         }
         self.attrs(item_attrs(item), item.to_token_stream());
+        if self.names.is_none()
+            && matches!(
+                item,
+                Item::Static(_)
+                    | Item::Struct(_)
+                    | Item::Enum(_)
+                    | Item::Union(_)
+                    | Item::Type(_)
+                    | Item::Fn(_)
+                    | Item::Const(_)
+            )
+        {
+            self.measurement.declarations.push(self.finding(
+                "declaration",
+                "item",
+                self.context.module.clone(),
+                0,
+            ));
+        }
         match item {
             Item::Enum(i) => self.definition(&i.ident),
             Item::Struct(i) => self.definition(&i.ident),

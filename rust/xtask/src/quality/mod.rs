@@ -1,11 +1,13 @@
 //! Shrink-only source counters and identifier checks. No game code is linked.
 pub(crate) mod baseline;
+mod budgets;
 mod cfg;
 mod deps;
 mod layers;
 mod macros;
 pub(crate) mod metrics;
 pub(crate) mod tool;
+mod transfers;
 pub(crate) mod walk;
 
 use std::collections::BTreeMap;
@@ -76,17 +78,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         .map(String::as_str)
         .unwrap_or("check");
     let baseline_path = root.join("rust/xtask/quality-baseline.toml");
-    if command == "move" {
-        if options.positional.len() != 3 {
-            return Err("usage: quality move [--prefix] <old identity> <new identity>".into());
-        }
-        let mut baseline = Baseline::read(&baseline_path)?;
-        baseline.add_move(
-            &options.positional[1],
-            &options.positional[2],
-            options.prefix,
-        )?;
-        return baseline.write(&baseline_path);
+    if command == "move" || command == "budget" {
+        return edit_baseline(root, &baseline_path, command, &options);
     }
     if command == "ident" {
         let names = &options.positional[1..];
@@ -159,8 +152,14 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     };
     let measured = measurement.baseline();
     initialize_layers(root, &options, &mut baseline)?;
+    budgets::check(&measurement, &baseline.budget)?;
     if existing && !options.allow_growth {
-        baseline::check_limits(&measured, &baseline.entries, &baseline.moved, false)?;
+        baseline::check_limits(
+            &budgets::without_budgeted(&measured, &baseline.budget),
+            &budgets::without_budgeted(&baseline.entries, &baseline.budget),
+            &baseline.moved,
+            false,
+        )?;
     }
     if !existing && !options.tighten {
         return Err("quality baseline missing; initialize with --tighten".into());
@@ -171,7 +170,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         None
     };
     if let Some(reference) = &options.base {
-        base_baseline = compare_base(root, reference, &measurement, &baseline, &options)?;
+        base_baseline = compare_base(root, reference, &measurement, &mut baseline, &options)?;
     }
     let headroom = baseline
         .entries
@@ -205,6 +204,52 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> Result<(), String> {
+    if command == "move" {
+        if options.positional.len() != 3 {
+            return Err("usage: quality move [--prefix] <old identity> <new identity>".into());
+        }
+        let mut baseline = Baseline::read(path)?;
+        let reference = options.base.as_deref().unwrap_or("origin/main");
+        let (base, _) = baseline::archived_measurement(root, reference)?;
+        let current = walk::measure(root, None, false)?;
+        if !options.prefix
+            && base
+                .declarations
+                .iter()
+                .all(|f| f.identity != options.positional[1])
+        {
+            return Err(
+                "move source is not a declaration; use --prefix for a module or crate".into(),
+            );
+        }
+        baseline.add_move(
+            &options.positional[1],
+            &options.positional[2],
+            &current,
+            &base,
+        )?;
+        return baseline.write(path);
+    }
+    if command == "budget" {
+        if options.positional.len() != 3 {
+            return Err("usage: quality budget <name> <value> [--allow-growth]".into());
+        }
+        let value = options.positional[2]
+            .parse::<u64>()
+            .map_err(|e| e.to_string())?;
+        let mut baseline = Baseline::read(path)?;
+        budgets::set(
+            &mut baseline.budget,
+            &options.positional[1],
+            value,
+            options.allow_growth,
+        )?;
+        return baseline.write(path);
+    }
+    unreachable!("only baseline editing commands are dispatched here")
+}
+
 fn initialize_layers(
     root: &Path,
     options: &Options,
@@ -229,7 +274,7 @@ fn compare_base(
     root: &Path,
     reference: &str,
     measurement: &metrics::Measurement,
-    baseline: &Baseline,
+    baseline: &mut Baseline,
     options: &Options,
 ) -> Result<Option<Baseline>, String> {
     let measured = measurement.baseline();
@@ -245,7 +290,16 @@ fn compare_base(
     }
     if !options.allow_growth {
         baseline::validate_transfers(measurement, &base, &baseline.moved)?;
-        baseline::check_limits(&current, &before, &baseline.moved, true)?;
+        let transferred = transfers::limits(&before, measurement, &base, &baseline.moved)?;
+        baseline::check_limits(
+            &budgets::without_budgeted(&current, &baseline.budget),
+            &budgets::without_budgeted(&transferred, &baseline.budget),
+            &BTreeMap::new(),
+            true,
+        )?;
+        if recorded.is_none() {
+            budgets::check_growth(&baseline.budget, &BTreeMap::new())?;
+        }
         if let Some(recorded) = &recorded {
             let mut recorded_entries = recorded.entries.clone();
             if !recorded.layers {
@@ -256,7 +310,15 @@ fn compare_base(
                         .map(|(k, v)| (k.clone(), *v)),
                 );
             }
-            baseline::check_limits(&baseline.entries, &recorded_entries, &baseline.moved, true)?;
+            budgets::check_growth(&baseline.budget, &recorded.budget)?;
+            let transferred =
+                transfers::limits(&recorded_entries, measurement, &base, &baseline.moved)?;
+            baseline::check_limits(
+                &budgets::without_budgeted(&baseline.entries, &baseline.budget),
+                &budgets::without_budgeted(&transferred, &baseline.budget),
+                &BTreeMap::new(),
+                true,
+            )?;
         }
     }
     for counter in ["loc", "ffi", "unsafe", "allows"] {
@@ -271,6 +333,9 @@ fn compare_base(
         before.len(),
         current.len()
     );
+    if options.tighten {
+        transfers::retire(&mut baseline.moved, &base);
+    }
     Ok(recorded)
 }
 
@@ -327,6 +392,75 @@ fn is_native(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn budget_cli_and_base_comparison_require_owner_approval_for_growth() {
+        let root = tool::fixture_directory();
+        let write = |name: &str, text: &str| {
+            let path = root.path().join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write(
+            "rust/Cargo.toml",
+            "[workspace]\n[package]\nname=\"uqm\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        );
+        write(
+            "rust/Cargo.lock",
+            "version = 4\n[[package]]\nname = \"uqm\"\nversion = \"0.1.0\"\n",
+        );
+        write("rust/src/lib.rs", "");
+        write(
+            "rust/xtask/src/quality/macros.rs",
+            "const HANDLERS: &[(&str, &str)] = &[];",
+        );
+        let path = root.path().join("rust/xtask/quality-baseline.toml");
+        let mut baseline = Baseline {
+            layers: true,
+            ..Default::default()
+        };
+        budgets::set(&mut baseline.budget, "planned_engine_core", 2, false).unwrap();
+        baseline.write(&path).unwrap();
+        let git = |args: &[&str]| {
+            tool::status(Command::new("git").current_dir(root.path()).args(args)).unwrap()
+        };
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "base",
+        ]);
+        let args = |value: &str| vec!["budget".into(), "planned_engine_core".into(), value.into()];
+        run(root.path(), &args("1")).unwrap();
+        assert!(run(root.path(), &args("3")).is_err());
+        assert!(run(root.path(), &args("invalid")).is_err());
+        assert!(run(root.path(), &["budget".into()]).is_err());
+        let mut approved = args("3");
+        approved.push("--allow-growth".into());
+        run(root.path(), &approved).unwrap();
+        let mut raised = Baseline::read(&path).unwrap();
+        let options = Options::default();
+        let measured = metrics::Measurement::default();
+        let error =
+            compare_base(root.path(), "HEAD", &measured, &mut raised, &options).unwrap_err();
+        assert!(error.contains("quality-growth-approved"), "{error}");
+        compare_base(
+            root.path(),
+            "HEAD",
+            &measured,
+            &mut raised,
+            &Options {
+                allow_growth: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        compare_base(root.path(), "HEAD", &measured, &mut baseline, &options).unwrap();
+    }
     #[test]
     fn native_extensions_include_assembly_and_are_not_substrings() {
         for p in [
