@@ -64,7 +64,7 @@ fn terminate(child: &mut Child) -> Result<ExitStatus> {
     {
         // The process group belongs to this invocation, never a name-wide game kill.
         let status = Command::new("/bin/kill")
-            .args(["-KILL", &format!("-{}", child.id())])
+            .args(["-KILL", "--", &format!("-{}", child.id())])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
