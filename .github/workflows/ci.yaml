@@ -231,6 +231,14 @@ jobs:
         run: |
           set -o pipefail
           cargo xtask parity record --all --out "$PARITY_DIR/record" 2>&1 | tee "$PARITY_DIR/record.log"
+      - name: Retain initial candidates before golden admission and loaded jitter
+        if: ${{ always() && steps.recording.outcome == 'success' && hashFiles('rust/tests/golden/manifest.json') == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-initial-${{ matrix.platform }}
+          path: tmp/verify/parity-${{ matrix.platform }}/record
+          if-no-files-found: error
+          retention-days: 3
       - name: Check base protection, full manifest and fresh recording against goldens
         if: ${{ always() && steps.recording.outcome == 'success' }}
         run: |
