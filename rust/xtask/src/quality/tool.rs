@@ -180,8 +180,9 @@ fn compare_base(
     host: &str,
 ) -> Result<(), String> {
     if let Some(reference) = &options.base {
-        if let Some(base) = baseline::baseline_at_ref(root, reference)? {
+        if let Some(mut base) = baseline::baseline_at_ref(root, reference)? {
             if !options.allow_growth {
+                initialize_new_lints(root, reference, &mut base, baseline, measured, host)?;
                 for (os, previous) in &baseline.lint {
                     if let Some(prior) = base.lint.get(os) {
                         compare(previous, prior, &baseline.moved)?;
@@ -203,6 +204,111 @@ fn compare_base(
         }
     }
     Ok(())
+}
+
+fn initialize_new_lints(
+    root: &Path,
+    reference: &str,
+    base: &mut Baseline,
+    current: &Baseline,
+    measured: &BTreeMap<String, u64>,
+    host: &str,
+) -> Result<(), String> {
+    let new_lints: std::collections::BTreeSet<_> = current
+        .lint
+        .values()
+        .flat_map(|counts| counts.keys())
+        .filter_map(|key| key.split_once('|').map(|(lint, _)| lint))
+        .filter(|lint| lint.starts_with("clippy::"))
+        .filter(|lint| {
+            !base.lint.values().any(|counts| {
+                counts
+                    .keys()
+                    .any(|key| key.starts_with(&format!("{lint}|")))
+            })
+        })
+        .collect();
+    if new_lints.is_empty() {
+        return Ok(());
+    }
+    let manifest = git_file(root, reference, "rust/Cargo.toml")?;
+    let manifest = manifest
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| e.to_string())?;
+    let classifier = git_file(root, reference, "rust/xtask/src/clippy.rs")?;
+    for lint in new_lints {
+        let name = &lint["clippy::".len()..];
+        if manifest["workspace"]["lints"]["clippy"].get(name).is_some()
+            || classifier.contains(&format!("\"{lint}\""))
+        {
+            continue;
+        }
+        require_unchanged_game_sources(root, reference)?;
+        let counts = |values: &BTreeMap<String, u64>| {
+            values
+                .iter()
+                .filter(|(key, _)| key.starts_with(&format!("{lint}|")))
+                .map(|(key, value)| (key.clone(), *value))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let recorded = current.lint.get(host).map(counts).unwrap_or_default();
+        if counts(measured) != recorded || recorded.keys().any(|key| key.contains("|uqm-xtask::")) {
+            return Err(format!(
+                "initial {lint} baseline must equal measured game-only counts for {host}"
+            ));
+        }
+        // The base did not enforce this lint. Credit only its initial, measured
+        // game debt; all subsequent comparisons retain the ordinary ratchet.
+        for (os, values) in &current.lint {
+            base.lint
+                .entry(os.clone())
+                .or_default()
+                .extend(counts(values));
+        }
+        println!("base {reference}: initializing newly enforced {lint}");
+    }
+    Ok(())
+}
+
+fn require_unchanged_game_sources(root: &Path, reference: &str) -> Result<(), String> {
+    let paths = [
+        "rust/src",
+        "rust/crates",
+        "rust/tests",
+        "rust/examples",
+        "rust/build.rs",
+    ];
+    let unchanged = Command::new("git")
+        .current_dir(root)
+        .args(["diff", "--quiet", reference, "--"])
+        .args(paths)
+        .status()
+        .map_err(|e| e.to_string())?;
+    let untracked = Command::new("git")
+        .current_dir(root)
+        .args(["ls-files", "--others", "--exclude-standard", "--"])
+        .args(paths)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !unchanged.success() || !untracked.status.success() || !untracked.stdout.is_empty() {
+        return Err("initial lint baseline requires unchanged game sources".into());
+    }
+    Ok(())
+}
+
+fn git_file(root: &Path, reference: &str, path: &str) -> Result<String, String> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["show", &format!("{reference}:{path}")])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "read {reference}:{path}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    String::from_utf8(output.stdout).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -230,6 +336,89 @@ pub(crate) fn fixture_directory() -> tempfile::TempDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initial_lint_counts_require_new_enforcement_unchanged_sources_and_exact_counts() {
+        let root = fixture_directory();
+        let git = |args: &[&str]| {
+            status(Command::new("git").current_dir(root.path()).args(args)).unwrap()
+        };
+        std::fs::create_dir_all(root.path().join("rust/src")).unwrap();
+        std::fs::create_dir_all(root.path().join("rust/xtask/src")).unwrap();
+        std::fs::write(
+            root.path().join("rust/Cargo.toml"),
+            "[workspace.lints.clippy]\nunwrap_used = 'warn'\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("rust/xtask/src/clippy.rs"),
+            "const DEBT: &[&str] = &[\"clippy::unwrap_used\"];\n",
+        )
+        .unwrap();
+        let source = root.path().join("rust/src/lib.rs");
+        std::fs::write(&source, "pub fn ownership() {}\n").unwrap();
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "base",
+        ]);
+        let key = "clippy::mem_forget|uqm::ownership::@file";
+        let counts = BTreeMap::from([(key.into(), 1)]);
+        let current = Baseline {
+            lint: [
+                ("linux".into(), counts.clone()),
+                ("macos".into(), counts.clone()),
+            ]
+            .into(),
+            ..Baseline::default()
+        };
+        let fresh_base = || Baseline {
+            lint: [
+                ("linux".into(), BTreeMap::new()),
+                ("macos".into(), BTreeMap::new()),
+            ]
+            .into(),
+            ..Baseline::default()
+        };
+        let initialize =
+            |base: &mut Baseline, recorded: &Baseline, measured: &BTreeMap<String, u64>| {
+                initialize_new_lints(root.path(), "HEAD", base, recorded, measured, "macos")
+            };
+        let mut base = fresh_base();
+        initialize(&mut base, &current, &counts).unwrap();
+        assert_eq!(base.lint, current.lint);
+        let growth = BTreeMap::from([(key.into(), 2)]);
+        assert!(compare(&growth, &base.lint["macos"], &BTreeMap::new()).is_err());
+        assert!(initialize(&mut fresh_base(), &current, &growth).is_err());
+        assert!(initialize(&mut fresh_base(), &current, &BTreeMap::new()).is_err());
+
+        let old_lint = Baseline {
+            lint: [(
+                "macos".into(),
+                [("clippy::unwrap_used|uqm::ownership::@file".into(), 1)].into(),
+            )]
+            .into(),
+            ..Baseline::default()
+        };
+        let mut base = fresh_base();
+        initialize(&mut base, &old_lint, &old_lint.lint["macos"]).unwrap();
+        assert!(
+            base.lint["macos"].is_empty(),
+            "an enabled lint with zero hits cannot bootstrap"
+        );
+        std::fs::write(
+            &source,
+            "pub fn ownership() { std::mem::forget(String::new()); }\n",
+        )
+        .unwrap();
+        assert!(initialize(&mut fresh_base(), &current, &counts).is_err());
+    }
 
     #[cfg(unix)]
     #[test]

@@ -162,6 +162,7 @@ unimplemented = "deny"
 undocumented_unsafe_blocks = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
+mem_forget = "warn"
 
 [lints]
 workspace = true
