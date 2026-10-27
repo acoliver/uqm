@@ -41,7 +41,11 @@ fn save_runner_command_uses_actual_test_entry_and_clears_debug_filter() {
         args,
         [
             "test",
+            "--release",
             "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,bundled-sdl",
             "--test",
             "save_runtime_capture",
             "--",

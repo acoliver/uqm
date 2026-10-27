@@ -1,3 +1,40 @@
+#[test]
+#[cfg(unix)]
+fn parallel_replays_share_content_and_binary_but_not_config_or_journals() {
+    let directory = crate::parity::tests::temporary();
+    let context = fixture(directory.path(), None);
+    let names = ["fixture", "second"];
+    fs::copy(
+        directory.path().join("rust/scripts/fixture.json"),
+        directory.path().join("rust/scripts/second.json"),
+    )
+    .unwrap();
+    let results = parallel::map(&names, std::num::NonZeroUsize::new(2).unwrap(), |name| {
+        replay::replay(&context, name, true)
+    });
+    for (name, result) in names.iter().zip(results) {
+        assert_eq!(result.unwrap().0.inputs_admitted, 3);
+        let logs = context
+            .diagnostics
+            .join("scenarios")
+            .join(name)
+            .join("automation");
+        let paths = fs::read_to_string(logs.join("paths.txt")).unwrap();
+        let expected_config = context.work.path().join(name).join("config");
+        assert_eq!(
+            paths,
+            format!(
+                "{}\n{}\n",
+                expected_config.display(),
+                context.content.display()
+            )
+        );
+        assert!(expected_config.is_dir());
+        assert_eq!(read(&logs.join(TRACE)).unwrap(), b"journal-trace\n");
+        assert_eq!(read(&logs.join(FIELDS)).unwrap(), b"journal-fields\n");
+    }
+}
+
 use super::*;
 
 #[cfg(unix)]
@@ -48,6 +85,8 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --automation-output) automation=$2; shift 2 ;;
         --replay-summary) summary=$2; shift 2 ;;
+        --configdir) config=$2; shift 2 ;;
+        --contentdir) content=$2; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -55,6 +94,9 @@ printf 'journal=%s jitter=%s\n' "${UQM_PARITY-unset}" "${UQM_REPLAY_JITTER-unset
 echo diagnostic >&2
 cp "$source_dir/summary.json" "$summary"
 cp "$source_dir/trace.jsonl" "$automation/trace.jsonl"
+printf '%s
+%s
+' "$config" "$content" > "$automation/paths.txt"
 if [ "${UQM_PARITY+x}" = x ]; then
     echo journal-trace > "$automation/parity.trace"
     echo journal-fields > "$automation/parity.fields"

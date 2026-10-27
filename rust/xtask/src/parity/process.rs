@@ -22,6 +22,11 @@ pub(super) fn run(command: &mut Command, budget: Duration, logs: &Path) -> Resul
         .spawn()
         .map_err(|error| format!("launch {command:?}: {error}"))?;
     let result = supervise(&mut child, budget);
+    eprintln!(
+        "parity process {}: {:.3}s",
+        logs.display(),
+        started.elapsed().as_secs_f64()
+    );
     write_json(
         &logs.join("duration.json"),
         &serde_json::json!({

@@ -10,6 +10,7 @@ mod coverage;
 mod inventory;
 mod manifest;
 mod options;
+mod parallel;
 mod process;
 mod recording;
 #[cfg(test)]
