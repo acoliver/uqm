@@ -13,9 +13,11 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
+use uqm_rust::collections::queue::{InitQueue, UninitQueue};
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
@@ -55,10 +57,15 @@ impl Battle {
             let height = ScreenHeight;
             let graphics = _GraphicsStatusFlags;
             _GraphicsStatusFlags &= !4;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
+            assert!(InitQueue(
+                &raw mut disp_q,
+                capacity,
+                mem::size_of::<ELEMENT>() as u16
+            ));
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                assert!(InitQueue(queue, 32, mem::size_of::<STARSHIP>() as u16));
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -78,6 +85,10 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                UninitQueue(queue);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -167,7 +178,7 @@ impl Drop for FrameSet {
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     _ship_frames: FrameSet,
     horn_frames: FrameSet,
@@ -183,7 +194,8 @@ impl Ship {
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [horn_frames.frame(0); 3];
         desc.ship_data.special = [napalm_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        // SAFETY: Battle retains the initialized fixture ship pools.
+        let mut ss = unsafe { PoolShip::new(player) };
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
