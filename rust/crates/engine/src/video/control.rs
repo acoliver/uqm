@@ -177,3 +177,88 @@ pub unsafe extern "C" fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int {
     rust_hfree(video.cast());
     1
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::video::legacy::{LegacyVideo, PlayLegacyVideo, PlayingLegacyVideo, StopLegacyVideo};
+
+    #[test]
+    fn video_lifecycle_uses_real_content_and_replay_audio_without_a_window() {
+        const CHILD: &str = "UQM_ENGINE_VIDEO_CONTROL_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "video::control::tests::video_lifecycle_uses_real_content_and_replay_audio_without_a_window", "--nocapture"])
+                .env(CHILD, "1")
+                .status().unwrap();
+            assert!(status.success());
+            return;
+        }
+        crate::time::source::install(true);
+        let directory = crate::video::ffi_vtable_tests::logo_directory();
+        // SAFETY: the child owns the content directory, surfaces and decoder handles for the full lifecycle.
+        unsafe {
+            let screen =
+                sdl2_sys::SDL_CreateRGBSurface(0, 320, 240, 32, 0xff, 0xff00, 0xff0000, 0xff000000);
+            assert!(!screen.is_null());
+            crate::graphics::sdl::lifecycle_abi::SDL_Screen = screen.cast();
+            crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND =
+                ptr::addr_of_mut!(crate::graphics::sdl::lifecycle_abi::RUST_BACKEND);
+            contentDir = directory.handle();
+            assert_eq!(InitVideoPlayer(0), 1);
+            assert!(VidPlaying().is_null());
+            assert_eq!(VidProcessFrame(), 0);
+            assert_eq!(VidGetPosition(), 0);
+            assert_eq!(VidSeek(100), 0);
+            assert_eq!(VidPlay(ptr::null_mut()), 0);
+            assert_eq!(DestroyVideo(ptr::null_mut()), 0);
+            assert!(_init_video_file(c"missing.duk".as_ptr()).is_null());
+            assert!(VideoDecoder_Load(contentDir.cast(), c"no-extension".as_ptr()).is_null());
+            assert!(VideoDecoder_Load(contentDir.cast(), c"movie.unknown".as_ptr()).is_null());
+            let decoder = VideoDecoder_Load(contentDir.cast(), c"logo.duk".as_ptr());
+            assert!(!decoder.is_null());
+            assert_ne!(
+                std::ffi::CStr::from_ptr(VideoDecoder_GetName(decoder)),
+                c"(Null)"
+            );
+            assert_eq!(VideoDecoder_Decode(decoder), 1);
+            assert_eq!((*decoder).error, 0);
+            assert!(VideoDecoder_Seek(decoder, 1.0) > 0.0);
+            assert_eq!(VideoDecoder_SeekFrame(decoder, 2), 2);
+            VideoDecoder_Rewind(decoder);
+            assert_eq!((*decoder).cur_frame, 0);
+            VideoDecoder_Free(decoder);
+            let clip = _init_video_file(c"logo.duk".as_ptr());
+            assert!(!clip.is_null());
+            assert_eq!((*clip).w, (*(*clip).decoder).w);
+            assert_eq!(VidPlay(clip), 2);
+            assert_eq!(VidPlaying(), clip);
+            assert_eq!(VidGetPosition(), 0);
+            assert_eq!(VidSeek(100), 0);
+            assert_eq!(VidProcessFrame(), 1);
+            VidStop();
+            assert!(VidPlaying().is_null());
+            assert_eq!(DestroyVideo(clip), 1);
+            let mut legacy = LegacyVideo {
+                video: c"logo.duk".as_ptr().cast_mut(),
+                audio: ptr::null_mut(),
+                speech: ptr::null_mut(),
+                loop_frame: u32::MAX,
+            };
+            assert!(PlayLegacyVideo(ptr::null_mut()).is_null());
+            assert_eq!(PlayingLegacyVideo(ptr::null_mut()), 0);
+            StopLegacyVideo(ptr::null_mut());
+            let reference = PlayLegacyVideo(&mut legacy);
+            assert!(!reference.is_null());
+            assert_eq!(PlayingLegacyVideo(reference), 1);
+            StopLegacyVideo(reference);
+            assert!(VidPlaying().is_null());
+            UninitVideoPlayer();
+            crate::sound::rodio_audio::rust_audio_uninit();
+            contentDir = ptr::null_mut();
+            crate::graphics::sdl::lifecycle_abi::GRAPHICS_BACKEND = ptr::null_mut();
+            crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
+            sdl2_sys::SDL_FreeSurface(screen);
+        }
+    }
+}

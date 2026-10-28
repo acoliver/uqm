@@ -570,9 +570,10 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
         state.presentation_count = state.presentation_count.saturating_add(1);
 
         // Read the generation at the presentation boundary, never at hook install.
-        if let Some(generation) = crate::graphics::sdl::lifecycle_abi::RUST_BACKEND
-            .readback_hook
-            .and_then(|hook| hook())
+        // SAFETY: presentation runs on the graphics thread that owns this backend.
+        if let Some(generation) =
+            unsafe { crate::graphics::sdl::lifecycle_abi::RUST_BACKEND.readback_hook }
+                .and_then(|hook| hook())
         {
             match video::presented_frame(&state.canvas, state.presentation_count, generation) {
                 Ok(frame) => state.presented_frame = Some(frame),

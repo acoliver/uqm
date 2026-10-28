@@ -23,12 +23,7 @@ pub struct LegacyVideoRef {
     pub speech: *mut c_void,
 }
 
-#[cfg(not(test))]
 use crate::video::control::VidStop;
-#[cfg(test)]
-extern "C" {
-    fn VidStop();
-}
 
 use crate::video::control::_init_video_file;
 

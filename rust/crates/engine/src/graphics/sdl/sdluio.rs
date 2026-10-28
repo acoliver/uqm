@@ -90,3 +90,32 @@ pub unsafe extern "C" fn sdluio_close(context: *mut SDL_RWops) -> c_int {
     rust_hfree(context.cast());
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sound::decoder_vtable_tests::Directory;
+
+    #[test]
+    #[serial_test::serial]
+    fn stream_callbacks_write_seek_and_read_complete_items() {
+        let directory = Directory::new();
+        // SAFETY: the repository owns the stream and the allocated RWops is consumed by close.
+        unsafe {
+            assert!(sdluio_load_image(directory.handle().cast(), c"absent.png".as_ptr()).is_null());
+            let file =
+                uio_bridge::uio_fopen(directory.handle(), c"data.bin".as_ptr(), c"w+b".as_ptr());
+            assert!(!file.is_null());
+            let rw: *mut SDL_RWops = rust_hmalloc(std::mem::size_of::<SDL_RWops>()).cast();
+            (*rw).hidden.unknown.data1 = file.cast();
+            assert_eq!(sdluio_write(rw, b"abcdef".as_ptr().cast(), 2, 3), 3);
+            assert_eq!(sdluio_seek(rw, 2, libc::SEEK_SET), 2);
+            let mut bytes = [0; 4];
+            assert_eq!(sdluio_read(rw, bytes.as_mut_ptr().cast(), 2, 2), 2);
+            assert_eq!(&bytes, b"cdef");
+            assert_eq!(sdluio_read(rw, bytes.as_mut_ptr().cast(), 2, 2), 0);
+            assert_eq!(sdluio_seek(rw, 0, -100), -1);
+            assert_eq!(sdluio_close(rw), 0);
+        }
+    }
+}

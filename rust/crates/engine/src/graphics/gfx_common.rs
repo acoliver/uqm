@@ -1053,3 +1053,7 @@ mod tests {
         assert!(!guard.is_initialized());
     }
 }
+
+#[cfg(test)]
+#[path = "gfx_common_tests.rs"]
+mod driver_tests;

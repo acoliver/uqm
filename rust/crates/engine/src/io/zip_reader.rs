@@ -599,3 +599,43 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+    use std::io::{ErrorKind, Write};
+
+    #[test]
+    fn directories_missing_entries_and_invalid_archives_have_distinct_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("archive.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&path).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        writer.add_directory("docs/", options).unwrap();
+        writer.start_file("docs/data", options).unwrap();
+        writer.write_all(b"payload").unwrap();
+        writer.finish().unwrap();
+        let index = ZipIndex::new(&path).unwrap();
+        assert!(index.get_entry("docs/data").is_some());
+        assert!(index.get_entry("absent").is_none());
+        assert_eq!(
+            index.read_entry("absent").unwrap_err().kind(),
+            ErrorKind::NotFound
+        );
+        assert_eq!(
+            index.read_entry("docs").unwrap_err().kind(),
+            ErrorKind::InvalidInput
+        );
+        assert!(matches!(index.open_entry("docs"), Err(e) if e.kind() == ErrorKind::InvalidInput));
+        assert!(matches!(index.open_entry("absent"), Err(e) if e.kind() == ErrorKind::NotFound));
+        std::fs::write(&path, b"invalid zip").unwrap();
+        assert_eq!(
+            ZipIndex::new(&path).unwrap_err().kind(),
+            ErrorKind::InvalidData
+        );
+        assert_eq!(
+            index.read_entry("docs/data").unwrap_err().kind(),
+            ErrorKind::InvalidData
+        );
+    }
+}

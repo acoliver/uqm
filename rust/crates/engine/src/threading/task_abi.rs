@@ -120,3 +120,33 @@ pub unsafe extern "C" fn FinishTask(task: *mut TaskStruct) {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn task_state_updates_return_previous_masked_bits_and_finish_clears_inuse() {
+        InitTaskSystem();
+        let task = ptr::addr_of!(TASKS.0[0]).cast_mut();
+        // SAFETY: the serial test initializes task mutexes before accessing the first task slot.
+        unsafe {
+            (*task)
+                .name
+                .store(c"test task".as_ptr().cast_mut(), Ordering::Relaxed);
+            assert_eq!(Task_SetState(task, TASK_INUSE | 4), 0);
+            assert_eq!(Task_SetState(task, TASK_INUSE), TASK_INUSE);
+            assert_eq!(Task_ClearState(task, 4), 4);
+            assert_eq!((*task).state.load(Ordering::Acquire), TASK_INUSE);
+            FinishTask(task);
+            assert_eq!((*task).state.load(Ordering::Acquire), 0);
+            assert!((*task).thread.load(Ordering::Acquire).is_null());
+        }
+        CleanupTaskSystem();
+        assert!(TASKS
+            .0
+            .iter()
+            .all(|task| task.state_mutex.load(Ordering::Acquire).is_null()));
+    }
+}

@@ -1,4 +1,5 @@
 //! Shrink-only source counters and identifier checks. No game code is linked.
+mod approvals;
 pub(crate) mod baseline;
 mod budgets;
 mod cfg;
@@ -31,6 +32,7 @@ struct Options {
     defs: bool,
     prefix: bool,
     allow_growth: bool,
+    allow_engine_os: bool,
 }
 
 impl Options {
@@ -62,6 +64,7 @@ impl Options {
                 "--defs" => options.defs = true,
                 "--prefix" => options.prefix = true,
                 "--allow-growth" => options.allow_growth = true,
+                "--allow-engine-os" => options.allow_engine_os = true,
                 _ if arg.starts_with('-') => return Err(format!("unknown quality option {arg}")),
                 _ => options.positional.push(arg.clone()),
             }
@@ -277,6 +280,9 @@ fn initialize_layers(
         );
         baseline.layers = true;
     }
+    if options.allow_engine_os {
+        approvals::engine_os(&mut baseline.entries);
+    }
     Ok(())
 }
 fn compare_base(
@@ -289,6 +295,9 @@ fn compare_base(
     let measured = measurement.baseline();
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
     let mut before = base.baseline();
+    if options.allow_engine_os {
+        approvals::engine_os(&mut before);
+    }
     let mut current = measured.clone();
     if recorded.is_none() {
         // U0-02 introduces the gate and its first tooling baseline. Existing
@@ -311,6 +320,9 @@ fn compare_base(
         }
         if let Some(recorded) = &recorded {
             let mut recorded_entries = recorded.entries.clone();
+            if options.allow_engine_os {
+                approvals::engine_os(&mut recorded_entries);
+            }
             if !recorded.layers {
                 recorded_entries.extend(
                     before

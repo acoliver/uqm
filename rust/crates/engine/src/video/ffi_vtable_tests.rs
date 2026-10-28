@@ -40,7 +40,7 @@ fn funcs() -> &'static TFB_VideoDecoderFuncs {
     &RUST_DUKV_DECODER_VTBL
 }
 
-fn logo_directory() -> Directory {
+pub(super) fn logo_directory() -> Directory {
     let directory = Directory::new();
     for ext in ["duk", "frm", "hdr", "tbl"] {
         let bytes = std::fs::read(logo_dir().join(format!("logo.{ext}"))).unwrap();

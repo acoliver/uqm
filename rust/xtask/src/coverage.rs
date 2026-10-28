@@ -1,3 +1,6 @@
+#[path = "coverage_debt.rs"]
+pub(crate) mod debt;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -158,6 +161,9 @@ fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result
 }
 
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
+    if args.first().is_some_and(|arg| arg == "debt") {
+        return debt::edit(root, &args[1..]);
+    }
     let mut args = args.iter();
     let base = match args.next().map(String::as_str) {
         Some("--base") => Some(args.next().ok_or("--base needs a ref")?.as_str()),
@@ -168,6 +174,10 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         return Err(format!("unexpected coverage option {arg}"));
     }
     let added = added_production_files(root, base, &tool::identities(root)?)?;
+    let baseline =
+        crate::quality::baseline::Baseline::read(&root.join("rust/xtask/quality-baseline.toml"))?;
+    let exempt = debt::exemptions(root, base, &baseline)?;
+    let added = added.difference(&exempt).cloned().collect();
     measure(root, &added, std::ffi::OsStr::new(&crate::quality::cargo()))
 }
 

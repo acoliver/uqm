@@ -329,6 +329,7 @@ mod tests {
         assert_eq!(format.Aloss, 8);
     }
     #[test]
+    #[serial_test::serial]
     fn registry_reuses_removed_slots_and_rejects_duplicates() {
         unsafe {
             assert!(VideoDecoder_Init(0, 32, 0xff, 0xff00, 0xff0000, 0xff000000));

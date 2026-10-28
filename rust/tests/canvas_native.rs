@@ -2,8 +2,15 @@
 use sdl2_sys::{SDL_CreateRGBSurface, SDL_FreeSurface, SDL_Surface};
 use std::ptr;
 use uqm_rust::graphics::{
-    native_abi::{Color, DrawMode, TFB_Image, HOT_SPOT},
-    native_canvas::{drawing::*, lifecycle::*, DRAW_REPLACE, TFB_SCALE_NEAREST},
+    native_abi::{Color, DrawMode, TFB_Image, EXTENT, HOT_SPOT},
+    native_canvas::{
+        drawing::*,
+        lifecycle::*,
+        rotation::*,
+        surface::{FALSE, TRUE},
+        transparency::*,
+        DRAW_REPLACE, TFB_SCALE_NEAREST,
+    },
 };
 use uqm_rust::threading::legacy_abi::{CreateMutex_Core, DestroyMutex};
 const RGBA_MASKS: (u32, u32, u32, u32) = (0xff, 0xff00, 0xff_0000, 0xff00_0000);
@@ -182,5 +189,78 @@ fn image_scaling_reuses_cache_until_dirty_then_refreshes_pixels() {
         assert_eq!(px(scaled, 0, 0), rgb(78, 90, 12));
         SDL_FreeSurface(scaled);
         SDL_FreeSurface(source);
+    }
+}
+
+#[test]
+fn rotation_preserves_pixels_at_zero_and_transfers_transparent_color() {
+    // SAFETY: both SDL surfaces are owned by this test and remain live through each operation.
+    unsafe {
+        let src = surface(2, 2, false);
+        let dst = surface(2, 2, false);
+        put(src, 0, 0, rgb(10, 20, 30));
+        put(src, 1, 0, rgb(40, 50, 60));
+        put(src, 0, 1, rgb(70, 80, 90));
+        put(src, 1, 1, rgb(100, 110, 120));
+        TFB_DrawCanvas_SetTransparentColor(src.cast(), color(1, 2, 3, 255), FALSE);
+        let size = EXTENT {
+            width: 2,
+            height: 2,
+        };
+        TFB_DrawCanvas_Rotate(src.cast(), dst.cast(), 0, size);
+        for y in 0..2 {
+            for x in 0..2 {
+                assert_eq!(px(dst, x, y), px(src, x, y));
+            }
+        }
+        let mut transparent = color(0, 0, 0, 0);
+        assert_eq!(
+            TFB_DrawCanvas_GetTransparentColor(dst.cast(), &mut transparent),
+            TRUE
+        );
+        assert_eq!((transparent.r, transparent.g, transparent.b), (1, 2, 3));
+        TFB_DrawCanvas_Rotate(
+            src.cast(),
+            dst.cast(),
+            90,
+            EXTENT {
+                width: 3,
+                height: 2,
+            },
+        );
+        assert_eq!(px(dst, 0, 0), rgb(10, 20, 30));
+        let mut extent = EXTENT {
+            width: 0,
+            height: 0,
+        };
+        TFB_DrawCanvas_GetRotatedExtent(src.cast(), 90, &mut extent);
+        assert!(extent.width >= 2 && extent.height >= 2);
+        SDL_FreeSurface(src);
+        SDL_FreeSurface(dst);
+    }
+}
+
+#[test]
+fn truecolor_transparency_copy_keeps_the_source_key_and_palette_absence() {
+    // SAFETY: both SDL surfaces are owned by this test and remain live through each operation.
+    unsafe {
+        let src = surface(2, 2, false);
+        let dst = surface(2, 2, false);
+        assert!(TFB_DrawCanvas_ExtractPalette(src.cast()).is_null());
+        TFB_DrawCanvas_SetTransparentColor(src.cast(), color(11, 22, 33, 255), FALSE);
+        TFB_DrawCanvas_CopyTransparencyInfo(src.cast(), dst.cast());
+        let mut found = color(0, 0, 0, 0);
+        assert_eq!(
+            TFB_DrawCanvas_GetTransparentColor(dst.cast(), &mut found),
+            TRUE
+        );
+        assert_eq!((found.r, found.g, found.b, found.a), (11, 22, 33, 255));
+        TFB_DrawCanvas_SetTransparentIndex(src.cast(), -1, FALSE);
+        assert_eq!(
+            TFB_DrawCanvas_GetTransparentColor(src.cast(), &mut found),
+            FALSE
+        );
+        SDL_FreeSurface(src);
+        SDL_FreeSurface(dst);
     }
 }

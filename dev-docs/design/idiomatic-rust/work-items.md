@@ -2035,6 +2035,7 @@ Phase 7 · semantic · lane `graphics` · about 5,800 changed lines · depends o
 - SDL_Surface canvases outside graphics/sdl, including video's
 - the present_hook and readback_hook fields of the graphics backend state (adapter A5)
 - graphics/{dcqueue_abi,context_abi,tfb_draw_abi,tfb_prim_abi,gfx_common_abi}.rs, with screen_global! and its walker handler
+- graphics/sdl/{pure_abi,platform_abi}.rs, whose C-style rendering entry points are replaced by Platform present
 
 **Out of scope.** drawables, frames, fonts, colour maps (U7-02); video decoding and audio (U7-04).
 
@@ -2194,6 +2195,7 @@ Phase 7 · semantic · lane `content-loading` · about 2,500 changed lines · de
 
 **Deletes** (gone when the PR merges; the acceptance checks prove it)
 - rust_ova_DecoderVtbl and every other decoder vtable with its extern "C" functions
+- sound/ffi.rs, whose decoder entry points and vtable are replaced by Decoder
 - sound and video unsafe outside the rodio backend
 
 **Out of scope.** input (U7-05).

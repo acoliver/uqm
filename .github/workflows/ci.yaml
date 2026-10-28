@@ -41,12 +41,18 @@ jobs:
           workspaces: rust
       - run: cargo fmt --all --check
       - run: cargo xtask abi-check
+      - name: Scope engine-crate approval
+        if: contains(github.event.pull_request.labels.*.name, 'quality-growth-approved')
+        run: |
+          if test -f crates/engine/Cargo.toml && ! git cat-file -e "origin/$BASE:rust/crates/engine/Cargo.toml" 2>/dev/null; then
+            echo "ENGINE_SPLIT=true" >> "$GITHUB_ENV"
+          fi
       - run: cargo xtask quality $BASE_ARG $GROWTH
         env:
-          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--allow-growth' || '' }}
+          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && (env.ENGINE_SPLIT == 'true' && '--allow-engine-os' || '--allow-growth') || '' }}
       - run: cargo xtask clippy $BASE_ARG $GROWTH $TIGHTEN
         env:
-          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--allow-growth' || '' }}
+          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && env.ENGINE_SPLIT != 'true' && '--allow-growth' || '' }}
           TIGHTEN: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--tighten' || '' }}
       - uses: actions/upload-artifact@v4
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') }}
@@ -145,11 +151,17 @@ jobs:
         with:
           workspaces: rust
           key: game-${{ matrix.target }}
+      - name: Scope engine-crate approval on macOS
+        if: matrix.target == 'aarch64-apple-darwin' && contains(github.event.pull_request.labels.*.name, 'quality-growth-approved')
+        run: |
+          if test -f crates/engine/Cargo.toml && ! git cat-file -e "origin/$BASE:rust/crates/engine/Cargo.toml" 2>/dev/null; then
+            echo "ENGINE_SPLIT=true" >> "$GITHUB_ENV"
+          fi
       - name: Check macOS Clippy baseline
         if: matrix.target == 'aarch64-apple-darwin'
         run: cargo xtask clippy $BASE_ARG $GROWTH
         env:
-          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && '--allow-growth' || '' }}
+          GROWTH: ${{ contains(github.event.pull_request.labels.*.name, 'quality-growth-approved') && env.ENGINE_SPLIT != 'true' && '--allow-growth' || '' }}
       - run: cargo build --release --locked --bin uqm --features bundled-sdl --target ${{ matrix.target }}
       - name: Check version, content and native networking without user state
         run: |

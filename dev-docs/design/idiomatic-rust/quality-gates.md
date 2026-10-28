@@ -116,7 +116,8 @@ and make side-by-side review against the C original harder.
 
 Baseline-backed checks accept `--base <git-ref>` (growth check, section 4) and
 `--tighten` (rewrite the baseline downward). Coverage accepts `--base <git-ref>`
-to identify added production files and has no baseline or growth override.
+to identify added production files and validate the limited `[coverage_debt]`
+move exceptions (section 4); it has no growth override.
 Production code is defined by the source walk of section 3.2.
 
 | Command | Checks | Limit |
@@ -369,8 +370,10 @@ Rules enforced by xtask:
      Shared source lines credit only one destination scope, and each lint's total
      is conserved. New wrapper lines, extra allows and per-file layer imports do
      not receive free credit.
-     Sources and targets cannot overlap other transfers, an existing destination
-     cannot absorb a second source, and each metric's workspace total cannot rise.
+     Sources cannot overlap. Nested destination prefixes are permitted only when
+     their measured source identities map to distinct destination identities;
+     existing destinations and duplicate credits still fail. Each metric's
+     workspace total cannot rise.
      A moved function keeps its own entry and is not split. `--tighten --base <ref>`
      drops transfers whose destinations are already present at base, including
      declarations below the ordinary debt thresholds. Item transfers retained after
@@ -379,9 +382,22 @@ Rules enforced by xtask:
      that the workspace total does not rise.
 4. **Coverage floors.** Workspace line coverage must be at least 70%, and each
    production file added relative to `--base` with instrumented executable lines
-   must have at least 70% line coverage. These are absolute checks, with no per-file
-   baseline or growth override. Files added by a move also count as added. Files
-   with zero instrumented lines, including declaration/re-export-only files that
+   must have at least 70% line coverage. No growth label overrides either floor.
+   Files added by a move also count as added, with the limited exceptions decided
+   in [#743](https://github.com/acoliver/uqm/issues/743). `[coverage_debt]` records
+   `"path" = "U7-02"` for a moved file already scheduled for deletion in that
+   unit's Deletes list in work-items.md. `cargo xtask coverage debt <path> <unit>
+   --base <ref>` records an entry only when Git identifies the file as a move;
+   coverage validates the deleting unit, rejects changed owners and non-move
+   additions, and rejects entries retained after their files are deleted. Existing
+   entries may only be removed, using `cargo xtask coverage debt remove <path>`.
+   Without `--base`, retained debt is checked against HEAD. The three window/GPU backends
+   `graphics/sdl/opengl.rs`, `graphics/sdl/sdl2.rs` and
+   `graphics/ffi_video_macos.rs` may instead use `"native"`; native-window scenarios
+   exercise those backends. Other files require behavior tests to reach 70%.
+   Debt exempts only the added-file floor, never the workspace measurement or its
+   70% floor. Baseline rewrites preserve these entries.
+   Files with zero instrumented lines, including declaration/re-export-only files that
    LLVM omits from its report, are listed as `no executable lines` and do not fail
    ([#711](https://github.com/acoliver/uqm/issues/711)). The workspace must still
    contain executable lines. Existing files contribute to the workspace total without an exact
@@ -392,7 +408,10 @@ Rules enforced by xtask:
 5. **Owner sign-off.** Any other growth needs the label `quality-growth-approved`,
    applied only by the owner, with the reason in the PR description. Agents never
    apply it. Setting the `[budget]` counters (U1-01, U1-02) and U1-02's unsafe
-   allowance are such approvals.
+   allowance are such approvals. The engine split approval is narrower: CI uses
+   `quality --allow-engine-os` only while introducing `crates/engine/Cargo.toml`.
+   It permits one direct edge to each of libc, sdl2, sdl2-sys, gl, rodio, cpal and
+   windows-sys, and leaves all other counters and Clippy ratchets enforced.
 
 There is no hashing, no provenance bundle and no self-check of xtask.
 

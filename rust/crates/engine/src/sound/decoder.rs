@@ -310,3 +310,7 @@ mod tests {
         assert_send::<DecodeError>();
     }
 }
+
+#[cfg(test)]
+#[path = "decoder_tests.rs"]
+mod limited_tests;

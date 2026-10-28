@@ -108,10 +108,14 @@ pub unsafe extern "C" fn TFB_InitGraphics(
     width: c_int,
     height: c_int,
 ) -> c_int {
-    let options = &*options.cast::<GraphicsOptions>();
-    RUST_BACKEND.present_hook = options.present_hook;
-    RUST_BACKEND.readback_hook = options.readback_hook;
-    SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
+    // SAFETY: the caller supplies live options and exclusively owns graphics initialization.
+    let options = unsafe {
+        let options = &*options.cast::<GraphicsOptions>();
+        RUST_BACKEND.present_hook = options.present_hook;
+        RUST_BACKEND.readback_hook = options.readback_hook;
+        SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
+        options
+    };
     update_video_globals(driver, flags, width, height);
     if ffi::rust_gfx_init(driver, flags, options, width, height) != 0 {
         std::process::exit(1);
@@ -190,10 +194,8 @@ static mut LAST_TRANSITION: c_int = 255;
 /// Called on the SDL main thread with graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
-    if RUST_BACKEND
-        .present_hook
-        .is_some_and(|hook| hook(false) != 0)
-    {
+    // SAFETY: the graphics thread owns the initialized backend throughout this call.
+    if unsafe { RUST_BACKEND.present_hook }.is_some_and(|hook| hook(false) != 0) {
         return;
     }
     let fade = GetFadeAmount();
@@ -232,7 +234,8 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
         (backend.screen)(0, 255, ptr::addr_of_mut!(SYSTEM_BOX));
     }
     (backend.postprocess)();
-    if let Some(hook) = (*GRAPHICS_BACKEND).present_hook {
+    // SAFETY: GRAPHICS_BACKEND refers to the backend initialized on this graphics thread.
+    if let Some(hook) = unsafe { (*GRAPHICS_BACKEND).present_hook } {
         hook(true);
     }
 }
