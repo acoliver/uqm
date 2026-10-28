@@ -197,17 +197,9 @@ pub union PRIM_DESC {
     pub Rect: RECT,
 }
 pub type PRIM_LINKS = DWORD;
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct PRIMITIVE {
-    pub Links: PRIM_LINKS,
-    pub Type: GRAPHICS_PRIM,
-    pub color: Color,
-    pub Object: PRIM_DESC,
-}
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-pub use crate::graphics::geometry_ffi::BoxIntersect;
+pub use crate::{engine::battle::record::PRIMITIVE, graphics::geometry_ffi::BoxIntersect};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DrawMode {

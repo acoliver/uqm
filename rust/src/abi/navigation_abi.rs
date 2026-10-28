@@ -1017,7 +1017,7 @@ pub type OBJ_SIZE = UWORD;
 pub type HLINK = QUEUE_HANDLE;
 pub use crate::ships::native::abi::link;
 pub type LINK = link;
-pub use crate::ships::native::abi::QUEUE;
+pub use crate::engine::battle::record::QUEUE;
 
 pub use crate::collections::queue::AllocLink;
 
@@ -1274,7 +1274,7 @@ pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
 pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-pub use crate::graphics::native_abi::PRIMITIVE;
+pub use crate::engine::battle::record::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
 pub use crate::ships::native::abi::INTERSECT_CONTROL;
 pub type INTERSECT_CODE = BYTE;
@@ -3473,10 +3473,10 @@ pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::ships::native::abi::state;
-pub use crate::ships::native::abi::state__bindgen_ty_1;
+pub use crate::engine::battle::record::state;
+pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub type ELEMENT = element;
+pub use crate::engine::battle::record::ELEMENT;
 pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type ElementCollisionFunc = ::std::option::Option<
     unsafe extern "C" fn(
@@ -3486,18 +3486,14 @@ pub type ElementCollisionFunc = ::std::option::Option<
         pPt1: *mut POINT,
     ),
 >;
-pub use crate::ships::native::abi::element;
-pub use crate::ships::native::abi::element__bindgen_ty_1;
-pub use crate::ships::native::abi::element__bindgen_ty_2;
-pub use crate::ships::native::abi::element__bindgen_ty_3;
-pub use crate::ships::native::abi::element__bindgen_ty_4;
-pub use crate::ships::native::abi::element__bindgen_ty_5;
-extern "C" {
-    pub static mut disp_q: QUEUE;
-}
-extern "C" {
-    pub static mut DisplayArray: [PRIMITIVE; 330usize];
-}
+pub use crate::engine::battle::record::element;
+pub use crate::engine::battle::record::element__bindgen_ty_1;
+pub use crate::engine::battle::record::element__bindgen_ty_2;
+pub use crate::engine::battle::record::element__bindgen_ty_3;
+pub use crate::engine::battle::record::element__bindgen_ty_4;
+pub use crate::engine::battle::record::element__bindgen_ty_5;
+pub use crate::engine::battle::legacy::disp_q;
+pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::AllocElement;
@@ -3570,16 +3566,16 @@ pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub type RACE_DESC = race_desc;
+pub use crate::engine::battle::record::RACE_DESC;
 pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
 pub type INIT_WEAPON_FUNC = ::std::option::Option<
     unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT,
 >;
 pub type UNINIT_FUNC = ::std::option::Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
-pub use crate::ships::native::abi::race_desc;
+pub use crate::engine::battle::record::race_desc;
 pub use crate::ships::native::abi::SHIP_BASE;
-pub use crate::ships::native::abi::STARSHIP;
+pub use crate::engine::battle::record::STARSHIP;
 pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub type HFLEETINFO = HLINK;
@@ -3921,9 +3917,7 @@ extern "C" {
 extern "C" {
     pub static mut TinyFont: FONT;
 }
-extern "C" {
-    pub static mut race_q: [crate::collections::queue::Queue;2];
-}
+pub use crate::engine::battle::legacy::race_q;
 extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }

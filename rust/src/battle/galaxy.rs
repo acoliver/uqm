@@ -214,9 +214,9 @@ pub(crate) mod engine {
     ];
     extern "C" {
         static mut zoom_out: i16;
-        static mut DisplayLinks: u32;
-        static mut DisplayFreeList: u16;
     }
+
+    use crate::engine::battle::legacy::{DisplayFreeList, DisplayLinks};
 
     unsafe fn prim(index: usize) -> *mut PRIMITIVE {
         (&raw mut DisplayArray).cast::<PRIMITIVE>().add(index)

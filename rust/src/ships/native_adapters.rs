@@ -41,7 +41,7 @@ mod live {
     use std::{mem, ptr};
 
     unsafe fn queue() -> *mut crate::collections::queue::Queue {
-        ptr::addr_of_mut!(crate::game_init::kernel_abi::disp_q).cast()
+        ptr::addr_of_mut!(crate::engine::battle::legacy::disp_q).cast()
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << 5
@@ -147,7 +147,7 @@ mod live {
         if crate::game_init::space_resources::InitSpace() == 0 { return 0; }
         SetContext(StatusContext); SetContext(SpaceContext);
         InitDisplayList(); crate::battle::galaxy::InitGalaxy();
-        let races = ptr::addr_of_mut!(crate::game_init::kernel_abi::race_q).cast::<QUEUE>();
+        let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
         if inHQSpace() != 0 {
             ReinitQueue(races); ReinitQueue(races.add(1));
             let flagship = Build(races, SPECIES_ID_SIS_SHIP_ID).cast::<STARSHIP>();
@@ -191,7 +191,7 @@ mod live {
             for i in (0..2).rev() { if !ships[i].is_null() && FleetIsInfinite(i as u16) == 0 { UpdateShipFragCrew(ships[i]); } }
         }
         if uqm_get_current_activity_lobyte() != IN_ENCOUNTER as u8 {
-            let races = ptr::addr_of_mut!(crate::game_init::kernel_abi::race_q).cast::<QUEUE>();
+            let races = ptr::addr_of_mut!(crate::engine::battle::legacy::race_q).cast::<QUEUE>();
             ReinitQueue(races); ReinitQueue(races.add(1));
             if inHQSpace() != 0 { crate::navigation::hyper_data::FreeHyperspace(); }
         }
