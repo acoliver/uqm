@@ -2182,11 +2182,8 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "allows|non_camel_case_types|uqm::supermelee::netplay::abi" = 899
 "allows|non_snake_case|uqm-engine::callback::ffi" = 210
 "allows|non_snake_case|uqm-engine::graphics::native_abi" = 973
-"allows|non_snake_case|uqm-engine::graphics::records::IntersectControl::EndPoint" = 2
-"allows|non_snake_case|uqm-engine::graphics::records::IntersectControl::IntersectStamp" = 2
-"allows|non_snake_case|uqm-engine::graphics::records::PRIMITIVE::Links" = 2
-"allows|non_snake_case|uqm-engine::graphics::records::PRIMITIVE::Object" = 2
-"allows|non_snake_case|uqm-engine::graphics::records::PRIMITIVE::Type" = 2
+"allows|non_snake_case|uqm-engine::graphics::records::IntersectControl" = 7
+"allows|non_snake_case|uqm-engine::graphics::records::PRIMITIVE" = 8
 "allows|non_snake_case|uqm-engine::input::joystick::HatDirection" = 15
 "allows|non_snake_case|uqm-engine::io::uio_bridge::uio_DirList" = 10
 "allows|non_snake_case|uqm-engine::network::sys::windows" = 209

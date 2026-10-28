@@ -26,7 +26,7 @@ const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/lega
 /// as the save directory.
 struct SaveDirFixture {
     scratch: TempDir,
-    repository: *mut uio_Repository,
+    repository_handle: *mut uio_Repository,
     dir: *mut c_void,
 }
 
@@ -54,7 +54,7 @@ impl SaveDirFixture {
             assert!(!dir.is_null());
             SaveDirFixture {
                 scratch,
-                repository,
+                repository_handle: repository,
                 dir: dir.cast(),
             }
         }
@@ -82,7 +82,7 @@ impl Drop for SaveDirFixture {
     fn drop(&mut self) {
         unsafe {
             uio_closeDir(self.dir.cast());
-            uio_closeRepository(self.repository);
+            uio_closeRepository(self.repository_handle);
             uio_unInit();
         }
     }
