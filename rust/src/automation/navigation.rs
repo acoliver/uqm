@@ -117,6 +117,22 @@ fn pursue_heading(dx: f64, dy: f64, ship_facing: u8) -> NavigationControl {
     }
 }
 
+/// A contact-seeking approach must leave an existing orbital menu before
+/// another arrival can dispatch a new conversation.
+#[derive(Debug, Default)]
+pub(crate) struct OrbitApproach {
+    flight_observed: bool,
+    /// Wait one callback after arrival before accepting the orbital menu.
+    pub(crate) transition_pending: bool,
+}
+
+impl OrbitApproach {
+    pub(crate) fn observe(&mut self, in_flight: bool, in_orbit: bool) -> bool {
+        self.flight_observed |= in_flight;
+        self.flight_observed && in_orbit
+    }
+}
+
 /// Trace label recorded when `navigate_to_hyperspace` observes the real
 /// transition into hyperspace.
 pub const HYPERSPACE_REACHED_LABEL: &str = "navigation_reached:hyperspace";
@@ -320,6 +336,24 @@ fn steering_for_vector(dx: f64, dy: f64, ship_facing: u8, thrust: bool) -> Navig
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeated_contact_approach_requires_flight_between_orbital_visits() {
+        let mut approach = OrbitApproach::default();
+        assert!(!approach.observe(false, true));
+        assert!(!approach.observe(false, true));
+        assert!(!approach.observe(false, false));
+        assert!(!approach.observe(true, false));
+        assert!(approach.observe(false, true));
+        assert!(!OrbitApproach::default().observe(false, true));
+    }
+
+    #[test]
+    fn initial_contact_approach_arrives_from_flight() {
+        let mut approach = OrbitApproach::default();
+        assert!(!approach.observe(true, false));
+        assert!(approach.observe(false, true));
+    }
 
     fn observation(
         ship_x: i32,
