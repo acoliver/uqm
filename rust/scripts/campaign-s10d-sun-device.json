@@ -233,6 +233,187 @@
       "key": "cancel",
       "value": 1,
       "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "up",
+      "value": 1,
+      "hold": 2,
+      "settle": 5
+    },
+    {
+      "action": "assert_state",
+      "all": [
+        {
+          "key": "sis:fuel",
+          "op": "eq",
+          "value": 7000
+        },
+        {
+          "key": "sis:module:0",
+          "op": "eq",
+          "value": 5
+        },
+        {
+          "key": "sis:jet:0",
+          "op": "eq",
+          "value": 21
+        }
+      ]
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "cancel",
+      "value": 1,
+      "hold": 2,
       "settle": 10
     },
     {

@@ -290,8 +290,8 @@
       "sha256": "7611c9ca618dd5ccf0ac762476bef45b906be20b7617b4b0d195cb97ec42d484"
     },
     "parity/counts/campaign-s10d-sun-device.toml": {
-      "bytes": 802154,
-      "sha256": "216f9577486d05c6c430be8b5ed84359b4a1e71244220184acbc410d5795e874"
+      "bytes": 724660,
+      "sha256": "41ada390544d722216f94b68a99adb681ac0cd945eba800dbc882e3e2463c9c9"
     },
     "parity/counts/campaign-s10e-armed-flagship.toml": {
       "bytes": 449118,

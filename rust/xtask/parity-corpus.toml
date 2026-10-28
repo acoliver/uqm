@@ -165,12 +165,6 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719
 
-[[expectation]]
-scenario = "campaign-s10d-sun-device"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
-
 
 
 # Existing encounter/scene failures reproduced on pristine main; see issue 720.
