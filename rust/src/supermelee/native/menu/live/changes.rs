@@ -1,15 +1,15 @@
 //! Local and remote team-change protocol.
 use super::*;
 pub(super) unsafe fn view_name(state: *mut MELEE_STATE, side: u16) {
-    if (*state).meleeStarted == 0 {
+    if (*state).melee_started == 0 {
         name(state, side, 4, ptr::null());
     }
 }
 unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
-    if !MeleeSetup_setShip((*state).meleeSetup, side as usize, index, ship) {
+    if !MeleeSetup_setShip((*state).melee_setup, side as usize, index, ship) {
         return false;
     }
-    if (*state).meleeStarted == 0 {
+    if (*state).melee_started == 0 {
         if ship == 255 {
             let mut r = mem::zeroed();
             GetShipBox(&mut r, side, index / 7, index % 7);
@@ -19,20 +19,20 @@ unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32)
         }
         worth(state, side, 4);
     }
-    if (*state).MeleeOption == 10
+    if (*state).melee_option == 10
         && (*state).side == side
         && index == ((*state).row * 7 + (*state).col)
     {
-        (*state).currentShip = ship;
+        (*state).current_ship = ship;
         DrawMeleeShipStrings(state, ship);
     }
     true
 }
 unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: *const c_char) -> bool {
-    if !MeleeSetup_setTeamName((*state).meleeSetup, side as usize, value) {
+    if !MeleeSetup_setTeamName((*state).melee_setup, side as usize, value) {
         return false;
     }
-    if (*state).row != 2 || (*state).side != side || (*P_MELEE_STATE).CurIndex == u16::MAX {
+    if (*state).row != 2 || (*state).side != side || (*P_MELEE_STATE).cur_index == u16::MAX {
         view_name(state, side);
     }
     true
@@ -47,15 +47,19 @@ pub unsafe extern "C" fn Melee_LocalChange_ship(
     index: u16,
     ship: u32,
 ) -> bool {
-    if !change_ship(state, side, index, ship) {
-        return false;
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        if !change_ship(state, side, index, ship) {
+            return false;
+        }
+        let setup = (*state).melee_setup;
+        if MeleeSetup_getSentShip(setup, side as usize, index) == 254 {
+            netplay_notify_all_set_ship(state, side, index);
+            MeleeSetup_setSentShip(setup, side as usize, index, ship);
+        }
+        true
     }
-    let setup = (*state).meleeSetup;
-    if MeleeSetup_getSentShip(setup, side as usize, index) == 254 {
-        Netplay_NotifyAll_setShip(state, side, index);
-        MeleeSetup_setSentShip(setup, side as usize, index, ship);
-    }
-    true
 }
 #[no_mangle]
 /// # Safety
@@ -69,9 +73,9 @@ pub unsafe extern "C" fn Melee_LocalChange_teamName(
     if !change_name(state, side, value) {
         return false;
     }
-    let setup = (*state).meleeSetup;
+    let setup = (*state).melee_setup;
     if MeleeSetup_getSentTeamName(setup, side as usize).is_null() {
-        Netplay_NotifyAll_setTeamName(state, side);
+        netplay_notify_all_set_team_name(state, side);
         MeleeSetup_setSentTeamName(setup, side as usize, value);
     }
     true
@@ -111,14 +115,14 @@ pub unsafe extern "C" fn Melee_LocalChange_team(
 /// Call on the game thread with initialized melee UI resources. All pointers
 /// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn Melee_bootstrapSyncTeam(state: *mut MELEE_STATE, side: usize) {
-    let setup = (*state).meleeSetup;
-    Netplay_NotifyAll_setFleet(state, side);
+    let setup = (*state).melee_setup;
+    netplay_notify_all_set_fleet(state, side);
     for index in 0..14 {
         let ship = MeleeSetup_getShip(setup, side, index);
         assert_eq!(MeleeSetup_getSentShip(setup, side, index), 254);
         MeleeSetup_setSentShip(setup, side, index, ship);
     }
-    Netplay_NotifyAll_setTeamName(state, side as u16);
+    netplay_notify_all_set_team_name(state, side as u16);
     MeleeSetup_setSentTeamName(setup, side, MeleeSetup_getTeamName(setup, side));
 }
 #[no_mangle]
@@ -132,20 +136,20 @@ pub unsafe extern "C" fn Melee_RemoteChange_ship(
     index: u16,
     ship: u32,
 ) {
-    let setup = (*state).meleeSetup;
+    let setup = (*state).melee_setup;
     let sent = MeleeSetup_getSentShip(setup, side as usize, index);
     if sent == 254 {
         change_ship(state, side, index, ship);
-        Netplay_NotifyAll_setShip(state, side, index);
+        netplay_notify_all_set_ship(state, side, index);
         return;
     }
     MeleeSetup_setSentShip(setup, side as usize, index, 254);
-    if ship != sent && NetConnection_getPlayerNr(conn) == side as i32 {
+    if ship != sent && net_connection_get_player_nr(conn) == side as i32 {
         change_ship(state, side, index, ship);
         return;
     }
     if MeleeSetup_getShip(setup, side as usize, index) != sent {
-        Netplay_NotifyAll_setShip(state, side, index);
+        netplay_notify_all_set_ship(state, side, index);
         MeleeSetup_setSentShip(setup, side as usize, index, ship);
     }
 }
@@ -159,20 +163,20 @@ pub unsafe extern "C" fn Melee_RemoteChange_teamName(
     side: u16,
     value: *const c_char,
 ) {
-    let setup = (*state).meleeSetup;
+    let setup = (*state).melee_setup;
     let sent = MeleeSetup_getSentTeamName(setup, side as usize);
     if sent.is_null() {
         change_name(state, side, value);
-        Netplay_NotifyAll_setTeamName(state, side);
+        netplay_notify_all_set_team_name(state, side);
         return;
     }
-    if libc::strcmp(value, sent) == 0 && NetConnection_getPlayerNr(conn) == side as i32 {
+    if libc::strcmp(value, sent) == 0 && net_connection_get_player_nr(conn) == side as i32 {
         change_name(state, side, value);
         MeleeSetup_setSentTeamName(setup, side as usize, ptr::null());
         return;
     }
     if libc::strcmp(MeleeSetup_getTeamName(setup, side as usize), sent) != 0 {
-        Netplay_NotifyAll_setTeamName(state, side);
+        netplay_notify_all_set_team_name(state, side);
         MeleeSetup_setSentTeamName(setup, side as usize, value);
     } else {
         MeleeSetup_setSentTeamName(setup, side as usize, ptr::null());
@@ -190,12 +194,12 @@ pub unsafe extern "C" fn confirmationCancelled(state: *mut MELEE_STATE, side: u1
     status(game_string(
         NETMELEE_STRING_BASE as i32 + if side == 0 { 16 } else { 17 },
     ));
-    if (*state).InputFunc.map(|f| f as usize) == Some(confirm as *const () as usize) {
-        (*state).InputFunc = Some(DoMelee);
+    if (*state).input_func.map(|f| f as usize) == Some(confirm as *const () as usize) {
+        (*state).input_func = Some(DoMelee);
     }
 }
 unsafe fn feedback(conn: *mut NetConnection, value: *const c_char, popup: bool) {
-    if NetMelee_getBattleState(conn).is_null() && !popup {
+    if net_melee_get_battle_state(conn).is_null() && !popup {
         status(value);
     } else {
         DoPopupWindow(value);
@@ -210,7 +214,7 @@ pub unsafe extern "C" fn connectedFeedback(conn: *mut NetConnection) {
         conn,
         game_string(
             NETMELEE_STRING_BASE as i32
-                + if NetConnection_getPlayerNr(conn) == 0 {
+                + if net_connection_get_player_nr(conn) == 0 {
                     8
                 } else {
                     9
@@ -229,7 +233,7 @@ pub unsafe extern "C" fn errorFeedback(conn: *mut NetConnection) {
         conn,
         game_string(
             NETMELEE_STRING_BASE as i32
-                + if NetConnection_getPlayerNr(conn) == 0 {
+                + if net_connection_get_player_nr(conn) == 0 {
                     10
                 } else {
                     11
@@ -247,7 +251,7 @@ pub unsafe extern "C" fn closeFeedback(conn: *mut NetConnection) {
         conn,
         game_string(
             NETMELEE_STRING_BASE as i32
-                + if NetConnection_getPlayerNr(conn) == 0 {
+                + if net_connection_get_player_nr(conn) == 0 {
                     12
                 } else {
                     13
@@ -274,7 +278,7 @@ pub unsafe extern "C" fn abortFeedback(conn: *mut NetConnection, reason: u32) {
 /// Call on the game thread with initialized melee UI resources. All pointers
 /// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, remote: bool) {
-    flushPacketQueues();
+    (*P_MELEE_STATE).netplay.flush_packet_queues();
     if reason == 2 && !remote {
         return;
     }

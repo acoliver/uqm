@@ -4453,8 +4453,8 @@ stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::supermelee::native::menu::live::DoMelee::@file" = 1
 "layers|module_edges|uqm::supermelee::native::menu::live::Melee::@file" = 2
 "layers|module_edges|uqm::supermelee::native::menu::live::boundary::@file" = 1
-"layers|module_edges|uqm::supermelee::native::menu::live::boundary::CaptureSound::@file" = 1
-"layers|module_edges|uqm::supermelee::native::menu::live::boundary::ReleaseSound::@file" = 1
+"layers|module_edges|uqm::supermelee::native::menu::live::boundary::capture_sound::@file" = 1
+"layers|module_edges|uqm::supermelee::native::menu::live::boundary::release_sound::@file" = 1
 "layers|module_edges|uqm::supermelee::native::menu::live::load_config::@file" = 4
 "layers|module_edges|uqm::supermelee::native::teams::@file" = 2
 "layers|module_edges|uqm::supermelee::native::teams::MeleeSetup_deserializeTeam::@file" = 1
@@ -4474,10 +4474,10 @@ stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::supermelee::netplay::abi::NetDescriptor_ExceptionCallback::@file" = 1
 "layers|module_edges|uqm::supermelee::netplay::abi::NetDescriptor_ReadCallback::@file" = 1
 "layers|module_edges|uqm::supermelee::netplay::abi::NetDescriptor_WriteCallback::@file" = 1
+"layers|module_edges|uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::flush_packet_queues::@file" = 1
+"layers|module_edges|uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::network_battle_input::@file" = 14
 "layers|module_edges|uqm::supermelee::netplay::netmelee::NETWORK_POLL_DELAY::@file" = 1
-"layers|module_edges|uqm::supermelee::netplay::netmelee::flushPacketQueues::@file" = 1
-"layers|module_edges|uqm::supermelee::netplay::netmelee::networkBattleInput::@file" = 14
-"layers|module_edges|uqm::supermelee::netplay::netrcv::data_ready_callback::@file" = 2
+"layers|module_edges|uqm::supermelee::netplay::netrcv::receive::@file" = 2
 "layers|module_edges|uqm::supermelee::netplay::netsend::sendPacket::@file" = 1
 "layers|module_edges|uqm::supermelee::setup::persistence::<TeamEntry>::team::@file" = 1
 "layers|module_edges|uqm::supermelee::setup::persistence::@file" = 6
@@ -5504,8 +5504,8 @@ stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|planned.uqm-modes|uqm::supermelee::native::menu::live::DoMelee::@file" = 1
 "layers|planned.uqm-modes|uqm::supermelee::native::menu::live::Melee::@file" = 2
 "layers|planned.uqm-modes|uqm::supermelee::native::menu::live::boundary::@file" = 1
-"layers|planned.uqm-modes|uqm::supermelee::native::menu::live::boundary::CaptureSound::@file" = 1
-"layers|planned.uqm-modes|uqm::supermelee::native::menu::live::boundary::ReleaseSound::@file" = 1
+"layers|planned.uqm-modes|uqm::supermelee::native::menu::live::boundary::capture_sound::@file" = 1
+"layers|planned.uqm-modes|uqm::supermelee::native::menu::live::boundary::release_sound::@file" = 1
 "layers|planned.uqm-modes|uqm::supermelee::native::menu::live::load_config::@file" = 4
 "layers|planned.uqm-modes|uqm::supermelee::native::teams::@file" = 2
 "layers|planned.uqm-modes|uqm::supermelee::native::teams::MeleeSetup_deserializeTeam::@file" = 1
@@ -5525,10 +5525,10 @@ stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|planned.uqm-modes|uqm::supermelee::netplay::abi::NetDescriptor_ExceptionCallback::@file" = 1
 "layers|planned.uqm-modes|uqm::supermelee::netplay::abi::NetDescriptor_ReadCallback::@file" = 1
 "layers|planned.uqm-modes|uqm::supermelee::netplay::abi::NetDescriptor_WriteCallback::@file" = 1
+"layers|planned.uqm-modes|uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::flush_packet_queues::@file" = 1
+"layers|planned.uqm-modes|uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::network_battle_input::@file" = 14
 "layers|planned.uqm-modes|uqm::supermelee::netplay::netmelee::NETWORK_POLL_DELAY::@file" = 1
-"layers|planned.uqm-modes|uqm::supermelee::netplay::netmelee::flushPacketQueues::@file" = 1
-"layers|planned.uqm-modes|uqm::supermelee::netplay::netmelee::networkBattleInput::@file" = 14
-"layers|planned.uqm-modes|uqm::supermelee::netplay::netrcv::data_ready_callback::@file" = 2
+"layers|planned.uqm-modes|uqm::supermelee::netplay::netrcv::receive::@file" = 2
 "layers|planned.uqm-modes|uqm::supermelee::netplay::netsend::sendPacket::@file" = 1
 "layers|planned.uqm-modes|uqm::ui::starbase::ExitStarBase::@file" = 2
 "layers|planned.uqm-modes|uqm::ui::starbase::VisitStarBase::@file" = 4
@@ -5708,15 +5708,16 @@ stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm::uqm" = 1
 
 [moved]
-"uqm::battle::battle_native::engine::battle_counter" = "uqm::app::bridge::CONTEXT"
-"uqm::battle::process_native::alloc_display_prim" = "uqm::battle::process_native::primitives::alloc_display_prim"
-"uqm::battle::process_native::free_display_prim" = "uqm::battle::process_native::primitives::free_display_prim"
-"uqm::battle::process_native::insert_prim_links" = "uqm::battle::process_native::primitives::insert_prim_links"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
+"uqm::supermelee::native::menu::live::boundary::CaptureSound" = "uqm::supermelee::native::menu::live::boundary::capture_sound"
+"uqm::supermelee::native::menu::live::boundary::ReleaseSound" = "uqm::supermelee::native::menu::live::boundary::release_sound"
+"uqm::supermelee::netplay::netmelee::flushPacketQueues" = "uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::flush_packet_queues"
+"uqm::supermelee::netplay::netmelee::networkBattleInput" = "uqm::supermelee::netplay::netmelee::<super::session::SessionCore>::network_battle_input"
+"uqm::supermelee::netplay::netrcv::data_ready_callback" = "uqm::supermelee::netplay::netrcv::receive"
 "uqm::threading" = "uqm-engine::threading"
 "uqm::video" = "uqm-engine::video"

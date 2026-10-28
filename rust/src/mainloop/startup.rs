@@ -133,8 +133,6 @@ mod live {
         crate::threading::task_abi::InitTaskSystem();
         crate::callback::ffi::Alarm_init();
         crate::callback::ffi::Callback_init();
-        crate::network::network_init();
-        crate::network::manager::NetManager_init();
 
         let (driver, flags) = super::graphics_config(parsed);
         let backend = graphics_options(c_option(&parsed.graphics_backend));

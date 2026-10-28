@@ -882,10 +882,7 @@ pub struct WaitForCommunicationReplayStep {
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanetSideCollisionFixtureStep {}
 
-/// Place the active melee ships within glory-device range and arm its last switch.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct SetupMeleeMutualLossFixtureStep {}
+pub use crate::automation::melee_fixture::SetupMeleeMutualLossFixtureStep;
 
 /// The no-payload step that waits for the production restart menu to finish
 /// initialization and accept navigation input.
@@ -967,6 +964,7 @@ pub enum Action {
     AssertMainMenuTransition(MainMenuTransitionDto),
     SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
     SetupMeleeMutualLossFixture(SetupMeleeMutualLossFixtureStep),
+    ConnectNetplay(crate::automation::netplay_fixture::Request),
     ConfigureParityMelee(crate::automation::melee_fixture::MeleeSetupRequest),
     RunParityFixture(crate::automation::melee_fixture::FixtureRequest),
     RunParityCorpus(crate::automation::melee_fixture::CorpusRequest),

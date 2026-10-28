@@ -39,6 +39,9 @@ pub(super) fn validate_assertion_step(
     requirements: &mut StepRequirements,
 ) -> Result<(), AutomationError> {
     match step {
+        Action::ConnectNetplay(request) => request
+            .validate()
+            .map_err(|error| AutomationError::step(path, index, error))?,
         Action::ConfigureParityMelee(request) => request
             .validate()
             .map_err(|error| AutomationError::step(path, index, error))?,

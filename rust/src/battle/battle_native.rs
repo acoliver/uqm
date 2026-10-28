@@ -58,6 +58,31 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
 }
 
 #[cfg(not(test))]
+type BattleNetwork = (
+    *mut crate::engine::battle::Battle,
+    std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
+    bool,
+);
+#[cfg(not(test))]
+unsafe fn battle_network() -> BattleNetwork {
+    use abi::NetworkInputContext;
+    use engine::{player_control, player_input, NETWORK_CONTROL};
+    let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
+    let had_net = (*battle).net.is_some();
+    (*battle)
+        .net
+        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
+    let net = (*battle).network();
+    for side in 0..2 {
+        if player_control(side) & NETWORK_CONTROL != 0 {
+            let context = player_input(side).cast::<NetworkInputContext>();
+            (*context).net = Some(net.clone());
+        }
+    }
+    (battle, net, had_net)
+}
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
@@ -77,9 +102,6 @@ pub(crate) mod engine {
 
     #[no_mangle]
     pub static mut instantVictory: BOOLEAN = 0;
-    pub static mut BATTLE_INPUT_ORDER: [usize; 2] = [0; 2];
-    #[no_mangle]
-    pub static mut battleFrameCount: BattleFrameCounter = 0;
     static mut BATTLE_REF: MUSIC_REF = ptr::null_mut();
 
     use crate::automation::battle_observer::rust_battle_frame_reset;
@@ -142,13 +164,6 @@ pub(crate) mod engine {
         (&raw mut race_q).cast::<QUEUE>().add(side)
     }
     /// # Safety
-    /// `side` must be a valid player index with initialized network state.
-    pub unsafe fn connection(side: usize) -> *mut NetConnection {
-        *(&raw const netConnections)
-            .cast::<*mut NetConnection>()
-            .add(side)
-    }
-    /// # Safety
     /// `element` must be live and its primitive index must address DisplayArray.
     pub unsafe fn primitive(element: *mut ELEMENT) -> *mut PRIMITIVE {
         (&raw mut DisplayArray)
@@ -180,7 +195,7 @@ pub(crate) mod engine {
             && game_state(BOMB_CARRIER, END_BOMB_CARRIER) == 0
     }
 
-    unsafe fn DoRunAway(ship: *mut STARSHIP) {
+    unsafe fn DoRunAway(battle: *mut crate::engine::battle::Battle, ship: *mut STARSHIP) {
         let e = (*ship).hShip.cast::<ELEMENT>();
         if (*primitive(e)).Type == gfx_object_STAMP_PRIM as u8
             && (*e).__bindgen_anon_1.life_span == NORMAL_LIFE as u16
@@ -188,7 +203,7 @@ pub(crate) mod engine {
             && (*e).__bindgen_anon_3.mass_points != (MAX_SHIP_MASS * 10) as u8
             && (*e).state_flags & APPEARING as u16 == 0
         {
-            crate::app::bridge::battle(|b| b.counters[0] = b.counters[0].wrapping_sub(1));
+            (*battle).counters[0] = (*battle).counters[0].wrapping_sub(1);
             (*e).__bindgen_anon_4.turn_wait = 3;
             (*e).__bindgen_anon_5.thrust_wait = 4;
             (*e).colorCycleIndex = 0;
@@ -203,16 +218,6 @@ pub(crate) mod engine {
         }
     }
 
-    unsafe fn setupBattleInputOrder() {
-        let controls = [player_control(0), player_control(1)];
-        for (i, side) in battle_input_order(&controls, NETWORK_CONTROL)
-            .into_iter()
-            .enumerate()
-        {
-            BATTLE_INPUT_ORDER[i] = side;
-        }
-    }
-
     /// # Safety
     /// `context` must be a live human input context on the game thread.
     #[no_mangle]
@@ -223,10 +228,14 @@ pub(crate) mod engine {
         CurrentInputToBattleInput((*context).playerNr)
     }
 
-    unsafe fn ProcessInput() {
-        netInput();
+    unsafe fn ProcessInput(
+        battle: *mut crate::engine::battle::Battle,
+        net: &dyn crate::engine::battle::net::BattleNet,
+        order: [usize; 2],
+    ) {
+        net.poll();
         let can_run = RunAwayAllowed();
-        for side in BATTLE_INPUT_ORDER {
+        for side in order {
             let mut h = (*race_queue(side)).head;
             while !h.is_null() {
                 let ship = h.cast::<STARSHIP>();
@@ -236,11 +245,7 @@ pub(crate) mod engine {
                     let ctx = player_input(side);
                     let mut input = ((*(*ctx).handlers).frameInput.unwrap())(ctx, ship);
                     if player_control(side) & NETWORK_CONTROL == 0 {
-                        let bib = getBattleInputBuffer(side);
-                        Netplay_NotifyAll_battleInput(input);
-                        flushPacketQueues();
-                        BattleInputBuffer_push(bib, input);
-                        BattleInputBuffer_pop(bib, &mut input);
+                        input = net.local_input(side, input);
                     }
                     (*ship).ship_input_state =
                         ship_input(input, (*(*ship).RaceDescPtr).ship_info.crew_level);
@@ -249,13 +254,13 @@ pub(crate) mod engine {
                         && side == 0
                         && input & BATTLE_ESCAPE != 0
                     {
-                        DoRunAway(ship);
+                        DoRunAway(battle, ship);
                     }
                 }
                 h = next;
             }
         }
-        flushPacketQueues();
+        net.flush();
         if activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
             set_activity(activity() & !(IN_BATTLE as u16));
         }
@@ -298,27 +303,28 @@ pub(crate) mod engine {
             ),
         );
         SetMenuSounds(0, 0);
-        if getNumNetConnections() > 0 && battleFrameCount.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL)
-        {
+        let net = (*bs).net.clone().unwrap_or_else(|| panic!("missing net"));
+        let frame = net.frame();
+        if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = mem::zeroed();
             crc_init(&mut state);
             crc_processState(&mut state);
-            let checksum = crc_finish(&state);
-            Netplay_NotifyAll_checksum(battleFrameCount, checksum);
-            flushPacketQueues();
-            addLocalChecksum(battleFrameCount, checksum);
+            net.record_checksum(frame, crc_finish(&state));
         }
-        ProcessInput();
-        if getNumNetConnections() > 0 {
-            let delay = getBattleInputDelay();
-            if battleFrameCount as usize >= delay
-                && (battleFrameCount as usize - delay)
-                    .is_multiple_of(NETPLAY_CHECKSUM_INTERVAL as usize)
+        ProcessInput(
+            (*bs).battle,
+            &*net,
+            battle_input_order(&[player_control(0), player_control(1)], NETWORK_CONTROL),
+        );
+        if net.peer_count() > 0 {
+            let delay = net.input_delay();
+            if frame as usize >= delay
+                && (frame as usize - delay).is_multiple_of(NETPLAY_CHECKSUM_INTERVAL as usize)
                 && activity() & CHECK_ABORT as u16 == 0
-                && !verifyChecksums((battleFrameCount as usize - delay) as u32)
+                && !net.verify_checksum((frame as usize - delay) as u32)
             {
                 set_activity(activity() | CHECK_ABORT as u16);
-                resetConnections(NetplayResetReason_ResetReason_syncLoss);
+                net.reset(NetplayResetReason_ResetReason_syncLoss);
             }
         }
         let mut rect: RECT = mem::zeroed();
@@ -343,10 +349,7 @@ pub(crate) mod engine {
         {
             return 0;
         }
-        match frame_interval(
-            ONE_SECOND,
-            (crate::app::bridge::battle(|b| b.nth_frame) >> 8) as u8,
-        ) {
+        match frame_interval(ONE_SECOND, ((*(*bs).battle).nth_frame >> 8) as u8) {
             None => {
                 Async_process();
                 TaskSwitch();
@@ -360,7 +363,7 @@ pub(crate) mod engine {
             return 0;
         }
         rust_battle_frame_advance();
-        battleFrameCount = battleFrameCount.wrapping_add(1);
+        net.set_frame(frame.wrapping_add(1));
         1
     }
 
@@ -368,15 +371,16 @@ pub(crate) mod engine {
     /// Player controls and any network-controlled side connections must be initialized.
     #[no_mangle]
     pub unsafe extern "C" fn GetPlayerOrder(i: COUNT) -> COUNT {
-        if (player_control(0) & NETWORK_CONTROL != 0
-            && !NetConnection_getDiscriminant(connection(0)))
-            || (player_control(1) & NETWORK_CONTROL != 0
-                && NetConnection_getDiscriminant(connection(1)))
-        {
-            i
-        } else {
-            1u16.wrapping_sub(i)
+        for side in 0..2 {
+            if player_control(side) & NETWORK_CONTROL != 0 {
+                let context = &*player_input(side).cast::<NetworkInputContext>();
+                return match &context.net {
+                    Some(net) => net.player_order(i),
+                    None => panic!("network input has no session"),
+                };
+            }
         }
+        1u16.wrapping_sub(i)
     }
 
     unsafe fn selectAllShips(count: SIZE) -> BOOLEAN {
@@ -394,6 +398,7 @@ pub(crate) mod engine {
     /// The game thread must own initialized battle, input, audio, and display state; any callback must remain valid for the battle.
     #[no_mangle]
     pub unsafe extern "C" fn Battle(callback: BattleFrameCallback) -> BOOLEAN {
+        let (battle, net, had_net) = battle_network();
         if activity() as u8 != SUPER_MELEE as u8 {
             crate::math::seed_random(rust_automation_seed_value(
                 crate::automation::trace::SeedDomain::CAMPAIGN_BATTLE_ID,
@@ -409,24 +414,22 @@ pub(crate) mod engine {
         let mut count = InitShips();
         if instantVictory != 0 {
             count = 0;
-            crate::app::bridge::battle(|b| b.counters = [1, 0]);
+            (*battle).counters = [1, 0];
             instantVictory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
             set_activity(activity() | IN_BATTLE as u16);
-            crate::app::bridge::battle(|b| b.counters[0] = CountLinks(race_queue(0)) as u8);
-            crate::app::bridge::battle(|b| b.counters[1] = CountLinks(race_queue(1)) as u8);
+            (*battle).counters[0] = CountLinks(race_queue(0)) as u8;
+            (*battle).counters[1] = CountLinks(race_queue(1)) as u8;
             rust_battle_frame_reset();
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
             }
-            setupBattleInputOrder();
-            initBattleInputBuffers();
-            initChecksumBuffers();
-            battleFrameCount = 0;
+            bs.battle = battle;
+            bs.net = Some(net.clone());
+            net.begin((&raw mut bs).cast());
             ResetWinnerStarShip();
-            setBattleStateConnections(&mut bs);
             crate::log_abi::log_message(
                 5,
                 &format!(
@@ -444,8 +447,8 @@ pub(crate) mod engine {
                 );
                 BattleSong(1);
                 bs.NextTime = 0;
-                initBattleStateDataConnections();
-                if !negotiateReadyConnections(true, NetState_NetState_inBattle) {
+                net.init_end_frames();
+                if !net.negotiate(true, NetState_NetState_inBattle) {
                     set_activity(activity() | CHECK_ABORT as u16);
                 } else {
                     bs.InputFunc = Some(DoBattle);
@@ -467,29 +470,29 @@ pub(crate) mod engine {
             }
             if activity() as u8 == SUPER_MELEE as u8 {
                 if activity() & CHECK_ABORT as u16 != 0 {
-                    waitResetConnections(NetState_NetState_inSetup);
+                    net.wait_reset(NetState_NetState_inSetup);
                     set_activity(activity() & !(CHECK_ABORT as u16));
                 } else {
                     MeleeGameOver();
                 }
             }
-            uninitBattleInputBuffers();
-            uninitChecksumBuffers();
-            setBattleStateConnections(ptr::null_mut());
+            net.finish();
             StopDitty();
             StopMusic();
             StopSound();
         }
         UninitShips();
         FreeBattleSong();
+        if !had_net {
+            (*battle).net = None;
+        }
         (count < 0) as BOOLEAN
     }
 }
 
 #[cfg(not(test))]
 pub use engine::{
-    battleFrameCount, frameInputHuman, instantVictory, Battle, BattleSong, FreeBattleSong,
-    GetPlayerOrder, BATTLE_INPUT_ORDER,
+    frameInputHuman, instantVictory, Battle, BattleSong, FreeBattleSong, GetPlayerOrder,
 };
 
 #[cfg(test)]

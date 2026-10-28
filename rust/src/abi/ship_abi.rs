@@ -1083,9 +1083,6 @@ pub struct NetplayOptions {
     pub inputDelay: usize,
 }
 unsafe extern "C" {
-    pub static mut netplayOptions: NetplayOptions;
-}
-unsafe extern "C" {
     pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
 }
 unsafe extern "C" {
@@ -1146,7 +1143,6 @@ pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
 pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct battlestate_struct {
     pub InputFunc: ::std::option::Option<
         unsafe extern "C" fn(pInputState: *mut battlestate_struct) -> BOOLEAN,
@@ -1154,14 +1150,13 @@ pub struct battlestate_struct {
     pub first_time: BOOLEAN,
     pub NextTime: DWORD,
     pub frame_cb: BattleFrameCallback,
+    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
+    pub battle: *mut crate::engine::battle::Battle,
 }
 unsafe extern "C" {
 }
 unsafe extern "C" {
     pub static mut instantVictory: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut battleFrameCount: BattleFrameCounter;
 }
 
 #[cfg(not(test))]
@@ -1261,11 +1256,11 @@ pub unsafe fn TimeSpaceMatterConflict(ElementPtr: *mut ELEMENT) -> BOOLEAN {
 
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::PlotIntercept;
-pub use crate::supermelee::netplay::checksum::add_local_checksum as addLocalChecksum;
+
 pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
-pub use crate::supermelee::netplay::checksum::init_checksum_buffers as initChecksumBuffers;
-pub use crate::supermelee::netplay::checksum::uninit_checksum_buffers as uninitChecksumBuffers;
-pub use crate::supermelee::netplay::checksum::verify_checksums as verifyChecksums;
+
+
+
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getStateData;
 pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) {
@@ -1275,20 +1270,7 @@ pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
-pub type PacketHandler = ::std::option::Option<
-    unsafe extern "C" fn(
-        conn: *mut NetConnection,
-        packet: *const ::std::os::raw::c_void,
-    ) -> ::std::os::raw::c_int,
->;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PacketTypeData {
-    pub len: usize,
-    pub handler: PacketHandler,
-    pub name: *const ::std::os::raw::c_char,
-}
-pub type MELEE_STATE = melee_state;
+pub use crate::supermelee::netplay::session::MeleeState as MELEE_STATE;
 unsafe extern "C" {
     pub static mut PickMeleeFrame: FRAME;
 }
@@ -1349,26 +1331,7 @@ pub struct melee_load_state {
     pub cur: COUNT,
     pub viewSize: COUNT,
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct melee_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pInputState: *mut melee_state) -> BOOLEAN>,
-    pub Initialized: BOOLEAN,
-    pub meleeStarted: BOOLEAN,
-    pub MeleeOption: MELEE_OPTIONS,
-    pub side: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub meleeSetup: *mut MeleeSetup,
-    pub load: melee_load_state,
-    pub currentShip: MeleeShip,
-    pub CurIndex: COUNT,
-    pub buildPickConfirmed: BOOLEAN,
-    pub randomContext: *mut RandomContext,
-    pub LastInputTime: TimeCount,
-    pub hMusic: MUSIC_REF,
-}
+pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::DoMelee;
@@ -1408,15 +1371,7 @@ pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::ui::flash::Flash_setRect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleStateData {
-    pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-    pub meleeState: *mut melee_state,
-    pub battleState: *mut battlestate_struct,
-    pub getMeleeState: *mut getmelee_struct,
-    pub endFrameCount: BattleFrameCounter,
-}
+pub use crate::supermelee::netplay::session::BattleStateData;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;
@@ -1632,15 +1587,14 @@ pub use crate::supermelee::native::battle_picker::live::MeleeGameOver;
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct getmelee_struct {
     pub InputFunc:
         ::std::option::Option<unsafe extern "C" fn(pInputState: *mut getmelee_struct) -> BOOLEAN>,
     pub Initialized: BOOLEAN,
     pub player: [getmelee_struct__bindgen_ty_1; 2usize],
+    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct getmelee_struct__bindgen_ty_1 {
     pub timeIn: TimeCount,
     pub hBattleShip: HSTARSHIP,
@@ -1694,10 +1648,10 @@ pub struct HumanInputContext {
     pub playerNr: COUNT,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct NetworkInputContext {
     pub handlers: *mut BattleInputHandlers,
     pub playerNr: COUNT,
+    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
 unsafe extern "C" {
     pub static mut PlayerInput: [*mut crate::battle::battle_controls::InputContext;2];
@@ -3891,48 +3845,42 @@ pub use crate::game_init::world_resources::live::load_gravity_well;
 
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
-pub use crate::supermelee::netplay::abi::BattleInputBuffer;
 
-pub use crate::supermelee::netplay::netinput::getBattleInputDelay;
 
-pub use crate::supermelee::netplay::netinput::initBattleInputBuffers;
 
-pub use crate::supermelee::netplay::abi::BattleInputBuffer_push;
-pub use crate::supermelee::netplay::netinput::uninitBattleInputBuffers;
 
-pub use crate::supermelee::netplay::abi::getBattleInputBuffer;
-pub use crate::supermelee::netplay::netinput::BattleInputBuffer_pop;
-unsafe extern "C" {
-    pub static mut netConnections: [*mut crate::supermelee::netplay::abi::NetConnection;2];
-}
 
-pub use crate::supermelee::netplay::netmelee::getNumNetConnections;
 
-pub use crate::supermelee::netplay::netmelee::netInput;
 
-pub use crate::supermelee::netplay::netmelee::flushPacketQueues;
 
-pub use crate::supermelee::netplay::netmelee::allConnected;
 
-pub use crate::supermelee::netplay::netmelee::initBattleStateDataConnections;
 
-pub use crate::supermelee::netplay::netmelee::setBattleStateConnections;
 
-pub use crate::supermelee::netplay::netmelee::setStateConnections;
 
-pub use crate::supermelee::netplay::netmelee::resetConnections;
+
+
+
+
+
+
+
+
+
+
+
+
 
 pub use crate::supermelee::netplay::netmelee::negotiateReady;
 
-pub use crate::supermelee::netplay::netmelee::negotiateReadyConnections;
+
 
 pub use crate::supermelee::netplay::netmelee::waitReady;
 
-pub use crate::supermelee::netplay::netmelee::waitResetConnections;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_checksum;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_battleInput;
+
+
+
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub use crate::graphics::native_abi::tfb_image;
 pub type TFB_Image = tfb_image;

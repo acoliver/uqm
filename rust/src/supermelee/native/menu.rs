@@ -1,7 +1,6 @@
 //! Super Melee setup lifecycle and menu dispatch.
 mod rules;
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod live {
     use crate::automation::coordinator::rust_automation_seed_value;
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
@@ -44,16 +43,16 @@ pub(crate) mod live {
         PulsedInputState.menu[key as usize] != 0
     }
     unsafe fn select_option(state: *mut MELEE_STATE) {
-        match (*state).MeleeOption {
+        match (*state).melee_option {
             4 => start_button(state),
             3 | 5 => {
-                (*state).Initialized = 0;
-                (*state).side = u16::from((*state).MeleeOption != 3);
+                (*state).initialized = 0;
+                (*state).side = u16::from((*state).melee_option != 3);
                 DoLoadTeam(state);
             }
             2 | 6 => {
-                (*state).side = u16::from((*state).MeleeOption != 2);
-                if MeleeSetup_getFleetValue((*state).meleeSetup, (*state).side as usize) > 0 {
+                (*state).side = u16::from((*state).melee_option != 2);
+                if MeleeSetup_getFleetValue((*state).melee_setup, (*state).side as usize) > 0 {
                     DoSaveTeam(state);
                 } else {
                     PlayMenuSound(2);
@@ -61,16 +60,16 @@ pub(crate) mod live {
             }
             9 => GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16,
             0 | 8 => {
-                let side = u16::from((*state).MeleeOption == 0);
-                let confirmed = MeleeConnectDialog(side as i32);
+                let side = u16::from((*state).melee_option == 0);
+                let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
                 redraw();
-                (*state).LastInputTime = GetTimeCounter();
+                (*state).last_input_time = GetTimeCounter();
                 if confirmed != 0 {
-                    (*state).Initialized = 0;
-                    (*state).InputFunc = Some(connecting);
+                    (*state).initialized = 0;
+                    (*state).input_func = Some(connecting);
                 }
             }
-            1 | 7 => next_control(usize::from((*state).MeleeOption == 1)),
+            1 | 7 => next_control(usize::from((*state).melee_option == 1)),
             _ => {}
         }
     }
@@ -85,27 +84,27 @@ pub(crate) mod live {
             return 0;
         }
         SetMenuSounds(15, 16);
-        if (*state).Initialized == 0 {
-            if !(*state).hMusic.is_null() {
+        if (*state).initialized == 0 {
+            if !(*state).h_music.is_null() {
                 StopMusic();
-                DestroyMusic((*state).hMusic);
-                (*state).hMusic = ptr::null_mut();
+                DestroyMusic((*state).h_music);
+                (*state).h_music = ptr::null_mut();
             }
-            (*state).hMusic = LoadMusic(MELEE_MUSIC.as_ptr().cast()).cast();
-            (*state).Initialized = 1;
-            (*state).MeleeOption = 4;
-            PlayMusic((*state).hMusic, 1, 1);
+            (*state).h_music = LoadMusic(MELEE_MUSIC.as_ptr().cast()).cast();
+            (*state).initialized = 1;
+            (*state).melee_option = 4;
+            PlayMusic((*state).h_music, 1, 1);
             init_screen();
             FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
-            (*state).LastInputTime = GetTimeCounter();
+            (*state).last_input_time = GetTimeCounter();
             return 1;
         }
-        netInput();
+        (*state).netplay.net_input();
         if key(KEY_MENU_CANCEL) || key(KEY_MENU_LEFT) {
-            (*state).LastInputTime = GetTimeCounter();
-            highlight((*state).MeleeOption, false);
-            (*state).MeleeOption = 10;
-            (*state).Initialized = 0;
+            (*state).last_input_time = GetTimeCounter();
+            highlight((*state).melee_option, false);
+            (*state).melee_option = 10;
+            (*state).initialized = 0;
             (*state).side = 0;
             if key(KEY_MENU_CANCEL) {
                 (*state).row = 0;
@@ -116,27 +115,27 @@ pub(crate) mod live {
             }
             edit(state);
         } else {
-            let mut next = (*state).MeleeOption;
+            let mut next = (*state).melee_option;
             let mut force = false;
             if key(KEY_MENU_UP) {
-                (*state).LastInputTime = GetTimeCounter();
+                (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, true, false);
             } else if key(KEY_MENU_DOWN) {
-                (*state).LastInputTime = GetTimeCounter();
+                (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
             if PlayerControl[0] & PlayerControl[1] & PSYTRON_CONTROL != 0
-                && GetTimeCounter().wrapping_sub((*state).LastInputTime) > 840 * 10
+                && GetTimeCounter().wrapping_sub((*state).last_input_time) > 840 * 10
             {
                 force = true;
                 next = 4;
             }
-            if next != (*state).MeleeOption {
-                if (*state).MeleeOption == 1 || (*state).MeleeOption == 7 {
+            if next != (*state).melee_option {
+                if (*state).melee_option == 1 || (*state).melee_option == 7 {
                     status_player(-1);
                 }
-                highlight((*state).MeleeOption, false);
-                (*state).MeleeOption = next;
+                highlight((*state).melee_option, false);
+                (*state).melee_option = next;
                 highlight(next, true);
                 if next == 1 || next == 7 {
                     let side = usize::from(next == 1);
@@ -154,7 +153,8 @@ pub(crate) mod live {
                 }
             }
         }
-        flushPacketQueues();
+        // SAFETY: DoMelee owns the menu and its session on the game thread.
+        unsafe { (*state).netplay.flush_packet_queues() };
         disconnects();
         Melee_flashSelection(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));
@@ -176,7 +176,7 @@ pub(crate) mod live {
                     break;
                 }
                 PlayerControl[side] = byte as u8;
-                if MeleeSetup_deserializeTeam((*state).meleeSetup, side, stream.cast()) == -1 {
+                if MeleeSetup_deserializeTeam((*state).melee_setup, side, stream.cast()) == -1 {
                     ok = false;
                     break;
                 }
@@ -200,7 +200,7 @@ pub(crate) mod live {
                 PlayerControl[side] as std::ffi::c_char,
                 stream.cast(),
             ) == -1
-                || MeleeSetup_serializeTeam((*state).meleeSetup, side, stream.cast()) == -1
+                || MeleeSetup_serializeTeam((*state).melee_setup, side, stream.cast()) == -1
             {
                 ok = false;
                 break;
@@ -221,20 +221,34 @@ pub(crate) mod live {
     /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn Melee() {
         InitGlobData();
-        let mut state: MELEE_STATE = mem::zeroed();
+        let mut state = MELEE_STATE {
+            input_func: None,
+            initialized: 0,
+            melee_started: 0,
+            melee_option: 0,
+            side: 0,
+            row: 0,
+            col: 0,
+            melee_setup: ptr::null_mut(),
+            load: mem::zeroed(),
+            current_ship: 0,
+            cur_index: 0,
+            build_pick_confirmed: 0,
+            random_context: ptr::null_mut(),
+            last_input_time: 0,
+            h_music: ptr::null_mut(),
+            netplay: Default::default(),
+        };
         P_MELEE_STATE = &mut state;
-        state.InputFunc = Some(DoMelee);
-        state.meleeSetup = MeleeSetup_new();
-        state.randomContext = new_context();
-        (*state.randomContext).reseed(rust_automation_seed_value(1, GetTimeCounter()));
-        for player in [0usize, 1] {
-            set_connection(player, ptr::null_mut());
-        }
-        state.currentShip = 255;
-        state.CurIndex = u16::MAX;
+        state.input_func = Some(DoMelee);
+        state.melee_setup = MeleeSetup_new();
+        state.random_context = new_context();
+        (*state.random_context).reseed(rust_automation_seed_value(1, GetTimeCounter()));
+        state.current_ship = 255;
+        state.cur_index = u16::MAX;
         InitMeleeLoadState(&mut state);
         GlobData.Game_state.CurrentActivity = SUPER_MELEE as u16;
-        GameSounds = CaptureSound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+        GameSounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
         crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
         MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
         crate::supermelee::native::build_picker::live::BuildBuildPickFrame();
@@ -257,22 +271,22 @@ pub(crate) mod live {
         write_config(&mut state);
         DestroyStringTable(ReleaseStringTable(state.load.dirEntries));
         state.load.dirEntries = ptr::null_mut();
-        if !state.hMusic.is_null() {
-            DestroyMusic(state.hMusic);
-            state.hMusic = ptr::null_mut();
+        if !state.h_music.is_null() {
+            DestroyMusic(state.h_music);
+            state.h_music = ptr::null_mut();
         }
         UninitSpace();
         crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
         DestroyDrawable(ReleaseDrawable(MeleeFrame));
         MeleeFrame = ptr::null_mut();
         crate::supermelee::native::build_picker::live::DestroyBuildPickFrame();
-        closeAllConnections();
-        setupInputDelay(0);
-        DestroySound(ReleaseSound(GameSounds).cast());
+        state.netplay.close_all_connections();
+        state.netplay.setup_input_delay(0);
+        DestroySound(release_sound(GameSounds).cast());
         GameSounds = ptr::null_mut();
         UninitMeleeLoadState(&mut state);
-        delete_context(state.randomContext);
-        MeleeSetup_delete(state.meleeSetup);
+        delete_context(state.random_context);
+        MeleeSetup_delete(state.melee_setup);
         FlushInput();
     }
 }

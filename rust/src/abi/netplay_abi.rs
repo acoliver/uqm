@@ -230,9 +230,6 @@ pub type STAMP = stamp;
 pub use crate::ships::native::abi::INTERSECT_CONTROL;
 pub type BattleFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 pub use crate::ships::native::abi::battlestate_struct;
-extern "C" {
-    pub static mut battleFrameCount: BattleFrameCounter;
-}
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
 pub type QUEUE_HANDLE = *mut ::std::os::raw::c_void;
@@ -257,107 +254,13 @@ pub use crate::engine::battle::legacy::disp_q;
 pub use crate::navigation::abi::ChecksumBuffer;
 pub use crate::navigation::abi::ChecksumEntry;
 pub use crate::navigation::abi::NetConnectionError;
-pub use crate::navigation::abi::NetConnectionError__bindgen_ty_1;
 pub use crate::navigation::abi::NetStatistics;
-pub use crate::network::descriptor::NetDescriptor;
-pub use crate::network::Socket;
-pub type NetDescriptor_ReadCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_WriteCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_ExceptionCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_CloseCallback = crate::network::descriptor::NdCallback;
-pub use crate::network::{sockaddr, socklen_t};
-pub const ProtocolFamily_PF_unspec: ProtocolFamily = 0;
-pub const ProtocolFamily_PF_inet: ProtocolFamily = 1;
-pub const ProtocolFamily_PF_inet6: ProtocolFamily = 2;
-pub type ProtocolFamily = ::std::os::raw::c_int;
-pub const Protocol_IPProto_tcp: Protocol = 0;
-pub const Protocol_IPProto_udp: Protocol = 1;
-pub type Protocol = ::std::os::raw::c_int;
-pub const SocketType_Sock_stream: SocketType = 0;
-pub const SocketType_Sock_dgram: SocketType = 1;
-pub type SocketType = ::std::os::raw::c_int;
-pub use crate::network::connect::ConnectState;
-pub use crate::network::descriptor::{
-    NetDescriptor_close, NetDescriptor_decRef, NetDescriptor_detach, NetDescriptor_getExtra,
-    NetDescriptor_getSocket, NetDescriptor_incRef, NetDescriptor_new,
-    NetDescriptor_setCloseCallback, NetDescriptor_setExceptionCallback, NetDescriptor_setExtra,
-    NetDescriptor_setReadCallback, NetDescriptor_setWriteCallback,
-};
-pub use crate::network::manager::{
-    NetManager_activateExceptionCallback, NetManager_activateReadCallback,
-    NetManager_activateWriteCallback, NetManager_addDesc, NetManager_deactivateExceptionCallback,
-    NetManager_deactivateReadCallback, NetManager_deactivateWriteCallback, NetManager_init,
-    NetManager_process, NetManager_removeDesc, NetManager_uninit,
-};
-pub use crate::network::{
-    Socket_accept, Socket_bind, Socket_close, Socket_connect, Socket_getError, Socket_listen,
-    Socket_open, Socket_recv, Socket_send, Socket_setInlineOOB, Socket_setInteractive,
-    Socket_setKeepAlive, Socket_setNodelay, Socket_setNonBlocking, Socket_setReuseAddr,
-    Socket_setTOS,
-};
-pub const ConnectStateState_Connect_closed: ConnectStateState = 0;
-pub const ConnectStateState_Connect_resolving: ConnectStateState = 1;
-pub const ConnectStateState_Connect_connecting: ConnectStateState = 2;
-pub type ConnectStateState = ::std::os::raw::c_uint;
 pub use crate::callback::ffi::Callback_add;
 pub use crate::callback::ffi::Callback_haveMore;
 pub use crate::callback::ffi::Callback_init;
 pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_remove;
 pub use crate::callback::ffi::Callback_uninit;
-pub use crate::network::connect::ConnectError;
-pub use crate::network::connect::ConnectFlags;
-pub use crate::network::ResolveError;
-pub type ConnectConnectCallback = ::std::option::Option<
-    unsafe extern "C" fn(
-        connectState: *mut ConnectState,
-        nd: *mut NetDescriptor,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ),
->;
-pub type ConnectErrorCallback = ::std::option::Option<
-    unsafe extern "C" fn(connectState: *mut ConnectState, error: *const ConnectError),
->;
-
-pub use crate::network::connect::connectHostByName;
-
-pub use crate::network::connect::ConnectState_incRef;
-
-pub use crate::network::connect::ConnectState_decRef;
-
-pub use crate::network::connect::ConnectState_close;
-
-pub use crate::network::connect::ConnectState_getExtra;
-pub const ListenStateState_Listen_closed: ListenStateState = 0;
-pub const ListenStateState_Listen_resolving: ListenStateState = 1;
-pub const ListenStateState_Listen_listening: ListenStateState = 2;
-pub type ListenStateState = ::std::os::raw::c_uint;
-pub use crate::network::listen::ListenError;
-pub use crate::network::listen::ListenFlags;
-pub use crate::network::listen::ListenState;
-pub type ListenConnectCallback = ::std::option::Option<
-    unsafe extern "C" fn(
-        listenState: *mut ListenState,
-        listenNd: *mut NetDescriptor,
-        newNd: *mut NetDescriptor,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ),
->;
-pub type ListenErrorCallback = ::std::option::Option<
-    unsafe extern "C" fn(listenState: *mut ListenState, error: *const ListenError),
->;
-
-pub use crate::network::listen::listenPort;
-
-pub use crate::network::listen::ListenState_close;
-
-pub use crate::network::listen::ListenState_incRef;
-
-pub use crate::network::listen::ListenState_decRef;
-
-pub use crate::network::listen::ListenState_getExtra;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PacketQueueLink {
@@ -373,187 +276,49 @@ pub struct PacketQueue {
 }
 
 pub use crate::supermelee::netplay::packetq::flushPacketQueue;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct HandShakeFlags {
-    pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    localOk: bool,
+    remoteOk: bool,
+    canceling: bool,
 }
 impl HandShakeFlags {
-    #[inline]
-    pub fn localOk(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_localOk(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(0usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn remoteOk(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_remoteOk(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(1usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn canceling(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(2usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_canceling(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(2usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(
-        localOk: bool,
-        remoteOk: bool,
-        canceling: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let localOk: u8 = unsafe { ::std::mem::transmute(localOk) };
-            localOk as u64
-        });
-        __bindgen_bitfield_unit.set(1usize, 1u8, {
-            let remoteOk: u8 = unsafe { ::std::mem::transmute(remoteOk) };
-            remoteOk as u64
-        });
-        __bindgen_bitfield_unit.set(2usize, 1u8, {
-            let canceling: u8 = unsafe { ::std::mem::transmute(canceling) };
-            canceling as u64
-        });
-        __bindgen_bitfield_unit
-    }
+    pub fn localOk(&self) -> bool { self.localOk }
+    pub fn set_localOk(&mut self, value: bool) { self.localOk = value; }
+    pub fn remoteOk(&self) -> bool { self.remoteOk }
+    pub fn set_remoteOk(&mut self, value: bool) { self.remoteOk = value; }
+    pub fn canceling(&self) -> bool { self.canceling }
+    pub fn set_canceling(&mut self, value: bool) { self.canceling = value; }
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct ReadyFlags {
-    pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    localReady: bool,
+    remoteReady: bool,
 }
 impl ReadyFlags {
-    #[inline]
-    pub fn localReady(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_localReady(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(0usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn remoteReady(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_remoteReady(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(1usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(
-        localReady: bool,
-        remoteReady: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let localReady: u8 = unsafe { ::std::mem::transmute(localReady) };
-            localReady as u64
-        });
-        __bindgen_bitfield_unit.set(1usize, 1u8, {
-            let remoteReady: u8 = unsafe { ::std::mem::transmute(remoteReady) };
-            remoteReady as u64
-        });
-        __bindgen_bitfield_unit
-    }
+    pub fn localReady(&self) -> bool { self.localReady }
+    pub fn set_localReady(&mut self, value: bool) { self.localReady = value; }
+    pub fn remoteReady(&self) -> bool { self.remoteReady }
+    pub fn set_remoteReady(&mut self, value: bool) { self.remoteReady = value; }
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct ResetFlags {
-    pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    localReset: bool,
+    remoteReset: bool,
 }
 impl ResetFlags {
-    #[inline]
-    pub fn localReset(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_localReset(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(0usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn remoteReset(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_remoteReset(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(1usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(
-        localReset: bool,
-        remoteReset: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let localReset: u8 = unsafe { ::std::mem::transmute(localReset) };
-            localReset as u64
-        });
-        __bindgen_bitfield_unit.set(1usize, 1u8, {
-            let remoteReset: u8 = unsafe { ::std::mem::transmute(remoteReset) };
-            remoteReset as u64
-        });
-        __bindgen_bitfield_unit
-    }
+    pub fn localReset(&self) -> bool { self.localReset }
+    pub fn set_localReset(&mut self, value: bool) { self.localReset = value; }
+    pub fn remoteReset(&self) -> bool { self.remoteReset }
+    pub fn set_remoteReset(&mut self, value: bool) { self.remoteReset = value; }
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Agreement {
-    pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    randomSeed: bool,
 }
 impl Agreement {
-    #[inline]
-    pub fn randomSeed(&self) -> bool {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_randomSeed(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::std::mem::transmute(val);
-            self._bitfield_1.set(0usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(randomSeed: bool) -> __BindgenBitfieldUnit<[u8; 1usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let randomSeed: u8 = unsafe { ::std::mem::transmute(randomSeed) };
-            randomSeed as u64
-        });
-        __bindgen_bitfield_unit
-    }
+    pub fn randomSeed(&self) -> bool { self.randomSeed }
+    pub fn set_randomSeed(&mut self, value: bool) { self.randomSeed = value; }
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -571,7 +336,9 @@ pub struct NetStateFlags {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NetConnection {
-    pub nd: *mut NetDescriptor,
+    pub session: *const super::session::SessionCore,
+    pub socket: Option<uqm_engine::host::Connection>,
+    pub write_offset: usize,
     pub player: ::std::os::raw::c_int,
     pub state: NetState,
     pub stateFlags: NetStateFlags,
@@ -592,20 +359,6 @@ pub struct NetConnection {
     pub stateData: *mut NetConnectionStateData,
     pub extra: *mut ::std::os::raw::c_void,
 }
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ConnectStateData {
-    pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-    pub isServer: bool,
-    pub state: ConnectStateData__bindgen_ty_1,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union ConnectStateData__bindgen_ty_1 {
-    pub connectState: *mut ConnectState,
-    pub listenState: *mut ListenState,
-}
-
 pub use crate::supermelee::netplay::netconnection::NetConnection_open;
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_close;
@@ -639,61 +392,19 @@ pub use crate::supermelee::netplay::netconnection::NetConnection_setResetCallbac
 pub use crate::supermelee::netplay::netconnection::NetConnection_getResetCallback;
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getResetCallbackArg;
-pub type PacketHandler = ::std::option::Option<
-    unsafe extern "C" fn(
-        conn: *mut NetConnection,
-        packet: *const ::std::os::raw::c_void,
-    ) -> ::std::os::raw::c_int,
->;
-pub use crate::ships::native::abi::PacketTypeData;
-extern "C" {
-    pub static mut packetTypeData: [crate::ships::native::abi::PacketTypeData;18];
-}
-pub use crate::navigation::abi::Packet;
-pub use crate::navigation::abi::PacketHeader;
-pub use crate::navigation::abi::Packet_Ack;
-pub use crate::navigation::abi::Packet_Init;
-pub use crate::navigation::abi::Packet_Init__bindgen_ty_1;
-pub use crate::navigation::abi::Packet_Init__bindgen_ty_2;
-pub use crate::navigation::abi::Packet_InputDelay;
-pub use crate::navigation::abi::Packet_Ping;
-pub use crate::navigation::abi::Packet_Ready;
-pub use crate::navigation::abi::Packet_SeedRandom;
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
-pub use crate::navigation::abi::FleetEntry;
-pub use crate::navigation::abi::Packet_Abort;
-pub use crate::navigation::abi::Packet_BattleInput;
-pub use crate::navigation::abi::Packet_Checksum;
-pub use crate::navigation::abi::Packet_Fleet;
-pub use crate::navigation::abi::Packet_FrameCount;
-pub use crate::navigation::abi::Packet_Handshake0;
-pub use crate::navigation::abi::Packet_Handshake1;
-pub use crate::navigation::abi::Packet_HandshakeCancel;
-pub use crate::navigation::abi::Packet_HandshakeCancelAck;
-pub use crate::navigation::abi::Packet_Reset;
-pub use crate::navigation::abi::Packet_SelectShip;
-pub use crate::navigation::abi::Packet_TeamName;
 pub type TimeCount = DWORD;
 pub type BATTLE_INPUT_STATE = UBYTE;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputBuffer {
-    pub buf: *mut BATTLE_INPUT_STATE,
-    pub maxSize: usize,
-    pub first: usize,
-    pub size: usize,
-}
 
-pub use crate::supermelee::netplay::netinput::getBattleInputDelay;
 
-pub use crate::supermelee::netplay::netinput::BattleInputBuffer_push;
 
-pub use crate::supermelee::netplay::netinput::getBattleInputBuffer;
+
+
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
 pub const MeleeShip_MELEE_CHENJESU: MeleeShip = 2;
@@ -914,9 +625,6 @@ pub type DeleteInputContextFunction =
 pub use crate::ships::native::abi::BattleInputHandlers;
 pub use crate::ships::native::abi::InputContext;
 pub use crate::ships::native::abi::NetworkInputContext;
-extern "C" {
-    pub static mut netConnections: [*mut crate::supermelee::netplay::abi::NetConnection;2];
-}
 pub type ForEachConnectionCallback = ::std::option::Option<
     unsafe extern "C" fn(conn: *mut NetConnection, arg: *mut ::std::os::raw::c_void) -> bool,
 >;
@@ -925,10 +633,10 @@ pub use crate::supermelee::netplay::netmelee::NetMelee_getMeleeState;
 
 pub use crate::supermelee::netplay::netmelee::NetMelee_getBattleState;
 
-pub use crate::supermelee::netplay::netmelee::flushPacketQueues;
+
 
 pub use crate::ships::native::abi::BattleStateData;
-pub use crate::supermelee::netplay::netmelee::sendAbortConnections;
+
 
 pub use crate::supermelee::netplay::netmisc::NetMelee_connectCallback;
 
@@ -939,15 +647,15 @@ extern "C" {}
 
 pub use crate::supermelee::netplay::netsend::sendPacket;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_setTeamName;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_setFleet;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_setShip;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_inputDelay;
 
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_checksum;
+
+
+
+
+
 
 pub use crate::callback::ffi::Alarm_addAbsoluteMs;
 pub use crate::callback::ffi::Alarm_addRelativeMs;
@@ -958,7 +666,7 @@ pub use crate::callback::ffi::Alarm_timeBeforeNextMs;
 pub use crate::callback::ffi::Alarm_uninit;
 pub use crate::callback::ffi::Async_process;
 pub use crate::callback::ffi::Async_timeBeforeNextMs;
-pub use crate::supermelee::netplay::notifyall::Netplay_NotifyAll_battleInput;
+
 
 pub use crate::supermelee::netplay::ready::Netplay_localReady;
 
@@ -983,3 +691,5 @@ pub type UqmNetplayConstants = ::std::os::raw::c_uint;
 
 #[cfg(test)]
 pub use crate::supermelee::netplay::test_runtime::*;
+
+pub use super::packet::Packet;

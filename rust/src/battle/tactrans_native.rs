@@ -128,36 +128,19 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, connection, player_input, primitive, rgb15, set_activity,
+        activity, player_input, primitive, rgb15, set_activity,
     };
-    use crate::battle::battle_native::{battleFrameCount, BattleSong};
+    use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
     use crate::collections::observation::image;
     use crate::ships::native::{
         cosine, facing_to_angle, init_intersect_points, put_element, sine, starship,
     };
-    use crate::supermelee::netplay::abi as netplay_abi;
-    use crate::supermelee::netplay::abi::{
-        flushPacketQueue, Netplay_isLocalReady, Netplay_localReady,
-    };
     use abi::*;
-    use std::ffi::c_void;
     use std::{mem, ptr};
 
     static mut DITTY_IS_PLAYING: BOOLEAN = 0;
     static mut WINNER_STAR_SHIP: *mut STARSHIP = ptr::null_mut();
-
-    // netmisc.h: the common state-data prefix is a release callback.
-    #[repr(C)]
-    struct BattleStateData {
-        releaseFunction: NetConnectionStateData_ReleaseFunction,
-        meleeState: *mut c_void,
-        battleState: *mut battlestate_struct,
-        getMeleeState: *mut getmelee_struct,
-        endFrameCount: BattleFrameCounter,
-    }
-
-    use crate::supermelee::netplay::notify::Netplay_Notify_frameCount;
 
     use crate::battle::world_elements::engine::crew_preprocess;
 
@@ -225,69 +208,6 @@ pub(crate) mod engine {
         WINNER_STAR_SHIP = ptr::null_mut();
     }
 
-    unsafe extern "C" fn readyToEnd2Callback(
-        conn: *mut netplay_abi::NetConnection,
-        _arg: *mut c_void,
-    ) {
-        NetConnection_setState(conn.cast(), NetState_NetState_endingBattle2);
-    }
-
-    unsafe extern "C" fn readyToEndCallback(
-        conn: *mut netplay_abi::NetConnection,
-        _arg: *mut c_void,
-    ) {
-        let data = NetConnection_getStateData(conn.cast()).cast::<BattleStateData>();
-        NetConnection_setState(conn.cast(), NetState_NetState_endingBattle);
-        let target = battleFrameCount.wrapping_add(1);
-        if target > (*data).endFrameCount {
-            (*data).endFrameCount = target;
-        }
-        Netplay_Notify_frameCount(conn, target);
-        flushPacketQueue(conn.cast());
-        Netplay_localReady(
-            conn.cast(),
-            Some(readyToEnd2Callback),
-            ptr::null_mut(),
-            false,
-        );
-    }
-
-    unsafe fn readyForBattleEndPlayer(conn: *mut NetConnection) -> bool {
-        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-        let state = NetConnection_getState(conn);
-        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
-            return true;
-        }
-        if state == NetState_NetState_inBattle {
-            if Netplay_isLocalReady(conn.cast()) {
-                return false;
-            }
-            Netplay_localReady(conn.cast(), Some(readyToEndCallback), ptr::null_mut(), true);
-            if NetConnection_getState(conn) == NetState_NetState_inBattle {
-                return false;
-            }
-        }
-        let state = NetConnection_getState(conn);
-        assert!(
-            state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2
-        );
-        if battleFrameCount < (*data).endFrameCount {
-            return false;
-        }
-        if NetConnection_getState(conn) == NetState_NetState_endingBattle {
-            waitReady(conn);
-            assert_eq!(
-                NetConnection_getState(conn),
-                NetState_NetState_endingBattle2
-            );
-            if battleFrameCount < (*data).endFrameCount {
-                return false;
-            }
-        }
-        negotiateReady(conn, true, NetState_NetState_interBattle);
-        true
-    }
-
     /// # Safety
     /// The caller must run on the game thread as part of battle-end input processing.
     #[no_mangle]
@@ -304,7 +224,11 @@ pub(crate) mod engine {
     /// `context` and its player connection must be live on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn battleEndReadyNetwork(context: *mut NetworkInputContext) -> bool {
-        readyForBattleEndPlayer(connection((*context).playerNr as usize))
+        (*context)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("network input has no session"))
+            .end_ready((*context).playerNr as usize)
     }
 
     unsafe fn readyForBattleEnd() -> bool {
@@ -421,6 +345,8 @@ pub(crate) mod engine {
         dead: *mut ELEMENT,
         pick: impl FnOnce(*mut STARSHIP, COUNT) -> BOOLEAN,
     ) {
+        let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
+        let net = (*battle).net.clone();
         let ship = starship(dead);
         if !readyForBattleEnd() {
             (*dead).state_flags &= !(DISAPPEARING as u16);
@@ -437,8 +363,13 @@ pub(crate) mod engine {
         free_ship((*ship).RaceDescPtr, 1, 1);
         (*ship).RaceDescPtr = ptr::null_mut();
         UnbatchGraphics();
-        initBattleStateDataConnections();
-        if !negotiateReadyConnections(true, NetState_NetState_interBattle) {
+        if let Some(net) = &net {
+            net.init_end_frames();
+        }
+        if net
+            .as_ref()
+            .is_some_and(|net| !net.negotiate(true, NetState_NetState_interBattle))
+        {
             set_activity(activity() & !(IN_BATTLE as u16));
             BatchGraphics();
             return;
@@ -448,7 +379,10 @@ pub(crate) mod engine {
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
         if pick(ship, (*ship).playerNr as COUNT) != 0 {
-            if !negotiateReadyConnections(true, NetState_NetState_inBattle) {
+            if net
+                .as_ref()
+                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
+            {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;
@@ -456,7 +390,7 @@ pub(crate) mod engine {
             if restart {
                 BattleSong(1);
             }
-        } else if crate::app::bridge::battle(|b| b.counters.contains(&0)) {
+        } else if (*battle).counters.contains(&0) {
             set_activity(activity() & !(IN_BATTLE as u16));
         } else {
             set_activity(activity() | CHECK_ABORT as u16);

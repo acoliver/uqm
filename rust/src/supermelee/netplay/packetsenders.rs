@@ -7,98 +7,111 @@ use std::ffi::c_char;
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendInit(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_Init_create().cast());
+    queue_packet(
+        conn,
+        Packet::Init {
+            protocol: [
+                NETPLAY_PROTOCOL_VERSION_MAJOR as u8,
+                NETPLAY_PROTOCOL_VERSION_MINOR as u8,
+            ],
+            version: [
+                UQM_MAJOR_VERSION as u8,
+                UQM_MINOR_VERSION as u8,
+                UQM_PATCH_VERSION as u8,
+            ],
+        },
+    );
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendAck(conn: *mut NetConnection, id: u32) {
-    queue_packet(conn, Packet_Ack_create(id).cast());
+    queue_packet(conn, Packet::Ack(id));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendReady(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_Ready_create().cast());
+    queue_packet(conn, Packet::Ready);
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendHandshake0(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_Handshake0_create().cast());
+    queue_packet(conn, Packet::Handshake0);
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendHandshake1(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_Handshake1_create().cast());
+    queue_packet(conn, Packet::Handshake1);
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendHandshakeCancel(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_HandshakeCancel_create().cast());
+    queue_packet(conn, Packet::HandshakeCancel);
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendHandshakeCancelAck(conn: *mut NetConnection) {
-    queue_packet(conn, Packet_HandshakeCancelAck_create().cast());
+    queue_packet(conn, Packet::HandshakeCancelAck);
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendSeedRandom(conn: *mut NetConnection, seed: u32) {
-    queue_packet(conn, Packet_SeedRandom_create(seed).cast());
+    queue_packet(conn, Packet::SeedRandom(seed));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendInputDelay(conn: *mut NetConnection, delay: u32) {
-    queue_packet(conn, Packet_InputDelay_create(delay).cast());
+    queue_packet(conn, Packet::InputDelay(delay));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendSelectShip(conn: *mut NetConnection, index: FleetShipIndex) {
-    queue_packet(conn, Packet_SelectShip_create(index).cast());
+    queue_packet(conn, Packet::SelectShip(index));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendBattleInput(conn: *mut NetConnection, input: BATTLE_INPUT_STATE) {
-    queue_packet(conn, Packet_BattleInput_create(input).cast());
+    queue_packet(conn, Packet::BattleInput(input));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendFrameCount(conn: *mut NetConnection, frame: BattleFrameCounter) {
-    queue_packet(conn, Packet_FrameCount_create(frame).cast());
+    queue_packet(conn, Packet::FrameCount(frame));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendAbort(conn: *mut NetConnection, reason: NetplayAbortReason) {
-    queue_packet(conn, Packet_Abort_create(reason as u16).cast());
+    queue_packet(conn, Packet::Abort(reason as u16));
 }
 
 /// # Safety
 /// `conn` must be connected with an initialized outgoing packet queue.
 #[no_mangle]
 pub unsafe extern "C" fn sendReset(conn: *mut NetConnection, reason: NetplayResetReason) {
-    queue_packet(conn, Packet_Reset_create(reason as u16).cast());
+    queue_packet(conn, Packet::Reset(reason as u16));
 }
 
 /// # Safety
@@ -110,7 +123,13 @@ pub unsafe extern "C" fn sendTeamName(
     name: *const c_char,
     len: usize,
 ) {
-    queue_packet(conn, Packet_TeamName_create(side, name, len).cast());
+    queue_packet(
+        conn,
+        Packet::TeamName {
+            side: side as u8,
+            name: std::slice::from_raw_parts(name.cast(), len).to_vec(),
+        },
+    );
 }
 
 /// # Safety
@@ -122,14 +141,18 @@ pub unsafe extern "C" fn sendFleet(
     ships: *const MeleeShip,
     count: usize,
 ) {
-    let packet = Packet_Fleet_create(side, count);
-    for index in 0..count {
-        (*packet).ships.as_mut_ptr().add(index).write(FleetEntry {
-            index: index as u8,
-            ship: *ships.add(index) as u8,
-        });
-    }
-    queue_packet(conn, packet.cast());
+    let ships = std::slice::from_raw_parts(ships, count)
+        .iter()
+        .enumerate()
+        .map(|(index, &ship)| (index as u8, ship as u8))
+        .collect();
+    queue_packet(
+        conn,
+        Packet::Fleet {
+            side: side as u8,
+            ships,
+        },
+    );
 }
 
 /// # Safety
@@ -141,12 +164,13 @@ pub unsafe extern "C" fn sendFleetShip(
     index: FleetShipIndex,
     ship: MeleeShip,
 ) {
-    let packet = Packet_Fleet_create(side, 1);
-    (*packet).ships.as_mut_ptr().write(FleetEntry {
-        index: index as u8,
-        ship: ship as u8,
-    });
-    queue_packet(conn, packet.cast());
+    queue_packet(
+        conn,
+        Packet::Fleet {
+            side: side as u8,
+            ships: vec![(index as u8, ship as u8)],
+        },
+    );
 }
 
 /// # Safety
@@ -157,5 +181,5 @@ pub unsafe extern "C" fn sendChecksum(
     frame: BattleFrameCounter,
     checksum: Checksum,
 ) {
-    queue_packet(conn, Packet_Checksum_create(frame, checksum).cast());
+    queue_packet(conn, Packet::Checksum { frame, checksum });
 }

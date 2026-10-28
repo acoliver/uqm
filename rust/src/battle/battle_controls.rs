@@ -3,7 +3,6 @@
 // context constructors. Rust handler functions are referenced through the
 // C ABI.
 
-use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
 
 /// COUNT = u16
@@ -76,6 +75,7 @@ pub struct HumanInputContext {
 #[repr(C)]
 pub struct NetworkInputContext {
     pub base: InputContext,
+    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ pub static NETWORK_INPUT_HANDLERS: BattleInputHandlers = BattleInputHandlers {
     frame_input: Some(unsafe_frame_input_network),
     select_ship: Some(unsafe_select_ship_network),
     battle_end_ready: Some(unsafe_battle_end_ready_network),
-    delete_context: Some(InputContext_delete),
+    delete_context: Some(delete_network_context),
 };
 
 // Trampoline functions to match the exact C function pointer signatures.
@@ -234,96 +234,69 @@ unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bo
 pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
     [std::ptr::null_mut(), std::ptr::null_mut()];
 
-use crate::supermelee::netplay::netmelee::networkBattleInput;
-
 #[cfg(not(test))]
 use crate::supermelee::native::battle_picker::live::selectShipNetwork;
 
 #[cfg(not(test))]
 use crate::battle::tactrans_native::engine::battleEndReadyNetwork;
 
-/// C: `void InputContext_init(InputContext *context, BattleInputHandlers *handlers, COUNT playerNr)`
-#[no_mangle]
+/// Release a human or computer context, both of which contain only the base record.
+///
 /// # Safety
-/// `context` must point to aligned, writable InputContext storage.
-/// `handlers` must remain valid while the initialized context uses it.
-pub unsafe extern "C" fn InputContext_init(
-    context: *mut InputContext,
-    handlers: *const BattleInputHandlers,
-    player_nr: Count,
-) {
-    unsafe {
-        (*context).handlers = handlers;
-        (*context).player_nr = player_nr;
-    }
-}
-
-/// C: `void InputContext_delete(InputContext *context)` — frees with HFree
+/// `context` must be null or an unconsumed allocation from the human/computer constructors.
+/// Network contexts must use their vtable destructor to drop the session handle.
 #[no_mangle]
-pub extern "C" fn InputContext_delete(context: *mut InputContext) {
+pub unsafe extern "C" fn InputContext_delete(context: *mut InputContext) {
     unsafe {
-        rust_hfree(context as *mut c_void);
+        if !context.is_null() {
+            drop(Box::from_raw(context));
+        }
     }
 }
 
 /// C: `ComputerInputContext *ComputerInputContext_new(COUNT playerNr)`
 #[no_mangle]
 pub extern "C" fn ComputerInputContext_new(player_nr: Count) -> *mut ComputerInputContext {
-    unsafe {
-        let result =
-            rust_hmalloc(std::mem::size_of::<ComputerInputContext>()) as *mut ComputerInputContext;
-        if !result.is_null() {
-            InputContext_init(
-                &mut (*result).base as *mut InputContext,
-                &COMPUTER_INPUT_HANDLERS as *const _,
-                player_nr,
-            );
-        }
-        result
-    }
+    Box::into_raw(Box::new(ComputerInputContext {
+        base: InputContext {
+            handlers: &COMPUTER_INPUT_HANDLERS,
+            player_nr,
+        },
+    }))
 }
 
-/// C: `HumanInputContext *HumanInputContext_new(COUNT playerNr)`
 #[no_mangle]
 pub extern "C" fn HumanInputContext_new(player_nr: Count) -> *mut HumanInputContext {
-    unsafe {
-        let result =
-            rust_hmalloc(std::mem::size_of::<HumanInputContext>()) as *mut HumanInputContext;
-        if !result.is_null() {
-            InputContext_init(
-                &mut (*result).base as *mut InputContext,
-                &HUMAN_INPUT_HANDLERS as *const _,
-                player_nr,
-            );
-        }
-        result
-    }
+    Box::into_raw(Box::new(HumanInputContext {
+        base: InputContext {
+            handlers: &HUMAN_INPUT_HANDLERS,
+            player_nr,
+        },
+    }))
 }
 
-/// C: `NetworkInputContext *NetworkInputContext_new(COUNT playerNr)`
 #[no_mangle]
 pub extern "C" fn NetworkInputContext_new(player_nr: Count) -> *mut NetworkInputContext {
-    unsafe {
-        let result =
-            rust_hmalloc(std::mem::size_of::<NetworkInputContext>()) as *mut NetworkInputContext;
-        if result.is_null() {
-            return result;
-        }
-
-        InputContext_init(
-            &mut (*result).base as *mut InputContext,
-            &NETWORK_INPUT_HANDLERS as *const _,
+    Box::into_raw(Box::new(NetworkInputContext {
+        base: InputContext {
+            handlers: &NETWORK_INPUT_HANDLERS,
             player_nr,
-        );
-        result
-    }
+        },
+        net: None,
+    }))
 }
 
 unsafe extern "C" fn unsafe_frame_input_network(
     ctx: *mut InputContext,
-    ship: *mut c_void,
+    _ship: *mut c_void,
 ) -> BattleInputState {
-    networkBattleInput(ctx.cast(), ship.cast())
+    // SAFETY: the network vtable is installed only on a live NetworkInputContext.
+    let context = unsafe { &*ctx.cast::<NetworkInputContext>() };
+    context
+        .net
+        .as_ref()
+        .unwrap_or_else(|| panic!("network input has no session"))
+        .remote_input(context.base.player_nr as usize)
 }
 
 unsafe extern "C" fn unsafe_select_ship_network(
@@ -354,6 +327,11 @@ unsafe extern "C" fn unsafe_battle_end_ready_network(ctx: *mut InputContext) -> 
 }
 
 // ---------------------------------------------------------------------------
+unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
+    // SAFETY: this vtable entry consumes the Box allocated by NetworkInputContext_new.
+    unsafe { drop(Box::from_raw(context.cast::<NetworkInputContext>())) };
+}
+
 #[cfg(test)]
 mod handler_stubs {
     use super::{BattleInputState, Boolean};

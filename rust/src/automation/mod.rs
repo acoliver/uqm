@@ -69,6 +69,7 @@ mod native_trace_oracle;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
 pub mod navigation;
+mod netplay_fixture;
 pub mod outcome;
 pub mod parity;
 mod parity_hooks;

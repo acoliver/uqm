@@ -341,6 +341,11 @@ fn execute(_operation: Operation<'_>) -> Result<Option<FixtureRun>, String> {
     Err("parity fixtures require the loaded game on its input thread".into())
 }
 
+/// Place the active melee ships within glory-device range and arm its last switch.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetupMeleeMutualLossFixtureStep {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

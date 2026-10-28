@@ -28,7 +28,7 @@ mod tests {
 }
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-pub(crate) mod live {
+pub mod live {
     use super::move_cursor;
     use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
@@ -60,11 +60,6 @@ pub(crate) mod live {
     use std::{ffi::CString, mem, ptr};
     #[no_mangle]
     pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
-    unsafe fn connections() -> [*mut NetConnection; 2] {
-        ptr::addr_of!(netConnections)
-            .cast::<[*mut NetConnection; 2]>()
-            .read()
-    }
     unsafe fn player_queue(player: usize) -> *mut QUEUE {
         crate::c_bindings::live_queues::player_ships(player)
             .cast_mut()
@@ -105,14 +100,6 @@ pub(crate) mod live {
         };
         Flash_setRect(s.flashContext, &r);
     }
-    unsafe fn report(choice: u16) {
-        for conn in connections() {
-            if !conn.is_null() && crate::supermelee::netplay::NetConnection_isConnected(conn.cast())
-            {
-                crate::supermelee::netplay::Netplay_Notify_shipSelected(conn.cast(), choice);
-            }
-        }
-    }
     /// # Safety
     /// The selection and live ship queues belong to the game thread.
     pub unsafe extern "C" fn setShipSelected(
@@ -135,7 +122,9 @@ pub(crate) mod live {
         s.hBattleShip = ship;
         PlayMenuSound(1);
         if network {
-            report(choice);
+            if let Some(net) = &(*state).net {
+                net.ship_selected(choice);
+            }
         }
         s.done = 1;
         true
@@ -194,7 +183,11 @@ pub(crate) mod live {
         context: *mut NetworkInputContext,
         state: *mut GETMELEE_STATE,
     ) -> u32 {
-        flushPacketQueues();
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .flush();
         let p = &mut (*state).player[(*context).playerNr as usize];
         if p.remoteSelected != 0 {
             p.done = 1;
@@ -213,9 +206,17 @@ pub(crate) mod live {
             }
         }
         SleepThread(840 / 120);
-        netInput();
-        let mut abort =
-            !allConnected() || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0;
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .poll();
+        let mut abort = !(*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .all_connected()
+            || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0;
         let mut done = true;
         if !abort {
             for player in 0..2 {
@@ -236,7 +237,11 @@ pub(crate) mod live {
                 }
             }
         }
-        flushPacketQueues();
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .flush();
         if abort {
             for p in &mut (*state).player {
                 if p.selecting != 0 {
@@ -440,7 +445,8 @@ pub(crate) mod live {
         for player in 0..2 {
             draw(player);
         }
-        negotiateReadyConnections(true, NetState_NetState_inSetup);
+        let net = crate::app::bridge::battle(|b| b.network());
+        net.negotiate(true, NetState_NetState_inSetup);
         let timeout = GetTimeCounter().wrapping_add(840 * 4);
         let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
             || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0;
@@ -467,19 +473,16 @@ pub(crate) mod live {
     }
     unsafe fn get_ships(mask: u16, ships: *mut HSTARSHIP) -> u32 {
         let mut state: GETMELEE_STATE = mem::zeroed();
-        for (player, conn) in connections().into_iter().enumerate() {
-            if mask & (1 << player) != 0 && !conn.is_null() {
-                let bs = NetConnection_getStateData(conn).cast::<BattleStateData>();
-                (*bs).getMeleeState = &mut state;
-            }
-        }
+        let (counters, net) = crate::app::bridge::battle(|b| (b.counters, b.network()));
+        state.net = Some(net.clone());
+        net.bind_picker(mask, (&raw mut state).cast());
         let now = GetTimeCounter();
         state.InputFunc = Some(choose);
         for i in 0..2 {
             let player = GetPlayerOrder(i) as usize;
             let p = &mut state.player[player];
             p.selecting = u32::from(mask & (1 << player) != 0);
-            p.ships_left = u16::from(crate::app::bridge::battle(|b| b.counters[player]));
+            p.ships_left = u16::from(counters[player]);
             p.randomIndex = TFB_Random() as u16 % p.ships_left;
             p.done = 0;
             if p.selecting == 0 {
@@ -500,7 +503,7 @@ pub(crate) mod live {
             changed(&mut state, player);
             Flash_start(state.player[player].flashContext);
         }
-        let mut ok = negotiateReadyConnections(true, NetState_NetState_selectShip);
+        let mut ok = net.negotiate(true, NetState_NetState_selectShip);
         SetDefaultMenuRepeatDelay();
         SetContext(OffScreenContext);
         crate::mainloop::restart_menu::c_extern::DoInput(
@@ -521,24 +524,16 @@ pub(crate) mod live {
             }
         }
         if ok {
-            if !negotiateReadyConnections(true, NetState_NetState_interBattle) {
+            if !net.negotiate(true, NetState_NetState_interBattle) {
                 ok = false;
             }
         } else {
-            setStateConnections(NetState_NetState_interBattle);
+            net.set_state(NetState_NetState_interBattle);
         }
         if !ok {
             GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
         }
-        for (player, conn) in connections().into_iter().enumerate() {
-            if mask & (1 << player) != 0
-                && !conn.is_null()
-                && crate::supermelee::netplay::NetConnection_isConnected(conn.cast())
-            {
-                let bs = NetConnection_getStateData(conn).cast::<BattleStateData>();
-                (*bs).getMeleeState = ptr::null_mut();
-            }
-        }
+        net.bind_picker(mask, ptr::null_mut());
         u32::from(ok)
     }
     /// # Safety

@@ -1,5 +1,4 @@
 //! Netplay connection dialog, ported from uqm/cnctdlg.c.
-#![allow(non_snake_case)]
 #![cfg(not(test))]
 
 use crate::navigation::abi::*;
@@ -15,11 +14,12 @@ const MENU_FRAME_RATE: DWORD = ONE_SECOND / 20;
 
 #[repr(C)]
 pub struct ConnectDialogState {
-    pub InputFunc: Option<unsafe extern "C" fn(*mut ConnectDialogState) -> BOOLEAN>,
-    pub NextTime: DWORD,
-    pub Initialized: BOOLEAN,
+    pub input_func: Option<unsafe extern "C" fn(*mut ConnectDialogState) -> BOOLEAN>,
+    pub next_time: DWORD,
+    pub initialized: BOOLEAN,
     pub which_side: c_int,
     pub confirmed: c_int,
+    pub session: *mut crate::supermelee::netplay::NetplaySession,
 }
 static mut MENU: WIDGET_MENU_SCREEN = unsafe { mem::zeroed() };
 static mut BUTTONS: [WIDGET_BUTTON; 3] = unsafe { mem::zeroed() };
@@ -44,7 +44,7 @@ const MENU_CURSOR_COLOR: Color = rgb15(31, 31, 31);
 unsafe fn game_string(index: usize) -> *const c_char {
     GetStringAddress(SetAbsStringTableIndex(GameStrings, index as COUNT))
 }
-unsafe extern "C" fn MCD_DrawMenuScreen(widget: *mut WIDGET, x: c_int, y: c_int) {
+unsafe extern "C" fn mcd_draw_menu_screen(widget: *mut WIDGET, x: c_int, y: c_int) {
     let screen = widget.cast::<WIDGET_MENU_SCREEN>();
     let mut widget_y = y + 8;
     for i in 0..(*screen).num_children as usize {
@@ -53,7 +53,7 @@ unsafe extern "C" fn MCD_DrawMenuScreen(widget: *mut WIDGET, x: c_int, y: c_int)
         widget_y += ((*child).height.unwrap())(child) + 8;
     }
 }
-unsafe extern "C" fn MCD_DrawButton(widget: *mut WIDGET, _x: c_int, y: c_int) {
+unsafe extern "C" fn mcd_draw_button(widget: *mut WIDGET, _x: c_int, y: c_int) {
     let button = widget.cast::<WIDGET_BUTTON>();
     let old_font = SetContextFont(StarConFont);
     let old_effect = SetContextFontEffect(ptr::null_mut());
@@ -75,7 +75,7 @@ unsafe extern "C" fn MCD_DrawButton(widget: *mut WIDGET, _x: c_int, y: c_int) {
     SetContextFont(old_font);
     SetContextForeGroundColor(old_text);
 }
-unsafe extern "C" fn MCD_DrawSlider(widget: *mut WIDGET, x: c_int, y: c_int) {
+unsafe extern "C" fn mcd_draw_slider(widget: *mut WIDGET, x: c_int, y: c_int) {
     let slider_widget = widget.cast::<WIDGET_SLIDER>();
     let old_font = SetContextFont(PLAYER_FONT_HANDLE);
     let old_effect = SetContextFontEffect(ptr::null_mut());
@@ -118,7 +118,7 @@ unsafe extern "C" fn MCD_DrawSlider(widget: *mut WIDGET, x: c_int, y: c_int) {
     SetContextFont(old_font);
     SetContextForeGroundColor(old_text);
 }
-unsafe extern "C" fn MCD_DrawTextEntry(widget: *mut WIDGET, x: c_int, y: c_int) {
+unsafe extern "C" fn mcd_draw_text_entry(widget: *mut WIDGET, x: c_int, y: c_int) {
     let entry = widget.cast::<WIDGET_TEXTENTRY>();
     let old_font = SetContextFont(PLAYER_FONT_HANDLE);
     let old_effect = SetContextFontEffect(ptr::null_mut());
@@ -198,7 +198,7 @@ unsafe extern "C" fn MCD_DrawTextEntry(widget: *mut WIDGET, x: c_int, y: c_int) 
     SetContextFont(old_font);
     SetContextForeGroundColor(old_text);
 }
-unsafe extern "C" fn OnTextEntryChange(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
     let widget = (*state).CbParam.cast::<WIDGET_TEXTENTRY>();
     (*widget).cursor_pos = (*state).CursorPos;
     if (*state).JoystickMode != 0 {
@@ -208,16 +208,16 @@ unsafe extern "C" fn OnTextEntryChange(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
     }
     1
 }
-unsafe extern "C" fn OnTextEntryFrame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
-    DrawConnectDialog();
+unsafe extern "C" fn on_text_entry_frame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    draw_connect_dialog();
     SleepThreadUntil((*state).NextTime);
     (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
     1
 }
-unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
+unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int {
     (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
     (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
-    DrawConnectDialog();
+    draw_connect_dialog();
     let mut revert_buf = [0; 256];
     utf8StringCopy(
         revert_buf.as_mut_ptr(),
@@ -231,8 +231,8 @@ unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
     state.MaxSize = (*widget).maxlen;
     state.CursorPos = (*widget).cursor_pos;
     state.CbParam = widget.cast();
-    state.ChangeCallback = Some(OnTextEntryChange);
-    state.FrameCallback = Some(OnTextEntryFrame);
+    state.ChangeCallback = Some(on_text_entry_change);
+    state.FrameCallback = Some(on_text_entry_frame);
     if DoTextEntry(&mut state) == 0 {
         utf8StringCopy(
             ((*widget).value.as_mut_ptr()).cast(),
@@ -243,29 +243,31 @@ unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
         callback(widget);
     }
     (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_NORMAL;
-    DrawConnectDialog();
+    draw_connect_dialog();
     1
+}
+unsafe fn apply_connection_options(server: bool) {
+    let state = &mut *CURRENT_STATE;
+    let options = (&mut *state.session).options_mut();
+    let peer = &mut options.peer[state.which_side as usize];
+    if !server {
+        peer.host = TEXTS[0].value.as_ptr();
+    }
+    peer.port = TEXTS[1].value.as_ptr();
+    peer.isServer = server;
+    options.inputDelay = SLIDER.value as usize;
+    state.confirmed = 1;
+    DONE = 1;
 }
 unsafe extern "C" fn do_connect(_: *mut WIDGET, event: c_int) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
-        let peer = &mut netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
-        peer.host = TEXTS[0].value.as_ptr();
-        peer.port = TEXTS[1].value.as_ptr();
-        peer.isServer = false;
-        (*CURRENT_STATE).confirmed = 1;
-        netplayOptions.inputDelay = SLIDER.value as usize;
-        DONE = 1;
+        apply_connection_options(false);
     }
     0
 }
 unsafe extern "C" fn do_listen(_: *mut WIDGET, event: c_int) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
-        let peer = &mut netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
-        peer.port = TEXTS[1].value.as_ptr();
-        peer.isServer = true;
-        netplayOptions.inputDelay = SLIDER.value as usize;
-        (*CURRENT_STATE).confirmed = 1;
-        DONE = 1;
+        apply_connection_options(true);
     }
     0
 }
@@ -288,7 +290,7 @@ macro_rules! widget_header {
         (*w).width = Some(Widget_WidthFullScreen);
     }};
 }
-unsafe fn CreateWidgets() {
+unsafe fn create_widgets() {
     DONE = 0;
     for button in
         std::slice::from_raw_parts_mut(ptr::addr_of_mut!(BUTTONS).cast::<WIDGET_BUTTON>(), 3)
@@ -299,7 +301,7 @@ unsafe fn CreateWidgets() {
             WIDGET_TYPE_WIDGET_TYPE_BUTTON,
             do_cancel,
             Widget_ReceiveFocusSimple,
-            MCD_DrawButton,
+            mcd_draw_button,
             Widget_HeightOneLine
         );
     }
@@ -314,7 +316,7 @@ unsafe fn CreateWidgets() {
         WIDGET_TYPE_WIDGET_TYPE_MENU_SCREEN,
         Widget_HandleEventMenuScreen,
         Widget_ReceiveFocusMenuScreen,
-        MCD_DrawMenuScreen,
+        mcd_draw_menu_screen,
         Widget_HeightFullScreen
     );
     MENU.num_children = 6;
@@ -332,14 +334,14 @@ unsafe fn CreateWidgets() {
         WIDGET_TYPE_WIDGET_TYPE_SLIDER,
         Widget_HandleEventSlider,
         Widget_ReceiveFocusSimple,
-        MCD_DrawSlider,
+        mcd_draw_slider,
         Widget_HeightOneLine
     );
     SLIDER.draw_value = Some(Widget_Slider_DrawValue);
     SLIDER.min = 0;
     SLIDER.max = 9;
     SLIDER.step = 1;
-    SLIDER.value = netplayOptions.inputDelay as c_int;
+    SLIDER.value = (*(*CURRENT_STATE).session).options_mut().inputDelay as c_int;
     SLIDER.category = game_string(NETMELEE_STRING_BASE as usize + 24);
     for entry in
         std::slice::from_raw_parts_mut(ptr::addr_of_mut!(TEXTS).cast::<WIDGET_TEXTENTRY>(), 2)
@@ -350,17 +352,21 @@ unsafe fn CreateWidgets() {
             WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY,
             Widget_HandleEventTextEntry,
             Widget_ReceiveFocusSimple,
-            MCD_DrawTextEntry,
+            mcd_draw_text_entry,
             Widget_HeightOneLine
         );
-        (*entry).handleEventSelect = Some(OnTextEntryEvent);
+        (*entry).handleEventSelect = Some(on_text_entry_event);
         (*entry).maxlen = WIDGET_TEXTENTRY_WIDTH as c_int - 1;
         (*entry).state = WIDGET_TEXTENTRY_STATE_WTE_NORMAL;
         (*entry).cursor_pos = 0;
     }
+    configure_text_entries();
+}
+unsafe fn configure_text_entries() {
     TEXTS[0].category = game_string(NETMELEE_STRING_BASE as usize + 22);
     TEXTS[1].category = game_string(NETMELEE_STRING_BASE as usize + 23);
-    let peer = &netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
+    let peer =
+        &(*(*CURRENT_STATE).session).options_mut().peer[(*CURRENT_STATE).which_side as usize];
     if TEXTS[0].value.as_ptr() != peer.host {
         libc::strncpy(
             TEXTS[0].value.as_mut_ptr(),
@@ -379,7 +385,7 @@ unsafe fn CreateWidgets() {
     TEXTS[1].value[TEXTS[1].maxlen as usize] = 0;
     (MENU.receiveFocus.unwrap())(ptr::addr_of_mut!(MENU).cast(), WIDGET_EVENT_DOWN as c_int);
 }
-unsafe fn DrawConnectDialog() {
+unsafe fn draw_connect_dialog() {
     let mut rectangle = RECT {
         extent: EXTENT {
             width: MCD_WIDTH as SIZE,
@@ -402,14 +408,14 @@ unsafe fn DrawConnectDialog() {
         rectangle.corner.y as c_int + 10,
     );
 }
-unsafe extern "C" fn DoMeleeConnectDialog(state: *mut ConnectDialogState) -> BOOLEAN {
+unsafe extern "C" fn do_melee_connect_dialog(state: *mut ConnectDialogState) -> BOOLEAN {
     GamePaused = 0;
-    if (*state).Initialized == 0 {
-        (*state).Initialized = 1;
+    if (*state).initialized == 0 {
+        (*state).initialized = 1;
         SetDefaultMenuRepeatDelay();
-        (*state).NextTime = GetTimeCounter();
-        CreateWidgets();
-        DrawConnectDialog();
+        (*state).next_time = GetTimeCounter();
+        create_widgets();
+        draw_connect_dialog();
     }
     let mut changed = true;
     let mut event = None;
@@ -433,24 +439,27 @@ unsafe extern "C" fn DoMeleeConnectDialog(state: *mut ConnectDialogState) -> BOO
         changed = false;
     }
     if changed {
-        DrawConnectDialog();
+        draw_connect_dialog();
     }
-    SleepThreadUntil((*state).NextTime.wrapping_add(MENU_FRAME_RATE));
-    (*state).NextTime = GetTimeCounter();
+    SleepThreadUntil((*state).next_time.wrapping_add(MENU_FRAME_RATE));
+    (*state).next_time = GetTimeCounter();
     BOOLEAN::from(GlobData.Game_state.CurrentActivity & CHECK_ABORT as ACTIVITY == 0 && DONE == 0)
 }
 
 /// # Safety
 /// Must run on the game thread with graphics, input, strings and netplay options
 /// initialized. `side` must index one of the two netplay peer records.
-#[no_mangle]
-pub unsafe extern "C" fn MeleeConnectDialog(side: c_int) -> BOOLEAN {
+pub unsafe fn melee_connect_dialog(
+    session: &mut crate::supermelee::netplay::NetplaySession,
+    side: c_int,
+) -> BOOLEAN {
     PLAYER_FONT_HANDLE =
         LoadGraphicInstance(crate::navigation::abi::PLAYER_FONT.as_ptr().cast()).cast();
     let mut state: ConnectDialogState = mem::zeroed();
-    state.Initialized = 0;
+    state.initialized = 0;
     state.which_side = side;
-    state.InputFunc = Some(DoMeleeConnectDialog);
+    state.session = session;
+    state.input_func = Some(do_melee_connect_dialog);
     state.confirmed = 1;
     CURRENT_STATE = &mut state;
     DoInput(ptr::addr_of_mut!(state).cast(), 1);

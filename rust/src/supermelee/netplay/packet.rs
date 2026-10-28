@@ -1,545 +1,200 @@
-use super::abi::*;
-use std::ffi::c_char;
-#[cfg(not(test))]
-use std::ffi::c_void;
+//! Explicit protocol 0.4 encoding. Reserved bytes are emitted as zero.
 
-const LENGTHS: [usize; 18] = [
-    size_of::<Packet_Init>(),
-    size_of::<Packet_Ping>(),
-    size_of::<Packet_Ack>(),
-    size_of::<Packet_Ready>(),
-    size_of::<Packet_Fleet>(),
-    size_of::<Packet_TeamName>(),
-    size_of::<Packet_Handshake0>(),
-    size_of::<Packet_Handshake1>(),
-    size_of::<Packet_HandshakeCancel>(),
-    size_of::<Packet_HandshakeCancelAck>(),
-    size_of::<Packet_SeedRandom>(),
-    size_of::<Packet_InputDelay>(),
-    size_of::<Packet_SelectShip>(),
-    size_of::<Packet_BattleInput>(),
-    size_of::<Packet_FrameCount>(),
-    size_of::<Packet_Checksum>(),
-    size_of::<Packet_Abort>(),
-    size_of::<Packet_Reset>(),
-];
-
-#[cfg(not(test))]
-#[no_mangle]
-pub static mut packetTypeData: [PacketTypeData; 18] = [
-    PacketTypeData {
-        len: size_of::<Packet_Init>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Init(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Init", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Ping>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Ping(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Ping", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Ack>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Ack(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Ack", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Ready>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Ready(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Ready", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Fleet>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Fleet(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Fleet", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_TeamName>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_TeamName(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("TeamName", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Handshake0>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Handshake0(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Handshake0", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Handshake1>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Handshake1(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Handshake1", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_HandshakeCancel>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_HandshakeCancel(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("HandshakeCancel", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_HandshakeCancelAck>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_HandshakeCancelAck(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("HandshakeCancelAck", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_SeedRandom>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_SeedRandom(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("SeedRandom", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_InputDelay>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_InputDelay(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("InputDelay", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_SelectShip>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_SelectShip(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("SelectShip", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_BattleInput>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_BattleInput(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("BattleInput", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_FrameCount>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_FrameCount(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("FrameCount", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Checksum>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Checksum(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Checksum", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Abort>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Abort(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Abort", "\0").as_ptr().cast(),
-    },
-    PacketTypeData {
-        len: size_of::<Packet_Reset>(),
-        handler: {
-            unsafe extern "C" fn dispatch(conn: *mut NetConnection, packet: *const c_void) -> i32 {
-                super::packethandlers::PacketHandler_Reset(conn, packet.cast())
-            }
-            Some(dispatch)
-        },
-        name: concat!("Reset", "\0").as_ptr().cast(),
-    },
-];
-
-pub(super) fn minimum_length(kind: usize) -> usize {
-    LENGTHS[kind]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Packet {
+    Init { protocol: [u8; 2], version: [u8; 3] },
+    Ping(u32),
+    Ack(u32),
+    Ready,
+    Fleet { side: u8, ships: Vec<(u8, u8)> },
+    TeamName { side: u8, name: Vec<u8> },
+    Handshake0,
+    Handshake1,
+    HandshakeCancel,
+    HandshakeCancelAck,
+    SeedRandom(u32),
+    InputDelay(u32),
+    SelectShip(u16),
+    BattleInput(u8),
+    FrameCount(u32),
+    Checksum { frame: u32, checksum: u32 },
+    Abort(u16),
+    Reset(u16),
 }
 
-unsafe fn create<T>(kind: usize, extra: usize) -> *mut T {
-    assert!(extra.is_multiple_of(4));
-    let len = LENGTHS[kind] + extra;
-    let wire_len = u16::try_from(len).expect("packet exceeds the wire length field");
-    let packet = libc::malloc(len).cast::<Packet>();
-    assert!(!packet.is_null());
-    (*packet).header.len = wire_len.to_be();
-    (*packet).header.type_ = (kind as u16).to_be();
-    packet.cast()
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecodeError {
+    Incomplete,
+    UnknownType,
+    InvalidLength,
 }
 
-/// # Safety
-/// `packet` must be an owned packet returned by a packet constructor.
-#[no_mangle]
-pub unsafe extern "C" fn Packet_delete(packet: *mut Packet) {
-    libc::free(packet.cast());
-}
+const MIN_LENGTH: [usize; 18] = [12, 8, 8, 4, 8, 6, 4, 4, 4, 4, 8, 8, 8, 8, 8, 12, 8, 8];
 
-#[no_mangle]
-pub extern "C" fn Packet_Init_create() -> *mut Packet_Init {
-    unsafe {
-        let packet = create::<Packet_Init>(0, 0);
-        (*packet).protoVersion.major = NETPLAY_PROTOCOL_VERSION_MAJOR as u8;
-        (*packet).protoVersion.minor = NETPLAY_PROTOCOL_VERSION_MINOR as u8;
-        (*packet).padding0 = 0;
-        (*packet).uqmVersion.major = UQM_MAJOR_VERSION as u8;
-        (*packet).uqmVersion.minor = UQM_MINOR_VERSION as u8;
-        (*packet).uqmVersion.patch = UQM_PATCH_VERSION as u8;
-        (*packet).padding1 = 0;
-        packet
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_Ready_create() -> *mut Packet_Ready {
-    unsafe { create(3, 0) }
-}
-#[no_mangle]
-pub extern "C" fn Packet_Handshake0_create() -> *mut Packet_Handshake0 {
-    unsafe { create(6, 0) }
-}
-#[no_mangle]
-pub extern "C" fn Packet_Handshake1_create() -> *mut Packet_Handshake1 {
-    unsafe { create(7, 0) }
-}
-#[no_mangle]
-pub extern "C" fn Packet_HandshakeCancel_create() -> *mut Packet_HandshakeCancel {
-    unsafe { create(8, 0) }
-}
-#[no_mangle]
-pub extern "C" fn Packet_HandshakeCancelAck_create() -> *mut Packet_HandshakeCancelAck {
-    unsafe { create(9, 0) }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_Ping_create(value: u32) -> *mut Packet_Ping {
-    unsafe {
-        let packet = create::<Packet_Ping>(1, 0);
-        (*packet).id = value.to_be();
-        packet
-    }
-}
-#[no_mangle]
-pub extern "C" fn Packet_Ack_create(value: u32) -> *mut Packet_Ack {
-    unsafe {
-        let packet = create::<Packet_Ack>(2, 0);
-        (*packet).id = value.to_be();
-        packet
-    }
-}
-#[no_mangle]
-pub extern "C" fn Packet_SeedRandom_create(value: u32) -> *mut Packet_SeedRandom {
-    unsafe {
-        let packet = create::<Packet_SeedRandom>(10, 0);
-        (*packet).seed = value.to_be();
-        packet
-    }
-}
-#[no_mangle]
-pub extern "C" fn Packet_InputDelay_create(value: u32) -> *mut Packet_InputDelay {
-    unsafe {
-        let packet = create::<Packet_InputDelay>(11, 0);
-        (*packet).delay = value.to_be();
-        packet
-    }
-}
-#[no_mangle]
-pub extern "C" fn Packet_FrameCount_create(value: u32) -> *mut Packet_FrameCount {
-    unsafe {
-        let packet = create::<Packet_FrameCount>(14, 0);
-        (*packet).frameCount = value.to_be();
-        packet
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_Fleet_create(side: NetplaySide, count: usize) -> *mut Packet_Fleet {
-    unsafe {
-        let fleet_size = count * size_of::<FleetEntry>();
-        let extra = (fleet_size + 3) & !3;
-        let packet = create::<Packet_Fleet>(4, extra);
-        (*packet).side = side as u8;
-        (*packet).padding = 0;
-        (*packet).numShips = (count as u16).to_be();
-        packet
-            .cast::<u8>()
-            .add(size_of::<Packet_Fleet>() + fleet_size)
-            .write_bytes(0, extra - fleet_size);
-        packet
-    }
-}
-
-/// # Safety
-/// `name` must contain `size` readable bytes, not including its terminator.
-#[no_mangle]
-pub unsafe extern "C" fn Packet_TeamName_create(
-    side: NetplaySide,
-    name: *const c_char,
-    size: usize,
-) -> *mut Packet_TeamName {
-    let extra = (size + 1 + 3) & !3;
-    let packet = create::<Packet_TeamName>(5, extra);
-    (*packet).side = side as u8;
-    (*packet).padding = 0;
-    let dest = (*packet).name.as_mut_ptr();
-    std::ptr::copy_nonoverlapping(name.cast::<u8>(), dest, size);
-    dest.add(size).write_bytes(0, extra - size);
-    packet
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_SelectShip_create(ship: u16) -> *mut Packet_SelectShip {
-    unsafe {
-        let packet = create::<Packet_SelectShip>(12, 0);
-        (*packet).ship = ship.to_be();
-        (*packet).padding = 0;
-        packet
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_BattleInput_create(state: u8) -> *mut Packet_BattleInput {
-    unsafe {
-        let packet = create::<Packet_BattleInput>(13, 0);
-        (*packet).state = state;
-        (*packet).padding0 = 0;
-        (*packet).padding1 = 0;
-        packet
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_Checksum_create(frame: u32, checksum: u32) -> *mut Packet_Checksum {
-    unsafe {
-        let packet = create::<Packet_Checksum>(15, 0);
-        (*packet).frameNr = frame.to_be();
-        (*packet).checksum = checksum.to_be();
-        packet
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn Packet_Abort_create(reason: u16) -> *mut Packet_Abort {
-    unsafe {
-        let packet = create::<Packet_Abort>(16, 0);
-        (*packet).reason = reason.to_be();
-        // These reserved bytes were uninitialized in the C constructors.
-        (*packet).padding0 = 0;
-        packet
-    }
-}
-#[no_mangle]
-pub extern "C" fn Packet_Reset_create(reason: u16) -> *mut Packet_Reset {
-    unsafe {
-        let packet = create::<Packet_Reset>(17, 0);
-        (*packet).reason = reason.to_be();
-        // These reserved bytes were uninitialized in the C constructors.
-        (*packet).padding0 = 0;
-        packet
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::c_void;
-
-    unsafe fn bytes(packet: *mut c_void) -> Vec<u8> {
-        let packet = packet.cast::<Packet>();
-        std::slice::from_raw_parts(packet.cast(), u16::from_be((*packet).header.len) as usize)
-            .to_vec()
-    }
-
-    #[test]
-    fn every_packet_wire_roundtrip() {
-        unsafe {
-            let fleet = Packet_Fleet_create(1, 1);
-            (*fleet).ships.as_mut_ptr().write(FleetEntry {
-                index: 13,
-                ship: 24,
-            });
-            let packets: [*mut c_void; 18] = [
-                Packet_Init_create().cast(),
-                Packet_Ping_create(0x12345678).cast(),
-                Packet_Ack_create(0x12345678).cast(),
-                Packet_Ready_create().cast(),
-                fleet.cast(),
-                Packet_TeamName_create(0, c"abc".as_ptr(), 3).cast(),
-                Packet_Handshake0_create().cast(),
-                Packet_Handshake1_create().cast(),
-                Packet_HandshakeCancel_create().cast(),
-                Packet_HandshakeCancelAck_create().cast(),
-                Packet_SeedRandom_create(0x12345678).cast(),
-                Packet_InputDelay_create(0x12345678).cast(),
-                Packet_SelectShip_create(0xabcd).cast(),
-                Packet_BattleInput_create(0xa5).cast(),
-                Packet_FrameCount_create(0x12345678).cast(),
-                Packet_Checksum_create(0x12345678, 0xabcdef01).cast(),
-                Packet_Abort_create(0x1234).cast(),
-                Packet_Reset_create(0x1234).cast(),
-            ];
-            let payloads: [&[u8]; 18] = [
-                &[0, 4, 0, 0, 0, 8, 0, 0],
-                &[0x12, 0x34, 0x56, 0x78],
-                &[0x12, 0x34, 0x56, 0x78],
-                &[],
-                &[1, 0, 0, 1, 13, 24, 0, 0],
-                &[0, 0, b'a', b'b', b'c', 0],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[0x12, 0x34, 0x56, 0x78],
-                &[0x12, 0x34, 0x56, 0x78],
-                &[0xab, 0xcd, 0, 0],
-                &[0xa5, 0, 0, 0],
-                &[0x12, 0x34, 0x56, 0x78],
-                &[0x12, 0x34, 0x56, 0x78, 0xab, 0xcd, 0xef, 1],
-                &[0x12, 0x34, 0, 0],
-                &[0x12, 0x34, 0, 0],
-            ];
-            for (kind, packet) in packets.into_iter().enumerate() {
-                let wire = bytes(packet);
-                assert_eq!(
-                    usize::from(u16::from_be_bytes([wire[0], wire[1]])),
-                    wire.len()
-                );
-                assert_eq!(usize::from(u16::from_be_bytes([wire[2], wire[3]])), kind);
-                assert_eq!(&wire[4..], payloads[kind], "packet {kind}");
-                let reconstructed = match kind {
-                    0 => Packet_Init_create().cast(),
-                    1 => Packet_Ping_create(u32::from_be_bytes(wire[4..8].try_into().unwrap()))
-                        .cast(),
-                    2 => {
-                        Packet_Ack_create(u32::from_be_bytes(wire[4..8].try_into().unwrap())).cast()
-                    }
-                    3 => Packet_Ready_create().cast(),
-                    4 => {
-                        let count = u16::from_be_bytes([wire[6], wire[7]]) as usize;
-                        let p = Packet_Fleet_create(wire[4] as u32, count);
-                        std::ptr::copy_nonoverlapping(
-                            wire[8..].as_ptr(),
-                            (*p).ships.as_mut_ptr().cast::<u8>(),
-                            count * 2,
-                        );
-                        p.cast()
-                    }
-                    5 => {
-                        Packet_TeamName_create(wire[4] as u32, wire[6..].as_ptr().cast(), 3).cast()
-                    }
-                    6 => Packet_Handshake0_create().cast(),
-                    7 => Packet_Handshake1_create().cast(),
-                    8 => Packet_HandshakeCancel_create().cast(),
-                    9 => Packet_HandshakeCancelAck_create().cast(),
-                    10 => {
-                        Packet_SeedRandom_create(u32::from_be_bytes(wire[4..8].try_into().unwrap()))
-                            .cast()
-                    }
-                    11 => {
-                        Packet_InputDelay_create(u32::from_be_bytes(wire[4..8].try_into().unwrap()))
-                            .cast()
-                    }
-                    12 => Packet_SelectShip_create(u16::from_be_bytes([wire[4], wire[5]])).cast(),
-                    13 => Packet_BattleInput_create(wire[4]).cast(),
-                    14 => {
-                        Packet_FrameCount_create(u32::from_be_bytes(wire[4..8].try_into().unwrap()))
-                            .cast()
-                    }
-                    15 => Packet_Checksum_create(
-                        u32::from_be_bytes(wire[4..8].try_into().unwrap()),
-                        u32::from_be_bytes(wire[8..12].try_into().unwrap()),
-                    )
-                    .cast(),
-                    16 => Packet_Abort_create(u16::from_be_bytes([wire[4], wire[5]])).cast(),
-                    17 => Packet_Reset_create(u16::from_be_bytes([wire[4], wire[5]])).cast(),
-                    _ => unreachable!(),
-                };
-                assert_eq!(bytes(reconstructed), wire);
-                Packet_delete(packet.cast());
-                Packet_delete(reconstructed.cast());
-            }
+impl Packet {
+    pub fn kind(&self) -> usize {
+        match self {
+            Self::Init { .. } => 0,
+            Self::Ping(_) => 1,
+            Self::Ack(_) => 2,
+            Self::Ready => 3,
+            Self::Fleet { .. } => 4,
+            Self::TeamName { .. } => 5,
+            Self::Handshake0 => 6,
+            Self::Handshake1 => 7,
+            Self::HandshakeCancel => 8,
+            Self::HandshakeCancelAck => 9,
+            Self::SeedRandom(_) => 10,
+            Self::InputDelay(_) => 11,
+            Self::SelectShip(_) => 12,
+            Self::BattleInput(_) => 13,
+            Self::FrameCount(_) => 14,
+            Self::Checksum { .. } => 15,
+            Self::Abort(_) => 16,
+            Self::Reset(_) => 17,
         }
     }
 
-    #[test]
-    fn team_names_and_fleets_keep_c_padding_lengths() {
-        unsafe {
-            for size in 0..9 {
-                let name = b"abcdefgh";
-                let p = Packet_TeamName_create(1, name.as_ptr().cast(), size);
-                let wire = bytes(p.cast());
-                assert_eq!(wire.len(), 6 + ((size + 4) & !3));
-                assert_eq!(&wire[6..6 + size], &name[..size]);
-                assert!(wire[6 + size..].iter().all(|&b| b == 0));
-                Packet_delete(p.cast());
-                let p = Packet_Fleet_create(0, size);
-                for index in 0..size {
-                    (*p).ships.as_mut_ptr().add(index).write(FleetEntry {
-                        index: index as u8,
-                        ship: 255,
-                    });
+    pub fn encode(&self) -> Vec<u8> {
+        let extra = match self {
+            Self::Fleet { ships, .. } => (ships.len() * 2 + 3) & !3,
+            Self::TeamName { name, .. } => (name.len() + 4) & !3,
+            _ => 0,
+        };
+        let len = MIN_LENGTH[self.kind()] + extra;
+        let wire_len = match u16::try_from(len) {
+            Ok(len) => len,
+            Err(_) => panic!("packet exceeds the wire length field"),
+        };
+        let mut bytes = vec![0; len];
+        bytes[..2].copy_from_slice(&wire_len.to_be_bytes());
+        bytes[2..4].copy_from_slice(&(self.kind() as u16).to_be_bytes());
+        match self {
+            Self::Init { protocol, version } => {
+                bytes[4..6].copy_from_slice(protocol);
+                bytes[8..11].copy_from_slice(version);
+            }
+            Self::Ping(value)
+            | Self::Ack(value)
+            | Self::SeedRandom(value)
+            | Self::InputDelay(value)
+            | Self::FrameCount(value) => {
+                bytes[4..8].copy_from_slice(&value.to_be_bytes());
+            }
+            Self::Fleet { side, ships } => {
+                bytes[4] = *side;
+                bytes[6..8].copy_from_slice(&(ships.len() as u16).to_be_bytes());
+                for (dest, &(index, ship)) in
+                    bytes[8..].as_chunks_mut::<2>().0.iter_mut().zip(ships)
+                {
+                    dest.copy_from_slice(&[index, ship]);
                 }
-                let wire = bytes(p.cast());
-                assert_eq!(wire.len(), 8 + ((size * 2 + 3) & !3));
-                assert!(wire[8 + size * 2..].iter().all(|&b| b == 0));
-                Packet_delete(p.cast());
             }
+            Self::TeamName { side, name } => {
+                bytes[4] = *side;
+                bytes[6..6 + name.len()].copy_from_slice(name);
+            }
+            Self::SelectShip(value) | Self::Abort(value) | Self::Reset(value) => {
+                bytes[4..6].copy_from_slice(&value.to_be_bytes());
+            }
+            Self::BattleInput(value) => bytes[4] = *value,
+            Self::Checksum { frame, checksum } => {
+                bytes[4..8].copy_from_slice(&frame.to_be_bytes());
+                bytes[8..12].copy_from_slice(&checksum.to_be_bytes());
+            }
+            Self::Ready
+            | Self::Handshake0
+            | Self::Handshake1
+            | Self::HandshakeCancel
+            | Self::HandshakeCancelAck => {}
         }
+        bytes
     }
+
+    fn decode_fleet(bytes: &[u8]) -> Result<Self, DecodeError> {
+        let count = usize::from(u16::from_be_bytes([bytes[6], bytes[7]]));
+        let end = 8 + count * 2;
+        if end > bytes.len() {
+            return Err(DecodeError::InvalidLength);
+        }
+        Ok(Self::Fleet {
+            side: bytes[4],
+            ships: bytes[8..end]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| (pair[0], pair[1]))
+                .collect(),
+        })
+    }
+
+    fn decode_team_name(bytes: &[u8]) -> Result<Self, DecodeError> {
+        if bytes.len() == 6 {
+            return Err(DecodeError::InvalidLength);
+        }
+        let end = bytes[6..bytes.len() - 1]
+            .iter()
+            .position(|&b| b == 0)
+            .map_or(bytes.len() - 1, |n| 6 + n);
+        Ok(Self::TeamName {
+            side: bytes[4],
+            name: bytes[6..end].to_vec(),
+        })
+    }
+
+    /// Decode one frame; return its consumed length so stream callers retain the suffix.
+    pub fn decode(bytes: &[u8]) -> Result<(Self, usize), DecodeError> {
+        if bytes.len() < 4 {
+            return Err(DecodeError::Incomplete);
+        }
+        let len = usize::from(u16::from_be_bytes([bytes[0], bytes[1]]));
+        let kind = usize::from(u16::from_be_bytes([bytes[2], bytes[3]]));
+        let minimum = *MIN_LENGTH.get(kind).ok_or(DecodeError::UnknownType)?;
+        if len < minimum {
+            return Err(DecodeError::InvalidLength);
+        }
+        if bytes.len() < len {
+            return Err(DecodeError::Incomplete);
+        }
+        Ok((Self::decode_payload(kind, &bytes[..len])?, len))
+    }
+
+    fn decode_payload(kind: usize, bytes: &[u8]) -> Result<Self, DecodeError> {
+        let short = || u16::from_be_bytes([bytes[4], bytes[5]]);
+        let word = || u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let packet = match kind {
+            0 => Self::Init {
+                protocol: [bytes[4], bytes[5]],
+                version: [bytes[8], bytes[9], bytes[10]],
+            },
+            1 => Self::Ping(word()),
+            2 => Self::Ack(word()),
+            3 => Self::Ready,
+            4 => Self::decode_fleet(bytes)?,
+            5 => Self::decode_team_name(bytes)?,
+            6 => Self::Handshake0,
+            7 => Self::Handshake1,
+            8 => Self::HandshakeCancel,
+            9 => Self::HandshakeCancelAck,
+            10 => Self::SeedRandom(word()),
+            11 => Self::InputDelay(word()),
+            12 => Self::SelectShip(short()),
+            13 => Self::BattleInput(bytes[4]),
+            14 => Self::FrameCount(word()),
+            15 => Self::Checksum {
+                frame: word(),
+                checksum: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+            },
+            16 => Self::Abort(short()),
+            17 => Self::Reset(short()),
+            _ => unreachable!(),
+        };
+        Ok(packet)
+    }
+}
+
+/// # Safety
+/// Consumes the uniquely owned packet allocated by queue_packet.
+pub(crate) unsafe fn packet_delete(packet: *mut Packet) {
+    drop(Box::from_raw(packet));
 }

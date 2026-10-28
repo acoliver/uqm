@@ -11,14 +11,15 @@
 pub mod abi {
     include!("../../abi/netplay_abi.rs");
 }
+mod battle;
 mod checkbuf;
 pub(crate) mod checksum;
 pub(crate) mod crc;
-mod packet;
-mod packethandlers;
-mod packetq;
+pub mod packet;
+pub mod packethandlers;
+pub mod packetq;
 mod packetsenders;
-use crate::network::set_errno;
+use crate::platform::set_errno;
 
 mod npconfirm;
 mod ready;
@@ -27,6 +28,8 @@ mod reset;
 mod netstate;
 
 mod netoptions;
+pub(crate) mod session;
+pub use session::NetplaySession;
 
 pub(crate) mod netinput;
 
@@ -46,24 +49,14 @@ pub(crate) mod netmelee;
 
 #[cfg(not(test))]
 pub(crate) use netconnection::NetConnection_isConnected;
-#[cfg(not(test))]
-pub(crate) use notify::Netplay_Notify_shipSelected;
 
 #[cfg(not(test))]
 pub(crate) use netconnection::{NetConnection_getPeerOptions, NetConnection_getPlayerNr};
 #[cfg(not(test))]
-pub(crate) use netmelee::{
-    cancelConfirmations, closeAllConnections, closeDisconnectedConnections,
-    closePlayerNetworkConnection, confirmConnections, openPlayerNetworkConnection, setupInputDelay,
-    NetMelee_getBattleState,
-};
-#[cfg(not(test))]
 pub(crate) use notify::Netplay_Notify_seedRandom;
-#[cfg(not(test))]
-pub(crate) use notifyall::{
-    Netplay_NotifyAll_inputDelay, Netplay_NotifyAll_setFleet, Netplay_NotifyAll_setShip,
-    Netplay_NotifyAll_setTeamName,
-};
 
 #[cfg(test)]
 mod test_runtime;
+
+#[cfg(not(test))]
+pub(crate) use netmelee::NetMelee_getBattleState;

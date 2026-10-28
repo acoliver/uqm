@@ -124,7 +124,7 @@ pub(super) mod live {
         };
         hot(stamp.frame, x, y);
         DrawStamp(&mut stamp);
-        DrawMeleeShipStrings(state, (*state).currentShip);
+        DrawMeleeShipStrings(state, (*state).current_ship);
     }
     /// # Safety
     /// Rect must be writable and the popup must be initialized.
@@ -136,29 +136,29 @@ pub(super) mod live {
         let time = GetTimeCounter();
         GamePaused = 0;
         if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
-            (*state).buildPickConfirmed = 0;
+            (*state).build_pick_confirmed = 0;
             return 0;
         }
         SetMenuSounds(15, 16);
         let keys = PulsedInputState.menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
-            (*state).buildPickConfirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
+            (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
         }
-        if keys[KEY_MENU_SPECIAL as usize] != 0 && (*state).currentShip != 255 {
-            DoShipSpin((*state).currentShip as u16, ptr::null_mut());
+        if keys[KEY_MENU_SPECIAL as usize] != 0 && (*state).current_ship != 255 {
+            DoShipSpin((*state).current_ship as u16, ptr::null_mut());
             return 1;
         }
         let selected = navigate(
-            (*state).currentShip,
+            (*state).current_ship,
             keys[KEY_MENU_LEFT as usize] != 0,
             keys[KEY_MENU_RIGHT as usize] != 0,
             keys[KEY_MENU_UP as usize] != 0,
             keys[KEY_MENU_DOWN as usize] != 0,
         );
-        if selected != (*state).currentShip {
-            DrawPickIcon((*state).currentShip, true);
-            (*state).currentShip = selected;
+        if selected != (*state).current_ship {
+            DrawPickIcon((*state).current_ship, true);
+            (*state).current_ship = selected;
             DrawMeleeShipStrings(state, selected);
         }
         Melee_flashSelection(state);
@@ -169,13 +169,13 @@ pub(super) mod live {
     /// State must be the active fleet editor on the game thread.
     pub unsafe extern "C" fn BuildPickShip(state: *mut MELEE_STATE) -> bool {
         FlushInput();
-        if (*state).currentShip == 255 {
-            (*state).currentShip = 0;
+        if (*state).current_ship == 255 {
+            (*state).current_ship = 0;
         }
         DrawPickFrame(state);
-        (*state).InputFunc = Some(pick);
+        (*state).input_func = Some(pick);
         DoInput(state.cast(), 0);
-        (*state).buildPickConfirmed != 0
+        (*state).build_pick_confirmed != 0
     }
 }
 

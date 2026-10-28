@@ -336,16 +336,16 @@ fn configure(request: &MeleeSetupRequest) -> Result<(), String> {
             .as_mut()
             .ok_or("configure_parity_melee requires the live Super Melee menu")?;
         configure_menu(
-            state.meleeStarted != 0,
+            state.melee_started != 0,
             &mut *controls,
             GlobData.Game_state.CurrentActivity,
             request.cyborg,
         )?;
-        state.MeleeOption = 4;
-        state.InputFunc = Some(crate::supermelee::native::menu::live::DoMelee);
+        state.melee_option = 4;
+        state.input_func = Some(crate::supermelee::native::menu::live::DoMelee);
         for (side, slot, ship) in ships {
             crate::supermelee::native::teams::MeleeSetup_setShip(
-                state.meleeSetup,
+                state.melee_setup,
                 side,
                 slot,
                 ship,
