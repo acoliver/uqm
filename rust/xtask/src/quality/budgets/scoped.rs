@@ -29,32 +29,42 @@ pub(super) fn validate(
     scopes: &BTreeMap<String, u64>,
     limit: u64,
 ) -> Result<(), String> {
-    if name != "stage_b_raw" {
+    if !["stage_b_raw", "stage_b_access_unsafe"].contains(&name) {
         return if scopes.is_empty() {
             Ok(())
         } else {
-            Err("only stage_b_raw accepts identity scopes".into())
+            Err("only Stage B budgets accept identity scopes".into())
         };
     }
     if scopes.is_empty() {
-        return Err("stage_b_raw requires exact raw identity scopes".into());
+        return Err(format!("{name} requires exact identity scopes"));
     }
     let mut sum = 0u64;
     for (key, value) in scopes {
         let fields: Vec<_> = key.split('|').collect();
-        if fields.len() != 3
-            || fields[0] != "ffi"
-            || !["raw_records", "raw_pointer_parameters"].contains(&fields[1])
-            || !fields[2].contains("::")
-            || fields[2].contains('*')
-        {
-            return Err(format!("invalid stage_b_raw identity: {key}"));
+        let valid = fields.len() == 3
+            && !fields[2].contains('*')
+            && match name {
+                "stage_b_raw" => {
+                    fields[0] == "ffi"
+                        && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
+                        && fields[2].contains("::")
+                }
+                "stage_b_access_unsafe" => {
+                    fields[0] == "unsafe"
+                        && ["unsafe_blocks", "unsafe_block_lines"].contains(&fields[1])
+                        && accessor_identity(fields[2])
+                }
+                _ => false,
+            };
+        if !valid {
+            return Err(format!("invalid {name} identity: {key}"));
         }
         sum = sum.checked_add(*value).ok_or("scope limits overflow")?;
     }
     if sum != limit {
         return Err(format!(
-            "stage_b_raw limit {limit} must equal scope limits {sum}"
+            "{name} limit {limit} must equal scope limits {sum}"
         ));
     }
     Ok(())
@@ -87,9 +97,30 @@ pub(super) fn check(measured: &Measurement, budget: &Budget) -> Result<(), Strin
             .sum();
         if value > *limit {
             return Err(format!(
-                "budget stage_b_raw {key}: limit {limit}, measured {value}"
+                "scoped budget {key}: limit {limit}, measured {value}"
             ));
         }
     }
     Ok(())
+}
+
+fn accessor_identity(identity: &str) -> bool {
+    [
+        "uqm::engine::battle::access::",
+        "uqm::battle::context_access::",
+    ]
+    .iter()
+    .any(|prefix| {
+        identity
+            .strip_prefix(prefix)
+            .is_some_and(|rest| !rest.is_empty() && !rest.ends_with("::"))
+    }) || [
+        "life_span",
+        "hit_points",
+        "mass_points",
+        "turn_wait",
+        "thrust_wait",
+    ]
+    .iter()
+    .any(|decoder| identity == format!("uqm::engine::battle::record::abi::<ELEMENT>::{decoder}"))
 }
