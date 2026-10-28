@@ -338,8 +338,8 @@
       "sha256": "b24449db7a99dfa568b08c27d294f0e2f3a19f6b77325928b778abe15256bd93"
     },
     "parity/counts/campaign-s13-connected-ending.toml": {
-      "bytes": 1636128,
-      "sha256": "0a1394b2f64b607ea544c011c8f1ee1d1a69e70d2e46051c1fb6e5ae9716f138"
+      "bytes": 2218263,
+      "sha256": "a546656c0a2a919dfcef16827d8be3db06f8e4f79f1905e887e296b67d7cd79c"
     },
     "parity/counts/collect-moon-energy-v1.toml": {
       "bytes": 72513,
