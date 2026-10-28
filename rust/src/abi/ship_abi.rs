@@ -3845,17 +3845,14 @@ pub use crate::game_init::world_resources::live::load_gravity_well;
 
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
-pub use crate::supermelee::netplay::abi::BattleInputBuffer;
 
 
 
 
 
-pub use crate::supermelee::netplay::abi::BattleInputBuffer_push;
 
 
 
-pub use crate::supermelee::netplay::netinput::BattleInputBuffer_pop;
 
 
 

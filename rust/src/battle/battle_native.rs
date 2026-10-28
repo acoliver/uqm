@@ -348,12 +348,11 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn GetPlayerOrder(i: COUNT) -> COUNT {
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {
-                let context = player_input(side).cast::<NetworkInputContext>();
-                return (*context)
-                    .net
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("missing net"))
-                    .player_order(i);
+                let context = &*player_input(side).cast::<NetworkInputContext>();
+                return match &context.net {
+                    Some(net) => net.player_order(i),
+                    None => panic!("network input has no session"),
+                };
             }
         }
         1u16.wrapping_sub(i)
@@ -370,17 +369,17 @@ pub(crate) mod engine {
         GetInitialStarShips()
     }
 
-    unsafe fn battle_network() -> (
+    type BattleNetwork = (
         *mut crate::engine::battle::Battle,
         std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
         bool,
-    ) {
+    );
+    unsafe fn battle_network() -> BattleNetwork {
         let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
-        let offline = crate::supermelee::netplay::NetplaySession::default();
         let had_net = (*battle).net.is_some();
-        if !had_net {
-            (*battle).net = Some(offline.battle_net());
-        }
+        (*battle).net.get_or_insert_with(|| {
+            crate::supermelee::netplay::NetplaySession::default().battle_net()
+        });
         let net = (*battle).network();
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {

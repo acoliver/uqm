@@ -13,21 +13,23 @@ unsafe extern "C" fn release_battle(data: *mut NetConnectionStateData) {
 pub unsafe extern "C" fn NetMelee_connectCallback(conn: *mut NetConnection) {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        let melee = (*conn).extra.cast::<melee_state>();
-        let data = libc::malloc(size_of::<BattleStateData>()).cast::<BattleStateData>();
-        assert!(!data.is_null());
-        // end_frame_count is initialized separately before battle, as in C.
-        (*data).release_function = Some(release_battle);
-        (*data).melee_state = melee;
-        (*data).battle_state = ptr::null_mut();
-        (*data).get_melee_state = ptr::null_mut();
-        (*conn).stateData = data.cast();
-        (*conn).extra = ptr::null_mut();
-        MeleeSetup_resetSentTeams((*melee).melee_setup);
-        sendInit(conn);
-        Netplay_localReady(conn, Some(enter_setup), ptr::null_mut(), false);
-    }
+
+    // SAFETY: the connection is live for this callback; end this view before
+    // invoking protocol callbacks which may access it again.
+    let melee = unsafe { (*conn).extra.cast::<melee_state>() };
+    let data = libc::malloc(size_of::<BattleStateData>()).cast::<BattleStateData>();
+    assert!(!data.is_null());
+    // end_frame_count is initialized separately before battle, as in C.
+    (*data).release_function = Some(release_battle);
+    (*data).melee_state = melee;
+    (*data).battle_state = ptr::null_mut();
+    (*data).get_melee_state = ptr::null_mut();
+    (*conn).stateData = data.cast();
+    (*conn).extra = ptr::null_mut();
+    // SAFETY: the callback's extra pointer is the live menu record.
+    unsafe { MeleeSetup_resetSentTeams((*melee).melee_setup) };
+    sendInit(conn);
+    Netplay_localReady(conn, Some(enter_setup), ptr::null_mut(), false);
 }
 /// # Safety
 /// `conn` is live and owns the melee state used by feedback.

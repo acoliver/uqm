@@ -23,39 +23,44 @@ pub(crate) fn connect(request: &Request) -> Result<(), String> {
     request.validate()?;
     // SAFETY: the fixture is admitted on the live menu input thread, before a
     // battle borrows its session. The menu and retained option text outlive it.
-    unsafe {
-        let state = P_MELEE_STATE
-            .as_mut()
-            .ok_or("netplay fixture requires the melee menu")?;
-        if state.melee_started != 0 {
-            return Err("cannot connect the netplay fixture during battle".into());
-        }
-        let side = usize::from(request.remote_player);
+    let state =
+        unsafe { P_MELEE_STATE.as_mut() }.ok_or("netplay fixture requires the melee menu")?;
+    if state.melee_started != 0 {
+        return Err("cannot connect the netplay fixture during battle".into());
+    }
+    let side = usize::from(request.remote_player);
+    state
+        .netplay
+        .configure_peer(side, request.server, request.port);
+    // SAFETY: the menu and session outlive this connection and its callbacks.
+    let conn = unsafe {
         state
             .netplay
-            .configure_peer(side, request.server, request.port);
-        let conn = state
-            .netplay
-            .open_player_network_connection(request.remote_player, P_MELEE_STATE.cast());
-        if conn.is_null() {
-            return Err("could not open netplay fixture endpoint".into());
-        }
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        if request.server {
-            eprintln!("netplay fixture listener ready");
-        }
-        loop {
-            if (*conn).state == NetState_NetState_inSetup {
-                break;
-            }
-            if (*conn).stateFlags.disconnected || std::time::Instant::now() >= deadline {
-                return Err("netplay fixture disconnected or did not enter setup".into());
-            }
-            state.netplay.net_input_blocking(1);
-        }
-        Ok(())
+            .open_player_network_connection(request.remote_player, P_MELEE_STATE.cast())
+    };
+    if conn.is_null() {
+        return Err("could not open netplay fixture endpoint".into());
     }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    if request.server {
+        eprintln!("netplay fixture listener ready");
+    }
+    loop {
+        // SAFETY: session teardown has not run and no callback deletes connections
+        // during polling; disconnection only updates their state until cleanup.
+        let (status, disconnected) = unsafe { ((*conn).state, (*conn).stateFlags.disconnected) };
+        if status == NetState_NetState_inSetup {
+            break;
+        }
+        if disconnected || std::time::Instant::now() >= deadline {
+            return Err("netplay fixture disconnected or did not enter setup".into());
+        }
+        // SAFETY: called on the menu's game thread while the session is live.
+        unsafe { state.netplay.net_input_blocking(1) };
+    }
+    Ok(())
 }
+
 #[cfg(test)]
 pub(crate) fn connect(_request: &Request) -> Result<(), String> {
     Err("netplay fixture requires a loaded replay game".into())

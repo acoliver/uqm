@@ -154,9 +154,7 @@ pub(crate) mod live {
             }
         }
         // SAFETY: DoMelee owns the menu and its session on the game thread.
-        unsafe {
-            (*state).netplay.flush_packet_queues();
-        }
+        unsafe { (*state).netplay.flush_packet_queues() };
         disconnects();
         Melee_flashSelection(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));

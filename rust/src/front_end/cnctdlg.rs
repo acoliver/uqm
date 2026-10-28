@@ -209,77 +209,65 @@ unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEA
     1
 }
 unsafe extern "C" fn on_text_entry_frame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        draw_connect_dialog();
-        SleepThreadUntil((*state).NextTime);
-        (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
-        1
-    }
+    draw_connect_dialog();
+    SleepThreadUntil((*state).NextTime);
+    (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
+    1
 }
 unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
-        (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
-        draw_connect_dialog();
-        let mut revert_buf = [0; 256];
+    (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
+    (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
+    draw_connect_dialog();
+    let mut revert_buf = [0; 256];
+    utf8StringCopy(
+        revert_buf.as_mut_ptr(),
+        mem::size_of_val(&revert_buf),
+        ((*widget).value.as_ptr()).cast(),
+    );
+    let mut state: TEXTENTRY_STATE = mem::zeroed();
+    state.Initialized = 0;
+    state.NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
+    state.BaseStr = (*widget).value.as_mut_ptr();
+    state.MaxSize = (*widget).maxlen;
+    state.CursorPos = (*widget).cursor_pos;
+    state.CbParam = widget.cast();
+    state.ChangeCallback = Some(on_text_entry_change);
+    state.FrameCallback = Some(on_text_entry_frame);
+    if DoTextEntry(&mut state) == 0 {
         utf8StringCopy(
-            revert_buf.as_mut_ptr(),
-            mem::size_of_val(&revert_buf),
-            ((*widget).value.as_ptr()).cast(),
+            ((*widget).value.as_mut_ptr()).cast(),
+            (*widget).maxlen as usize,
+            revert_buf.as_ptr(),
         );
-        let mut state: TEXTENTRY_STATE = mem::zeroed();
-        state.Initialized = 0;
-        state.NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
-        state.BaseStr = (*widget).value.as_mut_ptr();
-        state.MaxSize = (*widget).maxlen;
-        state.CursorPos = (*widget).cursor_pos;
-        state.CbParam = widget.cast();
-        state.ChangeCallback = Some(on_text_entry_change);
-        state.FrameCallback = Some(on_text_entry_frame);
-        if DoTextEntry(&mut state) == 0 {
-            utf8StringCopy(
-                ((*widget).value.as_mut_ptr()).cast(),
-                (*widget).maxlen as usize,
-                revert_buf.as_ptr(),
-            );
-        } else if let Some(callback) = (*widget).onChange {
-            callback(widget);
-        }
-        (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_NORMAL;
-        draw_connect_dialog();
-        1
+    } else if let Some(callback) = (*widget).onChange {
+        callback(widget);
     }
+    (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_NORMAL;
+    draw_connect_dialog();
+    1
+}
+unsafe fn apply_connection_options(server: bool) {
+    let state = &mut *CURRENT_STATE;
+    let options = (&mut *state.session).options_mut();
+    let peer = &mut options.peer[state.which_side as usize];
+    if !server {
+        peer.host = TEXTS[0].value.as_ptr();
+    }
+    peer.port = TEXTS[1].value.as_ptr();
+    peer.isServer = server;
+    options.inputDelay = SLIDER.value as usize;
+    state.confirmed = 1;
+    DONE = 1;
 }
 unsafe extern "C" fn do_connect(_: *mut WIDGET, event: c_int) -> c_int {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        if event == WIDGET_EVENT_SELECT as c_int {
-            let peer = &mut (*(*CURRENT_STATE).session).options_mut().peer
-                [(*CURRENT_STATE).which_side as usize];
-            peer.host = TEXTS[0].value.as_ptr();
-            peer.port = TEXTS[1].value.as_ptr();
-            peer.isServer = false;
-            (*CURRENT_STATE).confirmed = 1;
-            (*(*CURRENT_STATE).session).options_mut().inputDelay = SLIDER.value as usize;
-            DONE = 1;
-        }
-        0
+    if event == WIDGET_EVENT_SELECT as c_int {
+        apply_connection_options(false);
     }
+    0
 }
 unsafe extern "C" fn do_listen(_: *mut WIDGET, event: c_int) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
-        let peer = &mut (*(*CURRENT_STATE).session).options_mut().peer
-            [(*CURRENT_STATE).which_side as usize];
-        peer.port = TEXTS[1].value.as_ptr();
-        peer.isServer = true;
-        (*(*CURRENT_STATE).session).options_mut().inputDelay = SLIDER.value as usize;
-        (*CURRENT_STATE).confirmed = 1;
-        DONE = 1;
+        apply_connection_options(true);
     }
     0
 }
@@ -375,31 +363,27 @@ unsafe fn create_widgets() {
     configure_text_entries();
 }
 unsafe fn configure_text_entries() {
-    // SAFETY: the function contract requires live, game-thread-owned records
-    // and callback arguments for all legacy accesses in this operation.
-    unsafe {
-        TEXTS[0].category = game_string(NETMELEE_STRING_BASE as usize + 22);
-        TEXTS[1].category = game_string(NETMELEE_STRING_BASE as usize + 23);
-        let peer =
-            &(*(*CURRENT_STATE).session).options_mut().peer[(*CURRENT_STATE).which_side as usize];
-        if TEXTS[0].value.as_ptr() != peer.host {
-            libc::strncpy(
-                TEXTS[0].value.as_mut_ptr(),
-                peer.host,
-                TEXTS[0].maxlen as usize,
-            );
-        }
-        if TEXTS[1].value.as_ptr() != peer.port {
-            libc::strncpy(
-                TEXTS[1].value.as_mut_ptr(),
-                peer.port,
-                TEXTS[1].maxlen as usize,
-            );
-        }
-        TEXTS[0].value[TEXTS[0].maxlen as usize] = 0;
-        TEXTS[1].value[TEXTS[1].maxlen as usize] = 0;
-        (MENU.receiveFocus.unwrap())(ptr::addr_of_mut!(MENU).cast(), WIDGET_EVENT_DOWN as c_int);
+    TEXTS[0].category = game_string(NETMELEE_STRING_BASE as usize + 22);
+    TEXTS[1].category = game_string(NETMELEE_STRING_BASE as usize + 23);
+    let peer =
+        &(*(*CURRENT_STATE).session).options_mut().peer[(*CURRENT_STATE).which_side as usize];
+    if TEXTS[0].value.as_ptr() != peer.host {
+        libc::strncpy(
+            TEXTS[0].value.as_mut_ptr(),
+            peer.host,
+            TEXTS[0].maxlen as usize,
+        );
     }
+    if TEXTS[1].value.as_ptr() != peer.port {
+        libc::strncpy(
+            TEXTS[1].value.as_mut_ptr(),
+            peer.port,
+            TEXTS[1].maxlen as usize,
+        );
+    }
+    TEXTS[0].value[TEXTS[0].maxlen as usize] = 0;
+    TEXTS[1].value[TEXTS[1].maxlen as usize] = 0;
+    (MENU.receiveFocus.unwrap())(ptr::addr_of_mut!(MENU).cast(), WIDGET_EVENT_DOWN as c_int);
 }
 unsafe fn draw_connect_dialog() {
     let mut rectangle = RECT {

@@ -147,44 +147,43 @@ mod tests {
 
     #[test]
     fn c_element_checksum_vector_excludes_background_objects() {
-        unsafe {
-            let mut element: ELEMENT = std::mem::zeroed();
-            element.state_flags = 0x4567;
-            element.__bindgen_anon_1.life_span = 1234;
-            element.__bindgen_anon_2.crew_level = 5678;
-            element.__bindgen_anon_3.mass_points = 255;
-            element.__bindgen_anon_4.turn_wait = 17;
-            element.__bindgen_anon_5.thrust_wait = 33;
-            element.velocity.travel_angle = 42;
-            element.velocity.vector = EXTENT {
-                width: -123,
-                height: 456,
-            };
-            element.velocity.fract = EXTENT {
-                width: -1,
-                height: 32767,
-            };
-            element.velocity.error = EXTENT {
-                width: -32768,
-                height: 123,
-            };
-            element.velocity.incr = EXTENT {
-                width: 15,
-                height: -25,
-            };
-            element.current.location = POINT { x: -456, y: 789 };
-            element.next.location = POINT {
-                x: 30000,
-                y: -30000,
-            };
-            let mut state = CrcState::new();
-            crc_init(&mut state);
-            crc_process_element(&mut state, &element);
-            // Captured from the original checksum.c and crc.c integer routines.
-            assert_eq!(crc_finish(&state), 0x6850e519);
-            element.state_flags |= 1 << 15;
-            crc_process_element(&mut state, &element);
-            assert_eq!(crc_finish(&state), 0x6850e519);
-        }
+        // SAFETY: this ABI record contains only zero-valid scalar, union and pointer fields.
+        let mut element: ELEMENT = unsafe { std::mem::zeroed() };
+        element.state_flags = 0x4567;
+        element.__bindgen_anon_1.life_span = 1234;
+        element.__bindgen_anon_2.crew_level = 5678;
+        element.__bindgen_anon_3.mass_points = 255;
+        element.__bindgen_anon_4.turn_wait = 17;
+        element.__bindgen_anon_5.thrust_wait = 33;
+        element.velocity.travel_angle = 42;
+        element.velocity.vector = EXTENT {
+            width: -123,
+            height: 456,
+        };
+        element.velocity.fract = EXTENT {
+            width: -1,
+            height: 32767,
+        };
+        element.velocity.error = EXTENT {
+            width: -32768,
+            height: 123,
+        };
+        element.velocity.incr = EXTENT {
+            width: 15,
+            height: -25,
+        };
+        element.current.location = POINT { x: -456, y: 789 };
+        element.next.location = POINT {
+            x: 30000,
+            y: -30000,
+        };
+        let mut state = CrcState::new();
+        crc_init(&mut state);
+        crc_process_element(&mut state, &element);
+        // Captured from the original checksum.c and crc.c integer routines.
+        assert_eq!(crc_finish(&state), 0x6850e519);
+        element.state_flags |= 1 << 15;
+        crc_process_element(&mut state, &element);
+        assert_eq!(crc_finish(&state), 0x6850e519);
     }
 }

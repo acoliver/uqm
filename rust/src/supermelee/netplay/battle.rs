@@ -1,82 +1,8 @@
 use super::abi::*;
-use super::netconnection::{NetConnection_getState, NetConnection_getStateData};
-use super::netmelee::{negotiateReady, waitReady};
-use super::notify::{Netplay_Notify_frameCount, Netplay_Notify_shipSelected};
-use super::ready::{Netplay_isLocalReady, Netplay_localReady};
+use super::notify::Netplay_Notify_shipSelected;
 use super::session::SessionCore;
 use crate::engine::battle::net::BattleNet;
 use std::{ffi::c_void, ptr};
-
-unsafe extern "C" fn ready_to_end2_callback(conn: *mut NetConnection, _arg: *mut c_void) {
-    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-    unsafe {
-        NetConnection_setState(conn, NetState_NetState_endingBattle2);
-    }
-}
-
-unsafe extern "C" fn ready_to_end_callback(conn: *mut NetConnection, _arg: *mut c_void) {
-    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-    unsafe {
-        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-        NetConnection_setState(conn, NetState_NetState_endingBattle);
-        let target = (*(*conn).session).frame_count.get().wrapping_add(1);
-        if target > (*data).end_frame_count {
-            (*data).end_frame_count = target;
-        }
-        Netplay_Notify_frameCount(conn, target);
-        flushPacketQueue(conn.cast());
-        Netplay_localReady(
-            conn.cast(),
-            Some(ready_to_end2_callback),
-            ptr::null_mut(),
-            false,
-        );
-    }
-}
-
-unsafe fn ready_for_battle_end_player(conn: *mut NetConnection) -> bool {
-    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-    unsafe {
-        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-        let state = NetConnection_getState(conn);
-        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
-            return true;
-        }
-        if state == NetState_NetState_inBattle {
-            if Netplay_isLocalReady(conn.cast()) {
-                return false;
-            }
-            Netplay_localReady(
-                conn.cast(),
-                Some(ready_to_end_callback),
-                ptr::null_mut(),
-                true,
-            );
-            if NetConnection_getState(conn) == NetState_NetState_inBattle {
-                return false;
-            }
-        }
-        let state = NetConnection_getState(conn);
-        assert!(
-            state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2
-        );
-        if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
-            return false;
-        }
-        if NetConnection_getState(conn) == NetState_NetState_endingBattle {
-            waitReady(conn);
-            assert_eq!(
-                NetConnection_getState(conn),
-                NetState_NetState_endingBattle2
-            );
-            if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
-                return false;
-            }
-        }
-        negotiateReady(conn, true, NetState_NetState_interBattle);
-        true
-    }
-}
 
 impl BattleNet for SessionCore {
     fn poll(&self) {
@@ -96,21 +22,17 @@ impl BattleNet for SessionCore {
         unsafe { self.all_connected() }
     }
     fn peer_count(&self) -> usize {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { self.get_num_net_connections() }
+        self.get_num_net_connections()
     }
     fn player_order(&self, index: u16) -> u16 {
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            let a = self.connection(0);
-            let b = self.connection(1);
-            if (!a.is_null() && !(*a).stateFlags.discriminant)
-                || (!b.is_null() && (*b).stateFlags.discriminant)
-            {
-                index
-            } else {
-                1u16.wrapping_sub(index)
-            }
+        let discriminants = self.connections.get().map(|conn| {
+            // SAFETY: the session retains each record until connection teardown.
+            unsafe { conn.as_ref() }.map(|conn| conn.stateFlags.discriminant)
+        });
+        if discriminants[0] == Some(false) || discriminants[1] == Some(true) {
+            index
+        } else {
+            1u16.wrapping_sub(index)
         }
     }
     fn input_delay(&self) -> usize {
@@ -183,7 +105,7 @@ impl BattleNet for SessionCore {
     }
     fn end_ready(&self, side: usize) -> bool {
         // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe { ready_for_battle_end_player(self.connection(side)) }
+        unsafe { super::netmelee::ready_for_battle_end_player(self.connection(side)) }
     }
     fn ship_selected(&self, choice: u16) {
         if self.replay_remote_player.is_some() {
@@ -217,16 +139,15 @@ impl BattleNet for SessionCore {
         }
     }
     unsafe fn bind_picker(&self, mask: u16, picker: *mut c_void) {
-        // SAFETY: the function contract requires live, game-thread-owned records
-        // and callback arguments for all legacy accesses in this operation.
-        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
-        unsafe {
-            for (side, conn) in self.connections.get().into_iter().enumerate() {
-                if mask & (1 << side) != 0
-                    && !conn.is_null()
-                    && (picker.is_null() || (*conn).stateFlags.connected)
-                {
-                    (*(*conn).stateData.cast::<BattleStateData>()).get_melee_state = picker.cast();
+        for (side, conn) in self.connections.get().into_iter().enumerate() {
+            // SAFETY: the session owns each connection for the battle's lifetime.
+            let conn = unsafe { conn.as_mut() };
+            if let Some(conn) = conn {
+                if mask & (1 << side) != 0 && (picker.is_null() || conn.stateFlags.connected) {
+                    // SAFETY: connected connections own their battle state data.
+                    unsafe {
+                        (*conn.stateData.cast::<BattleStateData>()).get_melee_state = picker.cast()
+                    };
                 }
             }
         }

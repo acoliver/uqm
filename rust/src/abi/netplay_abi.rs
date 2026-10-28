@@ -400,18 +400,9 @@ pub type BATTLE_INPUT_STATE = UBYTE;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleInputBuffer {
-    pub buf: *mut BATTLE_INPUT_STATE,
-    pub maxSize: usize,
-    pub first: usize,
-    pub size: usize,
-}
 
 
 
-pub use crate::supermelee::netplay::netinput::BattleInputBuffer_push;
 
 
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;

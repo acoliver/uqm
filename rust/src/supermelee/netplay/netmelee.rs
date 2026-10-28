@@ -1,5 +1,8 @@
 //! Netplay orchestration, serialized on the game thread.
 use super::abi::*;
+use super::netconnection::{NetConnection_getState, NetConnection_getStateData};
+use super::notify::Netplay_Notify_frameCount;
+use super::ready::Netplay_isLocalReady;
 use super::{
     netconnection::{
         NetConnection_close, NetConnection_open, NetConnection_setReadyCallback,
@@ -173,14 +176,14 @@ impl super::session::SessionCore {
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn get_num_net_connections(&self) -> usize {
+    pub fn get_num_net_connections(&self) -> usize {
         self.connections
             .get()
             .iter()
             .filter(|conn| !conn.is_null())
             .count()
     }
-    pub(crate) unsafe fn connection(&self, player: usize) -> *mut NetConnection {
+    pub(crate) fn connection(&self, player: usize) -> *mut NetConnection {
         self.connections.get()[player]
     }
     pub(crate) unsafe fn each(&self, mut action: impl FnMut(*mut NetConnection) -> bool) -> bool {
@@ -246,24 +249,27 @@ impl super::session::SessionCore {
             );
         }
     }
-    unsafe fn connection_progress(&self) -> [(u32, usize); 2] {
+    fn connection_progress(&self) -> [(u32, usize); 2] {
         self.connections.get().map(|conn| {
             if conn.is_null() {
                 (NetState_NetState_unconnected, 0)
             } else {
-                ((*conn).state, (*conn).statistics.packetsReceived)
+                // SAFETY: the session owns the record throughout this snapshot.
+                unsafe { ((*conn).state, (*conn).statistics.packetsReceived) }
             }
         })
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
     pub unsafe fn net_input(&self) {
-        self.input_aux(0);
+        // SAFETY: the session is polled on the connection-owning game thread.
+        unsafe { self.input_aux(0) };
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
     pub unsafe fn net_input_blocking(&self, timeout: u32) {
-        self.input_aux(timeout.min(Async_timeBeforeNextMs()));
+        // SAFETY: the callback clock and all connections belong to this game thread.
+        unsafe { self.input_aux(timeout.min(Async_timeBeforeNextMs())) };
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
@@ -483,6 +489,74 @@ impl super::session::SessionCore {
             }
         }
     }
+}
+
+unsafe extern "C" fn ready_to_end2_callback(conn: *mut NetConnection, _arg: *mut c_void) {
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        NetConnection_setState(conn, NetState_NetState_endingBattle2);
+    }
+}
+
+unsafe extern "C" fn ready_to_end_callback(conn: *mut NetConnection, _arg: *mut c_void) {
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
+        NetConnection_setState(conn, NetState_NetState_endingBattle);
+        let target = (*(*conn).session).frame_count.get().wrapping_add(1);
+        if target > (*data).end_frame_count {
+            (*data).end_frame_count = target;
+        }
+        Netplay_Notify_frameCount(conn, target);
+        flushPacketQueue(conn.cast());
+        Netplay_localReady(
+            conn.cast(),
+            Some(ready_to_end2_callback),
+            ptr::null_mut(),
+            false,
+        );
+    }
+}
+
+pub(crate) unsafe fn ready_for_battle_end_player(conn: *mut NetConnection) -> bool {
+    let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
+    let state = NetConnection_getState(conn);
+    if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
+        return true;
+    }
+    if state == NetState_NetState_inBattle {
+        if Netplay_isLocalReady(conn.cast()) {
+            return false;
+        }
+        Netplay_localReady(
+            conn.cast(),
+            Some(ready_to_end_callback),
+            ptr::null_mut(),
+            true,
+        );
+        if NetConnection_getState(conn) == NetState_NetState_inBattle {
+            return false;
+        }
+    }
+    let state = NetConnection_getState(conn);
+    assert!(state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2);
+    if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
+        return false;
+    }
+    if NetConnection_getState(conn) == NetState_NetState_endingBattle {
+        waitReady(conn);
+        assert_eq!(
+            NetConnection_getState(conn),
+            NetState_NetState_endingBattle2
+        );
+        if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
+            return false;
+        }
+    }
+    negotiateReady(conn, true, NetState_NetState_interBattle);
+    true
 }
 
 #[cfg(test)]
