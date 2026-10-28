@@ -170,6 +170,14 @@ fn transfer_allows(
                 .max_by_key(|c| c.scope.len())
                 .map(|c| &c.scope);
             let Some(target_scope) = target_scope else {
+                transfer_narrowed_allow(
+                    entries,
+                    current,
+                    coverage,
+                    &target_item,
+                    lint,
+                    &mut credited,
+                )?;
                 continue;
             };
             if target_scope == &coverage.scope {
@@ -196,6 +204,58 @@ fn transfer_allows(
         }
     }
     entries.retain(|_, value| *value != 0);
+    Ok(())
+}
+
+fn transfer_narrowed_allow(
+    entries: &mut BTreeMap<String, u64>,
+    current: &Measurement,
+    coverage: &super::metrics::AllowCoverage,
+    target: &str,
+    lint: &str,
+    credited: &mut BTreeMap<(String, String, usize), String>,
+) -> Result<(), String> {
+    let narrowed: Vec<_> = current
+        .findings
+        .iter()
+        .filter(|f| f.counter == "allows" && f.metric == lint && prefix(&f.identity, target))
+        .collect();
+    let narrowed: Vec<_> = narrowed
+        .into_iter()
+        .filter(|f| !credited.values().any(|scope| scope == &f.key()))
+        .collect();
+    let available: Vec<_> = coverage
+        .lines
+        .iter()
+        .filter(|line| {
+            !credited.contains_key(&(coverage.scope.clone(), coverage.file.clone(), **line))
+        })
+        .copied()
+        .collect();
+    let total: u64 = narrowed.iter().map(|f| f.value).sum();
+    if total > available.len() as u64 {
+        return Err(format!("narrowed allow exceeds moved coverage at {target}"));
+    }
+    if total == 0 {
+        return Ok(());
+    }
+    let source = entries
+        .get_mut(&coverage.scope)
+        .ok_or_else(|| format!("missing allow scope {}", coverage.scope))?;
+    *source = source
+        .checked_sub(total)
+        .ok_or("insufficient narrowed allow debt")?;
+    let mut available = available.into_iter();
+    for finding in narrowed {
+        let key = finding.key();
+        for line in available.by_ref().take(finding.value as usize) {
+            credited.insert(
+                (coverage.scope.clone(), coverage.file.clone(), line),
+                key.clone(),
+            );
+        }
+        *entries.entry(key).or_default() += finding.value;
+    }
     Ok(())
 }
 

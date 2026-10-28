@@ -752,3 +752,33 @@ fn queue_glob_calls_follow_the_engine_source_move() {
     );
     assert!(!m.findings.iter().any(|f| f.metric == "queue_calls"));
 }
+
+#[test]
+fn moved_record_can_narrow_an_inherited_allow_to_its_legacy_field() {
+    use super::super::baseline::{check_limits, Baseline};
+    let base = fixture(&[("src/lib.rs", "#[allow(non_snake_case)] mod old {\npub struct Record {\npub Legacy: u8,\npub ordinary: u8,\n}\n}\n")], None, false);
+    let current = fixture(&[("src/lib.rs", "mod new {\npub struct Record {\n#[allow(non_snake_case)]\npub Legacy: u8,\npub ordinary: u8,\n}\n}\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move("uqm::old::Record", "uqm::new::Record", &current, &base)
+        .unwrap();
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    let wider = fixture(&[("src/lib.rs", "mod new {\npub struct Record {\n#[allow(non_snake_case)]\n#[deprecated]\npub Legacy: u8,\n#[allow(non_snake_case)]\n#[deprecated]\npub ordinary: u8,\n}\n}\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    assert!(baseline
+        .add_move("uqm::old::Record", "uqm::new::Record", &wider, &base)
+        .unwrap_err()
+        .contains("narrowed allow exceeds moved coverage"));
+}
