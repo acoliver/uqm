@@ -84,7 +84,9 @@ impl Packet {
             Self::Fleet { side, ships } => {
                 bytes[4] = *side;
                 bytes[6..8].copy_from_slice(&(ships.len() as u16).to_be_bytes());
-                for (dest, &(index, ship)) in bytes[8..].chunks_exact_mut(2).zip(ships) {
+                for (dest, &(index, ship)) in
+                    bytes[8..].as_chunks_mut::<2>().0.iter_mut().zip(ships)
+                {
                     dest.copy_from_slice(&[index, ship]);
                 }
             }
@@ -118,7 +120,9 @@ impl Packet {
         Ok(Self::Fleet {
             side: bytes[4],
             ships: bytes[8..end]
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| (pair[0], pair[1]))
                 .collect(),
         })
@@ -152,7 +156,10 @@ impl Packet {
         if bytes.len() < len {
             return Err(DecodeError::Incomplete);
         }
-        let bytes = &bytes[..len];
+        Ok((Self::decode_payload(kind, &bytes[..len])?, len))
+    }
+
+    fn decode_payload(kind: usize, bytes: &[u8]) -> Result<Self, DecodeError> {
         let short = || u16::from_be_bytes([bytes[4], bytes[5]]);
         let word = || u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
         let packet = match kind {
@@ -182,12 +189,12 @@ impl Packet {
             17 => Self::Reset(short()),
             _ => unreachable!(),
         };
-        Ok((packet, len))
+        Ok(packet)
     }
 }
 
 /// # Safety
 /// Consumes the uniquely owned packet allocated by queue_packet.
-pub(crate) unsafe fn Packet_delete(packet: *mut Packet) {
+pub(crate) unsafe fn packet_delete(packet: *mut Packet) {
     drop(Box::from_raw(packet));
 }

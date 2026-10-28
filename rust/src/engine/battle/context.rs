@@ -13,6 +13,12 @@ pub struct Battle {
 }
 
 impl Battle {
+    pub fn network(&self) -> std::rc::Rc<dyn super::net::BattleNet> {
+        self.net
+            .clone()
+            .unwrap_or_else(|| panic!("battle has no network session"))
+    }
+
     pub fn ship_lost(&mut self, side: usize) {
         self.counters[side] = self.counters[side].wrapping_sub(1);
     }

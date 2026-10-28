@@ -112,6 +112,7 @@ fn callback_assertion(action: &Action) -> bool {
             | Action::AssertPlanetSideCollisions(_)
             | Action::SetupPlanetSideCollisionFixture(_)
             | Action::SetupMeleeMutualLossFixture(_)
+            | Action::ConnectNetplay(_)
             | Action::ConfigureParityMelee(_)
             | Action::RunParityFixture(_)
             | Action::RunParityCorpus(_)

@@ -323,12 +323,16 @@ unsafe extern "C" fn unsafe_frame_input_network(
     ctx: *mut InputContext,
     _ship: *mut c_void,
 ) -> BattleInputState {
-    let context = ctx.cast::<NetworkInputContext>();
-    (*context)
-        .net
-        .as_ref()
-        .unwrap()
-        .remote_input((*ctx).player_nr as usize)
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        let context = ctx.cast::<NetworkInputContext>();
+        (*context)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("network input has no session"))
+            .remote_input((*ctx).player_nr as usize)
+    }
 }
 
 unsafe extern "C" fn unsafe_select_ship_network(
@@ -359,6 +363,17 @@ unsafe extern "C" fn unsafe_battle_end_ready_network(ctx: *mut InputContext) -> 
 }
 
 // ---------------------------------------------------------------------------
+unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        std::ptr::drop_in_place(std::ptr::addr_of_mut!(
+            (*context.cast::<NetworkInputContext>()).net
+        ));
+        InputContext_delete(context);
+    }
+}
+
 #[cfg(test)]
 mod handler_stubs {
     use super::{BattleInputState, Boolean};
@@ -443,11 +458,4 @@ mod tests {
             std::mem::size_of::<InputContext>()
         );
     }
-}
-
-unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
-    std::ptr::drop_in_place(std::ptr::addr_of_mut!(
-        (*context.cast::<NetworkInputContext>()).net
-    ));
-    InputContext_delete(context);
 }

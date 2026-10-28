@@ -4383,13 +4383,6 @@ pub struct ChecksumBuffer {
 pub struct NetConnectionError {
     pub state: NetState,
     pub err: ::std::os::raw::c_int,
-    pub extra: NetConnectionError__bindgen_ty_1,
-}
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union NetConnectionError__bindgen_ty_1 {
-    pub listenError: *const ListenError,
-    pub connectError: *const ConnectError,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -5221,5 +5214,3 @@ pub use crate::input::sdl_input::RebindInputState;
 pub use crate::input::sdl_input::SaveKeyConfiguration;
 
 pub use crate::input::sdl_input::BeginInputFrame;
-pub use crate::network::connect::ConnectError;
-pub use crate::network::listen::ListenError;

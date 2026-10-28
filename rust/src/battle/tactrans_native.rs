@@ -227,7 +227,7 @@ pub(crate) mod engine {
         (*context)
             .net
             .as_ref()
-            .unwrap()
+            .unwrap_or_else(|| panic!("network input has no session"))
             .end_ready((*context).playerNr as usize)
     }
 
@@ -346,7 +346,7 @@ pub(crate) mod engine {
         pick: impl FnOnce(*mut STARSHIP, COUNT) -> BOOLEAN,
     ) {
         let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
-        let net = (*battle).net.as_ref().unwrap().clone();
+        let net = (*battle).net.clone();
         let ship = starship(dead);
         if !readyForBattleEnd() {
             (*dead).state_flags &= !(DISAPPEARING as u16);
@@ -363,8 +363,13 @@ pub(crate) mod engine {
         free_ship((*ship).RaceDescPtr, 1, 1);
         (*ship).RaceDescPtr = ptr::null_mut();
         UnbatchGraphics();
-        net.init_end_frames();
-        if !net.negotiate(true, NetState_NetState_interBattle) {
+        if let Some(net) = &net {
+            net.init_end_frames();
+        }
+        if net
+            .as_ref()
+            .is_some_and(|net| !net.negotiate(true, NetState_NetState_interBattle))
+        {
             set_activity(activity() & !(IN_BATTLE as u16));
             BatchGraphics();
             return;
@@ -374,7 +379,10 @@ pub(crate) mod engine {
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
         if pick(ship, (*ship).playerNr as COUNT) != 0 {
-            if !net.negotiate(true, NetState_NetState_inBattle) {
+            if net
+                .as_ref()
+                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
+            {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;

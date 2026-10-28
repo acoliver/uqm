@@ -21,7 +21,7 @@ impl super::session::SessionCore {
     /// # Safety
     /// The melee setup and its connections are live on the game thread.
     pub unsafe fn netplay_notify_all_set_team_name(&self, melee: *mut MELEE_STATE, player: usize) {
-        let name = MeleeSetup_getTeamName((*melee).meleeSetup, player);
+        let name = MeleeSetup_getTeamName((*melee).melee_setup, player);
         let len = libc::strlen(name);
         self.each_notify(
             |conn| Netplay_Notify_setTeamName(conn, player as i32, name, len),
@@ -31,7 +31,7 @@ impl super::session::SessionCore {
     /// # Safety
     /// The melee setup and its connections are live on the game thread.
     pub unsafe fn netplay_notify_all_set_fleet(&self, melee: *mut MELEE_STATE, player: usize) {
-        let ships = MeleeSetup_getFleet((*melee).meleeSetup, player);
+        let ships = MeleeSetup_getFleet((*melee).melee_setup, player);
         self.each_notify(
             |conn| Netplay_Notify_setFleet(conn, player as i32, ships, MELEE_FLEET_SIZE as usize),
             true,
@@ -45,7 +45,7 @@ impl super::session::SessionCore {
         player: usize,
         index: usize,
     ) {
-        let ship = MeleeSetup_getShip((*melee).meleeSetup, player, index as FleetShipIndex);
+        let ship = MeleeSetup_getShip((*melee).melee_setup, player, index as FleetShipIndex);
         self.each_notify(
             |conn| Netplay_Notify_setShip(conn, player as i32, index as FleetShipIndex, ship),
             true,

@@ -5,7 +5,7 @@ use super::netstate::NetConnectionStateData_release;
 use super::packetq::{PacketQueue_init, PacketQueue_uninit};
 use std::{ffi::c_void, ptr};
 
-unsafe fn go(conn: *mut NetConnection) -> i32 {
+unsafe fn go(conn: *mut NetConnection) -> Result<(), i32> {
     assert_eq!((*conn).state, NetState_NetState_unconnected);
     NetConnection_setState(conn, NetState_NetState_connecting);
     let options = &*(*conn).options;
@@ -22,19 +22,18 @@ unsafe fn go(conn: *mut NetConnection) -> i32 {
     match result {
         Ok(socket) => {
             (*conn).socket = Some(socket);
-            0
+            Ok(())
         }
-        Err(error) => {
-            super::set_errno(error.raw_os_error().unwrap_or(libc::EIO));
-            -1
-        }
+        Err(error) => Err(error.raw_os_error().unwrap_or(libc::EIO)),
     }
 }
 
 /// # Safety
 /// The connection and its owning session are live on the game thread.
 pub(super) unsafe fn poll(conn: *mut NetConnection) {
-    let socket = (*conn).socket.expect("connection without transport");
+    let socket = (*conn)
+        .socket
+        .unwrap_or_else(|| panic!("connection without transport"));
     if (*conn).state == NetState_NetState_connecting {
         let ready = (*(*conn).session).transport.borrow_mut().poll(socket);
         match ready {
@@ -43,7 +42,9 @@ pub(super) unsafe fn poll(conn: *mut NetConnection) {
                 (*conn).stateFlags.discriminant = (*(*conn).options).isServer;
                 (*conn).stateFlags.connected = true;
                 NetConnection_setState(conn, NetState_NetState_init);
-                (*conn).connectCallback.expect("connect callback")(conn);
+                (*conn)
+                    .connectCallback
+                    .unwrap_or_else(|| panic!("connect callback"))(conn);
             }
             Err(error) => {
                 NetConnection_doErrorCallback(conn, error.raw_os_error().unwrap_or(libc::EIO));
@@ -95,7 +96,14 @@ pub unsafe extern "C" fn NetConnection_open(
     assert!(!(*conn).readBuf.is_null());
     (*conn).readEnd = (*conn).readBuf;
     (*conn).stateFlags.checksumInterval = NETPLAY_CHECKSUM_INTERVAL as usize;
-    go(conn);
+    if let Err(error) = go(conn) {
+        super::set_errno(error);
+        NetConnection_doErrorCallback(conn, error);
+        (*conn).stateFlags.disconnected = true;
+        NetConnection_setState(conn, NetState_NetState_unconnected);
+        NetConnection_close(conn);
+        return ptr::null_mut();
+    }
     conn
 }
 
@@ -137,9 +145,10 @@ pub unsafe extern "C" fn NetConnection_doErrorCallback(conn: *mut NetConnection,
     let error = NetConnectionError {
         state: (*conn).state,
         err,
-        extra: std::mem::zeroed(),
     };
-    (*conn).errorCallback.expect("error callback")(conn, &error);
+    (*conn)
+        .errorCallback
+        .unwrap_or_else(|| panic!("error callback"))(conn, &error);
 }
 
 /// # Safety

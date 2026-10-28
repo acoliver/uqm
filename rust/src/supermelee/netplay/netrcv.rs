@@ -2,12 +2,13 @@ use super::abi::*;
 use super::netconnection::NetConnection_doErrorCallback;
 use super::packet::{DecodeError, Packet};
 
+#[cfg(test)]
 fn packet_frame_length(data: &[u8]) -> isize {
     match Packet::decode(data) {
         Ok((_, length)) => length as isize,
         Err(DecodeError::Incomplete) => 0,
         Err(_) => {
-            unsafe { super::set_errno(libc::EBADMSG) };
+            super::set_errno(libc::EBADMSG);
             -1
         }
     }

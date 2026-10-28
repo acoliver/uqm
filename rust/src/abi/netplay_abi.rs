@@ -254,107 +254,13 @@ pub use crate::engine::battle::legacy::disp_q;
 pub use crate::navigation::abi::ChecksumBuffer;
 pub use crate::navigation::abi::ChecksumEntry;
 pub use crate::navigation::abi::NetConnectionError;
-pub use crate::navigation::abi::NetConnectionError__bindgen_ty_1;
 pub use crate::navigation::abi::NetStatistics;
-pub use crate::network::descriptor::NetDescriptor;
-pub use crate::network::Socket;
-pub type NetDescriptor_ReadCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_WriteCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_ExceptionCallback = crate::network::descriptor::NdCallback;
-pub type NetDescriptor_CloseCallback = crate::network::descriptor::NdCallback;
-pub use crate::network::{sockaddr, socklen_t};
-pub const ProtocolFamily_PF_unspec: ProtocolFamily = 0;
-pub const ProtocolFamily_PF_inet: ProtocolFamily = 1;
-pub const ProtocolFamily_PF_inet6: ProtocolFamily = 2;
-pub type ProtocolFamily = ::std::os::raw::c_int;
-pub const Protocol_IPProto_tcp: Protocol = 0;
-pub const Protocol_IPProto_udp: Protocol = 1;
-pub type Protocol = ::std::os::raw::c_int;
-pub const SocketType_Sock_stream: SocketType = 0;
-pub const SocketType_Sock_dgram: SocketType = 1;
-pub type SocketType = ::std::os::raw::c_int;
-pub use crate::network::connect::ConnectState;
-pub use crate::network::descriptor::{
-    NetDescriptor_close, NetDescriptor_decRef, NetDescriptor_detach, NetDescriptor_getExtra,
-    NetDescriptor_getSocket, NetDescriptor_incRef, NetDescriptor_new,
-    NetDescriptor_setCloseCallback, NetDescriptor_setExceptionCallback, NetDescriptor_setExtra,
-    NetDescriptor_setReadCallback, NetDescriptor_setWriteCallback,
-};
-pub use crate::network::manager::{
-    NetManager_activateExceptionCallback, NetManager_activateReadCallback,
-    NetManager_activateWriteCallback, NetManager_addDesc, NetManager_deactivateExceptionCallback,
-    NetManager_deactivateReadCallback, NetManager_deactivateWriteCallback, NetManager_init,
-    NetManager_process, NetManager_removeDesc, NetManager_uninit,
-};
-pub use crate::network::{
-    Socket_accept, Socket_bind, Socket_close, Socket_connect, Socket_getError, Socket_listen,
-    Socket_open, Socket_recv, Socket_send, Socket_setInlineOOB, Socket_setInteractive,
-    Socket_setKeepAlive, Socket_setNodelay, Socket_setNonBlocking, Socket_setReuseAddr,
-    Socket_setTOS,
-};
-pub const ConnectStateState_Connect_closed: ConnectStateState = 0;
-pub const ConnectStateState_Connect_resolving: ConnectStateState = 1;
-pub const ConnectStateState_Connect_connecting: ConnectStateState = 2;
-pub type ConnectStateState = ::std::os::raw::c_uint;
 pub use crate::callback::ffi::Callback_add;
 pub use crate::callback::ffi::Callback_haveMore;
 pub use crate::callback::ffi::Callback_init;
 pub use crate::callback::ffi::Callback_process;
 pub use crate::callback::ffi::Callback_remove;
 pub use crate::callback::ffi::Callback_uninit;
-pub use crate::network::connect::ConnectError;
-pub use crate::network::connect::ConnectFlags;
-pub use crate::network::ResolveError;
-pub type ConnectConnectCallback = ::std::option::Option<
-    unsafe extern "C" fn(
-        connectState: *mut ConnectState,
-        nd: *mut NetDescriptor,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ),
->;
-pub type ConnectErrorCallback = ::std::option::Option<
-    unsafe extern "C" fn(connectState: *mut ConnectState, error: *const ConnectError),
->;
-
-pub use crate::network::connect::connectHostByName;
-
-pub use crate::network::connect::ConnectState_incRef;
-
-pub use crate::network::connect::ConnectState_decRef;
-
-pub use crate::network::connect::ConnectState_close;
-
-pub use crate::network::connect::ConnectState_getExtra;
-pub const ListenStateState_Listen_closed: ListenStateState = 0;
-pub const ListenStateState_Listen_resolving: ListenStateState = 1;
-pub const ListenStateState_Listen_listening: ListenStateState = 2;
-pub type ListenStateState = ::std::os::raw::c_uint;
-pub use crate::network::listen::ListenError;
-pub use crate::network::listen::ListenFlags;
-pub use crate::network::listen::ListenState;
-pub type ListenConnectCallback = ::std::option::Option<
-    unsafe extern "C" fn(
-        listenState: *mut ListenState,
-        listenNd: *mut NetDescriptor,
-        newNd: *mut NetDescriptor,
-        addr: *const sockaddr,
-        addrLen: socklen_t,
-    ),
->;
-pub type ListenErrorCallback = ::std::option::Option<
-    unsafe extern "C" fn(listenState: *mut ListenState, error: *const ListenError),
->;
-
-pub use crate::network::listen::listenPort;
-
-pub use crate::network::listen::ListenState_close;
-
-pub use crate::network::listen::ListenState_incRef;
-
-pub use crate::network::listen::ListenState_decRef;
-
-pub use crate::network::listen::ListenState_getExtra;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PacketQueueLink {

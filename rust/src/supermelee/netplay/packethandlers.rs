@@ -7,26 +7,32 @@ use super::packetsenders::{
     sendAbort, sendAck, sendHandshake0, sendHandshake1, sendHandshakeCancelAck,
 };
 
+/// # Safety
+/// The connection and its session are live on the game thread; packet is decoded and complete.
 pub unsafe fn dispatch(conn: *mut NetConnection, packet: &Packet) -> i32 {
-    match packet {
-        Packet::Init { protocol, version } => handle_Init(conn, *protocol, *version),
-        Packet::Ping(value) => handle_Ping(conn, *value),
-        Packet::Ack(_) => handle_Ack(conn),
-        Packet::Ready => handle_Ready(conn),
-        Packet::Fleet { side, ships } => handle_Fleet(conn, *side, ships),
-        Packet::TeamName { side, name } => handle_TeamName(conn, *side, name),
-        Packet::Handshake0 => handle_Handshake0(conn),
-        Packet::Handshake1 => handle_Handshake1(conn),
-        Packet::HandshakeCancel => handle_HandshakeCancel(conn),
-        Packet::HandshakeCancelAck => handle_HandshakeCancelAck(conn),
-        Packet::SeedRandom(value) => handle_SeedRandom(conn, *value),
-        Packet::InputDelay(value) => handle_InputDelay(conn, *value),
-        Packet::SelectShip(value) => handle_SelectShip(conn, *value),
-        Packet::BattleInput(value) => handle_BattleInput(conn, *value),
-        Packet::FrameCount(value) => handle_FrameCount(conn, *value),
-        Packet::Checksum { frame, checksum } => handle_Checksum(conn, *frame, *checksum),
-        Packet::Abort(value) => handle_Abort(conn, *value),
-        Packet::Reset(value) => handle_Reset(conn, *value),
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        match packet {
+            Packet::Init { protocol, version } => handle_init(conn, *protocol, *version),
+            Packet::Ping(value) => handle_ping(conn, *value),
+            Packet::Ack(_) => handle_ack(conn),
+            Packet::Ready => handle_ready(conn),
+            Packet::Fleet { side, ships } => handle_fleet(conn, *side, ships),
+            Packet::TeamName { side, name } => handle_team_name(conn, *side, name),
+            Packet::Handshake0 => handle_handshake0(conn),
+            Packet::Handshake1 => handle_handshake1(conn),
+            Packet::HandshakeCancel => handle_handshake_cancel(conn),
+            Packet::HandshakeCancelAck => handle_handshake_cancel_ack(conn),
+            Packet::SeedRandom(value) => handle_seed_random(conn, *value),
+            Packet::InputDelay(value) => handle_input_delay(conn, *value),
+            Packet::SelectShip(value) => handle_select_ship(conn, *value),
+            Packet::BattleInput(value) => handle_battle_input(conn, *value),
+            Packet::FrameCount(value) => handle_frame_count(conn, *value),
+            Packet::Checksum { frame, checksum } => handle_checksum(conn, *frame, *checksum),
+            Packet::Abort(value) => handle_abort(conn, *value),
+            Packet::Reset(value) => handle_reset(conn, *value),
+        }
     }
 }
 
@@ -67,7 +73,7 @@ macro_rules! guard {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Init(conn: *mut NetConnection, protocol: [u8; 2], version: [u8; 3]) -> i32 {
+unsafe fn handle_init(conn: *mut NetConnection, protocol: [u8; 2], version: [u8; 3]) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_init && !(*conn).stateFlags.ready.remoteReady(),
@@ -103,7 +109,7 @@ unsafe fn handle_Init(conn: *mut NetConnection, protocol: [u8; 2], version: [u8;
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Ping(conn: *mut NetConnection, id: u32) -> i32 {
+unsafe fn handle_ping(conn: *mut NetConnection, id: u32) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ping") {
         return -1;
     }
@@ -115,7 +121,7 @@ unsafe fn handle_Ping(conn: *mut NetConnection, id: u32) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Ack(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_ack(conn: *mut NetConnection) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ack") {
         return -1;
     }
@@ -138,7 +144,7 @@ fn ready_meaningful(state: NetState) -> bool {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Ready(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_ready(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         ready_meaningful((*conn).state) && !(*conn).stateFlags.ready.remoteReady(),
@@ -159,14 +165,14 @@ unsafe fn local_side(conn: *const NetConnection, side: u8) -> COUNT {
 unsafe fn cancel_confirmation(conn: *mut NetConnection, data: *mut BattleStateData) {
     if (*conn).stateFlags.handshake.localOk() {
         Netplay_cancelConfirmation(conn);
-        confirmationCancelled((*data).meleeState, (*conn).player as COUNT);
+        confirmationCancelled((*data).melee_state, (*conn).player as COUNT);
     }
 }
 
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Fleet(conn: *mut NetConnection, side: u8, ships: &[(u8, u8)]) -> i32 {
+unsafe fn handle_fleet(conn: *mut NetConnection, side: u8, ships: &[(u8, u8)]) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
     let player = local_side(conn, side);
     let data = (*conn).stateData.cast::<BattleStateData>();
@@ -188,7 +194,7 @@ unsafe fn handle_Fleet(conn: *mut NetConnection, side: u8, ships: &[(u8, u8)]) -
             );
             return bad_message();
         }
-        Melee_RemoteChange_ship((*data).meleeState, conn, player, position, ship);
+        Melee_RemoteChange_ship((*data).melee_state, conn, player, position, ship);
     }
     0
 }
@@ -196,7 +202,7 @@ unsafe fn handle_Fleet(conn: *mut NetConnection, side: u8, ships: &[(u8, u8)]) -
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_TeamName(conn: *mut NetConnection, side: u8, name: &[u8]) -> i32 {
+unsafe fn handle_team_name(conn: *mut NetConnection, side: u8, name: &[u8]) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
     let data = (*conn).stateData.cast::<BattleStateData>();
     cancel_confirmation(conn, data);
@@ -204,7 +210,7 @@ unsafe fn handle_TeamName(conn: *mut NetConnection, side: u8, name: &[u8]) -> i3
     let len = name.len().min(MAX_TEAM_CHARS as usize);
     let mut buffer = [0u8; MAX_TEAM_CHARS as usize + 1];
     buffer[..len].copy_from_slice(&name[..len]);
-    Melee_RemoteChange_teamName((*data).meleeState, conn, side, buffer.as_ptr().cast());
+    Melee_RemoteChange_teamName((*data).melee_state, conn, side, buffer.as_ptr().cast());
     0
 }
 
@@ -219,7 +225,7 @@ unsafe fn handshake_complete(conn: *mut NetConnection) {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Handshake0(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_handshake0(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && !(*conn).stateFlags.handshake.remoteOk(),
@@ -235,7 +241,7 @@ unsafe fn handle_Handshake0(conn: *mut NetConnection) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Handshake1(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_handshake1(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup
@@ -259,7 +265,7 @@ unsafe fn handle_Handshake1(conn: *mut NetConnection) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_HandshakeCancel(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_handshake_cancel(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.remoteOk(),
@@ -273,7 +279,7 @@ unsafe fn handle_HandshakeCancel(conn: *mut NetConnection) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_HandshakeCancelAck(conn: *mut NetConnection) -> i32 {
+unsafe fn handle_handshake_cancel_ack(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.canceling(),
@@ -293,14 +299,14 @@ unsafe fn handle_HandshakeCancelAck(conn: *mut NetConnection) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_SeedRandom(conn: *mut NetConnection, seed: u32) -> i32 {
+unsafe fn handle_seed_random(conn: *mut NetConnection, seed: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_preBattle && !(*conn).stateFlags.discriminant,
         "SeedRandom"
     );
     let data = (*conn).stateData.cast::<BattleStateData>();
-    updateRandomSeed((*data).meleeState, (*conn).player as COUNT, seed);
+    updateRandomSeed((*data).melee_state, (*conn).player as COUNT, seed);
     (*conn).stateFlags.agreement.set_randomSeed(true);
     0
 }
@@ -308,7 +314,7 @@ unsafe fn handle_SeedRandom(conn: *mut NetConnection, seed: u32) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_InputDelay(conn: *mut NetConnection, delay: u32) -> i32 {
+unsafe fn handle_input_delay(conn: *mut NetConnection, delay: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_preBattle,
@@ -328,14 +334,14 @@ unsafe fn handle_InputDelay(conn: *mut NetConnection, delay: u32) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_SelectShip(conn: *mut NetConnection, ship: u16) -> i32 {
+unsafe fn handle_select_ship(conn: *mut NetConnection, ship: u16) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_selectShip,
         "SelectShip"
     );
     let data = (*conn).stateData.cast::<BattleStateData>();
-    if !updateMeleeSelection((*data).getMeleeState, (*conn).player as COUNT, ship) {
+    if !updateMeleeSelection((*data).get_melee_state, (*conn).player as COUNT, ship) {
         return bad_message();
     }
     0
@@ -353,7 +359,7 @@ fn battle_active(state: NetState) -> bool {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_BattleInput(conn: *mut NetConnection, input: u8) -> i32 {
+unsafe fn handle_battle_input(conn: *mut NetConnection, input: u8) -> i32 {
     guard!(conn, battle_active((*conn).state), "BattleInput");
     if !(*(*conn).session).push_input((*conn).player as usize, input) {
         return -1;
@@ -364,14 +370,14 @@ unsafe fn handle_BattleInput(conn: *mut NetConnection, input: u8) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_FrameCount(conn: *mut NetConnection, frame: u32) -> i32 {
+unsafe fn handle_frame_count(conn: *mut NetConnection, frame: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_endingBattle,
         "FrameCount"
     );
     let data = (*conn).stateData.cast::<BattleStateData>();
-    (*data).endFrameCount = (*data).endFrameCount.max(frame);
+    (*data).end_frame_count = (*data).end_frame_count.max(frame);
     Netplay_remoteReady(conn);
     0
 }
@@ -379,7 +385,7 @@ unsafe fn handle_FrameCount(conn: *mut NetConnection, frame: u32) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Checksum(conn: *mut NetConnection, frame: u32, checksum: u32) -> i32 {
+unsafe fn handle_checksum(conn: *mut NetConnection, frame: u32, checksum: u32) -> i32 {
     guard!(conn, battle_active((*conn).state), "Checksum");
     let interval = (*conn).stateFlags.checksumInterval;
     let delay = (*(*conn).session).get_battle_input_delay();
@@ -408,7 +414,7 @@ unsafe fn handle_Checksum(conn: *mut NetConnection, frame: u32, checksum: u32) -
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Abort(conn: *mut NetConnection, reason: u16) -> i32 {
+unsafe fn handle_abort(conn: *mut NetConnection, reason: u16) -> i32 {
     // Match the existing abort feedback's interpretation of the stored reason.
     abortFeedback(
         conn,
@@ -420,7 +426,7 @@ unsafe fn handle_Abort(conn: *mut NetConnection, reason: u16) -> i32 {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-unsafe fn handle_Reset(conn: *mut NetConnection, reason: u16) -> i32 {
+unsafe fn handle_reset(conn: *mut NetConnection, reason: u16) -> i32 {
     if !test_state(!(*conn).stateFlags.reset.remoteReset(), "Reset") {
         return -1;
     }

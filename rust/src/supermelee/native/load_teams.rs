@@ -224,11 +224,11 @@ pub(crate) mod live {
             return 0;
         }
         SetMenuSounds(1 | 2 | 128 | 256, 16);
-        if (*state).Initialized == 0 {
+        if (*state).initialized == 0 {
             draw(state);
             select(state, true);
-            (*state).Initialized = 1;
-            (*state).InputFunc = Some(DoLoadTeam);
+            (*state).initialized = 1;
+            (*state).input_func = Some(DoLoadTeam);
             return 1;
         }
         let keys = PulsedInputState.menu;
@@ -240,8 +240,8 @@ pub(crate) mod live {
                     (*state).load.view[((*state).load.cur - (*state).load.top) as usize],
                 );
             }
-            (*state).InputFunc = Some(DoMelee);
-            (*state).LastInputTime = GetTimeCounter();
+            (*state).input_func = Some(DoMelee);
+            (*state).last_input_time = GetTimeCounter();
             let mut rect = mem::zeroed();
             GetFrameRect(SetAbsFrameIndex(MeleeFrame, 28), &mut rect);
             RepairMeleeFrame(&rect);
@@ -302,7 +302,7 @@ pub(crate) mod live {
     #[no_mangle]
     pub unsafe extern "C" fn DoSaveTeam(state: *mut MELEE_STATE) -> u32 {
         let mut filename = CStr::from_ptr(MeleeSetup_getTeamName(
-            (*state).meleeSetup,
+            (*state).melee_setup,
             (*state).side as usize,
         ))
         .to_bytes()
@@ -317,7 +317,7 @@ pub(crate) mod live {
         let mut ok = false;
         if !stream.is_null() {
             ok = MeleeTeam_serialize(
-                &(*(*state).meleeSetup).teams[(*state).side as usize],
+                &(*(*state).melee_setup).teams[(*state).side as usize],
                 stream,
             ) == 0;
             uio_fclose(stream);

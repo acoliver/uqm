@@ -19,7 +19,7 @@ use std::{ffi::c_void, ptr};
 #[no_mangle]
 pub unsafe extern "C" fn NetMelee_getMeleeState(conn: *mut NetConnection) -> *mut melee_state {
     if (*conn).state > NetState_NetState_connecting {
-        (*(*conn).stateData.cast::<BattleStateData>()).meleeState
+        (*(*conn).stateData.cast::<BattleStateData>()).melee_state
     } else {
         (*conn).extra.cast()
     }
@@ -31,7 +31,7 @@ pub unsafe extern "C" fn NetMelee_getBattleState(
     conn: *mut NetConnection,
 ) -> *mut battlestate_struct {
     if (*conn).state > NetState_NetState_connecting {
-        (*(*conn).stateData.cast::<BattleStateData>()).battleState
+        (*(*conn).stateData.cast::<BattleStateData>()).battle_state
     } else {
         ptr::null_mut()
     }
@@ -223,17 +223,37 @@ impl super::session::SessionCore {
             }
         }
     }
-    unsafe fn input_aux(&self, mut timeout: u32) {
-        NetManager_process(&mut timeout);
-        Async_process();
-        for conn in self.connections.get() {
-            if !conn.is_null() && !(*conn).stateFlags.disconnected {
-                super::netconnection::poll(conn);
+    unsafe fn input_aux(&self, timeout: u32) {
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_millis(u64::from(timeout));
+        let before = self.connection_progress();
+        loop {
+            Async_process();
+            for conn in self.connections.get() {
+                if !conn.is_null() && !(*conn).stateFlags.disconnected {
+                    super::netconnection::poll(conn);
+                }
             }
+            self.flush_packet_queues();
+            Callback_process();
+            if self.connection_progress() != before || std::time::Instant::now() >= deadline {
+                return;
+            }
+            std::thread::sleep(
+                deadline
+                    .saturating_duration_since(std::time::Instant::now())
+                    .min(std::time::Duration::from_millis(1)),
+            );
         }
-        self.flush_packet_queues();
-        // A flush may detect a disconnect. Dispatch it before another flush.
-        Callback_process();
+    }
+    unsafe fn connection_progress(&self) -> [(u32, usize); 2] {
+        self.connections.get().map(|conn| {
+            if conn.is_null() {
+                (NetState_NetState_unconnected, 0)
+            } else {
+                ((*conn).state, (*conn).statistics.packetsReceived)
+            }
+        })
     }
     /// # Safety
     /// Called on the game thread with live connection, state and callback arguments.
@@ -306,7 +326,7 @@ impl super::session::SessionCore {
         for player in 0..NETPLAY_NUM_PLAYERS as usize {
             let conn = self.connection(player);
             if !conn.is_null() {
-                (*(*conn).stateData.cast::<BattleStateData>()).endFrameCount = 0;
+                (*(*conn).stateData.cast::<BattleStateData>()).end_frame_count = 0;
             }
         }
     }
@@ -316,7 +336,7 @@ impl super::session::SessionCore {
         for player in 0..NETPLAY_NUM_PLAYERS as usize {
             let conn = self.connection(player);
             if !conn.is_null() {
-                (*(*conn).stateData.cast::<BattleStateData>()).battleState = state;
+                (*(*conn).stateData.cast::<BattleStateData>()).battle_state = state;
             }
         }
     }
@@ -431,6 +451,40 @@ impl super::session::SessionCore {
         })
     }
 }
+
+impl super::session::SessionCore {
+    /// # Safety
+    /// Called on the game thread with live connection, state and callback arguments.
+    pub unsafe fn network_battle_input(&self, player: usize) -> BATTLE_INPUT_STATE {
+        use crate::mainloop::{
+            activity_flags::CHECK_ABORT, get_current_activity, set_current_activity, ActivityValue,
+        };
+        let session = self;
+        loop {
+            if let Some(input) = session.pop_input(player) {
+                return input;
+            }
+            let conn = session.connection(player);
+            session.net_input();
+            if let Some(input) = session.pop_input(player) {
+                return input;
+            }
+            if !(*conn).stateFlags.connected {
+                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
+                return 0;
+            }
+            if get_current_activity().0 & CHECK_ABORT != 0 {
+                return 0;
+            }
+            session.net_input_blocking(500);
+            if !(*conn).stateFlags.connected {
+                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
+                return 0;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -508,36 +562,6 @@ mod tests {
             reset_transition(&raw mut conn, (&raw mut state).cast());
             assert_eq!(conn.state, NetState_NetState_inSetup);
             assert!(state.done);
-        }
-    }
-}
-
-impl super::session::SessionCore {
-    /// # Safety
-    /// Called on the game thread with live connection, state and callback arguments.
-    pub unsafe fn network_battle_input(&self, player: usize) -> BATTLE_INPUT_STATE {
-        use crate::mainloop::{
-            activity_flags::CHECK_ABORT, get_current_activity, set_current_activity, ActivityValue,
-        };
-        let session = self;
-        loop {
-            if let Some(input) = session.pop_input(player) {
-                return input;
-            }
-            let conn = session.connection(player);
-            session.net_input();
-            if !(*conn).stateFlags.connected {
-                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
-                return 0;
-            }
-            if get_current_activity().0 & CHECK_ABORT != 0 {
-                return 0;
-            }
-            session.net_input_blocking(500);
-            if !(*conn).stateFlags.connected {
-                set_current_activity(ActivityValue(get_current_activity().0 | CHECK_ABORT));
-                return 0;
-            }
         }
     }
 }

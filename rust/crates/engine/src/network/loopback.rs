@@ -50,8 +50,14 @@ impl Net for LoopbackNet {
             .remove(port)
             .ok_or(io::ErrorKind::ConnectionRefused)?;
         let client = bus.allocate();
-        bus.streams.get_mut(&listener).unwrap().peer = Some(client);
-        bus.streams.get_mut(&client).unwrap().peer = Some(listener);
+        bus.streams
+            .get_mut(&listener)
+            .unwrap_or_else(|| panic!("listener not allocated"))
+            .peer = Some(client);
+        bus.streams
+            .get_mut(&client)
+            .unwrap_or_else(|| panic!("client not allocated"))
+            .peer = Some(listener);
         Ok(client)
     }
     fn listen(&mut self, port: &str) -> io::Result<Connection> {
@@ -69,7 +75,10 @@ impl Net for LoopbackNet {
     fn send(&mut self, connection: Connection, bytes: &[u8]) -> io::Result<usize> {
         let mut bus = self.bus.borrow_mut();
         let peer = bus.streams[&connection].peer.ok_or_else(would_block)?;
-        let peer = bus.streams.get_mut(&peer).unwrap();
+        let peer = bus
+            .streams
+            .get_mut(&peer)
+            .unwrap_or_else(|| panic!("peer not allocated"));
         if peer.closed {
             return Err(io::ErrorKind::BrokenPipe.into());
         }
@@ -81,20 +90,39 @@ impl Net for LoopbackNet {
         let stream = &bus.streams[&connection];
         let peer = stream.peer.ok_or_else(would_block)?;
         let peer_closed = bus.streams[&peer].closed;
-        let stream = bus.streams.get_mut(&connection).unwrap();
+        let stream = bus
+            .streams
+            .get_mut(&connection)
+            .unwrap_or_else(|| panic!("connection not allocated"));
         let count = stream.incoming.len().min(bytes.len());
         if count == 0 && !bytes.is_empty() && !peer_closed {
             return Err(would_block());
         }
         for byte in &mut bytes[..count] {
-            *byte = stream.incoming.pop_front().unwrap();
+            *byte = stream
+                .incoming
+                .pop_front()
+                .unwrap_or_else(|| panic!("queued byte missing"));
         }
         Ok(count)
     }
     fn close(&mut self, connection: Connection) {
         let mut bus = self.bus.borrow_mut();
-        bus.streams.get_mut(&connection).unwrap().closed = true;
+        bus.streams
+            .get_mut(&connection)
+            .unwrap_or_else(|| panic!("connection not allocated"))
+            .closed = true;
         bus.listeners.retain(|_, listener| *listener != connection);
+        match bus.streams[&connection].peer {
+            None => {
+                bus.streams.remove(&connection);
+            }
+            Some(peer) if bus.streams[&peer].closed => {
+                bus.streams.remove(&peer);
+                bus.streams.remove(&connection);
+            }
+            Some(_) => {}
+        }
     }
 }
 
@@ -126,5 +154,9 @@ mod tests {
             io::ErrorKind::BrokenPipe
         );
         a.close(server);
+        assert!(a.bus.borrow().streams.is_empty());
+        let pending = a.listen("21837").unwrap();
+        a.close(pending);
+        assert!(a.bus.borrow().streams.is_empty());
     }
 }

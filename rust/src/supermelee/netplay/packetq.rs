@@ -1,5 +1,5 @@
 use super::abi::{NetConnection, Packet, PacketQueue, PacketQueueLink};
-use super::packet::Packet_delete;
+use super::packet::packet_delete;
 use std::ptr;
 
 /// # Safety
@@ -18,7 +18,7 @@ pub unsafe extern "C" fn PacketQueue_uninit(queue: *mut PacketQueue) {
     let mut link = (*queue).first;
     while !link.is_null() {
         let next = (*link).next;
-        Packet_delete((*link).packet);
+        packet_delete((*link).packet);
         libc::free(link.cast());
         link = next;
     }
@@ -48,7 +48,7 @@ unsafe fn flush(queue: *mut PacketQueue, mut send: impl FnMut(*mut Packet) -> i3
             return -1;
         }
         let next = (*link).next;
-        Packet_delete((*link).packet);
+        packet_delete((*link).packet);
         libc::free(link.cast());
         (*queue).size -= 1;
         link = next;

@@ -17,9 +17,9 @@ pub(crate) mod checksum;
 pub(crate) mod crc;
 pub mod packet;
 pub mod packethandlers;
-mod packetq;
+pub mod packetq;
 mod packetsenders;
-use crate::network::set_errno;
+use crate::platform::set_errno;
 
 mod npconfirm;
 mod ready;

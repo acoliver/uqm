@@ -50,6 +50,10 @@ impl Coordinator {
             return Ok(None);
         }
         match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::ConnectNetplay(request)) => {
+                crate::automation::netplay_fixture::connect(request)?;
+                Ok(Some("netplay_connected".into()))
+            }
             Some(Action::ConfigureParityMelee(request)) => {
                 melee_fixture::configure(request)?;
                 Ok(Some("parity_melee_configured".into()))

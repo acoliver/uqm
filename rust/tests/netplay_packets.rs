@@ -3,12 +3,11 @@ extern crate uqm_rust;
 
 use abi::*;
 use uqm_rust::engine::battle::net::BattleNet;
+use uqm_rust::supermelee::netplay::packetq::{PacketQueue_init, PacketQueue_uninit};
 use uqm_rust::supermelee::netplay::{abi, NetplaySession};
 use uqm_rust::supermelee::netplay::{packet::Packet, packethandlers::dispatch};
 
 extern "C" {
-    fn PacketQueue_init(queue: *mut PacketQueue);
-    fn PacketQueue_uninit(queue: *mut PacketQueue);
     fn ChecksumBuffer_init(buffer: *mut ChecksumBuffer, delay: usize, interval: usize);
     fn ChecksumBuffer_uninit(buffer: *mut ChecksumBuffer);
     fn ChecksumBuffer_addChecksum(buffer: *mut ChecksumBuffer, frame: u32, checksum: u32) -> bool;
@@ -20,12 +19,16 @@ extern "C" {
 }
 
 unsafe fn connection(session: &NetplaySession, state: NetState) -> Box<NetConnection> {
-    let mut conn: Box<NetConnection> = Box::new(std::mem::zeroed());
-    conn.session = &**session;
-    conn.state = state;
-    conn.stateFlags.connected = true;
-    PacketQueue_init(&raw mut conn.queue);
-    conn
+    // SAFETY: the function contract requires live, game-thread-owned records
+    // and callback arguments for all legacy accesses in this operation.
+    unsafe {
+        let mut conn: Box<NetConnection> = Box::new(std::mem::zeroed());
+        conn.session = &**session;
+        conn.state = state;
+        conn.stateFlags.connected = true;
+        PacketQueue_init(&raw mut conn.queue);
+        conn
+    }
 }
 
 #[test]
@@ -249,7 +252,6 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
     unsafe {
         Callback_init();
         Alarm_init();
-        NetManager_init();
         let session = NetplaySession::default();
         let reserved = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port =
@@ -293,7 +295,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while a_events.events.is_empty() || b_events.events.is_empty() {
             assert!(std::time::Instant::now() < deadline);
-            let mut timeout = 20;
+            let timeout = 20;
             session.net_input_blocking(timeout);
         }
         assert!((*a).stateFlags.discriminant);
@@ -313,7 +315,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
-            let mut timeout = 20;
+            let timeout = 20;
             session.net_input_blocking(timeout);
         }
         let mut ready_a = 0usize;
@@ -337,7 +339,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
-            let mut timeout = 20;
+            let timeout = 20;
             session.net_input_blocking(timeout);
         }
         NetConnection_setState(a, NetState_NetState_inSetup);
@@ -354,7 +356,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert!(std::time::Instant::now() < deadline);
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
-            let mut timeout = 20;
+            let timeout = 20;
             session.net_input_blocking(timeout);
         }
         assert!((*a).statistics.packetsReceived > 0);
@@ -366,7 +368,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         assert_eq!(a_events.events, ["connect", "close", "delete", "release"]);
         while b_events.events.len() == 1 {
             assert!(std::time::Instant::now() < deadline);
-            let mut timeout = 20;
+            let timeout = 20;
             session.net_input_blocking(timeout);
         }
         assert_eq!(b_events.events, ["connect", "close"]);
@@ -390,7 +392,6 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         NetConnection_close(pending);
         assert_eq!(cancelled.events, ["cancel", "delete"]);
         Callback_process();
-        NetManager_uninit();
         Alarm_uninit();
         Callback_uninit();
     }
@@ -425,5 +426,41 @@ fn notifications_visit_only_connected_peers() {
         session.remove_net_connection(1);
         PacketQueue_uninit(&raw mut a.queue);
         PacketQueue_uninit(&raw mut b.queue);
+    }
+}
+
+unsafe extern "C" fn rejected_endpoint(conn: *mut NetConnection, error: *const NetConnectionError) {
+    // SAFETY: NetConnection_open passes its live connection and error, and the
+    // test keeps the bool callback argument alive for this synchronous call.
+    unsafe {
+        assert_eq!((*error).state, NetState_NetState_connecting);
+        assert_ne!((*error).err, 0);
+        *(*conn).extra.cast::<bool>() = true;
+    }
+}
+#[test]
+fn an_invalid_endpoint_reports_the_error_without_retaining_a_connection() {
+    // SAFETY: options and callback argument outlive the synchronous rejected open.
+    unsafe {
+        let session = NetplaySession::default();
+        let options = NetplayPeerOptions {
+            isServer: true,
+            host: c"127.0.0.1".as_ptr(),
+            port: c"invalid-port".as_ptr(),
+        };
+        let mut reported = false;
+        let conn = NetConnection_open(
+            0,
+            &options,
+            None,
+            None,
+            Some(rejected_endpoint),
+            None,
+            (&raw mut reported).cast(),
+            &*session,
+        );
+        assert!(conn.is_null());
+        assert!(reported);
+        assert_eq!(session.get_num_net_connections(), 0);
     }
 }

@@ -278,7 +278,7 @@ pub(crate) mod engine {
             ),
         );
         SetMenuSounds(0, 0);
-        let net = (*bs).net.as_ref().unwrap().clone();
+        let net = (*bs).net.clone().unwrap_or_else(|| panic!("missing net"));
         let frame = net.frame();
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = mem::zeroed();
@@ -349,7 +349,11 @@ pub(crate) mod engine {
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {
                 let context = player_input(side).cast::<NetworkInputContext>();
-                return (*context).net.as_ref().unwrap().player_order(i);
+                return (*context)
+                    .net
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing net"))
+                    .player_order(i);
             }
         }
         1u16.wrapping_sub(i)
@@ -377,7 +381,7 @@ pub(crate) mod engine {
         if !had_net {
             (*battle).net = Some(offline.battle_net());
         }
-        let net = (*battle).net.as_ref().unwrap().clone();
+        let net = (*battle).network();
         for side in 0..2 {
             if player_control(side) & NETWORK_CONTROL != 0 {
                 let context = player_input(side).cast::<NetworkInputContext>();

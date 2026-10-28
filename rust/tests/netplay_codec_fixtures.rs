@@ -10,7 +10,9 @@ fn codec_roundtrips_frozen_original_layouts_for_every_packet_type() {
         let (name, hex) = fixture.split_once(' ').unwrap();
         let wire: Vec<u8> = hex
             .as_bytes()
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|b| u8::from_str_radix(std::str::from_utf8(b).unwrap(), 16).unwrap())
             .collect();
         let (packet, consumed) = Packet::decode(&wire).unwrap();

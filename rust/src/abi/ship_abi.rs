@@ -1270,7 +1270,7 @@ pub unsafe fn NetConnection_setState(conn: *mut NetConnection, state: NetState) 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getState;
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant;
-pub type MELEE_STATE = melee_state;
+pub use crate::supermelee::netplay::session::MeleeState as MELEE_STATE;
 unsafe extern "C" {
     pub static mut PickMeleeFrame: FRAME;
 }
@@ -1331,27 +1331,7 @@ pub struct melee_load_state {
     pub cur: COUNT,
     pub viewSize: COUNT,
 }
-#[repr(C)]
-#[derive(Debug)]
-pub struct melee_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pInputState: *mut melee_state) -> BOOLEAN>,
-    pub Initialized: BOOLEAN,
-    pub meleeStarted: BOOLEAN,
-    pub MeleeOption: MELEE_OPTIONS,
-    pub side: COUNT,
-    pub row: COUNT,
-    pub col: COUNT,
-    pub meleeSetup: *mut MeleeSetup,
-    pub load: melee_load_state,
-    pub currentShip: MeleeShip,
-    pub CurIndex: COUNT,
-    pub buildPickConfirmed: BOOLEAN,
-    pub randomContext: *mut RandomContext,
-    pub LastInputTime: TimeCount,
-    pub hMusic: MUSIC_REF,
-    pub netplay: crate::supermelee::netplay::NetplaySession,
-}
+pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::DoMelee;
@@ -1391,15 +1371,7 @@ pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::ui::flash::Flash_setRect;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct BattleStateData {
-    pub releaseFunction: NetConnectionStateData_ReleaseFunction,
-    pub meleeState: *mut melee_state,
-    pub battleState: *mut battlestate_struct,
-    pub getMeleeState: *mut getmelee_struct,
-    pub endFrameCount: BattleFrameCounter,
-}
+pub use crate::supermelee::netplay::session::BattleStateData;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;

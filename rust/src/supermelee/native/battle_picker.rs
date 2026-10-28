@@ -28,7 +28,7 @@ mod tests {
 }
 #[cfg(not(test))]
 #[allow(non_snake_case)]
-pub(crate) mod live {
+pub mod live {
     use super::move_cursor;
     use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
@@ -122,7 +122,9 @@ pub(crate) mod live {
         s.hBattleShip = ship;
         PlayMenuSound(1);
         if network {
-            (*state).net.as_ref().unwrap().ship_selected(choice);
+            if let Some(net) = &(*state).net {
+                net.ship_selected(choice);
+            }
         }
         s.done = 1;
         true
@@ -181,7 +183,11 @@ pub(crate) mod live {
         context: *mut NetworkInputContext,
         state: *mut GETMELEE_STATE,
     ) -> u32 {
-        (*state).net.as_ref().unwrap().flush();
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .flush();
         let p = &mut (*state).player[(*context).playerNr as usize];
         if p.remoteSelected != 0 {
             p.done = 1;
@@ -200,8 +206,16 @@ pub(crate) mod live {
             }
         }
         SleepThread(840 / 120);
-        (*state).net.as_ref().unwrap().poll();
-        let mut abort = !(*state).net.as_ref().unwrap().all_connected()
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .poll();
+        let mut abort = !(*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .all_connected()
             || GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0;
         let mut done = true;
         if !abort {
@@ -223,7 +237,11 @@ pub(crate) mod live {
                 }
             }
         }
-        (*state).net.as_ref().unwrap().flush();
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .flush();
         if abort {
             for p in &mut (*state).player {
                 if p.selecting != 0 {
@@ -427,7 +445,7 @@ pub(crate) mod live {
         for player in 0..2 {
             draw(player);
         }
-        let net = crate::app::bridge::battle(|b| b.net.as_ref().unwrap().clone());
+        let net = crate::app::bridge::battle(|b| b.network());
         net.negotiate(true, NetState_NetState_inSetup);
         let timeout = GetTimeCounter().wrapping_add(840 * 4);
         let mut pressed = PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
@@ -455,8 +473,7 @@ pub(crate) mod live {
     }
     unsafe fn get_ships(mask: u16, ships: *mut HSTARSHIP) -> u32 {
         let mut state: GETMELEE_STATE = mem::zeroed();
-        let (counters, net) =
-            crate::app::bridge::battle(|b| (b.counters, b.net.as_ref().unwrap().clone()));
+        let (counters, net) = crate::app::bridge::battle(|b| (b.counters, b.network()));
         state.net = Some(net.clone());
         net.bind_picker(mask, (&raw mut state).cast());
         let now = GetTimeCounter();

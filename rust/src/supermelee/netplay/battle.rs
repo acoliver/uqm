@@ -7,79 +7,100 @@ use super::session::SessionCore;
 use crate::engine::battle::net::BattleNet;
 use std::{ffi::c_void, ptr};
 
-unsafe extern "C" fn readyToEnd2Callback(conn: *mut NetConnection, _arg: *mut c_void) {
-    NetConnection_setState(conn, NetState_NetState_endingBattle2);
+unsafe extern "C" fn ready_to_end2_callback(conn: *mut NetConnection, _arg: *mut c_void) {
+    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+    unsafe {
+        NetConnection_setState(conn, NetState_NetState_endingBattle2);
+    }
 }
 
-unsafe extern "C" fn readyToEndCallback(conn: *mut NetConnection, _arg: *mut c_void) {
-    let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-    NetConnection_setState(conn, NetState_NetState_endingBattle);
-    let target = (*(*conn).session).frame_count.get().wrapping_add(1);
-    if target > (*data).endFrameCount {
-        (*data).endFrameCount = target;
-    }
-    Netplay_Notify_frameCount(conn, target);
-    flushPacketQueue(conn.cast());
-    Netplay_localReady(
-        conn.cast(),
-        Some(readyToEnd2Callback),
-        ptr::null_mut(),
-        false,
-    );
-}
-
-unsafe fn readyForBattleEndPlayer(conn: *mut NetConnection) -> bool {
-    let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
-    let state = NetConnection_getState(conn);
-    if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
-        return true;
-    }
-    if state == NetState_NetState_inBattle {
-        if Netplay_isLocalReady(conn.cast()) {
-            return false;
+unsafe extern "C" fn ready_to_end_callback(conn: *mut NetConnection, _arg: *mut c_void) {
+    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+    unsafe {
+        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
+        NetConnection_setState(conn, NetState_NetState_endingBattle);
+        let target = (*(*conn).session).frame_count.get().wrapping_add(1);
+        if target > (*data).end_frame_count {
+            (*data).end_frame_count = target;
         }
-        Netplay_localReady(conn.cast(), Some(readyToEndCallback), ptr::null_mut(), true);
-        if NetConnection_getState(conn) == NetState_NetState_inBattle {
-            return false;
-        }
-    }
-    let state = NetConnection_getState(conn);
-    assert!(state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2);
-    if (*(*conn).session).frame_count.get() < (*data).endFrameCount {
-        return false;
-    }
-    if NetConnection_getState(conn) == NetState_NetState_endingBattle {
-        waitReady(conn);
-        assert_eq!(
-            NetConnection_getState(conn),
-            NetState_NetState_endingBattle2
+        Netplay_Notify_frameCount(conn, target);
+        flushPacketQueue(conn.cast());
+        Netplay_localReady(
+            conn.cast(),
+            Some(ready_to_end2_callback),
+            ptr::null_mut(),
+            false,
         );
-        if (*(*conn).session).frame_count.get() < (*data).endFrameCount {
+    }
+}
+
+unsafe fn ready_for_battle_end_player(conn: *mut NetConnection) -> bool {
+    // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+    unsafe {
+        let data = NetConnection_getStateData(conn).cast::<BattleStateData>();
+        let state = NetConnection_getState(conn);
+        if state == NetState_NetState_interBattle || state == NetState_NetState_inSetup {
+            return true;
+        }
+        if state == NetState_NetState_inBattle {
+            if Netplay_isLocalReady(conn.cast()) {
+                return false;
+            }
+            Netplay_localReady(
+                conn.cast(),
+                Some(ready_to_end_callback),
+                ptr::null_mut(),
+                true,
+            );
+            if NetConnection_getState(conn) == NetState_NetState_inBattle {
+                return false;
+            }
+        }
+        let state = NetConnection_getState(conn);
+        assert!(
+            state == NetState_NetState_endingBattle || state == NetState_NetState_endingBattle2
+        );
+        if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
             return false;
         }
+        if NetConnection_getState(conn) == NetState_NetState_endingBattle {
+            waitReady(conn);
+            assert_eq!(
+                NetConnection_getState(conn),
+                NetState_NetState_endingBattle2
+            );
+            if (*(*conn).session).frame_count.get() < (*data).end_frame_count {
+                return false;
+            }
+        }
+        negotiateReady(conn, true, NetState_NetState_interBattle);
+        true
     }
-    negotiateReady(conn, true, NetState_NetState_interBattle);
-    true
 }
 
 impl BattleNet for SessionCore {
     fn poll(&self) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.net_input();
         }
     }
     fn flush(&self) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.flush_packet_queues();
         }
     }
     fn all_connected(&self) -> bool {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe { self.all_connected() }
     }
     fn peer_count(&self) -> usize {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe { self.get_num_net_connections() }
     }
     fn player_order(&self, index: u16) -> u16 {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             let a = self.connection(0);
             let b = self.connection(1);
@@ -96,6 +117,12 @@ impl BattleNet for SessionCore {
         self.get_battle_input_delay()
     }
     fn local_input(&self, side: usize, input: u8) -> u8 {
+        // Replay peers retain AI evaluation (and its RNG draws), but received
+        // input remains authoritative for the remote player.
+        if self.replay_remote_player == Some(side) {
+            return self.remote_input(side);
+        }
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.netplay_notify_all_battle_input(input);
             self.flush_packet_queues();
@@ -105,6 +132,7 @@ impl BattleNet for SessionCore {
             .unwrap_or_else(|| panic!("local input buffer empty after push"))
     }
     fn remote_input(&self, side: usize) -> u8 {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe { self.network_battle_input(side) }
     }
     fn set_frame(&self, frame: u32) {
@@ -114,6 +142,7 @@ impl BattleNet for SessionCore {
         self.frame_count.get()
     }
     fn record_checksum(&self, frame: u32, checksum: u32) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.netplay_notify_all_checksum(frame, checksum);
             self.flush_packet_queues();
@@ -121,35 +150,46 @@ impl BattleNet for SessionCore {
         }
     }
     fn verify_checksum(&self, frame: u32) -> bool {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe { self.verify_checksums(frame) }
     }
     fn reset(&self, reason: u32) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.reset_connections(reason);
         }
     }
     fn negotiate(&self, notify: bool, state: u32) -> bool {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe { self.negotiate_ready_connections(notify, state) }
     }
     fn set_state(&self, state: u32) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.set_state_connections(state);
         }
     }
     fn wait_reset(&self, state: u32) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.wait_reset_connections(state);
         }
     }
     fn init_end_frames(&self) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.init_battle_state_data_connections();
         }
     }
     fn end_ready(&self, side: usize) -> bool {
-        unsafe { readyForBattleEndPlayer(self.connection(side)) }
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+        unsafe { ready_for_battle_end_player(self.connection(side)) }
     }
     fn ship_selected(&self, choice: u16) {
+        if self.replay_remote_player.is_some() {
+            return;
+        }
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.each(|conn| {
                 Netplay_Notify_shipSelected(conn, choice);
@@ -158,12 +198,18 @@ impl BattleNet for SessionCore {
         }
     }
     unsafe fn begin(&self, state: *mut c_void) {
-        self.init_battle_input_buffers();
-        self.init_checksum_buffers();
-        self.frame_count.set(0);
-        self.set_battle_state_connections(state.cast());
+        // SAFETY: the function contract requires live, game-thread-owned records
+        // and callback arguments for all legacy accesses in this operation.
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+        unsafe {
+            self.init_battle_input_buffers();
+            self.init_checksum_buffers();
+            self.frame_count.set(0);
+            self.set_battle_state_connections(state.cast());
+        }
     }
     fn finish(&self) {
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
         unsafe {
             self.uninit_battle_input_buffers();
             self.uninit_checksum_buffers();
@@ -171,12 +217,17 @@ impl BattleNet for SessionCore {
         }
     }
     unsafe fn bind_picker(&self, mask: u16, picker: *mut c_void) {
-        for (side, conn) in self.connections.get().into_iter().enumerate() {
-            if mask & (1 << side) != 0
-                && !conn.is_null()
-                && (picker.is_null() || (*conn).stateFlags.connected)
-            {
-                (*(*conn).stateData.cast::<BattleStateData>()).getMeleeState = picker.cast();
+        // SAFETY: the function contract requires live, game-thread-owned records
+        // and callback arguments for all legacy accesses in this operation.
+        // SAFETY: SessionCore owns the live connections and buffers on the game thread.
+        unsafe {
+            for (side, conn) in self.connections.get().into_iter().enumerate() {
+                if mask & (1 << side) != 0
+                    && !conn.is_null()
+                    && (picker.is_null() || (*conn).stateFlags.connected)
+                {
+                    (*(*conn).stateData.cast::<BattleStateData>()).get_melee_state = picker.cast();
+                }
             }
         }
     }

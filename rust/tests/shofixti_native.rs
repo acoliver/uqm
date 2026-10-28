@@ -11,13 +11,10 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
+use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
+
 unsafe extern "C" {
     fn init_shofixti() -> *mut RACE_DESC;
-    fn selectShipHuman(context: *mut HumanInputContext, state: *mut GETMELEE_STATE) -> BOOLEAN;
-    fn selectShipComputer(
-        context: *mut ComputerInputContext,
-        state: *mut GETMELEE_STATE,
-    ) -> BOOLEAN;
     static mut PlayerControls: [u32; 2];
     static mut race_q: [QUEUE; 2];
     static mut PlayerInput: [*mut InputContext; 2];

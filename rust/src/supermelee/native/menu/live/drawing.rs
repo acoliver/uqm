@@ -57,7 +57,7 @@ pub(super) unsafe fn ship_box(side: u16, index: usize, ship: u32, highlight: boo
     } else {
         (rgb(0, 0, 9), rgb(0, 0, 14), rgb(0, 0, 12))
     };
-    DrawStarConBox(&mut r, 1, light, dark, u32::from(ship != 255), inside);
+    draw_star_con_box(&mut r, 1, light, dark, u32::from(ship != 255), inside);
     if ship != 255 {
         let mut s = STAMP {
             origin: POINT {
@@ -96,7 +96,7 @@ pub(super) unsafe fn teams() {
             ship_box(
                 side as u16,
                 index,
-                MeleeSetup_getShip((*P_MELEE_STATE).meleeSetup, side, index as u16),
+                MeleeSetup_getShip((*P_MELEE_STATE).melee_setup, side, index as u16),
                 false,
             );
         }
@@ -118,9 +118,9 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     }
     let old = SetContext(SpaceContext);
     let mut clip = mem::zeroed();
-    GetContextClipRect(&mut clip);
-    SetContextClipRect(&mut r);
-    let origin = SetContextOrigin(POINT {
+    get_context_clip_rect(&mut clip);
+    set_context_clip_rect(&mut r);
+    let origin = set_context_origin(POINT {
         x: -r.corner.x + SAFE_X as i16,
         y: -r.corner.y + SAFE_Y as i16,
     });
@@ -130,12 +130,12 @@ pub unsafe extern "C" fn RepairMeleeFrame(rect: *const RECT) {
     DrawMeleeIcon(37);
     DrawMeleeIcon(26);
     teams();
-    if (*P_MELEE_STATE).MeleeOption == 11 {
+    if (*P_MELEE_STATE).melee_option == 11 {
         crate::supermelee::native::build_picker::live::DrawPickFrame(P_MELEE_STATE);
     }
     UnbatchGraphics();
-    SetContextOrigin(origin);
-    SetContextClipRect(&mut clip);
+    set_context_origin(origin);
+    set_context_clip_rect(&mut clip);
     SetContext(old);
 }
 pub(super) unsafe fn redraw() {
@@ -177,7 +177,7 @@ pub(super) unsafe fn worth(state: *mut MELEE_STATE, side: u16, highlight: u16) {
     }
     SetContextFont(MicroFont);
     let value =
-        CString::new(MeleeSetup_getFleetValue((*state).meleeSetup, side as usize).to_string())
+        CString::new(MeleeSetup_getFleetValue((*state).melee_setup, side as usize).to_string())
             .unwrap();
     let mut t = text(
         r.corner.x + r.extent.width,
@@ -205,7 +205,7 @@ pub(super) unsafe fn name(
     }
     SetContextFont(MicroFont);
     let value = if value.is_null() {
-        MeleeSetup_getTeamName((*state).meleeSetup, side as usize)
+        MeleeSetup_getTeamName((*state).melee_setup, side as usize)
     } else {
         value
     };
@@ -227,7 +227,7 @@ pub(super) unsafe fn name(
     } else {
         let mut bounds = mem::zeroed();
         let mut delta = [0u8; 30];
-        TextRect(&mut t, &mut bounds, delta.as_mut_ptr());
+        text_rect(&mut t, &mut bounds, delta.as_mut_ptr());
         if bounds.extent.width + 2 >= r.extent.width {
             UnbatchGraphics();
             return 0;
@@ -235,7 +235,7 @@ pub(super) unsafe fn name(
         bounds = r;
         SetContextForeGroundColor(rgb(20, 0, 20));
         DrawFilledRectangle(&mut bounds);
-        let cursor = (*state).CurIndex as usize;
+        let cursor = (*state).cur_index as usize;
         for d in delta.iter().take(cursor) {
             bounds.corner.x += i16::from(*d);
         }
@@ -278,22 +278,22 @@ pub(super) unsafe fn status(message: *const c_char) {
         SetContextForeGroundColor(rgb(0, 20, 0));
         BatchGraphics();
         let mut clip = mem::zeroed();
-        GetContextClipRect(&mut clip);
-        SetContextClipRect(&mut r);
+        get_context_clip_rect(&mut clip);
+        set_context_clip_rect(&mut r);
         let mut leading = 0;
-        GetContextFontLeading(&mut leading);
+        get_context_font_leading(&mut leading);
         let mut t = text(1, 0, TEXT_ALIGN_ALIGN_LEFT, message);
         if r.extent.width > 1 {
             while *t.pStr != 0 {
                 let mut next = ptr::null();
                 t.baseline.y += leading;
                 t.CharCount = u16::MAX;
-                getLineWithinWidth(&mut t, &mut next, r.extent.width - 1, t.CharCount);
+                get_line_within_width(&mut t, &mut next, r.extent.width - 1, t.CharCount);
                 font_DrawText(&mut t);
                 t.pStr = next;
             }
         }
-        SetContextClipRect(&mut clip);
+        set_context_clip_rect(&mut clip);
         UnbatchGraphics();
     }
     SetContext(old);
@@ -347,22 +347,22 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
         1 | 7 => controls(usize::from(option == 1), on),
         10 => {
             let s = &*P_MELEE_STATE;
-            if s.InputFunc.map(|f| f as usize) == Some(edit as *const () as usize) {
+            if s.input_func.map(|f| f as usize) == Some(edit as *const () as usize) {
                 if s.row < 2 {
                     ship_box(
                         s.side,
                         (s.row * 7 + s.col) as usize,
-                        MeleeSetup_getShip(s.meleeSetup, s.side as usize, s.row * 7 + s.col),
+                        MeleeSetup_getShip(s.melee_setup, s.side as usize, s.row * 7 + s.col),
                         on,
                     );
-                } else if s.CurIndex == u16::MAX {
+                } else if s.cur_index == u16::MAX {
                     name(P_MELEE_STATE, s.side, if on { 2 } else { 0 }, ptr::null());
                     worth(P_MELEE_STATE, s.side, if on { 2 } else { 0 });
                 }
             }
         }
         11 => crate::supermelee::native::build_picker::live::DrawPickIcon(
-            (*P_MELEE_STATE).currentShip,
+            (*P_MELEE_STATE).current_ship,
             !on,
         ),
         _ => {}
@@ -380,14 +380,14 @@ pub unsafe extern "C" fn Melee_flashSelection(state: *mut MELEE_STATE) {
         NEXT = now.wrapping_add(840 / 9);
         SELECT = !SELECT;
         let old = SetContext(SpaceContext);
-        highlight((*state).MeleeOption, SELECT);
+        highlight((*state).melee_option, SELECT);
         SetContext(old);
     }
 }
 pub(super) unsafe fn init_screen() {
     SetContext(SpaceContext);
     drawable_abi::SetContextFGFrame(Screen.cast());
-    SetContextClipRect(ptr::null_mut());
+    set_context_clip_rect(ptr::null_mut());
     SetContextBackGroundColor(rgb(0, 0, 0));
     ClearDrawable();
     let mut r = RECT {
@@ -400,7 +400,7 @@ pub(super) unsafe fn init_screen() {
             height: ScreenHeight as i16 - 2 * SAFE_Y as i16,
         },
     };
-    SetContextClipRect(&mut r);
+    set_context_clip_rect(&mut r);
     redraw();
 }
 #[no_mangle]
@@ -410,12 +410,12 @@ pub(super) unsafe fn init_screen() {
 pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32) {
     let old = SetContext(StatusContext);
     let mut clip = mem::zeroed();
-    GetContextClipRect(&mut clip);
+    get_context_clip_rect(&mut clip);
     let mut r = clip;
     r.corner.x += (SAFE_X as i16 * 2 - 32) + 29;
     r.corner.y += 76;
     r.extent.height = SHIP_INFO_HEIGHT as i16;
-    SetContextClipRect(&mut r);
+    set_context_clip_rect(&mut r);
     BatchGraphics();
     if ship == 255 {
         ClearShipStatus(0);
@@ -446,18 +446,18 @@ pub unsafe extern "C" fn DrawMeleeShipStrings(state: *mut MELEE_STATE, ship: u32
         InitShipStatus(&mut (*master).ShipInfo, ptr::null_mut(), ptr::null_mut());
     }
     UnbatchGraphics();
-    SetContextClipRect(&mut clip);
+    set_context_clip_rect(&mut clip);
     SetContext(old);
 }
 pub(super) unsafe fn current(state: *mut MELEE_STATE) {
-    (*state).currentShip = if (*state).row == 2 {
+    (*state).current_ship = if (*state).row == 2 {
         255
     } else {
         MeleeSetup_getShip(
-            (*state).meleeSetup,
+            (*state).melee_setup,
             (*state).side as usize,
             (*state).row * 7 + (*state).col,
         )
     };
-    DrawMeleeShipStrings(state, (*state).currentShip);
+    DrawMeleeShipStrings(state, (*state).current_ship);
 }
