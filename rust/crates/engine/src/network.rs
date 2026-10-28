@@ -68,14 +68,14 @@ pub static PROTOCOL_TRANSLATION: [c_int; 2] = [libc::IPPROTO_TCP, libc::IPPROTO_
 
 pub static SOCKET_TYPE_TRANSLATION: [c_int; 2] = [libc::SOCK_STREAM, libc::SOCK_DGRAM];
 
-pub extern "C" fn network_init() {
+pub fn network_init() {
     #[cfg(windows)]
     unsafe {
         sys::initialize();
     }
 }
 
-pub extern "C" fn network_uninit() {
+pub fn network_uninit() {
     #[cfg(windows)]
     unsafe {
         sys::uninitialize();
@@ -88,12 +88,7 @@ unsafe fn socket_ref(sock: *mut Socket) -> &'static mut Socket {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_open(
-    domain: c_int,
-    socket_type: c_int,
-    protocol: c_int,
-) -> *mut Socket {
+pub unsafe fn Socket_open(domain: c_int, socket_type: c_int, protocol: c_int) -> *mut Socket {
     let domains = [libc::PF_UNSPEC, libc::PF_INET, libc::PF_INET6];
     let types = [libc::SOCK_STREAM, libc::SOCK_DGRAM];
     let protocols = [libc::IPPROTO_TCP, libc::IPPROTO_UDP];
@@ -110,7 +105,7 @@ pub unsafe extern "C" fn Socket_open(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn socket_open_native(
+pub unsafe fn socket_open_native(
     domain: c_int,
     socket_type: c_int,
     protocol: c_int,
@@ -124,8 +119,7 @@ pub unsafe extern "C" fn socket_open_native(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_close(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_close(sock: *mut Socket) -> c_int {
     loop {
         let result = libc::close(socket_ref(sock).fd);
         if result == 0 {
@@ -140,8 +134,7 @@ pub unsafe extern "C" fn Socket_close(sock: *mut Socket) -> c_int {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_connect(
+pub unsafe fn Socket_connect(
     sock: *mut Socket,
     addr: *const libc::sockaddr,
     addr_len: socklen_t,
@@ -156,8 +149,7 @@ pub unsafe extern "C" fn Socket_connect(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_bind(
+pub unsafe fn Socket_bind(
     sock: *mut Socket,
     addr: *const libc::sockaddr,
     addr_len: socklen_t,
@@ -167,15 +159,13 @@ pub unsafe extern "C" fn Socket_bind(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_listen(sock: *mut Socket, backlog: c_int) -> c_int {
+pub unsafe fn Socket_listen(sock: *mut Socket, backlog: c_int) -> c_int {
     libc::listen(socket_ref(sock).fd, backlog)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_accept(
+pub unsafe fn Socket_accept(
     sock: *mut Socket,
     addr: *mut libc::sockaddr,
     addr_len: *mut socklen_t,
@@ -195,8 +185,7 @@ pub unsafe extern "C" fn Socket_accept(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_send(
+pub unsafe fn Socket_send(
     sock: *mut Socket,
     buf: *const c_void,
     len: size_t,
@@ -207,8 +196,7 @@ pub unsafe extern "C" fn Socket_send(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_recv(
+pub unsafe fn Socket_recv(
     sock: *mut Socket,
     buf: *mut c_void,
     len: size_t,
@@ -219,8 +207,7 @@ pub unsafe extern "C" fn Socket_recv(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setNonBlocking(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setNonBlocking(sock: *mut Socket) -> c_int {
     #[cfg(windows)]
     {
         return sys::nonblocking(socket_ref(sock).fd);
@@ -248,29 +235,25 @@ unsafe fn set_socket_option(sock: *mut Socket, level: c_int, option: c_int, valu
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setReuseAddr(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setReuseAddr(sock: *mut Socket) -> c_int {
     set_socket_option(sock, libc::SOL_SOCKET, libc::SO_REUSEADDR, 1)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setNodelay(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setNodelay(sock: *mut Socket) -> c_int {
     set_socket_option(sock, libc::IPPROTO_TCP, libc::TCP_NODELAY, 1)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setTOS(sock: *mut Socket, tos: c_int) -> c_int {
+pub unsafe fn Socket_setTOS(sock: *mut Socket, tos: c_int) -> c_int {
     set_socket_option(sock, libc::IPPROTO_IP, libc::IP_TOS, tos)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setInteractive(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setInteractive(sock: *mut Socket) -> c_int {
     if Socket_setNodelay(sock) == -1 {
         return -1;
     }
@@ -286,22 +269,19 @@ pub unsafe extern "C" fn Socket_setInteractive(sock: *mut Socket) -> c_int {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setInlineOOB(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setInlineOOB(sock: *mut Socket) -> c_int {
     set_socket_option(sock, libc::SOL_SOCKET, libc::SO_OOBINLINE, 1)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_setKeepAlive(sock: *mut Socket) -> c_int {
+pub unsafe fn Socket_setKeepAlive(sock: *mut Socket) -> c_int {
     set_socket_option(sock, libc::IPPROTO_TCP, libc::SO_KEEPALIVE, 1)
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-#[no_mangle]
-pub unsafe extern "C" fn Socket_getError(sock: *mut Socket, error: *mut c_int) -> c_int {
+pub unsafe fn Socket_getError(sock: *mut Socket, error: *mut c_int) -> c_int {
     let mut len = std::mem::size_of::<c_int>() as socklen_t;
     libc::getsockopt(
         socket_ref(sock).fd,
@@ -314,13 +294,13 @@ pub unsafe extern "C" fn Socket_getError(sock: *mut Socket, error: *mut c_int) -
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn resolve_state_inc_ref(state: *mut ResolveState) {
+pub unsafe fn resolve_state_inc_ref(state: *mut ResolveState) {
     (*state).ref_count += 1;
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn resolve_state_dec_ref(state: *mut ResolveState) -> bool {
+pub unsafe fn resolve_state_dec_ref(state: *mut ResolveState) -> bool {
     (*state).ref_count -= 1;
     if (*state).ref_count == 0 {
         debug_assert_eq!((*state).callback_id, CALLBACK_ID_INVALID);
@@ -333,13 +313,13 @@ pub unsafe extern "C" fn resolve_state_dec_ref(state: *mut ResolveState) -> bool
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn resolve_state_set_extra(state: *mut ResolveState, extra: *mut c_void) {
+pub unsafe fn resolve_state_set_extra(state: *mut ResolveState, extra: *mut c_void) {
     (*state).extra = extra;
 }
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn resolve_state_get_extra(state: *mut ResolveState) -> *mut c_void {
+pub unsafe fn resolve_state_get_extra(state: *mut ResolveState) -> *mut c_void {
     (*state).extra
 }
 
@@ -365,7 +345,7 @@ unsafe fn resolve_callback(arg: *mut c_void) {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn getaddrinfo_async(
+pub unsafe fn getaddrinfo_async(
     node: *const c_char,
     service: *const c_char,
     hints: *const libc::addrinfo,
@@ -397,7 +377,7 @@ pub unsafe extern "C" fn getaddrinfo_async(
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn resolve_close(state: *mut ResolveState) {
+pub unsafe fn resolve_close(state: *mut ResolveState) {
     if (*state).callback_id != CALLBACK_ID_INVALID {
         Callback_remove((*state).callback_id.unwrap());
         (*state).callback_id = CALLBACK_ID_INVALID;
@@ -408,7 +388,7 @@ pub unsafe extern "C" fn resolve_close(state: *mut ResolveState) {
 
 /// # Safety
 /// Pointer arguments must satisfy the corresponding C API contract and ownership rules.
-pub unsafe extern "C" fn split_addr_info_on_family(
+pub unsafe fn split_addr_info_on_family(
     info: *mut libc::addrinfo,
     family: c_int,
     selected: *mut *mut libc::addrinfo,
@@ -495,3 +475,219 @@ mod tests {
         }
     }
 }
+
+pub mod loopback;
+
+/// Nonblocking libc/WinSock transport. Pending operations retain their original
+/// resolver, timeout, address-family and retry behavior behind the host port.
+#[derive(Default)]
+pub struct NativeNet {
+    next: u64,
+    entries: std::collections::HashMap<crate::host::Connection, Box<PortEntry>>,
+}
+struct PortEntry {
+    descriptor: *mut descriptor::NetDescriptor,
+    connect: *mut connect::ConnectState,
+    listen: *mut listen::ListenState,
+    error: Option<c_int>,
+}
+impl Default for PortEntry {
+    fn default() -> Self {
+        Self {
+            descriptor: ptr::null_mut(),
+            connect: ptr::null_mut(),
+            listen: ptr::null_mut(),
+            error: None,
+        }
+    }
+}
+impl NativeNet {
+    fn entry(&mut self) -> (crate::host::Connection, &mut PortEntry) {
+        self.next += 1;
+        let id = crate::host::Connection(self.next);
+        self.entries.insert(id, Box::default());
+        (id, self.entries.get_mut(&id).unwrap())
+    }
+}
+unsafe extern "C" fn port_connected(
+    state: *mut connect::ConnectState,
+    descriptor: *mut descriptor::NetDescriptor,
+    _addr: *const sockaddr,
+    _len: socklen_t,
+) {
+    let entry = &mut *connect::ConnectState_getExtra(state).cast::<PortEntry>();
+    entry.descriptor = descriptor;
+    entry.connect = ptr::null_mut();
+    Socket_setInteractive(descriptor::NetDescriptor_getSocket(descriptor));
+    descriptor::NetDescriptor_setReadCallback(descriptor, Some(port_readable));
+    connect::ConnectState_close(state);
+}
+unsafe extern "C" fn port_connect_error(
+    state: *mut connect::ConnectState,
+    error: *const connect::ConnectError,
+) {
+    let entry = &mut *connect::ConnectState_getExtra(state).cast::<PortEntry>();
+    entry.error = Some((*error).err);
+    entry.connect = ptr::null_mut();
+    connect::ConnectState_close(state);
+}
+unsafe extern "C" fn port_accepted(
+    state: *mut listen::ListenState,
+    _listener: *mut descriptor::NetDescriptor,
+    descriptor: *mut descriptor::NetDescriptor,
+    _addr: *const sockaddr,
+    _len: socklen_t,
+) {
+    let entry = &mut *listen::ListenState_getExtra(state).cast::<PortEntry>();
+    entry.descriptor = descriptor;
+    entry.listen = ptr::null_mut();
+    Socket_setInteractive(descriptor::NetDescriptor_getSocket(descriptor));
+    descriptor::NetDescriptor_setReadCallback(descriptor, Some(port_readable));
+    listen::ListenState_close(state);
+}
+unsafe extern "C" fn port_listen_error(
+    state: *mut listen::ListenState,
+    error: *const listen::ListenError,
+) {
+    let entry = &mut *listen::ListenState_getExtra(state).cast::<PortEntry>();
+    entry.error = Some((*error).err);
+    entry.listen = ptr::null_mut();
+    listen::ListenState_close(state);
+}
+fn port_string(value: &str) -> std::io::Result<std::ffi::CString> {
+    std::ffi::CString::new(value)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))
+}
+impl crate::host::Net for NativeNet {
+    fn connect(&mut self, host: &str, port: &str) -> std::io::Result<crate::host::Connection> {
+        let host = port_string(host)?;
+        let port = port_string(port)?;
+        let (id, entry) = self.entry();
+        let flags = connect::ConnectFlags {
+            family_demand: 0,
+            family_prefer: 0,
+            timeout: 2000,
+            retry_delay_ms: 2000,
+        };
+        // SAFETY: the boxed entry stays live until close cancels all callbacks.
+        unsafe {
+            entry.connect = connect::connectHostByName(
+                host.as_ptr(),
+                port.as_ptr(),
+                0,
+                &flags,
+                Some(port_connected),
+                Some(port_connect_error),
+                (entry as *mut PortEntry).cast(),
+            );
+        }
+        Ok(id)
+    }
+    fn listen(&mut self, port: &str) -> std::io::Result<crate::host::Connection> {
+        let port = port_string(port)?;
+        let (id, entry) = self.entry();
+        let flags = listen::ListenFlags {
+            family_demand: 0,
+            family_prefer: 0,
+            backlog: 2,
+        };
+        // SAFETY: the boxed entry stays live until close cancels all callbacks.
+        unsafe {
+            entry.listen = listen::listenPort(
+                port.as_ptr(),
+                0,
+                &flags,
+                Some(port_accepted),
+                Some(port_listen_error),
+                (entry as *mut PortEntry).cast(),
+            );
+        }
+        Ok(id)
+    }
+    fn poll(&mut self, connection: crate::host::Connection) -> std::io::Result<bool> {
+        let mut timeout = 0;
+        // SAFETY: all descriptors and callbacks belong to this game thread.
+        unsafe {
+            manager::NetManager_process(&mut timeout);
+        }
+        crate::callback::ffi::Async_process();
+        let entry = &self.entries[&connection];
+        if let Some(error) = entry.error {
+            return Err(std::io::Error::from_raw_os_error(error));
+        }
+        Ok(!entry.descriptor.is_null())
+    }
+    fn send(
+        &mut self,
+        connection: crate::host::Connection,
+        bytes: &[u8],
+    ) -> std::io::Result<usize> {
+        let entry = &self.entries[&connection];
+        assert!(!entry.descriptor.is_null(), "send before connection ready");
+        // SAFETY: the live descriptor owns the socket and bytes cover the supplied length.
+        let result = unsafe {
+            Socket_send(
+                descriptor::NetDescriptor_getSocket(entry.descriptor),
+                bytes.as_ptr().cast(),
+                bytes.len(),
+                0,
+            )
+        };
+        if result < 0 {
+            Err(std::io::Error::from_raw_os_error(unsafe { last_errno() }))
+        } else {
+            Ok(result as usize)
+        }
+    }
+    fn recv(
+        &mut self,
+        connection: crate::host::Connection,
+        bytes: &mut [u8],
+    ) -> std::io::Result<usize> {
+        let entry = &self.entries[&connection];
+        assert!(!entry.descriptor.is_null(), "recv before connection ready");
+        // SAFETY: the live descriptor owns the socket and bytes cover the supplied length.
+        let result = unsafe {
+            Socket_recv(
+                descriptor::NetDescriptor_getSocket(entry.descriptor),
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                0,
+            )
+        };
+        if result < 0 {
+            Err(std::io::Error::from_raw_os_error(unsafe { last_errno() }))
+        } else {
+            Ok(result as usize)
+        }
+    }
+    fn close(&mut self, connection: crate::host::Connection) {
+        let entry = self
+            .entries
+            .remove(&connection)
+            .expect("closing unknown network connection");
+        // SAFETY: removal owns the entry; closing cancels callbacks before it is dropped.
+        unsafe {
+            if !entry.connect.is_null() {
+                connect::ConnectState_close(entry.connect);
+            }
+            if !entry.listen.is_null() {
+                listen::ListenState_close(entry.listen);
+            }
+            if !entry.descriptor.is_null() {
+                descriptor::NetDescriptor_close(entry.descriptor);
+            }
+        }
+    }
+}
+impl Drop for NativeNet {
+    fn drop(&mut self) {
+        use crate::host::Net;
+        let entries: Vec<_> = self.entries.keys().copied().collect();
+        for id in entries {
+            self.close(id);
+        }
+    }
+}
+
+unsafe extern "C" fn port_readable(_descriptor: *mut descriptor::NetDescriptor) {}

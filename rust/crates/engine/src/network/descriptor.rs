@@ -20,7 +20,6 @@ pub struct NetDescriptor {
 
 /// # Safety
 /// `socket` must be an open, unregistered socket. Ownership transfers on success.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_new(
     socket: *mut Socket,
     extra: *mut c_void,
@@ -45,7 +44,6 @@ pub unsafe extern "C" fn NetDescriptor_new(
 
 /// # Safety
 /// `nd` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_incRef(nd: *mut NetDescriptor) {
     assert!((*nd).ref_count < u32::MAX);
     (*nd).ref_count += 1;
@@ -53,7 +51,6 @@ pub unsafe extern "C" fn NetDescriptor_incRef(nd: *mut NetDescriptor) {
 
 /// # Safety
 /// `nd` must hold a live reference. The final reference requires a closed or detached socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_decRef(nd: *mut NetDescriptor) -> bool {
     assert!((*nd).ref_count > 0);
     (*nd).ref_count -= 1;
@@ -76,7 +73,6 @@ unsafe fn close_callback(arg: *mut c_void) {
 
 /// # Safety
 /// `nd` must be open. Consumes the owner's reference, after any deferred close callback.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_close(nd: *mut NetDescriptor) {
     assert!(!(*nd).closed && !(*nd).socket.is_null());
     NetManager_removeDesc(nd);
@@ -96,7 +92,6 @@ pub unsafe extern "C" fn NetDescriptor_close(nd: *mut NetDescriptor) {
 
 /// # Safety
 /// `nd` must be open. Consumes its reference without closing the socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_detach(nd: *mut NetDescriptor) {
     NetManager_removeDesc(nd);
     (*nd).socket = ptr::null_mut();
@@ -106,21 +101,18 @@ pub unsafe extern "C" fn NetDescriptor_detach(nd: *mut NetDescriptor) {
 
 /// # Safety
 /// `nd` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_getSocket(nd: *mut NetDescriptor) -> *mut Socket {
     (*nd).socket
 }
 
 /// # Safety
 /// `nd` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_setExtra(nd: *mut NetDescriptor, extra: *mut c_void) {
     (*nd).extra = extra;
 }
 
 /// # Safety
 /// `nd` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_getExtra(nd: *const NetDescriptor) -> *mut c_void {
     (*nd).extra
 }
@@ -144,7 +136,6 @@ unsafe fn update_callback(
 
 /// # Safety
 /// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_setReadCallback(
     nd: *mut NetDescriptor,
     callback: NdCallback,
@@ -160,7 +151,6 @@ pub unsafe extern "C" fn NetDescriptor_setReadCallback(
 
 /// # Safety
 /// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_setWriteCallback(
     nd: *mut NetDescriptor,
     callback: NdCallback,
@@ -176,7 +166,6 @@ pub unsafe extern "C" fn NetDescriptor_setWriteCallback(
 
 /// # Safety
 /// `nd` must hold a live reference. The callback must obey the descriptor ownership contract.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_setExceptionCallback(
     nd: *mut NetDescriptor,
     callback: NdCallback,
@@ -192,7 +181,6 @@ pub unsafe extern "C" fn NetDescriptor_setExceptionCallback(
 
 /// # Safety
 /// `nd` must hold a live reference. The callback must not consume the deferred callback's reference.
-#[no_mangle]
 pub unsafe extern "C" fn NetDescriptor_setCloseCallback(
     nd: *mut NetDescriptor,
     callback: NdCallback,

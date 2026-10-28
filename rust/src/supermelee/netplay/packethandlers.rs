@@ -3,10 +3,32 @@ use super::abi::{
     UqmNetplayConstants_UQM_NETPLAY_BATTLE_FRAME_RATE as BATTLE_FRAME_RATE,
     UqmNetplayConstants_UQM_NETPLAY_NUM_MELEE_SHIPS as NUM_MELEE_SHIPS,
 };
-use super::checksum::add_remote_checksum;
 use super::packetsenders::{
     sendAbort, sendAck, sendHandshake0, sendHandshake1, sendHandshakeCancelAck,
 };
+
+pub unsafe fn dispatch(conn: *mut NetConnection, packet: &Packet) -> i32 {
+    match packet {
+        Packet::Init { protocol, version } => handle_Init(conn, *protocol, *version),
+        Packet::Ping(value) => handle_Ping(conn, *value),
+        Packet::Ack(_) => handle_Ack(conn),
+        Packet::Ready => handle_Ready(conn),
+        Packet::Fleet { side, ships } => handle_Fleet(conn, *side, ships),
+        Packet::TeamName { side, name } => handle_TeamName(conn, *side, name),
+        Packet::Handshake0 => handle_Handshake0(conn),
+        Packet::Handshake1 => handle_Handshake1(conn),
+        Packet::HandshakeCancel => handle_HandshakeCancel(conn),
+        Packet::HandshakeCancelAck => handle_HandshakeCancelAck(conn),
+        Packet::SeedRandom(value) => handle_SeedRandom(conn, *value),
+        Packet::InputDelay(value) => handle_InputDelay(conn, *value),
+        Packet::SelectShip(value) => handle_SelectShip(conn, *value),
+        Packet::BattleInput(value) => handle_BattleInput(conn, *value),
+        Packet::FrameCount(value) => handle_FrameCount(conn, *value),
+        Packet::Checksum { frame, checksum } => handle_Checksum(conn, *frame, *checksum),
+        Packet::Abort(value) => handle_Abort(conn, *value),
+        Packet::Reset(value) => handle_Reset(conn, *value),
+    }
+}
 
 unsafe fn bad_message() -> i32 {
     super::set_errno(libc::EBADMSG);
@@ -31,13 +53,6 @@ unsafe fn reset_status(conn: *const NetConnection) -> Option<i32> {
     }
 }
 
-// TeamName lengths can leave the next packet unaligned for native u32 loads.
-macro_rules! field {
-    ($packet:expr, $field:ident) => {
-        std::ptr::addr_of!((*$packet).$field).read_unaligned()
-    };
-}
-
 macro_rules! guard {
     ($conn:expr, $condition:expr, $name:literal) => {
         if let Some(result) = reset_status($conn) {
@@ -52,24 +67,15 @@ macro_rules! guard {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Init(
-    conn: *mut NetConnection,
-    packet: *const Packet_Init,
-) -> i32 {
+unsafe fn handle_Init(conn: *mut NetConnection, protocol: [u8; 2], version: [u8; 3]) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_init && !(*conn).stateFlags.ready.remoteReady(),
         "Init"
     );
-    let packet = packet.read_unaligned();
-    let protocol_ok = packet.protoVersion.major == NETPLAY_PROTOCOL_VERSION_MAJOR as u8
-        && packet.protoVersion.minor == NETPLAY_PROTOCOL_VERSION_MINOR as u8;
-    let version = (
-        packet.uqmVersion.major,
-        packet.uqmVersion.minor,
-        packet.uqmVersion.patch,
-    );
+    let protocol_ok = protocol[0] == NETPLAY_PROTOCOL_VERSION_MAJOR as u8
+        && protocol[1] == NETPLAY_PROTOCOL_VERSION_MINOR as u8;
+    let version = (version[0], version[1], version[2]);
     let minimum = (
         NETPLAY_MIN_UQM_VERSION_MAJOR as u8,
         NETPLAY_MIN_UQM_VERSION_MINOR as u8,
@@ -81,8 +87,8 @@ pub unsafe extern "C" fn PacketHandler_Init(
         if !protocol_ok {
             log::error!(
                 "Protocol version {}.{} not supported.",
-                packet.protoVersion.major,
-                packet.protoVersion.minor
+                protocol[0],
+                protocol[1]
             );
         } else {
             log::error!("Remote side is running a version of UQM that is too old ({}.{}.{}; {}.{}.{} is required).", version.0, version.1, version.2, minimum.0, minimum.1, minimum.2);
@@ -97,27 +103,19 @@ pub unsafe extern "C" fn PacketHandler_Init(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Ping(
-    conn: *mut NetConnection,
-    packet: *const Packet_Ping,
-) -> i32 {
+unsafe fn handle_Ping(conn: *mut NetConnection, id: u32) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ping") {
         return -1;
     }
     // Preserve the C handler's pass-through of the stored ID to sendAck.
-    sendAck(conn, field!(packet, id));
+    sendAck(conn, u32::from_ne_bytes(id.to_be_bytes()));
     0
 }
 
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Ack(
-    conn: *mut NetConnection,
-    _packet: *const Packet_Ack,
-) -> i32 {
+unsafe fn handle_Ack(conn: *mut NetConnection) -> i32 {
     if !test_state((*conn).state > NetState_NetState_init, "Ack") {
         return -1;
     }
@@ -140,11 +138,7 @@ fn ready_meaningful(state: NetState) -> bool {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Ready(
-    conn: *mut NetConnection,
-    _packet: *const Packet_Ready,
-) -> i32 {
+unsafe fn handle_Ready(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         ready_meaningful((*conn).state) && !(*conn).stateFlags.ready.remoteReady(),
@@ -172,32 +166,14 @@ unsafe fn cancel_confirmation(conn: *mut NetConnection, data: *mut BattleStateDa
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Fleet(
-    conn: *mut NetConnection,
-    packet: *const Packet_Fleet,
-) -> i32 {
+unsafe fn handle_Fleet(conn: *mut NetConnection, side: u8, ships: &[(u8, u8)]) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
-    let count = u16::from_be(field!(packet, numShips)) as usize;
-    let player = local_side(conn, field!(packet, side));
-    let len = u16::from_be(field!(packet, header).len) as usize;
-    if size_of::<Packet_Fleet>() + count * size_of::<FleetEntry>() > len {
-        log::warn!(
-            "Invalid fleet size. Specified size is {count}, actual size = {}",
-            (len - size_of::<Packet_Fleet>()) / size_of::<FleetEntry>()
-        );
-        return bad_message();
-    }
+    let player = local_side(conn, side);
     let data = (*conn).stateData.cast::<BattleStateData>();
     cancel_confirmation(conn, data);
-    for index in 0..count {
-        let entry = packet
-            .cast::<u8>()
-            .add(size_of::<Packet_Fleet>() + index * size_of::<FleetEntry>())
-            .cast::<FleetEntry>()
-            .read_unaligned();
-        let ship = entry.ship as MeleeShip;
-        let position = entry.index as FleetShipIndex;
+    for &(index, ship) in ships {
+        let ship = ship as MeleeShip;
+        let position = index as FleetShipIndex;
         if !(ship < NUM_MELEE_SHIPS || ship == MeleeShip_MELEE_NONE) {
             log::warn!(
                 "Invalid ship type number {ship} (max = {}).",
@@ -220,26 +196,14 @@ pub unsafe extern "C" fn PacketHandler_Fleet(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_TeamName(
-    conn: *mut NetConnection,
-    packet: *const Packet_TeamName,
-) -> i32 {
+unsafe fn handle_TeamName(conn: *mut NetConnection, side: u8, name: &[u8]) -> i32 {
     guard!(conn, (*conn).state == NetState_NetState_inSetup, "Fleet");
-    let packet_len = u16::from_be(field!(packet, header).len) as usize;
-    if packet_len <= size_of::<Packet_TeamName>() {
-        return bad_message();
-    }
     let data = (*conn).stateData.cast::<BattleStateData>();
     cancel_confirmation(conn, data);
-    let side = local_side(conn, field!(packet, side));
-    let len = (packet_len - size_of::<Packet_TeamName>() - 1).min(MAX_TEAM_CHARS as usize);
+    let side = local_side(conn, side);
+    let len = name.len().min(MAX_TEAM_CHARS as usize);
     let mut buffer = [0u8; MAX_TEAM_CHARS as usize + 1];
-    std::ptr::copy_nonoverlapping(
-        packet.cast::<u8>().add(size_of::<Packet_TeamName>()),
-        buffer.as_mut_ptr(),
-        len,
-    );
+    buffer[..len].copy_from_slice(&name[..len]);
     Melee_RemoteChange_teamName((*data).meleeState, conn, side, buffer.as_ptr().cast());
     0
 }
@@ -255,11 +219,7 @@ unsafe fn handshake_complete(conn: *mut NetConnection) {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Handshake0(
-    conn: *mut NetConnection,
-    _packet: *const Packet_Handshake0,
-) -> i32 {
+unsafe fn handle_Handshake0(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && !(*conn).stateFlags.handshake.remoteOk(),
@@ -275,11 +235,7 @@ pub unsafe extern "C" fn PacketHandler_Handshake0(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Handshake1(
-    conn: *mut NetConnection,
-    _packet: *const Packet_Handshake1,
-) -> i32 {
+unsafe fn handle_Handshake1(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup
@@ -303,11 +259,7 @@ pub unsafe extern "C" fn PacketHandler_Handshake1(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_HandshakeCancel(
-    conn: *mut NetConnection,
-    _packet: *const Packet_HandshakeCancel,
-) -> i32 {
+unsafe fn handle_HandshakeCancel(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.remoteOk(),
@@ -321,11 +273,7 @@ pub unsafe extern "C" fn PacketHandler_HandshakeCancel(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_HandshakeCancelAck(
-    conn: *mut NetConnection,
-    _packet: *const Packet_HandshakeCancelAck,
-) -> i32 {
+unsafe fn handle_HandshakeCancelAck(conn: *mut NetConnection) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_inSetup && (*conn).stateFlags.handshake.canceling(),
@@ -345,22 +293,14 @@ pub unsafe extern "C" fn PacketHandler_HandshakeCancelAck(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_SeedRandom(
-    conn: *mut NetConnection,
-    packet: *const Packet_SeedRandom,
-) -> i32 {
+unsafe fn handle_SeedRandom(conn: *mut NetConnection, seed: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_preBattle && !(*conn).stateFlags.discriminant,
         "SeedRandom"
     );
     let data = (*conn).stateData.cast::<BattleStateData>();
-    updateRandomSeed(
-        (*data).meleeState,
-        (*conn).player as COUNT,
-        u32::from_be(field!(packet, seed)),
-    );
+    updateRandomSeed((*data).meleeState, (*conn).player as COUNT, seed);
     (*conn).stateFlags.agreement.set_randomSeed(true);
     0
 }
@@ -368,17 +308,12 @@ pub unsafe extern "C" fn PacketHandler_SeedRandom(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_InputDelay(
-    conn: *mut NetConnection,
-    packet: *const Packet_InputDelay,
-) -> i32 {
+unsafe fn handle_InputDelay(conn: *mut NetConnection, delay: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_preBattle,
         "InputDelay"
     );
-    let delay = u32::from_be(field!(packet, delay));
     if delay > BATTLE_FRAME_RATE {
         log::error!(
             "NETPLAY: [{}] Received absurdly large input delay value ({delay}).",
@@ -393,22 +328,14 @@ pub unsafe extern "C" fn PacketHandler_InputDelay(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_SelectShip(
-    conn: *mut NetConnection,
-    packet: *const Packet_SelectShip,
-) -> i32 {
+unsafe fn handle_SelectShip(conn: *mut NetConnection, ship: u16) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_selectShip,
         "SelectShip"
     );
     let data = (*conn).stateData.cast::<BattleStateData>();
-    if !updateMeleeSelection(
-        (*data).getMeleeState,
-        (*conn).player as COUNT,
-        u16::from_be(field!(packet, ship)),
-    ) {
+    if !updateMeleeSelection((*data).getMeleeState, (*conn).player as COUNT, ship) {
         return bad_message();
     }
     0
@@ -426,16 +353,9 @@ fn battle_active(state: NetState) -> bool {
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_BattleInput(
-    conn: *mut NetConnection,
-    packet: *const Packet_BattleInput,
-) -> i32 {
+unsafe fn handle_BattleInput(conn: *mut NetConnection, input: u8) -> i32 {
     guard!(conn, battle_active((*conn).state), "BattleInput");
-    if !BattleInputBuffer_push(
-        getBattleInputBuffer((*conn).player as usize),
-        field!(packet, state),
-    ) {
+    if !(*(*conn).session).push_input((*conn).player as usize, input) {
         return -1;
     }
     0
@@ -444,17 +364,12 @@ pub unsafe extern "C" fn PacketHandler_BattleInput(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_FrameCount(
-    conn: *mut NetConnection,
-    packet: *const Packet_FrameCount,
-) -> i32 {
+unsafe fn handle_FrameCount(conn: *mut NetConnection, frame: u32) -> i32 {
     guard!(
         conn,
         (*conn).state == NetState_NetState_endingBattle,
         "FrameCount"
     );
-    let frame = u32::from_be(field!(packet, frameCount));
     let data = (*conn).stateData.cast::<BattleStateData>();
     (*data).endFrameCount = (*data).endFrameCount.max(frame);
     Netplay_remoteReady(conn);
@@ -464,66 +379,52 @@ pub unsafe extern "C" fn PacketHandler_FrameCount(
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Checksum(
-    conn: *mut NetConnection,
-    packet: *const Packet_Checksum,
-) -> i32 {
+unsafe fn handle_Checksum(conn: *mut NetConnection, frame: u32, checksum: u32) -> i32 {
     guard!(conn, battle_active((*conn).state), "Checksum");
-    let frame = u32::from_be(field!(packet, frameNr));
-    let checksum = u32::from_be(field!(packet, checksum));
     let interval = (*conn).stateFlags.checksumInterval;
-    let delay = getBattleInputDelay();
+    let delay = (*(*conn).session).get_battle_input_delay();
     if !(frame as usize).is_multiple_of(interval) {
         log::warn!("NETPLAY: [{}] Received checksum for frame {frame}, expected a multiple of {interval}; discarding.", (*conn).player);
         return 0;
     }
-    if frame as usize > battleFrameCount as usize + delay + 1 {
+    if frame as usize > (*(*conn).session).frame_count.get() as usize + delay + 1 {
         log::warn!(
             "NETPLAY: [{}] Received checksum too far in the future ({frame}); discarding.",
             (*conn).player as COUNT
         );
         return 0;
     }
-    if (frame as usize) + delay < battleFrameCount as usize {
+    if (frame as usize) + delay < (*(*conn).session).frame_count.get() as usize {
         log::warn!(
             "NETPLAY: [{}] Received checksum too far in the past ({frame}); discarding.",
             (*conn).player as COUNT
         );
         return 0;
     }
-    add_remote_checksum(conn, frame, checksum);
+    (*(*conn).session).add_remote_checksum(conn, frame, checksum);
     0
 }
 
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Abort(
-    conn: *mut NetConnection,
-    packet: *const Packet_Abort,
-) -> i32 {
+unsafe fn handle_Abort(conn: *mut NetConnection, reason: u16) -> i32 {
     // Match the existing abort feedback's interpretation of the stored reason.
-    abortFeedback(conn, field!(packet, reason) as NetplayAbortReason);
+    abortFeedback(
+        conn,
+        u16::from_ne_bytes(reason.to_be_bytes()) as NetplayAbortReason,
+    );
     -1
 }
 
 /// # Safety
 /// Called on the game thread with a live connection and a validated,
 /// complete packet of this handler's type.
-#[no_mangle]
-pub unsafe extern "C" fn PacketHandler_Reset(
-    conn: *mut NetConnection,
-    packet: *const Packet_Reset,
-) -> i32 {
+unsafe fn handle_Reset(conn: *mut NetConnection, reason: u16) -> i32 {
     if !test_state(!(*conn).stateFlags.reset.remoteReset(), "Reset") {
         return -1;
     }
-    Netplay_remoteReset(
-        conn,
-        u16::from_be(field!(packet, reason)) as NetplayResetReason,
-    );
+    Netplay_remoteReset(conn, reason as NetplayResetReason);
     0
 }
 
@@ -542,7 +443,7 @@ mod tests {
     }
 
     unsafe fn queued_type(conn: &NetConnection) -> u16 {
-        u16::from_be((*(*conn.queue.first).packet).header.type_)
+        (*(*conn.queue.first).packet).kind() as u16
     }
 
     #[test]
@@ -550,14 +451,12 @@ mod tests {
         unsafe {
             let mut conn = connection(NetState_NetState_inSetup);
             conn.stateFlags.handshake.set_localOk(true);
-            let p = Packet_Handshake0_create();
-            assert_eq!(PacketHandler_Handshake0(&mut *conn, p), 0);
-            Packet_delete(p.cast());
+            let p = Packet::Handshake0;
+            assert_eq!(dispatch(&mut *conn, &p), 0);
             assert!(conn.stateFlags.handshake.remoteOk());
             assert_eq!(queued_type(&conn), 7);
-            let p = Packet_Handshake1_create();
-            assert_eq!(PacketHandler_Handshake1(&mut *conn, p), 0);
-            Packet_delete(p.cast());
+            let p = Packet::Handshake1;
+            assert_eq!(dispatch(&mut *conn, &p), 0);
             assert_eq!(conn.state, NetState_NetState_preBattle);
             assert!(!conn.stateFlags.handshake.localOk());
             assert!(!conn.stateFlags.handshake.remoteOk());
@@ -565,9 +464,8 @@ mod tests {
 
             let mut conn = connection(NetState_NetState_inSetup);
             conn.stateFlags.handshake.set_localOk(true);
-            let p = Packet_Handshake1_create();
-            assert_eq!(PacketHandler_Handshake1(&mut *conn, p), 0);
-            Packet_delete(p.cast());
+            let p = Packet::Handshake1;
+            assert_eq!(dispatch(&mut *conn, &p), 0);
             assert_eq!(queued_type(&conn), 7);
             assert_eq!(conn.state, NetState_NetState_preBattle);
             PacketQueue_uninit(&raw mut conn.queue);
@@ -577,9 +475,8 @@ mod tests {
                 conn.stateFlags.handshake.set_canceling(true);
                 conn.stateFlags.handshake.set_localOk(true);
                 conn.stateFlags.handshake.set_remoteOk(remote_ok);
-                let p = Packet_HandshakeCancelAck_create();
-                assert_eq!(PacketHandler_HandshakeCancelAck(&mut *conn, p), 0);
-                Packet_delete(p.cast());
+                let p = Packet::HandshakeCancelAck;
+                assert_eq!(dispatch(&mut *conn, &p), 0);
                 assert!(!conn.stateFlags.handshake.canceling());
                 assert_eq!(queued_type(&conn), if remote_ok { 7 } else { 6 });
                 PacketQueue_uninit(&raw mut conn.queue);
@@ -587,9 +484,8 @@ mod tests {
 
             let mut conn = connection(NetState_NetState_inSetup);
             conn.stateFlags.handshake.set_remoteOk(true);
-            let p = Packet_HandshakeCancel_create();
-            assert_eq!(PacketHandler_HandshakeCancel(&mut *conn, p), 0);
-            Packet_delete(p.cast());
+            let p = Packet::HandshakeCancel;
+            assert_eq!(dispatch(&mut *conn, &p), 0);
             assert!(!conn.stateFlags.handshake.remoteOk());
             assert_eq!(queued_type(&conn), 9);
             PacketQueue_uninit(&raw mut conn.queue);
@@ -600,17 +496,16 @@ mod tests {
     fn reset_gate_and_wrong_state_do_not_change_handshake() {
         unsafe {
             let mut conn = connection(NetState_NetState_inBattle);
-            let p = Packet_Handshake0_create();
-            assert_eq!(PacketHandler_Handshake0(&mut *conn, p), -1);
+            let p = Packet::Handshake0;
+            assert_eq!(dispatch(&mut *conn, &p), -1);
             assert!(!conn.stateFlags.handshake.remoteOk());
             conn.stateFlags.reset.set_localReset(true);
-            assert_eq!(PacketHandler_Handshake0(&mut *conn, p), 0);
+            assert_eq!(dispatch(&mut *conn, &p), 0);
             conn.stateFlags.reset.set_localReset(false);
             conn.stateFlags.reset.set_remoteReset(true);
-            assert_eq!(PacketHandler_Handshake0(&mut *conn, p), -1);
+            assert_eq!(dispatch(&mut *conn, &p), -1);
             assert!(!conn.stateFlags.handshake.remoteOk());
             assert_eq!(conn.queue.size, 0);
-            Packet_delete(p.cast());
             PacketQueue_uninit(&raw mut conn.queue);
         }
     }
@@ -620,15 +515,13 @@ mod tests {
         unsafe {
             let mut conn = connection(NetState_NetState_preBattle);
             for delay in [0, BATTLE_FRAME_RATE] {
-                let p = Packet_InputDelay_create(delay);
-                assert_eq!(PacketHandler_InputDelay(&mut *conn, p), 0);
+                let p = Packet::InputDelay(delay);
+                assert_eq!(dispatch(&mut *conn, &p), 0);
                 assert_eq!(conn.stateFlags.inputDelay, delay as usize);
-                Packet_delete(p.cast());
             }
-            let p = Packet_InputDelay_create(BATTLE_FRAME_RATE + 1);
-            assert_eq!(PacketHandler_InputDelay(&mut *conn, p), -1);
+            let p = Packet::InputDelay(BATTLE_FRAME_RATE + 1);
+            assert_eq!(dispatch(&mut *conn, &p), -1);
             assert_eq!(conn.stateFlags.inputDelay, BATTLE_FRAME_RATE as usize);
-            Packet_delete(p.cast());
             PacketQueue_uninit(&raw mut conn.queue);
         }
     }
@@ -641,17 +534,17 @@ mod tests {
                 let bytes = &mut storage[offset..offset + 8];
                 bytes.copy_from_slice(&[0, 8, 0, 11, 0, 0, 0, 17]);
                 let mut conn = connection(NetState_NetState_preBattle);
-                assert_eq!(
-                    PacketHandler_InputDelay(&mut *conn, bytes.as_ptr().cast()),
-                    0
-                );
+                assert_eq!(dispatch(&mut *conn, &Packet::decode(bytes).unwrap().0), 0);
                 assert_eq!(conn.stateFlags.inputDelay, 17);
                 bytes.copy_from_slice(&[0, 8, 0, 1, 0x12, 0x34, 0x56, 0x78]);
-                assert_eq!(PacketHandler_Ping(&mut *conn, bytes.as_ptr().cast()), 0);
-                let ack = (*conn.queue.first).packet.cast::<Packet_Ack>();
+                assert_eq!(dispatch(&mut *conn, &Packet::decode(bytes).unwrap().0), 0);
+                let ack = &*(*conn.queue.first).packet;
                 // The C handler passes the stored, network-order ID to sendAck.
                 assert_eq!(
-                    u32::from_be((*ack).id),
+                    match ack {
+                        Packet::Ack(id) => *id,
+                        other => panic!("expected Ack, got {other:?}"),
+                    },
                     u32::from_ne_bytes([0x12, 0x34, 0x56, 0x78])
                 );
                 PacketQueue_uninit(&raw mut conn.queue);

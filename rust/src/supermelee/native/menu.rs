@@ -62,7 +62,7 @@ pub(crate) mod live {
             9 => GlobData.Game_state.CurrentActivity |= CHECK_ABORT as u16,
             0 | 8 => {
                 let side = u16::from((*state).MeleeOption == 0);
-                let confirmed = MeleeConnectDialog(side as i32);
+                let confirmed = MeleeConnectDialog(&mut (*state).netplay, side as i32);
                 redraw();
                 (*state).LastInputTime = GetTimeCounter();
                 if confirmed != 0 {
@@ -100,7 +100,7 @@ pub(crate) mod live {
             (*state).LastInputTime = GetTimeCounter();
             return 1;
         }
-        netInput();
+        (*state).netplay.net_input();
         if key(KEY_MENU_CANCEL) || key(KEY_MENU_LEFT) {
             (*state).LastInputTime = GetTimeCounter();
             highlight((*state).MeleeOption, false);
@@ -154,7 +154,7 @@ pub(crate) mod live {
                 }
             }
         }
-        flushPacketQueues();
+        (*state).netplay.flush_packet_queues();
         disconnects();
         Melee_flashSelection(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));
@@ -221,15 +221,29 @@ pub(crate) mod live {
     /// pointer must remain exclusively accessible through the nested input loop.
     pub unsafe extern "C" fn Melee() {
         InitGlobData();
-        let mut state: MELEE_STATE = mem::zeroed();
+        let mut state = MELEE_STATE {
+            InputFunc: None,
+            Initialized: 0,
+            meleeStarted: 0,
+            MeleeOption: 0,
+            side: 0,
+            row: 0,
+            col: 0,
+            meleeSetup: ptr::null_mut(),
+            load: mem::zeroed(),
+            currentShip: 0,
+            CurIndex: 0,
+            buildPickConfirmed: 0,
+            randomContext: ptr::null_mut(),
+            LastInputTime: 0,
+            hMusic: ptr::null_mut(),
+            netplay: Default::default(),
+        };
         P_MELEE_STATE = &mut state;
         state.InputFunc = Some(DoMelee);
         state.meleeSetup = MeleeSetup_new();
         state.randomContext = new_context();
         (*state.randomContext).reseed(rust_automation_seed_value(1, GetTimeCounter()));
-        for player in [0usize, 1] {
-            set_connection(player, ptr::null_mut());
-        }
         state.currentShip = 255;
         state.CurIndex = u16::MAX;
         InitMeleeLoadState(&mut state);
@@ -266,8 +280,8 @@ pub(crate) mod live {
         DestroyDrawable(ReleaseDrawable(MeleeFrame));
         MeleeFrame = ptr::null_mut();
         crate::supermelee::native::build_picker::live::DestroyBuildPickFrame();
-        closeAllConnections();
-        setupInputDelay(0);
+        state.netplay.close_all_connections();
+        state.netplay.setup_input_delay(0);
         DestroySound(ReleaseSound(GameSounds).cast());
         GameSounds = ptr::null_mut();
         UninitMeleeLoadState(&mut state);

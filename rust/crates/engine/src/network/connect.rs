@@ -41,7 +41,6 @@ pub struct ConnectState {
 
 /// # Safety
 /// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ConnectState_incRef(state: *mut ConnectState) {
     assert!((*state).ref_count < u32::MAX);
     (*state).ref_count += 1;
@@ -49,7 +48,6 @@ pub unsafe extern "C" fn ConnectState_incRef(state: *mut ConnectState) {
 
 /// # Safety
 /// `state` must hold a live reference; all resources must be released before the final decrement.
-#[no_mangle]
 pub unsafe extern "C" fn ConnectState_decRef(state: *mut ConnectState) -> bool {
     assert!((*state).ref_count > 0);
     (*state).ref_count -= 1;
@@ -65,7 +63,6 @@ pub unsafe extern "C" fn ConnectState_decRef(state: *mut ConnectState) -> bool {
 
 /// # Safety
 /// `state` must hold a live reference. Cancels pending work and consumes that reference.
-#[no_mangle]
 pub unsafe extern "C" fn ConnectState_close(state: *mut ConnectState) {
     if !(*state).resolve_state.is_null() {
         resolve_close((*state).resolve_state);
@@ -90,7 +87,6 @@ pub unsafe extern "C" fn ConnectState_close(state: *mut ConnectState) {
 
 /// # Safety
 /// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ConnectState_getExtra(state: *mut ConnectState) -> *mut c_void {
     (*state).extra
 }
@@ -281,7 +277,6 @@ unsafe extern "C" fn resolve_error(resolve: *mut ResolveState, error: *const Res
 /// # Safety
 /// Strings and flags must be valid for the call. Callbacks and `extra` must outlive the
 /// operation. The success callback takes ownership of the descriptor and must close the state.
-#[no_mangle]
 pub unsafe extern "C" fn connectHostByName(
     host: *const c_char,
     service: *const c_char,

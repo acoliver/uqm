@@ -5,26 +5,33 @@ use super::abi::*;
 #[no_mangle]
 pub unsafe extern "C" fn sendPacket(conn: *mut NetConnection, packet: *mut Packet) -> i32 {
     assert!((*conn).stateFlags.connected);
-    let socket = NetDescriptor_getSocket((*conn).nd);
-    let mut len = u16::from_be((*packet).header.len) as usize;
-    while len > 0 {
-        // Preserve the existing transport's base pointer on each send.
-        let result = Socket_send(socket, packet.cast(), len, 0);
-        if result >= 0 {
-            len -= result as usize;
-            continue;
+    let socket = (*conn).socket.expect("send without transport");
+    let bytes = (*packet).encode();
+    while (*conn).write_offset < bytes.len() {
+        let result = (*(*conn).session)
+            .transport
+            .borrow_mut()
+            .send(socket, &bytes[(*conn).write_offset..]);
+        match result {
+            Ok(0) => {
+                super::set_errno(libc::EPIPE);
+                return -1;
+            }
+            Ok(count) => (*conn).write_offset += count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                let err = if error.kind() == std::io::ErrorKind::WouldBlock {
+                    libc::EAGAIN
+                } else {
+                    error.raw_os_error().unwrap_or(libc::EIO)
+                };
+                super::set_errno(err);
+                return -1;
+            }
         }
-        let err = crate::platform::errno();
-        if err == libc::EINTR {
-            continue;
-        }
-        if err != libc::ECONNRESET {
-            log::error!("send() failed: {}.", std::io::Error::from_raw_os_error(err));
-            super::set_errno(err);
-        }
-        return -1;
     }
+    (*conn).write_offset = 0;
     (*conn).statistics.packetsSent += 1;
-    (*conn).statistics.packetTypeSent[u16::from_be((*packet).header.type_) as usize] += 1;
+    (*conn).statistics.packetTypeSent[(*packet).kind()] += 1;
     0
 }

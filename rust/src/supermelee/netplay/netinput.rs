@@ -8,20 +8,39 @@ const EMPTY: BattleInputBuffer = BattleInputBuffer {
     first: 0,
     size: 0,
 };
-static mut BUFFERS: [BattleInputBuffer; 2] = [EMPTY; 2];
-static mut INPUT_DELAY: usize = 0;
-
-/// # Safety
-/// Must be called on the game thread before initializing the buffers.
-#[no_mangle]
-pub unsafe extern "C" fn setBattleInputDelay(delay: usize) {
-    INPUT_DELAY = delay;
+#[derive(Debug)]
+pub(super) struct InputBuffers {
+    buffers: [BattleInputBuffer; 2],
+    delay: usize,
 }
-/// # Safety
-/// Must be called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn getBattleInputDelay() -> usize {
-    INPUT_DELAY
+impl Default for InputBuffers {
+    fn default() -> Self {
+        Self {
+            buffers: [EMPTY; 2],
+            delay: 0,
+        }
+    }
+}
+
+impl super::session::SessionCore {
+    pub fn set_battle_input_delay(&self, delay: usize) {
+        self.input.borrow_mut().delay = delay;
+    }
+    pub fn get_battle_input_delay(&self) -> usize {
+        self.input.borrow().delay
+    }
+    pub fn push_input(&self, player: usize, value: u8) -> bool {
+        // SAFETY: the session exclusively owns its initialized input buffers.
+        unsafe { BattleInputBuffer_push(&mut self.input.borrow_mut().buffers[player], value) }
+    }
+    pub fn pop_input(&self, player: usize) -> Option<u8> {
+        let mut value = 0;
+        // SAFETY: the session exclusively owns its initialized input buffers.
+        unsafe {
+            BattleInputBuffer_pop(&mut self.input.borrow_mut().buffers[player], &mut value)
+                .then_some(value)
+        }
+    }
 }
 
 unsafe fn init(buffer: *mut BattleInputBuffer, capacity: usize) {
@@ -32,28 +51,27 @@ unsafe fn init(buffer: *mut BattleInputBuffer, capacity: usize) {
     (*buffer).size = 0;
 }
 
-/// # Safety
-/// Buffers must not already own allocations. Called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn initBattleInputBuffers() {
-    // Preserve the C int conversion before allocating.
-    let capacity = INPUT_DELAY.wrapping_mul(2).wrapping_add(2) as i32;
-    for player in 0..2 {
-        let buffer = getBattleInputBuffer(player);
-        init(buffer, capacity as usize);
-        for _ in 0..INPUT_DELAY {
-            BattleInputBuffer_push(buffer, 0);
+impl super::session::SessionCore {
+    /// # Safety
+    /// The session's buffers must not already own allocations.
+    pub unsafe fn init_battle_input_buffers(&self) {
+        let mut input = self.input.borrow_mut();
+        let delay = input.delay;
+        let capacity = delay.wrapping_mul(2).wrapping_add(2) as i32;
+        for buffer in &mut input.buffers {
+            init(buffer, capacity as usize);
+            for _ in 0..delay {
+                BattleInputBuffer_push(buffer, 0);
+            }
         }
     }
-}
-/// # Safety
-/// No callers may retain buffer references. Called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn uninitBattleInputBuffers() {
-    for player in 0..2 {
-        let buffer = getBattleInputBuffer(player);
-        libc::free((*buffer).buf.cast());
-        buffer.write(EMPTY);
+    /// # Safety
+    /// No caller may retain a reference to the input buffers.
+    pub unsafe fn uninit_battle_input_buffers(&self) {
+        for buffer in &mut self.input.borrow_mut().buffers {
+            libc::free(buffer.buf.cast());
+            *buffer = EMPTY;
+        }
     }
 }
 /// # Safety
@@ -89,16 +107,6 @@ pub unsafe extern "C" fn BattleInputBuffer_pop(
     (*buffer).size -= 1;
     true
 }
-/// # Safety
-/// `player` is 0 or 1. Only the game thread may access the returned buffer.
-#[no_mangle]
-pub unsafe extern "C" fn getBattleInputBuffer(player: usize) -> *mut BattleInputBuffer {
-    assert!(player < 2);
-    ptr::addr_of_mut!(BUFFERS)
-        .cast::<BattleInputBuffer>()
-        .add(player)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,12 +138,13 @@ mod tests {
     #[serial_test::serial]
     fn delay_initializes_both_players_with_zero_input_and_releases_storage() {
         unsafe {
-            let previous = getBattleInputDelay();
+            let session = super::super::NetplaySession::default();
             for delay in [0, 2, 35] {
-                setBattleInputDelay(delay);
-                initBattleInputBuffers();
+                session.set_battle_input_delay(delay);
+                session.init_battle_input_buffers();
                 for player in 0..2 {
-                    let buffer = getBattleInputBuffer(player);
+                    let buffer =
+                        &mut session.input.borrow_mut().buffers[player] as *mut BattleInputBuffer;
                     assert_eq!((*buffer).maxSize, delay * 2 + 2);
                     assert_eq!((*buffer).size, delay);
                     let mut input = 123;
@@ -145,15 +154,15 @@ mod tests {
                     }
                     assert!(!BattleInputBuffer_pop(buffer, &mut input));
                 }
-                uninitBattleInputBuffers();
-                uninitBattleInputBuffers();
+                session.uninit_battle_input_buffers();
+                session.uninit_battle_input_buffers();
                 for player in 0..2 {
-                    let buffer = getBattleInputBuffer(player);
+                    let buffer =
+                        &mut session.input.borrow_mut().buffers[player] as *mut BattleInputBuffer;
                     assert!((*buffer).buf.is_null());
                     assert_eq!((*buffer).maxSize, 0);
                 }
             }
-            setBattleInputDelay(previous);
         }
     }
 }

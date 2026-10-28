@@ -2,22 +2,8 @@
 use super::*;
 pub(super) use crate::mainloop::c_extern::ClearPlayerInputAll;
 use crate::supermelee::netplay as net;
-pub(super) use net::{
-    cancelConfirmations, closeAllConnections, closeDisconnectedConnections, confirmConnections,
-    setupInputDelay, Netplay_NotifyAll_inputDelay,
-};
-
 pub(super) unsafe fn connection(player: usize) -> *mut NetConnection {
-    ptr::addr_of!(netConnections)
-        .cast::<*mut NetConnection>()
-        .add(player)
-        .read()
-}
-pub(super) unsafe fn set_connection(player: usize, value: *mut NetConnection) {
-    ptr::addr_of_mut!(netConnections)
-        .cast::<*mut NetConnection>()
-        .add(player)
-        .write(value);
+    (*P_MELEE_STATE).netplay.connection(player)
 }
 pub(super) unsafe fn NetConnection_isConnected(conn: *mut NetConnection) -> bool {
     net::NetConnection_isConnected(conn.cast())
@@ -35,22 +21,33 @@ pub(super) unsafe fn Netplay_Notify_seedRandom(conn: *mut NetConnection, seed: u
     net::Netplay_Notify_seedRandom(conn.cast(), seed);
 }
 pub(super) unsafe fn Netplay_NotifyAll_setShip(state: *mut MELEE_STATE, side: u16, index: u16) {
-    net::Netplay_NotifyAll_setShip(state.cast(), side as usize, index as usize);
+    (*state)
+        .netplay
+        .netplay_notify_all_set_ship(state.cast(), side as usize, index as usize);
 }
 pub(super) unsafe fn Netplay_NotifyAll_setTeamName(state: *mut MELEE_STATE, side: u16) {
-    net::Netplay_NotifyAll_setTeamName(state.cast(), side as usize);
+    (*state)
+        .netplay
+        .netplay_notify_all_set_team_name(state.cast(), side as usize);
 }
 pub(super) unsafe fn Netplay_NotifyAll_setFleet(state: *mut MELEE_STATE, side: usize) {
-    net::Netplay_NotifyAll_setFleet(state.cast(), side);
+    (*state)
+        .netplay
+        .netplay_notify_all_set_fleet(state.cast(), side);
 }
 pub(super) unsafe fn closePlayerNetworkConnection(player: u16) {
-    net::closePlayerNetworkConnection(player);
+    (*P_MELEE_STATE)
+        .netplay
+        .close_player_network_connection(player);
 }
 pub(super) unsafe fn openPlayerNetworkConnection(
     player: u16,
     state: *mut std::ffi::c_void,
 ) -> *mut NetConnection {
-    net::openPlayerNetworkConnection(player, state).cast()
+    (*state.cast::<MELEE_STATE>())
+        .netplay
+        .open_player_network_connection(player, state)
+        .cast()
 }
 pub(super) unsafe fn CaptureSound(sound: *mut std::ffi::c_void) -> SOUND {
     crate::game_init::macro_abi::CaptureSound(sound.cast()).cast()

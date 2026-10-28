@@ -28,17 +28,14 @@ impl Manager {
 
 static MANAGER: LazyLock<Mutex<Manager>> = LazyLock::new(|| Mutex::new(Manager::new()));
 
-#[no_mangle]
 pub extern "C" fn NetManager_init() {
     *MANAGER.lock() = Manager::new();
 }
 
-#[no_mangle]
 pub extern "C" fn NetManager_uninit() {}
 
 /// # Safety
 /// `nd` must have an open socket not already registered with the manager.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_addDesc(nd: *mut NetDescriptor) -> c_int {
     let fd = (*(*nd).socket).fd;
     #[cfg(unix)]
@@ -67,7 +64,6 @@ pub unsafe extern "C" fn NetManager_addDesc(nd: *mut NetDescriptor) -> c_int {
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_removeDesc(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     let mut manager = MANAGER.lock();
@@ -79,7 +75,6 @@ pub unsafe extern "C" fn NetManager_removeDesc(nd: *mut NetDescriptor) {
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_activateReadCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_SET(fd, &mut MANAGER.lock().read_set);
@@ -87,7 +82,6 @@ pub unsafe extern "C" fn NetManager_activateReadCallback(nd: *mut NetDescriptor)
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_deactivateReadCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_CLR(fd, &mut MANAGER.lock().read_set);
@@ -95,7 +89,6 @@ pub unsafe extern "C" fn NetManager_deactivateReadCallback(nd: *mut NetDescripto
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_activateWriteCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_SET(fd, &mut MANAGER.lock().write_set);
@@ -103,7 +96,6 @@ pub unsafe extern "C" fn NetManager_activateWriteCallback(nd: *mut NetDescriptor
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_deactivateWriteCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_CLR(fd, &mut MANAGER.lock().write_set);
@@ -111,7 +103,6 @@ pub unsafe extern "C" fn NetManager_deactivateWriteCallback(nd: *mut NetDescript
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_activateExceptionCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_SET(fd, &mut MANAGER.lock().exception_set);
@@ -119,7 +110,6 @@ pub unsafe extern "C" fn NetManager_activateExceptionCallback(nd: *mut NetDescri
 
 /// # Safety
 /// `nd` must be registered with an open socket.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_deactivateExceptionCallback(nd: *mut NetDescriptor) {
     let fd = (*(*nd).socket).fd;
     libc::FD_CLR(fd, &mut MANAGER.lock().exception_set);
@@ -128,7 +118,6 @@ pub unsafe extern "C" fn NetManager_deactivateExceptionCallback(nd: *mut NetDesc
 /// # Safety
 /// `timeout_ms` must be writable. Calls must be serialized on the network event thread;
 /// callbacks may reenter this function, as in the C implementation.
-#[no_mangle]
 pub unsafe extern "C" fn NetManager_process(timeout_ms: *mut u32) -> c_int {
     let mut timeout = libc::timeval {
         tv_sec: (*timeout_ms / 1000) as _,

@@ -3704,7 +3704,7 @@ pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 pub use crate::front_end::uqmdebug::INSTANT_MOVE;
 
 #[cfg(not(test))]
-pub use crate::front_end::cnctdlg::MeleeConnectDialog;
+pub use crate::front_end::cnctdlg::melee_connect_dialog as MeleeConnectDialog;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SUMMARY_DESC {
@@ -4251,7 +4251,6 @@ pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
 pub type NetplayResetReason = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::NetConnection;
-pub use crate::supermelee::netplay::abi::ConnectStateData;
 pub type NetConnection_ConnectCallback =
     ::std::option::Option<unsafe extern "C" fn(nd: *mut NetConnection)>;
 pub type NetConnection_CloseCallback =
@@ -4284,9 +4283,6 @@ pub type NetConnectionStateData_ReleaseFunction =
 pub use crate::ships::native::abi::NetConnectionStateData;
 pub use crate::ships::native::abi::NetplayOptions;
 pub use crate::ships::native::abi::NetplayPeerOptions;
-extern "C" {
-    pub static mut netplayOptions: NetplayOptions;
-}
 extern "C" {
     pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
 }
@@ -4413,163 +4409,9 @@ pub use crate::supermelee::netplay::netconnection::NetConnection_getDiscriminant
 pub use crate::supermelee::netplay::netconnection::NetConnection_getPeerOptions;
 
 pub use crate::supermelee::netplay::netconnection::NetConnection_getPlayerNr;
-pub type PacketHandler = ::std::option::Option<
-    unsafe extern "C" fn(
-        conn: *mut NetConnection,
-        packet: *const ::std::os::raw::c_void,
-    ) -> ::std::os::raw::c_int,
->;
-pub use crate::ships::native::abi::PacketTypeData;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PacketHeader {
-    pub len: uint16,
-    pub type_: uint16,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Init {
-    pub header: PacketHeader,
-    pub protoVersion: Packet_Init__bindgen_ty_1,
-    pub padding0: uint16,
-    pub uqmVersion: Packet_Init__bindgen_ty_2,
-    pub padding1: uint8,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Init__bindgen_ty_1 {
-    pub major: uint8,
-    pub minor: uint8,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Init__bindgen_ty_2 {
-    pub major: uint8,
-    pub minor: uint8,
-    pub patch: uint8,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Ping {
-    pub header: PacketHeader,
-    pub id: uint32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Ack {
-    pub header: PacketHeader,
-    pub id: uint32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Ready {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_SeedRandom {
-    pub header: PacketHeader,
-    pub seed: uint32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_InputDelay {
-    pub header: PacketHeader,
-    pub delay: uint32,
-}
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FleetEntry {
-    pub index: uint8,
-    pub ship: uint8,
-}
-#[repr(C)]
-#[derive(Debug)]
-pub struct Packet_Fleet {
-    pub header: PacketHeader,
-    pub side: uint8,
-    pub padding: uint8,
-    pub numShips: uint16,
-    pub ships: __IncompleteArrayField<FleetEntry>,
-}
-#[repr(C)]
-#[derive(Debug)]
-pub struct Packet_TeamName {
-    pub header: PacketHeader,
-    pub side: uint8,
-    pub padding: uint8,
-    pub name: __IncompleteArrayField<uint8>,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Handshake0 {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Handshake1 {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_HandshakeCancel {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_HandshakeCancelAck {
-    pub header: PacketHeader,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_SelectShip {
-    pub header: PacketHeader,
-    pub ship: uint16,
-    pub padding: uint16,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_BattleInput {
-    pub header: PacketHeader,
-    pub state: uint8,
-    pub padding0: uint8,
-    pub padding1: uint16,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_FrameCount {
-    pub header: PacketHeader,
-    pub frameCount: uint32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Checksum {
-    pub header: PacketHeader,
-    pub frameNr: uint32,
-    pub checksum: uint32,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Abort {
-    pub header: PacketHeader,
-    pub reason: uint16,
-    pub padding0: uint16,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct Packet_Reset {
-    pub header: PacketHeader,
-    pub reason: uint16,
-    pub padding0: uint16,
-}
 pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
 pub use crate::ships::native::abi::melee_load_state;

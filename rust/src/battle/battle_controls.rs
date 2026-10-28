@@ -76,6 +76,7 @@ pub struct HumanInputContext {
 #[repr(C)]
 pub struct NetworkInputContext {
     pub base: InputContext,
+    pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +112,7 @@ pub static NETWORK_INPUT_HANDLERS: BattleInputHandlers = BattleInputHandlers {
     frame_input: Some(unsafe_frame_input_network),
     select_ship: Some(unsafe_select_ship_network),
     battle_end_ready: Some(unsafe_battle_end_ready_network),
-    delete_context: Some(InputContext_delete),
+    delete_context: Some(delete_network_context),
 };
 
 // Trampoline functions to match the exact C function pointer signatures.
@@ -234,8 +235,6 @@ unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bo
 pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
     [std::ptr::null_mut(), std::ptr::null_mut()];
 
-use crate::supermelee::netplay::netmelee::networkBattleInput;
-
 #[cfg(not(test))]
 use crate::supermelee::native::battle_picker::live::selectShipNetwork;
 
@@ -310,6 +309,7 @@ pub extern "C" fn NetworkInputContext_new(player_nr: Count) -> *mut NetworkInput
             return result;
         }
 
+        std::ptr::addr_of_mut!((*result).net).write(None);
         InputContext_init(
             &mut (*result).base as *mut InputContext,
             &NETWORK_INPUT_HANDLERS as *const _,
@@ -321,9 +321,14 @@ pub extern "C" fn NetworkInputContext_new(player_nr: Count) -> *mut NetworkInput
 
 unsafe extern "C" fn unsafe_frame_input_network(
     ctx: *mut InputContext,
-    ship: *mut c_void,
+    _ship: *mut c_void,
 ) -> BattleInputState {
-    networkBattleInput(ctx.cast(), ship.cast())
+    let context = ctx.cast::<NetworkInputContext>();
+    (*context)
+        .net
+        .as_ref()
+        .unwrap()
+        .remote_input((*ctx).player_nr as usize)
 }
 
 unsafe extern "C" fn unsafe_select_ship_network(
@@ -438,4 +443,11 @@ mod tests {
             std::mem::size_of::<InputContext>()
         );
     }
+}
+
+unsafe extern "C" fn delete_network_context(context: *mut InputContext) {
+    std::ptr::drop_in_place(std::ptr::addr_of_mut!(
+        (*context.cast::<NetworkInputContext>()).net
+    ));
+    InputContext_delete(context);
 }

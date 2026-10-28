@@ -26,13 +26,13 @@ pub unsafe extern "C" fn PacketQueue_uninit(queue: *mut PacketQueue) {
 
 /// # Safety
 /// `conn` must be connected with an initialized queue. Ownership of `packet` is transferred.
-pub unsafe extern "C" fn queue_packet(conn: *mut NetConnection, packet: *mut Packet) {
+pub unsafe fn queue_packet(conn: *mut NetConnection, packet: Packet) {
     assert!((*conn).stateFlags.connected);
     let queue = &raw mut (*conn).queue;
     let link = libc::malloc(size_of::<PacketQueueLink>()).cast::<PacketQueueLink>();
     assert!(!link.is_null());
     link.write(PacketQueueLink {
-        packet,
+        packet: Box::into_raw(Box::new(packet)),
         next: ptr::null_mut(),
     });
     *(*queue).end = link;
@@ -70,8 +70,6 @@ pub unsafe extern "C" fn flushPacketQueue(conn: *mut NetConnection) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::super::abi::Packet_Ping;
-    use super::super::packet::Packet_Ping_create;
     use super::*;
 
     #[test]
@@ -81,13 +79,16 @@ mod tests {
             conn.stateFlags.connected = true;
             PacketQueue_init(&raw mut conn.queue);
             for id in 1..=3 {
-                queue_packet(&mut conn, Packet_Ping_create(id).cast());
+                queue_packet(&mut conn, Packet::Ping(id));
             }
             assert_eq!(conn.queue.size, 3);
             let mut sent = Vec::new();
             assert_eq!(
                 flush(&raw mut conn.queue, |packet| {
-                    let id = u32::from_be((*packet.cast::<Packet_Ping>()).id);
+                    let id = match &*packet {
+                        Packet::Ping(id) => *id,
+                        _ => unreachable!(),
+                    };
                     if id == 2 {
                         return -1;
                     }
@@ -98,10 +99,13 @@ mod tests {
             );
             assert_eq!(sent, [1]);
             assert_eq!(conn.queue.size, 2);
-            queue_packet(&mut conn, Packet_Ping_create(4).cast());
+            queue_packet(&mut conn, Packet::Ping(4));
             assert_eq!(
                 flush(&raw mut conn.queue, |packet| {
-                    sent.push(u32::from_be((*packet.cast::<Packet_Ping>()).id));
+                    sent.push(match &*packet {
+                        Packet::Ping(id) => *id,
+                        _ => unreachable!(),
+                    });
                     0
                 }),
                 0
@@ -110,7 +114,7 @@ mod tests {
             assert_eq!(conn.queue.size, 0);
             assert!(conn.queue.first.is_null());
             assert_eq!(conn.queue.end, &raw mut conn.queue.first);
-            queue_packet(&mut conn, Packet_Ping_create(5).cast());
+            queue_packet(&mut conn, Packet::Ping(5));
             assert_eq!(conn.queue.size, 1);
             PacketQueue_uninit(&raw mut conn.queue);
         }

@@ -9,6 +9,7 @@ pub struct Battle {
     pub nth_frame: u16,
     pub max_zoom_out: i16,
     pub counters: [u8; 2],
+    pub net: Option<std::rc::Rc<dyn super::net::BattleNet>>,
 }
 
 impl Battle {
@@ -26,6 +27,7 @@ impl Battle {
             nth_frame: 0,
             max_zoom_out: 0,
             counters: [0; 2],
+            net: None,
         }
     }
 }

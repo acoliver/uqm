@@ -10,8 +10,9 @@ unsafe extern "C" fn changed(entry: *mut TEXTENTRY_STATE) -> u32 {
         (*entry).BaseStr,
     )
 }
-unsafe extern "C" fn frame(_entry: *mut TEXTENTRY_STATE) -> u32 {
-    netInput();
+unsafe extern "C" fn frame(entry: *mut TEXTENTRY_STATE) -> u32 {
+    let state = (*entry).CbParam.cast::<MELEE_STATE>();
+    (*state).netplay.net_input();
     1
 }
 unsafe fn advance(state: *mut MELEE_STATE) {
@@ -30,7 +31,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         (*state).InputFunc = Some(edit);
         return 1;
     }
-    netInput();
+    (*state).netplay.net_input();
     let row = (*state).row;
     let col = (*state).col;
     if (row < 2 || (*state).currentShip == 255)
@@ -108,7 +109,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
             current(state);
         }
     }
-    flushPacketQueues();
+    (*state).netplay.flush_packet_queues();
     Melee_flashSelection(state);
     SleepThreadUntil(time.wrapping_add(840 / 30));
     1

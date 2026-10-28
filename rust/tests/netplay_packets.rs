@@ -2,15 +2,13 @@
 extern crate uqm_rust;
 
 use abi::*;
-use uqm_rust::supermelee::netplay::abi;
+use uqm_rust::engine::battle::net::BattleNet;
+use uqm_rust::supermelee::netplay::{abi, NetplaySession};
+use uqm_rust::supermelee::netplay::{packet::Packet, packethandlers::dispatch};
 
 extern "C" {
     fn PacketQueue_init(queue: *mut PacketQueue);
     fn PacketQueue_uninit(queue: *mut PacketQueue);
-    fn Packet_Checksum_create(frame: u32, checksum: u32) -> *mut Packet_Checksum;
-    fn Packet_delete(packet: *mut Packet);
-    fn PacketHandler_Checksum(conn: *mut NetConnection, packet: *const Packet_Checksum) -> i32;
-    fn PacketHandler_TeamName(conn: *mut NetConnection, packet: *const Packet_TeamName) -> i32;
     fn ChecksumBuffer_init(buffer: *mut ChecksumBuffer, delay: usize, interval: usize);
     fn ChecksumBuffer_uninit(buffer: *mut ChecksumBuffer);
     fn ChecksumBuffer_addChecksum(buffer: *mut ChecksumBuffer, frame: u32, checksum: u32) -> bool;
@@ -21,8 +19,9 @@ extern "C" {
     ) -> bool;
 }
 
-unsafe fn connection(state: NetState) -> Box<NetConnection> {
+unsafe fn connection(session: &NetplaySession, state: NetState) -> Box<NetConnection> {
     let mut conn: Box<NetConnection> = Box::new(std::mem::zeroed());
+    conn.session = &**session;
     conn.state = state;
     conn.stateFlags.connected = true;
     PacketQueue_init(&raw mut conn.queue);
@@ -31,15 +30,11 @@ unsafe fn connection(state: NetState) -> Box<NetConnection> {
 
 #[test]
 fn checksum_handler_decodes_and_discards_outside_its_frame_window() {
-    extern "C" {
-        fn setBattleInputDelay(delay: usize);
-    }
     unsafe {
-        let previous_delay = getBattleInputDelay();
-        let previous_frame = battleFrameCount;
-        setBattleInputDelay(3);
-        battleFrameCount = 100;
-        let mut conn = connection(NetState_NetState_inBattle);
+        let session = NetplaySession::default();
+        session.set_battle_input_delay(3);
+        session.set_frame(100);
+        let mut conn = connection(&session, NetState_NetState_inBattle);
         conn.stateFlags.checksumInterval = 2;
         ChecksumBuffer_init(&raw mut conn.checksumBuffer, 3, 2);
         ChecksumBuffer_addChecksum(&raw mut conn.checksumBuffer, 100, 0xaaaa);
@@ -50,9 +45,8 @@ fn checksum_handler_decodes_and_discards_outside_its_frame_window() {
             (96, 0xdead),
             (101, 0xdead),
         ] {
-            let p = Packet_Checksum_create(frame, checksum);
-            assert_eq!(PacketHandler_Checksum(&mut *conn, p), 0);
-            Packet_delete(p.cast());
+            let p = Packet::Checksum { frame, checksum };
+            assert_eq!(dispatch(&mut *conn, &p), 0);
         }
         for (frame, expected) in [(98, 0x12345678), (104, 0xabcdef01), (100, 0xaaaa)] {
             let mut result = 0;
@@ -65,20 +59,19 @@ fn checksum_handler_decodes_and_discards_outside_its_frame_window() {
         }
         ChecksumBuffer_uninit(&raw mut conn.checksumBuffer);
         PacketQueue_uninit(&raw mut conn.queue);
-        setBattleInputDelay(previous_delay);
-        battleFrameCount = previous_frame;
     }
 }
 
 #[test]
 fn team_name_requires_room_for_its_terminator() {
     unsafe {
-        let mut conn = connection(NetState_NetState_inSetup);
+        let session = NetplaySession::default();
+        let mut conn = connection(&session, NetState_NetState_inSetup);
         conn.stateFlags.handshake.set_localOk(true);
         let bytes = [0, 6, 0, 5, 0, 0];
         assert_eq!(
-            PacketHandler_TeamName(&mut *conn, bytes.as_ptr().cast()),
-            -1
+            Packet::decode(&bytes),
+            Err(uqm_rust::supermelee::netplay::packet::DecodeError::InvalidLength)
         );
         assert!(conn.stateFlags.handshake.localOk());
         assert_eq!(conn.queue.size, 0);
@@ -96,22 +89,16 @@ unsafe fn exchange(sender: &mut NetConnection, receiver: &mut NetConnection) {
     while !sender.queue.first.is_null() {
         let link = sender.queue.first;
         let packet = (*link).packet;
-        let length = u16::from_be((*packet).header.len) as usize;
-        writer
-            .write_all(std::slice::from_raw_parts(packet.cast::<u8>(), length))
-            .unwrap();
-        let mut received = vec![0; length];
+        let wire = (*packet).encode();
+        writer.write_all(&wire).unwrap();
+        let mut received = vec![0; wire.len()];
         reader.read_exact(&mut received).unwrap();
-        let kind = u16::from_be((*packet).header.type_) as usize;
-        let handler = (*std::ptr::addr_of!(packetTypeData)
-            .cast::<PacketTypeData>()
-            .add(kind))
-        .handler
-        .unwrap();
-        assert_eq!(handler(receiver, received.as_ptr().cast()), 0);
+        let (received, consumed) = Packet::decode(&received).unwrap();
+        assert_eq!(consumed, wire.len());
+        assert_eq!(dispatch(receiver, &received), 0);
         sender.queue.first = (*link).next;
         sender.queue.size -= 1;
-        Packet_delete(packet);
+        drop(Box::from_raw(packet));
         libc::free(link.cast());
     }
     sender.queue.end = &raw mut sender.queue.first;
@@ -134,8 +121,9 @@ unsafe extern "C" fn reset_count(conn: *mut NetConnection, arg: *mut libc::c_voi
 #[test]
 fn two_peers_confirm_cancel_ready_and_reset_over_loopback() {
     unsafe {
-        let mut a = connection(NetState_NetState_inSetup);
-        let mut b = connection(NetState_NetState_inSetup);
+        let session = NetplaySession::default();
+        let mut a = connection(&session, NetState_NetState_inSetup);
+        let mut b = connection(&session, NetState_NetState_inSetup);
         assert_eq!(Netplay_cancelConfirmation(&mut *a), -1);
         assert_eq!(Netplay_confirm(&mut *a), 0);
         assert_eq!(Netplay_confirm(&mut *a), -1);
@@ -214,7 +202,10 @@ unsafe extern "C" fn connected_test(conn: *mut NetConnection) {
 unsafe extern "C" fn closed_test(conn: *mut NetConnection) {
     assert!(!(*conn).stateFlags.connected);
     assert!((*conn).stateFlags.disconnected);
-    assert!(!(*conn).stateData.is_null());
+    assert_eq!(
+        (*conn).stateData.is_null(),
+        (*conn).state == NetState_NetState_connecting
+    );
     let events = &mut *(*conn).extra.cast::<Lifecycle>();
     events
         .events
@@ -226,7 +217,10 @@ unsafe extern "C" fn closed_test(conn: *mut NetConnection) {
 }
 unsafe extern "C" fn deleted_test(conn: *mut NetConnection) {
     assert_eq!((*conn).state, NetState_NetState_unconnected);
-    assert!(!(*conn).stateData.is_null());
+    assert_eq!(
+        (*conn).stateData.is_null(),
+        (*(*conn).extra.cast::<Lifecycle>()).events == ["cancel"]
+    );
     (*(*conn).extra.cast::<Lifecycle>()).events.push("delete");
 }
 unsafe extern "C" fn failed_test(_conn: *mut NetConnection, _error: *const NetConnectionError) {
@@ -256,6 +250,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
         Callback_init();
         Alarm_init();
         NetManager_init();
+        let session = NetplaySession::default();
         let reserved = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port =
             std::ffi::CString::new(reserved.local_addr().unwrap().port().to_string()).unwrap();
@@ -279,6 +274,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             Some(failed_test),
             Some(deleted_test),
             (&raw mut a_events).cast(),
+            &*session,
         );
         assert_eq!((*a).state, NetState_NetState_connecting);
         Callback_process();
@@ -290,13 +286,15 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             Some(failed_test),
             Some(deleted_test),
             (&raw mut b_events).cast(),
+            &*session,
         );
+        session.add_net_connection(a, 0);
+        session.add_net_connection(b, 1);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while a_events.events.is_empty() || b_events.events.is_empty() {
             assert!(std::time::Instant::now() < deadline);
             let mut timeout = 20;
-            NetManager_process(&mut timeout);
-            Async_process();
+            session.net_input_blocking(timeout);
         }
         assert!((*a).stateFlags.discriminant);
         assert!(!(*b).stateFlags.discriminant);
@@ -316,8 +314,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
             let mut timeout = 20;
-            NetManager_process(&mut timeout);
-            Async_process();
+            session.net_input_blocking(timeout);
         }
         let mut ready_a = 0usize;
         let mut ready_b = 0usize;
@@ -341,8 +338,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
             let mut timeout = 20;
-            NetManager_process(&mut timeout);
-            Async_process();
+            session.net_input_blocking(timeout);
         }
         NetConnection_setState(a, NetState_NetState_inSetup);
         NetConnection_setState(b, NetState_NetState_inSetup);
@@ -359,23 +355,23 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             assert_eq!(flushPacketQueue(a), 0);
             assert_eq!(flushPacketQueue(b), 0);
             let mut timeout = 20;
-            NetManager_process(&mut timeout);
-            Async_process();
+            session.net_input_blocking(timeout);
         }
         assert!((*a).statistics.packetsReceived > 0);
         assert!((*b).statistics.packetsReceived > 0);
         attach_data(a, &raw mut a_events);
         attach_data(b, &raw mut b_events);
+        session.remove_net_connection(0);
         NetConnection_close(a);
         assert_eq!(a_events.events, ["connect", "close", "delete", "release"]);
         while b_events.events.len() == 1 {
             assert!(std::time::Instant::now() < deadline);
             let mut timeout = 20;
-            NetManager_process(&mut timeout);
-            Async_process();
+            session.net_input_blocking(timeout);
         }
         assert_eq!(b_events.events, ["connect", "close"]);
         assert_eq!((*b).state, NetState_NetState_unconnected);
+        session.remove_net_connection(1);
         NetConnection_close(b);
         assert_eq!(b_events.events, ["connect", "close", "delete", "release"]);
 
@@ -389,6 +385,7 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
             Some(failed_test),
             Some(deleted_test),
             (&raw mut cancelled).cast(),
+            &*session,
         );
         NetConnection_close(pending);
         assert_eq!(cancelled.events, ["cancel", "delete"]);
@@ -403,29 +400,29 @@ fn connection_lifecycle_keeps_callback_order_over_loopback() {
 #[serial_test::serial]
 fn notifications_visit_only_connected_peers() {
     unsafe {
-        let mut a = connection(NetState_NetState_inBattle);
-        let mut b = connection(NetState_NetState_inBattle);
-        let slots = std::ptr::addr_of_mut!(netConnections).cast::<*mut NetConnection>();
-        let saved = [*slots, *slots.add(1)];
-        *slots = &mut *a;
-        *slots.add(1) = &mut *b;
+        let session = NetplaySession::default();
+        let mut a = connection(&session, NetState_NetState_inBattle);
+        let mut b = connection(&session, NetState_NetState_inBattle);
+        session.add_net_connection(&mut *a, 0);
+        session.add_net_connection(&mut *b, 1);
         b.stateFlags.connected = false;
-        Netplay_NotifyAll_battleInput(0x23);
+        session.netplay_notify_all_battle_input(0x23);
         assert_eq!(a.queue.size, 1);
         assert_eq!(b.queue.size, 0);
-        assert_eq!(
-            (*(*a.queue.first).packet.cast::<Packet_BattleInput>()).state,
-            0x23
-        );
+        assert_eq!(&*(*a.queue.first).packet, &Packet::BattleInput(0x23));
         b.stateFlags.connected = true;
-        Netplay_NotifyAll_checksum(37, 0x12345678);
+        session.netplay_notify_all_checksum(37, 0x12345678);
         assert_eq!(a.queue.size, 2);
         assert_eq!(b.queue.size, 1);
-        let packet = (*b.queue.first).packet.cast::<Packet_Checksum>();
-        assert_eq!(u32::from_be((*packet).frameNr), 37);
-        assert_eq!(u32::from_be((*packet).checksum), 0x12345678);
-        *slots = saved[0];
-        *slots.add(1) = saved[1];
+        assert_eq!(
+            &*(*b.queue.first).packet,
+            &Packet::Checksum {
+                frame: 37,
+                checksum: 0x12345678
+            }
+        );
+        session.remove_net_connection(0);
+        session.remove_net_connection(1);
         PacketQueue_uninit(&raw mut a.queue);
         PacketQueue_uninit(&raw mut b.queue);
     }

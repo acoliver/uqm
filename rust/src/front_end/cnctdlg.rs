@@ -20,6 +20,7 @@ pub struct ConnectDialogState {
     pub Initialized: BOOLEAN,
     pub which_side: c_int,
     pub confirmed: c_int,
+    pub session: *mut crate::supermelee::netplay::NetplaySession,
 }
 static mut MENU: WIDGET_MENU_SCREEN = unsafe { mem::zeroed() };
 static mut BUTTONS: [WIDGET_BUTTON; 3] = unsafe { mem::zeroed() };
@@ -248,22 +249,24 @@ unsafe extern "C" fn OnTextEntryEvent(widget: *mut WIDGET_TEXTENTRY) -> c_int {
 }
 unsafe extern "C" fn do_connect(_: *mut WIDGET, event: c_int) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
-        let peer = &mut netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
+        let peer = &mut (*(*CURRENT_STATE).session).options_mut().peer
+            [(*CURRENT_STATE).which_side as usize];
         peer.host = TEXTS[0].value.as_ptr();
         peer.port = TEXTS[1].value.as_ptr();
         peer.isServer = false;
         (*CURRENT_STATE).confirmed = 1;
-        netplayOptions.inputDelay = SLIDER.value as usize;
+        (*(*CURRENT_STATE).session).options_mut().inputDelay = SLIDER.value as usize;
         DONE = 1;
     }
     0
 }
 unsafe extern "C" fn do_listen(_: *mut WIDGET, event: c_int) -> c_int {
     if event == WIDGET_EVENT_SELECT as c_int {
-        let peer = &mut netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
+        let peer = &mut (*(*CURRENT_STATE).session).options_mut().peer
+            [(*CURRENT_STATE).which_side as usize];
         peer.port = TEXTS[1].value.as_ptr();
         peer.isServer = true;
-        netplayOptions.inputDelay = SLIDER.value as usize;
+        (*(*CURRENT_STATE).session).options_mut().inputDelay = SLIDER.value as usize;
         (*CURRENT_STATE).confirmed = 1;
         DONE = 1;
     }
@@ -339,7 +342,7 @@ unsafe fn CreateWidgets() {
     SLIDER.min = 0;
     SLIDER.max = 9;
     SLIDER.step = 1;
-    SLIDER.value = netplayOptions.inputDelay as c_int;
+    SLIDER.value = (*(*CURRENT_STATE).session).options_mut().inputDelay as c_int;
     SLIDER.category = game_string(NETMELEE_STRING_BASE as usize + 24);
     for entry in
         std::slice::from_raw_parts_mut(ptr::addr_of_mut!(TEXTS).cast::<WIDGET_TEXTENTRY>(), 2)
@@ -360,7 +363,8 @@ unsafe fn CreateWidgets() {
     }
     TEXTS[0].category = game_string(NETMELEE_STRING_BASE as usize + 22);
     TEXTS[1].category = game_string(NETMELEE_STRING_BASE as usize + 23);
-    let peer = &netplayOptions.peer[(*CURRENT_STATE).which_side as usize];
+    let peer =
+        &(*(*CURRENT_STATE).session).options_mut().peer[(*CURRENT_STATE).which_side as usize];
     if TEXTS[0].value.as_ptr() != peer.host {
         libc::strncpy(
             TEXTS[0].value.as_mut_ptr(),
@@ -443,13 +447,16 @@ unsafe extern "C" fn DoMeleeConnectDialog(state: *mut ConnectDialogState) -> BOO
 /// # Safety
 /// Must run on the game thread with graphics, input, strings and netplay options
 /// initialized. `side` must index one of the two netplay peer records.
-#[no_mangle]
-pub unsafe extern "C" fn MeleeConnectDialog(side: c_int) -> BOOLEAN {
+pub unsafe fn melee_connect_dialog(
+    session: &mut crate::supermelee::netplay::NetplaySession,
+    side: c_int,
+) -> BOOLEAN {
     PLAYER_FONT_HANDLE =
         LoadGraphicInstance(crate::navigation::abi::PLAYER_FONT.as_ptr().cast()).cast();
     let mut state: ConnectDialogState = mem::zeroed();
     state.Initialized = 0;
     state.which_side = side;
+    state.session = session;
     state.InputFunc = Some(DoMeleeConnectDialog);
     state.confirmed = 1;
     CURRENT_STATE = &mut state;

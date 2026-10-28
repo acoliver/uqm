@@ -49,5 +49,5 @@ unsafe extern "C" fn enter_setup(conn: *mut NetConnection, _arg: *mut libc::c_vo
     connectedFeedback(conn);
     assert_eq!(NETPLAY_NUM_PLAYERS, 2);
     Melee_bootstrapSyncTeam(melee, player as usize);
-    flushPacketQueues();
+    (*(*conn).session).flush_packet_queues();
 }

@@ -42,7 +42,6 @@ pub struct ListenState {
 
 /// # Safety
 /// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ListenState_incRef(state: *mut ListenState) {
     assert!((*state).ref_count < u32::MAX);
     (*state).ref_count += 1;
@@ -50,7 +49,6 @@ pub unsafe extern "C" fn ListenState_incRef(state: *mut ListenState) {
 
 /// # Safety
 /// `state` must hold a live reference; listening descriptors must be closed before the final decrement.
-#[no_mangle]
 pub unsafe extern "C" fn ListenState_decRef(state: *mut ListenState) -> bool {
     assert!((*state).ref_count > 0);
     (*state).ref_count -= 1;
@@ -65,7 +63,6 @@ pub unsafe extern "C" fn ListenState_decRef(state: *mut ListenState) -> bool {
 
 /// # Safety
 /// `state` must hold a live reference. Cancels resolution, closes listeners and consumes that reference.
-#[no_mangle]
 pub unsafe extern "C" fn ListenState_close(state: *mut ListenState) {
     if !(*state).resolve_state.is_null() {
         resolve_close((*state).resolve_state);
@@ -86,7 +83,6 @@ pub unsafe extern "C" fn ListenState_close(state: *mut ListenState) {
 
 /// # Safety
 /// `state` must hold a live reference.
-#[no_mangle]
 pub unsafe extern "C" fn ListenState_getExtra(state: *mut ListenState) -> *mut c_void {
     (*state).extra
 }
@@ -236,7 +232,6 @@ unsafe extern "C" fn accept_callback(nd: *mut NetDescriptor) {
 /// # Safety
 /// `service` and `flags` must be valid for the call; callbacks and `extra` must outlive
 /// the operation. Each connect callback takes ownership of the accepted descriptor.
-#[no_mangle]
 pub unsafe extern "C" fn listenPort(
     service: *const c_char,
     proto: c_int,

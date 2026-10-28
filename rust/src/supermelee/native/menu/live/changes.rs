@@ -274,7 +274,7 @@ pub unsafe extern "C" fn abortFeedback(conn: *mut NetConnection, reason: u32) {
 /// Call on the game thread with initialized melee UI resources. All pointers
 /// must remain live through notification callbacks; side and slot indices must be in range.
 pub unsafe extern "C" fn resetFeedback(conn: *mut NetConnection, reason: u32, remote: bool) {
-    flushPacketQueues();
+    (*P_MELEE_STATE).netplay.flush_packet_queues();
     if reason == 2 && !remote {
         return;
     }

@@ -129,12 +129,12 @@ mod tests {
             conn.state = NetState_NetState_inSetup;
             PacketQueue_init(&raw mut conn.queue);
             Netplay_Notify_setShip(&raw mut conn, 1, 4, MeleeShip_MELEE_ARILOU);
-            let packet = (*conn.queue.first).packet.cast::<Packet_Fleet>();
-            assert_eq!((*packet).side, NetplaySide_NetplaySide_remote as u8);
-            assert_eq!((*(*packet).ships.as_ptr()).index, 4);
             assert_eq!(
-                (*(*packet).ships.as_ptr()).ship,
-                MeleeShip_MELEE_ARILOU as u8
+                &*(*conn.queue.first).packet,
+                &Packet::Fleet {
+                    side: NetplaySide_NetplaySide_remote as u8,
+                    ships: vec![(4, MeleeShip_MELEE_ARILOU as u8)]
+                }
             );
             assert_eq!(side(&conn, 0), NetplaySide_NetplaySide_local);
             conn.state = NetState_NetState_preBattle;

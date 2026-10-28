@@ -4,6 +4,7 @@ pub mod bridge_log;
 pub mod callback;
 pub mod collections;
 pub mod graphics;
+pub mod host;
 pub mod input;
 pub mod io;
 pub mod log_abi;

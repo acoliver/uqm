@@ -21,30 +21,32 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
     GamePaused = 0;
     if key(KEY_MENU_CANCEL) {
         (*state).InputFunc = Some(DoMelee);
-        cancelConfirmations();
+        (*state).netplay.cancel_confirmations();
         status(game_string(NETMELEE_STRING_BASE as i32 + 4));
         return 1;
     }
     if key(KEY_MENU_LEFT) || key(KEY_MENU_UP) || key(KEY_MENU_DOWN) {
         (*state).InputFunc = Some(DoMelee);
-        cancelConfirmations();
+        (*state).netplay.cancel_confirmations();
         status(c"".as_ptr());
         return DoMelee(state);
     }
-    closeDisconnectedConnections();
-    netInput();
+    (*state).netplay.close_disconnected_connections();
+    (*state).netplay.net_input();
     SleepThread(840 / 120);
     let count = ready();
     if count == -1 {
-        cancelConfirmations();
-        flushPacketQueues();
+        (*state).netplay.cancel_confirmations();
+        (*state).netplay.flush_packet_queues();
         (*state).InputFunc = Some(DoMelee);
         return 1;
     }
     if count != 2 {
         return 1;
     }
-    Netplay_NotifyAll_inputDelay(netplayOptions.inputDelay);
+    (*state)
+        .netplay
+        .netplay_notify_all_input_delay((&(*state).netplay).options.inputDelay);
     for player in [0usize, 1] {
         if PlayerControl[player] & NETWORK_CONTROL == 0 {
             continue;
@@ -58,11 +60,14 @@ pub(super) unsafe extern "C" fn confirm(state: *mut MELEE_STATE) -> u32 {
             Netplay_Notify_seedRandom(conn, SeedRandomNumbers());
         }
     }
-    flushPacketQueues();
-    if !negotiateReadyConnections(true, 5) {
+    (*state).netplay.flush_packet_queues();
+    if !(*state).netplay.negotiate_ready_connections(true, 5) {
         return 0;
     }
-    if !setupInputDelay(netplayOptions.inputDelay) {
+    if !(*state)
+        .netplay
+        .setup_input_delay((&(*state).netplay).options.inputDelay)
+    {
         return 0;
     }
     (*state).InputFunc = Some(DoMelee);
@@ -83,7 +88,14 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         crate::supermelee::native::battle_picker::live::FillPickMeleeFrame((*state).meleeSetup);
         WaitForSoundEnd(u16::MAX);
         load_gravity_well((TFB_Random() as u16 % NUMBER_OF_PLANET_TYPES as u16) as u8);
+        let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
+        assert!(
+            (*battle).net.is_none(),
+            "melee battle already owns a session"
+        );
+        (*battle).net = Some((*state).netplay.battle_net());
         Battle(None);
+        (*battle).net = None;
         free_gravity_well();
         ClearPlayerInputAll();
         if GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16 != 0 {
@@ -137,7 +149,7 @@ pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
     if ready() != 2 {
         status(game_string(NETMELEE_STRING_BASE as i32 + 7));
     }
-    confirmConnections();
+    (*state).netplay.confirm_connections();
     (*state).InputFunc = Some(confirm);
 }
 pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
@@ -183,7 +195,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         SetContextForeGroundColor(color);
         UnbatchGraphics();
     }
-    netInput();
+    (*state).netplay.net_input();
     if key(KEY_MENU_CANCEL) {
         if !connection(side).is_null() {
             closePlayerNetworkConnection(side as u16);
@@ -192,7 +204,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
         redraw();
         (*state).InputFunc = Some(DoMelee);
         (*state).LastInputTime = GetTimeCounter();
-        flushPacketQueues();
+        (*state).netplay.flush_packet_queues();
         return 1;
     }
     let conn = connection(side);
@@ -209,7 +221,7 @@ pub(super) unsafe extern "C" fn connecting(state: *mut MELEE_STATE) -> u32 {
             (*state).MeleeOption = 4;
         }
     }
-    flushPacketQueues();
+    (*state).netplay.flush_packet_queues();
     SleepThreadUntil(time.wrapping_add(840 / 30));
     1
 }
