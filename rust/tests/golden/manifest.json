@@ -234,8 +234,8 @@
       "sha256": "71c93c8d2e4e69df3e56287523e962ee32bc37825fef1d2849584e181f174267"
     },
     "parity/counts/campaign-s09g-funded-vault.toml": {
-      "bytes": 186867,
-      "sha256": "11976d76edd63d350598f2a6ea3944232071800a561bf0002d65db0971ec8818"
+      "bytes": 435546,
+      "sha256": "645774da64549c728aab3f432479ddb056a2c7e5e53b888bc8479573a770b200"
     },
     "parity/counts/campaign-s09h-rainbow-refuel.toml": {
       "bytes": 610114,
