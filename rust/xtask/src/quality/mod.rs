@@ -7,6 +7,9 @@ mod deps;
 mod layers;
 mod macros;
 pub(crate) mod metrics;
+mod recorded;
+#[cfg(test)]
+mod recorded_tests;
 #[cfg(test)]
 mod scoped_tests;
 pub(crate) mod tool;
@@ -32,6 +35,7 @@ struct Options {
     only: Vec<String>,
     scopes: BTreeMap<String, u64>,
     tighten: bool,
+    record: bool,
     defs: bool,
     prefix: bool,
     allow_growth: bool,
@@ -39,9 +43,27 @@ struct Options {
 }
 
 impl Options {
+    fn approved(&self) -> bool {
+        self.allow_growth || self.allow_engine_os
+    }
+
     fn validate_scopes(&self) -> Result<(), String> {
         if !self.scopes.is_empty() && self.positional.first().is_none_or(|p| p != "budget") {
             return Err("--scope is only valid for quality budget".into());
+        }
+        if self.allow_growth && self.allow_engine_os {
+            return Err("choose --allow-growth or --allow-engine-os, not both".into());
+        }
+        if self.tighten && (self.allow_growth || self.allow_engine_os || self.record) {
+            return Err("--tighten cannot be combined with growth approval or --record".into());
+        }
+        if self.record {
+            if !self.allow_growth && !self.allow_engine_os {
+                return Err("--record requires quality-growth-approved (--allow-growth or --allow-engine-os)".into());
+            }
+            if self.positional.first().is_some_and(|p| p != "check") {
+                return Err("--record is only valid for quality check".into());
+            }
         }
         Ok(())
     }
@@ -85,6 +107,7 @@ impl Options {
                     }
                 }
                 "--tighten" => options.tighten = true,
+                "--record" => options.record = true,
                 "--defs" => options.defs = true,
                 "--prefix" => options.prefix = true,
                 "--allow-growth" => options.allow_growth = true,
@@ -172,19 +195,42 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if command == "check" {
         deps::check(root)?;
     }
+    check_measurement(root, &baseline_path, &measurement, &options, native_files)
+}
+
+fn check_measurement(
+    root: &Path,
+    baseline_path: &Path,
+    measurement: &metrics::Measurement,
+    options: &Options,
+    native_files: u64,
+) -> Result<(), String> {
     let existing = baseline_path.exists();
     let mut baseline = if existing {
-        Baseline::read(&baseline_path)?
+        Baseline::read(baseline_path)?
     } else {
         Baseline::default()
     };
-    let measured = budgets::scoped_entries(&measurement, &baseline.budget);
-    initialize_layers(root, &options, &mut baseline)?;
-    budgets::check(&measurement, &baseline.budget)?;
+    let measured = budgets::scoped_entries(measurement, &baseline.budget);
+    initialize_layers(root, options, &mut baseline)?;
+    budgets::check(measurement, &baseline.budget)?;
+    if options.record {
+        let current = budgets::without_budgeted(&measured, &baseline.budget);
+        recorded::growth(&mut baseline, &current, options.allow_engine_os);
+    }
+    if options.approved() {
+        let current = budgets::without_budgeted(&measured, &baseline.budget);
+        let entries = budgets::without_budgeted(&baseline.entries, &baseline.budget);
+        recorded::check(&current, &entries, &entries)?;
+    }
     if existing && !options.allow_growth {
+        let mut limits = baseline.entries.clone();
+        if options.allow_engine_os {
+            approvals::engine_os(&mut limits);
+        }
         baseline::check_limits(
             &budgets::without_budgeted(&measured, &baseline.budget),
-            &budgets::without_budgeted(&baseline.entries, &baseline.budget),
+            &budgets::without_budgeted(&limits, &baseline.budget),
             &baseline.moved,
             false,
         )?;
@@ -198,17 +244,15 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         None
     };
     if let Some(reference) = &options.base {
-        base_baseline = compare_base(root, reference, &measurement, &mut baseline, &options)?;
+        base_baseline = compare_base(root, reference, measurement, &mut baseline, options)?;
     }
-    print_summary(&baseline, &measurement, measured.len(), native_files)?;
+    print_summary(&baseline, measurement, measured.len(), native_files)?;
     if options.tighten {
-        if options.allow_growth {
-            return Err(
-                "--tighten cannot raise a baseline; do not combine it with --allow-growth".into(),
-            );
-        }
-        baseline.tighten(&measurement, base_baseline.as_ref())?;
-        baseline.write(&baseline_path)?;
+        baseline.tighten(measurement, base_baseline.as_ref())?;
+        baseline.write(baseline_path)?;
+    }
+    if options.record {
+        baseline.write(baseline_path)?;
     }
     Ok(())
 }
@@ -326,9 +370,6 @@ fn initialize_layers(
         );
         baseline.layers = true;
     }
-    if options.allow_engine_os {
-        approvals::engine_os(&mut baseline.entries);
-    }
     Ok(())
 }
 fn compare_base(
@@ -341,6 +382,9 @@ fn compare_base(
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
     let mut before = base.baseline();
+    if options.approved() {
+        recorded::check_base(&measured, baseline, &before, recorded.as_ref())?;
+    }
     if options.allow_engine_os {
         approvals::engine_os(&mut before);
     }
