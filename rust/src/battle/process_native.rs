@@ -686,25 +686,38 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn AllocElement() -> HELEMENT {
         crate::app::bridge::enter(|cx| {
-            let handle = if let Some(id) = cx.b.elements.alloc() {
-                let index = DisplayFreeList;
-                if index == END {
-                    crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
-                    libc::exit(libc::EXIT_FAILURE);
-                }
-                let index =
-                    alloc_display_prim((&raw mut DisplayArray).cast(), &raw mut DisplayFreeList);
-                cx.b.elements[id].PrimIndex = index;
-                (*primitive(index)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                cx.b.elements.raw(id)
-            } else {
-                ptr::null_mut()
-            };
-            crate::collections::observation::record(
-                crate::collections::observation::Event::Allocate(handle as usize),
-            );
-            handle
+            cx.alloc_element()
+                .map_or(ptr::null_mut(), |id| cx.b.elements.raw(id))
         })
+    }
+
+    impl Cx<'_> {
+        pub fn alloc_element(&mut self) -> Option<ElementId> {
+            // SAFETY: the battle exclusively owns its initialized primitive pool.
+            unsafe {
+                let handle = if let Some(id) = self.b.elements.alloc() {
+                    let index = DisplayFreeList;
+                    if index == END {
+                        crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
+                        libc::exit(libc::EXIT_FAILURE);
+                    }
+                    let index = alloc_display_prim(
+                        (&raw mut DisplayArray).cast(),
+                        &raw mut DisplayFreeList,
+                    );
+                    self.b.elements[id].PrimIndex = index;
+                    (*primitive(index)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                    self.b.elements.raw(id)
+                } else {
+                    ptr::null_mut()
+                };
+                crate::collections::observation::record(
+                    crate::collections::observation::Event::Allocate(handle as usize),
+                );
+
+                self.b.elements.id(handle)
+            }
+        }
     }
 
     /// # Safety

@@ -1,19 +1,17 @@
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-mod native_ship_common;
-use native_ship_common::*;
+#[path = "support/battle.rs"]
+mod battle;
+use battle::*;
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, angle_to_facing, element, frame_index, normalize_facing};
-unsafe extern "C" {
-    fn init_vux() -> *mut RACE_DESC;
-}
 #[test]
 fn descriptor_laser_and_limpet_launch() {
     battle_context::run(|| {
         let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(init_vux, 0);
+            let mut ship = Ship::new(SPECIES_ID_VUX_ID, 0);
             assert_eq!(
                 ship.desc.ship_info.ship_flags,
                 (FIRES_FORE | SEEKING_SPECIAL | IMMEDIATE_WEAPON) as u16
@@ -40,7 +38,7 @@ fn descriptor_laser_and_limpet_launch() {
             assert_eq!((dx, dy), (600 << VELOCITY_SHIFT, 0));
             FreeElement(h);
             ship.ss.cur_status_flags = SPECIAL as u16;
-            with_rng(11, 0, || (ship.desc.postprocess_func.unwrap())(ship.ptr()));
+            with_rng(11, 0, || ship.postprocess());
             assert_eq!(ship.desc.ship_info.energy_level, 38);
             assert_eq!(ship.ss.special_counter, 7);
             let e = element(disp_q.tail);
@@ -71,10 +69,10 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
     battle_context::run(|| {
         let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(init_vux, 0);
-            let mut enemy = Ship::new(init_vux, 1);
+            let mut ship = Ship::new(SPECIES_ID_VUX_ID, 0);
+            let mut enemy = Ship::new(SPECIES_ID_VUX_ID, 1);
             ship.ss.cur_status_flags = SPECIAL as u16;
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
+            ship.postprocess();
             let e = element(disp_q.tail);
             let collide = (*e).collision_func.unwrap();
             for (increment, max, expected_inc, expected_max) in
@@ -90,9 +88,9 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                     uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                         collide,
                         e,
-                        ptr::null_mut(),
+                        &mut POINT { x: 0, y: 0 },
                         enemy.ptr(),
-                        ptr::null_mut(),
+                        &mut POINT { x: 0, y: 0 },
                     )
                 });
                 assert_eq!(enemy.desc.characteristics.turn_wait, 255);
@@ -107,14 +105,14 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
                     (COLLISION | DISAPPEARING) as u16
                 );
             }
-            let mut object: ELEMENT = mem::zeroed();
+            let mut object = Object::new();
             with_rng(12, 0, || {
                 uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                     collide,
                     e,
-                    ptr::null_mut(),
-                    &mut object,
-                    ptr::null_mut(),
+                    &mut POINT { x: 0, y: 0 },
+                    object.ptr(),
+                    &mut POINT { x: 0, y: 0 },
                 )
             });
         }
@@ -125,24 +123,24 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
     battle_context::run(|| {
         let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(init_vux, 0);
-            let enemy = Ship::new(init_vux, 1);
+            let mut ship = Ship::new(SPECIES_ID_VUX_ID, 0);
+            let enemy = Ship::new(SPECIES_ID_VUX_ID, 1);
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
             (*enemy.ptr()).next = (*enemy.ptr()).current;
             (*ship.ptr()).state_flags |= APPEARING as u16;
             let previous = GlobData.Game_state.CurrentActivity;
             GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
-            with_rng(42, 0, || (ship.desc.preprocess_func.unwrap())(ship.ptr()));
+            with_rng(42, 0, || ship.preprocess());
             assert_eq!((*ship.ptr()).current.location.x, 4000);
-            assert!(ship.desc.preprocess_func.is_none());
-            ship.desc.preprocess_func = (*init_vux()).preprocess_func;
+            assert_eq!(ship.desc.callbacks()[1], 0);
+            ship.desc.race_state = uqm_rust::engine::battle::RaceState::Vux { entry_done: false };
             GlobData.Game_state.CurrentActivity = 0;
             TFB_SeedRandom(42);
             let raw_x = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
             let raw_y = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
             let x = raw_x & !3;
             let y = raw_y & !3;
-            with_rng(42, 2, || (ship.desc.preprocess_func.unwrap())(ship.ptr()));
+            with_rng(42, 2, || ship.preprocess());
             assert_eq!(
                 (
                     (*ship.ptr()).current.location.x,
@@ -157,7 +155,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             assert_eq!(ship.ss.ShipFacing, face);
             assert_eq!(frame_index((*ship.ptr()).current.image.frame), face);
             assert!((*ship.ptr()).hTarget.is_null());
-            assert!(ship.desc.preprocess_func.is_none());
+            assert_eq!(ship.desc.callbacks()[1], 0);
             assert_eq!(
                 (*ship.ptr()).IntersectControl.EndPoint.x,
                 (x >> ONE_SHIFT) as i16
@@ -171,9 +169,9 @@ fn ai_changes_threat_state_and_uses_turning_energy_threshold() {
     battle_context::run(|| {
         let _battle = Battle::new(16);
         unsafe {
-            let mut ship = Ship::new(init_vux, 0);
-            let enemy = Ship::new(init_vux, 1);
-            let mut threat: ELEMENT = mem::zeroed();
+            let mut ship = Ship::new(SPECIES_ID_VUX_ID, 0);
+            let enemy = Ship::new(SPECIES_ID_VUX_ID, 1);
+            let mut threat = Object::new();
             ship.ss.weapon_counter = 1;
             for flags in [0, FINITE_LIFE, FINITE_LIFE | CREW_OBJECT] {
                 for energy in [19, 20] {
@@ -188,7 +186,7 @@ fn ai_changes_threat_state_and_uses_turning_energy_threshold() {
                         MoveState: MOVEMENT_STATE_ENTICE,
                     };
                     concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                        ObjectPtr: &mut threat,
+                        ObjectPtr: threat.ptr(),
                         facing: 0,
                         which_turn: 3,
                         MoveState: MOVEMENT_STATE_ENTICE,

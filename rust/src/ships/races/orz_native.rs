@@ -711,7 +711,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.special[0],
                             angle_to_facing(FULL_CIRCLE as i32) as COUNT,
                         ));
-                        (*effect).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+                        (*effect).preprocess_func = Some(ElementHook::Native(animation_preprocess));
                         (*effect).pParent = ss.cast();
                         (*prim(effect)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                         put_element(effect_h);

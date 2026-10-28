@@ -134,7 +134,7 @@ pub type ElementProcessFunc =
 /// Element collision function
 pub type ElementCollisionFunc = Option<
     crate::engine::battle::CollisionHook<
-        unsafe extern "C" fn(*mut Element, *const Point, *mut Element, *const Point),
+        unsafe extern "C" fn(*mut Element, *mut Point, *mut Element, *mut Point),
     >,
 >;
 
@@ -977,17 +977,17 @@ mod tests {
     }
 
     #[test]
-    fn element_layout_matches_c_abi() {
-        assert_eq!(std::mem::size_of::<Element>(), 176);
+    fn element_layout_matches_native_hook_record() {
+        assert_eq!(std::mem::size_of::<Element>(), 208);
         assert_eq!(std::mem::offset_of!(Element, preprocess_func), 16);
-        assert_eq!(std::mem::offset_of!(Element, player_nr), 48);
-        assert_eq!(std::mem::offset_of!(Element, state_flags), 50);
-        assert_eq!(std::mem::offset_of!(Element, life_span), 52);
-        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 54);
-        assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
-        assert_eq!(std::mem::offset_of!(Element, current), 112);
-        assert_eq!(std::mem::offset_of!(Element, next), 136);
-        assert_eq!(std::mem::offset_of!(Element, p_parent), 160);
-        assert_eq!(std::mem::offset_of!(Element, h_target), 168);
+        assert_eq!(std::mem::offset_of!(Element, player_nr), 80);
+        assert_eq!(std::mem::offset_of!(Element, state_flags), 82);
+        assert_eq!(std::mem::offset_of!(Element, life_span), 84);
+        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 86);
+        assert_eq!(std::mem::offset_of!(Element, prim_index), 136);
+        assert_eq!(std::mem::offset_of!(Element, current), 144);
+        assert_eq!(std::mem::offset_of!(Element, next), 168);
+        assert_eq!(std::mem::offset_of!(Element, p_parent), 192);
+        assert_eq!(std::mem::offset_of!(Element, h_target), 200);
     }
 }

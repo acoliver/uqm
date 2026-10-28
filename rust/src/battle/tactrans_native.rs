@@ -128,14 +128,14 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, player_input, primitive, rgb15, set_activity,
+        activity, player_input, rgb15, set_activity,
     };
     use crate::battle::battle_native::BattleSong;
+    use crate::battle::context_access::SharedFrames;
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
     use crate::collections::observation::image;
-    use crate::ships::native::{
-        cosine, facing_to_angle, init_intersect_points, put_element, sine, starship,
-    };
+    use crate::engine::battle::{Cx, ElementFn, ElementId, Parent, ShipId};
+    use crate::ships::native::{cosine, facing_to_angle, sine, starship};
     use abi::*;
     use std::{mem, ptr};
 
@@ -148,17 +148,13 @@ pub(crate) mod engine {
 
     use crate::battle::status_native::engine::PostProcessStatus;
 
-    use crate::battle::status_native::engine::PreProcessStatus;
-
     use crate::battle::ship_native::engine::ship_preprocess;
 
     use crate::battle::ship_native::engine::ship_postprocess;
 
-    extern "C" {
-        static mut explosion: [FRAME; 3];
-    }
+    extern "C" {}
 
-    fn same_callback(a: ElementProcessFunc, b: unsafe extern "C" fn(*mut ELEMENT)) -> bool {
+    fn same_callback(a: ElementProcessFunc, b: ElementFn) -> bool {
         a.map(|f| f.address()) == Some(b as usize)
     }
 
@@ -244,51 +240,53 @@ pub(crate) mod engine {
         true
     }
 
-    pub(crate) unsafe extern "C" fn preprocess_dead_ship(_ship: *mut ELEMENT) {
-        ProcessSound(usize::MAX as SOUND, ptr::null_mut());
+    pub(crate) fn preprocess_dead_ship(cx: &mut Cx<'_>, _ship: ElementId) {
+        cx.silence_battle_sounds();
     }
 
     /// # Safety
     /// `dead` must be a live dying ship element with an attached starship; its display queue and audio state must be initialized.
-    pub unsafe extern "C" fn cleanup_dead_ship(dead: *mut ELEMENT) {
-        ProcessSound(usize::MAX as SOUND, ptr::null_mut());
-        let dead_ship = starship(dead);
-        (*dead_ship).crew_level = (*(*dead_ship).RaceDescPtr).ship_info.crew_level;
+    pub fn cleanup_dead_ship(cx: &mut Cx<'_>, dead: ElementId) {
+        cx.silence_battle_sounds();
+        let dead_ship = cx.owner(dead);
+        cx.ship_mut(dead_ship).crew_level = cx.desc(dead_ship).ship_info.crew_level;
         let mut music_started = false;
-        let mut h = disp_q.head;
-        while !h.is_null() {
-            let e = h.cast::<ELEMENT>();
-            h = (*e).succ;
-            let ship = starship(e);
-            if ship == dead_ship {
-                (*e).pParent = ptr::null_mut();
-                if (*e).state_flags & CREW_OBJECT as u16 == 0
-                    || !same_callback((*e).preprocess_func, crew_preprocess)
+        let mut next = cx.b.elements.head();
+        while let Some(e) = next {
+            next = cx.b.elements.succ(e);
+            let parent = cx.parent(e);
+            if parent == Parent::Ship(dead_ship) {
+                cx.set_parent(e, None);
+                if cx.b.elements[e].state_flags & CREW_OBJECT as u16 == 0
+                    || !same_callback(cx.b.elements[e].preprocess_func, crew_preprocess)
                 {
-                    (*primitive(e)).Type = gfx_object_NUM_PRIMS as u8;
-                    (*e).__bindgen_anon_1.life_span = 0;
-                    (*e).state_flags = (NONSOLID | DISAPPEARING | FINITE_LIFE) as u16;
-                    (*e).preprocess_func = None;
-                    (*e).postprocess_func = None;
-                    (*e).death_func = None;
-                    (*e).collision_func = None;
+                    cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
+                    cx.b.elements[e].set_life_span(0);
+                    cx.b.elements[e].state_flags = (NONSOLID | DISAPPEARING | FINITE_LIFE) as u16;
+                    cx.b.elements[e].preprocess_func = None;
+                    cx.b.elements[e].postprocess_func = None;
+                    cx.b.elements[e].death_func = None;
+                    cx.b.elements[e].collision_func = None;
                 }
             }
-            if !ship.is_null() && (*ship).cur_status_flags & PLAY_VICTORY_DITTY as u16 != 0 {
-                music_started = true;
-                PlayDitty(ship);
-                (*ship).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
+            if let Parent::Ship(ship) = parent {
+                if cx.ship(ship).cur_status_flags & PLAY_VICTORY_DITTY as u16 != 0 {
+                    music_started = true;
+                    cx.play_ditty(ship);
+                    cx.ship_mut(ship).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
+                }
             }
         }
-        (*dead).__bindgen_anon_1.life_span = cleanup_lifetime(
+        let life = cleanup_lifetime(
             minimum_ditty_frames(ONE_SECOND),
             music_started,
-            dead_ship == WINNER_STAR_SHIP,
+            Some(dead_ship) == cx.winner(),
         );
-        (*dead).death_func = Some(ElementHook::Legacy(new_ship));
-        (*dead).preprocess_func = Some(ElementHook::Legacy(preprocess_dead_ship));
-        (*dead).state_flags &= !(DISAPPEARING as u16);
-        (*dead).pParent = dead_ship.cast();
+        cx.b.elements[dead].set_life_span(life);
+        cx.b.elements[dead].death_func = Some(ElementHook::Native(new_ship));
+        cx.b.elements[dead].preprocess_func = Some(ElementHook::Native(preprocess_dead_ship));
+        cx.b.elements[dead].state_flags &= !(DISAPPEARING as u16);
+        cx.set_parent(dead, Some(dead_ship));
     }
 
     unsafe fn setMinShipLifeSpan(ship: *mut ELEMENT, life: COUNT) {
@@ -329,11 +327,8 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// `dead` must be a live ship awaiting replacement with a valid starship and initialized battle, fleet, and network state.
-    #[no_mangle]
-    pub unsafe extern "C" fn new_ship(dead: *mut ELEMENT) {
-        new_ship_with_picker(dead, |ship, side| GetNextStarShip(ship, side));
+    pub fn new_ship(cx: &mut Cx<'_>, dead: ElementId) {
+        cx.replace_dead_ship(dead);
     }
 
     /// Run the replacement transition with an explicit selection/spawn boundary.
@@ -342,11 +337,11 @@ pub(crate) mod engine {
     /// As for `new_ship`. The picker must return the next-ship result for the
     /// supplied player and must not retain the outgoing ship pointer.
     pub unsafe fn new_ship_with_picker(
+        cx: &mut Cx<'_>,
         dead: *mut ELEMENT,
         pick: impl FnOnce(*mut STARSHIP, COUNT) -> BOOLEAN,
     ) {
-        let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
-        let net = (*battle).net.clone();
+        let net = cx.b.net.clone();
         let ship = starship(dead);
         if !readyForBattleEnd() {
             (*dead).state_flags &= !(DISAPPEARING as u16);
@@ -378,11 +373,8 @@ pub(crate) mod engine {
             UpdateShipFragCrew(ship);
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
-        if pick(ship, (*ship).playerNr as COUNT) != 0 {
-            if net
-                .as_ref()
-                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
-            {
+        if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
+            if net.as_ref().is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle)) {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;
@@ -390,7 +382,7 @@ pub(crate) mod engine {
             if restart {
                 BattleSong(1);
             }
-        } else if (*battle).counters.contains(&0) {
+        } else if cx.b.counters.contains(&0) {
             set_activity(activity() & !(IN_BATTLE as u16));
         } else {
             set_activity(activity() | CHECK_ABORT as u16);
@@ -398,47 +390,46 @@ pub(crate) mod engine {
         BatchGraphics();
     }
 
-    pub(crate) unsafe extern "C" fn explosion_preprocess(ship: *mut ELEMENT) {
-        let tick = ((NUM_EXPLOSION_FRAMES * 3) as u16)
-            .wrapping_sub((*ship).__bindgen_anon_1.life_span) as u8;
+    pub(crate) fn explosion_preprocess(cx: &mut Cx<'_>, ship: ElementId) {
+        let tick =
+            ((NUM_EXPLOSION_FRAMES * 3) as u16).wrapping_sub(cx.b.elements[ship].life_span()) as u8;
         let step = explosion_step(tick);
         if step.clear_preprocess {
-            (*ship).preprocess_func = None;
+            cx.b.elements[ship].preprocess_func = None;
         }
         if step.hide_primitive {
-            (*primitive(ship)).Type = gfx_object_NUM_PRIMS as u8;
-            (*ship).state_flags |= CHANGING as u16;
+            cx.primitive(ship).Type = gfx_object_NUM_PRIMS as u8;
+            cx.b.elements[ship].state_flags |= CHANGING as u16;
         }
         for _ in 0..step.fragments {
-            let h = AllocElement();
-            if h.is_null() {
+            let Some(e) = cx.alloc_element() else {
                 continue;
-            }
-            put_element(h);
-            let e = h.cast::<ELEMENT>();
-            (*e).playerNr = NEUTRAL_PLAYER_NUM as i16;
-            (*e).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-            (*e).__bindgen_anon_1.life_span = 9;
-            (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-            image!(set; (*e).current.image.farray, (&raw mut explosion).cast());
-            image!(frame; (*e).current.image.frame, explosion[0]);
-            let (angle, dist) = explosion_position_random(TFB_Random());
-            (*e).current.location.x = (*ship)
+            };
+            cx.put(e);
+            cx.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
+            cx.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            cx.b.elements[e].set_life_span(9);
+            cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
+            let array = cx.shared_frames(SharedFrames::Explosion);
+            image!(set; cx.b.elements[e].current.image.farray, array);
+            let frame = cx.shared_frame(SharedFrames::Explosion);
+            image!(frame; cx.b.elements[e].current.image.frame, frame);
+            let (angle, dist) = explosion_position_random((cx.rng)());
+            cx.b.elements[e].current.location.x = cx.b.elements[ship]
                 .current
                 .location
                 .x
                 .wrapping_add(cosine(angle as i32, dist as i32));
-            (*e).current.location.y = (*ship)
+            cx.b.elements[e].current.location.y = cx.b.elements[ship]
                 .current
                 .location
                 .y
                 .wrapping_add(sine(angle as i32, dist as i32));
-            (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
-            let (angle, dist) = explosion_velocity_random(TFB_Random());
-            SetVelocityComponents(
-                &mut (*e).velocity,
-                cosine(angle as i32, dist as i32),
-                sine(angle as i32, dist as i32),
+            cx.b.elements[e].preprocess_func = Some(ElementHook::Native(animation_preprocess));
+            let (angle, dist) = explosion_velocity_random((cx.rng)());
+            cx.b.elements[e].velocity.set_components(
+                i32::from(cosine(angle as i32, dist as i32)),
+                i32::from(sine(angle as i32, dist as i32)),
             );
         }
     }
@@ -499,14 +490,12 @@ pub(crate) mod engine {
     /// `dead` must be a live ship with a valid owner, player index, and battle counter on the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn RecordShipDeath(dead: *mut ELEMENT) {
-        let owner = starship(dead);
-        assert!(!owner.is_null());
-        if (*dead).__bindgen_anon_3.mass_points as u32 <= MAX_SHIP_MASS {
-            assert!((*owner).playerNr >= 0);
-            crate::app::bridge::battle(|b| b.ship_lost((*owner).playerNr as usize));
-        }
-        if activity() as u8 == SUPER_MELEE as u8 {
-            MeleeShipDeath(owner);
+        // SAFETY: the legacy ship element is checked before entering native behavior.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let id = cx.b.elements.id(dead.cast()).expect("null dead ship");
+                cx.record_ship_death(id);
+            });
         }
     }
 
@@ -523,9 +512,9 @@ pub(crate) mod engine {
         (*ship).__bindgen_anon_1.life_span = (NUM_EXPLOSION_FRAMES * 3) as u16;
         (*ship).state_flags &= !(DISAPPEARING as u16);
         (*ship).state_flags |= (FINITE_LIFE | NONSOLID) as u16;
-        (*ship).preprocess_func = Some(ElementHook::Legacy(explosion_preprocess));
-        (*ship).postprocess_func = Some(ElementHook::Legacy(PostProcessStatus));
-        (*ship).death_func = Some(ElementHook::Legacy(cleanup_dead_ship));
+        (*ship).preprocess_func = Some(ElementHook::Native(explosion_preprocess));
+        (*ship).postprocess_func = Some(ElementHook::Native(PostProcessStatus));
+        (*ship).death_func = Some(ElementHook::Native(cleanup_dead_ship));
         (*ship).hTarget = ptr::null_mut();
         if play_sound {
             PlaySound(
@@ -536,177 +525,251 @@ pub(crate) mod engine {
             );
         }
     }
-    /// # Safety
-    /// `ship` must be a live ship with valid battle, audio, display, and ownership state on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_death(ship: *mut ELEMENT) {
-        let owner = starship(ship);
-        StopAllBattleMusic();
-        (*owner).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
-        StartShipExplosion(ship, true);
-        SetWinnerStarShip(FindAliveStarShip(ship));
-        RecordShipDeath(ship);
+    pub fn ship_death(cx: &mut Cx<'_>, ship: ElementId) {
+        let owner = cx.owner(ship);
+        cx.stop_battle_music();
+        cx.ship_mut(owner).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
+        cx.start_ship_explosion(ship, true);
+        cx.select_winner(ship);
+        cx.record_ship_death(ship);
     }
 
-    pub(crate) unsafe extern "C" fn cycle_ion_trail(e: *mut ELEMENT) {
-        assert_eq!((*e).state_flags & PLAYER_SHIP as u16, 0);
-        (*e).colorCycleIndex = (*e).colorCycleIndex.wrapping_add(1);
-        if (*e).colorCycleIndex as usize != ION_COLORS.len() {
-            (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_5.thrust_wait as u16;
-            let (r, g, b) = ION_COLORS[(*e).colorCycleIndex as usize];
-            (*primitive(e)).color = rgb15(r, g, b);
-            (*e).state_flags &= !(DISAPPEARING as u16);
-            (*e).state_flags |= CHANGING as u16;
+    pub(crate) fn cycle_ion_trail(cx: &mut Cx<'_>, e: ElementId) {
+        assert_eq!(cx.b.elements[e].state_flags & PLAYER_SHIP as u16, 0);
+        cx.b.elements[e].colorCycleIndex = cx.b.elements[e].colorCycleIndex.wrapping_add(1);
+        if cx.b.elements[e].colorCycleIndex as usize != ION_COLORS.len() {
+            let life = cx.b.elements[e].thrust_wait() as u16;
+            cx.b.elements[e].set_life_span(life);
+            let (r, g, b) = ION_COLORS[cx.b.elements[e].colorCycleIndex as usize];
+            cx.primitive(e).color = rgb15(r, g, b);
+            cx.b.elements[e].state_flags &= !(DISAPPEARING as u16);
+            cx.b.elements[e].state_flags |= CHANGING as u16;
         }
     }
 
-    /// # Safety
-    /// `ship` must be a live player ship with a valid owner, race frames, primitive, and display queue.
-    #[no_mangle]
-    pub unsafe extern "C" fn spawn_ion_trail(ship: *mut ELEMENT) {
-        assert_ne!((*ship).state_flags & PLAYER_SHIP as u16, 0);
-        let h = AllocElement();
-        if h.is_null() {
-            return;
+    impl Cx<'_> {
+        pub fn spawn_ion_trail(&mut self, ship: ElementId) {
+            assert_ne!(self.b.elements[ship].state_flags & PLAYER_SHIP as u16, 0);
+            let Some(e) = self.alloc_element() else {
+                return;
+            };
+            let owner = self.owner(ship);
+            let angle = facing_to_angle(self.ship(owner).ShipFacing as i32) + HALF_CIRCLE as i32;
+            let mut rect: RECT = RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 0,
+                    height: 0,
+                },
+            };
+            let frame = self.desc(owner).ship_data.ship[0];
+            // SAFETY: the ship owns the loaded frame; the rectangle is local output.
+            unsafe {
+                GetFrameRect(frame, &mut rect);
+            }
+            rect.extent.height =
+                ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
+            let handle = self.b.elements.raw(e);
+            // SAFETY: the new slot is unlinked and inserted before the current head.
+            unsafe {
+                InsertQueue(&raw mut disp_q, handle, disp_q.head);
+            }
+            self.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
+            self.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            self.b.elements[e].set_thrust_wait(1);
+            self.b.elements[e].set_life_span(1);
+            self.primitive(e).Type = gfx_object_POINT_PRIM as u8;
+            self.primitive(e).color = rgb15(31, 21, 0);
+            self.b.elements[e].colorCycleIndex = 0;
+            // SAFETY: the loaded shared frame authority remains live for this battle.
+            unsafe {
+                image!(frame; self.b.elements[e].current.image.frame, DecFrameIndex(stars_in_space));
+                image!(set; self.b.elements[e].current.image.farray, &raw mut stars_in_space);
+            }
+            self.b.elements[e].current.location = self.b.elements[ship].current.location;
+            self.b.elements[e].current.location.x = self.b.elements[e]
+                .current
+                .location
+                .x
+                .wrapping_add(cosine(angle, rect.extent.height as i32));
+            self.b.elements[e].current.location.y = self.b.elements[e]
+                .current
+                .location
+                .y
+                .wrapping_add(sine(angle, rect.extent.height as i32));
+            self.b.elements[e].death_func = Some(ElementHook::Native(cycle_ion_trail));
+            self.set_parent(e, Some(owner));
+            image!(copy; self.b.elements[e].next, self.b.elements[e].current);
+            let life = self.b.elements[e].life_span().wrapping_sub(1);
+            self.b.elements[e].set_life_span(life);
+            self.b.elements[e].state_flags |= PRE_PROCESS as u16;
         }
-        let owner = starship(ship);
-        let angle = facing_to_angle((*owner).ShipFacing as i32) + HALF_CIRCLE as i32;
-        let mut rect: RECT = mem::zeroed();
-        GetFrameRect((*(*owner).RaceDescPtr).ship_data.ship[0], &mut rect);
-        rect.extent.height = ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
-        InsertQueue(&raw mut disp_q, h, disp_q.head);
-        let e = h.cast::<ELEMENT>();
-        (*e).playerNr = NEUTRAL_PLAYER_NUM as i16;
-        (*e).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-        (*e).__bindgen_anon_5.thrust_wait = 1;
-        (*e).__bindgen_anon_1.life_span = 1;
-        (*primitive(e)).Type = gfx_object_POINT_PRIM as u8;
-        (*primitive(e)).color = rgb15(31, 21, 0);
-        (*e).colorCycleIndex = 0;
-        image!(frame; (*e).current.image.frame, DecFrameIndex(stars_in_space));
-        image!(set; (*e).current.image.farray, &raw mut stars_in_space);
-        (*e).current.location = (*ship).current.location;
-        (*e).current.location.x = (*e)
-            .current
-            .location
-            .x
-            .wrapping_add(cosine(angle, rect.extent.height as i32));
-        (*e).current.location.y = (*e)
-            .current
-            .location
-            .y
-            .wrapping_add(sine(angle, rect.extent.height as i32));
-        (*e).death_func = Some(ElementHook::Legacy(cycle_ion_trail));
-        (*e).pParent = owner.cast();
-        image!(copy; (*e).next, (*e).current);
-        (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_sub(1);
-        (*e).state_flags |= PRE_PROCESS as u16;
     }
 
-    /// # Safety
-    /// `e` must be a live ship or transition image whose owner and original ship remain valid on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_transition(e: *mut ELEMENT) {
-        if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-            if (*e).state_flags & APPEARING as u16 != 0 {
-                (*e).__bindgen_anon_1.life_span = HYPERJUMP_LIFE as u16;
-                (*e).preprocess_func = Some(ElementHook::Legacy(ship_transition));
-                (*e).postprocess_func = None;
-                (*primitive(e)).Type = gfx_object_NUM_PRIMS as u8;
-                (*e).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
-            } else if (*e).__bindgen_anon_1.life_span < HYPERJUMP_LIFE as u16 {
-                if (*e).__bindgen_anon_1.life_span == NORMAL_LIFE as u16
-                    && (*e).__bindgen_anon_2.crew_level != 0
+    pub fn ship_transition(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.b.elements[e].state_flags & PLAYER_SHIP as u16 != 0 {
+            if cx.b.elements[e].state_flags & APPEARING as u16 != 0 {
+                cx.b.elements[e].set_life_span(HYPERJUMP_LIFE as u16);
+                cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_transition));
+                cx.b.elements[e].postprocess_func = None;
+                cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
+                cx.b.elements[e].state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
+            } else if cx.b.elements[e].life_span() < HYPERJUMP_LIFE as u16 {
+                if cx.b.elements[e].life_span() == NORMAL_LIFE as u16
+                    && cx.b.elements[e].hit_points() != 0
                 {
                     let frame =
-                        SetEquFrameIndex(*(*e).current.image.farray, (*e).current.image.frame);
-                    image!(frame; (*e).current.image.frame, frame);
-                    image!(frame; (*e).next.image.frame, frame);
-                    (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
-                    init_intersect_points(e);
-                    image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
-                    (*e).velocity = mem::zeroed();
-                    (*e).state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
-                    (*e).state_flags |= CHANGING as u16;
-                    (*e).preprocess_func = Some(ElementHook::Legacy(ship_preprocess));
-                    (*e).postprocess_func = Some(ElementHook::Legacy(ship_postprocess));
+                        cx.equ_frame(cx.frame_at(e, false), cx.b.elements[e].current.image.frame);
+                    image!(frame; cx.b.elements[e].current.image.frame, frame);
+                    image!(frame; cx.b.elements[e].next.image.frame, frame);
+                    cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
+                    cx.init_intersect(e);
+                    let frame =
+                        cx.equ_frame(cx.frame_at(e, true), cx.b.elements[e].next.image.frame);
+                    image!(frame; cx.b.elements[e].IntersectControl.IntersectStamp.frame, frame);
+                    cx.b.elements[e].velocity.zero();
+                    cx.b.elements[e].state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
+                    cx.b.elements[e].state_flags |= CHANGING as u16;
+                    cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_preprocess));
+                    cx.b.elements[e].postprocess_func = Some(ElementHook::Native(ship_postprocess));
                 }
                 return;
             }
         }
-        let owner = starship(e);
-        let original = (*owner).hShip.cast::<ELEMENT>();
-        if (*original).state_flags & NONSOLID as u16 == 0 {
-            (*e).preprocess_func = None;
-        } else {
-            let h = AllocElement();
-            if !h.is_null() {
-                put_element(h);
-                let angle = facing_to_angle((*owner).ShipFacing as i32);
-                let image = h.cast::<ELEMENT>();
-                (*image).playerNr = NEUTRAL_PLAYER_NUM as i16;
-                (*image).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-                (*image).__bindgen_anon_5.thrust_wait = 1;
-                (*image).__bindgen_anon_1.life_span = 1;
-                (*primitive(image)).Type = gfx_object_STAMPFILL_PRIM as u8;
-                (*primitive(image)).color = rgb15(31, 21, 0);
-                (*image).colorCycleIndex = 0;
-                image!(copy; (*image).current.image, (*e).current.image);
-                (*image).current.location = (*e).current.location;
-                let x = cosine(angle, 40 << ONE_SHIFT) as i32;
-                let y = sine(angle, 40 << ONE_SHIFT) as i32;
-                if (*e).state_flags & PLAYER_SHIP as u16 == 0 {
-                    (*image).current.location.x = ((*image).current.location.x as i32 + x) as i16;
-                    (*image).current.location.y = ((*image).current.location.y as i32 + y) as i16;
-                    (*e).preprocess_func = None;
-                } else if (*e).__bindgen_anon_2.crew_level != 0 {
-                    let life = (*e).__bindgen_anon_1.life_span as i32 - 1;
-                    (*image).current.location.x =
-                        ((*image).current.location.x as i32 - x * life) as i16;
-                    (*image).current.location.y =
-                        ((*image).current.location.y as i32 - y * life) as i16;
-                    (*image).current.location.x = wrap_coord(
-                        (*image).current.location.x,
-                        (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION),
-                    );
-                    (*image).current.location.y = wrap_coord(
-                        (*image).current.location.y,
-                        ScreenHeight << (ONE_SHIFT + MAX_REDUCTION),
-                    );
-                }
-                (*image).preprocess_func = Some(ElementHook::Legacy(ship_transition));
-                (*image).death_func = Some(ElementHook::Legacy(cycle_ion_trail));
-                (*image).pParent = owner.cast();
+        let owner = cx.owner(e);
+        let original = cx.ship_element(owner);
+        if cx.b.elements[original].state_flags & NONSOLID as u16 == 0 {
+            cx.b.elements[e].preprocess_func = None;
+        } else if let Some(image) = cx.alloc_element() {
+            cx.put(image);
+            let angle = facing_to_angle(cx.ship(owner).ShipFacing as i32);
+            cx.b.elements[image].playerNr = NEUTRAL_PLAYER_NUM as i16;
+            cx.b.elements[image].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            cx.b.elements[image].set_thrust_wait(1);
+            cx.b.elements[image].set_life_span(1);
+            cx.primitive(image).Type = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive(image).color = rgb15(31, 21, 0);
+            cx.b.elements[image].colorCycleIndex = 0;
+            let current_image = cx.b.elements[e].current.image;
+            image!(copy; cx.b.elements[image].current.image, current_image);
+            cx.b.elements[image].current.location = cx.b.elements[e].current.location;
+            let x = cosine(angle, 40 << ONE_SHIFT) as i32;
+            let y = sine(angle, 40 << ONE_SHIFT) as i32;
+            if cx.b.elements[e].state_flags & PLAYER_SHIP as u16 == 0 {
+                cx.b.elements[image].current.location.x =
+                    (cx.b.elements[image].current.location.x as i32 + x) as i16;
+                cx.b.elements[image].current.location.y =
+                    (cx.b.elements[image].current.location.y as i32 + y) as i16;
+                cx.b.elements[e].preprocess_func = None;
+            } else if cx.b.elements[e].hit_points() != 0 {
+                let life = cx.b.elements[e].life_span() as i32 - 1;
+                let (w, h) = cx.screen_dimensions();
+                cx.b.elements[image].current.location.x =
+                    (cx.b.elements[image].current.location.x as i32 - x * life) as i16;
+                cx.b.elements[image].current.location.y =
+                    (cx.b.elements[image].current.location.y as i32 - y * life) as i16;
+                cx.b.elements[image].current.location.x = wrap_coord(
+                    cx.b.elements[image].current.location.x,
+                    (w - 64) << (ONE_SHIFT + MAX_REDUCTION),
+                );
+                cx.b.elements[image].current.location.y = wrap_coord(
+                    cx.b.elements[image].current.location.y,
+                    h << (ONE_SHIFT + MAX_REDUCTION),
+                );
             }
+            cx.b.elements[image].preprocess_func = Some(ElementHook::Native(ship_transition));
+            cx.b.elements[image].death_func = Some(ElementHook::Native(cycle_ion_trail));
+            cx.set_parent(image, Some(owner));
         }
     }
 
-    /// # Safety
-    /// `e` must be a live fleeing ship with valid color-cycle state, owner, and display primitive.
-    #[no_mangle]
-    pub unsafe extern "C" fn flee_preprocess(e: *mut ELEMENT) {
-        (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait.wrapping_sub(1);
-        if (*e).__bindgen_anon_4.turn_wait == 0 {
-            let (index, thrust, wait) =
-                flee_cycle((*e).colorCycleIndex, (*e).__bindgen_anon_5.thrust_wait);
-            (*e).colorCycleIndex = index;
+    pub fn flee_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        let wait = cx.b.elements[e].turn_wait().wrapping_sub(1);
+        cx.b.elements[e].set_turn_wait(wait);
+        if wait == 0 {
+            let (index, thrust, wait) = flee_cycle(
+                cx.b.elements[e].colorCycleIndex,
+                cx.b.elements[e].thrust_wait(),
+            );
+            cx.b.elements[e].colorCycleIndex = index;
             let (r, g, b) = FLEE_COLORS[index as usize];
-            (*primitive(e)).color = rgb15(r, g, b);
-            (*e).__bindgen_anon_5.thrust_wait = thrust;
-            (*e).__bindgen_anon_4.turn_wait = wait;
+            cx.primitive(e).color = rgb15(r, g, b);
+            cx.b.elements[e].set_thrust_wait(thrust);
+            cx.b.elements[e].set_turn_wait(wait);
             if wait == 0 {
-                (*e).death_func = Some(ElementHook::Legacy(cleanup_dead_ship));
-                (*e).__bindgen_anon_2.crew_level = 0;
-                (*e).__bindgen_anon_1.life_span = (HYPERJUMP_LIFE + 1) as u16;
-                (*e).preprocess_func = Some(ElementHook::Legacy(ship_transition));
-                (*e).postprocess_func = None;
-                (*primitive(e)).Type = gfx_object_NUM_PRIMS as u8;
-                (*e).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
+                cx.b.elements[e].death_func = Some(ElementHook::Native(cleanup_dead_ship));
+                cx.b.elements[e].set_hit_points(0);
+                cx.b.elements[e].set_life_span((HYPERJUMP_LIFE + 1) as u16);
+                cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_transition));
+                cx.b.elements[e].postprocess_func = None;
+                cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
+                cx.b.elements[e].state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
             }
         }
-        let ship = starship(e);
-        (*ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
-        PreProcessStatus(e);
+        let ship = cx.owner(e);
+        cx.ship_mut(ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+        cx.preprocess_status(e);
+    }
+    impl Cx<'_> {
+        fn silence_battle_sounds(&mut self) {
+            // SAFETY: no record borrow crosses the sound queue boundary.
+            self.queue_sound(usize::MAX, None);
+        }
+        fn winner(&self) -> Option<ShipId> {
+            // SAFETY: winner state belongs to the owning game thread.
+            unsafe {
+                (!WINNER_STAR_SHIP.is_null()).then(|| self.ship_id(WINNER_STAR_SHIP as usize))
+            }
+        }
+        fn play_ditty(&mut self, ship: ShipId) {
+            let pointer = self.ship(ship) as *const STARSHIP as *mut STARSHIP;
+            // SAFETY: the checked winner owns its loaded victory music.
+            unsafe {
+                PlayDitty(pointer);
+            }
+        }
+        fn replace_dead_ship(&mut self, dead: ElementId) {
+            let pointer = self.b.elements.raw(dead).cast();
+            // SAFETY: the transition releases the outgoing descriptor and may enter a picker.
+            unsafe {
+                new_ship_with_picker(self, pointer, |ship, side| GetNextStarShip(ship, side));
+            }
+        }
+        fn stop_battle_music(&mut self) {
+            // SAFETY: music state is owned by the battle thread.
+            unsafe {
+                StopAllBattleMusic();
+            }
+        }
+        fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
+            let pointer = self.b.elements.raw(ship).cast();
+            // SAFETY: the checked dying ship retains its owner and resources.
+            unsafe {
+                StartShipExplosion(pointer, play_sound);
+            }
+        }
+        fn select_winner(&mut self, dead: ElementId) {
+            let pointer = self.b.elements.raw(dead).cast();
+            // SAFETY: the scan and update are synchronous with no retained record borrow.
+            unsafe {
+                SetWinnerStarShip(FindAliveStarShip(pointer));
+            }
+        }
+        fn record_ship_death(&mut self, dead: ElementId) {
+            let owner = self.owner(dead);
+            if u32::from(self.b.elements[dead].mass_points()) <= MAX_SHIP_MASS {
+                let player = self.ship(owner).playerNr;
+                assert!(player >= 0);
+                self.b.ship_lost(player as usize);
+            }
+            if self.world.activity() as u8 == SUPER_MELEE as u8 {
+                let pointer = self.ship(owner) as *const STARSHIP as *mut STARSHIP;
+                // SAFETY: the checked owner remains live while updating melee status.
+                unsafe {
+                    MeleeShipDeath(pointer);
+                }
+            }
+        }
     }
 }
 

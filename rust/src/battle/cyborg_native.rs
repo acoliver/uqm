@@ -468,8 +468,7 @@ pub(crate) mod engine {
         let mut owner = std::ptr::null_mut();
         GetElementStarShip(&mut moved, &mut owner);
         let mut weapons = [std::ptr::null_mut(); 6];
-        let initialize = (*(*owner).RaceDescPtr).init_weapon_func.unwrap();
-        let count = invoke_weapon(initialize, owner as usize, &mut moved, weapons.as_mut_ptr());
+        let count = invoke_weapon(owner as usize, &mut moved, weapons.as_mut_ptr());
         let mut remaining = count;
         let mut index = 0usize;
         while remaining != 0 {
@@ -1186,9 +1185,7 @@ pub(crate) mod engine {
             h = next;
         }
 
-        let intelligence = (*rd).cyborg_control.intelligence_func.unwrap();
         invoke_intelligence(
-            intelligence,
             owner as usize,
             &mut ship_copy,
             concerns.as_mut_ptr(),

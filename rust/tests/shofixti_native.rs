@@ -1,6 +1,7 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
 #[path = "support/battle_context.rs"]
 mod battle_context;
+mod native_ship_common;
 
 use std::{
     ffi::{c_void, CStr},
@@ -985,15 +986,15 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         (*ship.ptr()).death_func.unwrap(),
                         ship.ptr(),
                     );
-                    transitions::ship_death(other.ptr());
+                    native_ship_common::core(transitions::ship_death, other.ptr());
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
                         (ship.ss.SpeciesID, other.ss.SpeciesID),
                         (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
                     );
-                    transitions::cleanup_dead_ship(ship.ptr());
-                    transitions::cleanup_dead_ship(other.ptr());
+                    native_ship_common::core(transitions::cleanup_dead_ship, ship.ptr());
+                    native_ship_common::core(transitions::cleanup_dead_ship, other.ptr());
                     transitions::StopDitty();
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];
@@ -1009,45 +1010,47 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         desc.ship_data.ship = [ptr::null_mut(); 3];
                         desc.ship_data.weapon = [ptr::null_mut(); 3];
                         desc.ship_data.special = [ptr::null_mut(); 3];
-                        transitions::new_ship_with_picker(outgoing, |last, player| {
-                            assert_eq!(player as usize, side);
-                            let chosen = get_encounter_star_ship_with_picker(
-                                last.cast(),
-                                player,
-                                |player, out| {
-                                    selected[side] = true;
-                                    let mut state: GETMELEE_STATE = mem::zeroed();
-                                    let p = &mut state.player[player as usize];
-                                    p.selecting = 1;
-                                    p.ships_left = 1;
-                                    p.col = 1;
-                                    // Expire the computer's display delay without a sleep.
-                                    p.timeIn = u32::MAX - 419;
-                                    let result = if computer && side == 1 {
-                                        selectShipComputer(
-                                            (&mut inputs[side] as *mut InputContext).cast(),
-                                            &mut state,
-                                        )
-                                    } else {
-                                        PlayerControls[side] = side as u32;
-                                        PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
-                                        selectShipHuman(
-                                            (&mut inputs[side] as *mut InputContext).cast(),
-                                            &mut state,
-                                        )
-                                    };
-                                    assert_eq!(result, 1);
-                                    assert_eq!(state.player[side].done, 1);
-                                    assert_eq!(
-                                        state.player[side].hBattleShip,
-                                        (&raw mut reserves[side]).cast()
-                                    );
-                                    *out = state.player[side].hBattleShip;
-                                    1
-                                },
-                            );
-                            assert_eq!(!chosen.is_null(), expected_selection);
-                            (!chosen.is_null()) as BOOLEAN
+                        uqm_rust::app::bridge::enter(|cx| {
+                            transitions::new_ship_with_picker(cx, outgoing, |last, player| {
+                                assert_eq!(player as usize, side);
+                                let chosen = get_encounter_star_ship_with_picker(
+                                    last.cast(),
+                                    player,
+                                    |player, out| {
+                                        selected[side] = true;
+                                        let mut state: GETMELEE_STATE = mem::zeroed();
+                                        let p = &mut state.player[player as usize];
+                                        p.selecting = 1;
+                                        p.ships_left = 1;
+                                        p.col = 1;
+                                        // Expire the computer's display delay without a sleep.
+                                        p.timeIn = u32::MAX - 419;
+                                        let result = if computer && side == 1 {
+                                            selectShipComputer(
+                                                (&mut inputs[side] as *mut InputContext).cast(),
+                                                &mut state,
+                                            )
+                                        } else {
+                                            PlayerControls[side] = side as u32;
+                                            PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
+                                            selectShipHuman(
+                                                (&mut inputs[side] as *mut InputContext).cast(),
+                                                &mut state,
+                                            )
+                                        };
+                                        assert_eq!(result, 1);
+                                        assert_eq!(state.player[side].done, 1);
+                                        assert_eq!(
+                                            state.player[side].hBattleShip,
+                                            (&raw mut reserves[side]).cast()
+                                        );
+                                        *out = state.player[side].hBattleShip;
+                                        1
+                                    },
+                                );
+                                assert_eq!(!chosen.is_null(), expected_selection);
+                                (!chosen.is_null()) as BOOLEAN
+                            })
                         });
                     }
                     assert_eq!(selected, [expected_selection; 2]);

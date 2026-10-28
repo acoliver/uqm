@@ -3,113 +3,15 @@
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-use std::{
-    ffi::CStr,
-    mem, ptr,
-    sync::{Mutex, MutexGuard},
-};
-use uqm_rust::ships::native::{abi::*, element, put_element};
+#[path = "support/battle.rs"]
+mod battle;
+use battle::{Battle, Object, Ship};
+use std::{ffi::CStr, mem, ptr};
+use uqm_rust::battle::process_native::{FreeElement, RemoveElement};
+use uqm_rust::engine::battle::{Cx, ElementId, RaceState};
+use uqm_rust::ships::native::{abi::*, element};
 
-unsafe extern "C" {
-    fn init_androsynth() -> *mut RACE_DESC;
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
-    fn FreeElement(handle: HELEMENT);
-    fn RemoveElement(handle: HLINK);
-    static mut DisplayArray: [PRIMITIVE; 330];
-}
-
-/// The element queue and RNG are process-wide engine state.
-static ENGINE: Mutex<()> = Mutex::new(());
-
-struct Battlefield {
-    _engine: MutexGuard<'static, ()>,
-}
-
-impl Battlefield {
-    fn new() -> Self {
-        let engine = ENGINE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        unsafe {
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 16, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-            // Targeting looks primitives up through the global game state.
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-        }
-        Self { _engine: engine }
-    }
-}
-
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            GlobData.Game_state.DisplayArray = ptr::null_mut();
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
-
-/// A ship element with its own race descriptor copy, as the engine builds them.
-struct Ship {
-    desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
-    el: Box<ELEMENT>,
-}
-
-impl Ship {
-    fn new(player: SIZE) -> Self {
-        unsafe {
-            let mut desc = Box::new(*init_androsynth());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
-            ss.RaceDescPtr = &raw mut *desc;
-            ss.playerNr = player;
-            let mut el: Box<ELEMENT> = Box::new(mem::zeroed());
-            el.pParent = (&raw mut *ss).cast();
-            el.playerNr = player;
-            el.state_flags = PLAYER_SHIP as u16;
-            Self { desc, ss, el }
-        }
-    }
-
-    fn el(&mut self) -> *mut ELEMENT {
-        &raw mut *self.el
-    }
-
-    fn ship_frames(&self) -> *mut FRAME {
-        (&raw const self.desc.ship_data.ship)
-            .cast::<FRAME>()
-            .cast_mut()
-    }
-
-    fn special_frames(&self) -> *mut FRAME {
-        (&raw const self.desc.ship_data.special)
-            .cast::<FRAME>()
-            .cast_mut()
-    }
-
-    fn guardian_form(mut self) -> Self {
-        self.el.next.image.farray = self.ship_frames();
-        self
-    }
-
-    fn blazer_form(mut self) -> Self {
-        self.el.next.image.farray = self.special_frames();
-        self
-    }
-}
-
-unsafe extern "C" fn original_collision(
-    _: *mut ELEMENT,
-    _: *mut POINT,
-    _: *mut ELEMENT,
-    _: *mut POINT,
-) {
-}
+fn original_collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
 
 fn address(func: ElementCollisionFunc) -> Option<usize> {
     func.map(|f| (f).address())
@@ -141,37 +43,15 @@ fn make_byte(lo: u8, hi: u8) -> u8 {
     (hi << 4) | lo
 }
 
-/// A battle target the missile can lock on to.
-unsafe fn queue_enemy_ship(
-    desc: &mut RACE_DESC,
-    ss: &mut STARSHIP,
-    location: POINT,
-) -> *mut ELEMENT {
-    desc.ship_info.crew_level = 5;
-    ss.RaceDescPtr = desc;
-    let handle = AllocElement();
-    assert!(!handle.is_null());
-    let enemy = element(handle);
-    // Fresh elements carry NO_PRIM, which targeting treats as cloaked.
-    let prim = (&raw mut DisplayArray).cast::<PRIMITIVE>();
-    (*prim.add((*enemy).PrimIndex as usize)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-    (*enemy).playerNr = 1;
-    (*enemy).state_flags = PLAYER_SHIP as u16;
-    (*enemy).__bindgen_anon_1.life_span = 1;
-    (*enemy).pParent = (ss as *mut STARSHIP).cast();
-    (*enemy).current.location = location;
-    (*enemy).next.location = location;
-    put_element(handle);
-    enemy
-}
-
 #[test]
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|| {
         unsafe {
-            let template = init_androsynth();
-            assert_eq!(template, init_androsynth());
-            let desc = *template;
+            let desc = battle::descriptor(SPECIES_ID_ANDROSYNTH_ID);
+            assert!(std::ptr::eq(
+                desc.race.unwrap(),
+                uqm_rust::ships::races::race(SPECIES_ID_ANDROSYNTH_ID).unwrap()
+            ));
             assert_eq!(
                 desc.ship_info.ship_flags,
                 (FIRES_FORE | SEEKING_WEAPON) as u16
@@ -240,11 +120,11 @@ fn descriptor_matches_the_c_race_data() {
             // LONG_RANGE_WEAPON >> 2
             assert_eq!(desc.cyborg_control.WeaponRange, 1000);
             assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
-            assert!(desc.cyborg_control.intelligence_func.is_some());
-            assert!(desc.uninit_func.is_some());
-            assert!(desc.preprocess_func.is_some());
-            assert!(desc.postprocess_func.is_some());
-            assert!(desc.init_weapon_func.is_some());
+            assert!(desc.callbacks()[4] != 0);
+            assert!(desc.callbacks()[0] != 0);
+            assert!(desc.callbacks()[1] != 0);
+            assert!(desc.callbacks()[2] != 0);
+            assert!(desc.callbacks()[3] != 0);
             assert!(desc.data.is_null());
             assert!(desc.CodeRef.is_null());
         }
@@ -254,14 +134,12 @@ fn descriptor_matches_the_c_race_data() {
 #[test]
 fn bubble_is_launched_with_the_c_missile_block() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
             ship.ss.ShipFacing = 4;
             ship.el.next.location = POINT { x: 1000, y: 2000 };
-            let mut bubbles = [ptr::null_mut(); 1];
-            let launch = ship.desc.init_weapon_func.unwrap();
-            assert_eq!(launch(ship.el(), bubbles.as_mut_ptr()), 1);
+            let bubbles = ship.weapon(1);
 
             let bubble = element(bubbles[0]);
             assert!(!bubble.is_null());
@@ -282,12 +160,10 @@ fn bubble_is_launched_with_the_c_missile_block() {
 #[test]
 fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
-            let mut bubbles = [ptr::null_mut(); 1];
-            let launch = ship.desc.init_weapon_func.unwrap();
-            launch(ship.el(), bubbles.as_mut_ptr());
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
+            let bubbles = ship.weapon(1);
             let bubble = element(bubbles[0]);
             let preprocess = (*bubble).preprocess_func.unwrap();
 
@@ -339,14 +215,10 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
 #[test]
 fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
-            let mut enemy_desc: Box<RACE_DESC> = Box::new(*init_androsynth());
-            let mut enemy_ss: Box<STARSHIP> = Box::new(mem::zeroed());
-            let mut bubbles = [ptr::null_mut(); 1];
-            let launch = ship.desc.init_weapon_func.unwrap();
-            launch(ship.el(), bubbles.as_mut_ptr());
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
+            let bubbles = ship.weapon(1);
             let bubble = element(bubbles[0]);
             let preprocess = (*bubble).preprocess_func.unwrap();
             (*bubble).current.location = POINT { x: 0, y: 0 };
@@ -358,7 +230,14 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 (POINT { x: 300, y: 0 }, true),
                 (POINT { x: -300, y: 0 }, false),
             ] {
-                let enemy = queue_enemy_ship(&mut enemy_desc, &mut enemy_ss, location);
+                let mut enemy_ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 1);
+                enemy_ship.desc.ship_info.crew_level = 5;
+                enemy_ship.el.set_life_span(1);
+                enemy_ship.el.current.location = location;
+                enemy_ship.el.next.location = location;
+                (*battle::prim(enemy_ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                enemy_ship.queue();
+                let enemy = enemy_ship.ptr();
                 let mut probe = *bubble;
                 let mut tracked_facing: COUNT = 0;
                 let delta = TrackShip(&mut probe, &mut tracked_facing);
@@ -387,8 +266,7 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
                 // Remove this enemy before trying the other side.
                 let handle = disp_q.tail;
                 assert_eq!(element(handle), enemy);
-                RemoveElement(handle);
-                FreeElement(handle);
+                drop(enemy_ship);
             }
             FreeElement(bubbles[0]);
         }
@@ -399,36 +277,32 @@ fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
 /// preprocess picks the form, postprocess finishes the transformation.
 unsafe fn enter_blazer(ship: &mut Ship) {
     ship.ss.cur_status_flags = (SPECIAL | WEAPON) as u16;
-    let preprocess = ship.desc.preprocess_func.unwrap();
-    let postprocess = ship.desc.postprocess_func.unwrap();
-    preprocess(ship.el());
-    postprocess(ship.el());
+    ship.preprocess();
+    ship.postprocess();
 }
 
 #[test]
 fn special_switches_to_blazer_and_saves_the_collision_function() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
-            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
+            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
                 original_collision,
             ));
             ship.el.__bindgen_anon_3.mass_points = 6;
             ship.el.__bindgen_anon_4.turn_wait = 3;
             ship.el.__bindgen_anon_5.thrust_wait = 3;
 
-            let preprocess = ship.desc.preprocess_func.unwrap();
             ship.ss.cur_status_flags = (SPECIAL | WEAPON) as u16;
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(ship.el.next.image.farray, ship.special_frames());
             // Weapon is suppressed on the switching frame; special is still held.
             assert_eq!(ship.ss.cur_status_flags, SPECIAL as u16);
             assert_ne!(ship.el.state_flags & CHANGING as u16, 0);
-            assert!(ship.desc.data.is_null());
+            assert!(matches!(ship.desc.race_state, RaceState::None));
 
-            let postprocess = ship.desc.postprocess_func.unwrap();
-            postprocess(ship.el());
+            ship.postprocess();
             let c = ship.desc.characteristics;
             assert_eq!(c.energy_regeneration, 0xff, "BLAZER_DEGENERATION as BYTE");
             assert_eq!(ship.ss.energy_counter, 8);
@@ -442,30 +316,33 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
             assert_eq!(ship.el.__bindgen_anon_3.mass_points, 1);
 
             // The engine copy owns a block that remembers the original handler.
-            assert!(!ship.desc.data.is_null());
-            let saved = *ship.desc.data.cast::<ElementCollisionFunc>();
+            assert!(matches!(ship.desc.race_state, RaceState::Androsynth { .. }));
+            let saved = ship.saved_collision();
             assert_eq!(
                 address(saved),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
             assert!(ship.el.collision_func.is_some());
             assert_ne!(
                 address(ship.el.collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
             assert!(
-                init_androsynth().as_ref().unwrap().data.is_null(),
+                matches!(
+                    battle::descriptor(SPECIES_ID_ANDROSYNTH_ID).race_state,
+                    RaceState::None
+                ),
                 "the template descriptor never owns collision data"
             );
 
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
-            assert!(ship.desc.data.is_null());
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
-            assert!(ship.desc.data.is_null());
+            ship.uninit();
+            assert!(matches!(ship.desc.race_state, RaceState::None));
+            ship.uninit();
+            assert!(matches!(ship.desc.race_state, RaceState::None));
         }
     })
 }
@@ -473,13 +350,12 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
 #[test]
 fn low_energy_special_flashes_text_without_switching() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
             ship.desc.ship_info.energy_level = 1;
             ship.ss.cur_status_flags = (SPECIAL | WEAPON) as u16;
-            let preprocess = ship.desc.preprocess_func.unwrap();
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(ship.el.next.image.farray, ship.ship_frames());
             assert_eq!(ship.el.state_flags & CHANGING as u16, 0);
             // The status word written back is the one read before DeltaEnergy.
@@ -492,16 +368,15 @@ fn low_energy_special_flashes_text_without_switching() {
 #[test]
 fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
             enter_blazer(&mut ship);
-            let preprocess = ship.desc.preprocess_func.unwrap();
 
             // Thrust wait ticks down before the blazer accelerates.
             ship.el.__bindgen_anon_5.thrust_wait = 2;
             ship.ss.cur_status_flags = (THRUST | WEAPON | SPECIAL | LEFT) as u16;
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(ship.el.__bindgen_anon_5.thrust_wait, 1);
             assert_eq!(ship.ss.cur_status_flags, LEFT as u16);
             assert_eq!(velocity_fields(&ship.el.velocity), [0; 9]);
@@ -509,7 +384,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
             ship.el.__bindgen_anon_5.thrust_wait = 0;
             ship.ss.ShipFacing = 5;
             ship.ss.cur_status_flags = (THRUST | WEAPON | SPECIAL | LEFT) as u16;
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(
                 ship.ss.cur_status_flags,
                 (LEFT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
@@ -518,7 +393,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
 
             ship.ss.ShipFacing = 15;
             ship.ss.cur_status_flags = RIGHT as u16;
-            preprocess(ship.el());
+            ship.preprocess();
             // facing 16 wraps to 0
             assert_eq!(velocity_fields(&ship.el.velocity), velocity_toward(60, 0));
 
@@ -526,7 +401,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
             ship.el.__bindgen_anon_4.turn_wait = 1;
             ship.ss.ShipFacing = 15;
             ship.ss.cur_status_flags = RIGHT as u16;
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(velocity_fields(&ship.el.velocity), velocity_toward(60, 15));
         }
     })
@@ -535,16 +410,15 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
 #[test]
 fn blazer_clamps_turn_wait_against_vux_slowing() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
             enter_blazer(&mut ship);
             ship.desc.characteristics.turn_wait = 5;
             ship.desc.characteristics.special_wait = 4;
             ship.el.__bindgen_anon_5.thrust_wait = 1;
             ship.ss.cur_status_flags = 0;
-            let preprocess = ship.desc.preprocess_func.unwrap();
-            preprocess(ship.el());
+            ship.preprocess();
             assert_eq!(ship.desc.characteristics.turn_wait, 1);
             assert_eq!(ship.desc.characteristics.special_wait, 8);
         }
@@ -554,10 +428,10 @@ fn blazer_clamps_turn_wait_against_vux_slowing() {
 #[test]
 fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
-            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
+            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
                 original_collision,
             ));
             enter_blazer(&mut ship);
@@ -571,8 +445,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             ship.ss.cur_status_flags =
                 (LEFT | RIGHT | THRUST | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             ship.el.state_flags &= !(CHANGING as u16);
-            let preprocess = ship.desc.preprocess_func.unwrap();
-            preprocess(ship.el());
+            ship.preprocess();
 
             assert_eq!(ship.el.next.image.farray, ship.ship_frames());
             assert_ne!(ship.el.state_flags & CHANGING as u16, 0);
@@ -584,15 +457,15 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
             assert_ne!(address(ship.el.collision_func), blazer_handler);
             assert_eq!(
                 address(ship.el.collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
 
             // The block stays with the descriptor until uninit frees it once.
-            assert!(!ship.desc.data.is_null());
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
-            assert!(ship.desc.data.is_null());
+            assert!(matches!(ship.desc.race_state, RaceState::Androsynth { .. }));
+            ship.uninit();
+            assert!(matches!(ship.desc.race_state, RaceState::None));
         }
     })
 }
@@ -600,38 +473,37 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
 #[test]
 fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).guardian_form();
-            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
+            ship.el.collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
                 original_collision,
             ));
             enter_blazer(&mut ship);
-            let first_block = ship.desc.data;
-            assert!(!first_block.is_null());
+            let first_saved = ship.saved_collision();
+            assert_eq!(address(first_saved), Some(original_collision as usize));
 
             // Revert, restore the original handler, then transform a second time.
             ship.desc.ship_info.energy_level = 0;
             ship.ss.cur_status_flags = 0;
-            let preprocess = ship.desc.preprocess_func.unwrap();
-            preprocess(ship.el());
+            ship.preprocess();
             ship.desc.ship_info.energy_level = 24;
             assert_eq!(
                 address(ship.el.collision_func),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
             enter_blazer(&mut ship);
-            assert!(!ship.desc.data.is_null());
+            assert!(matches!(ship.desc.race_state, RaceState::Androsynth { .. }));
             assert_eq!(
-                address(*ship.desc.data.cast::<ElementCollisionFunc>()),
-                address(Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                address(ship.saved_collision()),
+                address(Some(uqm_rust::engine::battle::CollisionHook::Native(
                     original_collision
                 )))
             );
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
-            assert!(ship.desc.data.is_null());
+            ship.uninit();
+            assert!(matches!(ship.desc.race_state, RaceState::None));
         }
     })
 }
@@ -639,8 +511,7 @@ fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
 unsafe fn intelligence(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4]) {
     // A zero concern count lets only the Androsynth decisions run; the shared
     // cyborg pass has nothing to evaluate.
-    let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
-    ai(ship.el(), concerns.as_mut_ptr(), 0);
+    ship.intelligence(concerns);
 }
 
 fn concern_slot(index: u32) -> usize {
@@ -650,10 +521,10 @@ fn concern_slot(index: u32) -> usize {
 #[test]
 fn blazer_ai_ignores_crew_and_avoids_only_finite_life_weapons() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(0).blazer_form();
-            let mut other: ELEMENT = mem::zeroed();
+            let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).blazer_form();
+            let mut other = Object::new();
             let weapon_slot = concern_slot(ENEMY_WEAPON_INDEX);
 
             for (flags, expect_avoid) in [
@@ -661,18 +532,18 @@ fn blazer_ai_ignores_crew_and_avoids_only_finite_life_weapons() {
                 ((FINITE_LIFE | CREW_OBJECT) as u16, false),
                 (0, false),
             ] {
-                let mut weapon: ELEMENT = mem::zeroed();
+                let mut weapon = Object::new();
                 weapon.state_flags = flags;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-                concerns[concern_slot(CREW_OBJECT_INDEX)].ObjectPtr = &raw mut other;
-                concerns[weapon_slot].ObjectPtr = &raw mut weapon;
+                concerns[concern_slot(CREW_OBJECT_INDEX)].ObjectPtr = other.ptr();
+                concerns[weapon_slot].ObjectPtr = weapon.ptr();
                 concerns[weapon_slot].MoveState = MOVEMENT_STATE_ENTICE;
                 intelligence(&mut ship, &mut concerns);
                 assert!(concerns[concern_slot(CREW_OBJECT_INDEX)]
                     .ObjectPtr
                     .is_null());
                 if expect_avoid {
-                    assert_eq!(concerns[weapon_slot].ObjectPtr, &raw mut weapon);
+                    assert_eq!(concerns[weapon_slot].ObjectPtr, weapon.ptr());
                     assert_eq!(concerns[weapon_slot].MoveState, MOVEMENT_STATE_AVOID);
                 } else {
                     assert!(concerns[weapon_slot].ObjectPtr.is_null());
@@ -680,13 +551,13 @@ fn blazer_ai_ignores_crew_and_avoids_only_finite_life_weapons() {
             }
 
             // Weapons that are not luring keep their state.
-            let mut weapon: ELEMENT = mem::zeroed();
+            let mut weapon = Object::new();
             weapon.state_flags = 0;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            concerns[weapon_slot].ObjectPtr = &raw mut weapon;
+            concerns[weapon_slot].ObjectPtr = weapon.ptr();
             concerns[weapon_slot].MoveState = MOVEMENT_STATE_PURSUE;
             intelligence(&mut ship, &mut concerns);
-            assert_eq!(concerns[weapon_slot].ObjectPtr, &raw mut weapon);
+            assert_eq!(concerns[weapon_slot].ObjectPtr, weapon.ptr());
             assert_eq!(concerns[weapon_slot].MoveState, MOVEMENT_STATE_PURSUE);
         }
     })
@@ -698,7 +569,7 @@ struct Opponent {
 
 impl Opponent {
     fn new(weapon_range: u16, crew: u16, maneuverability: u16) -> Self {
-        let mut ship = Ship::new(1);
+        let mut ship = Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 1);
         ship.desc.cyborg_control.WeaponRange = weapon_range;
         ship.desc.cyborg_control.ManeuverabilityIndex = maneuverability;
         ship.el.__bindgen_anon_2.crew_level = crew;
@@ -715,7 +586,7 @@ struct Duel {
 impl Duel {
     fn new(enemy: Opponent, which_turn: u16) -> Self {
         let mut duel = Self {
-            ship: Ship::new(0).guardian_form(),
+            ship: Ship::bare(SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form(),
             enemy,
             concerns: unsafe { mem::zeroed() },
         };
@@ -748,7 +619,7 @@ impl Duel {
 #[test]
 fn guardian_ai_entices_only_under_the_c_conditions() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         let long = 1000;
         // (special counter, energy, enemy range, enemy crew, enemy maneuverability,
         //  which_turn, expected enticing)
@@ -790,9 +661,9 @@ fn guardian_ai_entices_only_under_the_c_conditions() {
 #[test]
 fn guardian_ai_morphs_when_threatened_or_when_outranging_is_possible() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
-            let mut missile: ELEMENT = mem::zeroed();
+            let mut missile = Object::new();
             let mut run =
                 |range, crew, maneuver, turn, energy, threat: Option<u16>, preset: bool| {
                     let mut duel = Duel::new(Opponent::new(range, crew, maneuver), turn);
@@ -801,7 +672,7 @@ fn guardian_ai_morphs_when_threatened_or_when_outranging_is_possible() {
                         duel.ship.ss.ship_input_state = SPECIAL as u8;
                     }
                     if let Some(threat_turn) = threat {
-                        duel = duel.weapon_threat(&raw mut missile, threat_turn);
+                        duel = duel.weapon_threat(missile.ptr(), threat_turn);
                     }
                     duel.run();
                     duel.input() & SPECIAL as u8 != 0
@@ -838,7 +709,7 @@ fn guardian_ai_morphs_when_threatened_or_when_outranging_is_possible() {
 #[test]
 fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battle::new(32);
         unsafe {
             // Keep the special in cooldown so only the weapon decision runs, and
             // let the enemy hold any state other than pursuit.

@@ -6,7 +6,6 @@ use crate::automation::parity::Journal;
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
 use crate::ships::races::{
-    androsynth_native::engine::AndrosynthData,
     pkunk_native::engine::{PkunkData, LAST_SOUND},
     sis_native::engine::SisData,
     umgah_native::engine::UmgahData,
@@ -15,7 +14,7 @@ use crate::ships::races::{
 pub(super) enum RaceData<'a> {
     None,
     #[cfg(not(test))]
-    Androsynth(&'a AndrosynthData),
+    Androsynth(crate::engine::battle::record::ElementCollisionFunc),
     #[cfg(not(test))]
     Pkunk(&'a PkunkData),
     #[cfg(not(test))]
@@ -30,6 +29,9 @@ impl<'a> RaceData<'a> {
     /// `pointer` is the given species' actual live descriptor data, immutable for `'a`.
     #[cfg(not(test))]
     pub(super) unsafe fn borrow(species: u32, descriptor: &'a RACE_DESC) -> Self {
+        if let crate::engine::battle::RaceState::Androsynth { collision } = descriptor.race_state {
+            return Self::Androsynth(collision);
+        }
         let pointer = descriptor.data;
         if pointer.is_null() {
             return Self::None;
@@ -37,7 +39,6 @@ impl<'a> RaceData<'a> {
         // SAFETY: each native initializer owns the corresponding concrete allocation.
         unsafe {
             match species {
-                SPECIES_ID_ANDROSYNTH_ID => Self::Androsynth(&*pointer.cast()),
                 SPECIES_ID_PKUNK_ID => Self::Pkunk(&*pointer.cast()),
                 SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
                 SPECIES_ID_MMRNMHRM_ID => Self::Mmrnmhrm(&*pointer.cast()),
@@ -63,7 +64,7 @@ impl<'a> RaceData<'a> {
                 fields,
                 &prefix,
                 "collision",
-                data.collision_func.map_or(0, |f| f.address()),
+                data.map_or(0, |f| f.address()),
                 SPECIES_ID_ANDROSYNTH_ID,
                 _hooks,
             ),

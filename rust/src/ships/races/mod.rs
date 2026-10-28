@@ -31,3 +31,13 @@ pub(crate) mod zoqfot_native;
 #[path = "samatra_native.rs"]
 pub mod samatra;
 pub mod samatra_state;
+
+#[cfg(not(test))]
+pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
+    use crate::ships::native::abi::{SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_VUX_ID};
+    match species {
+        SPECIES_ID_VUX_ID => Some(&vux_native::engine::VUX),
+        SPECIES_ID_ANDROSYNTH_ID => Some(&androsynth_native::engine::ANDROSYNTH),
+        _ => None,
+    }
+}

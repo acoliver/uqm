@@ -54,7 +54,7 @@ fn part0() -> Vec<(usize, &'static str)> {
             "battle::tactrans_native::ship_transition",
         ),
         (
-            crate::battle::tactrans_native::engine::spawn_ion_trail as *const () as usize,
+            crate::engine::battle::Cx::spawn_ion_trail as *const () as usize,
             "battle::tactrans_native::spawn_ion_trail",
         ),
     ]

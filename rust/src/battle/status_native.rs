@@ -216,6 +216,7 @@ fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::engine::battle::{Cx, ElementId, ShipId};
     use crate::ships::native::{rel_frame_index, starship};
 
     /// # Safety
@@ -444,32 +445,25 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Element, owning ship, captain frames, and active status context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn PostProcessStatus(e: *mut ELEMENT) {
-        let ship = starship(e);
-        if (*ship).captains_name_index != 0 || (*ship).playerNr == RPG_PLAYER_NUM as SIZE {
-            let current = (*ship).cur_status_flags;
-            let y = offset(ship);
-            if (*e).__bindgen_anon_2.crew_level == 0 {
-                (*ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
-                if (*(*ship).RaceDescPtr).ship_info.crew_level == 0 {
-                    explosion_flash((*e).__bindgen_anon_1.life_span, y, |color, mut r, fill| {
-                        SetContextForeGroundColor(color);
-                        if fill {
-                            DrawFilledRectangle(&mut r);
-                        } else {
-                            DrawRectangle(&mut r);
-                        }
-                    });
+    pub fn PostProcessStatus(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
+        if cx.ship(ship).captains_name_index != 0
+            || cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+        {
+            let current = cx.ship(ship).cur_status_flags;
+            let y = cx.status_offset(ship);
+            if cx.b.elements[e].hit_points() == 0 {
+                cx.ship_mut(ship).cur_status_flags &=
+                    !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+                if cx.desc(ship).ship_info.crew_level == 0 {
+                    cx.draw_explosion_flash(cx.b.elements[e].life_span(), y);
                 }
             }
-            let mut delta = ((*ship).old_status_flags ^ current)
+            let mut delta = (cx.ship(ship).old_status_flags ^ current)
                 & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL | LOW_ON_ENERGY) as u16;
             if delta != 0 {
                 if delta & LOW_ON_ENERGY as u16 != 0 {
-                    DrawCrewFuelString(
+                    cx.draw_energy_label(
                         y,
                         if current & LOW_ON_ENERGY as u16 == 0 {
                             1
@@ -480,16 +474,43 @@ pub(crate) mod engine {
                 }
                 delta &= (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
                 if delta != 0 {
-                    CaptainsWindow(
-                        &raw mut (*(*ship).RaceDescPtr).ship_data.captain_control,
-                        y,
-                        delta,
-                        current,
-                        2,
-                    );
+                    cx.draw_captain_controls(ship, y, delta, current);
                 }
             }
-            (*ship).old_status_flags = current;
+            cx.ship_mut(ship).old_status_flags = current;
+        }
+    }
+
+    impl Cx<'_> {
+        fn status_offset(&self, ship: ShipId) -> i16 {
+            // SAFETY: status offsets and this ship's side belong to the game thread.
+            unsafe { offset(self.ship(ship) as *const STARSHIP as *mut STARSHIP) }
+        }
+        fn draw_explosion_flash(&mut self, life: u16, y: i16) {
+            explosion_flash(life, y, |color, mut r, fill| {
+                // SAFETY: the battle owns its active status drawing context.
+                unsafe {
+                    SetContextForeGroundColor(color);
+                    if fill {
+                        DrawFilledRectangle(&mut r);
+                    } else {
+                        DrawRectangle(&mut r);
+                    }
+                }
+            });
+        }
+        fn draw_energy_label(&mut self, y: i16, change: i16) {
+            // SAFETY: the status drawing context and fonts are initialized.
+            unsafe {
+                DrawCrewFuelString(y, change);
+            }
+        }
+        fn draw_captain_controls(&mut self, ship: ShipId, y: i16, delta: u16, current: u16) {
+            let controls = &raw mut self.desc_mut(ship).ship_data.captain_control;
+            // SAFETY: drawing consumes only this ship's loaded captain frames.
+            unsafe {
+                CaptainsWindow(controls, y, delta, current, 2);
+            }
         }
     }
 }

@@ -155,7 +155,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
                         ));
-                        (*spot).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+                        (*spot).preprocess_func = Some(ElementHook::Native(animation_preprocess));
                         (*spot).pParent = ss.cast();
                         (*GlobData
                             .Game_state
@@ -539,7 +539,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
         image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, 8));
-        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+        (*e).preprocess_func = Some(ElementHook::Native(animation_preprocess));
         (*e).death_func = None;
         (*e).postprocess_func = None;
         (*e).collision_func = None;

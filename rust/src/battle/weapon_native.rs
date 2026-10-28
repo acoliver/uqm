@@ -46,13 +46,14 @@ pub(crate) mod engine {
             .add((*e).PrimIndex as usize)
     }
 
-    pub(crate) unsafe extern "C" fn collision_cb(
-        w: *mut ELEMENT,
-        wp: *mut POINT,
-        h: *mut ELEMENT,
-        hp: *mut POINT,
+    pub(crate) fn collision_cb(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        w: crate::engine::battle::ElementId,
+        wp: &mut POINT,
+        h: crate::engine::battle::ElementId,
+        hp: &mut POINT,
     ) {
-        weapon_collision(w, wp, h, hp);
+        cx.weapon_collision(w, wp, h, hp);
     }
 
     /// # Safety
@@ -67,7 +68,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_3.mass_points = 1;
             (*e).state_flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
             (*e).__bindgen_anon_1.life_span = 1;
-            (*e).collision_func = Some(CollisionHook::Legacy(collision_cb));
+            (*e).collision_func = Some(CollisionHook::Native(collision_cb));
             (*e).__bindgen_anon_5.blast_offset = 1;
             let (position, velocity) =
                 projectile::laser((b.cx, b.cy), b.face, b.pixoffs, (b.ex, b.ey));
@@ -98,7 +99,7 @@ pub(crate) mod engine {
             image!(set; (*e).current.image.farray, b.farray);
             image!(frame; (*e).current.image.frame, SetAbsFrameIndex(*b.farray, b.index));
             (*e).preprocess_func = b.preprocess_func;
-            (*e).collision_func = Some(CollisionHook::Legacy(collision_cb));
+            (*e).collision_func = Some(CollisionHook::Native(collision_cb));
             (*e).__bindgen_anon_5.blast_offset = b.blast_offs as u8;
             let (position, velocity) =
                 projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
@@ -177,7 +178,7 @@ pub(crate) mod engine {
                     (*b).__bindgen_anon_1.life_span = frames - facings;
                     (*b).__bindgen_anon_4.turn_wait = 0;
                     (*b).__bindgen_anon_5.next_turn = 0;
-                    (*b).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+                    (*b).preprocess_func = Some(ElementHook::Native(animation_preprocess));
                     image!(copy; (*b).current.image.farray, (*w).next.image.farray);
                     image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, facings));
                 }

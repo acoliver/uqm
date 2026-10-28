@@ -50,13 +50,17 @@ fn hooks() -> Hooks {
         blazer_collision: androsynth_native::engine::blazer_collision as *const () as usize,
         satellite: Some(chmmr_native::engine::satellite_postprocess),
         defense: chmmr_native::engine::spawn_point_defense as *const () as usize,
-        limpets: Some(vux_native::engine::spawn_limpets),
+        limpets: Some(crate::engine::battle::ElementHook::Native(
+            vux_native::engine::spawn_limpets,
+        )),
         fighters: Some(urquan_native::engine::spawn_fighters),
         fighter_preprocess: urquan_native::engine::fighter_preprocess as *const () as usize,
         pkunk: Some(pkunk_native::engine::pkunk_preprocess),
         intercept: pkunk_native::engine::intercept_pkunk_death as *const () as usize,
         rebirth: pkunk_native::engine::new_pkunk as *const () as usize,
-        ship_death: Some(crate::battle::tactrans_native::ship_death),
+        ship_death: Some(crate::engine::battle::ElementHook::Native(
+            crate::battle::tactrans_native::ship_death,
+        )),
         star_collision: crate::navigation::hyper_transition::star_collision as *const () as usize,
         unhyper: crate::navigation::hyper_transition::unhyper as *const () as usize,
     }
@@ -258,7 +262,7 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
             Effect::Crew(h, delta) => {
                 DeltaCrew(h.cast(), delta);
             }
-            Effect::Weapon(h) => crate::battle::ship_native::ship_postprocess(h.cast()),
+
             Effect::Remove(handles) => {
                 crate::mainloop::input_frame::drain_committed_draws();
                 for h in handles {
@@ -393,7 +397,16 @@ impl World<'_> {
     ) -> Option<(usize, usize)> {
         let parent = |h| self.elements[&h].p_parent as usize;
         match effect {
-            Effect::Invoke(callback, h) => callback.map(|callback| (callback as usize, parent(*h))),
+            Effect::Invoke(callback, h) => {
+                callback.map(|callback| (callback.address(), parent(*h)))
+            }
+            Effect::RaceProcess(post, h) => {
+                let address = parent(*h);
+                // SAFETY: this projection owns the live descriptor for metadata reads.
+                let callbacks =
+                    unsafe { (*(*(address as *const STARSHIP)).RaceDescPtr).callbacks() };
+                Some((callbacks[if *post { 2 } else { 1 }], address))
+            }
             Effect::Death(h) => self.elements[h]
                 .death_func
                 .map(|callback| (callback.address(), parent(*h))),
@@ -444,13 +457,22 @@ impl World<'_> {
                 // SAFETY: callback metadata came from the owned live graph, now fully dropped.
                 unsafe {
                     match effect {
+                        Effect::RaceProcess(_, h) | Effect::Weapon(h) => {
+                            crate::app::bridge::enter(|cx| {
+                                let id = cx.b.elements.id(h.cast()).unwrap();
+                                if let Effect::RaceProcess(post, _) = effect {
+                                    let ship = cx.owner(id);
+                                    crate::battle::process_native::invoke_race::invoke_ship_process(cx, ship, post);
+                                } else { crate::battle::ship_native::ship_postprocess(cx, id); }
+                            });
+                        }
                         Effect::Death(h) => {
                             crate::battle::process_native::invoke_element::invoke_legacy_element(death.ok_or("fixture ship has no production death callback")?, h);
                         }
                         Effect::Invoke(callback, h) => {
                             let callback = callback.ok_or("fixture is missing its production callback")?;
-                            let (_, parent) = observed.ok_or("fixture callback lacks owner metadata")?;
-                            invoke_context(callback as usize, parent, || callback(h.cast()));
+                            observed.ok_or("fixture callback lacks owner metadata")?;
+                            crate::battle::process_native::invoke_element::invoke_legacy_element(callback, h.cast::<ELEMENT>());
                         }
                         Effect::Collide(a, b) => {
                             let Collision {
@@ -458,11 +480,11 @@ impl World<'_> {
                                 points: [mut pa, mut pb],
                                 ..
                             } = collision.ok_or("collision effect lacks projected operands")?;
-                            crate::battle::process_native::invoke_collision::invoke_legacy_collision_const(callback.ok_or("fixture projectile has no collision callback")?,
+                            crate::battle::process_native::invoke_collision::invoke_legacy_collision(callback.ok_or("fixture projectile has no collision callback")?,
                                 a,
-                                (&raw mut pa).cast_const(),
+                                &raw mut pa,
                                 b,
-                                (&raw mut pb).cast_const(),
+                                &raw mut pb,
                             );
                         }
                         Effect::Think(_) => {

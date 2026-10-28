@@ -3349,7 +3349,7 @@ pub use crate::battle::tactrans_native::engine::new_ship;
 pub use crate::battle::tactrans_native::engine::ship_death;
 
 #[cfg(not(test))]
-pub use crate::battle::tactrans_native::engine::spawn_ion_trail;
+
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::flee_preprocess;

@@ -66,6 +66,8 @@ impl race_desc {
         init_weapon_func: None,
         data: std::ptr::null_mut(),
         CodeRef: std::ptr::null_mut(),
+        race: None,
+        race_state: crate::engine::battle::RaceState::None,
     };
 }
 

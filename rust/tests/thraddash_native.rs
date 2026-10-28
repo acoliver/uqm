@@ -192,7 +192,7 @@ impl Ship {
         (*e).playerNr = player;
         (*e).pParent = (&raw mut *ss).cast();
         (*e).state_flags = PLAYER_SHIP as u16;
-        (*e).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+        (*e).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
             uqm_rust::battle::ship_native::collision,
         ));
         (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
@@ -955,7 +955,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             (*trail).__bindgen_anon_1.life_span = 20;
             // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
             (*enemy.ptr()).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
-            (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
                 uqm_rust::battle::ship_native::collision,
             ));
             (*enemy.ptr()).current.location = (*trail).current.location;
@@ -965,7 +965,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             (*enemy.ptr()).IntersectControl = (*trail).IntersectControl;
             (*enemy.ptr()).IntersectControl.IntersectStamp.frame = enemy._ship_frames.frame(0);
             (*ship.ptr()).__bindgen_anon_1.life_span = 0;
-            (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+            (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(
                 uqm_rust::battle::tactrans_native::cleanup_dead_ship,
             ));
             _GraphicsStatusFlags |= 4;
@@ -1034,7 +1034,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     (*t).__bindgen_anon_2.hit_points = hp;
                     (*t).__bindgen_anon_3.mass_points = mass;
                     (*t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
-                        Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                        Some(uqm_rust::engine::battle::CollisionHook::Native(
                             uqm_rust::battle::ship_native::collision,
                         ))
                     } else {

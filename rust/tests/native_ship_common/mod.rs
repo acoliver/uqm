@@ -34,6 +34,12 @@ impl Battle {
                 InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
                 0
             );
+            for side in 0..2 {
+                assert_ne!(
+                    InitQueue(&raw mut race_q[side], 64, size_of::<STARSHIP>() as u16),
+                    0
+                );
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -51,6 +57,9 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            for side in 0..2 {
+                UninitQueue(&raw mut race_q[side]);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -104,9 +113,29 @@ impl FrameSet {
         (&raw const self.frames[index]).cast_mut().cast()
     }
 }
+pub struct Record<T>(*mut T);
+impl<T> std::ops::Deref for Record<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        unsafe { &*self.0 }
+    }
+}
+impl<T> std::ops::DerefMut for Record<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.0 }
+    }
+}
+
+pub unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEMENT) {
+    uqm_rust::app::bridge::enter(|cx| {
+        let id = cx.b.elements.id(element.cast()).unwrap();
+        callback(cx, id);
+    });
+}
+
 pub struct Ship {
     pub desc: Box<RACE_DESC>,
-    pub ss: Box<STARSHIP>,
+    pub ss: Record<STARSHIP>,
     pub handle: HELEMENT,
     pub ship_frames: FrameSet,
     pub weapon_frames: FrameSet,
@@ -121,7 +150,11 @@ impl Ship {
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
         desc.ship_data.special = [special_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let raw = uqm_rust::collections::queue::AllocLink(&raw mut race_q[player as usize])
+            .cast::<STARSHIP>();
+        assert!(!raw.is_null());
+        raw.write(mem::zeroed());
+        let mut ss = Record(raw);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -171,6 +204,16 @@ impl Ship {
     }
     pub unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
         (self.desc.cyborg_control.intelligence_func.unwrap())(self.ptr(), concerns.as_mut_ptr(), 0);
+    }
+}
+impl Drop for Ship {
+    fn drop(&mut self) {
+        unsafe {
+            uqm_rust::collections::queue::FreeLink(
+                &raw mut race_q[self.ss.playerNr as usize],
+                self.ss.0.cast(),
+            );
+        }
     }
 }
 pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {

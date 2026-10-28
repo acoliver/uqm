@@ -120,10 +120,27 @@ pub(crate) mod engine {
     /// Called on the game thread; object remains live until removed or flushed.
     #[no_mangle]
     pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
-        let queue = &raw mut QUEUE;
         // SAFETY: the game-thread publication exclusively owns this sound queue.
         unsafe {
-            crate::app::bridge::enter(|_cx| (*queue).push(sound, object));
+            crate::app::bridge::enter(|_cx| {
+                let queue = &raw mut QUEUE;
+                (*queue).push(sound, object);
+            });
+        }
+    }
+
+    impl crate::engine::battle::Cx<'_> {
+        pub fn queue_sound(
+            &mut self,
+            sound: usize,
+            source: Option<crate::engine::battle::ElementId>,
+        ) {
+            let pointer = source.map_or(ptr::null_mut(), |id| self.b.elements.raw(id).cast());
+            // SAFETY: this context owns the sound queue and validates its source id.
+            unsafe {
+                let queue = &raw mut QUEUE;
+                (*queue).push(sound as SOUND, pointer);
+            }
         }
     }
 

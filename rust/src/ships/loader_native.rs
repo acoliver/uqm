@@ -169,7 +169,11 @@ pub(crate) mod engine {
     /// Descriptor must be live and owned by the caller, with no outstanding borrows.
     /// Resource flags must match the parts loaded into this descriptor.
     pub unsafe extern "C" fn c_free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
-        if let Some(uninit) = (*d).uninit_func {
+        if let Some(race) = (*d).race {
+            if let Some(uninit) = race.uninit {
+                uninit(&mut *d);
+            }
+        } else if let Some(uninit) = (*d).uninit_func {
             uninit(d);
         }
         crate::collections::observation::record(

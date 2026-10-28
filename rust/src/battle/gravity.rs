@@ -18,7 +18,7 @@ use crate::graphics::pixmap_abi::SetEquFrameIndex;
 
 extern "C" {
     #[cfg(test)]
-    fn uqm_get_head_element() -> HElement;
+    fn uqm_get_head_element() -> *mut std::ffi::c_void;
     #[cfg(test)]
     fn uqm_wrap_delta_x(dx: i16) -> i16;
     #[cfg(test)]
@@ -105,7 +105,7 @@ impl Default for ElementQueueIter {
 impl ElementQueueIter {
     pub fn new() -> Self {
         ElementQueueIter {
-            next: unsafe { uqm_get_head_element() },
+            next: unsafe { uqm_get_head_element().cast() },
         }
     }
 }

@@ -216,7 +216,7 @@ pub(crate) mod engine {
                 MIN_PUMPITUDE_ANIMS + u16::from((*a).__bindgen_anon_4.turn_wait & !REVERSE_DIR);
             (*p).__bindgen_anon_4.turn_wait = 0;
             (*p).__bindgen_anon_5.next_turn = 0;
-            (*p).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+            (*p).preprocess_func = Some(ElementHook::Native(animation_preprocess));
             image!(copy; (*p).current.image.farray, (*a).next.image.farray);
             image!(frame; (*p).current.image.frame, SetAbsFrameIndex(
                 *(*p).current.image.farray,

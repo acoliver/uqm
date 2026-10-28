@@ -176,7 +176,13 @@ pub(crate) mod engine {
                 .life_span
                 .wrapping_add(u16::from((*b).__bindgen_anon_3.mass_points));
         }
-        collision(a, pa, b, pb);
+        crate::battle::process_native::invoke_collision::invoke_legacy_collision(
+            CollisionHook::Native(collision),
+            a,
+            pa,
+            b,
+            pb,
+        );
     }
 
     pub(crate) unsafe extern "C" fn utwig_preprocess(e: *mut ELEMENT) {

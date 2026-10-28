@@ -173,8 +173,8 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             }
             let ship = (*element).pParent.cast::<STARSHIP>();
             if index == (*ship).ShipFacing {
-                (*element).preprocess_func = Some(ElementHook::Legacy(ship_preprocess));
-                (*element).postprocess_func = Some(ElementHook::Legacy(ship_postprocess));
+                (*element).preprocess_func = Some(ElementHook::Native(ship_preprocess));
+                (*element).postprocess_func = Some(ElementHook::Native(ship_postprocess));
                 (*element).state_flags &= !(NONSOLID as u16);
             }
         }
@@ -188,45 +188,50 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
     }
     1
 }
-pub(crate) unsafe extern "C" fn star_collision(
-    source: *mut ELEMENT,
-    _p0: *mut POINT,
-    ship: *mut ELEMENT,
-    _p1: *mut POINT,
+pub(crate) fn star_collision(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    source: crate::engine::battle::ElementId,
+    _p0: &mut POINT,
+    ship: crate::engine::battle::ElementId,
+    _p1: &mut POINT,
 ) {
-    if (*ship).state_flags & PLAYER_SHIP as u16 == 0 || get("PORTAL_COUNTER") != 0 {
+    if cx.b.elements[ship].state_flags & PLAYER_SHIP as u16 == 0 || cx.portal_counter() != 0 {
         return;
     }
-    let mut point = element_universe(source);
-    let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
-    let parent = (*ship).pParent.cast::<STARSHIP>();
-    let (mut dx, mut dy) = (0, 0);
-    GetCurrentVelocityComponents(&mut (*ship).velocity, &mut dx, &mut dy);
-    if star.cast() == CurStarDescPtr
-        || (*ship).state_flags & APPEARING as u16 != 0
+    let contact = cx.star_contact(source);
+    let parent = cx.owner(ship);
+    let (dx, dy) = cx.b.elements[ship].velocity.get_current_components();
+    if contact.current
+        || cx.b.elements[ship].state_flags & APPEARING as u16 != 0
         || (dx == 0
             && dy == 0
-            && (*parent).cur_status_flags & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
+            && cx.ship(parent).cur_status_flags
+                & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
                 == 0)
     {
-        CurStarDescPtr = star.cast();
-        (*source).state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
-    } else if GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0
-        && (GlobData.Game_state.autopilot.x == -1
-            || GlobData.Game_state.autopilot.y == -1
-            || (GlobData.Game_state.autopilot.x == (*star).star_pt.x
-                && GlobData.Game_state.autopilot.y == (*star).star_pt.y))
-    {
-        CurStarDescPtr = star.cast();
-        (*source).state_flags |= COLLISION as u16;
-        init_transition(source, ship, 1);
+        cx.select_star(Some(contact));
+        cx.b.elements[source].state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
+    } else {
+        let autopilot = cx.autopilot();
+        if cx.world.activity() & IN_BATTLE as u16 != 0
+            && (autopilot.x == -1
+                || autopilot.y == -1
+                || (autopilot.x == contact.position.x && autopilot.y == contact.position.y))
+        {
+            cx.select_star(Some(contact));
+            cx.b.elements[source].state_flags |= COLLISION as u16;
+            cx.init_hyper_transition(source, ship, 1);
+        }
     }
 }
-pub(crate) unsafe extern "C" fn star_death(element: *mut ELEMENT) {
-    if (*element).state_flags & DEFY_PHYSICS as u16 == 0
-        && GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0
+pub(crate) fn star_death(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    if cx.b.elements[element].state_flags & DEFY_PHYSICS as u16 == 0
+        && cx.world.activity() & IN_BATTLE as u16 != 0
     {
-        CurStarDescPtr = ptr::null_mut();
+        cx.select_star(None);
     }
 }
 pub(crate) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
@@ -275,4 +280,54 @@ pub unsafe fn SaveSisHyperState() {
     }
     let ship = (*element).pParent.cast::<STARSHIP>();
     GlobData.Game_state.ShipFacing = (*ship).ShipFacing + 1;
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct StarContact {
+    address: usize,
+    position: crate::graphics::native_abi::POINT,
+    current: bool,
+}
+impl crate::engine::battle::Cx<'_> {
+    fn portal_counter(&self) -> u8 {
+        // SAFETY: story state is accessed only on the game thread.
+        get("PORTAL_COUNTER")
+    }
+    fn autopilot(&self) -> crate::graphics::native_abi::POINT {
+        // SAFETY: this is a value projection of the game-thread-owned world.
+        unsafe { GlobData.Game_state.autopilot }
+    }
+    fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
+        let element = self.b.elements.raw(id).cast();
+        // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
+        unsafe {
+            let mut point = element_universe(element);
+            let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
+            assert!(!star.is_null(), "star collision has no catalog entry");
+            StarContact {
+                address: star as usize,
+                position: (*star).star_pt,
+                current: star.cast() == CurStarDescPtr,
+            }
+        }
+    }
+    fn select_star(&mut self, contact: Option<StarContact>) {
+        // SAFETY: catalog addresses originate only in star_contact; None clears selection.
+        unsafe {
+            CurStarDescPtr = contact.map_or(ptr::null_mut(), |c| c.address as *mut _);
+        }
+    }
+    fn init_hyper_transition(
+        &mut self,
+        source: crate::engine::battle::ElementId,
+        ship: crate::engine::battle::ElementId,
+        kind: u8,
+    ) {
+        let source = self.b.elements.raw(source).cast();
+        let ship = self.b.elements.raw(ship).cast();
+        // SAFETY: checked elements remain live and no record references cross the call.
+        unsafe {
+            init_transition(source, ship, kind);
+        }
+    }
 }

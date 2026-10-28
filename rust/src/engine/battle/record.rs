@@ -138,6 +138,8 @@ mod abi {
         pub init_weapon_func: INIT_WEAPON_FUNC,
         pub data: *mut ::std::os::raw::c_void,
         pub CodeRef: *mut ::std::os::raw::c_void,
+        pub race: Option<&'static super::super::race::Race>,
+        pub race_state: super::super::race::RaceState,
     }
 
     #[repr(C)]
@@ -272,5 +274,42 @@ mod abi {
         pub ship_sounds: SOUND,
     }
 
+    impl ELEMENT {
+        pub fn life_span(&self) -> u16 {
+            // SAFETY: every member of this legacy union is a u16.
+            unsafe { self.__bindgen_anon_1.life_span }
+        }
+        pub fn set_life_span(&mut self, value: u16) {
+            self.__bindgen_anon_1.life_span = value;
+        }
+        pub fn hit_points(&self) -> u16 {
+            // SAFETY: every member of this legacy union is a u16.
+            unsafe { self.__bindgen_anon_2.hit_points }
+        }
+        pub fn set_hit_points(&mut self, value: u16) {
+            self.__bindgen_anon_2.hit_points = value;
+        }
+        pub fn mass_points(&self) -> u8 {
+            // SAFETY: the legacy union contains only a u8.
+            unsafe { self.__bindgen_anon_3.mass_points }
+        }
+        pub fn set_mass_points(&mut self, value: u8) {
+            self.__bindgen_anon_3.mass_points = value;
+        }
+        pub fn turn_wait(&self) -> u8 {
+            // SAFETY: every member of this legacy union is a u8.
+            unsafe { self.__bindgen_anon_4.turn_wait }
+        }
+        pub fn set_turn_wait(&mut self, value: u8) {
+            self.__bindgen_anon_4.turn_wait = value;
+        }
+        pub fn thrust_wait(&self) -> u8 {
+            // SAFETY: every member of this legacy union is a u8.
+            unsafe { self.__bindgen_anon_5.thrust_wait }
+        }
+        pub fn set_thrust_wait(&mut self, value: u8) {
+            self.__bindgen_anon_5.thrust_wait = value;
+        }
+    }
     pub const MAX_DISPLAY_PRIMS: u32 = 330;
 }

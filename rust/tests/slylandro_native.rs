@@ -34,6 +34,16 @@ impl Battle {
             InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
             0
         );
+        for side in 0..2 {
+            assert_ne!(
+                InitQueue(
+                    &raw mut uqm_rust::engine::battle::legacy::race_q[side],
+                    64,
+                    mem::size_of::<STARSHIP>() as u16
+                ),
+                0
+            );
+        }
         InitDisplayList();
         GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
         GlobData.Game_state.CurrentActivity = 0;
@@ -50,6 +60,9 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            for side in 0..2 {
+                UninitQueue(&raw mut uqm_rust::engine::battle::legacy::race_q[side]);
+            }
             GlobData = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
         }
@@ -102,9 +115,41 @@ impl FrameSet {
         (&raw const self.frames[index]).cast_mut().cast()
     }
 }
+struct PoolShip(*mut STARSHIP);
+impl PoolShip {
+    unsafe fn new(player: SIZE) -> Self {
+        let queue = &raw mut uqm_rust::engine::battle::legacy::race_q[player as usize];
+        let pointer = uqm_rust::collections::queue::AllocLink(queue).cast::<STARSHIP>();
+        assert!(!pointer.is_null());
+        pointer.write(mem::zeroed());
+        Self(pointer)
+    }
+}
+impl std::ops::Deref for PoolShip {
+    type Target = STARSHIP;
+    fn deref(&self) -> &STARSHIP {
+        unsafe { &*self.0 }
+    }
+}
+impl std::ops::DerefMut for PoolShip {
+    fn deref_mut(&mut self) -> &mut STARSHIP {
+        unsafe { &mut *self.0 }
+    }
+}
+impl Drop for PoolShip {
+    fn drop(&mut self) {
+        unsafe {
+            uqm_rust::collections::queue::FreeLink(
+                &raw mut uqm_rust::engine::battle::legacy::race_q[(*self.0).playerNr as usize],
+                self.0.cast(),
+            );
+        }
+    }
+}
+
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     frames: FrameSet,
 }
@@ -113,7 +158,7 @@ impl Ship {
         let mut desc = Box::new(*init_slylandro());
         let frames = FrameSet::new(16);
         desc.ship_data.ship = [frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
