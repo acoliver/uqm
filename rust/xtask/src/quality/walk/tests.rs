@@ -718,3 +718,37 @@ fn reviewed_macro_handlers_follow_crate_source_moves() {
         "define_hash_table".into()
     )));
 }
+
+#[test]
+fn queue_glob_calls_follow_the_engine_source_move() {
+    let m = fixture(
+        &[
+            (
+                "src/lib.rs",
+                "use crate::collections::queue::*; fn run() { PutQueue(); }",
+            ),
+            (
+                "crates/engine/src/collections/queue.rs",
+                "pub fn PutQueue() {}",
+            ),
+        ],
+        None,
+        false,
+    );
+    assert_eq!(m.report("queue_calls", None).unwrap(), 1);
+    let m = fixture(
+        &[
+            (
+                "src/lib.rs",
+                "#[path = \"../crates/engine/src/collections/queue.rs\"] mod queue;",
+            ),
+            (
+                "crates/engine/src/collections/queue.rs",
+                "pub fn PutQueue() { crate::collections::queue::PutQueue(); }",
+            ),
+        ],
+        None,
+        false,
+    );
+    assert!(!m.findings.iter().any(|f| f.metric == "queue_calls"));
+}

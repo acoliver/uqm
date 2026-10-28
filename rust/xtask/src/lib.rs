@@ -726,17 +726,9 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
         .collect();
     let package_id = exactly_one(package_ids, "UQM Cargo package identity")?;
     let build_package = build_script_package(root, &messages, &package_id)?;
-    let mut out_dirs = BTreeSet::new();
     let mut executables = BTreeSet::new();
     let mut rust_archives = BTreeSet::new();
     for message in &messages {
-        if message["reason"] == "build-script-executed"
-            && message["package_id"].as_str() == Some(build_package.as_str())
-        {
-            if let Some(path) = message["out_dir"].as_str() {
-                out_dirs.insert(PathBuf::from(path));
-            }
-        }
         if message["package_id"].as_str() != Some(package_id.as_str()) {
             continue;
         }
@@ -769,6 +761,14 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
             _ => {}
         }
     }
+    let out_dirs = messages
+        .iter()
+        .filter(|m| {
+            m["reason"] == "build-script-executed"
+                && m["package_id"].as_str() == Some(build_package.as_str())
+        })
+        .filter_map(|m| m["out_dir"].as_str().map(PathBuf::from))
+        .collect();
     let out_dir = exactly_one(out_dirs, "uqm OUT_DIR")?;
     Ok(ProductionPaths {
         executable: exactly_one(executables, "uqm executable")?,

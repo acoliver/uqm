@@ -540,6 +540,7 @@ impl<'a> Visit<'a> for Walker {
                     .is_some_and(|n| self.queue_functions.contains(&n.to_string()));
             if (resolved.contains("collections::queue::") || queue_glob)
                 && self.context.file != "src/collections/queue.rs"
+                && self.context.file != "crates/engine/src/collections/queue.rs"
                 && !self.context.module.contains("<LinkQueue<")
                 && !self.context.module.contains("<ElementTable")
             {
