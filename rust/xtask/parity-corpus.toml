@@ -173,19 +173,7 @@ terminal = "semantic_mismatch"
 issue = 719
 
 [[expectation]]
-scenario = "campaign-s09a-shattered-knowledge"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
-
-[[expectation]]
 scenario = "campaign-s09b-syreen-shuttle"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
-
-[[expectation]]
-scenario = "campaign-s09e-funded-knowledge"
 classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719

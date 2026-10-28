@@ -210,8 +210,8 @@
       "sha256": "d294d1bd116dc0e2d535877a483c091b8053aaf4d2046a3f658c64dcb89a56b5"
     },
     "parity/counts/campaign-s09a-shattered-knowledge.toml": {
-      "bytes": 610526,
-      "sha256": "62de0e9dc137ac3d18266286bf3f812d4c92067b33debfb4e046609d80c6d55b"
+      "bytes": 124416,
+      "sha256": "10346cb3f7731c7fe6fdd2639d6a77351d5e437b9fa601cfe8f0e0fadf0677b1"
     },
     "parity/counts/campaign-s09b-syreen-shuttle.toml": {
       "bytes": 2278989,
@@ -226,8 +226,8 @@
       "sha256": "dcf52cea69688eec3c7ca229d84260cd90090b0947da40bd96bc93abafe40eb9"
     },
     "parity/counts/campaign-s09e-funded-knowledge.toml": {
-      "bytes": 1244512,
-      "sha256": "87022b211bba752e7593070de19c5577b494413a45e4b3ce2d1ac56f1fdca2cc"
+      "bytes": 759321,
+      "sha256": "1978e51271260acce98011efa0230dd7fcd6a42d8bc9584ceccb7faa873aa45a"
     },
     "parity/counts/campaign-s09f-funded-shuttle.toml": {
       "bytes": 660373,

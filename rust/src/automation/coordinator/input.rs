@@ -73,8 +73,8 @@ impl Coordinator {
             }
             inner.release_semantic_select = false;
         }
-        let orbit_transition_pending = inner.orbit_transition_pending;
-        inner.orbit_transition_pending = false;
+        let orbit_transition_pending = inner.orbit.transition_pending;
+        inner.orbit.transition_pending = false;
 
         if self.admit_boundary(&mut inner, CallbackKind::Input) {
             return true;
