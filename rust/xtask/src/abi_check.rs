@@ -1,4 +1,5 @@
 //! Compare foreign declarations with their Rust-owned symbol definitions.
+mod module_resolution;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -157,27 +158,6 @@ impl Catalog {
         }
     }
 
-    fn absolute(&self, path: &str, scope: usize) -> String {
-        let module = &self.scopes[scope].path;
-        if let Some(rest) = path.strip_prefix("crate::") {
-            format!("{}::{rest}", module.split("::").next().unwrap())
-        } else if let Some(rest) = path.strip_prefix("self::") {
-            format!("{module}::{rest}")
-        } else if let Some(rest) = path.strip_prefix("super::") {
-            let parent = self.scopes[scope].parent.unwrap_or(scope);
-            self.absolute(&format!("self::{rest}"), parent)
-        } else {
-            let head = path.split("::").next().unwrap();
-            if let Some(import) = self.scopes[scope].imports.get(head) {
-                format!("{import}{}", &path[head.len()..])
-            } else if self.modules.contains_key(&format!("{module}::{head}")) {
-                format!("{module}::{path}")
-            } else {
-                path.to_string()
-            }
-        }
-    }
-
     fn lookup(
         &self,
         path: &str,
@@ -190,8 +170,8 @@ impl Catalog {
         let current = &self.scopes[scope];
         if let Some((prefix, name)) = path.rsplit_once("::") {
             let prefix = self.absolute(prefix, scope);
-            if let Some(module) = self.modules.get(&prefix) {
-                return self.lookup(name, *module, seen);
+            if let Some(module) = self.module_scope(&prefix, scope, &mut BTreeSet::new()) {
+                return self.lookup(name, module, seen);
             }
             // Resolve an imported module alias, such as gfx::POINT.
             if let Some((head, tail)) = path.split_once("::") {
@@ -1640,6 +1620,23 @@ mod tests {
         assert!(!dependency_allowed(&dependencies, "engine", "app"));
         assert!(!dependency_allowed(&dependencies, "platform", "engine"));
         assert!(!dependency_allowed(&dependencies, "other", "app"));
+    }
+
+    #[test]
+    fn resolves_types_through_reexported_module_chains() {
+        let catalog = catalog(
+            r#"
+            mod lower { pub mod graphics { pub mod abi { pub struct Frame; pub type Handle = *mut Frame; } } }
+            use lower::graphics;
+            use graphics::abi::*;
+            #[no_mangle] static mut screen: Handle = 0 as Handle;
+            mod caller { extern "C" { static mut screen: *mut crate::graphics::abi::Frame; } }
+        "#,
+        );
+        assert_eq!(
+            catalog.static_signature(&catalog.static_definitions[0]),
+            catalog.static_signature(&catalog.static_declarations[0])
+        );
     }
 
     #[test]

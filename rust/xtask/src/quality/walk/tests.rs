@@ -157,7 +157,18 @@ fn macro_handlers_expand_every_registered_definition() {
         }
     }
     for (file, name) in macros::HANDLERS {
-        let source = syn::parse_file(&fs::read_to_string(root.join(file)).unwrap()).unwrap();
+        let mut locations = vec![root.join(file)];
+        locations.extend(
+            fs::read_dir(root.join("crates"))
+                .unwrap()
+                .map(|entry| entry.unwrap().path().join(file)),
+        );
+        let locations: Vec<_> = locations
+            .into_iter()
+            .filter(|path| path.is_file())
+            .collect();
+        assert_eq!(locations.len(), 1, "one source authority for {file}");
+        let source = syn::parse_file(&fs::read_to_string(&locations[0]).unwrap()).unwrap();
         let mut found = Macros(Vec::new());
         found.visit_file(&source);
         let m = found
@@ -693,4 +704,81 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
     assert_eq!(other.report("bridge_calls", None).unwrap(), 0);
     assert_eq!(other.report("module_edges", None).unwrap(), 1);
     assert_eq!(other.report("planned.uqm-modes", None).unwrap(), 1);
+}
+
+#[test]
+fn reviewed_macro_handlers_follow_crate_source_moves() {
+    let m = fixture(&[
+        ("src/lib.rs", "#[path = \"../crates/engine/src/collections/hash_table.rs\"] mod table;"),
+        ("crates/engine/src/collections/hash_table.rs", "macro_rules! define_hash_table { () => { pub static mut TABLE: u8 = 0; }; } define_hash_table!();")
+    ], None, false);
+    assert_eq!(m.report("static_mut", None).unwrap(), 1);
+    assert!(m.handlers.contains(&(
+        "src/collections/hash_table.rs".into(),
+        "define_hash_table".into()
+    )));
+}
+
+#[test]
+fn queue_glob_calls_follow_the_engine_source_move() {
+    let m = fixture(
+        &[
+            (
+                "src/lib.rs",
+                "use crate::collections::queue::*; fn run() { PutQueue(); }",
+            ),
+            (
+                "crates/engine/src/collections/queue.rs",
+                "pub fn PutQueue() {}",
+            ),
+        ],
+        None,
+        false,
+    );
+    assert_eq!(m.report("queue_calls", None).unwrap(), 1);
+    let m = fixture(
+        &[
+            (
+                "src/lib.rs",
+                "#[path = \"../crates/engine/src/collections/queue.rs\"] mod queue;",
+            ),
+            (
+                "crates/engine/src/collections/queue.rs",
+                "pub fn PutQueue() { crate::collections::queue::PutQueue(); }",
+            ),
+        ],
+        None,
+        false,
+    );
+    assert!(!m.findings.iter().any(|f| f.metric == "queue_calls"));
+}
+
+#[test]
+fn moved_record_can_narrow_an_inherited_allow_to_its_legacy_field() {
+    use super::super::baseline::{check_limits, Baseline};
+    let base = fixture(&[("src/lib.rs", "#[allow(non_snake_case)] mod old {\npub struct Record {\npub Legacy: u8,\npub ordinary: u8,\n}\n}\n")], None, false);
+    let current = fixture(&[("src/lib.rs", "mod new {\npub struct Record {\n#[allow(non_snake_case)]\npub Legacy: u8,\npub ordinary: u8,\n}\n}\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move("uqm::old::Record", "uqm::new::Record", &current, &base)
+        .unwrap();
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    let wider = fixture(&[("src/lib.rs", "mod new {\npub struct Record {\n#[allow(non_snake_case)]\n#[deprecated]\npub Legacy: u8,\n#[allow(non_snake_case)]\n#[deprecated]\npub ordinary: u8,\n}\n}\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    assert!(baseline
+        .add_move("uqm::old::Record", "uqm::new::Record", &wider, &base)
+        .unwrap_err()
+        .contains("narrowed allow exceeds moved coverage"));
 }

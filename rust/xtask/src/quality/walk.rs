@@ -39,6 +39,19 @@ struct Target {
     src_path: PathBuf,
 }
 
+impl Package {
+    fn ordered_targets(&self) -> Vec<&Target> {
+        let mut targets: Vec<_> = self.targets.iter().collect();
+        targets.sort_by_key(|t| {
+            (
+                !t.kind.iter().any(|k| k == "lib" || k == "rlib"),
+                t.name.clone(),
+            )
+        });
+        targets
+    }
+}
+
 #[derive(Clone, Default)]
 struct Context {
     file: String,
@@ -54,6 +67,7 @@ struct Context {
     hooks: BTreeSet<String>,
     allows: Vec<String>,
     inline_depth: usize,
+    platform_split: bool,
 }
 
 pub struct Walker {
@@ -114,6 +128,7 @@ pub fn measure(
     } else {
         macros::archived_registry(&rust)?
     };
+    let platform_split = metadata.packages.iter().any(|p| p.name == "uqm-platform");
     let mut walker = Walker::new(rust, names, defs_only);
     walker.handlers = handlers;
     for package in metadata
@@ -122,6 +137,7 @@ pub fn measure(
         .filter(|p| metadata.workspace_members.contains(&p.id))
     {
         walker.context = Context {
+            platform_split,
             package: package.name.clone(),
             module: package.name.clone(),
             configs: configs.clone(),
@@ -131,14 +147,7 @@ pub fn measure(
             .manifest_path
             .parent()
             .ok_or("manifest has no parent")?;
-        let mut targets: Vec<_> = package.targets.iter().collect();
-        targets.sort_by_key(|t| {
-            (
-                !t.kind.iter().any(|k| k == "lib" || k == "rlib"),
-                t.name.clone(),
-            )
-        });
-        for target in targets {
+        for target in package.ordered_targets() {
             if names.is_none() && target.kind.iter().any(|k| k == "test" || k == "bench") {
                 continue;
             }
@@ -166,19 +175,25 @@ pub fn measure(
 impl Walker {
     fn new(rust: PathBuf, names: Option<&[String]>, defs_only: bool) -> Self {
         let rust = rust.canonicalize().expect("quality source root exists");
-        let queue_functions = fs::read_to_string(rust.join("src/collections/queue.rs"))
-            .ok()
-            .and_then(|text| syn::parse_file(&text).ok())
-            .map(|f| {
-                f.items
-                    .into_iter()
-                    .filter_map(|i| match i {
-                        Item::Fn(f) => Some(f.sig.ident.to_string()),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let queue_functions = fs::read_to_string(rust.join(
+            if rust.join("crates/engine/src/collections/queue.rs").exists() {
+                "crates/engine/src/collections/queue.rs"
+            } else {
+                "src/collections/queue.rs"
+            },
+        ))
+        .ok()
+        .and_then(|text| syn::parse_file(&text).ok())
+        .map(|f| {
+            f.items
+                .into_iter()
+                .filter_map(|i| match i {
+                    Item::Fn(f) => Some(f.sig.ident.to_string()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
         Self {
             rust,
             context: Context::default(),
@@ -751,9 +766,10 @@ impl Walker {
             let source = self.finding("layers", "", self.context.module.clone(), 1);
             self.measurement
                 .findings
-                .extend(super::layers::reference_with_bridge(
+                .extend(super::layers::reference_in_phase(
                     &source,
                     target,
+                    self.context.platform_split,
                     direct_bridge,
                 ));
         }

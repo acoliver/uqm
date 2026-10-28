@@ -408,9 +408,10 @@ impl<'a> Visit<'a> for Walker {
                     let file = self
                         .context
                         .file
-                        .strip_prefix("src/")
-                        .map(|f| format!("src/{f}"))
-                        .unwrap_or_else(|| self.context.file.clone());
+                        .strip_prefix("crates/")
+                        .and_then(|path| path.split_once('/').map(|(_, source)| source))
+                        .unwrap_or(&self.context.file)
+                        .to_string();
                     let registered = self
                         .handlers
                         .iter()
@@ -539,6 +540,7 @@ impl<'a> Visit<'a> for Walker {
                     .is_some_and(|n| self.queue_functions.contains(&n.to_string()));
             if (resolved.contains("collections::queue::") || queue_glob)
                 && self.context.file != "src/collections/queue.rs"
+                && self.context.file != "crates/engine/src/collections/queue.rs"
                 && !self.context.module.contains("<LinkQueue<")
                 && !self.context.module.contains("<ElementTable")
             {

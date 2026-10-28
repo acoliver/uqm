@@ -150,10 +150,12 @@ impl Baseline {
         current: &Measurement,
         base: &Measurement,
     ) -> Result<(), String> {
-        let mut moves = self.moved.clone();
+        let mut previous = self.moved.clone();
+        super::transfers::retire(&mut previous, base);
+        let mut moves = previous.clone();
         super::transfers::register(&mut moves, old, new)?;
         super::transfers::validate(current, base, &moves)?;
-        let before = super::transfers::limits(&base.baseline(), current, base, &self.moved)?;
+        let before = super::transfers::limits(&base.baseline(), current, base, &previous)?;
         let after = super::transfers::limits(&base.baseline(), current, base, &moves)?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
         let lint = self
@@ -462,6 +464,22 @@ mod tests {
         .is_err());
         assert!(check_limits(&BTreeMap::new(), &b.entries, &BTreeMap::new(), false).is_ok());
     }
+    #[test]
+    fn completed_nested_moves_do_not_block_a_later_crate_move() {
+        let mut b = Baseline {
+            entries: entries(&[("complexity|loc|uqm::graphics::load", 100)]),
+            moved: [(
+                "uqm::graphics::old_load".into(),
+                "uqm::graphics::load".into(),
+            )]
+            .into(),
+            ..Default::default()
+        };
+        move_baseline(&mut b, "uqm::graphics", "uqm-engine::graphics").unwrap();
+        assert_eq!(b.moved.len(), 1);
+        assert_eq!(b.moved["uqm::graphics"], "uqm-engine::graphics");
+    }
+
     #[test]
     fn prefix_transfer_requires_source_disappearance_and_does_not_duplicate_credit() {
         let before = entries(&[("complexity|loc|uqm::graphics::load", 100)]);

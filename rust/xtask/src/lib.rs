@@ -725,7 +725,7 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
         .filter_map(|message| message["package_id"].as_str().map(str::to_string))
         .collect();
     let package_id = exactly_one(package_ids, "UQM Cargo package identity")?;
-    let mut out_dirs = BTreeSet::new();
+    let build_package = build_script_package(root, &messages, &package_id)?;
     let mut executables = BTreeSet::new();
     let mut rust_archives = BTreeSet::new();
     for message in &messages {
@@ -733,11 +733,6 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
             continue;
         }
         match message["reason"].as_str() {
-            Some("build-script-executed") => {
-                if let Some(path) = message["out_dir"].as_str() {
-                    out_dirs.insert(PathBuf::from(path));
-                }
-            }
             Some("compiler-artifact")
                 if message["target"]["name"] == "uqm"
                     && cargo_message_has_target_kind(message, "bin")
@@ -766,12 +761,46 @@ fn parse_production_paths(root: &Path, messages: &[u8]) -> Result<ProductionPath
             _ => {}
         }
     }
+    let out_dirs = messages
+        .iter()
+        .filter(|m| {
+            m["reason"] == "build-script-executed"
+                && m["package_id"].as_str() == Some(build_package.as_str())
+        })
+        .filter_map(|m| m["out_dir"].as_str().map(PathBuf::from))
+        .collect();
     let out_dir = exactly_one(out_dirs, "uqm OUT_DIR")?;
     Ok(ProductionPaths {
         executable: exactly_one(executables, "uqm executable")?,
         rust_archive: exactly_one(rust_archives, "uqm Rust archive")?,
         out_dir,
     })
+}
+
+#[cfg(feature = "native")]
+fn build_script_package(
+    root: &Path,
+    messages: &[serde_json::Value],
+    package_id: &str,
+) -> Result<String, String> {
+    let engine_source = root.join("rust/crates/engine/src/lib.rs");
+    if engine_source.exists() {
+        exactly_one(
+            messages
+                .iter()
+                .filter(|message| {
+                    message["reason"] == "compiler-artifact"
+                        && message["target"]["name"] == "uqm_engine"
+                        && cargo_message_has_target_kind(message, "rlib")
+                        && message_source_is(message, &engine_source)
+                })
+                .filter_map(|message| message["package_id"].as_str().map(str::to_owned))
+                .collect(),
+            "engine Cargo package identity",
+        )
+    } else {
+        Ok(package_id.to_owned())
+    }
 }
 
 #[cfg(feature = "native")]
@@ -924,6 +953,26 @@ mod tests {
         assert_eq!(
             paths.rust_archive,
             Path::new("/target/release/deps/libuqm_rust-test.rlib")
+        );
+        let engine_source = root.path().join("rust/crates/engine/src/lib.rs");
+        fs::create_dir_all(engine_source.parent().unwrap()).unwrap();
+        fs::write(&engine_source, "").unwrap();
+        let engine_messages = messages.replace(
+            "\"package_id\":\"uqm-package\",\"reason\":\"build-script-executed\"",
+            "\"package_id\":\"engine-package\",\"reason\":\"build-script-executed\"",
+        ) + &format!(
+            "{}\n",
+            serde_json::json!({
+                "reason": "compiler-artifact", "package_id": "engine-package",
+                "target": {"name": "uqm_engine", "kind": ["rlib"], "src_path": engine_source},
+                "filenames": ["/target/release/deps/libuqm_engine-test.rlib"]
+            })
+        );
+        assert_eq!(
+            parse_production_paths(root.path(), engine_messages.as_bytes())
+                .unwrap()
+                .out_dir,
+            Path::new("/target/release/build/uqm/out")
         );
         let legacy = capture("staticlib", "/target/release/deps/libuqm_rust-test.a");
         assert!(parse_production_paths(root.path(), legacy.as_bytes()).is_err());

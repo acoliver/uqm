@@ -261,10 +261,15 @@ fn below_planned(crate_name: &str, target: &str) -> bool {
 }
 
 pub fn reference(source: &Finding, target: &str) -> Vec<Finding> {
-    reference_with_bridge(source, target, false)
+    reference_in_phase(source, target, false, false)
 }
 
-pub fn reference_with_bridge(source: &Finding, target: &str, direct_bridge: bool) -> Vec<Finding> {
+pub fn reference_in_phase(
+    source: &Finding,
+    target: &str,
+    platform_split: bool,
+    direct_bridge: bool,
+) -> Vec<Finding> {
     let mut result = Vec::new();
     let module = source
         .identity
@@ -307,8 +312,9 @@ pub fn reference_with_bridge(source: &Finding, target: &str, direct_bridge: bool
     }
     let restricted = matches!(
         source.package.as_str(),
-        "uqm-save" | "uqm-content" | "uqm-modes" | "uqm-engine"
-    ) || prefix(module, "engine");
+        "uqm-save" | "uqm-content" | "uqm-modes"
+    ) || (source.package == "uqm-engine" && platform_split)
+        || prefix(module, "engine");
     if restricted
         && [
             "std::time::Instant",
@@ -540,6 +546,16 @@ mod tests {
             "crate::automation::record"
         );
     }
+    #[test]
+    fn engine_keeps_its_os_backends_until_the_platform_split() {
+        let mut engine = source("graphics");
+        engine.package = "uqm-engine".into();
+        assert!(reference(&engine, "std::fs::read").is_empty());
+        assert!(reference_in_phase(&engine, "std::fs::read", true, false)
+            .iter()
+            .any(|f| f.metric == "banned_std"));
+    }
+
     #[test]
     fn banned_std_apis_have_path_boundaries() {
         let mut s = source("codec");
