@@ -113,9 +113,9 @@ pub unsafe extern "C" fn TFB_InitGraphics(
         let options = &*options.cast::<GraphicsOptions>();
         RUST_BACKEND.present_hook = options.present_hook;
         RUST_BACKEND.readback_hook = options.readback_hook;
-        SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
         options
     };
+    SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
     update_video_globals(driver, flags, width, height);
     if ffi::rust_gfx_init(driver, flags, options, width, height) != 0 {
         std::process::exit(1);

@@ -76,10 +76,13 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
         assert!(_init_video_file(c"missing.duk".as_ptr()).is_null());
         let clip = _init_video_file(c"logo.duk".as_ptr());
         assert!(!clip.is_null());
+        let playback_started = std::time::Instant::now();
         assert_eq!(VidPlay(clip), 2);
         assert_eq!(VidPlaying(), clip);
         assert_eq!(VidProcessFrame(), 1);
-        assert_eq!(VidGetPosition(), 25);
+        let position = VidGetPosition();
+        assert_eq!(position, tfb_get_video_position(clip));
+        assert!(u128::from(position) <= playback_started.elapsed().as_millis());
         assert_eq!(VidSeek(20), 0);
         VidStop();
         assert!(VidPlaying().is_null());
@@ -115,6 +118,10 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
             0,
             false
         ));
+        let pixels = [
+            255u8, 0, 0, 255, 99, 99, 99, 99, 0, 255, 0, 255, 88, 88, 88, 88,
+        ];
+        assert!(rust_present_video_to_window(pixels.as_ptr(), 1, 2, 8));
         UninitVideoPlayer();
         assert!(!rust_process_video_frame());
         uqm_rust::sound::rodio_audio::rust_audio_uninit();

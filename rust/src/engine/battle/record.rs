@@ -8,6 +8,7 @@ use crate::graphics::native_abi::{
 use std::os::raw::c_uint as SPECIES_ID;
 
 pub use crate::collections::queue::Queue;
+pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
 
 pub type QUEUE = Queue;
 
@@ -16,15 +17,13 @@ pub use abi::{
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
     tfb_soundsample, ElementCollisionFunc, ElementProcessFunc, IntelligenceFunc, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
-    INIT_WEAPON_FUNC, INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    POSTPROCESS_FUNC, PREPROCESS_FUNC, PRIMITIVE, PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE,
-    UNINIT_FUNC,
+    INIT_WEAPON_FUNC, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, POSTPROCESS_FUNC,
+    PREPROCESS_FUNC, PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE, UNINIT_FUNC,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
 mod abi {
     use super::*;
-    pub use crate::graphics::native_abi::PRIMITIVE;
     pub use crate::graphics::native_abi::PRIM_DESC;
 
     #[repr(C)]
@@ -173,8 +172,6 @@ mod abi {
         pub playerNr: SIZE,
         pub control: BYTE,
     }
-
-    pub use crate::graphics::native_abi::INTERSECT_CONTROL;
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]

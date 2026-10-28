@@ -1021,3 +1021,34 @@ fn deleting_a_null_canvas_is_reported_not_fatal() {
         TFB_DrawCanvas_Delete(ptr::null_mut());
     }
 }
+
+#[test]
+fn extracted_palette_preserves_every_rgb_entry_and_copied_index_polarity() {
+    // SAFETY: the test owns the live surfaces and the extracted palette allocation.
+    unsafe {
+        let src = paletted(1, 1);
+        let dst = paletted(1, 1);
+        let mut colors = [color(0, 0, 0, 255); 256];
+        for (i, entry) in colors.iter_mut().enumerate() {
+            *entry = color(i as u8, 255 - i as u8, 33, 255);
+        }
+        TFB_DrawCanvas_SetPalette(src.cast(), colors.as_mut_ptr());
+        let extracted = TFB_DrawCanvas_ExtractPalette(src.cast());
+        assert!(!extracted.is_null());
+        for (i, expected) in colors.iter().enumerate() {
+            let actual = *extracted.add(i);
+            assert_eq!(
+                (actual.r, actual.g, actual.b),
+                (expected.r, expected.g, expected.b)
+            );
+        }
+        crate::memory::rust_hfree(extracted.cast());
+        TFB_DrawCanvas_SetTransparentIndex(src.cast(), 7, FALSE);
+        assert_eq!(TFB_DrawCanvas_GetTransparentIndex(src.cast()), -1);
+        TFB_DrawCanvas_CopyTransparencyInfo(src.cast(), dst.cast());
+        let mut key = 0;
+        assert_ne!(sdl2_sys::SDL_GetColorKey(dst, &mut key), 0);
+        SDL_FreeSurface(src);
+        SDL_FreeSurface(dst);
+    }
+}

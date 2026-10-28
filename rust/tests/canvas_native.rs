@@ -264,3 +264,28 @@ fn truecolor_transparency_copy_keeps_the_source_key_and_palette_absence() {
         SDL_FreeSurface(dst);
     }
 }
+
+#[test]
+fn palette_round_trip_and_transparency_copy_follow_indexed_surface_rules() {
+    // SAFETY: each SDL surface and allocated palette is owned until freed below.
+    unsafe {
+        let src = paletted(2, 2);
+        let dst = paletted(2, 2);
+        let mut colors = [color(0, 0, 0, 255); 256];
+        colors[7] = color(12, 34, 56, 255);
+        TFB_DrawCanvas_SetPalette(src.cast(), colors.as_mut_ptr());
+        let extracted = TFB_DrawCanvas_ExtractPalette(src.cast());
+        assert!(!extracted.is_null());
+        let entry = *extracted.add(7);
+        assert_eq!((entry.r, entry.g, entry.b), (12, 34, 56));
+        uqm_rust::memory::rust_hfree(extracted.cast());
+        assert_eq!(TFB_DrawCanvas_IsPaletted(src.cast()), TRUE);
+        TFB_DrawCanvas_SetTransparentIndex(src.cast(), 7, FALSE);
+        assert_eq!(TFB_DrawCanvas_GetTransparentIndex(src.cast()), -1);
+        TFB_DrawCanvas_CopyTransparencyInfo(src.cast(), dst.cast());
+        let mut native_key = 0;
+        assert_ne!(sdl2_sys::SDL_GetColorKey(dst, &mut native_key), 0);
+        SDL_FreeSurface(src);
+        SDL_FreeSurface(dst);
+    }
+}

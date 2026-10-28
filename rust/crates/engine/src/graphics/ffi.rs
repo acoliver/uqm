@@ -570,10 +570,10 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
         state.presentation_count = state.presentation_count.saturating_add(1);
 
         // Read the generation at the presentation boundary, never at hook install.
-        // SAFETY: presentation runs on the graphics thread that owns this backend.
         if let Some(generation) =
+            // SAFETY: presentation runs on the graphics thread that owns this backend.
             unsafe { crate::graphics::sdl::lifecycle_abi::RUST_BACKEND.readback_hook }
-                .and_then(|hook| hook())
+                    .and_then(|hook| hook())
         {
             match video::presented_frame(&state.canvas, state.presentation_count, generation) {
                 Ok(frame) => state.presented_frame = Some(frame),
@@ -760,17 +760,13 @@ pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const 
             Err(_) => return,
         };
 
-        unsafe {
-            let surf = &*src_surface;
-            if surf.pixels.is_null() || surf.pitch <= 0 {
-                return;
-            }
-            let pitch = surf.pitch as usize;
-            let total_size = pitch * SCREEN_HEIGHT as usize;
-            let pixel_data = std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
-            if texture.update(None, pixel_data, pitch).is_err() {
-                return;
-            }
+        // SAFETY: the graphics state owns this live surface throughout the upload.
+        let surface = unsafe { sdl2::surface::SurfaceRef::from_ll(src_surface.cast()) };
+        if surface
+            .with_lock(|pixels| texture.update(None, pixels, surface.pitch() as usize))
+            .is_err()
+        {
+            return;
         }
 
         // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
