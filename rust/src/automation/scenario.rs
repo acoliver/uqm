@@ -197,6 +197,17 @@ impl PendingStartScene {
         }
     }
 
+    /// Gameplay scenes replace the introduction; the development boss fixture
+    /// retains its explicit presentation-driven startup.
+    #[must_use]
+    pub fn replaces_introduction(&self) -> bool {
+        !self.consumed
+            && matches!(
+                self.scene,
+                Some(AutomationScene::SolProbeEncounter | AutomationScene::StarbaseCommander)
+            )
+    }
+
     /// Consume the scene once at the safe game-initialized boundary.
     pub fn take(
         &mut self,
@@ -450,6 +461,26 @@ pub fn dispatch_observation() -> (u64, Option<u32>, Option<u32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gameplay_scene_owns_startup_but_development_fixture_keeps_its_intro() {
+        for scene in [
+            AutomationScene::SolProbeEncounter,
+            AutomationScene::StarbaseCommander,
+        ] {
+            let mut pending = PendingStartScene::new(Some(scene));
+            assert!(pending.replaces_introduction());
+            pending
+                .take(SceneActivationBoundary::GameInitialized)
+                .unwrap();
+            assert!(!pending.replaces_introduction());
+        }
+        assert!(!PendingStartScene::new(None).replaces_introduction());
+        assert!(
+            !PendingStartScene::new(Some(AutomationScene::SamatraDevFixture))
+                .replaces_introduction()
+        );
+    }
 
     #[test]
     fn start_scene_is_consumed_once() {

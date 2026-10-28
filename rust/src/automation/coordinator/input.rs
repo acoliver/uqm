@@ -3,6 +3,17 @@
 use super::*;
 
 impl Coordinator {
+    #[must_use]
+    pub fn start_scene_replaces_introduction() -> bool {
+        Self::get().is_some_and(|coord| {
+            coord
+                .inner
+                .lock()
+                .pending_start_scene
+                .replaces_introduction()
+        })
+    }
+
     pub(super) fn activate_input_runtime() -> &'static RuntimeModel {
         input_ffi::init_automation_runtime();
         let Some(runtime) = input_ffi::get_runtime() else {
