@@ -8,11 +8,10 @@ use std::{
     mem, ptr,
     sync::{Mutex, MutexGuard},
 };
+use uqm_rust::collections::queue::{InitQueue, UninitQueue};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
     static mut DisplayArray: [PRIMITIVE; 330];
 }
@@ -30,13 +29,14 @@ impl Battle {
             let display = GlobData.Game_state.DisplayArray;
             let width = ScreenWidth;
             let height = ScreenHeight;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
+            assert!(InitQueue(
+                &raw mut disp_q,
+                capacity,
+                mem::size_of::<ELEMENT>() as u16
+            ));
             let queues = &raw mut race_q;
             for queue in &mut *queues {
-                assert_ne!(InitQueue(queue, 64, size_of::<STARSHIP>() as u16), 0);
+                assert!(InitQueue(queue, 64, size_of::<STARSHIP>() as u16));
             }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
