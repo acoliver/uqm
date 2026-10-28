@@ -2,16 +2,19 @@ use std::collections::BTreeMap;
 
 use super::metrics::Measurement;
 
-#[derive(Debug, PartialEq, Eq)]
+mod scoped;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Budget {
     pub limit: u64,
     pub ends: String,
+    pub scopes: BTreeMap<String, u64>,
 }
 
 pub fn phase(name: &str) -> Result<&'static str, String> {
     match name {
         "bridge_calls" => Ok("phase-6"),
-        "legacy_hooks" => Ok("phase-2"),
+        "legacy_hooks" | "stage_b_raw" => Ok("phase-2"),
         "planned_engine_core" => Ok("phase-4"),
         _ => Err(format!("unknown transition budget {name}")),
     }
@@ -30,11 +33,13 @@ pub fn parse(table: &toml_edit::Table) -> Result<BTreeMap<String, Budget>, Strin
             if ends != Some(phase(name)?) {
                 return Err(format!("invalid budget end phase: {name}"));
             }
+            let scopes = scoped::parse(name, value.get("scopes"), limit)?;
             Ok((
                 name.into(),
                 Budget {
                     limit,
                     ends: phase(name)?.into(),
+                    scopes,
                 },
             ))
         })
@@ -52,6 +57,9 @@ pub fn write(budgets: &BTreeMap<String, Budget>) -> Result<toml_edit::Table, Str
                 .into(),
         );
         value.insert("ends", budget.ends.clone().into());
+        if !budget.scopes.is_empty() {
+            value.insert("scopes", scoped::write(&budget.scopes)?);
+        }
         table.insert(name, toml_edit::value(value));
     }
     Ok(table)
@@ -63,14 +71,36 @@ pub fn set(
     value: u64,
     allow_growth: bool,
 ) -> Result<(), String> {
+    set_scoped(budgets, name, value, BTreeMap::new(), allow_growth)
+}
+
+pub fn set_scoped(
+    budgets: &mut BTreeMap<String, Budget>,
+    name: &str,
+    value: u64,
+    scopes: BTreeMap<String, u64>,
+    allow_growth: bool,
+) -> Result<(), String> {
     let ends = phase(name)?.into();
+    scoped::validate(name, &scopes, value)?;
     i64::try_from(value).map_err(|e| e.to_string())?;
-    if budgets.get(name).is_some_and(|b| value > b.limit) && !allow_growth {
+    if budgets
+        .get(name)
+        .is_some_and(|b| value > b.limit || scoped::expanded(&scopes, &b.scopes))
+        && !allow_growth
+    {
         return Err(format!(
             "raising budget {name} requires quality-growth-approved (--allow-growth)"
         ));
     }
-    budgets.insert(name.into(), Budget { limit: value, ends });
+    budgets.insert(
+        name.into(),
+        Budget {
+            limit: value,
+            ends,
+            scopes,
+        },
+    );
     Ok(())
 }
 
@@ -80,7 +110,12 @@ pub fn check_growth(
 ) -> Result<(), String> {
     for (name, budget) in current {
         let before = base.get(name).map_or(0, |b| b.limit);
-        if budget.limit > before {
+        if budget.limit > before
+            || scoped::expanded(
+                &budget.scopes,
+                &base.get(name).map(|b| b.scopes.clone()).unwrap_or_default(),
+            )
+        {
             return Err(format!(
                 "budget {name}: {before} -> {}; requires quality-growth-approved",
                 budget.limit
@@ -92,6 +127,10 @@ pub fn check_growth(
 
 pub fn check(measured: &Measurement, budgets: &BTreeMap<String, Budget>) -> Result<(), String> {
     for (name, budget) in budgets {
+        if !budget.scopes.is_empty() {
+            scoped::check(measured, budget)?;
+            continue;
+        }
         let value: u64 = measured
             .findings
             .iter()
@@ -123,11 +162,88 @@ pub fn without_budgeted(
         .collect()
 }
 
+pub fn scoped_entries(
+    measured: &Measurement,
+    budgets: &BTreeMap<String, Budget>,
+) -> BTreeMap<String, u64> {
+    remove_scoped(measured.baseline(), measured, budgets)
+}
+
+pub fn remove_scoped(
+    mut entries: BTreeMap<String, u64>,
+    measured: &Measurement,
+    budgets: &BTreeMap<String, Budget>,
+) -> BTreeMap<String, u64> {
+    let selected = Measurement {
+        findings: measured
+            .findings
+            .iter()
+            .filter(|f| budgets.values().any(|b| b.scopes.contains_key(&f.key())))
+            .cloned()
+            .collect(),
+        ..Default::default()
+    };
+    for (key, value) in selected.baseline() {
+        if let Some(total) = entries.get_mut(&key) {
+            *total = total.saturating_sub(value);
+        }
+    }
+    entries
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::quality::baseline::Baseline;
     use crate::quality::metrics::Finding;
+
+    #[test]
+    fn stage_b_budget_requires_exact_raw_identities_and_does_not_hide_other_growth() {
+        let text = r#"[budget]
+stage_b_raw = { limit = 2, ends = "phase-2", scopes = { "ffi|raw_records|uqm::engine::battle::table::ElementTable" = 2 } }
+"#;
+        let root = crate::quality::tool::fixture_directory();
+        let path = root.path().join("baseline.toml");
+        std::fs::write(&path, text).unwrap();
+        let baseline = Baseline::read(&path).unwrap();
+        baseline.write(&path).unwrap();
+        assert_eq!(Baseline::read(&path).unwrap(), baseline);
+        let finding = |id: &str, value| Finding {
+            counter: "ffi".into(),
+            metric: "raw_records".into(),
+            identity: id.into(),
+            file: "src/engine/battle/table.rs".into(),
+            package: "uqm".into(),
+            subsystem: "engine".into(),
+            value,
+        };
+        let mut measured = Measurement {
+            findings: vec![
+                finding("uqm::engine::battle::table::ElementTable", 2),
+                finding("uqm::engine::battle::table::other", 1),
+            ],
+            ..Default::default()
+        };
+        check(&measured, &baseline.budget).unwrap();
+        assert_eq!(
+            scoped_entries(&measured, &baseline.budget)["ffi|raw_records|uqm::engine"],
+            1
+        );
+        measured.findings[0].value = 3;
+        assert!(check(&measured, &baseline.budget).is_err());
+        for bad in [
+            text.replace("raw_records", "static_mut"),
+            text.replace("::ElementTable", "::*"),
+            text.replace("limit = 2", "limit = 3"),
+            text.replace(
+                ", scopes = { \"ffi|raw_records|uqm::engine::battle::table::ElementTable\" = 2 }",
+                "",
+            ),
+        ] {
+            std::fs::write(&path, bad).unwrap();
+            assert!(Baseline::read(&path).is_err());
+        }
+    }
 
     #[test]
     fn malformed_or_unplanned_budgets_fail() {
