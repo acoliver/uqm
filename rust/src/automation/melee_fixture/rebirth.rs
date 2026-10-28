@@ -29,7 +29,7 @@ pub(super) fn advance(
                 .get_mut(&phoenix)
                 .ok_or("fixture element or owner is no longer live")?;
             assert_eq!(
-                element.death_func.map_or(0, |f| f as usize),
+                element.death_func.map_or(0, |f| f.address()),
                 hooks.intercept
             );
             element.life_span = 0;
@@ -45,7 +45,7 @@ pub(super) fn advance(
             ])
         }
         2 => {
-            if world.elements[&a].death_func.map_or(0, |f| f as usize) == hooks.rebirth
+            if world.elements[&a].death_func.map_or(0, |f| f.address()) == hooks.rebirth
                 && world.elements[&a].life_span == 0
             {
                 run.phoenix = world.ship(a).phoenix;
@@ -99,7 +99,7 @@ fn phoenix_exists(world: &World<'_>, intercept: usize) -> bool {
     world
         .elements
         .values()
-        .any(|e| e.death_func.map_or(0, |f| f as usize) == intercept)
+        .any(|e| e.death_func.map_or(0, |f| f.address()) == intercept)
 }
 
 fn restore(
@@ -118,9 +118,9 @@ fn restore(
     )?;
     proof.require(
         [
-            element.preprocess_func.map_or(0, |f| f as usize),
-            element.postprocess_func.map_or(0, |f| f as usize),
-            element.death_func.map_or(0, |f| f as usize),
+            element.preprocess_func.map_or(0, |f| f.address()),
+            element.postprocess_func.map_or(0, |f| f.address()),
+            element.death_func.map_or(0, |f| f.address()),
         ] == saved.hooks,
         "hooks-restored",
     )

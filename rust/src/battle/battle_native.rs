@@ -76,8 +76,6 @@ pub(crate) mod engine {
     pub const SCALE_STEP: i32 = 0;
 
     #[no_mangle]
-    pub static mut battle_counter: [BYTE; 2] = [0; 2];
-    #[no_mangle]
     pub static mut instantVictory: BOOLEAN = 0;
     pub static mut BATTLE_INPUT_ORDER: [usize; 2] = [0; 2];
     #[no_mangle]
@@ -95,10 +93,6 @@ pub(crate) mod engine {
     use crate::navigation::globals::getGameState;
 
     use crate::navigation::globals::setGameState;
-
-    extern "C" {
-        pub static mut nth_frame: UWORD;
-    }
 
     /// # Safety
     /// Game state must be initialized and accessed only on the game thread.
@@ -194,11 +188,11 @@ pub(crate) mod engine {
             && (*e).__bindgen_anon_3.mass_points != (MAX_SHIP_MASS * 10) as u8
             && (*e).state_flags & APPEARING as u16 == 0
         {
-            battle_counter[0] = battle_counter[0].wrapping_sub(1);
+            crate::app::bridge::battle(|b| b.counters[0] = b.counters[0].wrapping_sub(1));
             (*e).__bindgen_anon_4.turn_wait = 3;
             (*e).__bindgen_anon_5.thrust_wait = 4;
             (*e).colorCycleIndex = 0;
-            (*e).preprocess_func = Some(flee_preprocess);
+            (*e).preprocess_func = Some(ElementHook::Legacy(flee_preprocess));
             (*e).__bindgen_anon_3.mass_points = (MAX_SHIP_MASS * 10) as u8;
             (*e).velocity = mem::zeroed();
             (*ship).cur_status_flags &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
@@ -349,7 +343,10 @@ pub(crate) mod engine {
         {
             return 0;
         }
-        match frame_interval(ONE_SECOND, (nth_frame >> 8) as u8) {
+        match frame_interval(
+            ONE_SECOND,
+            (crate::app::bridge::battle(|b| b.nth_frame) >> 8) as u8,
+        ) {
             None => {
                 Async_process();
                 TaskSwitch();
@@ -412,14 +409,14 @@ pub(crate) mod engine {
         let mut count = InitShips();
         if instantVictory != 0 {
             count = 0;
-            battle_counter = [1, 0];
+            crate::app::bridge::battle(|b| b.counters = [1, 0]);
             instantVictory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
             set_activity(activity() | IN_BATTLE as u16);
-            battle_counter[0] = CountLinks(race_queue(0)) as u8;
-            battle_counter[1] = CountLinks(race_queue(1)) as u8;
+            crate::app::bridge::battle(|b| b.counters[0] = CountLinks(race_queue(0)) as u8);
+            crate::app::bridge::battle(|b| b.counters[1] = CountLinks(race_queue(1)) as u8);
             rust_battle_frame_reset();
             if optMeleeScale != SCALE_STEP {
                 SetGraphicScaleMode(optMeleeScale);
@@ -491,8 +488,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    battleFrameCount, battle_counter, frameInputHuman, instantVictory, Battle, BattleSong,
-    FreeBattleSong, GetPlayerOrder, BATTLE_INPUT_ORDER,
+    battleFrameCount, frameInputHuman, instantVictory, Battle, BattleSong, FreeBattleSong,
+    GetPlayerOrder, BATTLE_INPUT_ORDER,
 };
 
 #[cfg(test)]

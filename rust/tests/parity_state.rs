@@ -1,4 +1,7 @@
 //! Production checkpoint and fighter callers, including cross-process address stability.
+#[path = "support/battle_context.rs"]
+mod battle_context;
+
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
 use uqm_rust::{
     automation::{
@@ -26,48 +29,50 @@ type Fields = BTreeMap<String, String>;
 
 #[test]
 fn live_state_is_complete_stable_and_read_only() {
-    if let Some(directory) = std::env::var_os("UQM_STATE_TEST_CHILD") {
-        exercise_live_callers(Path::new(&directory));
-        return;
-    }
-    fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify"))
-        .unwrap_or_else(|error| panic!("create verification directory: {error}"));
-    let directory = tempfile::Builder::new()
-        .prefix("parity-state-")
-        .tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify"))
-        .unwrap_or_else(|error| panic!("create state test directory: {error}"));
-    for name in ["first", "relocated"] {
-        let output = directory.path().join(name);
-        fs::create_dir(&output)
-            .unwrap_or_else(|error| panic!("create child output directory: {error}"));
-        let result = Command::new(
-            std::env::current_exe()
-                .unwrap_or_else(|error| panic!("locate state test binary: {error}")),
-        )
-        .args([
-            "--exact",
-            "live_state_is_complete_stable_and_read_only",
-            "--nocapture",
-        ])
-        .env("UQM_STATE_TEST_CHILD", &output)
-        .output()
-        .unwrap_or_else(|error| panic!("run state test child: {error}"));
-        assert!(
-            result.status.success(),
-            "{}\n{}",
-            String::from_utf8_lossy(&result.stdout),
-            String::from_utf8_lossy(&result.stderr)
-        );
-    }
-    for name in ["parity.fields", "parity.trace"] {
-        assert_eq!(
-            fs::read(directory.path().join("first").join(name))
-                .unwrap_or_else(|error| panic!("read first {name}: {error}")),
-            fs::read(directory.path().join("relocated").join(name))
-                .unwrap_or_else(|error| panic!("read relocated {name}: {error}")),
-            "{name} changed with process addresses"
-        );
-    }
+    battle_context::run(|| {
+        if let Some(directory) = std::env::var_os("UQM_STATE_TEST_CHILD") {
+            exercise_live_callers(Path::new(&directory));
+            return;
+        }
+        fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify"))
+            .unwrap_or_else(|error| panic!("create verification directory: {error}"));
+        let directory = tempfile::Builder::new()
+            .prefix("parity-state-")
+            .tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify"))
+            .unwrap_or_else(|error| panic!("create state test directory: {error}"));
+        for name in ["first", "relocated"] {
+            let output = directory.path().join(name);
+            fs::create_dir(&output)
+                .unwrap_or_else(|error| panic!("create child output directory: {error}"));
+            let result = Command::new(
+                std::env::current_exe()
+                    .unwrap_or_else(|error| panic!("locate state test binary: {error}")),
+            )
+            .args([
+                "--exact",
+                "live_state_is_complete_stable_and_read_only",
+                "--nocapture",
+            ])
+            .env("UQM_STATE_TEST_CHILD", &output)
+            .output()
+            .unwrap_or_else(|error| panic!("run state test child: {error}"));
+            assert!(
+                result.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        for name in ["parity.fields", "parity.trace"] {
+            assert_eq!(
+                fs::read(directory.path().join("first").join(name))
+                    .unwrap_or_else(|error| panic!("read first {name}: {error}")),
+                fs::read(directory.path().join("relocated").join(name))
+                    .unwrap_or_else(|error| panic!("read relocated {name}: {error}")),
+                "{name} changed with process addresses"
+            );
+        }
+    })
 }
 
 fn exercise_live_callers(directory: &Path) {
@@ -306,9 +311,15 @@ fn race_custom_fields(directory: &Path) {
         observation::record(Event::Allocate(ptr::from_mut(&mut phoenix) as usize));
         let mut data = SavedPkunk {
             phoenix: ptr::from_mut(&mut phoenix).cast(),
-            preprocess: human.postprocess_func,
-            postprocess: human.postprocess_func,
-            death: human.postprocess_func,
+            preprocess: human
+                .postprocess_func
+                .map(uqm_rust::engine::battle::ElementHook::Legacy),
+            postprocess: human
+                .postprocess_func
+                .map(uqm_rust::engine::battle::ElementHook::Legacy),
+            death: human
+                .postprocess_func
+                .map(uqm_rust::engine::battle::ElementHook::Legacy),
         };
         let mut descriptor: RACE_DESC = std::mem::zeroed();
         descriptor.data = ptr::from_mut(&mut data).cast();

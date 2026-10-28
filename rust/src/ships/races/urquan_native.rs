@@ -190,7 +190,7 @@ pub(crate) mod engine {
                 {
                     (*e).__bindgen_anon_5.thrust_wait =
                         normalize_facing(angle_to_facing(i32::from(ARCTAN(dx, dy)))) as BYTE;
-                    (*e).postprocess_func = Some(fighter_postprocess);
+                    (*e).postprocess_func = Some(ElementHook::Legacy(fighter_postprocess));
                 }
                 if enroute {
                     face = frame_index((*target).current.image.frame);
@@ -306,9 +306,9 @@ pub(crate) mod engine {
                 .DisplayArray
                 .add((*fighter).PrimIndex as usize))
             .Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-            (*fighter).preprocess_func = Some(fighter_preprocess);
+            (*fighter).preprocess_func = Some(ElementHook::Legacy(fighter_preprocess));
             (*fighter).postprocess_func = None;
-            (*fighter).collision_func = Some(fighter_collision);
+            (*fighter).collision_func = Some(CollisionHook::Legacy(fighter_collision));
             (*fighter).death_func = None;
             (*fighter).current.location = (*e).next.location;
             let fighter_face;

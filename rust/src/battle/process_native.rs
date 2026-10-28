@@ -8,7 +8,12 @@ use crate::ships::native::abi::*;
 
 mod collision_motion;
 pub(super) mod dispatch;
+pub mod invoke_collision;
+pub mod invoke_element;
+pub mod invoke_race;
+mod primitives;
 mod queue_view;
+use primitives::{alloc_display_prim, free_display_prim, insert_prim_links};
 
 const SKIP_COLLISION: u16 = NONSOLID as u16 | DISAPPEARING as u16;
 const COLLISION_BIT: u16 = COLLISION as u16;
@@ -185,50 +190,6 @@ const fn make_links(pred: COUNT, succ: COUNT) -> PRIM_LINKS {
     pred as PRIM_LINKS | ((succ as PRIM_LINKS) << 16)
 }
 
-// The primitive pool stores only link words here. The other fields survive a
-// free/reallocate cycle until the caller writes them, as in the C macros.
-unsafe fn alloc_display_prim(array: *mut PRIMITIVE, free: *mut COUNT) -> COUNT {
-    let index = *free;
-    *free = ((*array.add(usize::from(index))).Links >> 16) as COUNT;
-    index
-}
-
-unsafe fn free_display_prim(array: *mut PRIMITIVE, free: *mut COUNT, index: COUNT) {
-    (*array.add(usize::from(index))).Links = make_links(END, *free);
-    *free = index;
-}
-
-unsafe fn insert_prim_links(
-    array: *mut PRIMITIVE,
-    list: *mut PRIM_LINKS,
-    index: COUNT,
-    before: COUNT,
-) {
-    let link;
-    if before == END {
-        link = (*list >> 16) as COUNT;
-        *list = if link == END {
-            make_links(index, index)
-        } else {
-            make_links(*list as COUNT, index)
-        };
-    } else {
-        let pl = (*array.add(usize::from(before))).Links;
-        if before != *list as COUNT {
-            link = pl as COUNT;
-        } else {
-            link = END;
-            *list = make_links(index, (*list >> 16) as COUNT);
-        }
-        (*array.add(usize::from(before))).Links = make_links(index, (pl >> 16) as COUNT);
-    }
-    if link != END {
-        let primitive = array.add(usize::from(link));
-        (*primitive).Links = make_links((*primitive).Links as COUNT, index);
-    }
-    (*array.add(usize::from(index))).Links = make_links(link, before);
-}
-
 fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> COORD {
     let delta = i32::from(c) - i32::from(origin);
     (if step {
@@ -239,38 +200,25 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
-pub(crate) mod engine {
+use helpers::*;
+mod helpers {
     use super::*;
     use crate::collections::observation::image;
-    use crate::ships::native::frame_index;
-    use std::ptr;
-
-    #[no_mangle]
-    pub static mut zoom_out: SIZE = 1 << ZOOM_SHIFT;
-    #[no_mangle]
-    pub static mut nth_frame: UWORD = 0;
-    static mut OPT_MAX_ZOOM_OUT: SIZE = 0;
-
-    extern "C" {
-        static mut SpaceOrg: POINT;
-
-    }
-
-    fn width(pixels: i32) -> i32 {
+    use crate::graphics::pixmap_abi::SetEquFrameIndex;
+    pub(super) fn width(pixels: i32) -> i32 {
         (pixels - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)
     }
-    fn height(pixels: i32) -> i32 {
+    pub(super) fn height(pixels: i32) -> i32 {
         pixels << (ONE_SHIFT + MAX_REDUCTION)
     }
-    unsafe fn primitive(index: COUNT) -> *mut PRIMITIVE {
+    pub(super) unsafe fn primitive(index: COUNT) -> *mut PRIMITIVE {
         (&raw mut DisplayArray)
             .cast::<PRIMITIVE>()
             .add(usize::from(index))
     }
 
     #[inline]
-    unsafe fn locked(handle: HELEMENT) -> *mut ELEMENT {
+    pub(super) unsafe fn locked(handle: HELEMENT) -> *mut ELEMENT {
         // LockLink/UnlockLink are queue-table address casts, with assertions in C.
         if !handle.is_null() {
             assert!(!disp_q.pq_tab.is_null());
@@ -284,78 +232,108 @@ pub(crate) mod engine {
         handle.cast()
     }
     #[inline]
-    unsafe fn head() -> HELEMENT {
-        disp_q.head
-    }
-
-    #[inline]
-    fn colliding(e: &ELEMENT) -> bool {
+    pub(super) fn colliding(e: &ELEMENT) -> bool {
         e.state_flags & SKIP_COLLISION == 0
     }
     #[inline]
-    fn init_intersect_start(e: &mut ELEMENT) {
+    pub(super) fn init_intersect_start(e: &mut ELEMENT) {
         e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> ONE_SHIFT;
         e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> ONE_SHIFT;
     }
     #[inline]
-    fn init_intersect_end(e: &mut ELEMENT) {
+    pub(super) fn init_intersect_end(e: &mut ELEMENT) {
         e.IntersectControl.EndPoint.x = e.next.location.x >> ONE_SHIFT;
         e.IntersectControl.EndPoint.y = e.next.location.y >> ONE_SHIFT;
     }
     #[inline]
-    unsafe fn init_intersect_frame(e: *mut ELEMENT) {
+    pub(super) unsafe fn init_intersect_frame(e: *mut ELEMENT) {
         image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
     }
+}
 
-    unsafe fn preprocess(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_1.life_span == 0 {
-            if !(*e).pParent.is_null() {
-                Untarget(e);
-            }
-            (*e).state_flags |= DISAPPEARING as ELEMENT_FLAGS;
-            if let Some(death) = (*e).death_func {
-                dispatch::invoke(death as usize, (*e).pParent as usize, || death(e));
+#[cfg(not(test))]
+#[allow(non_snake_case)]
+pub(crate) mod engine {
+    use super::invoke_element::invoke_element;
+    use super::*;
+    use crate::collections::observation::image;
+    use crate::engine::battle::{Cx, ElementId};
+    use crate::ships::native::frame_index;
+    use std::ptr;
+
+    extern "C" {
+        static mut SpaceOrg: POINT;
+
+    }
+
+    unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
+        let pointer = cx.b.elements.raw(id).cast();
+        let amount = cx.b.elements[id].__bindgen_anon_2.hit_points as SIZE;
+        crate::app::bridge::publish(cx, || do_damage(pointer, amount));
+    }
+
+    fn untarget(cx: &mut Cx<'_>, dead: ElementId) {
+        let mut next = cx.b.elements.head();
+        while let Some(id) = next {
+            next = cx.b.elements.succ(id);
+            if cx.b.elements.id(cx.b.elements[id].hTarget) == Some(dead) {
+                cx.b.elements[id].hTarget = ptr::null_mut();
             }
         }
-        let mut flags = (*e).state_flags;
+    }
+
+    unsafe fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.b.elements[e].__bindgen_anon_1.life_span == 0 {
+            if !cx.b.elements[e].pParent.is_null() {
+                untarget(cx, e);
+            }
+            cx.b.elements[e].state_flags |= DISAPPEARING as ELEMENT_FLAGS;
+            if let Some(death) = cx.b.elements[e].death_func {
+                invoke_element(cx, death, e);
+            }
+        }
+        let mut flags = cx.b.elements[e].state_flags;
         if flags & DISAPPEARING as ELEMENT_FLAGS == 0 {
             if flags & APPEARING as ELEMENT_FLAGS != 0 {
-                image!(copy; (*e).next, (*e).current);
-                if colliding(&*e) {
-                    init_intersect_start(&mut *e);
-                    init_intersect_end(&mut *e);
-                    init_intersect_frame(e);
+                image!(copy; cx.b.elements[e].next, cx.b.elements[e].current);
+                if colliding(&cx.b.elements[e]) {
+                    init_intersect_start(&mut cx.b.elements[e]);
+                    init_intersect_end(&mut cx.b.elements[e]);
+                    init_intersect_frame(cx.b.elements.raw(e).cast());
                 }
                 if flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                     flags &= !(APPEARING as ELEMENT_FLAGS);
                 }
             }
-            if let Some(pre) = (*e).preprocess_func {
+            if let Some(pre) = cx.b.elements[e].preprocess_func {
                 if flags & APPEARING as ELEMENT_FLAGS == 0 {
-                    dispatch::invoke(pre as usize, (*e).pParent as usize, || pre(e));
-                    flags = (*e).state_flags;
-                    if flags & CHANGING as ELEMENT_FLAGS != 0 && colliding(&*e) {
-                        init_intersect_frame(e);
+                    invoke_element(cx, pre, e);
+                    flags = cx.b.elements[e].state_flags;
+                    if flags & CHANGING as ELEMENT_FLAGS != 0 && colliding(&cx.b.elements[e]) {
+                        init_intersect_frame(cx.b.elements.raw(e).cast());
                     }
                 }
             }
             if flags & IGNORE_VELOCITY as ELEMENT_FLAGS == 0 {
                 let (mut dx, mut dy) = (0, 0);
-                GetNextVelocityComponents(&mut (*e).velocity, &mut dx, &mut dy, 1);
+                GetNextVelocityComponents(&mut cx.b.elements[e].velocity, &mut dx, &mut dy, 1);
                 if dx != 0 || dy != 0 {
                     flags |= CHANGING as ELEMENT_FLAGS;
-                    (*e).next.location.x = (*e).next.location.x.wrapping_add(dx);
-                    (*e).next.location.y = (*e).next.location.y.wrapping_add(dy);
+                    cx.b.elements[e].next.location.x =
+                        cx.b.elements[e].next.location.x.wrapping_add(dx);
+                    cx.b.elements[e].next.location.y =
+                        cx.b.elements[e].next.location.y.wrapping_add(dy);
                 }
             }
-            if colliding(&*e) {
-                init_intersect_end(&mut *e);
+            if colliding(&cx.b.elements[e]) {
+                init_intersect_end(&mut cx.b.elements[e]);
             }
             if flags & FINITE_LIFE as ELEMENT_FLAGS != 0 {
-                (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_sub(1);
+                cx.b.elements[e].__bindgen_anon_1.life_span =
+                    cx.b.elements[e].__bindgen_anon_1.life_span.wrapping_sub(1);
             }
         }
-        (*e).state_flags =
+        cx.b.elements[e].state_flags =
             (flags & !((POST_PROCESS | COLLISION) as ELEMENT_FLAGS)) | PRE_PROCESS as ELEMENT_FLAGS;
     }
     unsafe fn collide_native(a: *mut ELEMENT, b: *mut ELEMENT) {
@@ -413,277 +391,274 @@ pub(crate) mod engine {
     /// Elements must belong to the initialized display queue on the game thread,
     /// with live collision images and callbacks on every solid element.
     pub unsafe fn process_collisions(
-        mut next_test: HELEMENT,
-        element_ptr: *mut ELEMENT,
+        cx: &mut Cx<'_>,
+        mut next_test: Option<ElementId>,
+        el: ElementId,
         min_time: TIME_VALUE,
         process_flags: ELEMENT_FLAGS,
     ) -> ELEMENT_FLAGS {
-        while !next_test.is_null() {
-            let test_handle = next_test;
-            let test = locked(test_handle);
-            if (*test).state_flags & process_flags == 0 {
-                preprocess(test);
+        while let Some(test) = next_test {
+            if cx.b.elements[test].state_flags & process_flags == 0 {
+                preprocess(cx, test);
             }
             // A death callback can retire every element owned by its ship,
             // including the active projectile, and clear their callbacks.
-            if !colliding(&*element_ptr) {
-                (*element_ptr).state_flags |= COLLISION as ELEMENT_FLAGS;
-                let _ = locked(test_handle);
+            if !colliding(&cx.b.elements[el]) {
+                cx.b.elements[el].state_flags |= COLLISION as ELEMENT_FLAGS;
                 return COLLISION as ELEMENT_FLAGS;
             }
-            next_test = (*test).succ;
-            if test == element_ptr {
-                let _ = locked(test_handle);
+            next_test = cx.b.elements.succ(test);
+            if test == el {
                 continue;
             }
             if collision_eligible(
-                (*test).state_flags,
-                (*element_ptr).state_flags,
-                (*test).pParent == (*element_ptr).pParent,
-                (*test).__bindgen_anon_3.mass_points,
-                (*element_ptr).__bindgen_anon_3.mass_points,
+                cx.b.elements[test].state_flags,
+                cx.b.elements[el].state_flags,
+                cx.b.elements[test].pParent == cx.b.elements[el].pParent,
+                cx.b.elements[test].__bindgen_anon_3.mass_points,
+                cx.b.elements[el].__bindgen_anon_3.mass_points,
             ) {
-                let mut state_flags = (*element_ptr).state_flags;
-                let mut test_state_flags = (*test).state_flags;
+                let mut state_flags = cx.b.elements[el].state_flags;
+                let mut test_state_flags = cx.b.elements[test].state_flags;
                 let finite_life = FINITE_LIFE as ELEMENT_FLAGS;
                 let mut time_value;
                 if (state_flags | test_state_flags) & finite_life != 0
                     && (((state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                        && (*element_ptr).__bindgen_anon_1.life_span > 1)
+                        && cx.b.elements[el].__bindgen_anon_1.life_span > 1)
                         || ((test_state_flags & APPEARING as ELEMENT_FLAGS != 0)
-                            && (*test).__bindgen_anon_1.life_span > 1))
+                            && cx.b.elements[test].__bindgen_anon_1.life_span > 1))
                 {
                     time_value = 0;
                 } else {
                     loop {
                         time_value = DrawablesIntersect(
-                            &mut (*element_ptr).IntersectControl,
-                            &mut (*test).IntersectControl,
+                            &raw mut (*cx.b.elements.raw(el).cast::<ELEMENT>()).IntersectControl,
+                            &raw mut (*cx.b.elements.raw(test).cast::<ELEMENT>()).IntersectControl,
                             min_time,
                         );
                         if time_value != 1 || (state_flags | test_state_flags) & finite_life != 0 {
                             break;
                         }
                         if state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
-                            init_intersect_end(&mut *test);
-                            (*test).IntersectControl.IntersectStamp.origin =
-                                (*test).IntersectControl.EndPoint;
+                            init_intersect_end(&mut cx.b.elements[test]);
+                            cx.b.elements[test].IntersectControl.IntersectStamp.origin =
+                                cx.b.elements[test].IntersectControl.EndPoint;
                             time_value = DrawablesIntersect(
-                                &mut (*element_ptr).IntersectControl,
-                                &mut (*test).IntersectControl,
+                                &raw mut (*cx.b.elements.raw(el).cast::<ELEMENT>())
+                                    .IntersectControl,
+                                &raw mut (*cx.b.elements.raw(test).cast::<ELEMENT>())
+                                    .IntersectControl,
                                 1,
                             );
-                            init_intersect_start(&mut *test);
+                            init_intersect_start(&mut cx.b.elements[test]);
                         }
                         if time_value == 1 {
-                            let cur = (*element_ptr).current.image.frame;
-                            let next = (*element_ptr).next.image.frame;
-                            let tcur = (*test).current.image.frame;
-                            let tnext = (*test).next.image.frame;
+                            let cur = cx.b.elements[el].current.image.frame;
+                            let next = cx.b.elements[el].next.image.frame;
+                            let tcur = cx.b.elements[test].current.image.frame;
+                            let tnext = cx.b.elements[test].next.image.frame;
                             if next == cur && tnext == tcur {
                                 if test_state_flags & APPEARING as ELEMENT_FLAGS != 0 {
-                                    do_damage(test, (*test).__bindgen_anon_2.hit_points as SIZE);
-                                    if !(*test).pParent.is_null() {
-                                        Untarget(test);
+                                    damage(cx, test);
+                                    if !cx.b.elements[test].pParent.is_null() {
+                                        untarget(cx, test);
                                     }
-                                    (*test).state_flags |=
+                                    cx.b.elements[test].state_flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
-                                    if let Some(death) = (*test).death_func {
-                                        dispatch::invoke(
-                                            death as usize,
-                                            (*test).pParent as usize,
-                                            || death(test),
-                                        );
+                                    if let Some(death) = cx.b.elements[test].death_func {
+                                        invoke_element(cx, death, test);
                                     }
                                 }
                                 if state_flags & APPEARING as ELEMENT_FLAGS != 0 {
-                                    do_damage(
-                                        element_ptr,
-                                        (*element_ptr).__bindgen_anon_2.hit_points as SIZE,
-                                    );
-                                    if !(*element_ptr).pParent.is_null() {
-                                        Untarget(element_ptr);
+                                    damage(cx, el);
+                                    if !cx.b.elements[el].pParent.is_null() {
+                                        untarget(cx, el);
                                     }
-                                    (*element_ptr).state_flags |=
+                                    cx.b.elements[el].state_flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
-                                    if let Some(death) = (*element_ptr).death_func {
-                                        dispatch::invoke(
-                                            death as usize,
-                                            (*element_ptr).pParent as usize,
-                                            || death(element_ptr),
-                                        );
+                                    if let Some(death) = cx.b.elements[el].death_func {
+                                        invoke_element(cx, death, el);
                                     }
-                                    let _ = locked(test_handle);
                                     return COLLISION_BIT as ELEMENT_FLAGS;
                                 }
                                 time_value = 0;
                             } else {
                                 if frame_index(cur) != frame_index(next) {
-                                    image!(frame; (*element_ptr).next.image.frame, SetEquFrameIndex(next, cur));
+                                    image!(frame; cx.b.elements[el].next.image.frame, SetEquFrameIndex(next, cur));
                                 } else if next != cur {
-                                    image!(copy; (*element_ptr).next.image, (*element_ptr).current.image);
-                                    if (*element_ptr).__bindgen_anon_1.life_span
+                                    image!(copy; cx.b.elements[el].next.image, cx.b.elements[el].current.image);
+                                    if cx.b.elements[el].__bindgen_anon_1.life_span
                                         > NORMAL_LIFE as COUNT
                                     {
-                                        (*element_ptr).__bindgen_anon_1.life_span =
+                                        cx.b.elements[el].__bindgen_anon_1.life_span =
                                             NORMAL_LIFE as COUNT;
                                     }
                                 }
                                 if frame_index(tcur) != frame_index(tnext) {
-                                    image!(frame; (*test).next.image.frame, SetEquFrameIndex(tnext, tcur));
+                                    image!(frame; cx.b.elements[test].next.image.frame, SetEquFrameIndex(tnext, tcur));
                                 } else if tnext != tcur {
-                                    image!(copy; (*test).next.image, (*test).current.image);
-                                    if (*test).__bindgen_anon_1.life_span > NORMAL_LIFE as COUNT {
-                                        (*test).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
+                                    image!(copy; cx.b.elements[test].next.image, cx.b.elements[test].current.image);
+                                    if cx.b.elements[test].__bindgen_anon_1.life_span
+                                        > NORMAL_LIFE as COUNT
+                                    {
+                                        cx.b.elements[test].__bindgen_anon_1.life_span =
+                                            NORMAL_LIFE as COUNT;
                                     }
                                 }
-                                init_intersect_start(&mut *element_ptr);
-                                init_intersect_end(&mut *element_ptr);
-                                init_intersect_frame(element_ptr);
+                                init_intersect_start(&mut cx.b.elements[el]);
+                                init_intersect_end(&mut cx.b.elements[el]);
+                                init_intersect_frame(cx.b.elements.raw(el).cast());
                                 if state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
-                                    (*((*element_ptr).pParent as *mut STARSHIP)).ShipFacing =
-                                        frame_index((*element_ptr).next.image.frame);
+                                    (*(cx.b.elements[el].pParent as *mut STARSHIP)).ShipFacing =
+                                        frame_index(cx.b.elements[el].next.image.frame);
                                 }
-                                init_intersect_start(&mut *test);
-                                init_intersect_end(&mut *test);
-                                init_intersect_frame(test);
+                                init_intersect_start(&mut cx.b.elements[test]);
+                                init_intersect_end(&mut cx.b.elements[test]);
+                                init_intersect_frame(cx.b.elements.raw(test).cast());
                                 if test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
-                                    (*((*test).pParent as *mut STARSHIP)).ShipFacing =
-                                        frame_index((*test).next.image.frame);
+                                    (*(cx.b.elements[test].pParent as *mut STARSHIP)).ShipFacing =
+                                        frame_index(cx.b.elements[test].next.image.frame);
                                 }
                             }
                         }
                         if time_value == 0 {
-                            init_intersect_end(&mut *element_ptr);
-                            init_intersect_end(&mut *test);
+                            init_intersect_end(&mut cx.b.elements[el]);
+                            init_intersect_end(&mut cx.b.elements[test]);
                             break;
                         }
                     }
                 }
                 if time_value > 0 {
-                    let mut save = (*element_ptr).IntersectControl.EndPoint;
-                    let mut test_save = (*test).IntersectControl.EndPoint;
-                    init_intersect_end(&mut *element_ptr);
-                    init_intersect_end(&mut *test);
+                    let mut save = cx.b.elements[el].IntersectControl.EndPoint;
+                    let mut test_save = cx.b.elements[test].IntersectControl.EndPoint;
+                    init_intersect_end(&mut cx.b.elements[el]);
+                    init_intersect_end(&mut cx.b.elements[test]);
                     let collided = time_value == 1
                         || ((state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             || process_collisions(
+                                cx,
                                 next_test,
-                                element_ptr,
+                                el,
                                 time_value - 1,
                                 process_flags,
                             ) == 0)
                             && (test_state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                                 || process_collisions(
-                                    if (*test).state_flags & APPEARING as ELEMENT_FLAGS == 0 {
-                                        (*element_ptr).succ
+                                    cx,
+                                    if cx.b.elements[test].state_flags & APPEARING as ELEMENT_FLAGS
+                                        == 0
+                                    {
+                                        cx.b.elements.succ(el)
                                     } else {
-                                        head()
+                                        cx.b.elements.head()
                                     },
                                     test,
                                     time_value - 1,
                                     process_flags,
                                 ) == 0));
                     if collided {
-                        state_flags = (*element_ptr).state_flags;
-                        test_state_flags = (*test).state_flags;
-                        let pairs = [
-                            (element_ptr, &raw mut save, test, &raw mut test_save),
-                            (test, &raw mut test_save, element_ptr, &raw mut save),
-                        ];
-                        for index in dispatch::collision_order(
+                        state_flags = cx.b.elements[el].state_flags;
+                        test_state_flags = cx.b.elements[test].state_flags;
+                        super::invoke_collision::invoke_pair(
+                            cx,
+                            el,
+                            &mut save,
+                            test,
+                            &mut test_save,
                             test_state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0,
-                        ) {
-                            let (first, point, second, other_point) = pairs[index];
-                            let hook = (*first).collision_func.unwrap();
-                            dispatch::invoke(hook as usize, (*first).pParent as usize, || {
-                                hook(first, point, second, other_point)
-                            });
-                        }
-                        if (*test).state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
+                        );
+                        if cx.b.elements[test].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0
                             && test_state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0
                         {
-                            (*test).IntersectControl.IntersectStamp.origin = test_save;
-                            (*test).next.location.x = test_save.x << ONE_SHIFT;
-                            (*test).next.location.y = test_save.y << ONE_SHIFT;
-                            init_intersect_end(&mut *test);
+                            cx.b.elements[test].IntersectControl.IntersectStamp.origin = test_save;
+                            cx.b.elements[test].next.location.x = test_save.x << ONE_SHIFT;
+                            cx.b.elements[test].next.location.y = test_save.y << ONE_SHIFT;
+                            init_intersect_end(&mut cx.b.elements[test]);
                         }
-                        if (*element_ptr).state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
+                        if cx.b.elements[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS != 0 {
                             if state_flags & COLLISION_BIT as ELEMENT_FLAGS == 0 {
-                                (*element_ptr).IntersectControl.IntersectStamp.origin = save;
-                                (*element_ptr).next.location.x = save.x << ONE_SHIFT;
-                                (*element_ptr).next.location.y = save.y << ONE_SHIFT;
-                                init_intersect_end(&mut *element_ptr);
+                                cx.b.elements[el].IntersectControl.IntersectStamp.origin = save;
+                                cx.b.elements[el].next.location.x = save.x << ONE_SHIFT;
+                                cx.b.elements[el].next.location.y = save.y << ONE_SHIFT;
+                                init_intersect_end(&mut cx.b.elements[el]);
                                 if state_flags & finite_life == 0
                                     && test_state_flags & finite_life == 0
                                 {
-                                    collide_native(element_ptr, test);
+                                    collide_native(
+                                        cx.b.elements.raw(el).cast(),
+                                        cx.b.elements.raw(test).cast(),
+                                    );
                                     process_collisions(
-                                        head(),
-                                        element_ptr,
+                                        cx,
+                                        cx.b.elements.head(),
+                                        el,
                                         MAX_TIME_VALUE as TIME_VALUE,
                                         process_flags,
                                     );
                                     process_collisions(
-                                        head(),
+                                        cx,
+                                        cx.b.elements.head(),
                                         test,
                                         MAX_TIME_VALUE as TIME_VALUE,
                                         process_flags,
                                     );
                                 }
                             }
-                            let _ = locked(test_handle);
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
-                        if !colliding(&*element_ptr) {
-                            (*element_ptr).state_flags |= COLLISION_BIT as ELEMENT_FLAGS;
-                            let _ = locked(test_handle);
+                        if !colliding(&cx.b.elements[el]) {
+                            cx.b.elements[el].state_flags |= COLLISION_BIT as ELEMENT_FLAGS;
                             return COLLISION_BIT as ELEMENT_FLAGS;
                         }
                     }
                 }
             }
-            let _ = locked(test_handle);
         }
-        (*element_ptr).state_flags & COLLISION_BIT as ELEMENT_FLAGS
+        cx.b.elements[el].state_flags & COLLISION_BIT as ELEMENT_FLAGS
     }
 
-    unsafe fn preprocess_queue(scroll_x: *mut SIZE, scroll_y: *mut SIZE) -> ViewState {
-        let active_sides =
-            COUNT::from(battle_counter[0] != 0) + COUNT::from(battle_counter[1] != 0);
+    unsafe fn preprocess_queue(
+        cx: &mut Cx<'_>,
+        scroll_x: *mut SIZE,
+        scroll_y: *mut SIZE,
+    ) -> ViewState {
+        let active_sides = COUNT::from(cx.b.counters[0] != 0) + COUNT::from(cx.b.counters[1] != 0);
         let mut bounds = queue_view::CameraBounds::new(
             optMeleeScale == SCALE_STEP,
             (width(ScreenWidth), height(ScreenHeight)),
         );
-        let mut handle = head();
-        while !handle.is_null() {
-            let e = locked(handle);
-            if (*e).state_flags & PRE_PROCESS_BIT == 0 {
-                preprocess(e);
+        let mut handle = cx.b.elements.head();
+        while let Some(e) = handle {
+            if cx.b.elements[e].state_flags & PRE_PROCESS_BIT == 0 {
+                preprocess(cx, e);
             }
-            let next = (*e).succ;
-            if colliding(&*e) && (*e).state_flags & COLLISION_BIT == 0 {
-                process_collisions(next, e, MAX_TIME_VALUE as TIME_VALUE, PRE_PROCESS_BIT);
+            let next = cx.b.elements.succ(e);
+            if colliding(&cx.b.elements[e]) && cx.b.elements[e].state_flags & COLLISION_BIT == 0 {
+                process_collisions(cx, next, e, MAX_TIME_VALUE as TIME_VALUE, PRE_PROCESS_BIT);
             }
-            if (*e).state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
+            if cx.b.elements[e].state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0 {
                 bounds.include(
-                    (*e).next.location,
-                    (*e).playerNr,
+                    cx.b.elements[e].next.location,
+                    cx.b.elements[e].playerNr,
                     active_sides,
                     &queue_view::ViewConfig {
-                        limit: OPT_MAX_ZOOM_OUT,
-                        zoom: zoom_out,
+                        limit: cx.b.max_zoom_out,
+                        zoom: cx.b.zoom_out,
                         step: optMeleeScale == SCALE_STEP,
-                        activity: GlobData.Game_state.CurrentActivity as BYTE,
+                        activity: cx.world.activity() as BYTE,
                         dimensions: (width(ScreenWidth), height(ScreenHeight)),
                     },
                 );
             }
-            let _ = locked(handle);
             handle = next;
         }
-        let minimum = bounds.finish(OPT_MAX_ZOOM_OUT, zoom_out, optMeleeScale == SCALE_STEP);
+        let minimum = bounds.finish(
+            cx.b.max_zoom_out,
+            cx.b.zoom_out,
+            optMeleeScale == SCALE_STEP,
+        );
         calc_view_engine(
+            cx,
             &mut bounds.origin,
             minimum,
             scroll_x,
@@ -692,16 +667,16 @@ pub(crate) mod engine {
         )
     }
 
-    unsafe fn postprocess(e: *mut ELEMENT) {
-        if let Some(post) = (*e).postprocess_func {
-            dispatch::invoke(post as usize, (*e).pParent as usize, || post(e));
+    unsafe fn postprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if let Some(post) = cx.b.elements[e].postprocess_func {
+            invoke_element(cx, post, e);
         }
-        image!(copy; (*e).current, (*e).next);
-        if colliding(&*e) {
-            init_intersect_start(&mut *e);
-            init_intersect_end(&mut *e);
+        image!(copy; cx.b.elements[e].current, cx.b.elements[e].next);
+        if colliding(&cx.b.elements[e]) {
+            init_intersect_start(&mut cx.b.elements[e]);
+            init_intersect_end(&mut cx.b.elements[e]);
         }
-        (*e).state_flags = ((*e).state_flags
+        cx.b.elements[e].state_flags = (cx.b.elements[e].state_flags
             & !((PRE_PROCESS | CHANGING | APPEARING) as ELEMENT_FLAGS))
             | POST_PROCESS_BIT;
     }
@@ -710,46 +685,50 @@ pub(crate) mod engine {
     /// The initialized element queue and display pool are exclusively game-thread owned.
     #[no_mangle]
     pub unsafe extern "C" fn AllocElement() -> HELEMENT {
-        let handle = AllocLink(&raw mut disp_q);
-        if !handle.is_null() {
-            let e = locked(handle);
-            ptr::write_bytes(e, 0, 1);
-            (*e).PrimIndex = DisplayFreeList;
-            if (*e).PrimIndex == END {
-                crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
-                libc::exit(libc::EXIT_FAILURE);
-            }
-            (*e).PrimIndex =
-                alloc_display_prim((&raw mut DisplayArray).cast(), &raw mut DisplayFreeList);
-            (*primitive((*e).PrimIndex)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-            let _ = locked(handle);
-        }
-        crate::collections::observation::record(crate::collections::observation::Event::Allocate(
-            handle as usize,
-        ));
-        handle
+        crate::app::bridge::enter(|cx| {
+            let handle = if let Some(id) = cx.b.elements.alloc() {
+                let index = DisplayFreeList;
+                if index == END {
+                    crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
+                    libc::exit(libc::EXIT_FAILURE);
+                }
+                let index =
+                    alloc_display_prim((&raw mut DisplayArray).cast(), &raw mut DisplayFreeList);
+                cx.b.elements[id].PrimIndex = index;
+                (*primitive(index)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                cx.b.elements.raw(id)
+            } else {
+                ptr::null_mut()
+            };
+            crate::collections::observation::record(
+                crate::collections::observation::Event::Allocate(handle as usize),
+            );
+            handle
+        })
     }
 
     /// # Safety
     /// `handle` is null or an unlinked allocated element from `disp_q`.
     #[no_mangle]
     pub unsafe extern "C" fn FreeElement(handle: HELEMENT) {
-        if !handle.is_null() {
-            let e = locked(handle);
-            free_display_prim(
-                (&raw mut DisplayArray).cast(),
-                &raw mut DisplayFreeList,
-                (*e).PrimIndex,
-            );
-            let _ = locked(handle);
-            crate::collections::observation::record(crate::collections::observation::Event::Free(
-                handle as usize,
-            ));
-            FreeLink(&raw mut disp_q, handle);
-        }
+        crate::app::bridge::enter(|cx| {
+            if let Some(id) = cx.b.elements.id(handle) {
+                let index = cx.b.elements[id].PrimIndex;
+                free_display_prim(
+                    (&raw mut DisplayArray).cast(),
+                    &raw mut DisplayFreeList,
+                    index,
+                );
+                crate::collections::observation::record(
+                    crate::collections::observation::Event::Free(handle as usize),
+                );
+                cx.b.elements.free(id);
+            }
+        });
     }
 
     unsafe fn calc_view_engine(
+        cx: &mut Cx<'_>,
         origin: *mut POINT,
         next_reduction: SIZE,
         scroll_x: *mut SIZE,
@@ -763,9 +742,9 @@ pub(crate) mod engine {
             height(ScreenHeight),
         );
         if (dx != 0 || dy != 0) && inHQSpace() != 0 {
-            MoveSIS(&mut dx, &mut dy);
+            crate::app::bridge::publish(cx, || MoveSIS(&mut dx, &mut dy));
         }
-        let state = if zoom_out == next_reduction {
+        let state = if cx.b.zoom_out == next_reduction {
             if dx == 0 && dy == 0 && inHQSpace() == 0 {
                 ViewState::Stable
             } else {
@@ -773,7 +752,7 @@ pub(crate) mod engine {
             }
         } else {
             let (new_origin, reduction) = view_origin(
-                zoom_out,
+                cx.b.zoom_out,
                 next_reduction,
                 ships_alive,
                 optMeleeScale == SCALE_STEP,
@@ -781,11 +760,11 @@ pub(crate) mod engine {
                 height(ScreenHeight),
             );
             SpaceOrg = new_origin;
-            zoom_out = reduction;
+            cx.b.zoom_out = reduction;
             ViewState::Change
         };
-        if (GlobData.Game_state.CurrentActivity as u8) <= IN_HYPERSPACE as u8 {
-            MoveGalaxy(state as VIEW_STATE, dx, dy);
+        if (cx.world.activity() as u8) <= IN_HYPERSPACE as u8 {
+            crate::app::bridge::publish(cx, || MoveGalaxy(state as VIEW_STATE, dx, dy));
         }
         *scroll_x = dx;
         *scroll_y = dy;
@@ -815,21 +794,25 @@ pub(crate) mod engine {
     /// The element queue has been initialized; no elements may remain in use.
     #[no_mangle]
     pub unsafe extern "C" fn InitDisplayList() {
-        if optMeleeScale == SCALE_STEP {
-            zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
-            OPT_MAX_ZOOM_OUT = MAX_VIS_REDUCTION as SIZE;
-        } else {
-            zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
-            OPT_MAX_ZOOM_OUT = MAX_ZOOM_OUT as SIZE;
-        }
-        crate::collections::observation::record(crate::collections::observation::Event::ResetPool);
-        ReinitQueue(&raw mut disp_q);
-        for i in 0..MAX_DISPLAY_PRIMS as COUNT {
-            (*primitive(i)).Links = make_links(END, i + 1);
-        }
-        (*primitive(MAX_DISPLAY_PRIMS as COUNT - 1)).Links = make_links(END, END);
-        DisplayFreeList = 0;
-        DisplayLinks = make_links(END, END);
+        crate::app::bridge::enter(|cx| {
+            if optMeleeScale == SCALE_STEP {
+                cx.b.zoom_out = (MAX_VIS_REDUCTION + 1) as SIZE;
+                cx.b.max_zoom_out = MAX_VIS_REDUCTION as SIZE;
+            } else {
+                cx.b.zoom_out = (MAX_ZOOM_OUT + (1 << ZOOM_SHIFT)) as SIZE;
+                cx.b.max_zoom_out = MAX_ZOOM_OUT as SIZE;
+            }
+            crate::collections::observation::record(
+                crate::collections::observation::Event::ResetPool,
+            );
+            cx.b.elements.reinit();
+            for i in 0..MAX_DISPLAY_PRIMS as COUNT {
+                (*primitive(i)).Links = make_links(END, i + 1);
+            }
+            (*primitive(MAX_DISPLAY_PRIMS as COUNT - 1)).Links = make_links(END, END);
+            DisplayFreeList = 0;
+            DisplayLinks = make_links(END, END);
+        });
     }
 
     /// # Safety
@@ -850,40 +833,44 @@ pub(crate) mod engine {
     /// `dead` and all target handles in the queue refer to live pool elements.
     #[no_mangle]
     pub unsafe extern "C" fn Untarget(dead: *mut ELEMENT) {
-        let mut handle = head();
-        while !handle.is_null() {
-            let e = locked(handle);
-            let next = (*e).succ;
-            let target = (*e).hTarget;
-            if !target.is_null() {
-                let target_element = locked(target);
-                if target_element == dead {
-                    (*e).hTarget = ptr::null_mut();
-                }
-                let _ = locked(target);
-            }
-            let _ = locked(handle);
-            handle = next;
-        }
+        crate::app::bridge::enter(|cx| {
+            let dead =
+                cx.b.elements
+                    .id(dead.cast())
+                    .unwrap_or_else(|| panic!("null dead element"));
+            untarget(cx, dead);
+        });
     }
 
-    unsafe fn postprocess_queue(view_state: ViewState, mut scroll_x: SIZE, mut scroll_y: SIZE) {
+    unsafe fn retire(cx: &mut Cx<'_>, id: ElementId) {
+        let raw = cx.b.elements.raw(id);
+        crate::app::bridge::publish(cx, || {
+            RemoveElement(raw);
+            FreeElement(raw);
+        });
+    }
+
+    unsafe fn postprocess_queue(
+        cx: &mut Cx<'_>,
+        view_state: ViewState,
+        mut scroll_x: SIZE,
+        mut scroll_y: SIZE,
+    ) {
         let reduction = if optMeleeScale == SCALE_STEP {
-            (i32::from(zoom_out) + ONE_SHIFT as i32) as SIZE
+            (i32::from(cx.b.zoom_out) + ONE_SHIFT as i32) as SIZE
         } else {
-            (i32::from(zoom_out) << ONE_SHIFT) as SIZE
+            (i32::from(cx.b.zoom_out) << ONE_SHIFT) as SIZE
         };
-        let mut handle = head();
-        while !handle.is_null() {
-            let e = locked(handle);
-            let mut flags = (*e).state_flags;
+        let mut handle = cx.b.elements.head();
+        while let Some(e) = handle {
+            let mut flags = cx.b.elements[e].state_flags;
             let (delta_x, delta_y);
             let next_handle;
             if flags & PRE_PROCESS_BIT != 0 {
                 if flags & COLLISION_BIT == 0 {
-                    (*e).state_flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
+                    cx.b.elements[e].state_flags &= !(DEFY_PHYSICS as ELEMENT_FLAGS);
                 } else {
-                    (*e).state_flags &= !COLLISION_BIT;
+                    cx.b.elements[e].state_flags &= !COLLISION_BIT;
                 }
                 if flags & POST_PROCESS_BIT != 0 {
                     delta_x = 0;
@@ -894,39 +881,35 @@ pub(crate) mod engine {
                 }
             } else {
                 let mut pending = handle;
-                loop {
-                    let post = locked(pending);
-                    if (*post).state_flags & PRE_PROCESS_BIT == 0 {
-                        preprocess(post);
+                while let Some(post) = pending {
+                    if cx.b.elements[post].state_flags & PRE_PROCESS_BIT == 0 {
+                        preprocess(cx, post);
                     }
-                    let next = (*post).succ;
-                    if colliding(&*post) && (*post).state_flags & COLLISION_BIT == 0 {
+                    let next = cx.b.elements.succ(post);
+                    if colliding(&cx.b.elements[post])
+                        && cx.b.elements[post].state_flags & COLLISION_BIT == 0
+                    {
                         process_collisions(
-                            head(),
+                            cx,
+                            cx.b.elements.head(),
                             post,
                             MAX_TIME_VALUE as TIME_VALUE,
                             PRE_PROCESS_BIT | POST_PROCESS_BIT,
                         );
                     }
-                    let _ = locked(pending);
                     pending = next;
-                    if pending.is_null() {
-                        break;
-                    }
                 }
                 scroll_x = 0;
                 scroll_y = 0;
                 delta_x = 0;
                 delta_y = 0;
-                flags = (*e).state_flags;
+                flags = cx.b.elements[e].state_flags;
             }
             if flags & DISAPPEARING as ELEMENT_FLAGS != 0 {
-                next_handle = (*e).succ;
-                let _ = locked(handle);
-                RemoveElement(handle);
-                FreeElement(handle);
+                next_handle = cx.b.elements.succ(e);
+                retire(cx, e);
             } else {
-                let primitive = primitive((*e).PrimIndex);
+                let primitive = primitive(cx.b.elements[e].PrimIndex);
                 let kind = (*primitive).Type;
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
@@ -938,36 +921,41 @@ pub(crate) mod engine {
                     let next;
                     if kind == gfx_object_LINE_PRIM as GRAPHICS_PRIM {
                         let (location, first, second) = projection.line(
-                            (*e).current.location,
-                            (*e).next.location,
+                            cx.b.elements[e].current.location,
+                            cx.b.elements[e].next.location,
                             (delta_x, delta_y),
                         );
                         next = location;
                         (*primitive).Object.Line.first = first;
                         (*primitive).Object.Line.second = second;
                     } else {
-                        next = projection.scroll((*e).next.location, (delta_x, delta_y));
+                        next =
+                            projection.scroll(cx.b.elements[e].next.location, (delta_x, delta_y));
                         (*primitive).Object.Point = projection.display(next);
                         if kind == gfx_object_STAMP_PRIM as GRAPHICS_PRIM
                             || kind == gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM
                         {
                             if view_state == ViewState::Change || flags & CHANGE_BITS != 0 {
                                 let (index, scale) = if optMeleeScale == SCALE_STEP {
-                                    (zoom_out as COUNT, GSCALE_IDENTITY as COUNT)
+                                    (cx.b.zoom_out as COUNT, GSCALE_IDENTITY as COUNT)
                                 } else {
-                                    calc_zoom_stuff(zoom_out)
+                                    calc_zoom_stuff(cx.b.zoom_out)
                                 };
-                                image!(frame; (*e).next.image.frame, SetEquFrameIndex(
-                                    *(*e).next.image.farray.add(usize::from(index)),
-                                    (*e).next.image.frame,
+                                image!(frame; cx.b.elements[e].next.image.frame, SetEquFrameIndex(
+                                    *cx.b.elements[e].next.image.farray.add(usize::from(index)),
+                                    cx.b.elements[e].next.image.frame,
                                 ));
                                 if optMeleeScale == SCALE_TRILINEAR
                                     && index < 2
                                     && scale != GSCALE_IDENTITY as COUNT
                                 {
-                                    let frame = (*e).next.image.frame;
+                                    let frame = cx.b.elements[e].next.image.frame;
                                     let mmframe = SetEquFrameIndex(
-                                        *(*e).next.image.farray.add(usize::from(index) + 1),
+                                        *cx.b.elements[e]
+                                            .next
+                                            .image
+                                            .farray
+                                            .add(usize::from(index) + 1),
                                         frame,
                                     );
                                     if !frame.is_null() && !mmframe.is_null() {
@@ -981,17 +969,16 @@ pub(crate) mod engine {
                                     }
                                 }
                             }
-                            (*primitive).Object.Stamp.frame = (*e).next.image.frame;
+                            (*primitive).Object.Stamp.frame = cx.b.elements[e].next.image.frame;
                         }
                     }
-                    (*e).next.location = next;
+                    cx.b.elements[e].next.location = next;
                 }
-                postprocess(e);
+                postprocess(cx, e);
                 if kind < gfx_object_NUM_PRIMS as GRAPHICS_PRIM {
-                    InsertPrim(&raw mut DisplayLinks, (*e).PrimIndex, END);
+                    InsertPrim(&raw mut DisplayLinks, cx.b.elements[e].PrimIndex, END);
                 }
-                next_handle = (*e).succ;
-                let _ = locked(handle);
+                next_handle = cx.b.elements.succ(e);
             }
             handle = next_handle;
         }
@@ -999,33 +986,32 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn RedrawQueue(clear: BOOLEAN) {
+    unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: BOOLEAN) {
         SetContext(StatusContext);
         let (mut sx, mut sy) = (0, 0);
-        let state = preprocess_queue(&mut sx, &mut sy);
-        postprocess_queue(state, sx, sy);
+        let state = preprocess_queue(cx, &mut sx, &mut sy);
+        postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
             UpdateSoundPositions();
         }
         SetContext(SpaceContext);
-        let activity = GlobData.Game_state.CurrentActivity;
+        let activity = cx.world.activity();
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
         {
-            let skip = (nth_frame >> 8) as BYTE;
+            let skip = (cx.b.nth_frame >> 8) as BYTE;
             if skip != BYTE::MAX
                 && (skip == 0 || {
-                    nth_frame = nth_frame.wrapping_sub(1);
-                    nth_frame & 0x00ff == 0
+                    cx.b.nth_frame = cx.b.nth_frame.wrapping_sub(1);
+                    cx.b.nth_frame & 0x00ff == 0
                 })
             {
-                nth_frame = nth_frame.wrapping_add(UWORD::from(skip));
+                cx.b.nth_frame = cx.b.nth_frame.wrapping_add(UWORD::from(skip));
                 if clear != 0 {
                     ClearDrawable();
                 }
                 if optMeleeScale != SCALE_STEP {
-                    let (_, scale) = calc_zoom_stuff(zoom_out);
+                    let (_, scale) = calc_zoom_stuff(cx.b.zoom_out);
                     SetGraphicScale(i32::from(scale));
                 }
                 DrawBatch((&raw mut DisplayArray).cast(), DisplayLinks, 0);
@@ -1033,10 +1019,16 @@ pub(crate) mod engine {
             }
             FlushSounds();
         } else {
-            ProcessSound((!0usize) as SOUND, ptr::null_mut());
+            crate::app::bridge::publish(cx, || ProcessSound((!0usize) as SOUND, ptr::null_mut()));
             FlushSounds();
         }
         DisplayLinks = make_links(END, END);
+    }
+    /// # Safety
+    /// Game thread, inside the published lifecycle, with initialized rendering state.
+    #[no_mangle]
+    pub unsafe extern "C" fn RedrawQueue(clear: BOOLEAN) {
+        crate::app::bridge::enter(|cx| redraw_queue(cx, clear));
     }
 }
 
@@ -1049,6 +1041,40 @@ pub use engine::{
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn live_helpers_preserve_record_coordinates_and_pool_addresses() {
+        use helpers::*;
+        assert_eq!(width(320), 8192);
+        assert_eq!(height(240), 7680);
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
+        let mut record: ELEMENT = unsafe { std::mem::zeroed() };
+        record.current.location = POINT { x: 44, y: 52 };
+        record.next.location = POINT { x: 60, y: 68 };
+        assert!(colliding(&record));
+        init_intersect_start(&mut record);
+        init_intersect_end(&mut record);
+        assert_eq!(record.IntersectControl.IntersectStamp.origin.x, 11);
+        assert_eq!(record.IntersectControl.EndPoint.y, 17);
+        record.state_flags = NONSOLID as u16;
+        assert!(!colliding(&record));
+        let mut frame = std::ptr::null_mut();
+        record.next.image.farray = &raw mut frame;
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
+        unsafe {
+            init_intersect_frame(&raw mut record);
+            assert!(record.IntersectControl.IntersectStamp.frame.is_null());
+            let original = disp_q;
+            disp_q.pq_tab = (&raw mut record).cast();
+            disp_q.object_size = size_of::<ELEMENT>() as u16;
+            disp_q.num_objects = 1;
+            assert_eq!(locked((&raw mut record).cast()), &raw mut record);
+            assert!(locked(std::ptr::null_mut()).is_null());
+            assert_eq!(primitive(0), (&raw mut DisplayArray).cast());
+            disp_q = original;
+        }
+    }
 
     #[test]
     fn zoom_mip_thresholds_and_integer_scale() {
@@ -1193,8 +1219,10 @@ mod tests {
 
     #[test]
     fn primitive_insertion_preserves_head_tail_and_neighbor_order() {
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut array: [PRIMITIVE; 5] = unsafe { std::mem::zeroed() };
         let mut list = make_links(END, END);
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
         unsafe {
             insert_prim_links(array.as_mut_ptr(), &mut list, 0, END);
             insert_prim_links(array.as_mut_ptr(), &mut list, 1, END);
@@ -1210,12 +1238,14 @@ mod tests {
 
     #[test]
     fn primitive_pool_allocates_in_order_and_reuses_frees_lifo() {
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
         let mut array: [PRIMITIVE; 4] = unsafe { std::mem::zeroed() };
         for (i, primitive) in array.iter_mut().enumerate() {
             primitive.Links = make_links(END, if i == 3 { END } else { i as COUNT + 1 });
             primitive.Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
         }
         let mut free = 0;
+        // SAFETY: this serialized test owns the records and projected storage for the scope.
         unsafe {
             assert_eq!(alloc_display_prim(array.as_mut_ptr(), &mut free), 0);
             assert_eq!(alloc_display_prim(array.as_mut_ptr(), &mut free), 1);

@@ -166,7 +166,7 @@ pub(crate) mod engine {
             index: face,
             life: DISCRIMINATOR_LIFE,
             farray: (&raw mut (*race).ship_data.special).cast::<FRAME>(),
-            preprocess_func: Some(butt_missile_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(butt_missile_preprocess)),
             blast_offs: DISCRIMINATOR_OFFSET,
         };
         let butt = initialize_missile(&mut block);

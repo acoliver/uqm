@@ -105,7 +105,7 @@ pub(crate) mod engine {
             hit_points: 1,
             damage: 1,
             life: 10,
-            preprocess_func: Some(spit_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(spit_preprocess)),
             blast_offs: 0,
         };
         *out = initialize_missile(&mut block);
@@ -153,8 +153,8 @@ pub(crate) mod engine {
         let h = initialize_missile(&mut block);
         if !h.is_null() {
             let tongue = element(h);
-            (*tongue).postprocess_func = Some(tongue_postprocess);
-            (*tongue).collision_func = Some(tongue_collision);
+            (*tongue).postprocess_func = Some(ElementHook::Legacy(tongue_postprocess));
+            (*tongue).collision_func = Some(CollisionHook::Legacy(tongue_collision));
             if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
                 (*tongue).__bindgen_anon_4.turn_wait = (*ss).special_counter;
             } else {

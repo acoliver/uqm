@@ -246,15 +246,7 @@ pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
 pub use crate::engine::battle::record::ELEMENT;
-pub type ElementProcessFunc = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-pub type ElementCollisionFunc = ::std::option::Option<
-    unsafe extern "C" fn(
-        ElementPtr0: *mut ELEMENT,
-        pPt0: *mut POINT,
-        ElementPtr1: *mut ELEMENT,
-        pPt1: *mut POINT,
-    ),
->;
+pub use crate::engine::battle::record::{ElementProcessFunc, ElementCollisionFunc};
 pub use crate::engine::battle::record::element;
 pub use crate::engine::battle::record::element__bindgen_ty_1;
 pub use crate::engine::battle::record::element__bindgen_ty_2;

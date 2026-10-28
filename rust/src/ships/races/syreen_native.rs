@@ -136,7 +136,7 @@ pub(crate) mod engine {
                 (*crew).playerNr = (*source).playerNr;
                 (*crew).state_flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
                 (*crew).__bindgen_anon_1.life_span = 0;
-                (*crew).death_func = Some(spawn_crew);
+                (*crew).death_func = Some(ElementHook::Legacy(spawn_crew));
                 (*crew).pParent = (*source).pParent;
                 (*crew).hTarget = ptr::null_mut();
 

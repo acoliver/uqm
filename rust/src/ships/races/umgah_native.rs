@@ -143,7 +143,7 @@ pub(crate) mod engine {
             hit_points: 100,
             damage: 1,
             life: 1,
-            preprocess_func: Some(cone_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(cone_preprocess)),
             blast_offs: 0,
             index: 0,
         };
@@ -161,7 +161,7 @@ pub(crate) mod engine {
         *out = initialize_missile(&mut b);
         if !(*out).is_null() {
             let cone = element(*out);
-            (*cone).collision_func = Some(cone_collision);
+            (*cone).collision_func = Some(CollisionHook::Legacy(cone_collision));
             (*cone).state_flags &= !(APPEARING as u16);
             image!(copy; (*cone).next, (*cone).current);
             (*cone).IntersectControl.IntersectStamp.origin = POINT {

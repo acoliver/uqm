@@ -133,10 +133,10 @@ mod live {
                 if CalculateGravity(element) == 0 && TimeSpaceMatterConflict(element) == 0 { break; }
             }
         }
-        (*element).preprocess_func = Some(crate::battle::ship_native::ship_preprocess);
-        (*element).postprocess_func = Some(crate::battle::ship_native::ship_postprocess);
-        (*element).death_func = Some(crate::battle::tactrans_native::ship_death);
-        (*element).collision_func = Some(crate::battle::ship_native::collision);
+        (*element).preprocess_func = Some(ElementHook::Legacy(crate::battle::ship_native::ship_preprocess));
+        (*element).postprocess_func = Some(ElementHook::Legacy(crate::battle::ship_native::ship_postprocess));
+        (*element).death_func = Some(ElementHook::Legacy(crate::battle::tactrans_native::ship_death));
+        (*element).collision_func = Some(CollisionHook::Legacy(crate::battle::ship_native::collision));
         (*element).velocity = mem::zeroed();
         (*element).pParent = ship.cast();
         (*element).hTarget = ptr::null_mut();
@@ -176,7 +176,7 @@ mod live {
         handle = rust_bridge_GetHeadElement();
         while !handle.is_null() {
             let element = &mut *handle.cast::<ELEMENT>(); handle = element.succ;
-            if element.state_flags & PLAYER_SHIP as u16 != 0 || element.death_func.is_some_and(|callback| std::ptr::fn_addr_eq(callback, crate::battle::tactrans_native::new_ship as unsafe extern "C" fn(*mut ELEMENT))) {
+            if element.state_flags & PLAYER_SHIP as u16 != 0 || element.death_func.is_some_and(|callback| callback.address() == crate::battle::tactrans_native::new_ship as *const () as usize) {
                 let ship = element.pParent.cast::<STARSHIP>();
                 if ship.is_null() || (*ship).RaceDescPtr.is_null() { continue; }
                 let descriptor = (*ship).RaceDescPtr;

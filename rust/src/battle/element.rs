@@ -128,11 +128,15 @@ use super::velocity::VelocityDesc;
 // ---------------------------------------------------------------------------
 
 /// Element processing function (preprocess, postprocess, death)
-pub type ElementProcessFunc = Option<unsafe extern "C" fn(*mut Element)>;
+pub type ElementProcessFunc =
+    Option<crate::engine::battle::ElementHook<unsafe extern "C" fn(*mut Element)>>;
 
 /// Element collision function
-pub type ElementCollisionFunc =
-    Option<unsafe extern "C" fn(*mut Element, *const Point, *mut Element, *const Point)>;
+pub type ElementCollisionFunc = Option<
+    crate::engine::battle::CollisionHook<
+        unsafe extern "C" fn(*mut Element, *const Point, *mut Element, *const Point),
+    >,
+>;
 
 // ---------------------------------------------------------------------------
 // Link Types (for doubly-linked display list)

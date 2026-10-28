@@ -148,10 +148,10 @@ fn thrust(
 
 #[cfg(not(test))]
 fn install_ship_hooks(e: &mut ELEMENT, parent: *mut std::ffi::c_void, side: SIZE, species: u32) {
-    e.preprocess_func = Some(engine::ship_preprocess);
-    e.postprocess_func = Some(engine::ship_postprocess);
-    e.death_func = Some(ship_death);
-    e.collision_func = Some(engine::collision);
+    e.preprocess_func = Some(ElementHook::Legacy(engine::ship_preprocess));
+    e.postprocess_func = Some(ElementHook::Legacy(engine::ship_postprocess));
+    e.death_func = Some(ElementHook::Legacy(ship_death));
+    e.collision_func = Some(CollisionHook::Legacy(engine::collision));
     e.velocity.zero();
     e.pParent = parent;
     crate::battle::process_native::dispatch::record_spawn(parent as usize, side, species);
@@ -159,10 +159,13 @@ fn install_ship_hooks(e: &mut ELEMENT, parent: *mut std::ffi::c_void, side: SIZE
 }
 
 #[cfg(not(test))]
+const GRAVITY_MASS_NATIVE: u16 = 100;
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::process_native::dispatch::invoke;
+    use crate::battle::process_native::invoke_element::invoke_race_element;
     use crate::battle::sounds::{GameSounds, ProcessSound};
     use crate::battle::status_native::{
         DeltaEnergy, DrawCaptainsWindow, PostProcessStatus, PreProcessStatus,
@@ -174,7 +177,6 @@ pub(crate) mod engine {
     };
     use std::{mem, ptr};
 
-    const GRAVITY_MASS_NATIVE: u16 = 100;
     const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
 
@@ -236,7 +238,7 @@ pub(crate) mod engine {
                 DrawCaptainsWindow(ship);
                 SetContext(old);
                 if let Some(preprocess) = (*rd).preprocess_func {
-                    invoke(preprocess as usize, (*e).pParent as usize, || preprocess(e));
+                    crate::app::bridge::enter(|cx| invoke_race_element(cx, preprocess, e));
                 }
                 if (*e).hTarget.is_null() {
                     ship_transition(e);
@@ -269,7 +271,7 @@ pub(crate) mod engine {
             DeltaEnergy(e, (*rd).characteristics.energy_regeneration as i8 as SIZE);
         }
         if let Some(preprocess) = (*rd).preprocess_func {
-            invoke(preprocess as usize, (*e).pParent as usize, || preprocess(e));
+            crate::app::bridge::enter(|cx| invoke_race_element(cx, preprocess, e));
             flags = (*ship).cur_status_flags;
         }
         if (*e).__bindgen_anon_4.turn_wait != 0 {
@@ -317,9 +319,12 @@ pub(crate) mod engine {
         {
             let mut weapons = [ptr::null_mut(); 6];
             let initialize = (*rd).init_weapon_func.expect("ship weapon initializer");
-            let count = invoke(initialize as usize, (*e).pParent as usize, || {
-                initialize(e, weapons.as_mut_ptr())
-            });
+            let count = crate::battle::process_native::invoke_race::invoke_weapon(
+                initialize,
+                (*e).pParent as usize,
+                e,
+                weapons.as_mut_ptr(),
+            );
             if count != 0 {
                 let owner = starship(e);
                 let mut played = false;
@@ -344,9 +349,7 @@ pub(crate) mod engine {
             (*ship).special_counter -= 1;
         }
         if let Some(postprocess) = (*rd).postprocess_func {
-            invoke(postprocess as usize, (*e).pParent as usize, || {
-                postprocess(e)
-            });
+            crate::app::bridge::enter(|cx| invoke_race_element(cx, postprocess, e));
         }
         if GlobData.Game_state.CurrentActivity as BYTE <= IN_ENCOUNTER as BYTE {
             PostProcessStatus(e);

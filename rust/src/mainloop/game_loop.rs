@@ -469,7 +469,8 @@ pub extern "C" fn rust_game_loop() -> c_int {
 
 #[cfg(not(test))]
 pub extern "C" fn rust_game_loop() -> c_int {
-    match run_game_lifecycle_impl(&cffi::CffiOps) {
+    // SAFETY: this is the synchronous game-thread lifecycle and storage boundary.
+    match unsafe { crate::app::with_battle(|| run_game_lifecycle_impl(&cffi::CffiOps)) } {
         Ok(_) => 0,
         Err(e) => {
             eprintln!("rust_game_loop: fatal error: {e}");

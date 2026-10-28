@@ -158,7 +158,7 @@ pub(crate) mod engine {
         }
         (*blast).__bindgen_anon_5.thrust_wait = animations as u8;
         (*blast).__bindgen_anon_1.life_span = (animations << 1) - 1;
-        (*blast).preprocess_func = Some(plasma_blast_preprocess);
+        (*blast).preprocess_func = Some(ElementHook::Legacy(plasma_blast_preprocess));
         image!(copy; (*blast).current.image.farray, (*e0).next.image.farray);
         image!(frame; (*blast).current.image.frame, SetAbsFrameIndex(*(*blast).current.image.farray, NUM_PLASMAS as u16));
     }
@@ -246,13 +246,13 @@ pub(crate) mod engine {
             hit_points: MISSILE_DAMAGE as i16,
             damage: MISSILE_DAMAGE as i16,
             life: MISSILE_LIFE as u16,
-            preprocess_func: Some(plasma_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(plasma_preprocess)),
             blast_offs: MISSILE_OFFSET,
         };
         *array = initialize_missile(&mut block);
         if !(*array).is_null() {
             let p = element(*array);
-            (*p).collision_func = Some(plasma_collision);
+            (*p).collision_func = Some(CollisionHook::Legacy(plasma_collision));
             (*p).__bindgen_anon_4.turn_wait = TRACK_WAIT + 2;
         }
         1

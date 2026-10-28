@@ -40,10 +40,10 @@ pub(super) fn element(
     target(fields, prefix, e, journal, owners);
     velocity(fields, prefix, &e.velocity);
     for (name, address) in [
-        ("preprocess", e.preprocess_func.map_or(0, |f| f as usize)),
-        ("postprocess", e.postprocess_func.map_or(0, |f| f as usize)),
-        ("collision", e.collision_func.map_or(0, |f| f as usize)),
-        ("death", e.death_func.map_or(0, |f| f as usize)),
+        ("preprocess", e.preprocess_func.map_or(0, |f| f.address())),
+        ("postprocess", e.postprocess_func.map_or(0, |f| f.address())),
+        ("collision", e.collision_func.map_or(0, |f| f.address())),
+        ("death", e.death_func.map_or(0, |f| f.address())),
     ] {
         value(
             fields,

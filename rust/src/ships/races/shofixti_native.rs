@@ -217,7 +217,7 @@ pub(crate) mod engine {
                 image!(frame; (*d).current.image.frame, frame);
                 (*d).__bindgen_anon_1.life_span = GetFrameCount(frame.cast());
                 (*d).current.location = (*e).current.location;
-                (*d).preprocess_func = Some(destruct_preprocess);
+                (*d).preprocess_func = Some(ElementHook::Legacy(destruct_preprocess));
                 (*d).postprocess_func = None;
                 (*d).death_func = None;
                 (*d).velocity = mem::zeroed();
@@ -231,9 +231,9 @@ pub(crate) mod engine {
             let obj = element(h);
             let next = (*obj).succ;
             let flags = (*obj).state_flags;
-            let marine = (*obj).preprocess_func.map(|f| f as usize)
+            let marine = (*obj).preprocess_func.map(|f| f.address())
                 == Some(intruder_preprocess as *const () as usize)
-                && (*obj).collision_func.map(|f| f as usize)
+                && (*obj).collision_func.map(|f| f.address())
                     == Some(marine_collision as *const () as usize);
             if flags & (NONSOLID | DISAPPEARING) as u16 == 0 || marine {
                 // C stores each subtraction and negation in SIZE before shifting.
@@ -287,20 +287,20 @@ pub(crate) mod engine {
             (*d).__bindgen_anon_1.life_span = 0;
             (*d).pParent = (*e).pParent;
             (*d).hTarget = ptr::null_mut();
-            (*d).death_func = Some(self_destruct_kill_objects);
+            (*d).death_func = Some(ElementHook::Legacy(self_destruct_kill_objects));
             put_element(h);
         }
         DeltaCrew(e, -(i32::from((*e).__bindgen_anon_2.crew_level)) as SIZE);
         (*e).state_flags |= NONSOLID as u16;
         (*e).__bindgen_anon_1.life_span = 0;
-        (*e).death_func = Some(shofixti_destruct_death);
+        (*e).death_func = Some(ElementHook::Legacy(shofixti_destruct_death));
     }
 
     pub(crate) unsafe extern "C" fn shofixti_destruct_death(e: *mut ELEMENT) {
         let ss = starship(e);
         StopAllBattleMusic();
         StartShipExplosion(e, false);
-        (*e).preprocess_func = Some(destruct_preprocess);
+        (*e).preprocess_func = Some(ElementHook::Legacy(destruct_preprocess));
         PlaySound(
             SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1).cast(),
             CalcSoundPosition(e),

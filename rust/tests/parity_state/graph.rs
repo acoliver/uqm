@@ -44,7 +44,9 @@ pub(super) fn elements_and_fighters(directory: &Path) {
     second.current.location.x = -91;
     second.current.location.y = 43;
     second.crew_or_hp = 7;
-    second.preprocess_func = Some(unregistered_hook);
+    second.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+        unregistered_hook,
+    ));
     neutral.pred = &mut *second;
     neutral.player_nr = -1;
     neutral.h_target = &mut *first;
@@ -198,7 +200,9 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     element.crew_or_hp = 19;
     element.current.location.x = -9;
     element.p_parent = ptr::from_mut(&mut ship).cast();
-    element.preprocess_func = Some(unregistered_hook);
+    element.preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+        unregistered_hook,
+    ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     unsafe {
         GlobData.Game_state.CurrentActivity = IN_BATTLE as u16;

@@ -1,4 +1,7 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
+#[path = "support/battle_context.rs"]
+mod battle_context;
+
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
@@ -43,7 +46,6 @@ unsafe extern "C" {
     fn TFB_DrawImage_New(canvas: *mut c_void) -> *mut c_void;
     fn TFB_DrawImage_Delete(image: *mut c_void);
     static mut DisplayArray: [PRIMITIVE; 330];
-    static mut battle_counter: [BYTE; 2];
     static mut _GraphicsStatusFlags: BYTE;
 }
 static LOCK: Mutex<()> = Mutex::new(());
@@ -61,7 +63,7 @@ impl Battle {
         let globals = GlobData;
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
-        let counters = battle_counter;
+        let counters = uqm_rust::app::bridge::battle(|b| b.counters);
         assert_ne!(
             InitQueue(
                 &raw mut disp_q,
@@ -78,7 +80,7 @@ impl Battle {
         ScreenWidth = 320;
         ScreenHeight = 240;
         _GraphicsStatusFlags &= !4;
-        battle_counter = [10, 10];
+        uqm_rust::app::bridge::battle(|b| b.counters = [10, 10]);
         ResetWinnerStarShip();
         Self {
             _guard: guard,
@@ -97,7 +99,7 @@ impl Drop for Battle {
             GlobData = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
-            battle_counter = self.counters;
+            uqm_rust::app::bridge::battle(|b| b.counters = self.counters);
         }
     }
 }
@@ -239,7 +241,7 @@ impl Ship {
     unsafe fn ai(&mut self, concerns: &mut [EVALUATE_DESC; 5]) {
         (self.desc.cyborg_control.intelligence_func.unwrap())(self.ptr(), concerns.as_mut_ptr(), 0);
     }
-    unsafe fn arm(&mut self) -> Option<unsafe extern "C" fn(*mut ELEMENT)> {
+    unsafe fn arm(&mut self) -> ElementProcessFunc {
         self.desc.ship_data.captain_control.special = self.captain.frame(16);
         self.ss.old_status_flags = 0;
         self.ss.cur_status_flags = SPECIAL as u16;
@@ -294,7 +296,7 @@ unsafe fn object(flags: u16, mass: BYTE, hp: COUNT, dx: i32, dy: i32) -> *mut EL
 
 #[test]
 fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         for (activity, recruited, damaged) in [
             (0, false, false),
@@ -439,12 +441,12 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             assert_eq!((*p).ship_info.crew_level, 6);
             assert!((*p).postprocess_func.is_some());
         }
-    }
+    })
 }
 
 #[test]
 fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(2);
         let mut ship = Ship::new(1);
         for facing in [0, 4, 7, 15, u16::MAX] {
@@ -519,12 +521,12 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
             assert!(failure.is_null());
             FreeElement(out);
         }
-    }
+    })
 }
 
 #[test]
 fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         let enemy = Ship::new(1);
@@ -566,12 +568,12 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
             );
             assert_eq!(ship.ss.ship_input_state & SPECIAL as u8 != 0, expected, "remaining {remaining}, turn {enemy_turn}, immediate {immediate}, crew {crew}, start {start}, counter {counter}");
         }
-    }
+    })
 }
 
 #[test]
 fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         let mut threat = Ship::new(1);
@@ -604,12 +606,12 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
         assert_eq!(PlotIntercept(threat.ptr(), ship.ptr(), 2, 0), 0);
         with_rng(55, 0, || ship.ai(&mut concerns));
         assert_eq!(ship.ss.ship_input_state & SPECIAL as u8, 0);
-    }
+    })
 }
 
 #[test]
 fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
         let mut ship = Ship::new(0);
         let post = ship.desc.postprocess_func.unwrap();
@@ -649,12 +651,12 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
         assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 0);
         assert_ne!((*ship.ptr()).state_flags & NONSOLID as u16, 0);
         assert!((*ship.ptr()).death_func.is_some());
-    }
+    })
 }
 
 #[test]
 fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(64);
         let mut ship = Ship::new(0);
         let mut enemy = Ship::new(1);
@@ -678,12 +680,20 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
             objects.push((object(flags as u16, mass, 30, dx, dy), expected));
         }
         let marine = object((NONSOLID | DISAPPEARING) as u16, 1, 1, 0, 0);
-        (*marine).preprocess_func = Some(intruder_preprocess);
-        (*marine).collision_func = Some(marine_collision);
+        (*marine).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+            intruder_preprocess,
+        ));
+        (*marine).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            marine_collision,
+        ));
         let preprocess_only = object(NONSOLID as u16, 1, 1, 0, 0);
-        (*preprocess_only).preprocess_func = Some(intruder_preprocess);
+        (*preprocess_only).preprocess_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+            intruder_preprocess,
+        ));
         let collision_only = object(NONSOLID as u16, 1, 1, 0, 0);
-        (*collision_only).collision_func = Some(marine_collision);
+        (*collision_only).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            marine_collision,
+        ));
         let fragile = object(0, 1, 19, 0, 0);
         let kill = ship.arm().unwrap();
         let deferred = element(disp_q.tail);
@@ -692,7 +702,9 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
             50,
             "damage must be deferred"
         );
-        with_rng(2, 0, || kill(deferred));
+        with_rng(2, 0, || {
+            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(kill, deferred)
+        });
         assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 31);
         assert_eq!(enemy.desc.ship_info.crew_level, 31);
         for (obj, hp) in objects {
@@ -708,15 +720,15 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
         }
         enemy.desc.ship_info.crew_level = 1;
         (*enemy.ptr()).__bindgen_anon_2.crew_level = 1;
-        kill(deferred);
+        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(kill, deferred);
         assert_eq!((*enemy.ptr()).__bindgen_anon_1.life_span, 0);
         assert_eq!(enemy.desc.ship_info.crew_level, 0);
-    }
+    })
 }
 
 #[test]
 fn failed_deferred_allocation_still_kills_the_ship() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(0);
         assert!(with_rng(4, 0, || ship.arm()).is_none());
@@ -725,12 +737,12 @@ fn failed_deferred_allocation_still_kills_the_ship() {
         assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 0);
         assert_eq!(ship.desc.ship_info.crew_level, 0);
         assert!((*ship.ptr()).death_func.is_some());
-    }
+    })
 }
 
 #[test]
 fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death() {
-    unsafe {
+    battle_context::run(|| unsafe {
         for (other_crew, other_mass, prior, expected_self, ditty) in [
             (6, 1, 0, false, true),
             (0, 1, 0, true, true),
@@ -752,7 +764,12 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             }
             ship.arm();
             let death = (*ship.ptr()).death_func.unwrap();
-            with_rng(13, 0, || death(ship.ptr()));
+            with_rng(13, 0, || {
+                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                    death,
+                    ship.ptr(),
+                )
+            });
             let expected = if expected_self {
                 &raw mut *ship.ss
             } else {
@@ -760,7 +777,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             };
             assert_eq!(GetWinnerStarShip(), expected);
             assert_eq!((*expected).cur_status_flags & 0x200 != 0, ditty);
-            assert_eq!(battle_counter[0], 9);
+            assert_eq!(uqm_rust::app::bridge::battle(|b| b.counters[0]), 9);
             assert_eq!((*ship.ptr()).__bindgen_anon_1.life_span, 36);
             assert_eq!(ship.desc.ship_info.energy_level, 0);
             assert_eq!((*ship.ptr()).velocity.travel_angle, 0);
@@ -770,16 +787,19 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
                     && (*ship.ptr()).death_func.is_some()
             );
         }
-    }
+    })
 }
 
 #[test]
 fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         ship.arm();
-        ((*ship.ptr()).death_func.unwrap())(ship.ptr());
+        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+            (*ship.ptr()).death_func.unwrap(),
+            ship.ptr(),
+        );
         let flash = (*ship.ptr()).preprocess_func.unwrap();
         for (life, color) in [
             (36, (255, 255, 255, 255)),
@@ -787,13 +807,23 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (34, (255, 255, 255, 255)),
         ] {
             (*ship.ptr()).__bindgen_anon_1.life_span = life;
-            with_rng(3, 0, || flash(ship.ptr()));
+            with_rng(3, 0, || {
+                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                    flash,
+                    ship.ptr(),
+                )
+            });
             assert_eq!((*prim(ship.ptr())).Type, gfx_object_STAMPFILL_PRIM as u8);
             assert_eq!(rgba((*prim(ship.ptr())).color), color);
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
         }
         (*ship.ptr()).__bindgen_anon_1.life_span = 33;
-        with_rng(3, 0, || flash(ship.ptr()));
+        with_rng(3, 0, || {
+            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                flash,
+                ship.ptr(),
+            )
+        });
         assert!((*ship.ptr()).preprocess_func.is_none());
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         let explosion = element(disp_q.tail);
@@ -834,7 +864,11 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (165, 0, 0, 255),
         ] {
             (*explosion).next.image.frame = ship.special_frames.frame(7);
-            with_rng(3, 0, || animate(explosion));
+            with_rng(3, 0, || {
+                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                    animate, explosion,
+                )
+            });
             assert_eq!(
                 frame_index((*explosion).next.image.frame),
                 1,
@@ -848,177 +882,192 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             b: 255,
             a: 0,
         };
-        animate(explosion);
+        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(animate, explosion);
         assert_eq!(
             rgba((*prim(explosion)).color),
             (255, 255, 255, 0),
             "sameColor includes alpha"
         );
-    }
+    })
 }
 
 #[test]
 fn failed_visual_explosion_allocation_still_hides_the_ship() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(0);
         ship.arm();
-        ((*ship.ptr()).death_func.unwrap())(ship.ptr());
+        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+            (*ship.ptr()).death_func.unwrap(),
+            ship.ptr(),
+        );
         (*ship.ptr()).__bindgen_anon_1.life_span = 33;
-        ((*ship.ptr()).preprocess_func.unwrap())(ship.ptr());
+        uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+            (*ship.ptr()).preprocess_func.unwrap(),
+            ship.ptr(),
+        );
         assert_eq!({ disp_q.tail }, ship.handle);
         assert_eq!((*prim(ship.ptr())).Type, gfx_object_NUM_PRIMS as u8);
         assert!((*ship.ptr()).preprocess_func.is_none());
-    }
+    })
 }
 
 #[test]
 fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
-    use uqm_rust::{
-        battle::tactrans_native as transitions, pickship::ffi::get_encounter_star_ship_with_picker,
-    };
-    unsafe extern "C" fn ready(_: *mut InputContext) -> bool {
-        true
-    }
-    unsafe {
-        for computer in [false, true] {
-            for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
-                let _battle = Battle::new(16);
-                let saved_queues = race_q;
-                let saved_inputs = PlayerInput;
-                let saved_offscreen = OffScreenContext;
-                let saved_controls = PlayerControls;
-                let saved_pulsed = PulsedInputState;
-                let mut context = mem::zeroed();
-                OffScreenContext = &mut context;
-                GlobData.Game_state.CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
-                battle_counter = initial;
-                let mut ship = Ship::new(0);
-                let mut other = Ship::new(1);
-                ship.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
-                other.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
-                let mut reserves: [STARSHIP; 2] = mem::zeroed();
-                let mut handlers = BattleInputHandlers {
-                    frameInput: None,
-                    selectShip: None,
-                    battleEndReady: Some(ready),
-                    deleteContext: None,
-                };
-                let mut inputs = [InputContext {
-                    handlers: &mut handlers,
-                    playerNr: 0,
-                }; 2];
-                inputs[1].playerNr = 1;
-                for side in 0..2 {
-                    PlayerInput[side] = &mut inputs[side];
-                    let active = if side == 0 {
-                        &raw mut *ship.ss
-                    } else {
-                        &raw mut *other.ss
+    battle_context::run(|| {
+        use uqm_rust::{
+            battle::tactrans_native as transitions,
+            pickship::ffi::get_encounter_star_ship_with_picker,
+        };
+        unsafe extern "C" fn ready(_: *mut InputContext) -> bool {
+            true
+        }
+        unsafe {
+            for computer in [false, true] {
+                for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
+                    let _battle = Battle::new(16);
+                    let saved_queues = race_q;
+                    let saved_inputs = PlayerInput;
+                    let saved_offscreen = OffScreenContext;
+                    let saved_controls = PlayerControls;
+                    let saved_pulsed = PulsedInputState;
+                    let mut context = mem::zeroed();
+                    OffScreenContext = &mut context;
+                    GlobData.Game_state.CurrentActivity = (SUPER_MELEE | IN_BATTLE) as u16;
+                    uqm_rust::app::bridge::battle(|b| b.counters = initial);
+                    let mut ship = Ship::new(0);
+                    let mut other = Ship::new(1);
+                    ship.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                    other.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                    let mut reserves: [STARSHIP; 2] = mem::zeroed();
+                    let mut handlers = BattleInputHandlers {
+                        frameInput: None,
+                        selectShip: None,
+                        battleEndReady: Some(ready),
+                        deleteContext: None,
                     };
-                    reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
-                    reserves[side].index = 1;
-                    reserves[side].playerNr = side as SIZE;
-                    race_q[side] = mem::zeroed();
-                    race_q[side].head = active.cast();
-                    race_q[side].tail = active.cast();
-                    if initial[side] > 1 {
-                        (*active).succ = (&raw mut reserves[side]).cast();
-                        reserves[side].pred = active.cast();
-                        race_q[side].tail = (&raw mut reserves[side]).cast();
+                    let mut inputs = [InputContext {
+                        handlers: &mut handlers,
+                        playerNr: 0,
+                    }; 2];
+                    inputs[1].playerNr = 1;
+                    for side in 0..2 {
+                        PlayerInput[side] = &mut inputs[side];
+                        let active = if side == 0 {
+                            &raw mut *ship.ss
+                        } else {
+                            &raw mut *other.ss
+                        };
+                        reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
+                        reserves[side].index = 1;
+                        reserves[side].playerNr = side as SIZE;
+                        race_q[side] = mem::zeroed();
+                        race_q[side].head = active.cast();
+                        race_q[side].tail = active.cast();
+                        if initial[side] > 1 {
+                            (*active).succ = (&raw mut reserves[side]).cast();
+                            reserves[side].pred = active.cast();
+                            race_q[side].tail = (&raw mut reserves[side]).cast();
+                        }
                     }
+                    // Arm the real glory device, execute its area damage, then
+                    // process both deaths within the same simulated frame.
+                    let blast = ship.arm().unwrap();
+                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                        blast,
+                        element(disp_q.tail),
+                    );
+                    assert_eq!(
+                        (
+                            ship.desc.ship_info.crew_level,
+                            other.desc.ship_info.crew_level
+                        ),
+                        (0, 0)
+                    );
+                    uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                        (*ship.ptr()).death_func.unwrap(),
+                        ship.ptr(),
+                    );
+                    transitions::ship_death(other.ptr());
+                    let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
+                    assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
+                    assert_eq!(
+                        (ship.ss.SpeciesID, other.ss.SpeciesID),
+                        (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
+                    );
+                    transitions::cleanup_dead_ship(ship.ptr());
+                    transitions::cleanup_dead_ship(other.ptr());
+                    transitions::StopDitty();
+                    let expected_selection = initial == [2, 2];
+                    let mut selected = [false; 2];
+                    for side in 0..2 {
+                        let outgoing = if side == 0 { ship.ptr() } else { other.ptr() };
+                        // The fixture owns its frame buffers, rather than the
+                        // resource loader used by production free_ship.
+                        let desc = if side == 0 {
+                            &mut ship.desc
+                        } else {
+                            &mut other.desc
+                        };
+                        desc.ship_data.ship = [ptr::null_mut(); 3];
+                        desc.ship_data.weapon = [ptr::null_mut(); 3];
+                        desc.ship_data.special = [ptr::null_mut(); 3];
+                        transitions::new_ship_with_picker(outgoing, |last, player| {
+                            assert_eq!(player as usize, side);
+                            let chosen = get_encounter_star_ship_with_picker(
+                                last.cast(),
+                                player,
+                                |player, out| {
+                                    selected[side] = true;
+                                    let mut state: GETMELEE_STATE = mem::zeroed();
+                                    let p = &mut state.player[player as usize];
+                                    p.selecting = 1;
+                                    p.ships_left = 1;
+                                    p.col = 1;
+                                    // Expire the computer's display delay without a sleep.
+                                    p.timeIn = u32::MAX - 419;
+                                    let result = if computer && side == 1 {
+                                        selectShipComputer(
+                                            (&mut inputs[side] as *mut InputContext).cast(),
+                                            &mut state,
+                                        )
+                                    } else {
+                                        PlayerControls[side] = side as u32;
+                                        PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
+                                        selectShipHuman(
+                                            (&mut inputs[side] as *mut InputContext).cast(),
+                                            &mut state,
+                                        )
+                                    };
+                                    assert_eq!(result, 1);
+                                    assert_eq!(state.player[side].done, 1);
+                                    assert_eq!(
+                                        state.player[side].hBattleShip,
+                                        (&raw mut reserves[side]).cast()
+                                    );
+                                    *out = state.player[side].hBattleShip;
+                                    1
+                                },
+                            );
+                            assert_eq!(!chosen.is_null(), expected_selection);
+                            (!chosen.is_null()) as BOOLEAN
+                        });
+                    }
+                    assert_eq!(selected, [expected_selection; 2]);
+                    let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
+                    assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
+                    assert_eq!(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16, 0);
+                    assert_eq!(
+                        GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
+                        expected_selection
+                    );
+                    race_q = saved_queues;
+                    PlayerInput = saved_inputs;
+                    OffScreenContext = saved_offscreen;
+                    PlayerControls = saved_controls;
+                    PulsedInputState = saved_pulsed;
                 }
-                // Arm the real glory device, execute its area damage, then
-                // process both deaths within the same simulated frame.
-                let blast = ship.arm().unwrap();
-                blast(element(disp_q.tail));
-                assert_eq!(
-                    (
-                        ship.desc.ship_info.crew_level,
-                        other.desc.ship_info.crew_level
-                    ),
-                    (0, 0)
-                );
-                (*ship.ptr()).death_func.unwrap()(ship.ptr());
-                transitions::ship_death(other.ptr());
-                let remaining = battle_counter;
-                assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
-                assert_eq!(
-                    (ship.ss.SpeciesID, other.ss.SpeciesID),
-                    (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
-                );
-                transitions::cleanup_dead_ship(ship.ptr());
-                transitions::cleanup_dead_ship(other.ptr());
-                transitions::StopDitty();
-                let expected_selection = initial == [2, 2];
-                let mut selected = [false; 2];
-                for side in 0..2 {
-                    let outgoing = if side == 0 { ship.ptr() } else { other.ptr() };
-                    // The fixture owns its frame buffers, rather than the
-                    // resource loader used by production free_ship.
-                    let desc = if side == 0 {
-                        &mut ship.desc
-                    } else {
-                        &mut other.desc
-                    };
-                    desc.ship_data.ship = [ptr::null_mut(); 3];
-                    desc.ship_data.weapon = [ptr::null_mut(); 3];
-                    desc.ship_data.special = [ptr::null_mut(); 3];
-                    transitions::new_ship_with_picker(outgoing, |last, player| {
-                        assert_eq!(player as usize, side);
-                        let chosen = get_encounter_star_ship_with_picker(
-                            last.cast(),
-                            player,
-                            |player, out| {
-                                selected[side] = true;
-                                let mut state: GETMELEE_STATE = mem::zeroed();
-                                let p = &mut state.player[player as usize];
-                                p.selecting = 1;
-                                p.ships_left = 1;
-                                p.col = 1;
-                                // Expire the computer's display delay without a sleep.
-                                p.timeIn = u32::MAX - 419;
-                                let result = if computer && side == 1 {
-                                    selectShipComputer(
-                                        (&mut inputs[side] as *mut InputContext).cast(),
-                                        &mut state,
-                                    )
-                                } else {
-                                    PlayerControls[side] = side as u32;
-                                    PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
-                                    selectShipHuman(
-                                        (&mut inputs[side] as *mut InputContext).cast(),
-                                        &mut state,
-                                    )
-                                };
-                                assert_eq!(result, 1);
-                                assert_eq!(state.player[side].done, 1);
-                                assert_eq!(
-                                    state.player[side].hBattleShip,
-                                    (&raw mut reserves[side]).cast()
-                                );
-                                *out = state.player[side].hBattleShip;
-                                1
-                            },
-                        );
-                        assert_eq!(!chosen.is_null(), expected_selection);
-                        (!chosen.is_null()) as BOOLEAN
-                    });
-                }
-                assert_eq!(selected, [expected_selection; 2]);
-                let remaining = battle_counter;
-                assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
-                assert_eq!(GlobData.Game_state.CurrentActivity & CHECK_ABORT as u16, 0);
-                assert_eq!(
-                    GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0,
-                    expected_selection
-                );
-                race_q = saved_queues;
-                PlayerInput = saved_inputs;
-                OffScreenContext = saved_offscreen;
-                PlayerControls = saved_controls;
-                PulsedInputState = saved_pulsed;
             }
         }
-    }
+    })
 }

@@ -212,9 +212,7 @@ pub(crate) mod engine {
             plast_star: ptr::null_mut(),
         },
     ];
-    extern "C" {
-        static mut zoom_out: i16;
-    }
+    extern "C" {}
 
     use crate::engine::battle::legacy::{DisplayFreeList, DisplayLinks};
 
@@ -279,7 +277,7 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn MoveGalaxy(view: u32, mut dx: i16, mut dy: i16) {
         // VIEW_STABLE=0, VIEW_CHANGE=2; TFB_SCALE_STEP=0.
         if view != 0 {
-            let mut reduction = zoom_out as u16;
+            let mut reduction = crate::app::bridge::battle(|b| b.zoom_out) as u16;
             let step = optMeleeScale == 0;
             if view == 2 {
                 if inHQSpace() != 0 {

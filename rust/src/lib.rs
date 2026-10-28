@@ -57,3 +57,5 @@ pub mod navigation;
 pub mod ui;
 
 pub use uqm_engine::{log_debug, log_error, log_fatal, log_info, log_warning};
+
+pub mod app;

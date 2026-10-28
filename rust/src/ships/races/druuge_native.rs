@@ -114,7 +114,7 @@ pub(crate) mod engine {
         *cannons = initialize_missile(&mut block);
         if !(*cannons).is_null() {
             let cannon = element(*cannons);
-            (*cannon).collision_func = Some(cannon_collision);
+            (*cannon).collision_func = Some(CollisionHook::Legacy(cannon_collision));
         }
         1
     }

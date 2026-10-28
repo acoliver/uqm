@@ -155,7 +155,7 @@ pub(crate) mod engine {
             index: (*ss).ShipFacing,
             life: MISSILE_LIFE,
             farray: (*(*ss).RaceDescPtr).ship_data.weapon.as_mut_ptr(),
-            preprocess_func: Some(nuke_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(nuke_preprocess)),
             blast_offs: NUKE_OFFSET,
         };
         let nuke = initialize_missile(&mut block);
@@ -174,7 +174,7 @@ pub(crate) mod engine {
                 let e = element(defense);
                 (*e).playerNr = (*source).playerNr;
                 (*e).state_flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
-                (*e).death_func = Some(spawn_point_defense);
+                (*e).death_func = Some(ElementHook::Legacy(spawn_point_defense));
                 (*e).pParent = ss.cast();
                 put_element(defense);
             }

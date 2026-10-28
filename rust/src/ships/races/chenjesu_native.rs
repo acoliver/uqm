@@ -143,7 +143,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_add(1);
         } else {
             (*e).__bindgen_anon_1.life_span = 1;
-            (*e).postprocess_func = Some(crystal_postprocess);
+            (*e).postprocess_func = Some(ElementHook::Legacy(crystal_postprocess));
         }
     }
 
@@ -160,7 +160,7 @@ pub(crate) mod engine {
             (*blast).__bindgen_anon_1.life_span = NUM_SPARKLES;
             (*blast).__bindgen_anon_4.turn_wait = 0;
             (*blast).__bindgen_anon_5.next_turn = 0;
-            (*blast).preprocess_func = Some(animation_preprocess);
+            (*blast).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
             image!(copy; (*blast).current.image.farray, (*a).next.image.farray);
             image!(frame; (*blast).current.image.frame, SetAbsFrameIndex((*blast).current.image.farray.read(), 2));
         }
@@ -210,7 +210,7 @@ pub(crate) mod engine {
         (*e).state_flags &= !(DISAPPEARING as u16);
         (*e).state_flags |= (NONSOLID | FINITE_LIFE) as u16;
         (*e).__bindgen_anon_1.life_span = 6;
-        (*e).preprocess_func = Some(animation_preprocess);
+        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
         (*e).death_func = None;
         (*e).collision_func = None;
         (*e).velocity = mem::zeroed();
@@ -254,10 +254,10 @@ pub(crate) mod engine {
                 .DisplayArray
                 .add((*dog).PrimIndex as usize);
             (*prim).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-            (*dog).preprocess_func = Some(doggy_preprocess);
+            (*dog).preprocess_func = Some(ElementHook::Legacy(doggy_preprocess));
             (*dog).postprocess_func = None;
-            (*dog).collision_func = Some(doggy_collision);
-            (*dog).death_func = Some(doggy_death);
+            (*dog).collision_func = Some(CollisionHook::Legacy(doggy_collision));
+            (*dog).death_func = Some(ElementHook::Legacy(doggy_death));
             let ss = starship(e);
             let angle =
                 (facing_to_angle(i32::from((*ss).ShipFacing)) + HALF_CIRCLE as i32) as COUNT;
@@ -392,12 +392,12 @@ pub(crate) mod engine {
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
             life: MISSILE_LIFE,
-            preprocess_func: Some(crystal_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(crystal_preprocess)),
             blast_offs: MISSILE_OFFSET,
         };
         *out = initialize_missile(&mut block);
         if !(*out).is_null() {
-            (*element(*out)).collision_func = Some(crystal_collision);
+            (*element(*out)).collision_func = Some(CollisionHook::Legacy(crystal_collision));
         }
         1
     }

@@ -479,7 +479,7 @@ pub(crate) mod live {
             let player = GetPlayerOrder(i) as usize;
             let p = &mut state.player[player];
             p.selecting = u32::from(mask & (1 << player) != 0);
-            p.ships_left = u16::from(battle_counter[player]);
+            p.ships_left = u16::from(crate::app::bridge::battle(|b| b.counters[player]));
             p.randomIndex = TFB_Random() as u16 % p.ships_left;
             p.done = 0;
             if p.selecting == 0 {

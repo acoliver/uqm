@@ -51,7 +51,7 @@ pub struct MissileBlock {
     pub index: u16,
     pub life: u16,
     pub farray: *mut Frame,
-    pub preprocess_func: Option<unsafe extern "C" fn(ElementPtr)>,
+    pub preprocess_func: crate::engine::battle::record::ElementProcessFunc,
     pub blast_offs: i16,
 }
 
