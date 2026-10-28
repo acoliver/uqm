@@ -54,6 +54,7 @@ struct Context {
     hooks: BTreeSet<String>,
     allows: Vec<String>,
     inline_depth: usize,
+    platform_split: bool,
 }
 
 pub struct Walker {
@@ -122,6 +123,10 @@ pub fn measure(
         .filter(|p| metadata.workspace_members.contains(&p.id))
     {
         walker.context = Context {
+            platform_split: metadata
+                .packages
+                .iter()
+                .any(|p| p.name == "uqm-platform" && metadata.workspace_members.contains(&p.id)),
             package: package.name.clone(),
             module: package.name.clone(),
             configs: configs.clone(),
@@ -751,9 +756,10 @@ impl Walker {
             let source = self.finding("layers", "", self.context.module.clone(), 1);
             self.measurement
                 .findings
-                .extend(super::layers::reference_with_bridge(
+                .extend(super::layers::reference_in_phase(
                     &source,
                     target,
+                    self.context.platform_split,
                     direct_bridge,
                 ));
         }

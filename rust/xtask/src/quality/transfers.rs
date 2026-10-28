@@ -23,16 +23,22 @@ fn identities(measurement: &Measurement) -> impl Iterator<Item = &Finding> {
     measurement.declarations.iter().chain(&measurement.findings)
 }
 
+fn root_layer_reference(finding: &Finding) -> bool {
+    finding.counter == "layers"
+        && (finding.metric == "module_edges" || finding.metric.starts_with("planned."))
+}
+
 pub fn validate(
     current: &Measurement,
     base: &Measurement,
     moves: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     let mut unique = BTreeMap::new();
+    let current_ids: BTreeSet<_> = identities(current).map(|f| f.identity.as_str()).collect();
     for (old, new) in moves {
         register(&mut unique, old, new)?;
         let sources: BTreeSet<_> = identities(base)
-            .filter(|f| prefix(&f.identity, old))
+            .filter(|f| prefix(&f.identity, old) && !root_layer_reference(f))
             .map(|f| f.identity.as_str())
             .collect();
         if sources.is_empty() && identities(base).any(|f| prefix(&f.identity, new)) {
@@ -49,7 +55,7 @@ pub fn validate(
         }
         for source in sources {
             let target = format!("{new}{}", &source[old.len()..]);
-            if !identities(current).any(|f| f.identity == target) {
+            if !current_ids.contains(target.as_str()) {
                 return Err(format!(
                     "move target {target} is absent; function transfers cannot split"
                 ));
@@ -79,13 +85,18 @@ pub fn limits(
         return Ok(entries.clone());
     }
     let mut relocated = Measurement::default();
+    let owners: BTreeMap<_, _> = identities(current)
+        .map(|f| (f.identity.as_str(), f))
+        .collect();
     for finding in &base.findings {
         let mut finding = finding.clone();
         if let Some((old, new)) = moves.iter().find(|(old, _)| prefix(&finding.identity, old)) {
             let target = format!("{new}{}", &finding.identity[old.len()..]);
-            let owner = identities(current)
-                .find(|f| f.identity == target)
-                .ok_or_else(|| format!("missing target {target}"))?;
+            let owner = match owners.get(target.as_str()) {
+                Some(owner) => owner,
+                None if root_layer_reference(&finding) => continue,
+                None => return Err(format!("missing target {target}")),
+            };
             finding.identity = target;
             finding.package.clone_from(&owner.package);
             finding.subsystem.clone_from(&owner.subsystem);
@@ -180,4 +191,46 @@ fn transfer_allows(
     }
     entries.retain(|_, value| *value != 0);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_crate_move_may_remove_root_only_layer_edges() {
+        let finding = |counter: &str, metric: &str, id: &str, package: &str| Finding {
+            counter: counter.into(),
+            metric: metric.into(),
+            identity: id.into(),
+            file: "src/lib.rs".into(),
+            package: package.into(),
+            subsystem: package.into(),
+            value: 1,
+        };
+        let base = Measurement {
+            declarations: vec![finding("declaration", "fn", "uqm::graphics::load", "uqm")],
+            findings: vec![finding(
+                "layers",
+                "module_edges",
+                "uqm::graphics::load::@file",
+                "uqm",
+            )],
+            ..Default::default()
+        };
+        let current = Measurement {
+            declarations: vec![finding(
+                "declaration",
+                "fn",
+                "uqm-engine::graphics::load",
+                "uqm-engine",
+            )],
+            ..Default::default()
+        };
+        let moves = [("uqm::graphics".into(), "uqm-engine::graphics".into())].into();
+        validate(&current, &base, &moves).unwrap();
+        let limits = limits(&base.baseline(), &current, &base, &moves).unwrap();
+        assert!(!limits.keys().any(|key| key.contains("module_edges")));
+        assert!(validate(&Measurement::default(), &base, &moves).is_err());
+    }
 }
