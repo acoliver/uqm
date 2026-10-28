@@ -51,6 +51,28 @@ fn access_budget_is_phase_two_exact_scoped_and_leaves_line_and_function_ratchets
     measurement.findings[0].value = 2;
     assert!(check(&measurement, &budgets).is_err());
     assert!(check_growth(&budgets, &BTreeMap::new()).is_err());
+    for module in [
+        "uqm::engine::battle::record",
+        "uqm::engine::battle::record::abi",
+    ] {
+        for decoder in [
+            "life_span",
+            "hit_points",
+            "mass_points",
+            "turn_wait",
+            "thrust_wait",
+        ] {
+            let key = format!("unsafe|unsafe_blocks|{module}::<ELEMENT>::{decoder}");
+            set_scoped(
+                &mut BTreeMap::new(),
+                "stage_b_access_unsafe",
+                1,
+                [(key, 1)].into(),
+                false,
+            )
+            .unwrap();
+        }
+    }
     for key in [
         "unsafe|unsafe_lines|uqm::engine::battle::access::f",
         "unsafe|unsafe_fn|uqm::engine::battle::access::f",

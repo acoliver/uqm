@@ -122,5 +122,12 @@ fn accessor_identity(identity: &str) -> bool {
         "thrust_wait",
     ]
     .iter()
-    .any(|decoder| identity == format!("uqm::engine::battle::record::abi::<ELEMENT>::{decoder}"))
+    .any(|decoder| {
+        [
+            "uqm::engine::battle::record",
+            "uqm::engine::battle::record::abi",
+        ]
+        .iter()
+        .any(|module| identity == format!("{module}::<ELEMENT>::{decoder}"))
+    })
 }
