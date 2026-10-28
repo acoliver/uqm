@@ -58,6 +58,31 @@ pub fn ship_input(input: u8, crew: u16) -> u8 {
 }
 
 #[cfg(not(test))]
+type BattleNetwork = (
+    *mut crate::engine::battle::Battle,
+    std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
+    bool,
+);
+#[cfg(not(test))]
+unsafe fn battle_network() -> BattleNetwork {
+    use abi::NetworkInputContext;
+    use engine::{player_control, player_input, NETWORK_CONTROL};
+    let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
+    let had_net = (*battle).net.is_some();
+    (*battle)
+        .net
+        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
+    let net = (*battle).network();
+    for side in 0..2 {
+        if player_control(side) & NETWORK_CONTROL != 0 {
+            let context = player_input(side).cast::<NetworkInputContext>();
+            (*context).net = Some(net.clone());
+        }
+    }
+    (battle, net, had_net)
+}
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
@@ -367,27 +392,6 @@ pub(crate) mod engine {
             return 0;
         }
         GetInitialStarShips()
-    }
-
-    type BattleNetwork = (
-        *mut crate::engine::battle::Battle,
-        std::rc::Rc<dyn crate::engine::battle::net::BattleNet>,
-        bool,
-    );
-    unsafe fn battle_network() -> BattleNetwork {
-        let battle = crate::app::bridge::battle(|b| b as *mut crate::engine::battle::Battle);
-        let had_net = (*battle).net.is_some();
-        (*battle).net.get_or_insert_with(|| {
-            crate::supermelee::netplay::NetplaySession::default().battle_net()
-        });
-        let net = (*battle).network();
-        for side in 0..2 {
-            if player_control(side) & NETWORK_CONTROL != 0 {
-                let context = player_input(side).cast::<NetworkInputContext>();
-                (*context).net = Some(net.clone());
-            }
-        }
-        (battle, net, had_net)
     }
 
     /// # Safety
