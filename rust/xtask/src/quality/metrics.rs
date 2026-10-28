@@ -67,6 +67,42 @@ pub struct Measurement {
     pub identifiers: Vec<Finding>,
 }
 
+// A measured metric remains a valid report name after its final finding is removed.
+const REPORT_METRICS: &[&str] = &[
+    "loc",
+    "cyclomatic",
+    "cognitive",
+    "static_mut",
+    "foreign_items",
+    "extern_c_fn",
+    "raw_pointer_parameters",
+    "no_mangle",
+    "export_name",
+    "link_name",
+    "repr_c",
+    "abi_includes",
+    "raw_records",
+    "hook_calls",
+    "queue_calls",
+    "bridge_calls",
+    "legacy_hooks",
+    "unsafe_fn",
+    "unsafe_fn_lines",
+    "unsafe_impl",
+    "unsafe_impl_lines",
+    "unsafe_blocks",
+    "unsafe_block_lines",
+    "unsafe_lines",
+    "cfg_not_test_modules",
+    "module_edges",
+    "planned_engine_core",
+    "banned_std",
+    "planned.uqm-engine",
+    "planned.uqm-content",
+    "planned.uqm-modes",
+    "planned.uqm-platform",
+];
+
 impl Measurement {
     pub fn report(&self, counter: &str, scope: Option<&str>) -> Result<u64, String> {
         if ![
@@ -79,6 +115,7 @@ impl Measurement {
             "layers",
         ]
         .contains(&counter)
+            && !REPORT_METRICS.contains(&counter)
             && !self.findings.iter().any(|f| f.metric == counter)
         {
             return Err(format!("unknown quality counter {counter}"));
@@ -406,6 +443,20 @@ pub const HOOK_FIELDS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn zero_occurrences_of_known_metrics_are_reportable() {
+        let empty = Measurement::default();
+        for metric in REPORT_METRICS {
+            assert_eq!(empty.report(metric, None), Ok(0), "metric {metric}");
+            assert_eq!(
+                empty.report(metric, Some("battle")),
+                Ok(0),
+                "metric {metric}"
+            );
+        }
+        assert!(empty.report("hook_call_typo", None).is_err());
+    }
+
     #[test]
     fn effective_loc_excludes_comments_and_docs() {
         let source =
