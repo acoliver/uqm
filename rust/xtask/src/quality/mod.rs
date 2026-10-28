@@ -182,12 +182,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     initialize_layers(root, &options, &mut baseline)?;
     budgets::check(&measurement, &baseline.budget)?;
     if existing && !options.allow_growth {
-        baseline::check_limits(
-            &budgets::without_budgeted(&measured, &baseline.budget),
-            &budgets::without_budgeted(&baseline.entries, &baseline.budget),
-            &baseline.moved,
-            false,
-        )?;
+        check_recorded_limits(&measured, &baseline, options.base.is_some())?;
     }
     if !existing && !options.tighten {
         return Err("quality baseline missing; initialize with --tighten".into());
@@ -211,6 +206,22 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         baseline.write(&baseline_path)?;
     }
     Ok(())
+}
+
+fn check_recorded_limits(
+    measured: &BTreeMap<String, u64>,
+    baseline: &Baseline,
+    has_base: bool,
+) -> Result<(), String> {
+    let mut current = budgets::without_budgeted(measured, &baseline.budget);
+    let mut recorded = budgets::without_budgeted(&baseline.entries, &baseline.budget);
+    if has_base {
+        // Approved staging unsafe never raises the recorded baseline. The strict
+        // measured-base comparison below owns that ratchet when --base is given.
+        current.retain(|key, _| !key.starts_with("unsafe|"));
+        recorded.retain(|key, _| !key.starts_with("unsafe|"));
+    }
+    baseline::check_limits(&current, &recorded, &baseline.moved, false)
 }
 
 fn print_summary(
@@ -460,6 +471,99 @@ fn is_native(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn measured_base_inherits_approved_unsafe_but_rejects_fresh_growth() {
+        use std::fs;
+        let root = tool::fixture_directory();
+        let write = |name: &str, text: &str| {
+            let path = root.path().join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "rust/Cargo.toml",
+            "[workspace]\n[package]\nname=\"uqm\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        );
+        write(
+            "rust/Cargo.lock",
+            "version = 4\n[[package]]\nname = \"uqm\"\nversion = \"0.1.0\"\n",
+        );
+        write(
+            "rust/xtask/src/quality/macros.rs",
+            "const HANDLERS: &[(&str, &str)] = &[];",
+        );
+        let one = "pub fn a() { unsafe { std::hint::unreachable_unchecked() } }\n";
+        write("rust/src/lib.rs", one);
+        let measurement = walk::measure(root.path(), None, false).unwrap();
+        Baseline {
+            entries: measurement.baseline(),
+            layers: true,
+            ..Default::default()
+        }
+        .write(&root.path().join("rust/xtask/quality-baseline.toml"))
+        .unwrap();
+        let git = |args: &[&str]| {
+            tool::status(Command::new("git").current_dir(root.path()).args(args)).unwrap()
+        };
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "baseline",
+        ]);
+        let two = format!("{one}{}", one.replace("fn a", "fn b"));
+        write("rust/src/lib.rs", &two);
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "approved unsafe staging",
+        ]);
+        let options = Options {
+            base: Some("HEAD".into()),
+            ..Options::default()
+        };
+        let mut recorded =
+            Baseline::read(&root.path().join("rust/xtask/quality-baseline.toml")).unwrap();
+        let (measured, _) = baseline::archived_measurement(root.path(), "HEAD").unwrap();
+        let baseline = fs::read(root.path().join("rust/xtask/quality-baseline.toml")).unwrap();
+        let error = check_recorded_limits(&measured.baseline(), &recorded, false).unwrap_err();
+        assert!(error.contains("workspace unsafe_blocks: 1 -> 2"), "{error}");
+        check_recorded_limits(&measured.baseline(), &recorded, true).unwrap();
+        compare_base(root.path(), "HEAD", &measured, &mut recorded, &options).unwrap();
+        assert_eq!(
+            fs::read(root.path().join("rust/xtask/quality-baseline.toml")).unwrap(),
+            baseline
+        );
+        write(
+            "rust/src/lib.rs",
+            &format!("{two}{}", one.replace("fn a", "fn c")),
+        );
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "fresh unsafe growth",
+        ]);
+        let (grown, _) = baseline::archived_measurement(root.path(), "HEAD").unwrap();
+        let error =
+            compare_base(root.path(), "HEAD~1", &grown, &mut recorded, &options).unwrap_err();
+        assert!(error.contains("workspace unsafe_blocks: 2 -> 3"), "{error}");
+    }
+
     #[test]
     fn budget_cli_and_base_comparison_require_owner_approval_for_growth() {
         let root = tool::fixture_directory();
