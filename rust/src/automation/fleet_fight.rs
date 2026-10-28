@@ -62,26 +62,11 @@ impl FleetFight {
         if obs.activity & (0x1000 | 0x2000 | 0x4000) != 0 {
             return Progress::Failed("fleet_fight_aborted_or_loaded".into());
         }
-        if !self.started && obs.encounter_menu {
-            if self.ticks >= max_ticks {
-                return Progress::Failed("fleet_fight_timeout:encounter_menu".into());
-            }
-            self.preview_ticks += 1;
-            // Its first callback initializes the menu and ignores keys. Release
-            // through initialization, then move from Hail to Attack and confirm.
-            return Progress::Input(match self.preview_ticks {
-                3 => Some(MenuKey::Down),
-                7 => Some(MenuKey::Select),
-                _ => None,
-            });
-        }
         let in_battle = obs.activity & 0x0200 != 0;
         if !self.started {
-            if !in_battle || obs.activity & 0xff != 2 || obs.counters[1] == 0 {
-                return Progress::Failed("fleet_fight_requires_ordinary_encounter".into());
+            if let Some(progress) = self.begin(max_ticks, &obs, in_battle) {
+                return progress;
             }
-            self.started = true;
-            self.initial = obs.counters;
         }
         if in_battle {
             if self.last != obs.counters {
@@ -140,6 +125,41 @@ impl FleetFight {
         };
         Progress::Input(Some(key))
     }
+
+    fn begin(&mut self, max_ticks: u64, obs: &Observation, in_battle: bool) -> Option<Progress> {
+        if obs.encounter_menu {
+            if self.ticks >= max_ticks {
+                return Some(Progress::Failed(
+                    "fleet_fight_timeout:encounter_menu".into(),
+                ));
+            }
+            self.preview_ticks += 1;
+            // Its first callback initializes the menu and ignores keys. Release
+            // through initialization, then move from Hail to Attack and confirm.
+            return Some(Progress::Input(match self.preview_ticks {
+                3 => Some(MenuKey::Down),
+                7 => Some(MenuKey::Select),
+                _ => None,
+            }));
+        }
+        if !in_battle && obs.activity & 0x0400 != 0 {
+            // Communication completion is observed before its owner returns to
+            // the encounter dispatch that creates the battle and its queues.
+            return Some(if self.ticks >= max_ticks {
+                Progress::Failed("fleet_fight_timeout:encounter_handoff".into())
+            } else {
+                Progress::Input(None)
+            });
+        }
+        if !in_battle || obs.activity & 0xff != 2 || obs.counters[1] == 0 {
+            return Some(Progress::Failed(
+                "fleet_fight_requires_ordinary_encounter".into(),
+            ));
+        }
+        self.started = true;
+        self.initial = obs.counters;
+        None
+    }
 }
 
 #[cfg(test)]
@@ -156,6 +176,21 @@ mod tests {
             picker: None,
             encounter_menu: false,
             escape_generation: 0,
+        }
+    }
+
+    #[test]
+    fn communication_handoff_waits_for_battle_without_accepting_stale_counters() {
+        for activity in [0x403, 0x404] {
+            let mut fight = FleetFight::default();
+            let mut handoff = obs([0, 0]);
+            handoff.activity = activity;
+            assert_eq!(fight.observe(100, handoff.clone()), Progress::Input(None));
+            assert_eq!(fight.observe(100, obs([5, 3])), Progress::Input(None));
+            assert!(matches!(
+                FleetFight::default().observe(1, handoff),
+                Progress::Failed(_)
+            ));
         }
     }
 

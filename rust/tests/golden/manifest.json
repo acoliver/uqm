@@ -50,8 +50,8 @@
       "sha256": "74e93d0955403d538f77e6bd857a9d2bbef8c8d41bad9d8372a72321c113ce12"
     },
     "parity/counts.toml": {
-      "bytes": 74314450,
-      "sha256": "731f13ba5abd5975c1e8ffd1092dea2b28c1f709e819e8c947e263f9e0c46b87"
+      "bytes": 74350679,
+      "sha256": "9a5c4e285d1db54315c47a7be047dd1b776d661261fa002f567f3a6e07abcb73"
     },
     "parity/death-spawn/parity.fields": {
       "bytes": 11489072,
