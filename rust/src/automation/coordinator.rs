@@ -1997,28 +1997,9 @@ impl Coordinator {
                 && snapshot.orbital_moon == i32::from(navigation.moon)
                 && snapshot.orbital_data_index == snapshot.target_data_index;
             let control = crate::automation::navigation::steer_moon_route(
-                crate::automation::navigation::NavigationObservation {
-                    active: snapshot.active != 0,
-                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
-                    in_orbit: snapshot.in_orbit != 0,
-                    ship_x: snapshot.ship_x,
-                    ship_y: snapshot.ship_y,
-                    ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
-                    target_x: snapshot.target_x,
-                    target_y: snapshot.target_y,
-                    velocity_x: snapshot.velocity_x,
-                    velocity_y: snapshot.velocity_y,
-                    view_center_x: snapshot.view_center_x,
-                    view_center_y: snapshot.view_center_y,
-                    // The collision guard still holds this moon, so the ship is sitting in
-                    // it without having entered orbit.
-                    target_guard_active: snapshot.wait_intersect
-                        == crate::automation::navigation::moon_wait_intersect(
-                            navigation.planet,
-                            navigation.moon,
-                        ),
-                },
+                snapshot.moon_observation(navigation.planet, navigation.moon),
                 navigation.planet,
+                &snapshot.moon_obstacles[..snapshot.moon_obstacle_count],
             );
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
                 if remaining % 250 == 0 {
