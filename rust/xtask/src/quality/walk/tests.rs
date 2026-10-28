@@ -367,3 +367,154 @@ fn a_source_declaration_cannot_remain_even_when_its_ffi_debt_disappears() {
     assert!(baseline.moved.is_empty());
     assert_eq!(baseline.entries, base.baseline());
 }
+
+#[test]
+fn inherited_allow_declaration_transfer_conserves_lines_and_rejects_growth() {
+    use super::super::baseline::{check_limits, Baseline};
+    let before = "#[allow(non_snake_case)]\nmod old {\n    #[repr(C)]\n    struct RECORD {\n        CamelField: u8,\n    }\n    struct Kept;\n}\n#[allow(non_snake_case)]\nmod new {\n}\n";
+    let after = "#[allow(non_snake_case)]\nmod old {\n    struct Kept;\n}\n#[allow(non_snake_case)]\nmod new {\n    #[repr(C)]\n    struct RECORD {\n        CamelField: u8,\n    }\n}\n";
+    let base = fixture(&[("src/lib.rs", before)], None, false);
+    let current = fixture(&[("src/lib.rs", after)], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move("uqm::old::RECORD", "uqm::new::RECORD", &current, &base)
+        .unwrap();
+    assert_eq!(baseline.entries["allows|non_snake_case|uqm::old"], 4);
+    assert_eq!(baseline.entries["allows|non_snake_case|uqm::new"], 7);
+    assert_eq!(
+        baseline.entries.values().sum::<u64>(),
+        base.baseline().values().sum::<u64>()
+    );
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    let mut grown = current.baseline();
+    *grown.get_mut("allows|non_snake_case|uqm::new").unwrap() += 1;
+    assert!(check_limits(&grown, &baseline.entries, &BTreeMap::new(), true).is_err());
+}
+
+#[test]
+fn anonymous_item_identities_ignore_line_and_column_changes() {
+    let source = "mod graphics {\n#[allow(clippy::identity_op)] const _: () = { let _ = 1 + 0; };\nconst _: () = ();\n}\n";
+    let base = fixture(&[("src/lib.rs", source)], None, false);
+    let shifted = fixture(
+        &[(
+            "src/lib.rs",
+            &format!(
+                "struct MovedAway;\n\n{}",
+                source.replace("const _", "    const _")
+            ),
+        )],
+        None,
+        false,
+    );
+    let ids = |m: &Measurement| {
+        m.declarations
+            .iter()
+            .filter(|f| f.identity.contains("::_"))
+            .map(|f| f.identity.clone())
+            .collect::<BTreeSet<_>>()
+    };
+    assert_eq!(ids(&base), ids(&shifted));
+    assert_eq!(ids(&base).len(), 2);
+    assert!(ids(&base).iter().all(|id| !id.contains('@')));
+}
+
+#[test]
+fn inherited_allow_transfers_deduplicate_shared_lines_and_include_coverage() {
+    use super::super::baseline::{check_limits, Baseline};
+    let measure = |text: &str| {
+        fixture(
+            &[
+                ("src/lib.rs", text),
+                (
+                    "src/records.rs",
+                    "struct A; struct B;\n#[cfg(test)] struct TestOnly;\n/// docs\nstruct Kept;\n",
+                ),
+            ],
+            None,
+            false,
+        )
+    };
+    let base = measure("#[allow(non_snake_case)] mod old { include!(\"records.rs\"); }\n#[allow(non_snake_case)] mod new {}\n");
+    let current = fixture(&[("src/lib.rs", "#[allow(non_snake_case)] mod old { struct Kept; }\n#[allow(non_snake_case)] mod new { struct A; struct B; }\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    for name in ["A", "B"] {
+        baseline
+            .add_move(
+                &format!("uqm::old::{name}"),
+                &format!("uqm::new::{name}"),
+                &current,
+                &base,
+            )
+            .unwrap();
+    }
+    assert_eq!(baseline.entries["allows|non_snake_case|uqm::old"], 2);
+    assert_eq!(baseline.entries["allows|non_snake_case|uqm::new"], 2);
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    let split = fixture(&[("src/lib.rs", "#[allow(non_snake_case)] mod old { struct Kept; }\n#[allow(non_snake_case)] mod new { struct A; }\n#[allow(non_snake_case)] mod other { struct B; }\n")], None, false);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move("uqm::old::A", "uqm::new::A", &split, &base)
+        .unwrap();
+    assert!(baseline
+        .add_move("uqm::old::B", "uqm::other::B", &split, &base)
+        .unwrap_err()
+        .contains("credited to both"));
+}
+
+#[test]
+fn anonymous_macro_identities_and_baseline_rekey_are_stable() {
+    use super::super::baseline::Baseline;
+    let macros = "macro_rules! assert_c_layout { ($name:ident) => { const _: () = { #[allow(clippy::identity_op)] fn check() { let _ = 1 + 0; } }; }; }";
+    let source =
+        "include!(\"c_bindings.rs\");\nassert_c_layout!(First);\nassert_c_layout!(Second);\n";
+    let base = fixture(
+        &[("src/lib.rs", source), ("src/c_bindings.rs", macros)],
+        None,
+        false,
+    );
+    let shifted = fixture(
+        &[
+            ("src/lib.rs", &format!("struct Named;\n\n{source}")),
+            ("src/c_bindings.rs", macros),
+        ],
+        None,
+        false,
+    );
+    assert_eq!(base.baseline(), shifted.baseline());
+    let mut baseline = Baseline::default();
+    for (old, new) in &base.identity_renames {
+        baseline
+            .entries
+            .insert(format!("allows|lint|{old}::child"), 7);
+        assert!(!new.contains('@'));
+    }
+    let count = baseline.entries.len();
+    baseline.rekey(&base.identity_renames).unwrap();
+    let entries = baseline.entries.clone();
+    baseline.rekey(&base.identity_renames).unwrap();
+    assert_eq!(baseline.entries, entries);
+    assert_eq!(baseline.entries.len(), count);
+    assert!(baseline.entries.keys().all(|k| !k.contains('@')));
+    assert!(baseline.entries.values().all(|v| *v == 7));
+}

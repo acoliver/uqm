@@ -74,16 +74,28 @@ impl<'a> Visit<'a> for Walker {
             return;
         }
         if let Some(name) = item_name(item) {
-            self.context.module = format!("{}::{name}", self.context.module);
             if name == "_" {
-                self.context.module.push_str(&format!(
-                    "@{}:{}",
-                    item.span().start().line,
-                    item.span().start().column
-                ));
+                self.anonymous_identity(
+                    "_",
+                    &format!(
+                        "_@{}:{}",
+                        item.span().start().line,
+                        item.span().start().column
+                    ),
+                );
+            } else {
+                self.context.module = format!("{}::{name}", self.context.module);
             }
         }
         self.attrs(item_attrs(item), item.to_token_stream());
+        if self.names.is_none() && item_name(item).is_some() && !self.context.allows.is_empty() {
+            self.allow_items.push((
+                self.context.module.clone(),
+                self.context.file.clone(),
+                item.to_token_stream(),
+                self.context.allows.clone(),
+            ));
+        }
         if self.names.is_none()
             && matches!(
                 item,
