@@ -551,7 +551,7 @@ mod tests {
         let mut engine = source("graphics");
         engine.package = "uqm-engine".into();
         assert!(reference(&engine, "std::fs::read").is_empty());
-        assert!(reference_in_phase(&engine, "std::fs::read", true)
+        assert!(reference_in_phase(&engine, "std::fs::read", true, false)
             .iter()
             .any(|f| f.metric == "banned_std"));
     }
