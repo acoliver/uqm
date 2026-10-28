@@ -24,6 +24,7 @@ use super::types::{MenuInputState, RestartMenuItem, SelectionResult};
 pub struct DoRestartState {
     /// Whether the menu has been initialized (first frame completed).
     pub initialized: bool,
+    pub scene_replaces_introduction: bool,
     /// Last time input was received (for inactivity timeout).
     pub last_input_time: u32,
     /// Inactivity timeout duration in ticks.
@@ -40,6 +41,7 @@ impl Default for DoRestartState {
     fn default() -> Self {
         Self {
             initialized: false,
+            scene_replaces_introduction: false,
             last_input_time: 0,
             inact_timeout: 0,
             cur_state: RestartMenuItem::NewGame.as_u8(),
@@ -184,9 +186,9 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartSt
         (c_extern::ONE_SECOND / 2) as i16,
     );
     ops.sleep_thread_until(fade_result);
-    if crate::automation::coordinator::Coordinator::is_active() {
-        let _stop = crate::automation::coordinator::Coordinator::process_main_menu_ready();
-    }
+    state.scene_replaces_introduction =
+        crate::automation::coordinator::Coordinator::start_scene_replaces_introduction();
+    let _stop = crate::automation::coordinator::Coordinator::process_main_menu_ready();
 }
 
 /// Handle menu selection dispatch.

@@ -175,18 +175,24 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
 //  TryStartGame — restart.c:355-387
 // ===========================================================================
 
+/// Startup policy carried from the menu to campaign initialization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CampaignStart {
+    pub scene_replaces_introduction: bool,
+}
+
 /// Attempts to start or load a game via the restart menu.
 ///
 /// Loops `RestartMenu` until the player starts/loads a game, plays
 /// Super Melee, quits, or times out.
 ///
-/// Returns `true` if a game was started/loaded, `false` if quit or timed out.
+/// Returns the campaign startup policy, or `None` if quit or timed out.
 ///
 /// Matches `TryStartGame()` in restart.c:355-387.
 ///
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
-pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
+pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<CampaignStart> {
     // Create and initialize MENU_STATE (restart.c:357-359)
     let menu_ptr = ops.create_menu_state();
     let mut menu_state = DoRestartState::default();
@@ -205,7 +211,9 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
 
         if started_game {
             ops.destroy_menu_state(menu_ptr);
-            return true;
+            return Some(CampaignStart {
+                scene_replaces_introduction: menu_state.scene_replaces_introduction,
+            });
         }
 
         let activity = ops.get_current_activity();
@@ -224,11 +232,11 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
             );
             ops.sleep_thread_until(fade_result);
             ops.destroy_menu_state(menu_ptr);
-            return false;
+            return None;
         } else if activity & CHECK_ABORT != 0 {
             // Quit (restart.c:376-377)
             ops.destroy_menu_state(menu_ptr);
-            return false;
+            return None;
         }
         // Otherwise loop again
     }
@@ -249,7 +257,10 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
 /// @requirement REQ-RM-007
 pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
     loop {
-        while !try_start_game_impl(ops) {
+        let start = loop {
+            if let Some(start) = try_start_game_impl(ops) {
+                break start;
+            }
             if ops.get_current_activity() == !0u16 {
                 ops.set_current_activity(0);
                 ops.splash_screen();
@@ -258,10 +269,8 @@ pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
             if ops.get_current_activity() & CHECK_ABORT != 0 {
                 return false;
             }
-        }
-        if ops.get_last_activity() & CHECK_RESTART != 0 {
-            ops.introduction();
-        }
+        };
+        play_campaign_introduction(ops, start);
         if ops.get_current_activity() & CHECK_ABORT == 0 {
             break;
         }
@@ -275,6 +284,12 @@ pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
     ops.set_player_control(1, COMPUTER_CONTROL as u16 | AWESOME_RATING as u16);
 
     true
+}
+
+fn play_campaign_introduction(ops: &(impl RestartMenuOps + ?Sized), start: CampaignStart) {
+    if ops.get_last_activity() & CHECK_RESTART != 0 && !start.scene_replaces_introduction {
+        ops.introduction();
+    }
 }
 
 // ===========================================================================
@@ -650,7 +665,10 @@ mod tests {
         ops.do_input_activity_after.set(4); // IN_INTERPLANETARY → started
 
         let result = try_start_game_impl(&ops);
-        assert!(result, "should return true when game starts");
+        assert!(
+            result.is_some(),
+            "a started game returns its startup policy"
+        );
     }
 
     #[test]
@@ -659,7 +677,7 @@ mod tests {
         ops.do_input_activity_after.set(CHECK_ABORT);
 
         let result = try_start_game_impl(&ops);
-        assert!(!result, "quit should return false");
+        assert!(result.is_none(), "quit cannot start a campaign");
     }
 
     #[test]
@@ -668,7 +686,7 @@ mod tests {
         ops.do_input_activity_after.set(!0u16);
 
         let result = try_start_game_impl(&ops);
-        assert!(!result, "timeout should return false");
+        assert!(result.is_none(), "timeout cannot start a campaign");
     }
 
     // ---- start_game_impl tests -------------------------------------------
@@ -696,6 +714,21 @@ mod tests {
             ops.player_control_1.get(),
             u16::from(COMPUTER_CONTROL | AWESOME_RATING)
         );
+    }
+
+    #[test]
+    fn declared_start_scene_reaches_lifecycle_without_consuming_input_in_introduction() {
+        let ops = MockOps::new();
+        ops.do_input_activity_after.set(4);
+        ops.last_activity.set(CHECK_LOAD | CHECK_RESTART);
+        play_campaign_introduction(
+            &ops,
+            CampaignStart {
+                scene_replaces_introduction: true,
+            },
+        );
+        assert_eq!(ops.introduction_calls.get(), 0);
+        assert_eq!(ops.input_callbacks.get(), 0);
     }
 
     #[test]
@@ -744,7 +777,7 @@ mod tests {
         ops.do_input_activity_after.set(CHECK_ABORT);
 
         let result = start_game_impl(&ops);
-        assert!(!result, "quit should return false");
+        assert!(!result, "quit cannot start a campaign");
     }
 
     #[test]

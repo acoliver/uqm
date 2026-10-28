@@ -253,24 +253,6 @@ terminal = "semantic_mismatch"
 issue = 720
 
 [[expectation]]
-scenario = "repro-comm-menu-initial"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
-scenario = "repro-sol-probe-comm-ui"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
-scenario = "sol-probe-scene-v1"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
 scenario = "thraddash-guard-v1"
 classification = "known_bug"
 terminal = "semantic_mismatch"
