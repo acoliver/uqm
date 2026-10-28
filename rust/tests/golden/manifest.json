@@ -754,16 +754,16 @@
       "sha256": "7e5f277b86b8a4d72bf3e139f808fa2dd42297ed31e7248db7cf2c798524d72c"
     },
     "parity/counts/repro-comm-menu-initial.toml": {
-      "bytes": 7764,
-      "sha256": "2fc2f1409f48a91fc20390d56d885e89dd425b2448dc185f8f62ada299bcb641"
+      "bytes": 8037,
+      "sha256": "49623d103e5cf3b8deb7479a8a6972e325449324a261a704d3b1010b9e8d0824"
     },
     "parity/counts/repro-game-menu-initial.toml": {
       "bytes": 7808,
       "sha256": "db3cdaf11b34ea947e4335ca64f9138fb0953be7ef1115501a6868316311598c"
     },
     "parity/counts/repro-sol-probe-comm-ui.toml": {
-      "bytes": 3177,
-      "sha256": "601114da6490c022643509605689100904e741140fb36a1d4843665352181013"
+      "bytes": 12626,
+      "sha256": "87a17a1671ae85ec4e2feac29000037bd7a0e39b4935d0b411dcc9872f6ed4ab"
     },
     "parity/counts/samatra-dev-fixture-v1.toml": {
       "bytes": 767603,
@@ -774,8 +774,8 @@
       "sha256": "3a897214d9cbb35a2a39dd26c55e5fcb1da478170b1a72ab79a082f84ac3cfb8"
     },
     "parity/counts/sol-probe-scene-v1.toml": {
-      "bytes": 3172,
-      "sha256": "2d8c701e5c3f9c31ea889d0392c2306432e4a6707caa4fd6f131520d295ebb1f"
+      "bytes": 8770,
+      "sha256": "d09f0e6cc7ec1e700c86a61a75d9ddbce7e4d41a194f02b8c3b147aac9477d81"
     },
     "parity/counts/starbase-visit-v1.toml": {
       "bytes": 82068,
