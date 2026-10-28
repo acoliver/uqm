@@ -412,6 +412,19 @@ Rules enforced by xtask:
    `quality --allow-engine-os` only while introducing `crates/engine/Cargo.toml`.
    It permits one direct edge to each of libc, sdl2, sdl2-sys, gl, rodio, cpal and
    windows-sys, and leaves all other counters and Clippy ratchets enforced.
+   Approved source-counter growth must be recorded before merge with
+   `cargo xtask quality --allow-growth --record` (or `--allow-engine-os --record`
+   for the scoped engine allowance). Recording raises only measured ordinary entries
+   that exceed their recorded limits; it leaves reductions, finite budgets, transfers,
+   lint debt and coverage exceptions unchanged. It cannot be combined with `--tighten`.
+   The approval flag is the local counterpart of the owner-applied label, not permission
+   for an agent to apply that label or approve unrelated growth.
+   CI's existing labelled `quality --base` invocation verifies that each grown
+   per-identity counter equals its measurement in the PR baseline, including missing
+   entries and inflated recorded allowances. It compares both the base's measurements
+   and its baseline, so repairs of previously unrecorded growth are checked too.
+   Budget-backed counters still use their finite limits and need no duplicate ordinary
+   entries. A label no longer permits unrecorded growth. See [#755](https://github.com/acoliver/uqm/issues/755).
 
 There is no hashing, no provenance bundle and no self-check of xtask.
 
