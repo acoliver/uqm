@@ -72,6 +72,13 @@ pub fn file_identity(
     // Integration-test files are intentionally absent from the production walk.
     let (package, rest) = if let Some(rest) = file.strip_prefix("xtask/") {
         ("uqm-xtask", rest)
+    } else if let Some((package, rest)) =
+        file.strip_prefix("crates/").and_then(|p| p.split_once('/'))
+    {
+        return Ok(Some(format!(
+            "uqm-{package}::@path::{}",
+            rest.replace('/', "::")
+        )));
     } else {
         ("uqm", file.as_str())
     };
@@ -88,7 +95,18 @@ fn transferred<'a>(
     moves: &BTreeMap<String, String>,
 ) -> Result<Option<&'a u64>, String> {
     let mut credits = Vec::new();
-    for (old, new) in moves {
+    let path_moves = moves
+        .iter()
+        .filter_map(|(old, new)| {
+            let (old_package, old_module) = old.split_once("::")?;
+            let (new_package, new_module) = new.split_once("::")?;
+            Some((
+                format!("{old_package}::@path::src::{old_module}"),
+                format!("{new_package}::@path::src::{new_module}"),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (old, new) in moves.iter().chain(&path_moves) {
         // The identity may follow a lint name or target-OS discriminator.
         let (head, identity) = key.rsplit_once('|').unwrap_or(("", key));
         if super::layers::prefix(identity, new) {
@@ -430,6 +448,24 @@ mod tests {
         assert!(std::fs::read_to_string(first)
             .unwrap()
             .contains("echo first"));
+    }
+
+    #[test]
+    fn crate_moves_transfer_test_file_lints_without_merging_credit() {
+        let before = [("lint|uqm::@path::src::sound::tests.rs".into(), 3)].into();
+        let after = [("lint|uqm-engine::@path::src::sound::tests.rs".into(), 3)].into();
+        let moves = [("uqm::sound".into(), "uqm-engine::sound".into())].into();
+        compare(&after, &before, &moves).unwrap();
+        assert_eq!(
+            file_identity(
+                Path::new("/repo"),
+                "crates/engine/src/sound/tests.rs",
+                &BTreeMap::new()
+            )
+            .unwrap()
+            .as_deref(),
+            Some("uqm-engine::@path::src::sound::tests.rs")
+        );
     }
 
     #[test]
