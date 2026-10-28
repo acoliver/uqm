@@ -61,13 +61,15 @@ impl Channels {
 }
 
 #[cfg(not(test))]
+use crate::sound::heart_ffi::{
+    get_positional_object, set_positional_object, update_sound_position,
+};
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::ships::native::abi::*;
-    use crate::sound::heart_ffi::{
-        get_positional_object, set_positional_object, update_sound_position,
-    };
 
     #[no_mangle]
     pub static mut MenuSounds: SOUND = ptr::null_mut();
@@ -119,7 +121,10 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
         let queue = &raw mut QUEUE;
-        (*queue).push(sound, object);
+        // SAFETY: the game-thread publication exclusively owns this sound queue.
+        unsafe {
+            crate::app::bridge::enter(|_cx| (*queue).push(sound, object));
+        }
     }
 
     /// # Safety

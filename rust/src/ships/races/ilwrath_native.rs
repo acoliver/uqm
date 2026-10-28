@@ -254,7 +254,7 @@ pub(crate) mod engine {
             index: 0,
             life: MISSILE_LIFE,
             farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast::<FRAME>(),
-            preprocess_func: Some(flame_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(flame_preprocess)),
             blast_offs: MISSILE_OFFSET,
         };
         *flames = initialize_missile(&mut block);
@@ -273,7 +273,7 @@ pub(crate) mod engine {
                 - (i32::from(dy) >> VELOCITY_SHIFT))
                 as COORD;
 
-            (*flame).collision_func = Some(flame_collision);
+            (*flame).collision_func = Some(CollisionHook::Legacy(flame_collision));
             (*flame).__bindgen_anon_4.turn_wait = 0;
         }
 

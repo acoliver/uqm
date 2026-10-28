@@ -195,7 +195,7 @@ pub(crate) mod engine {
         };
         *out = initialize_missile(&mut block);
         if !(*out).is_null() {
-            (*element(*out)).collision_func = Some(howitzer_collision);
+            (*element(*out)).collision_func = Some(CollisionHook::Legacy(howitzer_collision));
         }
         1
     }
@@ -402,7 +402,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_5.thrust_wait = 0;
             (*e).__bindgen_anon_4.turn_wait =
                 (normalize_facing(i32::from(TFB_Random() as BYTE)) << 4) as BYTE;
-            (*e).preprocess_func = Some(marine_preprocess);
+            (*e).preprocess_func = Some(ElementHook::Legacy(marine_preprocess));
         }
     }
 
@@ -426,7 +426,7 @@ pub(crate) mod engine {
             (*ion).current.location.y = (i32::from((*ion).current.location.y)
                 + i32::from(sine(i32::from(angle), 2 << ONE_SHIFT)))
                 as COORD;
-            (*ion).death_func = Some(ion_preprocess);
+            (*ion).death_func = Some(ElementHook::Legacy(ion_preprocess));
             (*ion).pParent = ss.cast();
             image!(copy; (*ion).next, (*ion).current);
             (*ion).__bindgen_anon_1.life_span -= 1;
@@ -620,7 +620,7 @@ pub(crate) mod engine {
                     (*a).state_flags |= NONSOLID as u16;
                     (*a).state_flags &= !(CREW_OBJECT as u16);
                     (*prim(a)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                    (*a).preprocess_func = Some(intruder_preprocess);
+                    (*a).preprocess_func = Some(ElementHook::Legacy(intruder_preprocess));
                     silhouette(b, a, (*a).next.image.frame, 0);
                 }
                 sound(ss, 2, b);
@@ -711,7 +711,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.special[0],
                             angle_to_facing(FULL_CIRCLE as i32) as COUNT,
                         ));
-                        (*effect).preprocess_func = Some(animation_preprocess);
+                        (*effect).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
                         (*effect).pParent = ss.cast();
                         (*prim(effect)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                         put_element(effect_h);
@@ -752,8 +752,8 @@ pub(crate) mod engine {
                 (*marine).__bindgen_anon_4.turn_wait = (normalize_facing(angle_to_facing(
                     i32::from(facing) + HALF_CIRCLE as i32,
                 )) << 4) as BYTE;
-                (*marine).preprocess_func = Some(marine_preprocess);
-                (*marine).collision_func = Some(marine_collision);
+                (*marine).preprocess_func = Some(ElementHook::Legacy(marine_preprocess));
+                (*marine).collision_func = Some(CollisionHook::Legacy(marine_collision));
                 (*marine).pParent = ss.cast();
                 (*prim(marine)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                 put_element(h);
@@ -788,7 +788,7 @@ pub(crate) mod engine {
                 (*turret).__bindgen_anon_1.life_span = 1;
                 image!(set; (*turret).current.image.farray, (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast());
                 image!(frame; (*turret).current.image.frame, SetAbsFrameIndex((*(*ss).RaceDescPtr).ship_data.special[0], (*ss).ShipFacing));
-                (*turret).postprocess_func = Some(turret_postprocess);
+                (*turret).postprocess_func = Some(ElementHook::Legacy(turret_postprocess));
                 (*turret).pParent = ss.cast();
                 InsertQueue((&raw mut disp_q).cast(), h, (*e).succ);
             }

@@ -250,7 +250,7 @@ pub(crate) mod engine {
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
             life: MISSILE_LIFE,
-            preprocess_func: Some(bubble_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(bubble_preprocess)),
             blast_offs: MISSILE_OFFSET,
         };
         *bubbles = initialize_missile(&mut block);
@@ -398,7 +398,7 @@ pub(crate) mod engine {
                             collision_func: (*ship).collision_func,
                         }),
                     );
-                    (*ship).collision_func = Some(blazer_collision);
+                    (*ship).collision_func = Some(CollisionHook::Legacy(blazer_collision));
                 }
             }
 

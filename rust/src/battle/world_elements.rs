@@ -47,6 +47,19 @@ const fn crew_color(high: bool) -> Color {
 }
 
 #[cfg(not(test))]
+fn width(pixels: i32) -> i32 {
+    (pixels - 64) << (ONE_SHIFT + MAX_REDUCTION)
+}
+#[cfg(not(test))]
+fn height(pixels: i32) -> i32 {
+    pixels << (ONE_SHIFT + MAX_REDUCTION)
+}
+#[cfg(not(test))]
+fn aligned_random(random: u32, extent: i32) -> i16 {
+    ((i32::from(random as u16) % extent) as i16) & !((1 << ONE_SHIFT) - 1)
+}
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
@@ -69,16 +82,6 @@ pub(crate) mod engine {
             .cast::<PRIMITIVE>()
             .add((*e).PrimIndex as usize)
     }
-    fn width(pixels: i32) -> i32 {
-        (pixels - 64) << (ONE_SHIFT + MAX_REDUCTION)
-    }
-    fn height(pixels: i32) -> i32 {
-        pixels << (ONE_SHIFT + MAX_REDUCTION)
-    }
-    fn aligned_random(random: u32, extent: i32) -> i16 {
-        ((i32::from(random as u16) % extent) as i16) & !((1 << ONE_SHIFT) - 1)
-    }
-
     pub(crate) unsafe extern "C" fn gravity_postprocess(e: *mut ELEMENT) {
         CalculateGravity(e);
     }
@@ -99,8 +102,8 @@ pub(crate) mod engine {
         (*primitive(e)).Type = gfx_object_STAMP_PRIM as u8;
         image!(set; (*e).current.image.farray, (&raw mut planet).cast::<FRAME>());
         image!(frame; (*e).current.image.frame, *(*e).current.image.farray);
-        (*e).collision_func = Some(collision);
-        (*e).postprocess_func = Some(gravity_postprocess);
+        (*e).collision_func = Some(CollisionHook::Legacy(collision));
+        (*e).postprocess_func = Some(ElementHook::Legacy(gravity_postprocess));
         (*e).velocity = mem::zeroed();
         loop {
             (*e).current.location.x = aligned_random(TFB_Random(), width(ScreenWidth));
@@ -132,8 +135,8 @@ pub(crate) mod engine {
             angle_to_facing(FULL_CIRCLE as i32) as u16,
         ));
         (*e).current.location = (*source).current.location;
-        (*e).preprocess_func = Some(animation_preprocess);
-        (*e).death_func = Some(spawn_asteroid);
+        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+        (*e).death_func = Some(ElementHook::Legacy(spawn_asteroid));
     }
 
     pub(crate) unsafe extern "C" fn asteroid_preprocess(e: *mut ELEMENT) {
@@ -200,9 +203,9 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = wait;
         (*e).__bindgen_anon_5.thrust_wait = wait;
         (*e).__bindgen_anon_5.thrust_wait |= TFB_Random() as u8 & 128;
-        (*e).preprocess_func = Some(asteroid_preprocess);
-        (*e).death_func = Some(spawn_rubble);
-        (*e).collision_func = Some(collision);
+        (*e).preprocess_func = Some(ElementHook::Legacy(asteroid_preprocess));
+        (*e).death_func = Some(ElementHook::Legacy(spawn_rubble));
+        (*e).collision_func = Some(CollisionHook::Legacy(collision));
         put_element(handle);
     }
 
@@ -210,19 +213,24 @@ pub(crate) mod engine {
     /// Element and its owning STARSHIP, for player ships, must be live.
     #[no_mangle]
     pub unsafe extern "C" fn do_damage(e: *mut ELEMENT, damage: i16) {
-        if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-            if DeltaCrew(e, damage.wrapping_neg()) == 0 {
-                (*e).__bindgen_anon_1.life_span = 0;
-                (*e).state_flags |= NONSOLID as u16;
-            }
-        } else {
-            damage_object(
-                (*e).__bindgen_anon_3.mass_points,
-                &mut (*e).__bindgen_anon_2.hit_points,
-                &mut (*e).__bindgen_anon_1.life_span,
-                &mut (*e).state_flags,
-                damage,
-            );
+        // SAFETY: the published game-thread boundary owns this element and its ship.
+        unsafe {
+            crate::app::bridge::enter(|_cx| {
+                if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
+                    if DeltaCrew(e, damage.wrapping_neg()) == 0 {
+                        (*e).__bindgen_anon_1.life_span = 0;
+                        (*e).state_flags |= NONSOLID as u16;
+                    }
+                } else {
+                    damage_object(
+                        (*e).__bindgen_anon_3.mass_points,
+                        &mut (*e).__bindgen_anon_2.hit_points,
+                        &mut (*e).__bindgen_anon_1.life_span,
+                        &mut (*e).state_flags,
+                        damage,
+                    );
+                }
+            });
         }
     }
 
@@ -316,8 +324,8 @@ pub(crate) mod engine {
             (*primitive(crew)).color = crew_color(false);
             image!(frame; (*crew).current.image.frame, DecFrameIndex(stars_in_space));
             image!(set; (*crew).current.image.farray, &raw mut stars_in_space);
-            (*crew).preprocess_func = Some(crew_preprocess);
-            (*crew).collision_func = Some(crew_collision);
+            (*crew).preprocess_func = Some(ElementHook::Legacy(crew_preprocess));
+            (*crew).collision_func = Some(CollisionHook::Legacy(crew_collision));
             (*crew).pParent = owner.cast();
             // The original loop retains this reassignment for subsequent crew.
             owner = starship(target);

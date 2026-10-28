@@ -2,7 +2,7 @@
 
 use super::*;
 #[cfg(not(test))]
-use crate::{battle::process_native::engine::zoom_out, graphics::native_abi::frame_desc};
+use crate::graphics::native_abi::frame_desc;
 
 fn zoom_matches(
     view: usize,
@@ -140,7 +140,7 @@ fn drive(
                     Effect::Reset => {
                         crate::mainloop::input_frame::drain_committed_draws();
                         crate::battle::tactrans_native::ResetWinnerStarShip();
-                        crate::battle::battle_native::battle_counter = [7, 7];
+                        crate::app::bridge::battle(|b| b.counters = [7, 7]);
                         apply(Effect::Remove(elements.clone()))?;
                         for owner in &ships {
                             let descriptor = mem::replace(&mut *slots[owner], ptr::null_mut());
@@ -190,7 +190,7 @@ unsafe fn borrow_world<'a>() -> World<'a> {
     unsafe {
         let mut world = World::new(
             GlobData.Game_state.CurrentActivity,
-            crate::battle::battle_native::battle_counter,
+            crate::app::bridge::battle(|b| b.counters),
             crate::planets::starmap::CurStarDescPtr as usize,
         );
         let mut element = (*crate::c_bindings::live_queues::display_list())
@@ -298,7 +298,7 @@ unsafe fn apply(effect: Effect) -> Result<Reply, String> {
                 });
                 return Ok(zoom_proof(
                     view,
-                    zoom_out,
+                    crate::app::bridge::battle(|b| b.zoom_out),
                     index,
                     frame,
                     &*frames[view],
@@ -396,11 +396,11 @@ impl World<'_> {
             Effect::Invoke(callback, h) => callback.map(|callback| (callback as usize, parent(*h))),
             Effect::Death(h) => self.elements[h]
                 .death_func
-                .map(|callback| (callback as usize, parent(*h))),
+                .map(|callback| (callback.address(), parent(*h))),
             Effect::Collide(..) => collision.and_then(|collision| {
                 collision
                     .callback
-                    .map(|callback| (callback as usize, collision.parent))
+                    .map(|callback| (callback.address(), collision.parent))
             }),
             Effect::Intelligence(callback, h, _) => {
                 callback.map(|callback| (callback as usize, parent(*h)))
@@ -414,7 +414,7 @@ impl World<'_> {
         effects: Vec<Effect>,
         mut dispatch: impl FnMut(Effect) -> Result<Reply, String>,
     ) -> Vec<Result<Reply, String>> {
-        use crate::collections::observation::observe;
+        use crate::battle::process_native::invoke_race::invoke_context;
         let prepared = effects
             .into_iter()
             .map(|effect| {
@@ -441,17 +441,16 @@ impl World<'_> {
         prepared
             .into_iter()
             .map(|(effect, collision, death, observed, active)| {
-                if let Some((callback, parent)) = observed {
-                    observe(callback, parent);
-                }
                 // SAFETY: callback metadata came from the owned live graph, now fully dropped.
                 unsafe {
                     match effect {
                         Effect::Death(h) => {
-                            death.ok_or("fixture ship has no production death callback")?(h);
+                            crate::battle::process_native::invoke_element::invoke_legacy_element(death.ok_or("fixture ship has no production death callback")?, h);
                         }
                         Effect::Invoke(callback, h) => {
-                            callback.ok_or("fixture is missing its production callback")?(h.cast());
+                            let callback = callback.ok_or("fixture is missing its production callback")?;
+                            let (_, parent) = observed.ok_or("fixture callback lacks owner metadata")?;
+                            invoke_context(callback as usize, parent, || callback(h.cast()));
                         }
                         Effect::Collide(a, b) => {
                             let Collision {
@@ -459,7 +458,7 @@ impl World<'_> {
                                 points: [mut pa, mut pb],
                                 ..
                             } = collision.ok_or("collision effect lacks projected operands")?;
-                            callback.ok_or("fixture projectile has no collision callback")?(
+                            crate::battle::process_native::invoke_collision::invoke_legacy_collision_const(callback.ok_or("fixture projectile has no collision callback")?,
                                 a,
                                 (&raw mut pa).cast_const(),
                                 b,
@@ -477,11 +476,9 @@ impl World<'_> {
                             }
                         }
                         Effect::Intelligence(callback, h, mut concerns) => {
-                            callback.ok_or("Arilou intelligence callback is unavailable")?(
-                                h.cast(),
-                                concerns.as_mut_ptr(),
-                                10,
-                            );
+                            let callback = callback.ok_or("Arilou intelligence callback is unavailable")?;
+                            let (_, parent) = observed.ok_or("fixture intelligence lacks owner metadata")?;
+                            invoke_context(callback as usize, parent, || callback(h.cast(), concerns.as_mut_ptr(), 10));
                         }
                         other => return dispatch(other),
                     }
@@ -497,9 +494,9 @@ fn phoenix(data: &crate::ships::races::pkunk_native::engine::PkunkData) -> Phoen
     Phoenix {
         handle: data.hPhoenix.cast(),
         hooks: [
-            data.saved_preprocess_func.map_or(0, |f| f as usize),
-            data.saved_postprocess_func.map_or(0, |f| f as usize),
-            data.saved_death_func.map_or(0, |f| f as usize),
+            data.saved_preprocess_func.map_or(0, |f| f.address()),
+            data.saved_postprocess_func.map_or(0, |f| f.address()),
+            data.saved_death_func.map_or(0, |f| f.address()),
         ],
     }
 }

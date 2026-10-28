@@ -130,8 +130,8 @@ pub(crate) mod engine {
         if !(*out).is_null() {
             let ss = starship(e);
             let laser = element(*out);
-            (*laser).postprocess_func = Some(lightning_postprocess);
-            (*laser).collision_func = Some(lightning_collision);
+            (*laser).postprocess_func = Some(ElementHook::Legacy(lightning_postprocess));
+            (*laser).collision_func = Some(CollisionHook::Legacy(lightning_collision));
             // This draw precedes TrackShip's optional opposite-facing draw.
             let random = TFB_Random();
             let mut angle: COUNT;

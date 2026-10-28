@@ -191,7 +191,7 @@ pub(crate) mod engine {
             hit_points: 1,
             damage: 2,
             life: NAPALM_LIFE,
-            preprocess_func: Some(flame_napalm_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(flame_napalm_preprocess)),
             blast_offs: 0,
         };
         let h = initialize_missile(&mut b);

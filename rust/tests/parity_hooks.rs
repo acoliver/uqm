@@ -17,7 +17,7 @@ fn every_assigned_native_battle_and_navigation_callback_has_a_stable_registry_na
             .map(|capture| capture[1].into()),
     );
     let assigned = regex::Regex::new(
-        r"(?:preprocess_func|postprocess_func|collision_func|death_func|init_weapon_func|intelligence_func|uninit_func)\s*(?:=|:)\s*Some\((\w+)\)",
+        r"(?:preprocess_func|postprocess_func|collision_func|death_func|init_weapon_func|intelligence_func|uninit_func)\s*(?:=|:)\s*Some\(\s*(?:[\w:]+::Legacy\(\s*)?(\w+)\s*\)",
     )?;
     let declaration = regex::Regex::new(r"\bfn\s+(\w+)\s*\(")?;
     let mut pending = vec![

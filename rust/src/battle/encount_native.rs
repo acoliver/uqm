@@ -44,15 +44,27 @@ pub const fn combat_speed(flags: u8) -> u8 {
 }
 
 #[cfg(not(test))]
+use crate::ships::native::abi::{COUNT, POINT, TEXT, TEXT_ALIGN, UNICODE};
+#[cfg(not(test))]
+fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
+    TEXT {
+        baseline: POINT { x, y },
+        pStr: string,
+        align,
+        CharCount: COUNT::MAX,
+    }
+}
+
+#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, game_state, nth_frame, player_input, race_queue, rgb15, set_activity,
-        set_game_state, set_player_control, set_player_input, sis_height, sis_width,
-        AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
+        activity, game_state, player_input, race_queue, rgb15, set_activity, set_game_state,
+        set_player_control, set_player_input, sis_height, sis_width, AWESOME_RATING,
+        CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
-    use crate::battle::battle_native::{battle_counter, Battle};
+    use crate::battle::battle_native::Battle;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -91,14 +103,6 @@ pub(crate) mod engine {
     unsafe fn escape_pressed() -> bool {
         let template = *(&raw const PlayerControls).cast::<CONTROL_TEMPLATE>();
         CurrentInputState.key[template as usize][KEY_ESCAPE as usize] != 0
-    }
-    fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
-        TEXT {
-            baseline: POINT { x, y },
-            pStr: string,
-            align,
-            CharCount: COUNT::MAX,
-        }
     }
     unsafe fn draw_text(t: &mut TEXT, string: *const UNICODE) {
         t.pStr = string;
@@ -430,8 +434,8 @@ pub(crate) mod engine {
         set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
         set_game_state(BOMB_CARRIER, END_BOMB_CARRIER, 0);
         let mut victory = victory_state(
-            battle_counter[1],
-            battle_counter[0],
+            crate::app::bridge::battle(|b| b.counters[1]),
+            crate::app::bridge::battle(|b| b.counters[0]),
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
         let frag = GlobData
@@ -638,7 +642,8 @@ pub(crate) mod engine {
         WaitForSoundEnd(COUNT::MAX);
         let mut saved = ptr::null_mut();
         if GlobData.Game_state.glob_flags & CYBORG_ENABLED as u8 != 0 {
-            nth_frame = 1 | ((combat_speed(GlobData.Game_state.glob_flags) as u16) << 8);
+            let speed = 1 | ((combat_speed(GlobData.Game_state.glob_flags) as u16) << 8);
+            crate::app::bridge::battle(|b| b.nth_frame = speed);
             set_player_control(0, CYBORG_CONTROL | AWESOME_RATING);
             saved = player_input(0);
             set_player_input(0, ptr::null_mut());
@@ -663,7 +668,7 @@ pub(crate) mod engine {
             GlobData.SIS_state.CrewEnlisted = COUNT::MAX;
         }
         if GlobData.Game_state.glob_flags & CYBORG_ENABLED as u8 != 0 {
-            nth_frame = 0;
+            crate::app::bridge::battle(|b| b.nth_frame = 0);
             set_player_control(0, HUMAN_CONTROL | STANDARD_RATING);
             ClearPlayerInput(0);
             set_player_input(0, saved);

@@ -8,7 +8,6 @@ use super::{
     crew_label, crew_strip, find_escort, highlight, icon_origin, moved, name_strip, slot, Area,
     Cursor, Direction, Escort, Slot, ICON_HEIGHT, ICON_WIDTH, NO_ID,
 };
-use crate::battle::ffi::live_counters;
 use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
@@ -339,7 +338,7 @@ fn base_activity_aborted() -> bool {
 /// Game thread, inside a full-game battle.
 unsafe fn get_armada_star_ship() -> *mut c_void {
     // SAFETY: `battle_counter` has a slot for each side.
-    if unsafe { *live_counters::battle_counter_slot(1) } == 0 {
+    if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
         return std::ptr::null_mut();
     }
@@ -373,7 +372,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
         if chosen == tail_of(player_queue()) {
             // Player chose SIS. There will be no more choices.
             // SAFETY: `battle_counter` has a slot for each side.
-            unsafe { *live_counters::battle_counter_slot(RPG_PLAYER_NUM) = 1 };
+            unsafe { crate::app::bridge::battle(|b| b.counters[RPG_PLAYER_NUM] = 1) };
         }
         // SAFETY: plain call.
         WaitForSoundEnd(0);
@@ -412,7 +411,6 @@ pub unsafe fn get_encounter_star_ship_with_picker(
 ) -> *mut c_void {
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
-    let counter = unsafe { live_counters::battle_counter_slot(side) };
     // SAFETY: as above.
     let queue = unsafe { live_queues::player_ships(side) };
 
@@ -428,8 +426,8 @@ pub unsafe fn get_encounter_star_ship_with_picker(
         // SAFETY: `battle_counter` has a slot for each side.
         let (own, other) = unsafe {
             (
-                *live_counters::battle_counter_slot(0),
-                *live_counters::battle_counter_slot(1),
+                crate::app::bridge::battle(|b| b.counters[0]),
+                crate::app::bridge::battle(|b| b.counters[1]),
             )
         };
         if own == 0 || other == 0 {
@@ -448,7 +446,7 @@ pub unsafe fn get_encounter_star_ship_with_picker(
     if side == RPG_PLAYER_NUM {
         // Human player in a full game.
         // SAFETY: `counter` points into `battle_counter`.
-        let ships_left = unsafe { *counter };
+        let ships_left = unsafe { crate::app::bridge::battle(|b| b.counters[side]) };
         if last.is_null() && ships_left == 1 {
             // First time picking a ship and player has no escorts: SIS is the
             // last ship in the queue (though there is only one).
@@ -493,7 +491,7 @@ pub unsafe fn get_encounter_star_ship_with_picker(
             }
         }
         // SAFETY: `counter` points into `battle_counter`.
-        unsafe { *counter += 1 };
+        unsafe { crate::app::bridge::battle(|b| b.counters[side] += 1) };
         // SAFETY: `queue` is `race_q[side]`.
         return unsafe { (*queue).head };
     }

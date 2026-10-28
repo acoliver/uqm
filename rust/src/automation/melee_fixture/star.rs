@@ -47,7 +47,7 @@ pub(super) fn advance(
                                 .intersects(ElementFlags::APPEARING | ElementFlags::NONSOLID)
                     });
                     let source = world.order.iter().copied().find(|h| {
-                        world.elements[h].collision_func.map_or(0, |f| f as usize)
+                        world.elements[h].collision_func.map_or(0, |f| f.address())
                             == hooks.star_collision
                     });
                     if let (Some(ship), Some(source)) = (ship, source) {
@@ -68,7 +68,7 @@ pub(super) fn advance(
             run.proof.require(
                 world.elements[&run.a]
                     .preprocess_func
-                    .map_or(0, |f| f as usize)
+                    .map_or(0, |f| f.address())
                     == hooks.unhyper,
                 "star-contact",
             )?;

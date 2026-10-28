@@ -176,7 +176,7 @@ pub(crate) mod engine {
             (*ss).weapon_counter = WEAPON_WAIT;
         } else {
             (*p).__bindgen_anon_1.life_span = PUMPUP_LIFE;
-            (*p).preprocess_func = Some(pump_up_preprocess);
+            (*p).preprocess_func = Some(ElementHook::Legacy(pump_up_preprocess));
             (*p).postprocess_func = None;
             let a = facing_to_angle(i32::from((*ss).ShipFacing)) as COUNT;
             SetVelocityComponents(
@@ -216,7 +216,7 @@ pub(crate) mod engine {
                 MIN_PUMPITUDE_ANIMS + u16::from((*a).__bindgen_anon_4.turn_wait & !REVERSE_DIR);
             (*p).__bindgen_anon_4.turn_wait = 0;
             (*p).__bindgen_anon_5.next_turn = 0;
-            (*p).preprocess_func = Some(animation_preprocess);
+            (*p).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
             image!(copy; (*p).current.image.farray, (*a).next.image.farray);
             image!(frame; (*p).current.image.frame, SetAbsFrameIndex(
                 *(*p).current.image.farray,
@@ -249,8 +249,8 @@ pub(crate) mod engine {
         *out = initialize_missile(&mut block);
         if !(*out).is_null() {
             let p = element(*out);
-            (*p).postprocess_func = Some(pump_up_postprocess);
-            (*p).collision_func = Some(pump_up_collision);
+            (*p).postprocess_func = Some(ElementHook::Legacy(pump_up_postprocess));
+            (*p).collision_func = Some(CollisionHook::Legacy(pump_up_collision));
             (*p).__bindgen_anon_5.thrust_wait = LEVEL_COUNTER;
         }
         1
@@ -287,7 +287,7 @@ pub(crate) mod engine {
                     (*p).__bindgen_anon_1.life_span = 1;
                     image!(copy; (*p).current, (*e).next);
                     image!(copy; (*p).next, (*e).next);
-                    (*p).preprocess_func = Some(confuse_preprocess);
+                    (*p).preprocess_func = Some(ElementHook::Legacy(confuse_preprocess));
                     (*GlobData
                         .Game_state
                         .DisplayArray
@@ -337,7 +337,7 @@ pub(crate) mod engine {
                 image!(copy; (*p).next, (*p).current);
                 (*p).playerNr = (*a).playerNr;
                 (*p).state_flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
-                (*p).preprocess_func = Some(confuse_preprocess);
+                (*p).preprocess_func = Some(ElementHook::Legacy(confuse_preprocess));
                 (*GlobData
                     .Game_state
                     .DisplayArray
@@ -373,13 +373,13 @@ pub(crate) mod engine {
             hit_points: CMISSILE_HITS,
             damage: CMISSILE_DAMAGE,
             life: CMISSILE_LIFE,
-            preprocess_func: Some(confuse_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(confuse_preprocess)),
             blast_offs: CMISSILE_OFFSET,
         };
         *out = initialize_missile(&mut block);
         if !(*out).is_null() {
             let p = element(*out);
-            (*p).collision_func = Some(confusion_collision);
+            (*p).collision_func = Some(CollisionHook::Legacy(confusion_collision));
             (*p).pParent = ss.cast();
         }
         1

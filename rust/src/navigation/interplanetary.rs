@@ -425,8 +425,8 @@ pub(crate) mod live {
         let icon = (*group).melee_icon;
         crate::collections::observation::image!(single; (*element).current.image.farray, ptr::addr_of_mut!((*group).melee_icon), icon);
         crate::collections::observation::image!(frame; (*element).current.image.frame, SetAbsFrameIndex(icon, 1));
-        (*element).death_func = Some(group_preprocess);
-        (*element).collision_func = Some(group_collision);
+        (*element).death_func = Some(ElementHook::Legacy(group_preprocess));
+        (*element).collision_func = Some(CollisionHook::Legacy(group_collision));
         (*element).current.location =
             world(locationToDisplay((*group).loc, radius((*group).sys_loc)));
         (*element).pParent = group.cast();
@@ -495,8 +495,8 @@ pub(crate) mod live {
         let frame = GlobData.Game_state.ShipStamp.frame;
         crate::collections::observation::image!(single; (*element).current.image.farray, ptr::addr_of_mut!(GlobData.Game_state.ShipStamp.frame), frame);
         crate::collections::observation::image!(frame; (*element).current.image.frame, frame);
-        (*element).preprocess_func = Some(flagship_preprocess);
-        (*element).collision_func = Some(flagship_collision);
+        (*element).preprocess_func = Some(ElementHook::Legacy(flagship_preprocess));
+        (*element).collision_func = Some(CollisionHook::Legacy(flagship_collision));
         (*element).current.location = world(GlobData.Game_state.ShipStamp.origin);
         PutQueue(ptr::addr_of_mut!(disp_q), handle);
     }

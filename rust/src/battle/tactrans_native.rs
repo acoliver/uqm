@@ -130,7 +130,7 @@ pub(crate) mod engine {
     use crate::battle::battle_native::engine::{
         activity, connection, player_input, primitive, rgb15, set_activity,
     };
-    use crate::battle::battle_native::{battleFrameCount, battle_counter, BattleSong};
+    use crate::battle::battle_native::{battleFrameCount, BattleSong};
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
     use crate::collections::observation::image;
     use crate::ships::native::{
@@ -176,7 +176,7 @@ pub(crate) mod engine {
     }
 
     fn same_callback(a: ElementProcessFunc, b: unsafe extern "C" fn(*mut ELEMENT)) -> bool {
-        a.map(|f| f as usize) == Some(b as usize)
+        a.map(|f| f.address()) == Some(b as usize)
     }
 
     /// # Safety
@@ -361,8 +361,8 @@ pub(crate) mod engine {
             music_started,
             dead_ship == WINNER_STAR_SHIP,
         );
-        (*dead).death_func = Some(new_ship);
-        (*dead).preprocess_func = Some(preprocess_dead_ship);
+        (*dead).death_func = Some(ElementHook::Legacy(new_ship));
+        (*dead).preprocess_func = Some(ElementHook::Legacy(preprocess_dead_ship));
         (*dead).state_flags &= !(DISAPPEARING as u16);
         (*dead).pParent = dead_ship.cast();
     }
@@ -456,7 +456,7 @@ pub(crate) mod engine {
             if restart {
                 BattleSong(1);
             }
-        } else if battle_counter[0] == 0 || battle_counter[1] == 0 {
+        } else if crate::app::bridge::battle(|b| b.counters.contains(&0)) {
             set_activity(activity() & !(IN_BATTLE as u16));
         } else {
             set_activity(activity() | CHECK_ABORT as u16);
@@ -499,7 +499,7 @@ pub(crate) mod engine {
                 .location
                 .y
                 .wrapping_add(sine(angle as i32, dist as i32));
-            (*e).preprocess_func = Some(animation_preprocess);
+            (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
             let (angle, dist) = explosion_velocity_random(TFB_Random());
             SetVelocityComponents(
                 &mut (*e).velocity,
@@ -569,8 +569,7 @@ pub(crate) mod engine {
         assert!(!owner.is_null());
         if (*dead).__bindgen_anon_3.mass_points as u32 <= MAX_SHIP_MASS {
             assert!((*owner).playerNr >= 0);
-            let count = &raw mut battle_counter[(*owner).playerNr as usize];
-            *count = (*count).wrapping_sub(1);
+            crate::app::bridge::battle(|b| b.ship_lost((*owner).playerNr as usize));
         }
         if activity() as u8 == SUPER_MELEE as u8 {
             MeleeShipDeath(owner);
@@ -590,9 +589,9 @@ pub(crate) mod engine {
         (*ship).__bindgen_anon_1.life_span = (NUM_EXPLOSION_FRAMES * 3) as u16;
         (*ship).state_flags &= !(DISAPPEARING as u16);
         (*ship).state_flags |= (FINITE_LIFE | NONSOLID) as u16;
-        (*ship).preprocess_func = Some(explosion_preprocess);
-        (*ship).postprocess_func = Some(PostProcessStatus);
-        (*ship).death_func = Some(cleanup_dead_ship);
+        (*ship).preprocess_func = Some(ElementHook::Legacy(explosion_preprocess));
+        (*ship).postprocess_func = Some(ElementHook::Legacy(PostProcessStatus));
+        (*ship).death_func = Some(ElementHook::Legacy(cleanup_dead_ship));
         (*ship).hTarget = ptr::null_mut();
         if play_sound {
             PlaySound(
@@ -663,7 +662,7 @@ pub(crate) mod engine {
             .location
             .y
             .wrapping_add(sine(angle, rect.extent.height as i32));
-        (*e).death_func = Some(cycle_ion_trail);
+        (*e).death_func = Some(ElementHook::Legacy(cycle_ion_trail));
         (*e).pParent = owner.cast();
         image!(copy; (*e).next, (*e).current);
         (*e).__bindgen_anon_1.life_span = (*e).__bindgen_anon_1.life_span.wrapping_sub(1);
@@ -677,7 +676,7 @@ pub(crate) mod engine {
         if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
             if (*e).state_flags & APPEARING as u16 != 0 {
                 (*e).__bindgen_anon_1.life_span = HYPERJUMP_LIFE as u16;
-                (*e).preprocess_func = Some(ship_transition);
+                (*e).preprocess_func = Some(ElementHook::Legacy(ship_transition));
                 (*e).postprocess_func = None;
                 (*primitive(e)).Type = gfx_object_NUM_PRIMS as u8;
                 (*e).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
@@ -695,8 +694,8 @@ pub(crate) mod engine {
                     (*e).velocity = mem::zeroed();
                     (*e).state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
                     (*e).state_flags |= CHANGING as u16;
-                    (*e).preprocess_func = Some(ship_preprocess);
-                    (*e).postprocess_func = Some(ship_postprocess);
+                    (*e).preprocess_func = Some(ElementHook::Legacy(ship_preprocess));
+                    (*e).postprocess_func = Some(ElementHook::Legacy(ship_postprocess));
                 }
                 return;
             }
@@ -741,8 +740,8 @@ pub(crate) mod engine {
                         ScreenHeight << (ONE_SHIFT + MAX_REDUCTION),
                     );
                 }
-                (*image).preprocess_func = Some(ship_transition);
-                (*image).death_func = Some(cycle_ion_trail);
+                (*image).preprocess_func = Some(ElementHook::Legacy(ship_transition));
+                (*image).death_func = Some(ElementHook::Legacy(cycle_ion_trail));
                 (*image).pParent = owner.cast();
             }
         }
@@ -762,10 +761,10 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_5.thrust_wait = thrust;
             (*e).__bindgen_anon_4.turn_wait = wait;
             if wait == 0 {
-                (*e).death_func = Some(cleanup_dead_ship);
+                (*e).death_func = Some(ElementHook::Legacy(cleanup_dead_ship));
                 (*e).__bindgen_anon_2.crew_level = 0;
                 (*e).__bindgen_anon_1.life_span = (HYPERJUMP_LIFE + 1) as u16;
-                (*e).preprocess_func = Some(ship_transition);
+                (*e).preprocess_func = Some(ElementHook::Legacy(ship_transition));
                 (*e).postprocess_func = None;
                 (*primitive(e)).Type = gfx_object_NUM_PRIMS as u8;
                 (*e).state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;

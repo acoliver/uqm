@@ -103,7 +103,7 @@ pub(super) fn blazer(
             })
         }
         1 => {
-            run.saved_hook = world.elements[&a].collision_func.map_or(0, |f| f as usize);
+            run.saved_hook = world.elements[&a].collision_func.map_or(0, |f| f.address());
             let ship = world.ship_mut(a);
             let info = ship
                 .info
@@ -118,7 +118,7 @@ pub(super) fn blazer(
         }
         2 => {
             run.proof.require(
-                world.elements[&a].collision_func.map_or(0, |f| f as usize)
+                world.elements[&a].collision_func.map_or(0, |f| f.address())
                     == hooks.blazer_collision,
                 "blazer-installed",
             )?;
@@ -132,7 +132,7 @@ pub(super) fn blazer(
         }
         3 => {
             run.proof.require(
-                world.elements[&a].collision_func.map_or(0, |f| f as usize) == run.saved_hook,
+                world.elements[&a].collision_func.map_or(0, |f| f.address()) == run.saved_hook,
                 "collision-restored",
             )?;
             run.proof.require(
@@ -166,7 +166,7 @@ pub(super) fn satellites(
                 .iter()
                 .copied()
                 .filter(|h| {
-                    world.elements[h].postprocess_func.map(|f| f as usize)
+                    world.elements[h].postprocess_func.map(|f| f.address())
                         == hooks.satellite.map(|f| f as usize)
                 })
                 .collect();
@@ -199,7 +199,7 @@ pub(super) fn satellites(
                 .iter()
                 .find_map(|(&h, e)| {
                     (!run.before.contains(&h)
-                        && e.death_func.map_or(0, |f| f as usize) == hooks.defense)
+                        && e.death_func.map_or(0, |f| f.address()) == hooks.defense)
                         .then_some(e)
                 })
                 .ok_or("satellite did not queue delayed defense")?;
@@ -273,7 +273,7 @@ pub(super) fn death_spawn(
                 "collision-killed",
             )?;
             run.proof.require(
-                world.elements[&run.b].death_func.map(|f| f as usize)
+                world.elements[&run.b].death_func.map(|f| f.address())
                     == hooks.ship_death.map(|f| f as usize),
                 "death-hook",
             )?;
@@ -411,7 +411,9 @@ pub(super) fn pool(
             let fighters = world
                 .elements
                 .values()
-                .filter(|e| e.preprocess_func.map_or(0, |f| f as usize) == hooks.fighter_preprocess)
+                .filter(|e| {
+                    e.preprocess_func.map_or(0, |f| f.address()) == hooks.fighter_preprocess
+                })
                 .count();
             run.proof.require(
                 world.elements.len() == 150 && fighters >= 140,

@@ -63,7 +63,7 @@ pub(super) unsafe fn ambient() {
     (*element).playerNr = NEUTRAL_PLAYER_NUM as i16;
     (*element).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
     (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-    (*element).preprocess_func = Some(animation_preprocess);
+    (*element).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
     let random = TFB_Random();
     let dx = (random as u8 as i32 % (ScreenWidth - 64)) - ((ScreenWidth - 64) >> 1);
     let dy = ((random >> 8) as u8 as i32 % ScreenHeight) - (ScreenHeight >> 1);
@@ -192,14 +192,14 @@ unsafe fn add(encounter: *mut ENCOUNTER, universe: POINT) -> HELEMENT {
                 i = 9;
             }
             image!(frame; (*element).current.image.frame, SetRelFrameIndex(*(*element).current.image.farray, -i));
-            (*element).death_func = Some(transition);
+            (*element).death_func = Some(ElementHook::Legacy(transition));
         } else {
             image!(frame; (*element).current.image.frame, DecFrameIndex(*(*element).current.image.farray));
         }
         (*element).__bindgen_anon_4.turn_wait = 1;
         (*element).preprocess_func = None;
         (*element).postprocess_func = None;
-        (*element).collision_func = Some(collision);
+        (*element).collision_func = Some(CollisionHook::Legacy(collision));
         SetUpElement(element);
         image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
         (*primitive(element)).Type = gfx_object_NUM_PRIMS as u8;
@@ -295,7 +295,7 @@ unsafe fn process(
             (*element).state_flags |= NONSOLID as u16;
             (*element).__bindgen_anon_1.life_span = 0;
             if (*encounter).transition_state == 0 {
-                (*element).death_func = Some(transition);
+                (*element).death_func = Some(ElementHook::Legacy(transition));
                 (*encounter).transition_state = -1;
                 (*element).__bindgen_anon_2.hit_points = 1;
             } else {

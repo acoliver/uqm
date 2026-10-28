@@ -276,7 +276,7 @@ pub(crate) mod engine {
                 let handle = *weapons.add(index);
                 if !handle.is_null() {
                     let laser = crate::ships::native::element(handle);
-                    (*laser).collision_func = Some(twin_laser_collision);
+                    (*laser).collision_func = Some(CollisionHook::Legacy(twin_laser_collision));
                 }
             }
         } else {
@@ -289,7 +289,7 @@ pub(crate) mod engine {
             block.hit_points = MISSILE_HITS;
             block.damage = MISSILE_DAMAGE;
             block.life = MISSILE_LIFE;
-            block.preprocess_func = Some(missile_preprocess);
+            block.preprocess_func = Some(ElementHook::Legacy(missile_preprocess));
             block.blast_offs = 0;
             block.face = normalize_facing(i32::from(facing) - 1);
             block.index = block.face;

@@ -127,7 +127,7 @@ pub(super) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, k
     let dx = (((*source).next.location.x as i32 - (*ship).next.location.x as i32) << 5) as i16;
     let dy = (((*source).next.location.y as i32 - (*ship).next.location.y as i32) << 5) as i16;
     (*ship).state_flags |= NONSOLID as u16;
-    (*ship).preprocess_func = Some(unhyper);
+    (*ship).preprocess_func = Some(ElementHook::Legacy(unhyper));
     (*ship).postprocess_func = None;
     (*ship).__bindgen_anon_4.turn_wait = kind;
     let starship = (*ship).pParent.cast::<STARSHIP>();
@@ -154,7 +154,7 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             (*element).state_flags |= DEFY_PHYSICS as u16;
             return 0;
         } else {
-            (*element).preprocess_func = Some(hyper_preprocess);
+            (*element).preprocess_func = Some(ElementHook::Legacy(hyper_preprocess));
             (*element).postprocess_func = None;
             (*element).state_flags |= NONSOLID as u16;
             crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex(
@@ -173,8 +173,8 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             }
             let ship = (*element).pParent.cast::<STARSHIP>();
             if index == (*ship).ShipFacing {
-                (*element).preprocess_func = Some(ship_preprocess);
-                (*element).postprocess_func = Some(ship_postprocess);
+                (*element).preprocess_func = Some(ElementHook::Legacy(ship_preprocess));
+                (*element).postprocess_func = Some(ElementHook::Legacy(ship_postprocess));
                 (*element).state_flags &= !(NONSOLID as u16);
             }
         }

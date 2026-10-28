@@ -133,7 +133,7 @@ pub(crate) mod engine {
             hit_points: 1,
             damage: 0,
             life: 80,
-            preprocess_func: Some(limpet_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(limpet_preprocess)),
             blast_offs: 0,
             cx: (*e).next.location.x,
             cy: (*e).next.location.y,
@@ -141,7 +141,7 @@ pub(crate) mod engine {
         let h = initialize_missile(&mut block);
         if !h.is_null() {
             let limpet = element(h);
-            (*limpet).collision_func = Some(limpet_collision);
+            (*limpet).collision_func = Some(CollisionHook::Legacy(limpet_collision));
             (*limpet).pParent = ss.cast();
             put_element(h);
         }

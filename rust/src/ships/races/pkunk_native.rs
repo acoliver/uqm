@@ -357,7 +357,7 @@ pub(crate) mod engine {
                     - (i32::from(dy) >> VELOCITY_SHIFT))
                     as COORD;
 
-                (*missile).preprocess_func = Some(animate);
+                (*missile).preprocess_func = Some(ElementHook::Legacy(animate));
             }
         }
 
@@ -449,7 +449,7 @@ pub(crate) mod engine {
         StopAllBattleMusic();
         StartShipExplosion(ship, true);
         // Once the explosion ends, we will get a brand new ship
-        (*ship).death_func = Some(new_pkunk);
+        (*ship).death_func = Some(ElementHook::Legacy(new_pkunk));
     }
 
     pub(crate) unsafe extern "C" fn intercept_pkunk_death(e: *mut ELEMENT) {
@@ -479,7 +479,7 @@ pub(crate) mod engine {
             (*data).saved_postprocess_func = (*ship).postprocess_func;
             (*data).saved_death_func = (*ship).death_func;
 
-            (*ship).death_func = Some(pkunk_reincarnation_death);
+            (*ship).death_func = Some(ElementHook::Legacy(pkunk_reincarnation_death));
         }
     }
 
@@ -547,8 +547,8 @@ pub(crate) mod engine {
                 }
 
                 (*image).__bindgen_anon_3.mass_points = angle as BYTE;
-                (*image).preprocess_func = Some(phoenix_transition);
-                (*image).death_func = Some(spawn_phoenix_trail);
+                (*image).preprocess_func = Some(ElementHook::Legacy(phoenix_transition));
+                (*image).death_func = Some(ElementHook::Legacy(spawn_phoenix_trail));
                 (*image).pParent = ss.cast();
             }
         }
@@ -577,7 +577,7 @@ pub(crate) mod engine {
                 (*phoenix).state_flags = (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR) as ELEMENT_FLAGS;
                 (*phoenix).__bindgen_anon_1.life_span = 1;
 
-                (*phoenix).death_func = Some(intercept_pkunk_death);
+                (*phoenix).death_func = Some(ElementHook::Legacy(intercept_pkunk_death));
 
                 (*phoenix).pParent = ss.cast();
 

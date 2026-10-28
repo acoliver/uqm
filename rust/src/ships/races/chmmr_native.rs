@@ -155,7 +155,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
                         ));
-                        (*spot).preprocess_func = Some(animation_preprocess);
+                        (*spot).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
                         (*spot).pParent = ss.cast();
                         (*GlobData
                             .Game_state
@@ -202,7 +202,7 @@ pub(crate) mod engine {
         if !(*lasers).is_null() {
             let laser = element(*lasers);
             (*laser).__bindgen_anon_3.mass_points = 2;
-            (*laser).death_func = Some(laser_death);
+            (*laser).death_func = Some(ElementHook::Legacy(laser_death));
             (*laser).__bindgen_anon_4.turn_wait =
                 ((u32::from((*ss).special_counter) + 1) % 4) as u8;
         }
@@ -516,7 +516,7 @@ pub(crate) mod engine {
                 (*defense).state_flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
                 let successor = element((*e).succ);
                 (*defense).hTarget = (*successor).pred;
-                (*defense).death_func = Some(spawn_point_defense);
+                (*defense).death_func = Some(ElementHook::Legacy(spawn_point_defense));
                 (*defense).pParent = starship(e).cast();
             }
         }
@@ -539,7 +539,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
         image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, 8));
-        (*e).preprocess_func = Some(animation_preprocess);
+        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
         (*e).death_func = None;
         (*e).postprocess_func = None;
         (*e).collision_func = None;
@@ -575,10 +575,11 @@ pub(crate) mod engine {
                         (*(*ss).RaceDescPtr).ship_data.special[0],
                         TFB_Random() as COUNT & 7,
                     ));
-                    (*satellite).preprocess_func = Some(satellite_preprocess);
-                    (*satellite).postprocess_func = Some(satellite_postprocess);
-                    (*satellite).death_func = Some(satellite_death);
-                    (*satellite).collision_func = Some(satellite_collision);
+                    (*satellite).preprocess_func = Some(ElementHook::Legacy(satellite_preprocess));
+                    (*satellite).postprocess_func =
+                        Some(ElementHook::Legacy(satellite_postprocess));
+                    (*satellite).death_func = Some(ElementHook::Legacy(satellite_death));
+                    (*satellite).collision_func = Some(CollisionHook::Legacy(satellite_collision));
                     (*satellite).pParent = ss.cast();
                     (*GlobData
                         .Game_state
@@ -599,7 +600,7 @@ pub(crate) mod engine {
             (*satellite).playerNr = (*e).playerNr;
             (*satellite).state_flags = (FINITE_LIFE | NONSOLID | IGNORE_SIMILAR | APPEARING) as u16;
             (*satellite).__bindgen_anon_1.life_span = (HYPERJUMP_LIFE + 1) as COUNT;
-            (*satellite).death_func = Some(spawn_satellites);
+            (*satellite).death_func = Some(ElementHook::Legacy(spawn_satellites));
             (*satellite).pParent = ss.cast();
             (*GlobData
                 .Game_state

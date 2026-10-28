@@ -212,7 +212,7 @@ pub(crate) mod engine {
                 let d = element(h);
                 (*d).playerNr = (*e).playerNr;
                 (*d).state_flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
-                (*d).death_func = Some(spawn_point_defense);
+                (*d).death_func = Some(ElementHook::Legacy(spawn_point_defense));
                 (*d).pParent = ss.cast();
                 put_element(h);
             }
@@ -394,7 +394,7 @@ pub(crate) mod engine {
             *out.add(i) = h;
             if !h.is_null() {
                 let m = element(h);
-                (*m).collision_func = Some(blaster_collision);
+                (*m).collision_func = Some(CollisionHook::Legacy(blaster_collision));
                 (*m).__bindgen_anon_4.turn_wait = (nt << 4) | nt;
             }
         }
@@ -484,7 +484,7 @@ pub(crate) mod engine {
             b.flags = IGNORE_SIMILAR as u16;
             b.blast_offs = 8;
             b.speed = 24 << ONE_SHIFT;
-            b.preprocess_func = Some(blaster_preprocess);
+            b.preprocess_func = Some(ElementHook::Legacy(blaster_preprocess));
             b.hit_points = i16::from(2 * gun);
             b.damage = i16::from(2 * gun);
             b.life = 12 + 3 * (u16::from(gun) - 1);

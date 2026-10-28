@@ -1,4 +1,7 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
+#[path = "support/battle_context.rs"]
+mod battle_context;
+
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
@@ -264,7 +267,7 @@ unsafe fn junk(ship: &Ship, dx: i32, dy: i32, flags: u16, mass: BYTE) -> *mut EL
 
 #[test]
 fn descriptor_matches_all_c_stats_resources_and_callbacks() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let p = init_slylandro();
         let d = *p;
@@ -393,12 +396,12 @@ fn descriptor_matches_all_c_stats_resources_and_callbacks() {
             (*p).cyborg_control.intelligence_func.map(|f| f as usize),
             d.cyborg_control.intelligence_func.map(|f| f as usize)
         );
-    }
+    })
 }
 
 #[test]
 fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         ship.ss.ShipFacing = 15;
@@ -455,12 +458,12 @@ fn root_bolts_have_exact_random_color_length_angle_and_folded_chain_length() {
             }
         }
         assert!(colors_seen.into_iter().all(|seen| seen));
-    }
+    })
 }
 
 #[test]
 fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposite_turn() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let ship = Ship::new(0);
         let mut enemy = Ship::new(1);
@@ -491,12 +494,12 @@ fn lightning_tracks_all_turn_directions_and_draws_the_bolt_random_before_opposit
                 FreeElement(h);
             }
         }
-    }
+    })
 }
 
 #[test]
 fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_ship() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(16);
         let ship = Ship::new(0);
         let mut ally = Ship::new(0);
@@ -536,98 +539,100 @@ fn roots_choose_nearest_live_visible_opponent_not_a_cached_target_ally_or_dead_s
             bolt_velocity(0, 0, random)
         );
         FreeElement(h);
-    }
+    })
 }
 
 #[test]
 fn child_segments_keep_unrounded_travel_angle_inherit_color_and_retain_selected_target() {
-    unsafe {
-        let _battle = Battle::new(16);
-        let ship = Ship::new(0);
-        let mut enemy = Ship::new(1);
-        let mut cached = Ship::new(1);
-        cached.at(6000, 4000);
-        let h = ship.fire_from(ship.ptr());
-        let parent = element(h);
-        (*parent).current.location = POINT { x: 4000, y: 4000 };
-        (*parent).next.location = POINT { x: 4100, y: 4200 };
-        (*parent).__bindgen_anon_4.turn_wait = 4;
-        (*prim(parent)).color = Color {
-            r: 3,
-            g: 77,
-            b: 129,
-            a: 43,
-        };
-        for (angle, dx, dy, delta) in [
-            (1, 0, -1000, 0),
-            (1, 1000, 0, 4),
-            (1, -1000, 0, 12),
-            (1, 0, 1000, 8),
-            (5, 0, -1000, 15),
-        ] {
-            enemy.at(4000 + dx, 4000 + dy);
-            cached.desc.ship_info.crew_level = 0;
-            (*parent).velocity.travel_angle = angle;
-            (*parent).hTarget = ptr::null_mut();
-            let (random, _) = randoms(77);
-            let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || {
-                ship.fire_from(parent)
-            });
-            let child = element(child_h);
+    battle_context::run(|| {
+        unsafe {
+            let _battle = Battle::new(16);
+            let ship = Ship::new(0);
+            let mut enemy = Ship::new(1);
+            let mut cached = Ship::new(1);
+            cached.at(6000, 4000);
+            let h = ship.fire_from(ship.ptr());
+            let parent = element(h);
+            (*parent).current.location = POINT { x: 4000, y: 4000 };
+            (*parent).next.location = POINT { x: 4100, y: 4200 };
+            (*parent).__bindgen_anon_4.turn_wait = 4;
+            (*prim(parent)).color = Color {
+                r: 3,
+                g: 77,
+                b: 129,
+                a: 43,
+            };
+            for (angle, dx, dy, delta) in [
+                (1, 0, -1000, 0),
+                (1, 1000, 0, 4),
+                (1, -1000, 0, 12),
+                (1, 0, 1000, 8),
+                (5, 0, -1000, 15),
+            ] {
+                enemy.at(4000 + dx, 4000 + dy);
+                cached.desc.ship_info.crew_level = 0;
+                (*parent).velocity.travel_angle = angle;
+                (*parent).hTarget = ptr::null_mut();
+                let (random, _) = randoms(77);
+                let child_h = with_rng(77, if delta == 8 { 2 } else { 1 }, || {
+                    ship.fire_from(parent)
+                });
+                let child = element(child_h);
+                assert_eq!(
+                    velocity(&(*child).velocity),
+                    bolt_velocity(angle, delta, random),
+                    "angle {angle}, delta {delta}"
+                );
+                assert_eq!(rgba((*prim(child)).color), (3, 77, 129, 43));
+                assert_eq!((*child).__bindgen_anon_4.turn_wait, 3);
+                assert_eq!((*child).pParent, (*parent).pParent);
+                assert_eq!(
+                    ((*child).current.location.x, (*child).current.location.y),
+                    (4100, 4200)
+                );
+                assert_eq!((*parent).hTarget, enemy.handle);
+                FreeElement(child_h);
+            }
+            // A child with a cached target uses that target even if a nearer ship exists.
+            cached.desc.ship_info.crew_level = 12;
+            enemy.at(4000, 3999);
+            (*parent).velocity.travel_angle = 1;
+            (*parent).hTarget = cached.handle;
+            let (random, _) = randoms(99);
+            let child_h = with_rng(99, 1, || ship.fire_from(parent));
+            assert_eq!((*parent).hTarget, cached.handle);
             assert_eq!(
-                velocity(&(*child).velocity),
-                bolt_velocity(angle, delta, random),
-                "angle {angle}, delta {delta}"
+                velocity(&(*element(child_h)).velocity),
+                bolt_velocity(1, 4, random)
             );
-            assert_eq!(rgba((*prim(child)).color), (3, 77, 129, 43));
-            assert_eq!((*child).__bindgen_anon_4.turn_wait, 3);
-            assert_eq!((*child).pParent, (*parent).pParent);
-            assert_eq!(
-                ((*child).current.location.x, (*child).current.location.y),
-                (4100, 4200)
-            );
-            assert_eq!((*parent).hTarget, enemy.handle);
             FreeElement(child_h);
+            // A dead cached target is cleared without starting a fresh queue scan.
+            cached.desc.ship_info.crew_level = 0;
+            (*parent).hTarget = cached.handle;
+            let child_h = with_rng(99, 1, || ship.fire_from(parent));
+            assert!((*parent).hTarget.is_null());
+            assert_eq!(
+                velocity(&(*element(child_h)).velocity),
+                bolt_velocity(1, -1, random)
+            );
+            FreeElement(child_h);
+            enemy.desc.ship_info.crew_level = 0;
+            (*parent).__bindgen_anon_4.turn_wait = 0;
+            let child_h = with_rng(99, 1, || ship.fire_from(parent));
+            assert_eq!((*element(child_h)).__bindgen_anon_4.turn_wait, 255);
+            assert_eq!(
+                velocity(&(*element(child_h)).velocity),
+                bolt_velocity(1, -1, random)
+            );
+            FreeElement(child_h);
+            FreeElement(h);
         }
-        // A child with a cached target uses that target even if a nearer ship exists.
-        cached.desc.ship_info.crew_level = 12;
-        enemy.at(4000, 3999);
-        (*parent).velocity.travel_angle = 1;
-        (*parent).hTarget = cached.handle;
-        let (random, _) = randoms(99);
-        let child_h = with_rng(99, 1, || ship.fire_from(parent));
-        assert_eq!((*parent).hTarget, cached.handle);
-        assert_eq!(
-            velocity(&(*element(child_h)).velocity),
-            bolt_velocity(1, 4, random)
-        );
-        FreeElement(child_h);
-        // A dead cached target is cleared without starting a fresh queue scan.
-        cached.desc.ship_info.crew_level = 0;
-        (*parent).hTarget = cached.handle;
-        let child_h = with_rng(99, 1, || ship.fire_from(parent));
-        assert!((*parent).hTarget.is_null());
-        assert_eq!(
-            velocity(&(*element(child_h)).velocity),
-            bolt_velocity(1, -1, random)
-        );
-        FreeElement(child_h);
-        enemy.desc.ship_info.crew_level = 0;
-        (*parent).__bindgen_anon_4.turn_wait = 0;
-        let child_h = with_rng(99, 1, || ship.fire_from(parent));
-        assert_eq!((*element(child_h)).__bindgen_anon_4.turn_wait, 255);
-        assert_eq!(
-            velocity(&(*element(child_h)).velocity),
-            bolt_velocity(1, -1, random)
-        );
-        FreeElement(child_h);
-        FreeElement(h);
-    }
+    })
 }
 
 #[test]
 fn lightning_postprocess_extends_chains_until_zero_or_collision() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(32);
         let mut ship = Ship::new(0);
         ship.ss.weapon_counter = 8;
@@ -637,7 +642,12 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
         for wait in (0..8).rev() {
             (*parent).next = (*parent).current;
             let before = queue_len();
-            with_rng(56, 1, || ((*parent).postprocess_func.unwrap())(parent));
+            with_rng(56, 1, || {
+                uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                    (*parent).postprocess_func.unwrap(),
+                    parent,
+                )
+            });
             assert_eq!(queue_len(), before + 1);
             let child = element(disp_q.tail);
             assert_ne!(child, parent);
@@ -646,18 +656,28 @@ fn lightning_postprocess_extends_chains_until_zero_or_collision() {
             parent = child;
         }
         let before = queue_len();
-        with_rng(56, 0, || ((*parent).postprocess_func.unwrap())(parent));
+        with_rng(56, 0, || {
+            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                (*parent).postprocess_func.unwrap(),
+                parent,
+            )
+        });
         assert_eq!(queue_len(), before);
         (*parent).__bindgen_anon_4.turn_wait = 5;
         (*parent).state_flags |= COLLISION as u16;
-        with_rng(56, 0, || ((*parent).postprocess_func.unwrap())(parent));
+        with_rng(56, 0, || {
+            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                (*parent).postprocess_func.unwrap(),
+                parent,
+            )
+        });
         assert_eq!(queue_len(), before);
-    }
+    })
 }
 
 #[test]
 fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(2);
         let mut ship = Ship::new(0);
         ship.ss.weapon_counter = 8;
@@ -665,16 +685,21 @@ fn allocation_failure_consumes_no_lightning_random_and_keeps_initializer_count()
         put_element(h);
         let parent = element(h);
         assert!(with_rng(7, 0, || ship.fire_from(ship.ptr())).is_null());
-        with_rng(7, 0, || ((*parent).postprocess_func.unwrap())(parent));
+        with_rng(7, 0, || {
+            uqm_rust::battle::process_native::invoke_element::invoke_legacy_element(
+                (*parent).postprocess_func.unwrap(),
+                parent,
+            )
+        });
         assert_eq!({ disp_q.tail }, h);
         with_rng(7, 0, || ship.post());
         assert_eq!({ disp_q.tail }, h);
-    }
+    })
 }
 
 #[test]
 fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_collision() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(32);
         let mut ship = Ship::new(0);
         let h = ship.fire_from(ship.ptr());
@@ -687,7 +712,15 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
         target.__bindgen_anon_2.hit_points = 3;
         target.__bindgen_anon_3.mass_points = 2;
         target.state_flags = FINITE_LIFE as u16;
-        with_rng(13, 0, || collide(beam, &mut pa, &mut target, &mut pb));
+        with_rng(13, 0, || {
+            uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                collide,
+                beam,
+                &mut pa,
+                &mut target,
+                &mut pb,
+            )
+        });
         assert_eq!(
             target.__bindgen_anon_2.hit_points, 2,
             "generic weapon damage applied"
@@ -710,7 +743,15 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
                 } else {
                     counter
                 };
-                with_rng(13, 0, || collide(beam, &mut pa, &mut target, &mut pb));
+                with_rng(13, 0, || {
+                    uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
+                        collide,
+                        beam,
+                        &mut pa,
+                        &mut target,
+                        &mut pb,
+                    )
+                });
                 assert_eq!(ship.ss.weapon_counter, folded.wrapping_sub(wait));
                 assert_eq!((*beam).__bindgen_anon_4.turn_wait, 0);
                 assert_eq!(
@@ -721,12 +762,12 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
             }
         }
         FreeElement(h);
-    }
+    })
 }
 
 #[test]
 fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(32);
         let mut ship = Ship::new(0);
         for counter in [0u8, 17, 18, 255, 1, 8, 9, 16] {
@@ -740,12 +781,12 @@ fn ship_postprocess_emits_only_during_the_sixteen_active_weapon_ticks() {
             }
             assert_eq!(ship.ss.weapon_counter, counter);
         }
-    }
+    })
 }
 
 #[test]
 fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_frame() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         for (initial, old, current, turn_wait, thrust_wait, facing) in [
@@ -807,12 +848,12 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
             assert_eq!(velocity(&(*ship.ptr()).velocity), v);
             assert_eq!((*ship.ptr()).state_flags, flags as u16);
         }
-    }
+    })
 }
 
 #[test]
 fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_boundaries() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(64);
         let mut ship = Ship::new(0);
         ship.ss.cur_status_flags = SPECIAL as u16;
@@ -862,12 +903,12 @@ fn harvester_filters_all_junk_flags_collision_rules_and_inclusive_distance_bound
         assert_eq!(ship.desc.ship_info.energy_level, 20);
         assert_eq!(ship.ss.energy_counter, 10);
         assert_eq!(ship.ss.special_counter, 20);
-    }
+    })
 }
 
 #[test]
 fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_macro() {
-    unsafe {
+    battle_context::run(|| unsafe {
         for (ship_flags, obj_flags, same_parent, ship_mass, obj_mass, harvest) in [
             (IGNORE_SIMILAR, IGNORE_SIMILAR, true, 1, 1, false),
             (IGNORE_SIMILAR, IGNORE_SIMILAR, false, 1, 1, true),
@@ -890,53 +931,55 @@ fn harvester_same_parent_zero_mass_and_ship_solidity_match_collision_possible_ma
             assert_eq!((*e).__bindgen_anon_1.life_span == 0, harvest);
             assert_eq!(ship.ss.special_counter, if harvest { 20 } else { 0 });
         }
-    }
+    })
 }
 
 #[test]
 fn harvester_requires_key_and_ready_counter_but_can_run_at_full_energy() {
-    unsafe {
-        let _battle = Battle::new(16);
-        let mut ship = Ship::new(0);
-        for (key, counter, energy, harvest) in [
-            (false, 0, 0, false),
-            (true, 1, 0, false),
-            (true, 0, 20, true),
-        ] {
+    battle_context::run(|| {
+        unsafe {
+            let _battle = Battle::new(16);
+            let mut ship = Ship::new(0);
+            for (key, counter, energy, harvest) in [
+                (false, 0, 0, false),
+                (true, 1, 0, false),
+                (true, 0, 20, true),
+            ] {
+                let e = junk(&ship, 0, 0, 0, 1);
+                ship.ss.cur_status_flags = if key { SPECIAL as u16 } else { 0 };
+                ship.ss.special_counter = counter;
+                ship.desc.ship_info.energy_level = energy;
+                with_rng(6, 0, || ship.post());
+                assert_eq!((*e).__bindgen_anon_1.life_span == 0, harvest);
+                assert_eq!(ship.ss.special_counter, if harvest { 20 } else { counter });
+                assert_eq!(
+                    ship.desc.ship_info.energy_level,
+                    if harvest { 20 } else { energy }
+                );
+                // Exclude this object from later cases.
+                (*e).state_flags |= NONSOLID as u16;
+            }
+            ship.ss.special_counter = 0;
+            ship.desc.ship_info.energy_level = 0;
+            ship.post();
+            assert_eq!(ship.ss.special_counter, 0);
+            assert_eq!(ship.desc.ship_info.energy_level, 0);
+            ship.at(-32760, 4000);
             let e = junk(&ship, 0, 0, 0, 1);
-            ship.ss.cur_status_flags = if key { SPECIAL as u16 } else { 0 };
-            ship.ss.special_counter = counter;
-            ship.desc.ship_info.energy_level = energy;
-            with_rng(6, 0, || ship.post());
-            assert_eq!((*e).__bindgen_anon_1.life_span == 0, harvest);
-            assert_eq!(ship.ss.special_counter, if harvest { 20 } else { counter });
+            (*e).next.location.x = 32760;
+            ship.post();
             assert_eq!(
-                ship.desc.ship_info.energy_level,
-                if harvest { 20 } else { energy }
+                (*e).__bindgen_anon_1.life_span,
+                0,
+                "subtraction truncates to SIZE before absolute value"
             );
-            // Exclude this object from later cases.
-            (*e).state_flags |= NONSOLID as u16;
         }
-        ship.ss.special_counter = 0;
-        ship.desc.ship_info.energy_level = 0;
-        ship.post();
-        assert_eq!(ship.ss.special_counter, 0);
-        assert_eq!(ship.desc.ship_info.energy_level, 0);
-        ship.at(-32760, 4000);
-        let e = junk(&ship, 0, 0, 0, 1);
-        (*e).next.location.x = 32760;
-        ship.post();
-        assert_eq!(
-            (*e).__bindgen_anon_1.life_span,
-            0,
-            "subtraction truncates to SIZE before absolute value"
-        );
-    }
+    })
 }
 
 #[test]
 fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         let enemy = Ship::new(1);
@@ -984,12 +1027,12 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
         ship.ss.ship_input_state = (SPECIAL | WEAPON) as u8;
         with_rng(17, 0, || ship.ai(&mut concerns, 0));
         assert_eq!(ship.ss.ship_input_state & (SPECIAL | WEAPON) as u8, 0);
-    }
+    })
 }
 
 #[test]
 fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresses_thrust() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         let e = junk(&ship, 1000, 0, 0, 1);
@@ -1017,12 +1060,12 @@ fn empty_energy_expands_concerns_only_without_gravity_and_cooldown_and_suppresse
             assert_eq!((*ship.ptr()).__bindgen_anon_5.thrust_wait, 0);
             assert_eq!(ship.ss.ship_input_state & SPECIAL as u8, SPECIAL as u8);
         }
-    }
+    })
 }
 
 #[test]
 fn shared_ai_turns_toward_a_ship_without_applying_generic_thrust() {
-    unsafe {
+    battle_context::run(|| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(0);
         let mut enemy = Ship::new(1);
@@ -1039,5 +1082,5 @@ fn shared_ai_turns_toward_a_ship_without_applying_generic_thrust() {
         assert_eq!(ship.ss.ship_input_state & THRUST as u8, 0);
         assert_eq!((*ship.ptr()).__bindgen_anon_5.thrust_wait, 0);
         assert_eq!(velocity(&(*ship.ptr()).velocity), before);
-    }
+    })
 }

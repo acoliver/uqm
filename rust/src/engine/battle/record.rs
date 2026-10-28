@@ -56,15 +56,8 @@ mod abi {
             offset!(STATE, image) + offset!(state__bindgen_ty_1, farray) == offset!(Visual, farray)
         );
     };
-    pub type ElementProcessFunc = Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-    pub type ElementCollisionFunc = Option<
-        unsafe extern "C" fn(
-            ElementPtr0: *mut ELEMENT,
-            pPt0: *mut POINT,
-            ElementPtr1: *mut ELEMENT,
-            pPt1: *mut POINT,
-        ),
-    >;
+    pub type ElementProcessFunc = Option<super::super::hooks::ElementHook>;
+    pub type ElementCollisionFunc = Option<super::super::hooks::CollisionHook>;
     #[repr(C)]
     #[derive(Copy, Clone)]
     pub struct element {

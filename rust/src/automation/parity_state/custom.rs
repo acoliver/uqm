@@ -63,7 +63,7 @@ impl<'a> RaceData<'a> {
                 fields,
                 &prefix,
                 "collision",
-                data.collision_func.map_or(0, |f| f as usize),
+                data.collision_func.map_or(0, |f| f.address()),
                 SPECIES_ID_ANDROSYNTH_ID,
                 _hooks,
             ),
@@ -84,7 +84,7 @@ impl<'a> RaceData<'a> {
                         fields,
                         &prefix,
                         name,
-                        callback.map_or(0, |f| f as usize),
+                        callback.map_or(0, |f| f.address()),
                         SPECIES_ID_PKUNK_ID,
                         _hooks,
                     );
@@ -168,7 +168,7 @@ fn missile_fields(
         fields,
         prefix,
         "preprocess",
-        missile.preprocess_func.map_or(0, |f| f as usize),
+        missile.preprocess_func.map_or(0, |f| f.address()),
         SPECIES_ID_SIS_SHIP_ID,
         hooks,
     );

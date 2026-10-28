@@ -1,3 +1,4 @@
+pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
@@ -1155,7 +1156,6 @@ pub struct battlestate_struct {
     pub frame_cb: BattleFrameCallback,
 }
 unsafe extern "C" {
-    pub static mut battle_counter: [BYTE; 2usize];
 }
 unsafe extern "C" {
     pub static mut instantVictory: BOOLEAN;
@@ -1826,7 +1826,7 @@ pub struct MISSILE_BLOCK {
     pub index: COUNT,
     pub life: COUNT,
     pub farray: *mut FRAME,
-    pub preprocess_func: ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>,
+    pub preprocess_func: crate::engine::battle::record::ElementProcessFunc,
     pub blast_offs: SIZE,
 }
 

@@ -67,7 +67,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_3.mass_points = 1;
             (*e).state_flags = (APPEARING | FINITE_LIFE) as u16 | b.flags;
             (*e).__bindgen_anon_1.life_span = 1;
-            (*e).collision_func = Some(collision_cb);
+            (*e).collision_func = Some(CollisionHook::Legacy(collision_cb));
             (*e).__bindgen_anon_5.blast_offset = 1;
             let (position, velocity) =
                 projectile::laser((b.cx, b.cy), b.face, b.pixoffs, (b.ex, b.ey));
@@ -98,7 +98,7 @@ pub(crate) mod engine {
             image!(set; (*e).current.image.farray, b.farray);
             image!(frame; (*e).current.image.frame, SetAbsFrameIndex(*b.farray, b.index));
             (*e).preprocess_func = b.preprocess_func;
-            (*e).collision_func = Some(collision_cb);
+            (*e).collision_func = Some(CollisionHook::Legacy(collision_cb));
             (*e).__bindgen_anon_5.blast_offset = b.blast_offs as u8;
             let (position, velocity) =
                 projectile::missile((b.cx, b.cy), b.face, b.pixoffs, b.speed);
@@ -177,7 +177,7 @@ pub(crate) mod engine {
                     (*b).__bindgen_anon_1.life_span = frames - facings;
                     (*b).__bindgen_anon_4.turn_wait = 0;
                     (*b).__bindgen_anon_5.next_turn = 0;
-                    (*b).preprocess_func = Some(animation_preprocess);
+                    (*b).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
                     image!(copy; (*b).current.image.farray, (*w).next.image.farray);
                     image!(frame; (*b).current.image.frame, SetAbsFrameIndex(*(*b).current.image.farray, facings));
                 }

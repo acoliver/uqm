@@ -137,14 +137,14 @@ pub(crate) mod engine {
             hit_points: 12,
             damage: 2,
             life: 2,
-            preprocess_func: Some(comet_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(comet_preprocess)),
             blast_offs: 0,
         };
         let h = initialize_missile(&mut b);
         if !h.is_null() {
             put_element(h);
             let c = element(h);
-            (*c).collision_func = Some(comet_collision);
+            (*c).collision_func = Some(CollisionHook::Legacy(comet_collision));
             (*c).pParent = ss.cast();
             (*c).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait;
             (*c).hTarget = (*e).hTarget;
@@ -426,7 +426,8 @@ pub(crate) mod engine {
         q: *mut POINT,
     ) {
         if (*o).playerNr == NPC_PLAYER_NUM as SIZE {
-            if (*e).preprocess_func.map(|f| f as usize) == (*o).preprocess_func.map(|f| f as usize)
+            if (*e).preprocess_func.map(|f| f.address())
+                == (*o).preprocess_func.map(|f| f.address())
                 && (*e).state_flags & DEFY_PHYSICS as u16 == 0
                 && ((*p).x != (*e).IntersectControl.IntersectStamp.origin.x
                     || (*p).y != (*e).IntersectControl.IntersectStamp.origin.y)
@@ -534,13 +535,13 @@ pub(crate) mod engine {
                     hit_points: 10,
                     damage: 1,
                     life: 2,
-                    preprocess_func: Some(sentinel_preprocess),
+                    preprocess_func: Some(ElementHook::Legacy(sentinel_preprocess)),
                     blast_offs: 0,
                 };
                 let h = initialize_missile(&mut b);
                 if !h.is_null() {
                     let s = element(h);
-                    (*s).collision_func = Some(sentinel_collision);
+                    (*s).collision_func = Some(CollisionHook::Legacy(sentinel_collision));
                     (*s).__bindgen_anon_4.turn_wait = 3;
                     (*s).pParent = ss.cast();
                     (*ss).special_counter = 72;
@@ -584,9 +585,9 @@ pub(crate) mod engine {
                         (*d).ship_data.special[0],
                         u16::from(TFB_Random() as u8 % 10),
                     ));
-                    (*g).preprocess_func = Some(generator_preprocess);
-                    (*g).collision_func = Some(generator_collision);
-                    (*g).death_func = Some(generator_death);
+                    (*g).preprocess_func = Some(ElementHook::Legacy(generator_preprocess));
+                    (*g).collision_func = Some(CollisionHook::Legacy(generator_collision));
+                    (*g).death_func = Some(ElementHook::Legacy(generator_death));
                     (*g).pParent = ss.cast();
                     insert(h, disp_q.head);
                 }
@@ -606,7 +607,7 @@ pub(crate) mod engine {
                 };
                 image!(set; (*t).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
                 image!(frame; (*t).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 1));
-                (*t).preprocess_func = Some(turret_preprocess);
+                (*t).preprocess_func = Some(ElementHook::Legacy(turret_preprocess));
                 (*t).pParent = ss.cast();
                 insert(h, (*e).succ);
             }
@@ -625,8 +626,8 @@ pub(crate) mod engine {
                 };
                 image!(set; (*g).current.image.farray, (&raw mut (*d).ship_data.ship).cast());
                 image!(frame; (*g).current.image.frame, SetAbsFrameIndex((*d).ship_data.ship[0], 11));
-                (*g).preprocess_func = Some(gate_preprocess);
-                (*g).collision_func = Some(gate_collision);
+                (*g).preprocess_func = Some(ElementHook::Legacy(gate_preprocess));
+                (*g).collision_func = Some(CollisionHook::Legacy(gate_collision));
                 (*g).pParent = ss.cast();
                 insert(h, (*e).succ);
             }
@@ -695,7 +696,7 @@ pub(crate) mod engine {
                     }
                 }
             }
-            if e.death_func.map(|f| f as usize) == Some(generator_death as *const () as usize)
+            if e.death_func.map(|f| f.address()) == Some(generator_death as *const () as usize)
                 && e.state_flags & FINITE_LIFE as u16 == 0
             {
                 let x = i32::from(e.current.location.x);
@@ -711,7 +712,7 @@ pub(crate) mod engine {
                 comet_collision as *const () as usize,
                 sentinel_collision as *const () as usize,
             ]
-            .contains(&e.collision_func.map_or(0, |f| f as usize))
+            .contains(&e.collision_func.map_or(0, |f| f.address()))
                 && e.state_flags & DISAPPEARING as u16 == 0
             {
                 let (vx, vy) = e.velocity.preview_next_components(1);
@@ -721,7 +722,7 @@ pub(crate) mod engine {
                     velocity: (i32::from(vx as i16), i32::from(vy as i16)),
                 });
             }
-            if e.collision_func.map(|f| f as usize) == Some(gate_collision as *const () as usize) {
+            if e.collision_func.map(|f| f.address()) == Some(gate_collision as *const () as usize) {
                 // SAFETY: the gate's primitive is live in this immutable display graph.
                 result.gate_open =
                     unsafe { (*primitive(h.cast())).Type } == gfx_object_STAMPFILL_PRIM as u8;

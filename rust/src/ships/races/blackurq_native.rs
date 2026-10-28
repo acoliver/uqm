@@ -148,7 +148,7 @@ pub(crate) mod engine {
         dy /= 2;
         SetVelocityComponents(&raw mut (*e).velocity, dx, dy);
         if dx == 0 && dy == 0 {
-            (*e).preprocess_func = Some(buzztrack_preprocess);
+            (*e).preprocess_func = Some(ElementHook::Legacy(buzztrack_preprocess));
         }
         spin_preprocess(e);
     }
@@ -168,14 +168,14 @@ pub(crate) mod engine {
             (*a).state_flags |= (NONSOLID | CHANGING) as u16;
             (*a).__bindgen_anon_1.life_span = 5;
             image!(frame; (*a).next.image.frame, SetAbsFrameIndex((*a).current.image.frame, 2));
-            (*a).preprocess_func = Some(splinter_preprocess);
+            (*a).preprocess_func = Some(ElementHook::Legacy(splinter_preprocess));
         }
     }
     pub(crate) unsafe extern "C" fn buzzsaw_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         if (*ss).cur_status_flags & WEAPON as u16 == 0 {
             (*e).__bindgen_anon_1.life_span >>= 1;
-            (*e).preprocess_func = Some(decelerate_preprocess);
+            (*e).preprocess_func = Some(ElementHook::Legacy(decelerate_preprocess));
         }
         spin_preprocess(e);
     }
@@ -219,7 +219,7 @@ pub(crate) mod engine {
             hit_points: 10,
             damage: 4,
             life: 64,
-            preprocess_func: Some(buzzsaw_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(buzzsaw_preprocess)),
             blast_offs: 9,
         };
         *out = initialize_missile(&mut block);
@@ -227,8 +227,8 @@ pub(crate) mod engine {
             let e = element(*out);
             (*e).__bindgen_anon_4.turn_wait = 0;
             (*e).__bindgen_anon_5.thrust_wait = 0;
-            (*e).postprocess_func = Some(buzzsaw_postprocess);
-            (*e).collision_func = Some(buzzsaw_collision);
+            (*e).postprocess_func = Some(ElementHook::Legacy(buzzsaw_postprocess));
+            (*e).collision_func = Some(CollisionHook::Legacy(buzzsaw_collision));
         }
         1
     }
@@ -343,7 +343,7 @@ pub(crate) mod engine {
             damage: 3,
             life: (i32::from(frame_count((*(*ss).RaceDescPtr).ship_data.special[0])) * 3 - 1)
                 as COUNT,
-            preprocess_func: Some(gas_cloud_preprocess),
+            preprocess_func: Some(ElementHook::Legacy(gas_cloud_preprocess)),
             blast_offs: 2,
         };
         let (mut dx, mut dy) = (0, 0);
@@ -355,7 +355,7 @@ pub(crate) mod engine {
                 (*gas).pParent = ss.cast();
                 (*gas).hTarget = ptr::null_mut();
                 (*gas).__bindgen_anon_4.turn_wait = 1;
-                (*gas).collision_func = Some(gas_cloud_collision);
+                (*gas).collision_func = Some(CollisionHook::Legacy(gas_cloud_collision));
                 DeltaVelocityComponents(&raw mut (*gas).velocity, dx, dy);
                 put_element(h);
             }

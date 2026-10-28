@@ -181,7 +181,7 @@ pub(crate) mod engine {
 
     pub(crate) unsafe extern "C" fn utwig_preprocess(e: *mut ELEMENT) {
         if (*e).state_flags & APPEARING as u16 != 0 {
-            (*e).collision_func = Some(utwig_collision);
+            (*e).collision_func = Some(CollisionHook::Legacy(utwig_collision));
         }
         let ss = starship(e);
         if u32::from((*e).__bindgen_anon_1.life_span) > NORMAL_LIFE + 1 {
