@@ -738,7 +738,7 @@ impl Walker {
             .map(|alias| format!("{alias}{}", &text[head.len()..]))
             .unwrap_or(text)
     }
-    fn layer_path(&mut self, target: &str, span: Span) {
+    fn layer_path(&mut self, target: &str, span: Span, direct_bridge: bool) {
         let target = super::layers::absolute(&self.context.lexical_module, target);
         let target = target.as_str();
         let event = format!(
@@ -751,7 +751,11 @@ impl Walker {
             let source = self.finding("layers", "", self.context.module.clone(), 1);
             self.measurement
                 .findings
-                .extend(super::layers::reference(&source, target));
+                .extend(super::layers::reference_with_bridge(
+                    &source,
+                    target,
+                    direct_bridge,
+                ));
         }
     }
     fn exported_symbol(&mut self, attrs: &[Attribute], ident: &syn::Ident) {

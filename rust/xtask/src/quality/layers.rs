@@ -261,6 +261,10 @@ fn below_planned(crate_name: &str, target: &str) -> bool {
 }
 
 pub fn reference(source: &Finding, target: &str) -> Vec<Finding> {
+    reference_with_bridge(source, target, false)
+}
+
+pub fn reference_with_bridge(source: &Finding, target: &str, direct_bridge: bool) -> Vec<Finding> {
     let mut result = Vec::new();
     let module = source
         .identity
@@ -282,7 +286,7 @@ pub fn reference(source: &Finding, target: &str) -> Vec<Finding> {
         result.push(finding);
     };
     if let Some(target) = target.strip_prefix("crate::") {
-        if source.package == "uqm" {
+        if source.package == "uqm" && !(direct_bridge && target.starts_with("app::bridge::")) {
             if !permitted(layer(module), layer(target)) {
                 add("module_edges".into());
             }

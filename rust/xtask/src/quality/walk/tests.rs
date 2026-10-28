@@ -637,3 +637,60 @@ fn anonymous_macro_identities_and_baseline_rekey_are_stable() {
     assert!(baseline.entries.keys().all(|k| !k.contains('@')));
     assert!(baseline.entries.values().all(|v| *v == 7));
 }
+
+#[test]
+fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges() {
+    let direct = fixture(
+        &[(
+            "src/lib.rs",
+            "mod pickship { fn run() { crate::app::bridge::enter(); } }",
+        )],
+        None,
+        false,
+    );
+    assert_eq!(direct.report("bridge_calls", None).unwrap(), 1);
+    assert_eq!(direct.report("module_edges", None).unwrap(), 0);
+    assert_eq!(direct.report("planned.uqm-modes", None).unwrap(), 0);
+    let alias = fixture(
+        &[(
+            "src/lib.rs",
+            "mod pickship { use crate::app::bridge as handoff; fn run() { handoff::enter(); } }",
+        )],
+        None,
+        false,
+    );
+    assert_eq!(alias.report("bridge_calls", None).unwrap(), 1);
+    assert!(alias.report("module_edges", None).unwrap() > 0);
+    let reexport = fixture(
+        &[(
+            "src/lib.rs",
+            "mod pickship { pub use crate::app::bridge::enter; fn run() { enter(); } }",
+        )],
+        None,
+        false,
+    );
+    assert_eq!(reexport.report("bridge_calls", None).unwrap(), 1);
+    assert!(reexport.report("module_edges", None).unwrap() > 0);
+    let address = fixture(
+        &[(
+            "src/lib.rs",
+            "mod pickship { fn run() { let handoff = crate::app::bridge::enter; handoff(); } }",
+        )],
+        None,
+        false,
+    );
+    assert_eq!(address.report("bridge_calls", None).unwrap(), 0);
+    assert_eq!(address.report("module_edges", None).unwrap(), 1);
+    assert_eq!(address.report("planned.uqm-modes", None).unwrap(), 1);
+    let other = fixture(
+        &[(
+            "src/lib.rs",
+            "mod pickship { fn run() { crate::app::other::enter(); } }",
+        )],
+        None,
+        false,
+    );
+    assert_eq!(other.report("bridge_calls", None).unwrap(), 0);
+    assert_eq!(other.report("module_edges", None).unwrap(), 1);
+    assert_eq!(other.report("planned.uqm-modes", None).unwrap(), 1);
+}
