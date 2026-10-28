@@ -5,7 +5,7 @@ use crate::graphics::{
     native_abi::RECT,
 };
 use std::{
-    ffi::{c_char, c_int, c_void},
+    ffi::{c_int, c_void},
     ptr,
 };
 const NUM_SCREENS: usize = 3;
@@ -28,13 +28,17 @@ pub struct TfbGraphicsBackend {
     upload_transition_screen: unsafe extern "C" fn(),
     screen: unsafe extern "C" fn(c_int, u8, *const SDL_Rect),
     color: unsafe extern "C" fn(u8, u8, u8, u8, *const SDL_Rect),
+    present_hook: Option<fn(bool) -> i32>,
+    pub(crate) readback_hook: Option<fn() -> Option<u64>>,
 }
-static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
+pub(crate) static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
     preprocess: ffi::rust_gfx_preprocess,
     postprocess: ffi::rust_gfx_postprocess,
     upload_transition_screen: ffi::rust_gfx_upload_transition_screen,
     screen: ffi::rust_gfx_screen,
     color: ffi::rust_gfx_color,
+    present_hook: None,
+    readback_hook: None,
 };
 pub static mut GRAPHICS_BACKEND: *mut TfbGraphicsBackend = ptr::null_mut();
 
@@ -42,9 +46,13 @@ use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
 
 use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
 
-use crate::automation::input_ffi::rust_automation_present_callback;
-
-use crate::automation::input_ffi::rust_automation_presented_frame;
+#[derive(Default)]
+pub struct GraphicsOptions {
+    pub renderer: Option<std::ffi::CString>,
+    pub native_position: Option<(i32, i32)>,
+    pub present_hook: Option<fn(bool) -> i32>,
+    pub readback_hook: Option<fn() -> Option<u64>>,
+}
 
 use crate::graphics::cmap_abi::GetFadeAmount;
 
@@ -91,18 +99,33 @@ pub(crate) unsafe fn clear_rust_screen_globals() {
     format_conv_surf = ptr::null_mut();
 }
 /// # Safety
-/// Called once on the SDL main thread; renderer must be null or a readable C string.
+/// Called once on the SDL main thread; options points to a live GraphicsOptions.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_InitGraphics(
     driver: c_int,
     flags: c_int,
-    renderer: *const c_char,
+    options: *const c_void,
     width: c_int,
     height: c_int,
 ) -> c_int {
+    let options = &*options.cast::<GraphicsOptions>();
+    let renderer = options
+        .renderer
+        .as_ref()
+        .map_or(ptr::null(), |value| value.as_ptr());
+    RUST_BACKEND.present_hook = options.present_hook;
+    RUST_BACKEND.readback_hook = options.readback_hook;
     SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
     update_video_globals(driver, flags, width, height);
-    if ffi::rust_gfx_init(driver, flags, renderer, width, height) != 0 {
+    if ffi::rust_gfx_init(
+        driver,
+        flags,
+        renderer,
+        width,
+        height,
+        options.native_position,
+    ) != 0
+    {
         std::process::exit(1);
     }
     assert!(
@@ -179,7 +202,10 @@ static mut LAST_TRANSITION: c_int = 255;
 /// Called on the SDL main thread with graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
-    if rust_automation_present_callback() != 0 {
+    if (*GRAPHICS_BACKEND)
+        .present_hook
+        .is_some_and(|hook| hook(false) != 0)
+    {
         return;
     }
     let fade = GetFadeAmount();
@@ -218,7 +244,9 @@ pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
         (backend.screen)(0, 255, ptr::addr_of_mut!(SYSTEM_BOX));
     }
     (backend.postprocess)();
-    rust_automation_presented_frame();
+    if let Some(hook) = (*GRAPHICS_BACKEND).present_hook {
+        hook(true);
+    }
 }
 /// # Safety
 /// Screen must be a valid screen ID; called on graphics thread.

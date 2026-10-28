@@ -22,7 +22,7 @@ fn funcs() -> &'static TFB_SoundDecoderFuncs {
 }
 
 fn fixture(name: &str) -> Vec<u8> {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let path = PathBuf::from(env!("UQM_RUST_ROOT"))
         .join("tests/fixtures/tracker")
         .join(name);
     std::fs::read(&path).unwrap_or_else(|e| panic!("fixture {}: {e}", path.display()))

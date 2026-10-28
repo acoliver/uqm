@@ -22,10 +22,12 @@ fn display_geometry_changed(
 
 #[cfg(feature = "debug-process")]
 pub(super) fn sync_native_display_geometry() -> Result<(), String> {
-    let Some(config) = crate::automation::native_window::active_native_window_config() else {
+    let Some(state) = get_gfx_state() else {
         return Ok(());
     };
-    let state = get_gfx_state().ok_or("native graphics not initialized")?;
+    let Some((x, y)) = state.native_position else {
+        return Ok(());
+    };
     let display = state.canvas.window().display_index()?;
     let bounds = state.video.display_bounds(display)?;
     let display_changed = display_geometry_changed(&mut state.native_display_bounds, bounds);
@@ -34,22 +36,16 @@ pub(super) fn sync_native_display_geometry() -> Result<(), String> {
     let native = macos::position(state.canvas.window())?;
     #[cfg(not(target_os = "macos"))]
     let native = position;
-    if display_changed
-        || native_position_changed(
-            position,
-            native,
-            (config.client_bounds.x, config.client_bounds.y),
-        )
-    {
+    if display_changed || native_position_changed(position, native, (x, y)) {
         // Cocoa can rebase its bottom-left frame before SDL updates its cached
         // top-left position, even after the display-change placement ran.
         rust_bridge_log_msg(&format!(
             "NATIVE_PLACEMENT: display={bounds:?} changed={display_changed} client={position:?} native={native:?} requested=({}, {})",
-            config.client_bounds.x, config.client_bounds.y
+            x, y
         ));
         state.canvas.window_mut().set_position(
-            sdl2::video::WindowPos::Positioned(config.client_bounds.x),
-            sdl2::video::WindowPos::Positioned(config.client_bounds.y),
+            sdl2::video::WindowPos::Positioned(x),
+            sdl2::video::WindowPos::Positioned(y),
         );
     }
     Ok(())
@@ -92,6 +88,24 @@ pub(super) fn readback<T: sdl2::render::RenderTarget>(
     let (width, height) = canvas.output_size()?;
     let rgba = canvas.read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)?;
     Ok((width, height, rgba))
+}
+
+pub(super) fn presented_frame<T: sdl2::render::RenderTarget>(
+    canvas: &sdl2::render::Canvas<T>,
+    count: u64,
+    generation: u64,
+) -> Result<PresentedFrame, String> {
+    let (width, height, mut rgba) = readback(canvas)?;
+    for pixel in rgba.as_chunks_mut::<4>().0 {
+        pixel[3] = u8::MAX;
+    }
+    Ok(PresentedFrame {
+        count,
+        generation,
+        width,
+        height,
+        rgba,
+    })
 }
 
 pub(super) fn scanlines(
@@ -162,6 +176,11 @@ mod tests {
         let (width, height, bytes) = readback(&canvas).unwrap();
         assert_eq!((width, height), (7, 5));
         assert_eq!(bytes.len(), (width * height * 4) as usize);
+        let frame = presented_frame(&canvas, 7, 19).unwrap();
+        assert_eq!((frame.count, frame.generation), (7, 19));
+        assert_eq!((frame.width, frame.height), (7, 5));
+        assert_eq!(frame.validate(), Ok(()));
+        assert!(frame.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
     }
 
     #[test]

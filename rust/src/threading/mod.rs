@@ -23,6 +23,8 @@
 
 #[cfg(target_os = "macos")]
 pub mod critical_timer;
+#[cfg(unix)]
+pub mod descriptor;
 pub mod pacing;
 #[cfg(target_os = "macos")]
 pub mod qos;

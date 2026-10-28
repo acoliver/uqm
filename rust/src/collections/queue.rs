@@ -16,7 +16,19 @@ pub struct Link {
     pub succ: HLink,
 }
 
-pub use crate::engine::battle::record::Queue;
+/// QUEUE — the queue control structure
+/// C: `typedef struct queue { HLINK head; HLINK tail; BYTE *pq_tab;
+///      HLINK free_list; COUNT object_size; BYTE num_objects; } QUEUE;`
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Queue {
+    pub head: HLink,
+    pub tail: HLink,
+    pub pq_tab: *mut u8,
+    pub free_list: HLink,
+    pub object_size: u16,
+    pub num_objects: u8,
+}
 
 /// OBJ_SIZE type alias
 pub type ObjSize = u16;

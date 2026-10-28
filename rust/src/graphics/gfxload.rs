@@ -9,9 +9,7 @@ use std::ptr;
 
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 
-extern "C" {
-    static mut repository: *mut uio::uio_Repository;
-}
+use crate::io::handles::repository;
 #[derive(Clone, Copy)]
 struct AniData {
     transparent: i32,

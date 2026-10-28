@@ -21,11 +21,7 @@ use crate::strings::string_table::{
     AllocStringTable, StringTable, StringTableEntry, HAS_NAMEINDEX, HAS_SOUND_CLIPS, HAS_TIMESTAMP,
 };
 
-#[cfg(not(test))]
-use crate::mainloop::options_abi::contentDir;
-#[cfg(test)]
-#[allow(non_upper_case_globals)]
-static mut contentDir: *mut c_void = null_mut();
+use crate::io::handles::contentDir;
 
 const MAX_STRINGS: usize = 2048;
 const LOG_INFO: i32 = 4;

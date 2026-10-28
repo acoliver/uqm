@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use uqm_rust::video::scaler::VideoScaler;
+//! use uqm_engine::video::scaler::VideoScaler;
 //!
 //! let mut scaler = VideoScaler::new(280, 200, 1120, 800);
 //! let upscaled = scaler.scale(&frame_data)?;

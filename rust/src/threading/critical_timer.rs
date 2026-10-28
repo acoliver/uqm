@@ -50,7 +50,7 @@ impl CriticalTimer {
 /// Darwin creates kqueue descriptors without close-on-exec and sets it in a
 /// second call, so no child may be forked in between.
 pub(crate) fn create_queue() -> std::io::Result<OwnedFd> {
-    let _guard = crate::automation::child_session::guard_descriptor_inheritance();
+    let _guard = super::descriptor::guard_descriptor_inheritance();
     // SAFETY: kqueue takes no arguments.
     let raw_queue = unsafe { libc::kqueue() };
     if raw_queue < 0 {

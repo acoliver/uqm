@@ -2,6 +2,9 @@
 //!
 //! Handles saving and loading control configurations.
 
+#[no_mangle]
+pub static mut input_templates: [[std::ffi::c_char; 30]; 6] = [[0; 30]; 6];
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, Write};

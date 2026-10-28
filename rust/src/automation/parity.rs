@@ -301,7 +301,10 @@ impl Journal {
         )
     }
 
-    pub fn present(&mut self, frame: &super::capture::PresentedFrame) -> std::io::Result<()> {
+    pub fn present(
+        &mut self,
+        frame: &crate::graphics::presented_frame::PresentedFrame,
+    ) -> std::io::Result<()> {
         self.boundary();
         writeln!(
             self.trace,
@@ -377,7 +380,7 @@ mod tests {
         journal.input(1, 512, "weapon")?;
         journal.event("spawn 0 7".into());
         journal.checkpoint(512, 0x1234, &fields)?;
-        journal.present(&super::super::capture::PresentedFrame {
+        journal.present(&crate::graphics::presented_frame::PresentedFrame {
             count: 1,
             generation: 0,
             width: 1,

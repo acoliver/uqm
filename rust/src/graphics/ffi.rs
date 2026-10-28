@@ -8,6 +8,7 @@
 mod video;
 pub(crate) use video::reconfigure_video;
 
+use crate::graphics::presented_frame::PresentedFrame;
 use std::cell::UnsafeCell;
 use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
@@ -134,9 +135,11 @@ struct RustGraphicsState {
     /// Fullscreen state
     fullscreen: bool,
     /// Last immutable renderer readback published at the presentation boundary.
-    presented_frame: Option<crate::automation::capture::PresentedFrame>,
+    presented_frame: Option<PresentedFrame>,
     /// Number of frames actually presented by this backend instance.
     presentation_count: u64,
+    #[cfg(feature = "debug-process")]
+    native_position: Option<(i32, i32)>,
     #[cfg(feature = "debug-process")]
     native_display_bounds: Option<sdl2::rect::Rect>,
 }
@@ -178,12 +181,13 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe extern "C" fn rust_gfx_init(
+pub unsafe fn rust_gfx_init(
     _driver: c_int,
     flags: c_int,
     _renderer: *const c_char,
     width: c_int,
     height: c_int,
+    native_position: Option<(i32, i32)>,
 ) -> c_int {
     // REQ-INIT-095: Already-initialized guard — prevent double-init
     if get_gfx_state().is_some() {
@@ -250,14 +254,11 @@ pub unsafe extern "C" fn rust_gfx_init(
         height as u32,
     );
     window_builder.position_centered();
-    #[cfg(feature = "debug-process")]
-    if let Some(config) = crate::automation::native_window::active_native_window_config() {
+    if let Some((x, y)) = native_position {
         // A decorated 960px client exceeds a 1080px desktop's work area once
         // the menu bar and Dock are included. Cocoa then moves it on activation.
         // Borderless proof windows also avoid the title-frame show animation.
-        window_builder
-            .borderless()
-            .position(config.client_bounds.x, config.client_bounds.y);
+        window_builder.borderless().position(x, y);
     }
 
     let window = match window_builder.build() {
@@ -371,6 +372,8 @@ pub unsafe extern "C" fn rust_gfx_init(
         fullscreen,
         presented_frame: None,
         presentation_count: 0,
+        #[cfg(feature = "debug-process")]
+        native_position,
         #[cfg(feature = "debug-process")]
         native_display_bounds: None,
     };
@@ -562,23 +565,13 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
         }
         state.presentation_count = state.presentation_count.saturating_add(1);
 
-        if crate::automation::Coordinator::is_active() {
-            let generation = crate::automation::input_ffi::get_runtime()
-                .map(|runtime| runtime.mirror.capture_generation());
-            match video::readback(&state.canvas) {
-                Ok((width, height, mut rgba)) => {
-                    for pixel in rgba.as_chunks_mut::<4>().0 {
-                        pixel[3] = u8::MAX;
-                    }
-                    state.presented_frame =
-                        generation.map(|generation| crate::automation::capture::PresentedFrame {
-                            count: state.presentation_count,
-                            generation,
-                            width,
-                            height,
-                            rgba,
-                        });
-                }
+        // Read the generation at the presentation boundary, never at hook install.
+        if let Some(generation) = crate::graphics::sdl::lifecycle_abi::RUST_BACKEND
+            .readback_hook
+            .and_then(|hook| hook())
+        {
+            match video::presented_frame(&state.canvas, state.presentation_count, generation) {
+                Ok(frame) => state.presented_frame = Some(frame),
                 Err(error) => {
                     state.presented_frame = None;
                     rust_bridge_log_msg(&format!(
@@ -593,7 +586,7 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
 }
 
 /// Take the immutable readback associated with the most recent actual present.
-pub(crate) fn take_presented_frame() -> Option<crate::automation::capture::PresentedFrame> {
+pub(crate) fn take_presented_frame() -> Option<PresentedFrame> {
     get_gfx_state().and_then(|state| state.presented_frame.take())
 }
 
@@ -1107,11 +1100,11 @@ mod tests {
     fn test_init_already_initialized_returns_neg1() {
         unsafe {
             // First init should succeed
-            let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
             assert_eq!(result1, 0, "first init should succeed");
 
             // Second init should return -1
-            let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
             assert_eq!(result2, -1, "second init must return -1 (REQ-INIT-095)");
 
             // Cleanup
@@ -1125,7 +1118,7 @@ mod tests {
     #[ignore]
     fn test_init_returns_zero() {
         unsafe {
-            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
             assert_eq!(result, 0, "init should return 0 on success (REQ-INIT-080)");
             rust_gfx_uninit();
         }
@@ -1137,7 +1130,7 @@ mod tests {
     #[ignore]
     fn test_init_creates_surfaces() {
         unsafe {
-            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
             assert_eq!(result, 0, "init must succeed");
 
             for i in 0..TFB_GFX_NUMSCREENS as c_int {
@@ -1161,7 +1154,7 @@ mod tests {
         unsafe {
             // Flag bit 7 = SCALE_HQXX (triggers soft scaler allocation)
             let hqxx_flag: c_int = 1 << 7;
-            let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480);
+            let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480, None);
             assert_eq!(result, 0, "init with SCALE_HQXX must succeed");
 
             if let Some(state) = get_gfx_state() {

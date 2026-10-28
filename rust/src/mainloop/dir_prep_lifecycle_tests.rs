@@ -8,10 +8,10 @@ use std::path::Path;
 use serial_test::serial;
 use tempfile::TempDir;
 
-use super::c_dir_globals::{
+use super::*;
+use super::{
     baseContentPath, configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir,
 };
-use super::*;
 use crate::io::uio_bridge::{
     uio_DirList_free, uio_close, uio_closeDir, uio_closeRepository, uio_getDirList, uio_init,
     uio_open, uio_openRepository, uio_read, uio_unInit,

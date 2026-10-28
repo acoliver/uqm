@@ -137,31 +137,17 @@ fn expand_dollar_vars(input: &str) -> String {
 // Direct C global access for directory handles (options.h/setup.c)
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
-pub use crate::game_init::kernel_abi::repository;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::{
-    baseContentPath, configDir, contentDir, contentMountHandle, meleeDir, saveDir,
+pub use crate::io::handles::{
+    configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir,
 };
+#[cfg(not(test))]
+pub use crate::mainloop::options_abi::baseContentPath;
+#[cfg(test)]
+#[allow(non_upper_case_globals)]
+static mut baseContentPath: [c_char; PATH_MAX] = [0; PATH_MAX];
 
 /// Maximum path length, matching C's PATH_MAX on macOS.
 pub(crate) const PATH_MAX: usize = 4096;
-
-#[cfg(test)]
-#[allow(non_upper_case_globals)]
-pub(crate) mod c_dir_globals {
-    pub static mut repository: *mut crate::io::uio_bridge::uio_Repository = std::ptr::null_mut();
-    pub static mut configDir: *mut crate::io::uio_bridge::uio_DirHandle = std::ptr::null_mut();
-    pub static mut contentDir: *mut crate::io::uio_bridge::uio_DirHandle = std::ptr::null_mut();
-    pub static mut saveDir: *mut crate::io::uio_bridge::uio_DirHandle = std::ptr::null_mut();
-    pub static mut meleeDir: *mut crate::io::uio_bridge::uio_DirHandle = std::ptr::null_mut();
-    pub static mut contentMountHandle: *mut crate::io::uio_bridge::uio_MountHandle =
-        std::ptr::null_mut();
-    pub static mut baseContentPath: [std::ffi::c_char; 4096] = [0; 4096];
-}
-
-#[cfg(test)]
-use c_dir_globals::*;
 
 // uio_* are Rust-implemented (USE_RUST_UIO) — same crate, call directly
 use crate::io::uio_bridge::{

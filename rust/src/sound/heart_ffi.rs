@@ -58,6 +58,7 @@ use super::types::*;
 // C FFI helpers — UIO + string table access
 // =============================================================================
 
+use crate::io::handles::contentDir;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_fclose;
 #[cfg(not(test))]
@@ -68,8 +69,6 @@ use crate::io::uio_bridge::uio_fread;
 use crate::io::uio_bridge::uio_fseek;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_ftell;
-#[cfg(not(test))]
-use crate::mainloop::options_abi::contentDir;
 #[cfg(not(test))]
 use crate::strings::string_table::AllocStringTable;
 #[cfg(not(test))]
@@ -111,12 +110,6 @@ unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int 
 unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
     0
 }
-#[cfg(test)]
-#[allow(
-    non_upper_case_globals,
-    reason = "test stub mirrors the legacy C global symbol"
-)]
-static mut contentDir: *mut c_void = std::ptr::null_mut::<c_void>();
 #[cfg(test)]
 #[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
 unsafe fn AllocStringTable(_n: c_int, _f: c_int) -> *mut c_void {

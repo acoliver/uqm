@@ -12,9 +12,10 @@ fn words(bytes: &[u8]) -> Vec<u32> {
 
 #[test]
 fn c_scaler_surface_fixtures() {
-    let fixture = words(include_bytes!(
-        "../../../tests/fixtures/software-scalers.bin"
-    ));
+    let fixture = words(include_bytes!(concat!(
+        env!("UQM_RUST_ROOT"),
+        "/tests/fixtures/software-scalers.bin"
+    )));
     let mut records = fixture.as_slice();
     let mut checked = [0; 6];
     while !records.is_empty() {
@@ -129,7 +130,10 @@ fn packed_blends_keep_original_rounding() {
 
 #[test]
 fn all_hq_patterns_and_conditional_edges_match_c() {
-    let fixture = include_bytes!("../../../tests/fixtures/hq2x-rules.bin");
+    let fixture = include_bytes!(concat!(
+        env!("UQM_RUST_ROOT"),
+        "/tests/fixtures/hq2x-rules.bin"
+    ));
     assert_eq!(&fixture[..8], b"HQ2X\0\0\0\0");
     let expected = words(&fixture[8..]);
     let pixels = std::array::from_fn(|i| {
@@ -195,7 +199,10 @@ fn hq_difference_thresholds_are_strict_and_channel_local() {
 
 #[test]
 fn every_hq_neighborhood_matches_c_in_each_channel_layout() {
-    let fixture = include_bytes!("../../../tests/fixtures/hq2x-neighborhoods.bin");
+    let fixture = include_bytes!(concat!(
+        env!("UQM_RUST_ROOT"),
+        "/tests/fixtures/hq2x-neighborhoods.bin"
+    ));
     assert_eq!(&fixture[..8], b"HQIN\0\0\0\0");
     let expected = words(&fixture[8..]);
     for (layout, shifts) in [[24, 16, 8], [16, 8, 0], [8, 16, 24], [0, 8, 16]]

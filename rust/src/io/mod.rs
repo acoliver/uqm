@@ -6,6 +6,7 @@
 pub mod dirs;
 pub mod ffi;
 pub mod files;
+pub mod handles;
 pub mod legacy_dirs;
 pub mod temp;
 pub mod uio_bridge;

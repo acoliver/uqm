@@ -7,7 +7,7 @@
 //!
 //! ```ignore
 //! use std::path::Path;
-//! use uqm_rust::video::decoder::DukVideoDecoder;
+//! use uqm_engine::video::decoder::DukVideoDecoder;
 //!
 //! let decoder = DukVideoDecoder::open(Path::new("content/addons"), "intro")?;
 //! let frame = decoder.decode_frame(0)?;

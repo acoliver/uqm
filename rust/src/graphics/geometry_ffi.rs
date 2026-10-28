@@ -435,7 +435,7 @@ pub unsafe extern "C" fn _clip_line(clip: *const Rect, line: *mut BresenhamLine)
 
 pub use super::native_abi::frame_desc as FrameDesc;
 pub use super::native_abi::stamp as Stamp;
-pub use crate::ships::native::abi::INTERSECT_CONTROL as IntersectControl;
+pub use super::native_abi::INTERSECT_CONTROL as IntersectControl;
 
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_Intersect;
 

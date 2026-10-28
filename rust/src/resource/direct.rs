@@ -73,10 +73,10 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn directory_table_excludes_hidden_names_and_nonfiles() {
-        std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp")).unwrap();
+        std::fs::create_dir_all(concat!(env!("UQM_RUST_ROOT"), "/../tmp")).unwrap();
         let temp = tempfile::Builder::new()
             .prefix("direct-")
-            .tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp"))
+            .tempdir_in(concat!(env!("UQM_RUST_ROOT"), "/../tmp"))
             .unwrap();
         std::fs::write(temp.path().join("one.sav"), b"1").unwrap();
         std::fs::write(temp.path().join("two.sav"), b"2").unwrap();

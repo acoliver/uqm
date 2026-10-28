@@ -1126,22 +1126,10 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub static mut optGamma: f32;
 }
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::contentDir;
-#[cfg(test)]
-pub use crate::mainloop::dir_prep::c_dir_globals::contentDir;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::configDir;
-#[cfg(test)]
-pub use crate::mainloop::dir_prep::c_dir_globals::configDir;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::saveDir;
-#[cfg(test)]
-pub use crate::mainloop::dir_prep::c_dir_globals::saveDir;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::meleeDir;
-#[cfg(test)]
-pub use crate::mainloop::dir_prep::c_dir_globals::meleeDir;
+pub use crate::io::handles::contentDir;
+pub use crate::io::handles::configDir;
+pub use crate::io::handles::saveDir;
+pub use crate::io::handles::meleeDir;
 unsafe extern "C" {
     pub static mut baseContentPath: [std::ffi::c_char;4096];
 }

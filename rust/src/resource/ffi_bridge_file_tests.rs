@@ -366,7 +366,7 @@ unsafe extern "C" fn record_length(fp: *mut c_void, length: u32) -> *mut c_void 
 fn loading_a_resource_from_a_path_hands_the_open_file_to_the_loader() {
     let content = Content::new(&[("res.bin", b"Zabcd"), ("empty.bin", b"")]);
     unsafe {
-        contentDir = content.dir;
+        contentDir = content.dir.cast();
         let loaded = LoadResourceFromPath(c("res.bin").as_ptr(), Some(record_length));
         assert_eq!(
             loaded as usize,

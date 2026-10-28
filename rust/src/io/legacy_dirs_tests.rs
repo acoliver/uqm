@@ -19,8 +19,10 @@ fn expand(src: &[u8], limit: usize, flags: i32) -> Result<Vec<u8>, i32> {
 #[test]
 fn path_expansion_matches_original_c_cases() {
     // Captured with cwd=/, HOME=/legacy-home and F3_VALUE=value/../path.
-    let cases: Vec<(String, i32, usize, String, bool)> =
-        serde_json::from_str(include_str!("../../tests/fixtures/dirs-expansion.json")).unwrap();
+    let cases: Vec<(String, i32, usize, String, bool)> = serde_json::from_str(include_str!(
+        concat!(env!("UQM_RUST_ROOT"), "/tests/fixtures/dirs-expansion.json")
+    ))
+    .unwrap();
     for (src, flags, limit, expected, failed) in cases {
         let result = expand(src.as_bytes(), limit, flags);
         if failed {
@@ -129,10 +131,10 @@ fn ffi_expansion_and_home_pointer() {
 
 #[test]
 fn mkdirhier_preserves_existing_entries_and_reports_intermediate_files() {
-    std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp")).unwrap();
+    std::fs::create_dir_all(concat!(env!("UQM_RUST_ROOT"), "/../tmp")).unwrap();
     let temp = tempfile::Builder::new()
         .prefix("dirs-")
-        .tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp"))
+        .tempdir_in(concat!(env!("UQM_RUST_ROOT"), "/../tmp"))
         .unwrap();
     let path = CString::new(format!("{}/a//b/c/", temp.path().display())).unwrap();
     unsafe {

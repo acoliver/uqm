@@ -14,7 +14,7 @@ pub unsafe extern "C" fn tfb_pure_init_graphics(
     width: c_int,
     height: c_int,
 ) -> c_int {
-    if ffi::rust_gfx_init(driver, flags, renderer, width, height) != 0 {
+    if ffi::rust_gfx_init(driver, flags, renderer, width, height, None) != 0 {
         std::process::exit(1);
     }
     if tfb_pure_configure_video(driver, flags, width, height, 0) != 0 {

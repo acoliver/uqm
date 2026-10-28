@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use uqm_rust::sound::mixer::{
+//! use uqm_engine::sound::mixer::{
 //!     mixer_init, mixer_uninit, MixerFlags, MixerFormat, MixerQuality,
 //! };
 //!

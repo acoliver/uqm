@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use uqm_rust::video::{DukVideoHeader, DUCK_FPS};
+//! use uqm_engine::video::{DukVideoHeader, DUCK_FPS};
 //!
 //! // Calculate video duration
 //! fn video_duration(frame_count: u32) -> f32 {

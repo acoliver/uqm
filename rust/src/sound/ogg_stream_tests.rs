@@ -5,11 +5,11 @@ use super::*;
 use std::io::Cursor;
 
 const VOICE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
+    env!("UQM_RUST_ROOT"),
     "/../sc2/content/addons/3dovoice/talkingpet/talkingpet-039.ogg"
 );
 const MUSIC: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
+    env!("UQM_RUST_ROOT"),
     "/../sc2/content/addons/3domusic/starbase.ogg"
 );
 
@@ -247,7 +247,7 @@ fn opening_garbage_is_refused_without_changing_the_decoder() {
 
 #[test]
 fn opening_a_text_file_by_path_is_refused() {
-    let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+    let manifest = concat!(env!("UQM_RUST_ROOT"), "/Cargo.toml");
     let mut decoder = OggDecoder::new();
     decoder.init();
     assert!(matches!(

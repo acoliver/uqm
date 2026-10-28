@@ -10,12 +10,7 @@ use super::c_api::*;
 use super::ffi::{self, GestureUnion, VCONTROL_GESTURE, VCONTROL_NONE};
 use super::keynames::key_name;
 use super::vcontrol::Gesture;
-#[cfg(not(test))]
-use crate::mainloop::dir_prep::{configDir as CONFIG_DIR, contentDir as CONTENT_DIR};
-#[cfg(test)]
-static mut CONFIG_DIR: *mut c_void = ptr::null_mut();
-#[cfg(test)]
-static mut CONTENT_DIR: *mut c_void = ptr::null_mut();
+use crate::io::handles::{configDir as CONFIG_DIR, contentDir as CONTENT_DIR};
 use crate::resource::ffi_bridge::{
     res_GetString, res_HasKey, res_IsString, res_PutString, res_Remove, LoadResourceIndex,
     SaveResourceIndex,
@@ -49,17 +44,9 @@ const MENU_NAMES: &[&str] = &[
 ];
 const FLIGHT_NAMES: &[&str] = &["up", "down", "left", "right", "weapon", "special", "escape"];
 
+use super::templates::input_templates as INPUT_TEMPLATES;
 #[cfg(not(test))]
 use crate::threading::legacy_abi::TaskSwitch;
-#[cfg(not(test))]
-extern "C" {
-    #[link_name = "input_templates"]
-    static mut INPUT_TEMPLATES: [[c_char; 30]; 6];
-
-}
-
-#[cfg(test)]
-static mut INPUT_TEMPLATES: [[c_char; 30]; 6] = [[0; 30]; 6];
 
 struct CharacterBuffer {
     data: [u32; 256],

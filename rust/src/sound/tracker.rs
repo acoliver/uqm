@@ -751,7 +751,7 @@ mod tests {
     #[ignore = "requires the pinned external UQM content package"]
     fn shipped_mod_resources_parse_and_render_in_memory() {
         use std::io::Read;
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = std::path::Path::new(env!("UQM_RUST_ROOT"))
             .join("../sc2/content/packages/uqm-0.8.0-content.uqm");
         let file = std::fs::File::open(path).unwrap();
         let mut archive = zip::ZipArchive::new(file).unwrap();

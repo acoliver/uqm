@@ -2,6 +2,8 @@
 //! be returned directly to the engine's `init_<race>` callers.
 
 mod descriptor;
+#[cfg(not(test))]
+pub use crate::ships::code_resources::engine::InstallCodeResType;
 
 #[allow(
     non_camel_case_types,

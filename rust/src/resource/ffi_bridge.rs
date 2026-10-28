@@ -36,6 +36,7 @@ use super::type_registry;
 
 #[cfg(not(test))]
 use crate::graphics::resgfx::InstallGraphicResTypes;
+use crate::io::handles::contentDir;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_fclose as uio_fclose_raw;
 #[cfg(not(test))]
@@ -56,10 +57,6 @@ use crate::io::uio_bridge::uio_fwrite;
 use crate::io::uio_bridge::uio_stat;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_unlink as uio_unlink_raw;
-#[cfg(not(test))]
-use crate::mainloop::options_abi::contentDir;
-#[cfg(not(test))]
-use crate::ships::code_resources::engine::InstallCodeResType;
 #[cfg(not(test))]
 use crate::strings::sresins::InstallStringTableResType;
 #[cfg(not(test))]
@@ -173,13 +170,6 @@ unsafe fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int {
 unsafe fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int {
     real_uio::uio_stat(dir.cast(), path, stat_buf)
 }
-
-#[cfg(test)]
-#[allow(
-    non_upper_case_globals,
-    reason = "test stub mirrors the legacy C global symbol"
-)]
-static mut contentDir: *mut c_void = ptr::null_mut();
 
 // =============================================================================
 // Global state
@@ -336,7 +326,6 @@ pub unsafe extern "C" fn InitResourceSystem() -> *mut c_void {
                 );
             }
             InstallVideoResType();
-            InstallCodeResType();
         }
     }
 

@@ -15,7 +15,7 @@ use crate::video::{VideoError, VideoFrame, DUCK_FPS};
 const LOGO_FRAMES: u32 = 231;
 
 fn logo_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content/addons/3dovideo/logo")
+    Path::new(env!("UQM_RUST_ROOT")).join("../sc2/content/addons/3dovideo/logo")
 }
 
 fn logo() -> DukVideoDecoder {

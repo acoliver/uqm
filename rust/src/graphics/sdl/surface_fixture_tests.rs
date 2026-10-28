@@ -64,9 +64,10 @@ unsafe fn describe(surface: *mut SDL_Surface) -> Surface {
 
 #[test]
 fn png_and_rotozoom_match_recorded_c_surfaces() {
-    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/graphics/sdl-surfaces.json"
-    ))
+    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(concat!(
+        env!("UQM_RUST_ROOT"),
+        "/tests/fixtures/graphics/sdl-surfaces.json"
+    )))
     .unwrap();
     for case in fixtures {
         unsafe {

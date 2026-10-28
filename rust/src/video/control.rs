@@ -17,10 +17,7 @@ use crate::threading::legacy_abi::CreateMutex_Core;
 
 use crate::threading::legacy_abi::DestroyMutex;
 
-#[cfg(test)]
-use crate::mainloop::dir_prep::c_dir_globals::contentDir;
-#[cfg(not(test))]
-use crate::mainloop::options_abi::contentDir;
+use crate::io::handles::contentDir;
 
 extern "C" {
 

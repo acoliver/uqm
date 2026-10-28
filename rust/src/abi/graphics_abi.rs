@@ -199,7 +199,16 @@ pub union PRIM_DESC {
 pub type PRIM_LINKS = DWORD;
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-pub use crate::{engine::battle::record::PRIMITIVE, graphics::geometry_ffi::BoxIntersect};
+pub use crate::graphics::geometry_ffi::BoxIntersect;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct PRIMITIVE {
+    pub Links: PRIM_LINKS,
+    pub Type: GRAPHICS_PRIM,
+    pub color: Color,
+    pub Object: PRIM_DESC,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DrawMode {
@@ -986,7 +995,12 @@ pub struct _widget_controlentry {
     pub controlname: [[::std::os::raw::c_char; 16usize]; 2usize],
 }
 pub type WIDGET_CONTROLENTRY = _widget_controlentry;
-#[cfg(not(test))]
-pub use crate::mainloop::options_abi::contentDir;
-#[cfg(test)]
-pub use crate::mainloop::dir_prep::c_dir_globals::contentDir;
+pub use crate::io::handles::contentDir;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct INTERSECT_CONTROL {
+    pub last_time_val: u16,
+    pub EndPoint: POINT,
+    pub IntersectStamp: STAMP,
+}
