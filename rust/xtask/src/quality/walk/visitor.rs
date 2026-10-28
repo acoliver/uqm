@@ -371,6 +371,14 @@ impl<'a> Visit<'a> for Walker {
             if let Some(name) = &field.ident {
                 self.context.module.push_str(&format!("::{name}"));
                 self.definition(name);
+                if self.names.is_none() {
+                    self.measurement.declarations.push(self.finding(
+                        "declaration",
+                        "field",
+                        self.context.module.clone(),
+                        0,
+                    ));
+                }
             }
             self.attrs(&field.attrs, field.to_token_stream());
             visit::visit_field(self, field);
