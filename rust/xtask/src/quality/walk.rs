@@ -39,6 +39,19 @@ struct Target {
     src_path: PathBuf,
 }
 
+impl Package {
+    fn ordered_targets(&self) -> Vec<&Target> {
+        let mut targets: Vec<_> = self.targets.iter().collect();
+        targets.sort_by_key(|t| {
+            (
+                !t.kind.iter().any(|k| k == "lib" || k == "rlib"),
+                t.name.clone(),
+            )
+        });
+        targets
+    }
+}
+
 #[derive(Clone, Default)]
 struct Context {
     file: String,
@@ -134,14 +147,7 @@ pub fn measure(
             .manifest_path
             .parent()
             .ok_or("manifest has no parent")?;
-        let mut targets: Vec<_> = package.targets.iter().collect();
-        targets.sort_by_key(|t| {
-            (
-                !t.kind.iter().any(|k| k == "lib" || k == "rlib"),
-                t.name.clone(),
-            )
-        });
-        for target in targets {
+        for target in package.ordered_targets() {
             if names.is_none() && target.kind.iter().any(|k| k == "test" || k == "bench") {
                 continue;
             }
