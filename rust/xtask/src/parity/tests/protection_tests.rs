@@ -182,7 +182,7 @@ fn counts_inventory_must_match_every_script_even_with_fresh_hashes() {
     write(&root.join("rust/scripts/new-script.json"), b"{}").unwrap();
     assert!(inventory::verify(root, &root.join(GOLDEN), &manifest, None)
         .unwrap_err()
-        .contains("missing"));
+        .contains(r#"missing=["parity/counts/new-script.toml"]"#));
 }
 
 #[test]
