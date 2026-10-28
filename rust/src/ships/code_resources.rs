@@ -127,6 +127,8 @@ pub(crate) mod engine {
         rust_hfree(data);
         1
     }
+    /// # Safety
+    /// Register on the resource owner thread after InitResourceSystem.
     #[no_mangle]
     pub unsafe extern "C" fn InstallCodeResType() -> c_int {
         InstallResTypeVectors(

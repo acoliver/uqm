@@ -584,8 +584,8 @@ pub unsafe fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -
 )]
 #[repr(C)]
 pub struct uio_DirList {
-    pub(crate) names: *mut *mut c_char,
-    pub(crate) numNames: c_int,
+    pub names: *mut *mut c_char,
+    pub numNames: c_int,
     buffer: *mut c_char,
 }
 

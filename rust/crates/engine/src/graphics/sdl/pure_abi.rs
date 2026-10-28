@@ -10,11 +10,18 @@ use crate::graphics::software_scalers::Scale_Init;
 pub unsafe extern "C" fn tfb_pure_init_graphics(
     driver: c_int,
     flags: c_int,
-    renderer: *const c_char,
+    _renderer: *const c_char,
     width: c_int,
     height: c_int,
 ) -> c_int {
-    if ffi::rust_gfx_init(driver, flags, renderer, width, height, None) != 0 {
+    if ffi::rust_gfx_init(
+        driver,
+        flags,
+        &super::lifecycle_abi::GraphicsOptions::default(),
+        width,
+        height,
+    ) != 0
+    {
         std::process::exit(1);
     }
     if tfb_pure_configure_video(driver, flags, width, height, 0) != 0 {

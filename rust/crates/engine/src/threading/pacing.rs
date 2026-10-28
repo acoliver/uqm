@@ -152,7 +152,7 @@ pub fn sleep_for(env: &mut impl PacingEnv, duration: u32) {
     env.sleep_ms(ticks_to_ms(duration));
 }
 
-pub(crate) mod linked {
+pub mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
     use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};
     #[cfg(target_os = "macos")]

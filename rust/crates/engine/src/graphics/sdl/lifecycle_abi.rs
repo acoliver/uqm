@@ -109,23 +109,11 @@ pub unsafe extern "C" fn TFB_InitGraphics(
     height: c_int,
 ) -> c_int {
     let options = &*options.cast::<GraphicsOptions>();
-    let renderer = options
-        .renderer
-        .as_ref()
-        .map_or(ptr::null(), |value| value.as_ptr());
     RUST_BACKEND.present_hook = options.present_hook;
     RUST_BACKEND.readback_hook = options.readback_hook;
     SDL_SCREENS = [ptr::null_mut(); NUM_SCREENS];
     update_video_globals(driver, flags, width, height);
-    if ffi::rust_gfx_init(
-        driver,
-        flags,
-        renderer,
-        width,
-        height,
-        options.native_position,
-    ) != 0
-    {
+    if ffi::rust_gfx_init(driver, flags, options, width, height) != 0 {
         std::process::exit(1);
     }
     assert!(
@@ -202,7 +190,7 @@ static mut LAST_TRANSITION: c_int = 255;
 /// Called on the SDL main thread with graphics initialized.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SwapBuffers(mut redraw: c_int) {
-    if (*GRAPHICS_BACKEND)
+    if RUST_BACKEND
         .present_hook
         .is_some_and(|hook| hook(false) != 0)
     {

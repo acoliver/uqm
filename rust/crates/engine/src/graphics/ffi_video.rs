@@ -180,7 +180,12 @@ mod tests {
         assert_eq!((frame.count, frame.generation), (7, 19));
         assert_eq!((frame.width, frame.height), (7, 5));
         assert_eq!(frame.validate(), Ok(()));
-        assert!(frame.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
+        assert!(frame
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 255));
     }
 
     #[test]

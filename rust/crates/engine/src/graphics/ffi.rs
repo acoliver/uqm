@@ -9,8 +9,9 @@ mod video;
 pub(crate) use video::reconfigure_video;
 
 use crate::graphics::presented_frame::PresentedFrame;
+use crate::graphics::sdl::lifecycle_abi::GraphicsOptions;
 use std::cell::UnsafeCell;
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_int, c_void};
 use std::ptr;
 
 use sdl2::pixels::PixelFormatEnum;
@@ -150,7 +151,7 @@ fn get_gfx_state() -> Option<&'static mut RustGraphicsState> {
     unsafe { (*RUST_GFX.0.get()).as_mut() }
 }
 
-pub(crate) fn with_gfx_state<F, R>(f: F) -> Option<R>
+pub fn with_gfx_state<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut sdl2::render::Canvas<sdl2::video::Window>, u32, u32) -> R,
 {
@@ -184,10 +185,9 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 pub unsafe fn rust_gfx_init(
     _driver: c_int,
     flags: c_int,
-    _renderer: *const c_char,
+    options: &GraphicsOptions,
     width: c_int,
     height: c_int,
-    native_position: Option<(i32, i32)>,
 ) -> c_int {
     // REQ-INIT-095: Already-initialized guard — prevent double-init
     if get_gfx_state().is_some() {
@@ -200,28 +200,7 @@ pub unsafe fn rust_gfx_init(
         flags, flags, width, height
     ));
 
-    // Log scaler flags for debugging
-    if (flags & (1 << 3)) != 0 {
-        rust_bridge_log_msg("  SCALE_BILINEAR set");
-    }
-    if (flags & (1 << 4)) != 0 {
-        rust_bridge_log_msg("  SCALE_BIADAPT set");
-    }
-    if (flags & (1 << 5)) != 0 {
-        rust_bridge_log_msg("  SCALE_BIADAPTADV set");
-    }
-    if (flags & (1 << 6)) != 0 {
-        rust_bridge_log_msg("  SCALE_TRISCAN set");
-    }
-    if (flags & (1 << 7)) != 0 {
-        rust_bridge_log_msg("  SCALE_HQXX set");
-    }
-    if (flags & (1 << 8)) != 0 {
-        rust_bridge_log_msg("  SCALE_XBRZ3 set");
-    }
-    if (flags & (1 << 9)) != 0 {
-        rust_bridge_log_msg("  SCALE_XBRZ4 set");
-    }
+    log_scaler_flags(flags);
 
     let fullscreen = (flags & 0x01) != 0;
 
@@ -254,7 +233,7 @@ pub unsafe fn rust_gfx_init(
         height as u32,
     );
     window_builder.position_centered();
-    if let Some((x, y)) = native_position {
+    if let Some((x, y)) = options.native_position {
         // A decorated 960px client exceeds a 1080px desktop's work area once
         // the menu bar and Dock are included. Cocoa then moves it on activation.
         // Borderless proof windows also avoid the title-frame show animation.
@@ -373,7 +352,7 @@ pub unsafe fn rust_gfx_init(
         presented_frame: None,
         presentation_count: 0,
         #[cfg(feature = "debug-process")]
-        native_position,
+        native_position: options.native_position,
         #[cfg(feature = "debug-process")]
         native_display_bounds: None,
     };
@@ -397,6 +376,31 @@ pub unsafe fn rust_gfx_init(
 
     rust_bridge_log_msg("RUST_GFX_INIT: Success");
     0
+}
+
+fn log_scaler_flags(flags: c_int) {
+    // Log scaler flags for debugging
+    if (flags & (1 << 3)) != 0 {
+        rust_bridge_log_msg("  SCALE_BILINEAR set");
+    }
+    if (flags & (1 << 4)) != 0 {
+        rust_bridge_log_msg("  SCALE_BIADAPT set");
+    }
+    if (flags & (1 << 5)) != 0 {
+        rust_bridge_log_msg("  SCALE_BIADAPTADV set");
+    }
+    if (flags & (1 << 6)) != 0 {
+        rust_bridge_log_msg("  SCALE_TRISCAN set");
+    }
+    if (flags & (1 << 7)) != 0 {
+        rust_bridge_log_msg("  SCALE_HQXX set");
+    }
+    if (flags & (1 << 8)) != 0 {
+        rust_bridge_log_msg("  SCALE_XBRZ3 set");
+    }
+    if (flags & (1 << 9)) != 0 {
+        rust_bridge_log_msg("  SCALE_XBRZ4 set");
+    }
 }
 
 /// Uninitialize graphics
@@ -586,7 +590,7 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
 }
 
 /// Take the immutable readback associated with the most recent actual present.
-pub(crate) fn take_presented_frame() -> Option<PresentedFrame> {
+pub fn take_presented_frame() -> Option<PresentedFrame> {
     get_gfx_state().and_then(|state| state.presented_frame.take())
 }
 
@@ -1100,11 +1104,11 @@ mod tests {
     fn test_init_already_initialized_returns_neg1() {
         unsafe {
             // First init should succeed
-            let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
+            let result1 = rust_gfx_init(0, 0, &GraphicsOptions::default(), 640, 480);
             assert_eq!(result1, 0, "first init should succeed");
 
             // Second init should return -1
-            let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
+            let result2 = rust_gfx_init(0, 0, &GraphicsOptions::default(), 640, 480);
             assert_eq!(result2, -1, "second init must return -1 (REQ-INIT-095)");
 
             // Cleanup
@@ -1118,7 +1122,7 @@ mod tests {
     #[ignore]
     fn test_init_returns_zero() {
         unsafe {
-            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
+            let result = rust_gfx_init(0, 0, &GraphicsOptions::default(), 640, 480);
             assert_eq!(result, 0, "init should return 0 on success (REQ-INIT-080)");
             rust_gfx_uninit();
         }
@@ -1130,7 +1134,7 @@ mod tests {
     #[ignore]
     fn test_init_creates_surfaces() {
         unsafe {
-            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480, None);
+            let result = rust_gfx_init(0, 0, &GraphicsOptions::default(), 640, 480);
             assert_eq!(result, 0, "init must succeed");
 
             for i in 0..TFB_GFX_NUMSCREENS as c_int {
@@ -1154,7 +1158,7 @@ mod tests {
         unsafe {
             // Flag bit 7 = SCALE_HQXX (triggers soft scaler allocation)
             let hqxx_flag: c_int = 1 << 7;
-            let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480, None);
+            let result = rust_gfx_init(0, hqxx_flag, &GraphicsOptions::default(), 640, 480);
             assert_eq!(result, 0, "init with SCALE_HQXX must succeed");
 
             if let Some(state) = get_gfx_state() {

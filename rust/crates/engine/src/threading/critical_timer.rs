@@ -49,7 +49,7 @@ impl CriticalTimer {
 ///
 /// Darwin creates kqueue descriptors without close-on-exec and sets it in a
 /// second call, so no child may be forked in between.
-pub(crate) fn create_queue() -> std::io::Result<OwnedFd> {
+pub fn create_queue() -> std::io::Result<OwnedFd> {
     let _guard = super::descriptor::guard_descriptor_inheritance();
     // SAFETY: kqueue takes no arguments.
     let raw_queue = unsafe { libc::kqueue() };
@@ -68,7 +68,7 @@ pub(crate) fn create_queue() -> std::io::Result<OwnedFd> {
 /// The change record that arms a one-shot critical timer. The kernel's
 /// timer data is in microseconds; a sub-microsecond remainder rounds up so
 /// the wait is never shorter than requested.
-pub(crate) fn timer_change(ident: libc::uintptr_t, duration: Duration) -> libc::kevent {
+pub fn timer_change(ident: libc::uintptr_t, duration: Duration) -> libc::kevent {
     let micros = isize::try_from(duration.as_nanos().div_ceil(1000)).unwrap_or(isize::MAX);
     libc::kevent {
         ident,
@@ -82,7 +82,7 @@ pub(crate) fn timer_change(ident: libc::uintptr_t, duration: Duration) -> libc::
 
 /// Apply `changes` to `queue` and block, with no timeout, until one event is
 /// ready. Returns its filter, or no filter after an interrupted wait.
-pub(crate) fn wait_for_event(
+pub fn wait_for_event(
     queue: BorrowedFd<'_>,
     changes: &[libc::kevent],
 ) -> std::io::Result<Option<i16>> {

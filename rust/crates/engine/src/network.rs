@@ -12,7 +12,9 @@ use ::libc::{c_char, c_int, c_void, size_t, ssize_t};
 use std::ptr;
 use sys::SocketHandle;
 pub use sys::{sockaddr, socklen_t};
-pub(crate) unsafe fn set_errno(error: c_int) {
+/// # Safety
+/// Called on the thread whose OS error slot is being updated.
+pub unsafe fn set_errno(error: c_int) {
     crate::platform::set_errno(error);
 }
 

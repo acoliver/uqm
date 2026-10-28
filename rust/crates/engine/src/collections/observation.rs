@@ -73,7 +73,7 @@ pub enum Event {
         callback: usize,
     },
 }
-pub(crate) fn observe_views<T>(frames: &[T], role: &str, address: impl Fn(&T) -> usize) {
+pub fn observe_views<T>(frames: &[T], role: &str, address: impl Fn(&T) -> usize) {
     crate::collections::observation::record(crate::collections::observation::Event::FrameSet {
         address: frames.as_ptr() as usize,
         frames: frames.iter().map(address).collect(),
@@ -154,7 +154,7 @@ pub fn assign_set<T: ImagePointer>(slot: &mut T, array: T, single: Option<usize>
     *slot = array;
 }
 
-pub(crate) fn swap_image_view<T: ImagePointer>(ambient: &mut T, view: &mut T) {
+pub fn swap_image_view<T: ImagePointer>(ambient: &mut T, view: &mut T) {
     let previous = *ambient;
     assign_frame(ambient, *view);
     assign_view(view, previous);
@@ -171,6 +171,7 @@ pub fn copy_image<T: Copy>(slot: &mut T, value: T, source: usize) {
 }
 
 // Evaluate the RHS before borrowing the destination, as an ordinary assignment does.
+#[macro_export]
 macro_rules! image {
     (frame; $slot:expr, $value:expr) => {{
         let value = $value;
@@ -196,7 +197,7 @@ macro_rules! image {
         $crate::collections::observation::copy_image(&mut $slot, value, address);
     }};
 }
-pub(crate) use image;
+pub use crate::image;
 
 /// Advance the battle-frame counter by one.
 ///
