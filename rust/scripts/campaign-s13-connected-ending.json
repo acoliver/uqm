@@ -688,7 +688,7 @@
           }
         ]
       },
-      "max_ticks": 12000
+      "max_ticks": 18340
     },
     {
       "action": "capture",
