@@ -182,7 +182,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 }
 
 fn measure(root: &Path, added: &BTreeSet<String>, cargo: &std::ffi::OsStr) -> Result<(), String> {
-    let version = Command::new(cargo)
+    let version = tool::command(cargo)
         .args(["llvm-cov", "--version"])
         .output()
         .map_err(|e| format!("cargo-llvm-cov: {e}"))?;
@@ -195,7 +195,7 @@ fn measure(root: &Path, added: &BTreeSet<String>, cargo: &std::ffi::OsStr) -> Re
     fs::create_dir_all(report.parent().ok_or("coverage report has no parent")?)
         .map_err(|e| e.to_string())?;
     tool::status(
-        Command::new(cargo)
+        tool::command(cargo)
             .current_dir(root.join("rust"))
             .args([
                 "llvm-cov",

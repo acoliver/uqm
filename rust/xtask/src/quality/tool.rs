@@ -30,6 +30,22 @@ impl Options {
     }
 }
 
+pub(crate) fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let program = program.as_ref();
+    #[cfg(all(test, unix))]
+    if Path::new(program)
+        .extension()
+        .is_some_and(|ext| ext == "sh")
+    {
+        // Unit-test fixtures are interpreter input, never execve targets. A
+        // concurrent fork can inherit their writer even after our writer closes.
+        let mut command = Command::new("/bin/sh");
+        command.arg(program);
+        return command;
+    }
+    Command::new(program)
+}
+
 pub fn status(command: &mut Command) -> Result<(), String> {
     let status = command.status().map_err(|e| format!("{command:?}: {e}"))?;
     if status.success() {
@@ -344,15 +360,13 @@ fn git_file(root: &Path, reference: &str, path: &str) -> Result<String, String> 
 #[cfg(test)]
 #[cfg(unix)]
 pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let path = tempfile::Builder::new()
         .prefix("cargo-fixture-")
         .tempdir_in(root)
         .unwrap()
         .keep()
-        .join("cargo");
+        .join("cargo.sh");
     std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
     path
 }
 

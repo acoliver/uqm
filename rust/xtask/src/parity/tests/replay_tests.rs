@@ -35,12 +35,69 @@ fn parallel_replays_share_content_and_binary_but_not_config_or_journals() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+fn concurrent_replays_read_fixtures_without_executing_the_written_files() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::Barrier;
+
+    let barrier = Barrier::new(5);
+    std::thread::scope(|scope| {
+        let spawner = scope.spawn(|| {
+            barrier.wait();
+            for _ in 0..16 {
+                assert!(Command::new("/bin/sh")
+                    .args(["-c", ":"])
+                    .status()
+                    .unwrap()
+                    .success());
+            }
+        });
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    for mode in [0o700, 0o600] {
+                        let directory = crate::parity::tests::temporary();
+                        let context = fixture(directory.path(), None);
+                        // Keep the writer alive across spawn, reproducing the inherited-fd
+                        // exclusion without depending on the scheduler's fork timing.
+                        let writer = fs::OpenOptions::new()
+                            .write(true)
+                            .open(&context.executable)
+                            .unwrap();
+                        fs::set_permissions(&context.executable, fs::Permissions::from_mode(mode))
+                            .unwrap();
+                        let (summary, counts) = replay::replay(&context, "fixture", true).unwrap();
+                        drop(writer);
+                        assert!(summary.completed);
+                        assert_eq!(summary.inputs_admitted, 3);
+                        assert_eq!(counts.exit_code, 0);
+                        assert_eq!(
+                            read(
+                                &context
+                                    .diagnostics
+                                    .join("scenarios/fixture/automation")
+                                    .join(TRACE)
+                            )
+                            .unwrap(),
+                            b"journal-trace\n"
+                        );
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        spawner.join().unwrap();
+    });
+}
+
 use super::*;
 
 #[cfg(unix)]
 fn fixture<'a>(root: &'a Path, jitter: Option<&str>) -> Context<'a> {
-    use std::os::unix::fs::PermissionsExt;
-
     let work = tempfile::Builder::new()
         .prefix("replay-")
         .tempdir_in(root)
@@ -104,7 +161,6 @@ fi
 "##,
     )
     .unwrap();
-    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
     Context {
         root,
         out: root.join("out"),
@@ -248,7 +304,6 @@ fn recording_orchestrates_fresh_payloads_and_keeps_failures_out_of_goldens() {
 #[test]
 #[cfg(unix)]
 fn save_subprocess_requires_all_capture_payloads_and_frozen_admission_metadata() {
-    use std::os::unix::fs::PermissionsExt;
     const CHILD: &str = "UQM_SAVE_RUNNER_TRANSPORT_TEST";
     if let Some(root) = std::env::var_os(CHILD) {
         let root = Path::new(&root);
@@ -302,7 +357,6 @@ done
 "##,
     )
     .unwrap();
-    fs::set_permissions(&cargo, fs::Permissions::from_mode(0o700)).unwrap();
     let status = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "parity::recording::tests::save_subprocess_requires_all_capture_payloads_and_frozen_admission_metadata"])
         .env(CHILD, root).env("CARGO", cargo).status().unwrap();

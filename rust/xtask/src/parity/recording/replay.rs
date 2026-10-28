@@ -61,7 +61,7 @@ pub(super) fn replay(
     fs::create_dir_all(&config).map_err(|error| error.to_string())?;
     stage_save(context.root, &script, &config)?;
     let summary_path = logs.join("summary.json");
-    let mut command = Command::new(&context.executable);
+    let mut command = crate::quality::tool::command(&context.executable);
     command
         .current_dir(context.work.path())
         .arg("--replay")

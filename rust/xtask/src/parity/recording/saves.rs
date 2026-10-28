@@ -33,7 +33,7 @@ pub(in crate::parity) fn command(
     destination: &Path,
     content: &Path,
 ) -> Command {
-    let mut command = Command::new(crate::quality::cargo());
+    let mut command = crate::quality::tool::command(crate::quality::cargo());
     command
         .current_dir(root.join("rust"))
         .args([
