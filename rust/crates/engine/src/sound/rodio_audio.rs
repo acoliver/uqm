@@ -278,32 +278,30 @@ struct RawPlayback<'a> {
     looping: bool,
 }
 
+fn pcm_samples(data: &[u8], bits: u16) -> Option<Vec<i16>> {
+    if bits == 16 {
+        Some(
+            data.as_chunks::<2>()
+                .0
+                .iter()
+                .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
+                .collect(),
+        )
+    } else if bits == 8 {
+        Some(data.iter().map(|&b| ((b as i16) - 128) * 256).collect())
+    } else {
+        rust_bridge_log_msg(&format!("RUST_AUDIO_PLAY_RAW: unsupported bits={}", bits));
+        None
+    }
+}
+
 fn play_raw(
     stream_handle: &OutputStreamHandle,
     input: &RawPlayback<'_>,
     volumes: &VolumeState,
     sinks: &mut HashMap<u32, (Sink, SoundCategory)>,
 ) -> u32 {
-    // Convert bytes to i16 samples
-    let samples: Vec<i16> = if input.bits == 16 {
-        input
-            .data
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
-            .collect()
-    } else if input.bits == 8 {
-        input
-            .data
-            .iter()
-            .map(|&b| ((b as i16) - 128) * 256)
-            .collect()
-    } else {
-        rust_bridge_log_msg(&format!(
-            "RUST_AUDIO_PLAY_RAW: unsupported bits={}",
-            input.bits
-        ));
+    let Some(samples) = pcm_samples(input.data, input.bits) else {
         return 0;
     };
 
@@ -667,6 +665,21 @@ pub unsafe extern "C" fn rust_audio_cleanup() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pcm_conversion_preserves_signed_limits_centers_unsigned_audio_and_ignores_partial_frames() {
+        assert_eq!(
+            pcm_samples(&[0, 128, 255, 255, 0, 0, 255, 127, 42], 16),
+            Some(vec![i16::MIN, -1, 0, i16::MAX])
+        );
+        assert_eq!(
+            pcm_samples(&[0, 127, 128, 255], 8),
+            Some(vec![-32768, -256, 0, 32512])
+        );
+        assert_eq!(pcm_samples(&[], 16), Some(Vec::new()));
+        assert_eq!(pcm_samples(&[42], 16), Some(Vec::new()));
+        assert_eq!(pcm_samples(&[0; 3], 24), None);
+    }
 
     #[test]
     fn test_volume_state() {
