@@ -11,7 +11,7 @@ pub fn register(moves: &mut BTreeMap<String, String>, old: &str, new: &str) -> R
         if prefix(old, source) || prefix(source, old) {
             return Err(format!("move source {old} already credited"));
         }
-        if prefix(new, target) || prefix(target, new) {
+        if new == target {
             return Err(format!("move target {new} already credited"));
         }
     }
@@ -34,6 +34,7 @@ pub fn validate(
     moves: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     let mut unique = BTreeMap::new();
+    let mut targets = BTreeMap::new();
     let current_ids: BTreeSet<_> = identities(current).map(|f| f.identity.as_str()).collect();
     for (old, new) in moves {
         register(&mut unique, old, new)?;
@@ -55,6 +56,11 @@ pub fn validate(
         }
         for source in sources {
             let target = format!("{new}{}", &source[old.len()..]);
+            if let Some(previous) = targets.insert(target.clone(), source) {
+                return Err(format!(
+                    "{previous} and {source} have the same target {target}"
+                ));
+            }
             if !current_ids.contains(target.as_str()) {
                 return Err(format!(
                     "move target {target} is absent; function transfers cannot split"
@@ -232,5 +238,46 @@ mod tests {
         let limits = limits(&base.baseline(), &current, &base, &moves).unwrap();
         assert!(!limits.keys().any(|key| key.contains("module_edges")));
         assert!(validate(&Measurement::default(), &base, &moves).is_err());
+    }
+}
+
+#[cfg(test)]
+mod nested_tests {
+    use super::*;
+
+    fn measured(ids: &[&str]) -> Measurement {
+        Measurement {
+            declarations: ids
+                .iter()
+                .map(|id| Finding {
+                    counter: "declaration".into(),
+                    metric: "item".into(),
+                    identity: (*id).into(),
+                    file: "src/lib.rs".into(),
+                    package: id.split("::").next().unwrap().into(),
+                    subsystem: "graphics".into(),
+                    value: 0,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_module_move_and_an_incoming_record_have_disjoint_target_identities() {
+        let base = measured(&["uqm::graphics::load", "uqm::battle::Record"]);
+        let current = measured(&["uqm-engine::graphics::load", "uqm-engine::graphics::Record"]);
+        let moves = BTreeMap::from([
+            ("uqm::graphics".into(), "uqm-engine::graphics".into()),
+            (
+                "uqm::battle::Record".into(),
+                "uqm-engine::graphics::Record".into(),
+            ),
+        ]);
+        validate(&current, &base, &moves).unwrap();
+        let collision = measured(&["uqm::graphics::Record", "uqm::battle::Record"]);
+        assert!(validate(&current, &collision, &moves)
+            .unwrap_err()
+            .contains("same target"));
     }
 }
