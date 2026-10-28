@@ -389,7 +389,7 @@ impl<'a> Visit<'a> for Walker {
         let mut imports = BTreeMap::new();
         metrics::use_paths(&item.tree, "", &mut imports);
         for target in imports.values() {
-            self.layer_path(target, item.span());
+            self.layer_path(target, item.span(), false);
         }
         self.context.imports.extend(imports);
         // Pure re-exports carry no raw-record debt.
@@ -518,6 +518,16 @@ impl<'a> Visit<'a> for Walker {
         }
         if let syn::Expr::Path(path) = &*expr.func {
             let resolved = self.resolve(&path.path);
+            let direct_bridge = path
+                .path
+                .segments
+                .iter()
+                .map(|s| s.ident.to_string())
+                .collect::<Vec<_>>()
+                .starts_with(&["crate".into(), "app".into(), "bridge".into()]);
+            if direct_bridge {
+                self.layer_path(&resolved, path.span(), true);
+            }
             let queue_glob = self
                 .context
                 .imports
@@ -544,7 +554,7 @@ impl<'a> Visit<'a> for Walker {
         visit::visit_expr_call(self, expr);
     }
     fn visit_path(&mut self, path: &'a syn::Path) {
-        self.layer_path(&self.resolve(path), path.span());
+        self.layer_path(&self.resolve(path), path.span(), false);
         if !self.record_module()
             && !path
                 .segments

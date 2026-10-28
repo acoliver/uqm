@@ -294,7 +294,12 @@ checks four things.
    U4-04), because its Stage B code reaches `GlobData` until Phase 4.
    References into `src/engine/` from planned engine members are inside the future
    `uqm-engine` boundary. Outbound staging references still count separately against
-   `planned_engine_core`, and ordinary module-edge checks still apply.
+   `planned_engine_core`, and ordinary module-edge checks still apply. Under the
+   [A4 attribution decision](https://github.com/acoliver/uqm/issues/739), direct
+   calls spelled `crate::app::bridge::*` count once in the finite `bridge_calls`
+   budget, without duplicate `module_edges` or `planned.*` debt. Calls through
+   aliases or re-exports, and all other upward references, still count as layer
+   debt. The bridge budget must reach zero when A4 is deleted.
    `planned.uqm-content` and `planned.uqm-modes` must be 0 in U6-04's semantic
    commits, before its move commit.
 4. **Banned `std` APIs** in `uqm-save`, `uqm-content`, `uqm-modes`, and `uqm-engine`
