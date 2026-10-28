@@ -131,4 +131,108 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
         uio::uio_closeRepository(repository);
         uio::uio_unInit();
     }
+    replay_audio_exports_follow_sample_completion_and_transport();
+}
+
+#[test]
+fn string_bank_deduplicates_across_chunks_and_preserves_split_tails() {
+    use std::ffi::CStr;
+    use uqm_rust::resource::stringbank::*;
+
+    // SAFETY: this test owns the bank and all returned pointers remain live until it is freed.
+    unsafe {
+        let bank = StringBank_Create();
+        assert!(!bank.is_null());
+        let alpha = StringBank_AddString(bank, c"alpha".as_ptr());
+        assert_ne!(alpha, StringBank_AddString(bank, c"alpha".as_ptr()));
+        assert_eq!(alpha, StringBank_AddOrFindString(bank, c"alpha".as_ptr()));
+        assert_eq!(
+            alpha,
+            StringBank_AddOrFindSubstring(bank, c"alphabet".as_ptr(), 5)
+        );
+        let beta = StringBank_AddSubstring(bank, c"betamax".as_ptr(), 4);
+        assert_eq!(CStr::from_ptr(beta), c"beta");
+        for i in 0..300 {
+            let value = CString::new(format!("bank-entry-{i:04}")).unwrap();
+            let saved = StringBank_AddString(bank, value.as_ptr());
+            assert_eq!(CStr::from_ptr(saved), value.as_c_str());
+        }
+        assert_eq!(CStr::from_ptr(alpha), c"alpha");
+        assert_eq!(alpha, StringBank_AddOrFindString(bank, c"alpha".as_ptr()));
+        let tail = StringBank_AddOrFindString(bank, c"bank-entry-0299".as_ptr());
+        assert_eq!(CStr::from_ptr(tail), c"bank-entry-0299");
+        let too_long = CString::new(vec![b'x'; 2048]).unwrap();
+        assert!(StringBank_AddString(bank, too_long.as_ptr()).is_null());
+        let mut pieces = [ptr::null(); 4];
+        assert_eq!(
+            SplitString(
+                c"alpha,,alpha,tail,rest".as_ptr(),
+                b',' as _,
+                4,
+                pieces.as_mut_ptr(),
+                bank
+            ),
+            4
+        );
+        assert_eq!(pieces[0], alpha);
+        assert_eq!(pieces[2], alpha);
+        assert_eq!(CStr::from_ptr(pieces[1]), c"");
+        assert_eq!(CStr::from_ptr(pieces[3]), c"tail,rest");
+        assert_eq!(
+            SplitString(
+                c"whole,tail".as_ptr(),
+                b',' as _,
+                1,
+                pieces.as_mut_ptr(),
+                bank
+            ),
+            1
+        );
+        assert_eq!(CStr::from_ptr(pieces[0]), c"whole,tail");
+        StringBank_Free(bank);
+        StringBank_Free(ptr::null_mut());
+    }
+}
+
+fn replay_audio_exports_follow_sample_completion_and_transport() {
+    use uqm_rust::sound::rodio_audio::*;
+    use uqm_rust::time::{counter_abi::ONE_SECOND, source};
+
+    let pcm = [0u8; 2000];
+    // SAFETY: replay audio was selected before initialization; every byte slice stays live during calls.
+    unsafe {
+        assert_eq!(rust_audio_init(), 1);
+        assert_eq!(rust_audio_play_raw(ptr::null(), 4, 1000, 1, 16, 0, 0), 0);
+        assert_eq!(rust_audio_play_raw(pcm.as_ptr(), 0, 1000, 1, 16, 0, 0), 0);
+        assert_eq!(
+            rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 0, 1, 16, 0, 0),
+            0
+        );
+        assert_eq!(rust_audio_play_wav(ptr::null(), 1, 0, 0), 0);
+        assert_eq!(rust_audio_play_ogg(pcm.as_ptr(), 0, 1, 0), 0);
+        assert_eq!(rust_audio_play_ogg(pcm.as_ptr(), pcm.len(), 1, 0), 0);
+        let handle = rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 1000, 1, 16, 2, 0);
+        assert_ne!(handle, 0);
+        assert_eq!(rust_audio_is_playing(handle), 1);
+        rust_audio_pause(handle);
+        source::advance_to(source::now_ticks() + 2 * ONE_SECOND);
+        assert_eq!(rust_audio_is_playing(handle), 1);
+        rust_audio_resume(handle);
+        source::advance_to(source::now_ticks() + ONE_SECOND);
+        assert_eq!(rust_audio_is_playing(handle), 0);
+        rust_audio_cleanup();
+        let looping = rust_audio_play_raw(pcm.as_ptr(), pcm.len(), 1000, 1, 16, 7, 1);
+        assert_ne!(looping, 0);
+        source::advance_to(source::now_ticks() + 2 * ONE_SECOND);
+        assert_eq!(rust_audio_is_playing(looping), 1);
+        rust_audio_stop(looping);
+        assert_eq!(rust_audio_is_playing(looping), 0);
+        let last = play_raw_pcm(pcm.to_vec(), 1000, 1, 16, SoundCategory::Music, true);
+        assert_ne!(last, 0);
+        rust_audio_stop_all();
+        assert_eq!(rust_audio_is_playing(last), 0);
+        rust_audio_uninit();
+        assert_eq!(rust_audio_is_playing(last), 0);
+        assert_eq!(rust_audio_play_wav(pcm.as_ptr(), pcm.len(), 0, 0), 0);
+    }
 }
