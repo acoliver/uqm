@@ -57,7 +57,7 @@ fn fixture(root: &Path) -> manifest::Manifest {
     }
     let rows = BTreeMap::from([("scenario".into(), counts_tests::success_counts())]);
     write(
-        &golden.join("parity/counts.toml"),
+        &golden.join("parity/counts/scenario.toml"),
         counts::encode(&rows).unwrap().as_bytes(),
     )
     .unwrap();
@@ -182,7 +182,7 @@ fn counts_inventory_must_match_every_script_even_with_fresh_hashes() {
     write(&root.join("rust/scripts/new-script.json"), b"{}").unwrap();
     assert!(inventory::verify(root, &root.join(GOLDEN), &manifest, None)
         .unwrap_err()
-        .contains("counts inventory"));
+        .contains(r#"missing=["parity/counts/new-script.toml"]"#));
 }
 
 #[test]

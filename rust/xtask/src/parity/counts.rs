@@ -5,6 +5,9 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, Table};
 
 mod difference;
 mod phases;
+mod storage;
+
+pub(super) use storage::{compare_directories, read_directory, write_directory};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -252,7 +255,10 @@ pub(super) fn encode(rows: &BTreeMap<String, Counts>) -> Result<String> {
             }
             table[key] = item(value)?;
         }
-        phases::encode(&mut table, &counts.action_phases)?;
+        phases::encode(&mut table, &counts.action_phases, false)?;
+        if table.to_string().len() > 5_000_000 {
+            phases::encode(&mut table, &counts.action_phases, true)?;
+        }
         tables.push(table);
     }
     doc["scenario"] = toml_edit::Item::ArrayOfTables(tables);
@@ -351,17 +357,6 @@ fn validate_counts(counts: &Counts) -> Result<()> {
     }
     if counts.classification == manifest::Classification::KnownBug && counts.issue.is_none() {
         return Err("known bug counts lack issue".into());
-    }
-    Ok(())
-}
-
-pub(super) fn compare_files(actual: &Path, expected: &Path) -> Result<()> {
-    let left = read(actual)?;
-    let right = read(expected)?;
-    let actual_rows = decode(std::str::from_utf8(&left).map_err(|error| error.to_string())?)?;
-    let expected_rows = decode(std::str::from_utf8(&right).map_err(|error| error.to_string())?)?;
-    if actual_rows != expected_rows || left != right {
-        return Err(difference::first(&actual_rows, &expected_rows));
     }
     Ok(())
 }

@@ -35,7 +35,7 @@ pub(super) fn run(root: &Path, args: &[String]) -> Result<()> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask parity <record|check> [--all|--entry NAME] [--out DIR] [--base REF] [--allow-golden-update] [--recording DIR] [--game-bin PATH]; parity counts <record|check> --all [--out FILE]; parity protect --base REF [--allow-golden-update]".into()
+    "usage: cargo xtask parity <record|check> [--all|--entry NAME] [--out DIR] [--base REF] [--allow-golden-update] [--recording DIR] [--game-bin PATH]; parity counts <record|check> --all [--out DIR]; parity protect --base REF [--allow-golden-update]".into()
 }
 
 fn execute(root: &Path, command: &str, args: &[String]) -> Result<()> {
@@ -78,7 +78,7 @@ fn counts_command(root: &Path, args: &[String]) -> Result<()> {
     let result = recording::record_counts(&context, &manifest, &out);
     context.finish(result)?;
     if command == "check" {
-        counts::compare_files(&out, &root.join(GOLDEN).join("parity/counts.toml"))?;
+        counts::compare_directories(&out, &root.join(GOLDEN).join("parity/counts"))?;
     }
     Ok(())
 }

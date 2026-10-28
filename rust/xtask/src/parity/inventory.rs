@@ -53,8 +53,7 @@ pub(super) fn verify(
 }
 
 fn verify_counts(root: &Path, directory: &Path, manifest: &manifest::Manifest) -> Result<()> {
-    let bytes = read(&directory.join("parity/counts.toml"))?;
-    let rows = counts::decode(std::str::from_utf8(&bytes).map_err(|error| error.to_string())?)?;
+    let rows = counts::read_directory(&directory.join("parity/counts"))?;
     let expected = script_names(root)?;
     let actual: BTreeSet<_> = rows.keys().cloned().collect();
     if expected != actual {

@@ -12,9 +12,9 @@ pub(super) fn tree(
         compare_entry(&entry.name, &left, &right)?;
     }
     if entries.len() == manifest.entries.len() {
-        counts::compare_files(
-            &actual.join("parity/counts.toml"),
-            &expected.join("parity/counts.toml"),
+        counts::compare_directories(
+            &actual.join("parity/counts"),
+            &expected.join("parity/counts"),
         )?;
         let stored: serde_json::Value = json(&actual.join(INVENTORY))?;
         let files = stored["files"]

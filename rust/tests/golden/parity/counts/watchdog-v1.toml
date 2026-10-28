@@ -1,0 +1,13 @@
+[[scenario]]
+name = "watchdog-v1"
+classification = "success"
+completed = true
+exit_code = 0
+failures = []
+input_seen = 4
+present_seen = 1
+terminal = "success"
+phase_encoding = "delta-dictionary-v1"
+action_names = ["wait_input_ticks", "finish"]
+phase_names = ["WaitingForInput", "WaitCounting { remaining: 2 }", "WaitCounting { remaining: 1 }"]
+action_phases = ["[0,0,0,0,0]", "[0,1,0,0,0]", "[1,0,0,0,1]", "[1,0,0,0,2]", "[1,0,1,1,0]", "[1,0,0,1,0]", "[0,0,0,1,0]"]

@@ -6,6 +6,7 @@ mod parallel_tests;
 mod protection_tests;
 mod quality_tests;
 mod runner_tests;
+mod storage_tests;
 
 #[test]
 fn trace_difference_reads_both_side_files_at_first_state_boundary() {

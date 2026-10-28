@@ -201,7 +201,7 @@ fn field(table: &Table, key: &str) -> Result<String> {
         .ok_or_else(|| format!("manifest lacks string {key}"))
 }
 
-fn identifier(text: &str) -> bool {
+pub(super) fn identifier(text: &str) -> bool {
     !text.is_empty()
         && text
             .bytes()
@@ -230,7 +230,9 @@ impl Manifest {
             }
         }
         if entry.is_none() {
-            paths.insert("parity/counts.toml".into());
+            for name in script_names(root)? {
+                paths.insert(format!("parity/counts/{name}.toml"));
+            }
             for name in save_names(root)? {
                 paths.insert(format!("saves/{name}.capture"));
                 paths.insert(format!("saves/{name}.capture.json"));

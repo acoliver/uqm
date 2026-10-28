@@ -13,7 +13,7 @@ pub(super) fn first(
             _ => (),
         }
     }
-    "counts.toml bytes differ despite equal decoded samples".into()
+    "counts bytes differ despite equal decoded samples".into()
 }
 
 fn row(name: &str, actual: &Counts, expected: &Counts) -> String {
