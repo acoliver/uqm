@@ -1935,7 +1935,10 @@ layers = true
 "unsafe_op_in_unsafe_fn|uqm::ui::util::@file" = 65
 
 [budget]
+bridge_calls = { limit = 48, ends = "phase-6" }
+legacy_hooks = { limit = 143, ends = "phase-2" }
 planned_engine_core = { limit = 12, ends = "phase-4" }
+stage_b_raw = { limit = 47, ends = "phase-2", scopes = { "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_collision::invoke_legacy_collision" = 4, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_collision::invoke_legacy_collision_const" = 4, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_element::invoke_legacy_element" = 1, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_element::invoke_race_element" = 1, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_race::invoke_intelligence" = 2, "ffi|raw_pointer_parameters|uqm::battle::process_native::invoke_race::invoke_weapon" = 2, "ffi|raw_pointer_parameters|uqm::engine::battle::context::<Battle>::new" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::context::<World>::new" = 2, "ffi|raw_pointer_parameters|uqm::engine::battle::table::<ElementTable>::from_queue" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::table::<ElementTable>::parent" = 1, "ffi|raw_pointer_parameters|uqm::engine::battle::table::parent_slot" = 1, "ffi|raw_records|uqm::app::bridge::with_battle" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_collision" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_collision::invoke_collision" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_collision::invoke_legacy_collision" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_collision::invoke_legacy_collision_const" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_element::invoke_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_element::invoke_race_element" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_race" = 1, "ffi|raw_records|uqm::battle::process_native::invoke_race::invoke_intelligence" = 2, "ffi|raw_records|uqm::battle::process_native::invoke_race::invoke_weapon" = 2, "ffi|raw_records|uqm::engine::battle::hooks" = 1, "ffi|raw_records|uqm::engine::battle::hooks::LegacyCollisionFn" = 2, "ffi|raw_records|uqm::engine::battle::hooks::LegacyElementFn" = 1, "ffi|raw_records|uqm::engine::battle::table" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as Index<ElementId>>::Output" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as Index<ElementId>>::index" = 2, "ffi|raw_records|uqm::engine::battle::table::<ElementTable as IndexMut<ElementId>>::index_mut" = 2, "ffi|raw_records|uqm::engine::battle::table::<ElementTable>::alloc" = 1, "ffi|raw_records|uqm::engine::battle::table::<ElementTable>::slot" = 1 } }
 
 [entry]
 "allows|cfg_not_test_modules|uqm::battle::battle_native::engine" = 1
@@ -2998,8 +3001,9 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "ffi|link_name|uqm::planets" = 8
 "ffi|link_name|uqm::savegame" = 3
 "ffi|no_mangle|uqm-engine::uqm-engine" = 445
+"ffi|no_mangle|uqm::app" = 1
 "ffi|no_mangle|uqm::automation" = 5
-"ffi|no_mangle|uqm::battle" = 117
+"ffi|no_mangle|uqm::battle" = 116
 "ffi|no_mangle|uqm::comm" = 65
 "ffi|no_mangle|uqm::engine" = 5
 "ffi|no_mangle|uqm::front_end" = 13
@@ -3076,7 +3080,8 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "ffi|repr_c|uqm::time" = 2
 "ffi|repr_c|uqm::ui" = 2
 "ffi|static_mut|uqm-engine::uqm-engine" = 72
-"ffi|static_mut|uqm::battle" = 19
+"ffi|static_mut|uqm::app" = 1
+"ffi|static_mut|uqm::battle" = 18
 "ffi|static_mut|uqm::comm" = 70
 "ffi|static_mut|uqm::engine" = 5
 "ffi|static_mut|uqm::front_end" = 48
@@ -5696,40 +5701,15 @@ planned_engine_core = { limit = 12, ends = "phase-4" }
 "unsafe|unsafe_lines|uqm::uqm" = 1
 
 [moved]
-"uqm::automation::capture::<PresentedFrame>::encode_png" = "uqm-engine::graphics::presented_frame::<PresentedFrame>::encode_png"
-"uqm::automation::capture::<PresentedFrame>::presentation_evidence" = "uqm::automation::capture::presentation_evidence"
-"uqm::automation::capture::<PresentedFrame>::validate" = "uqm-engine::graphics::presented_frame::<PresentedFrame>::validate"
-"uqm::automation::capture::PresentedFrame" = "uqm-engine::graphics::presented_frame::PresentedFrame"
-"uqm::automation::child_session::DescriptorInheritanceGuard" = "uqm-engine::threading::descriptor::DescriptorInheritanceGuard"
-"uqm::automation::child_session::guard_descriptor_inheritance" = "uqm-engine::threading::descriptor::guard_descriptor_inheritance"
-"uqm::bridge_log" = "uqm-engine::bridge_log"
-"uqm::callback" = "uqm-engine::callback"
-"uqm::collections" = "uqm-engine::collections"
-"uqm::engine::battle::record::Queue" = "uqm-engine::collections::queue::Queue"
-"uqm::engine::battle::record::abi::INTERSECT_CONTROL" = "uqm-engine::graphics::records::IntersectControl"
-"uqm::engine::battle::record::abi::PRIMITIVE" = "uqm-engine::graphics::records::PRIMITIVE"
-"uqm::game_init::kernel_abi::repository" = "uqm-engine::io::handles::repository"
-"uqm::game_init::kernel_abi::rootDir" = "uqm-engine::io::handles::rootDir"
+"uqm::battle::battle_native::engine::battle_counter" = "uqm::app::bridge::CONTEXT"
+"uqm::battle::process_native::alloc_display_prim" = "uqm::battle::process_native::primitives::alloc_display_prim"
+"uqm::battle::process_native::free_display_prim" = "uqm::battle::process_native::primitives::free_display_prim"
+"uqm::battle::process_native::insert_prim_links" = "uqm::battle::process_native::primitives::insert_prim_links"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
-"uqm::log_abi" = "uqm-engine::log_abi"
-"uqm::logging" = "uqm-engine::logging"
-"uqm::mainloop::options_abi::configDir" = "uqm-engine::io::handles::configDir"
-"uqm::mainloop::options_abi::contentDir" = "uqm-engine::io::handles::contentDir"
-"uqm::mainloop::options_abi::contentMountHandle" = "uqm-engine::io::handles::contentMountHandle"
-"uqm::mainloop::options_abi::input_templates" = "uqm-engine::input::templates::input_templates"
-"uqm::mainloop::options_abi::meleeDir" = "uqm-engine::io::handles::meleeDir"
-"uqm::mainloop::options_abi::saveDir" = "uqm-engine::io::handles::saveDir"
-"uqm::math" = "uqm-engine::math"
-"uqm::memory" = "uqm-engine::memory"
 "uqm::network" = "uqm-engine::network"
-"uqm::platform" = "uqm-engine::platform"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
-"uqm::strings" = "uqm-engine::strings"
-"uqm::target::build-script-build" = "uqm-engine::target::build-script-build"
 "uqm::threading" = "uqm-engine::threading"
-"uqm::time::counter_abi" = "uqm-engine::time::counter_abi"
-"uqm::time::source" = "uqm-engine::time::source"
 "uqm::video" = "uqm-engine::video"
