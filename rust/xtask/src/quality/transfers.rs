@@ -132,12 +132,20 @@ fn transfer_allows(
     let mut credited = BTreeMap::<(String, String, usize), String>::new();
     for (old, new) in moves {
         for coverage in base.allow_coverage.iter().filter(|c| prefix(&c.item, old)) {
-            let scope = coverage.scope.splitn(3, '|').nth(2).unwrap();
+            let scope = coverage
+                .scope
+                .splitn(3, '|')
+                .nth(2)
+                .ok_or_else(|| format!("missing allow identity in {}", coverage.scope))?;
             if prefix(scope, old) {
                 continue; // Direct allows already relocate with their finding.
             }
             let target_item = format!("{new}{}", &coverage.item[old.len()..]);
-            let lint = coverage.scope.split('|').nth(1).unwrap();
+            let lint = coverage
+                .scope
+                .split('|')
+                .nth(1)
+                .ok_or_else(|| format!("missing allow lint in {}", coverage.scope))?;
             let target_scope = current
                 .allow_coverage
                 .iter()
