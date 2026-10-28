@@ -127,9 +127,7 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::battle_native::engine::{
-        activity, player_input, rgb15, set_activity,
-    };
+    use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
     use crate::collections::observation::image;
@@ -374,7 +372,10 @@ pub(crate) mod engine {
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
         if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
-            if net.as_ref().is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle)) {
+            if net
+                .as_ref()
+                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
+            {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;
