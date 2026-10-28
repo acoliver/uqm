@@ -114,16 +114,16 @@
       "sha256": "9159d08ed4a18c292f276a28b574f1bd9bb698f3c58d6634a83779a90544ac85"
     },
     "parity/counts/campaign-s07-taalo-protected.toml": {
-      "bytes": 1311411,
-      "sha256": "2075b3625737953f0b9e65f0a93639f689275f7389915793079cc2359ad9449e"
+      "bytes": 665408,
+      "sha256": "c5d45b8303e3598dfca6f906e671dcf50959616aeb657e96734ea9fe35b2f5b9"
     },
     "parity/counts/campaign-s07a-bomb-refueled.toml": {
       "bytes": 445925,
       "sha256": "2d28c77c1ad610af910f0dbc2ac978a04928f12a524426cc9eb1e0b54f5056b1"
     },
     "parity/counts/campaign-s07b-west-refueled.toml": {
-      "bytes": 843597,
-      "sha256": "be3836bf4416621281331cb6e715e7807b6ac06021ec8f4fa17f5f86913b6298"
+      "bytes": 905174,
+      "sha256": "64065d83a9d1ca8db7e66a6749023db7a35ec562bc46c53a2da3cf0789952658"
     },
     "parity/counts/campaign-s07c-war-cleared.toml": {
       "bytes": 8805853,
@@ -214,8 +214,8 @@
       "sha256": "10346cb3f7731c7fe6fdd2639d6a77351d5e437b9fa601cfe8f0e0fadf0677b1"
     },
     "parity/counts/campaign-s09b-syreen-shuttle.toml": {
-      "bytes": 2278989,
-      "sha256": "4432105c3d76ae68306d6b31f7f45d859a01d5e7545013b1ece9ba7c95cea615"
+      "bytes": 1160702,
+      "sha256": "0a1796662b3a2f58b6fb633c245871677e9cc5e0e4aa3f26ee1327f0901bb5e3"
     },
     "parity/counts/campaign-s09c-syreen-vault.toml": {
       "bytes": 343364,
