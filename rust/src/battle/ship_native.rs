@@ -243,9 +243,9 @@ pub(crate) mod engine {
                 }
             }
         }
-        cx.ship_mut(ship).cur_status_flags = flags;
+        cx.ship_state_mut(ship).status = flags;
         if cx.ship(ship).energy_counter != 0 {
-            cx.ship_mut(ship).energy_counter -= 1;
+            cx.ship_state_mut(ship).energy_counter -= 1;
         } else if cx.desc(ship).ship_info.energy_level < cx.desc(ship).ship_info.max_energy
             || (cx.desc(ship).characteristics.energy_regeneration as i8) < 0
         {
@@ -262,7 +262,7 @@ pub(crate) mod engine {
             let facing = normalize_facing(
                 i32::from(cx.ship(ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
-            cx.ship_mut(ship).ShipFacing = facing;
+            cx.ship_state_mut(ship).facing = facing;
             let frame = cx.abs_frame(cx.b.elements[e].next.image.frame, facing);
             image!(frame; cx.b.elements[e].next.image.frame, frame);
             cx.b.elements[e].state_flags |= CHANGING as u16;
@@ -283,9 +283,9 @@ pub(crate) mod engine {
                 characteristics.thrust_increment,
                 characteristics.max_thrust,
             );
-            cx.ship_mut(ship).cur_status_flags &=
+            cx.ship_state_mut(ship).status &=
                 !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
-            cx.ship_mut(ship).cur_status_flags |= result;
+            cx.ship_state_mut(ship).status |= result;
             cx.b.elements[e].set_thrust_wait(characteristics.thrust_wait);
             if !cx.object_cloaked(e) && cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
                 cx.spawn_ion_trail(e);
@@ -302,7 +302,7 @@ pub(crate) mod engine {
         }
         let ship = cx.owner(e);
         if cx.ship(ship).weapon_counter != 0 {
-            cx.ship_mut(ship).weapon_counter -= 1;
+            cx.ship_state_mut(ship).weapon_counter -= 1;
         } else if cx.ship(ship).cur_status_flags & WEAPON as u16 != 0
             && cx.delta_energy(
                 e,
@@ -324,10 +324,10 @@ pub(crate) mod engine {
                     cx.process_ship_sound(ship, 0, e);
                 }
             }
-            cx.ship_mut(ship).weapon_counter = cx.desc(ship).characteristics.weapon_wait;
+            cx.ship_state_mut(ship).weapon_counter = cx.desc(ship).characteristics.weapon_wait;
         }
         if cx.ship(ship).special_counter != 0 {
-            cx.ship_mut(ship).special_counter -= 1;
+            cx.ship_state_mut(ship).special_counter -= 1;
         }
         cx.invoke_ship_process(ship, true);
         if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {

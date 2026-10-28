@@ -133,3 +133,62 @@ fn projected_autoaim_uses_both_positions_without_mutating_live_target() {
         }
     });
 }
+
+#[test]
+fn native_races_cannot_call_raw_mutable_record_accessors() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let source = include_str!("../src/engine/battle/record.rs");
+    let methods = ["ship_mut", "desc_mut"]
+        .map(|name| {
+            source
+                .lines()
+                .find(|line| line.contains(&format!("fn {name}(")))
+                .unwrap()
+                .trim()
+                .trim_end_matches('{')
+                .to_owned()
+                + "{ unimplemented!() }"
+        })
+        .join("\n");
+    let prefix = format!("mod engine {{ pub mod battle {{ pub struct Cx; #[derive(Clone,Copy)] pub struct ShipId; pub struct STARSHIP; pub struct RACE_DESC; mod record {{ use super::*; impl Cx {{ {methods} }} }}");
+    let output = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join(format!("native-access-{}.rmeta", std::process::id()));
+    for native in [false, true] {
+        let caller = "fn probe(cx:&mut crate::engine::battle::Cx,id:crate::engine::battle::ShipId) { cx.ship_mut(id); cx.desc_mut(crate::engine::battle::ShipId); }";
+        let code = if native {
+            format!("{prefix} }} }} mod ships {{ mod races {{ {caller} }} }}")
+        } else {
+            format!("{prefix} mod access {{ {caller} }} }} }}")
+        };
+        let mut child = Command::new("rustc")
+            .args([
+                "--edition=2021",
+                "--crate-type=lib",
+                "--emit=metadata",
+                "-o",
+                output.to_str().unwrap(),
+                "-",
+            ])
+            .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(code.as_bytes())
+            .unwrap();
+        let result = child.wait_with_output().unwrap();
+        let errors = String::from_utf8(result.stderr).unwrap();
+        assert_eq!(result.status.success(), !native, "{errors}");
+        if !native {
+            std::fs::remove_file(&output).unwrap();
+        }
+        if native {
+            assert_eq!(errors.matches("error[E0624]").count(), 2, "{errors}");
+        }
+    }
+}

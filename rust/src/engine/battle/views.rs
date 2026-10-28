@@ -78,6 +78,7 @@ pub struct ShipState {
     pub weapon_counter: u8,
     pub special_counter: u8,
     pub energy_counter: u8,
+    pub crew: u16,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Info {

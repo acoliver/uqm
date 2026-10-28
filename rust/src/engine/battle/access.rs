@@ -309,3 +309,10 @@ pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R
     crate::collections::observation::observe(callback, parent);
     call()
 }
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn clear_captain_background(&mut self, ship: ShipId) {
+        self.desc_mut(ship).ship_data.captain_control.background = std::ptr::null_mut();
+    }
+}

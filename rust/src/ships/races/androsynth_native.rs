@@ -363,7 +363,7 @@ pub(crate) mod engine {
             flags &= !((THRUST | WEAPON | SPECIAL) as u16);
             if cx.race_stats(ss).characteristics.turn_wait > BLAZER_TURN_WAIT {
                 cx.race_stats_mut(ss).characteristics.special_wait =
-                    cx.desc(ss).characteristics.special_wait.wrapping_add(
+                    cx.race_stats(ss).characteristics.special_wait.wrapping_add(
                         cx.race_stats(ss).characteristics.turn_wait - BLAZER_TURN_WAIT,
                     );
                 cx.race_stats_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;

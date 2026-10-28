@@ -182,7 +182,7 @@ impl Cx<'_> {
             };
             DrawStamp(&mut stamp);
             DestroyDrawable(ReleaseDrawable(frame));
-            self.desc_mut(ship).ship_data.captain_control.background = std::ptr::null_mut();
+            self.clear_captain_background(ship);
             SetContext(old);
         }
     }
@@ -648,7 +648,7 @@ mod status_native_access {
             delta: u16,
             current: u16,
         ) {
-            let controls = &raw mut self.desc_mut(ship).ship_data.captain_control;
+            let controls = self.captain_controls(ship).as_ptr();
             // SAFETY: drawing consumes only this ship's loaded captain frames.
             unsafe {
                 CaptainsWindow(controls, y, delta, current, 2);

@@ -363,6 +363,7 @@ impl ShipState {
             weapon_counter: s.weapon_counter,
             special_counter: s.special_counter,
             energy_counter: s.energy_counter,
+            crew: s.crew_level,
         }
     }
     fn apply(s: &mut STARSHIP, v: Self) {
@@ -374,6 +375,7 @@ impl ShipState {
         s.weapon_counter = v.weapon_counter;
         s.special_counter = v.special_counter;
         s.energy_counter = v.energy_counter;
+        s.crew_level = v.crew;
     }
 }
 
@@ -456,7 +458,7 @@ impl Cx<'_> {
                 .unwrap_or_else(|| panic!("{}", "ship slot")),
         )
     }
-    pub(crate) fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
+    pub(super) fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
         // SAFETY: this exclusive context borrow scopes the one-record projection.
         self.project_mut(
             std::ptr::NonNull::new(self.ship_pointer(id))
@@ -469,13 +471,17 @@ impl Cx<'_> {
         // SAFETY: each live ship owns its descriptor until teardown.
         self.project(std::ptr::NonNull::new(pointer).unwrap_or_else(|| panic!("{}", "descriptor")))
     }
-    pub(crate) fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
+    pub(super) fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
         let pointer = self.ship(id).RaceDescPtr;
         assert!(!pointer.is_null(), "ship {id:?} has no descriptor");
         // SAFETY: the exclusive context borrow scopes the descriptor projection.
         self.project_mut(
             std::ptr::NonNull::new(pointer).unwrap_or_else(|| panic!("{}", "descriptor")),
         )
+    }
+    #[cfg(not(test))]
+    pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
+        std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
     }
     pub(crate) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
         super::Subject {

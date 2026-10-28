@@ -249,7 +249,7 @@ pub(crate) mod engine {
     pub fn cleanup_dead_ship(cx: &mut Cx<'_>, dead: ElementId) {
         cx.silence_battle_sounds();
         let dead_ship = cx.owner(dead);
-        cx.ship_mut(dead_ship).crew_level = cx.desc(dead_ship).ship_info.crew_level;
+        cx.ship_state_mut(dead_ship).crew = cx.desc(dead_ship).ship_info.crew_level;
         let mut music_started = false;
         let mut next = cx.b.elements.head();
         while let Some(e) = next {
@@ -273,7 +273,7 @@ pub(crate) mod engine {
                 if cx.ship(ship).cur_status_flags & PLAY_VICTORY_DITTY as u16 != 0 {
                     music_started = true;
                     cx.play_ditty(ship);
-                    cx.ship_mut(ship).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
+                    cx.ship_state_mut(ship).status &= !(PLAY_VICTORY_DITTY as u16);
                 }
             }
         }
@@ -529,7 +529,7 @@ pub(crate) mod engine {
     pub fn ship_death(cx: &mut Cx<'_>, ship: ElementId) {
         let owner = cx.owner(ship);
         cx.stop_battle_music();
-        cx.ship_mut(owner).cur_status_flags &= !(PLAY_VICTORY_DITTY as u16);
+        cx.ship_state_mut(owner).status &= !(PLAY_VICTORY_DITTY as u16);
         cx.start_ship_explosion(ship, true);
         cx.select_winner(ship);
         cx.record_ship_death(ship);
@@ -649,7 +649,7 @@ pub(crate) mod engine {
             }
         }
         let ship = cx.owner(e);
-        cx.ship_mut(ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+        cx.ship_state_mut(ship).status &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
         cx.preprocess_status(e);
     }
 }
