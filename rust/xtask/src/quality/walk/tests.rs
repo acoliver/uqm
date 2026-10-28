@@ -234,6 +234,125 @@ fn layers_follow_aliases_relative_imports_and_foreign_symbol_names() {
     assert_eq!(measured.report("planned.uqm-content", None).unwrap(), 1);
 }
 
+fn record_transfer_fixture(record: &str) -> Measurement {
+    fixture(
+        &[
+            (
+                "src/lib.rs",
+                "mod battle {} mod engine { pub mod battle { pub mod record; } }",
+            ),
+            ("src/engine/battle/record.rs", record),
+        ],
+        None,
+        false,
+    )
+}
+
+#[test]
+fn record_field_transfer_survives_disappearing_raw_record_debt() {
+    use super::super::baseline::{check_limits, Baseline};
+    let record = "#[repr(C)] struct element { hTarget: HELEMENT, value: u8 }";
+    let base = fixture(
+        &[("src/lib.rs", &format!("mod battle {{ {record} }}"))],
+        None,
+        false,
+    );
+    let current = record_transfer_fixture(record);
+    let target = "uqm::engine::battle::record::element::hTarget";
+    assert!(base
+        .findings
+        .iter()
+        .any(|f| f.identity == "uqm::battle::element::hTarget" && f.metric == "raw_records"));
+    assert!(!current
+        .findings
+        .iter()
+        .any(|f| f.identity == target && f.metric == "raw_records"));
+    assert!(current.declarations.iter().any(|f| f.identity == target));
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline
+        .add_move(
+            "uqm::battle::element",
+            "uqm::engine::battle::record::element",
+            &current,
+            &base,
+        )
+        .unwrap();
+    check_limits(
+        &current.baseline(),
+        &baseline.entries,
+        &BTreeMap::new(),
+        true,
+    )
+    .unwrap();
+    assert_eq!(baseline.entries["ffi|raw_records|uqm::engine"], 1);
+    assert_eq!(baseline.entries["ffi|repr_c|uqm::engine"], 1);
+    assert!(!baseline.entries.contains_key("ffi|raw_records|uqm::battle"));
+    assert!(baseline
+        .add_move(
+            "uqm::battle::element",
+            "uqm::engine::another",
+            &current,
+            &base
+        )
+        .is_err());
+    let mut growth = current.baseline();
+    growth.insert("ffi|repr_c|uqm::engine".into(), 2);
+    assert!(check_limits(&growth, &baseline.entries, &BTreeMap::new(), true).is_err());
+    let retained = fixture(
+        &[
+            ("src/lib.rs", &format!("mod battle {{ {record} }} mod engine {{ pub mod battle {{ pub mod record; }} }}")),
+            ("src/engine/battle/record.rs", record),
+        ],
+        None,
+        false,
+    );
+    assert!(
+        super::super::transfers::validate(&retained, &base, &baseline.moved)
+            .unwrap_err()
+            .contains("still exists")
+    );
+}
+
+#[test]
+fn record_transfer_rejects_removed_fields_even_without_metric_findings() {
+    use super::super::baseline::Baseline;
+    let base = fixture(
+        &[(
+            "src/lib.rs",
+            "mod battle { #[repr(C)] struct element { hTarget: HELEMENT, value: u8 } }",
+        )],
+        None,
+        false,
+    );
+    for (record, missing) in [
+        ("#[repr(C)] struct element { value: u8 }", "hTarget"),
+        ("#[repr(C)] struct element { hTarget: HELEMENT }", "value"),
+    ] {
+        let current = record_transfer_fixture(record);
+        let mut baseline = Baseline {
+            entries: base.baseline(),
+            ..Default::default()
+        };
+        let error = baseline
+            .add_move(
+                "uqm::battle::element",
+                "uqm::engine::battle::record::element",
+                &current,
+                &base,
+            )
+            .unwrap_err();
+        assert!(
+            error.contains(&format!("element::{missing} is absent")),
+            "{error}"
+        );
+        assert!(baseline.moved.is_empty());
+        assert_eq!(baseline.entries, base.baseline());
+    }
+}
+
 #[test]
 fn declaration_move_keeps_the_source_subsystem_live() {
     let base = fixture(
