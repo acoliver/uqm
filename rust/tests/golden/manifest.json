@@ -146,8 +146,8 @@
       "sha256": "d3c8a69d02a743de1009f7199ceadadfbf7be9a17807e022dff82d656d17f855"
     },
     "parity/counts/campaign-s07h-connected-taalo.toml": {
-      "bytes": 608193,
-      "sha256": "2745c2b4f8055e838d438a2c92b08005bf52dfa8532c72e885e35bc3bb8247af"
+      "bytes": 615109,
+      "sha256": "ea258c3ae7a9cdb61db0ec97a22da20a44df2026c439c6e69979b6706444b7fd"
     },
     "parity/counts/campaign-s08-talking-pet.toml": {
       "bytes": 1706117,
@@ -746,8 +746,8 @@
       "sha256": "8d009a75d03756f1bd0a52499ff77dfa81d031feba0a146da78f371e3014cc7c"
     },
     "parity/counts/real-sol-starbase-alliance.toml": {
-      "bytes": 902644,
-      "sha256": "5b7b1a1c4ec6db2fb3829f15dddd8558c60260c7836c35856527fa8c3dad23e1"
+      "bytes": 869151,
+      "sha256": "ee7b4f07df63fd85fb789e7d24a9ed5c2e5be3a4018b5d5fd61d9a27a6b58b1c"
     },
     "parity/counts/real-sol-starbase-to-mars.toml": {
       "bytes": 172482,

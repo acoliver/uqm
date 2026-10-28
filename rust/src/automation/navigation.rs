@@ -249,26 +249,8 @@ pub fn steer_moon_navigation(observation: NavigationObservation) -> NavigationCo
     steer_to_velocity(dx * speed / distance, dy * speed / distance, observation)
 }
 
-/// Route toward a moon of `target_planet`, wherever the ship currently is.
-///
-/// Moons exist only inside their planet's inner system, so the moon controller
-/// is only meaningful once the ship is in that inner system. From the outer
-/// system, or from another planet's inner system, the ship first flies to the
-/// planet exactly as `navigate_to_planet` does: `steer_toward_target` leaves a
-/// wrong inner system outward, then closes on the planet in the outer view
-/// (whose position the observation reports as the target) to enter its inner
-/// system.
-#[must_use]
-pub fn steer_moon_route(
-    observation: NavigationObservation,
-    target_planet: u8,
-) -> NavigationControl {
-    if observation.inner_planet == Some(target_planet) {
-        steer_moon_navigation(observation)
-    } else {
-        steer_toward_target(observation)
-    }
-}
+mod moon_route;
+pub use moon_route::steer_moon_route;
 
 /// Speed held while leaving a moon whose collision guard is still set.
 const MOON_BACKOFF_SPEED: f64 = 8.0;
@@ -837,7 +819,7 @@ mod tests {
         // moon controller would thrust; the route must instead turn outward.
         let mut state = observation(77, 145, 4, 82, 145);
         state.inner_planet = Some(0);
-        let control = steer_moon_route(state, 2);
+        let control = steer_moon_route(state, 2, &[]);
         assert_eq!(control, steer_toward_target(state));
         assert!(!control.thrust);
         assert!(control.left ^ control.right);
@@ -848,7 +830,7 @@ mod tests {
         // Outward from (121, 113) through (77, 145) is facing 10 or 11.
         let mut state = observation(77, 145, 11, 82, 145);
         state.inner_planet = Some(0);
-        assert!(steer_moon_route(state, 2).thrust);
+        assert!(steer_moon_route(state, 2, &[]).thrust);
     }
 
     #[test]
@@ -856,28 +838,34 @@ mod tests {
         // Outer system: the target is the planet's display position.
         let state = observation(100, 200, 0, 100, 100);
         assert_eq!(
-            steer_moon_route(state, 2),
+            steer_moon_route(state, 2, &[]),
             NavigationControl {
                 thrust: true,
                 ..NavigationControl::default()
             }
         );
         let turning = observation(100, 100, 0, 200, 100);
-        assert!(steer_moon_route(turning, 2).right);
+        assert!(steer_moon_route(turning, 2, &[]).right);
     }
 
     #[test]
     fn moon_route_uses_the_moon_controller_inside_the_target_planets_inner_system() {
         let mut state = observation(100, 200, 0, 100, 100);
         state.inner_planet = Some(2);
-        assert_eq!(steer_moon_route(state, 2), steer_moon_navigation(state));
+        assert_eq!(
+            steer_moon_route(state, 2, &[]),
+            steer_moon_navigation(state)
+        );
         // Pure pursuit would fly outward from the view centre here; the moon
         // controller closes on the moon instead.
-        assert_ne!(steer_moon_route(state, 2), steer_toward_target(state));
+        assert_ne!(steer_moon_route(state, 2, &[]), steer_toward_target(state));
         let mut guarded = observation(100, 100, 0, 100, 100);
         guarded.inner_planet = Some(2);
         guarded.target_guard_active = true;
-        assert_eq!(steer_moon_route(guarded, 2), steer_moon_navigation(guarded));
+        assert_eq!(
+            steer_moon_route(guarded, 2, &[]),
+            steer_moon_navigation(guarded)
+        );
     }
 
     #[test]
@@ -889,9 +877,9 @@ mod tests {
             ..NavigationControl::default()
         };
         state.inner_planet = Some(0);
-        assert_eq!(steer_moon_route(state, 2), leave);
+        assert_eq!(steer_moon_route(state, 2, &[]), leave);
         state.inner_planet = Some(2);
-        assert_eq!(steer_moon_route(state, 2), leave);
+        assert_eq!(steer_moon_route(state, 2, &[]), leave);
     }
 
     #[test]

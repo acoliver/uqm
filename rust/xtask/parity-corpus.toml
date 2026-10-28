@@ -204,11 +204,6 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 720
 
-[[expectation]]
-scenario = "real-sol-starbase-alliance"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
 
 [[expectation]]
 scenario = "thraddash-guard-v1"
