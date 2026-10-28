@@ -1,3 +1,12 @@
+pub use crate::engine::battle::record::{
+    captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
+    element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
+    tfb_soundsample, ElementCollisionFunc, ElementProcessFunc, IntelligenceFunc, TFB_SoundSample,
+    CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
+    INIT_WEAPON_FUNC, INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
+    POSTPROCESS_FUNC, PREPROCESS_FUNC, PRIMITIVE, PRIM_DESC, QUEUE, RACE_DESC, SHIP_INFO, STARSHIP,
+    STATE, UNINIT_FUNC,
+};
 // Shared engine records used by the Rust runtime.
 
 pub use crate::math::{
@@ -140,7 +149,6 @@ pub const NUM_EXPLOSION_FRAMES: u32 = 12;
 pub const GAME_SOUND_PRIORITY: u32 = 2;
 pub const NEUTRAL_PLAYER_NUM: i32 = -1;
 pub const MAX_DISPLAY_ELEMENTS: u32 = 150;
-pub const MAX_DISPLAY_PRIMS: u32 = 330;
 pub const MAX_CREW_SIZE: u32 = 42;
 pub const MAX_ENERGY_SIZE: u32 = 42;
 pub const MAX_SHIP_MASS: u32 = 10;
@@ -983,17 +991,8 @@ pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
 pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
-pub use crate::graphics::native_abi::PRIM_DESC;
 pub type PRIM_LINKS = DWORD;
-pub use crate::engine::battle::record::PRIMITIVE;
 pub type BATCH_FLAGS = BYTE;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct INTERSECT_CONTROL {
-    pub last_time_val: TIME_VALUE,
-    pub EndPoint: POINT,
-    pub IntersectStamp: STAMP,
-}
 pub type HOT_SPOT = POINT;
 pub const ScreenFadeType_FadeAllToWhite: ScreenFadeType = 250;
 pub const ScreenFadeType_FadeSomeToWhite: ScreenFadeType = 251;
@@ -1033,13 +1032,6 @@ pub struct soundposition {
     pub y: ::std::os::raw::c_int,
 }
 pub type SoundPosition = soundposition;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct tfb_soundsample {
-    _unused: [u8; 0],
-}
-pub type TFB_SoundSample = tfb_soundsample;
-pub type MUSIC_REF = *mut *mut TFB_SoundSample;
 pub use crate::sound::heart_ffi::channel_playing as ChannelPlaying;
 pub use crate::sound::heart_ffi::stop_sound as StopSound;
 pub use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
@@ -1209,7 +1201,6 @@ pub struct link {
     pub succ: HLINK,
 }
 pub type LINK = link;
-pub use crate::engine::battle::record::QUEUE;
 pub unsafe fn FreeLink(pq: *mut QUEUE, hLink: HLINK) {
     crate::collections::queue::FreeLink(pq.cast(), hLink);
 }
@@ -1268,11 +1259,6 @@ pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
-pub use crate::engine::battle::record::{
-    state, state__bindgen_ty_1, STATE, ELEMENT, ElementProcessFunc, ElementCollisionFunc,
-    element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
-    element__bindgen_ty_4, element__bindgen_ty_5,
-};
 pub use crate::engine::battle::legacy::disp_q;
 pub use crate::engine::battle::legacy::DisplayFreeList;
 pub use crate::engine::battle::legacy::DisplayArray;
@@ -1562,99 +1548,10 @@ pub const SPECIES_ID_SA_MATRA_ID: SPECIES_ID = 27;
 pub const SPECIES_ID_UR_QUAN_PROBE_ID: SPECIES_ID = 28;
 pub const SPECIES_ID_NUM_SPECIES_ID: SPECIES_ID = 29;
 pub type SPECIES_ID = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct captain_stuff {
-    pub captain_rsc: RESOURCE,
-    pub background: FRAME,
-    pub turn: FRAME,
-    pub thrust: FRAME,
-    pub weapon: FRAME,
-    pub special: FRAME,
-}
-pub type CAPTAIN_STUFF = captain_stuff;
 pub const MOVEMENT_STATE_PURSUE: MOVEMENT_STATE = 0;
 pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
 pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
-pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct EVALUATE_DESC {
-    pub ObjectPtr: *mut ELEMENT,
-    pub facing: COUNT,
-    pub which_turn: COUNT,
-    pub MoveState: MOVEMENT_STATE,
-}
-pub type IntelligenceFunc = ::std::option::Option<
-    unsafe extern "C" fn(
-        ShipPtr: *mut ELEMENT,
-        ObjectsOfConcern: *mut EVALUATE_DESC,
-        ConcernCounter: COUNT,
-    ),
->;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct INTEL_STUFF {
-    pub ManeuverabilityIndex: COUNT,
-    pub WeaponRange: COUNT,
-    pub intelligence_func: IntelligenceFunc,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct CHARACTERISTIC_STUFF {
-    pub max_thrust: COUNT,
-    pub thrust_increment: COUNT,
-    pub energy_regeneration: BYTE,
-    pub weapon_energy_cost: BYTE,
-    pub special_energy_cost: BYTE,
-    pub energy_wait: BYTE,
-    pub turn_wait: BYTE,
-    pub thrust_wait: BYTE,
-    pub weapon_wait: BYTE,
-    pub special_wait: BYTE,
-    pub ship_mass: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SHIP_INFO {
-    pub ship_flags: UWORD,
-    pub ship_cost: BYTE,
-    pub crew_level: COUNT,
-    pub max_crew: COUNT,
-    pub energy_level: BYTE,
-    pub max_energy: BYTE,
-    pub race_strings_rsc: RESOURCE,
-    pub icons_rsc: RESOURCE,
-    pub melee_icon_rsc: RESOURCE,
-    pub race_strings: STRING,
-    pub icons: FRAME,
-    pub melee_icon: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FLEET_STUFF {
-    pub strength: COUNT,
-    pub known_loc: POINT,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct DATA_STUFF {
-    pub ship_rsc: [RESOURCE; 3usize],
-    pub weapon_rsc: [RESOURCE; 3usize],
-    pub special_rsc: [RESOURCE; 3usize],
-    pub captain_control: CAPTAIN_STUFF,
-    pub victory_ditty_rsc: RESOURCE,
-    pub ship_sounds_rsc: RESOURCE,
-    pub ship: [FRAME; 3usize],
-    pub weapon: [FRAME; 3usize],
-    pub special: [FRAME; 3usize],
-    pub victory_ditty: MUSIC_REF,
-    pub ship_sounds: SOUND,
-}
-pub use crate::engine::battle::record::{
-    race_desc, RACE_DESC, PREPROCESS_FUNC, POSTPROCESS_FUNC, INIT_WEAPON_FUNC, UNINIT_FUNC,
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SHIP_BASE {
@@ -1663,7 +1560,6 @@ pub struct SHIP_BASE {
     pub SpeciesID: SPECIES_ID,
     pub captains_name_index: BYTE,
 }
-pub use crate::engine::battle::record::STARSHIP;
 pub type HSHIPFRAG = HLINK;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

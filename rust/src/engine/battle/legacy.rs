@@ -1,16 +1,22 @@
 //! Single storage authority for the legacy battle queues and display list.
-#![allow(non_snake_case, non_upper_case_globals)]
 
-use super::record::{PRIMITIVE, QUEUE};
-use crate::ships::native::abi::{COUNT, MAX_DISPLAY_PRIMS, PRIM_LINKS};
-use std::mem;
+use super::record::{MAX_DISPLAY_PRIMS, PRIMITIVE, QUEUE};
+use crate::graphics::native_abi::{COUNT, PRIM_LINKS};
+use std::{mem, ptr};
+
+const EMPTY_QUEUE: QUEUE = QUEUE {
+    head: ptr::null_mut(),
+    tail: ptr::null_mut(),
+    pq_tab: ptr::null_mut(),
+    free_list: ptr::null_mut(),
+    object_size: 0,
+    num_objects: 0,
+};
 
 #[no_mangle]
-// SAFETY: QUEUE contains only integers and nullable raw pointers.
-pub static mut disp_q: QUEUE = unsafe { mem::zeroed() };
+pub static mut disp_q: QUEUE = EMPTY_QUEUE;
 #[no_mangle]
-// SAFETY: Both queues contain only integers and nullable raw pointers.
-pub static mut race_q: [QUEUE; 2] = unsafe { mem::zeroed() };
+pub static mut race_q: [QUEUE; 2] = [EMPTY_QUEUE; 2];
 
 #[no_mangle]
 pub static mut DisplayFreeList: COUNT = 0;

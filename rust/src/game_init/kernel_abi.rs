@@ -1,7 +1,6 @@
 //! Live game kernel and resource globals, ported from setup.c.
 #![allow(non_snake_case)]
 
-pub use crate::engine::battle::legacy::{disp_q, race_q};
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
 use crate::io::uio_bridge as uio;

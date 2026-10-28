@@ -1,6 +1,8 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
+#[cfg(not(test))]
+use crate::engine::battle::legacy::DisplayLinks;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
@@ -244,7 +246,6 @@ pub(crate) mod engine {
     use crate::ships::native::frame_index;
     use std::ptr;
 
-    pub use crate::engine::battle::legacy::{DisplayArray, DisplayFreeList, DisplayLinks};
     #[no_mangle]
     pub static mut zoom_out: SIZE = 1 << ZOOM_SHIFT;
     #[no_mangle]
