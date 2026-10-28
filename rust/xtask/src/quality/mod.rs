@@ -7,6 +7,8 @@ mod deps;
 mod layers;
 mod macros;
 pub(crate) mod metrics;
+#[cfg(test)]
+mod scoped_tests;
 pub(crate) mod tool;
 mod transfers;
 pub(crate) mod walk;
@@ -28,6 +30,7 @@ struct Options {
     base: Option<String>,
     expect: Option<u64>,
     only: Vec<String>,
+    scopes: BTreeMap<String, u64>,
     tighten: bool,
     defs: bool,
     prefix: bool,
@@ -36,6 +39,13 @@ struct Options {
 }
 
 impl Options {
+    fn validate_scopes(&self) -> Result<(), String> {
+        if !self.scopes.is_empty() && self.positional.first().is_none_or(|p| p != "budget") {
+            return Err("--scope is only valid for quality budget".into());
+        }
+        Ok(())
+    }
+
     fn parse(args: &[String]) -> Result<Self, String> {
         let mut options = Self::default();
         let mut args = args.iter();
@@ -60,6 +70,20 @@ impl Options {
                         .map(str::to_string)
                         .collect()
                 }
+                "--scope" => {
+                    let (key, value) = args
+                        .next()
+                        .ok_or("--scope needs counter|metric|identity=value")?
+                        .split_once('=')
+                        .ok_or("--scope needs counter|metric|identity=value")?;
+                    if options
+                        .scopes
+                        .insert(key.into(), value.parse::<u64>().map_err(|e| e.to_string())?)
+                        .is_some()
+                    {
+                        return Err(format!("duplicate budget scope {key}"));
+                    }
+                }
                 "--tighten" => options.tighten = true,
                 "--defs" => options.defs = true,
                 "--prefix" => options.prefix = true,
@@ -75,6 +99,7 @@ impl Options {
 
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let options = Options::parse(args)?;
+    options.validate_scopes()?;
     let command = options
         .positional
         .first()
@@ -153,7 +178,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     } else {
         Baseline::default()
     };
-    let measured = measurement.baseline();
+    let measured = budgets::scoped_entries(&measurement, &baseline.budget);
     initialize_layers(root, &options, &mut baseline)?;
     budgets::check(&measurement, &baseline.budget)?;
     if existing && !options.allow_growth {
@@ -175,12 +200,32 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if let Some(reference) = &options.base {
         base_baseline = compare_base(root, reference, &measurement, &mut baseline, &options)?;
     }
+    print_summary(&baseline, &measurement, measured.len(), native_files)?;
+    if options.tighten {
+        if options.allow_growth {
+            return Err(
+                "--tighten cannot raise a baseline; do not combine it with --allow-growth".into(),
+            );
+        }
+        baseline.tighten(&measurement, base_baseline.as_ref())?;
+        baseline.write(&baseline_path)?;
+    }
+    Ok(())
+}
+
+fn print_summary(
+    baseline: &Baseline,
+    measurement: &metrics::Measurement,
+    entries: usize,
+    native_files: u64,
+) -> Result<(), String> {
+    let measured = measurement.baseline();
     let headroom = baseline
         .entries
         .iter()
         .filter(|(key, value)| measured.get(*key).copied().unwrap_or(0) < **value)
         .count();
-    println!("quality: {} files, {} macro handlers, {} debt entries, {headroom} entries with headroom, native-files={native_files}", measurement.findings.iter().filter(|f| f.counter == "loc").count(), measurement.handlers.len(), measured.len());
+    println!("quality: {} files, {} macro handlers, {} debt entries, {headroom} entries with headroom, native-files={native_files}", measurement.findings.iter().filter(|f| f.counter == "loc").count(), measurement.handlers.len(), entries);
     for counter in ["loc", "ffi", "unsafe", "allows"] {
         println!("{counter}={}", measurement.report(counter, None)?);
     }
@@ -194,15 +239,6 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         });
     for (metric, value) in totals {
         println!("  {metric}={value}");
-    }
-    if options.tighten {
-        if options.allow_growth {
-            return Err(
-                "--tighten cannot raise a baseline; do not combine it with --allow-growth".into(),
-            );
-        }
-        baseline.tighten(&measurement, base_baseline.as_ref())?;
-        baseline.write(&baseline_path)?;
     }
     Ok(())
 }
@@ -251,12 +287,22 @@ fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> 
             .parse::<u64>()
             .map_err(|e| e.to_string())?;
         let mut baseline = Baseline::read(path)?;
-        budgets::set(
-            &mut baseline.budget,
-            &options.positional[1],
-            value,
-            options.allow_growth,
-        )?;
+        if options.scopes.is_empty() {
+            budgets::set(
+                &mut baseline.budget,
+                &options.positional[1],
+                value,
+                options.allow_growth,
+            )?;
+        } else {
+            budgets::set_scoped(
+                &mut baseline.budget,
+                &options.positional[1],
+                value,
+                options.scopes.clone(),
+                options.allow_growth,
+            )?;
+        }
         return baseline.write(path);
     }
     unreachable!("only baseline editing commands are dispatched here")
@@ -292,7 +338,7 @@ fn compare_base(
     baseline: &mut Baseline,
     options: &Options,
 ) -> Result<Option<Baseline>, String> {
-    let measured = measurement.baseline();
+    let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
     let mut before = base.baseline();
     if options.allow_engine_os {
@@ -309,6 +355,7 @@ fn compare_base(
     if !options.allow_growth {
         baseline::validate_transfers(measurement, &base, &baseline.moved)?;
         let transferred = transfers::limits(&before, measurement, &base, &baseline.moved)?;
+        let transferred = budgets::remove_scoped(transferred, &base, &baseline.budget);
         baseline::check_limits(
             &budgets::without_budgeted(&current, &baseline.budget),
             &budgets::without_budgeted(&transferred, &baseline.budget),

@@ -125,7 +125,7 @@ impl Baseline {
         measurement: &Measurement,
         base: Option<&Baseline>,
     ) -> Result<(), String> {
-        let measured = measurement.baseline();
+        let measured = super::budgets::scoped_entries(measurement, &self.budget);
         super::budgets::check(measurement, &self.budget)?;
         if !self.entries.is_empty() {
             check_limits(
