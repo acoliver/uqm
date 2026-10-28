@@ -157,7 +157,18 @@ fn macro_handlers_expand_every_registered_definition() {
         }
     }
     for (file, name) in macros::HANDLERS {
-        let source = syn::parse_file(&fs::read_to_string(root.join(file)).unwrap()).unwrap();
+        let mut locations = vec![root.join(file)];
+        locations.extend(
+            fs::read_dir(root.join("crates"))
+                .unwrap()
+                .map(|entry| entry.unwrap().path().join(file)),
+        );
+        let locations: Vec<_> = locations
+            .into_iter()
+            .filter(|path| path.is_file())
+            .collect();
+        assert_eq!(locations.len(), 1, "one source authority for {file}");
+        let source = syn::parse_file(&fs::read_to_string(&locations[0]).unwrap()).unwrap();
         let mut found = Macros(Vec::new());
         found.visit_file(&source);
         let m = found
@@ -693,4 +704,17 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
     assert_eq!(other.report("bridge_calls", None).unwrap(), 0);
     assert_eq!(other.report("module_edges", None).unwrap(), 1);
     assert_eq!(other.report("planned.uqm-modes", None).unwrap(), 1);
+}
+
+#[test]
+fn reviewed_macro_handlers_follow_crate_source_moves() {
+    let m = fixture(&[
+        ("src/lib.rs", "#[path = \"../crates/engine/src/collections/hash_table.rs\"] mod table;"),
+        ("crates/engine/src/collections/hash_table.rs", "macro_rules! define_hash_table { () => { pub static mut TABLE: u8 = 0; }; } define_hash_table!();")
+    ], None, false);
+    assert_eq!(m.report("static_mut", None).unwrap(), 1);
+    assert!(m.handlers.contains(&(
+        "src/collections/hash_table.rs".into(),
+        "define_hash_table".into()
+    )));
 }

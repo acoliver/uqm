@@ -408,9 +408,10 @@ impl<'a> Visit<'a> for Walker {
                     let file = self
                         .context
                         .file
-                        .strip_prefix("src/")
-                        .map(|f| format!("src/{f}"))
-                        .unwrap_or_else(|| self.context.file.clone());
+                        .strip_prefix("crates/")
+                        .and_then(|path| path.split_once('/').map(|(_, source)| source))
+                        .unwrap_or(&self.context.file)
+                        .to_string();
                     let registered = self
                         .handlers
                         .iter()
