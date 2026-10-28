@@ -161,23 +161,27 @@ fn real_failures_known_bugs_and_expected_failures_remain_distinct() {
 #[test]
 fn counts_comparison_rejects_mismatch_missing_and_malformed_fields() {
     let directory = temporary();
-    let actual = directory.path().join("actual.toml");
-    let golden = directory.path().join("golden.toml");
+    let actual = directory.path().join("actual");
+    let golden = directory.path().join("golden");
     let rows = BTreeMap::from([("script".into(), success_counts())]);
     let text = counts::encode(&rows).unwrap();
-    fs::write(&actual, &text).unwrap();
-    assert!(counts::compare_files(&actual, &golden).is_err());
-    fs::write(&golden, &text).unwrap();
-    counts::compare_files(&actual, &golden).unwrap();
-    fs::write(&actual, text.replace("input_seen = 3", "input_seen = 4")).unwrap();
-    assert!(counts::compare_files(&actual, &golden).is_err());
+    write(&actual.join("script.toml"), text.as_bytes()).unwrap();
+    assert!(counts::compare_directories(&actual, &golden).is_err());
+    write(&golden.join("script.toml"), text.as_bytes()).unwrap();
+    counts::compare_directories(&actual, &golden).unwrap();
+    write(
+        &actual.join("script.toml"),
+        text.replace("input_seen = 3", "input_seen = 4").as_bytes(),
+    )
+    .unwrap();
+    assert!(counts::compare_directories(&actual, &golden).is_err());
     for text in [
         text.replace("terminal = \"success\"\n", ""),
         text.replace("input_seen = 3", "input_seen = \"3\""),
         text.replace("TapReleasePending", "DifferentPhase"),
     ] {
-        fs::write(&actual, text).unwrap();
-        assert!(counts::compare_files(&actual, &golden).is_err());
+        write(&actual.join("script.toml"), text.as_bytes()).unwrap();
+        assert!(counts::compare_directories(&actual, &golden).is_err());
     }
     assert!(counts::decode("").is_err());
     assert!(counts::decode("[[scenario]]\nname='missing'\n").is_err());
@@ -224,13 +228,21 @@ fn compressed_phases_reject_bad_indices_shapes_and_counter_overflow() {
 #[test]
 fn counts_difference_identifies_first_exact_sample_without_dumping_inventory() {
     let directory = temporary();
-    let actual = directory.path().join("actual.toml");
-    let expected = directory.path().join("expected.toml");
+    let actual = directory.path().join("actual");
+    let expected = directory.path().join("expected");
     let mut rows = BTreeMap::from([("script".into(), success_counts())]);
-    fs::write(&expected, counts::encode(&rows).unwrap()).unwrap();
+    write(
+        &expected.join("script.toml"),
+        counts::encode(&rows).unwrap().as_bytes(),
+    )
+    .unwrap();
     rows.get_mut("script").unwrap().action_phases[1].phase = "DifferentPhase".into();
-    fs::write(&actual, counts::encode(&rows).unwrap()).unwrap();
-    let report = counts::compare_files(&actual, &expected).unwrap_err();
+    write(
+        &actual.join("script.toml"),
+        counts::encode(&rows).unwrap().as_bytes(),
+    )
+    .unwrap();
+    let report = counts::compare_directories(&actual, &expected).unwrap_err();
     assert!(
         report.contains("script")
             && report.contains("sample 1")

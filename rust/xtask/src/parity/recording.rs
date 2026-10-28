@@ -57,7 +57,7 @@ pub(super) fn record(
             counts_with_cache(
                 &context,
                 manifest,
-                &context.out.join("parity/counts.toml"),
+                &context.out.join("parity/counts"),
                 cached,
                 failed,
             ),
@@ -239,7 +239,7 @@ fn counts_with_cache(
             errors.push(format!("expectation references missing scenario {name}"));
         }
     }
-    write(out, counts::encode(&rows)?.as_bytes())?;
+    counts::write_directory(out, &rows)?;
     errors_result(errors)
 }
 

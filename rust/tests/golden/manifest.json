@@ -49,9 +49,757 @@
       "bytes": 2406079,
       "sha256": "74e93d0955403d538f77e6bd857a9d2bbef8c8d41bad9d8372a72321c113ce12"
     },
-    "parity/counts.toml": {
-      "bytes": 74350679,
-      "sha256": "9a5c4e285d1db54315c47a7be047dd1b776d661261fa002f567f3a6e07abcb73"
+    "parity/counts/battle-v1.toml": {
+      "bytes": 48088,
+      "sha256": "f7fb1e28318567fb4248be6e401b8877965792646fa85e7038b8d22873272200"
+    },
+    "parity/counts/campaign-s01-funded-sol.toml": {
+      "bytes": 193038,
+      "sha256": "48d125e0ccf577e84c1df7fb44b60a479dbd658bc69ee72c620b4ef234e5a6e8"
+    },
+    "parity/counts/campaign-s02-spindle-pkunk.toml": {
+      "bytes": 514944,
+      "sha256": "532454d9bb8b5286cedd78b4b5f9bc8864b46f992b36a3dea44924810570c8c2"
+    },
+    "parity/counts/campaign-s03a-north-ready.toml": {
+      "bytes": 469746,
+      "sha256": "3ffd5eba3a6974f7a9c95dbafe7f3f08df360bf2a9f8f62a3bf3cf32c0083535"
+    },
+    "parity/counts/campaign-s03b-broken-ultron.toml": {
+      "bytes": 2828500,
+      "sha256": "b887fa22a14a1c2bfc697bc9ce256a26f03b2c67911c9d736f5f6ee189d788b5"
+    },
+    "parity/counts/campaign-s03c-thraddash-diverted.toml": {
+      "bytes": 1038732,
+      "sha256": "9ce0bac7931621e4b0e8b84f2748e25f768c80c86e467cd67de7c8c9cbc9f6ae"
+    },
+    "parity/counts/campaign-s03d-north-artifacts.toml": {
+      "bytes": 191255,
+      "sha256": "db3c6c8c0eedd675c0ff4654f7fc4b6cb8e2047de6e14ea16c873db95c6d6073"
+    },
+    "parity/counts/campaign-s04a-north-refueled.toml": {
+      "bytes": 931691,
+      "sha256": "4b947d98b290edb108b1fd036ee170f8e61ed0b04b6619d290d9edab8974077d"
+    },
+    "parity/counts/campaign-s04b-burvixese-caster.toml": {
+      "bytes": 1537720,
+      "sha256": "c67a37c5c790d848a66d9b0de9084b098e253dc2711c59dda0c93f13db13ca65"
+    },
+    "parity/counts/campaign-s04c-ilwrath-approach.toml": {
+      "bytes": 1109568,
+      "sha256": "18a568c6635a7296475ce954442dd9d17990825ed0b0209ab1cfa46354f51ba4"
+    },
+    "parity/counts/campaign-s04d-caster-diversion.toml": {
+      "bytes": 45283,
+      "sha256": "45faa82b3fea625cf8213320ddba67bc7902aa2917707b5abe9d1958f2de90ab"
+    },
+    "parity/counts/campaign-s05a-south-refueled.toml": {
+      "bytes": 515004,
+      "sha256": "d5e3155ed864766bb0369618b6b6fc7c7212a8f0af4705204cf6aa1abaf67320"
+    },
+    "parity/counts/campaign-s05b-repaired-ultron.toml": {
+      "bytes": 1394545,
+      "sha256": "5d5a33d3542c2ff23d37ed8551acd32d3a621a05a62a0e70a78dee792fa20b2b"
+    },
+    "parity/counts/campaign-s06a-utwig-alliance.toml": {
+      "bytes": 748527,
+      "sha256": "b3372f6a257ca829fe97bb0fdd4a68cb15478b292882b33a666e949a6bc76381"
+    },
+    "parity/counts/campaign-s06b-bomb-approach.toml": {
+      "bytes": 200430,
+      "sha256": "4fb57a1dc351dbe1cab9dd6b9410dfd24f73ab6563e059a410bd001bca706e86"
+    },
+    "parity/counts/campaign-s06c-utwig-bomb.toml": {
+      "bytes": 80389,
+      "sha256": "9159d08ed4a18c292f276a28b574f1bd9bb698f3c58d6634a83779a90544ac85"
+    },
+    "parity/counts/campaign-s07-taalo-protected.toml": {
+      "bytes": 1311411,
+      "sha256": "2075b3625737953f0b9e65f0a93639f689275f7389915793079cc2359ad9449e"
+    },
+    "parity/counts/campaign-s07a-bomb-refueled.toml": {
+      "bytes": 445925,
+      "sha256": "2d28c77c1ad610af910f0dbc2ac978a04928f12a524426cc9eb1e0b54f5056b1"
+    },
+    "parity/counts/campaign-s07b-west-refueled.toml": {
+      "bytes": 843597,
+      "sha256": "be3836bf4416621281331cb6e715e7807b6ac06021ec8f4fa17f5f86913b6298"
+    },
+    "parity/counts/campaign-s07c-war-cleared.toml": {
+      "bytes": 8805853,
+      "sha256": "5bd871376beec2d7ca8d1ed930c24a707a331457ed0d013884a622406a5f3e7d"
+    },
+    "parity/counts/campaign-s07d-southeast-staging.toml": {
+      "bytes": 113713,
+      "sha256": "c3430a6283641d60aae3db26cf7f470fb66fcf7ada2d1ed63612db6b6eebfb8f"
+    },
+    "parity/counts/campaign-s07e-portal-staging.toml": {
+      "bytes": 394824,
+      "sha256": "7261eb219eebe86fba061b8b0a86b860381fc08bb4b843b6ea3cfa31d49405e3"
+    },
+    "parity/counts/campaign-s07f-portal-sol.toml": {
+      "bytes": 1621319,
+      "sha256": "f71a766d84bbdaa6a3001f6217dda55d98edcb66ba74841ef15516d94ff93790"
+    },
+    "parity/counts/campaign-s07g-starbase-armed.toml": {
+      "bytes": 166105,
+      "sha256": "d3c8a69d02a743de1009f7199ceadadfbf7be9a17807e022dff82d656d17f855"
+    },
+    "parity/counts/campaign-s07h-connected-taalo.toml": {
+      "bytes": 608193,
+      "sha256": "2745c2b4f8055e838d438a2c92b08005bf52dfa8532c72e885e35bc3bb8247af"
+    },
+    "parity/counts/campaign-s08-talking-pet.toml": {
+      "bytes": 1706117,
+      "sha256": "95f7e258601b08aa4949b03a1c096a0db9eb0e2d539457c1010fcd8616e28d95"
+    },
+    "parity/counts/campaign-s08a-arilou-home.toml": {
+      "bytes": 1653463,
+      "sha256": "c01f7fd189821020136ca2115c2432465c516c52f54fcc94211b020d13b2f9f3"
+    },
+    "parity/counts/campaign-s08a-refitted.toml": {
+      "bytes": 749893,
+      "sha256": "eef6760e155031953ce628bb18e06a52172310d4b07dbf7d2488c69813ffdece"
+    },
+    "parity/counts/campaign-s08b-crew-ready.toml": {
+      "bytes": 260056,
+      "sha256": "69a6a52861b05137ba5d3093929d2a98471ce360e54b49b74e4cc98b58850282"
+    },
+    "parity/counts/campaign-s08c-pkunk-resupply.toml": {
+      "bytes": 313460,
+      "sha256": "ac77a8bcdcde731ab385a5fb35cc3e7c94a04ed4b32787c063207a4b545ee5f7"
+    },
+    "parity/counts/campaign-s08d-fueled-crew.toml": {
+      "bytes": 393431,
+      "sha256": "dffbba13e079ca2aad37cb59dadfc9efc90ded7914311e566095a3eb2de16c29"
+    },
+    "parity/counts/campaign-s08e-portal-approach.toml": {
+      "bytes": 463995,
+      "sha256": "5261b653083cf88765a4f28e0d2caea7bbabe410bbf343909d46e9b9c8f72ffd"
+    },
+    "parity/counts/campaign-s08f-portal-roundtrip.toml": {
+      "bytes": 1587618,
+      "sha256": "5f04385ab0317dd0c7dcffd5aafc4f1fb94fe54e98d675d3871fab8f72bde9cb"
+    },
+    "parity/counts/campaign-s08g-funded-fleet.toml": {
+      "bytes": 745831,
+      "sha256": "d6e136093f673201258e5189066fd98fa9dc03c6f5bfacac2201f1daf3bfd873"
+    },
+    "parity/counts/campaign-s08h-full-drives.toml": {
+      "bytes": 680505,
+      "sha256": "cc72839cef28e906fe23da63b50038d37db97257eb6515a44f4a39640c334ea9"
+    },
+    "parity/counts/campaign-s08i-connected-arilou.toml": {
+      "bytes": 884273,
+      "sha256": "d75e55eb2b041f983009fa8d3e91e6263658b3649cbca74c01a3fc3636deb27b"
+    },
+    "parity/counts/campaign-s08j-connected-talking-pet.toml": {
+      "bytes": 901968,
+      "sha256": "6c4d563de64bce3a2fea3b9a9f1ad0ed9b4e61fd97a07b01b320d5f4331ea2c7"
+    },
+    "parity/counts/campaign-s08k-rainbow-funding.toml": {
+      "bytes": 708701,
+      "sha256": "b1057c2a5ae564668c4ef65884dd9ec6ce542786b70258763e42e4fc430ad915"
+    },
+    "parity/counts/campaign-s08l-umgah-fleet.toml": {
+      "bytes": 971638,
+      "sha256": "bdb53104098a6342617b8cc9d4a23ff1b9239e761f4407f4b86aa8b0f60b61aa"
+    },
+    "parity/counts/campaign-s08m-protected-pet-fleet.toml": {
+      "bytes": 1554991,
+      "sha256": "d294d1bd116dc0e2d535877a483c091b8053aaf4d2046a3f658c64dcb89a56b5"
+    },
+    "parity/counts/campaign-s09a-shattered-knowledge.toml": {
+      "bytes": 610526,
+      "sha256": "62de0e9dc137ac3d18266286bf3f812d4c92067b33debfb4e046609d80c6d55b"
+    },
+    "parity/counts/campaign-s09b-syreen-shuttle.toml": {
+      "bytes": 2278989,
+      "sha256": "4432105c3d76ae68306d6b31f7f45d859a01d5e7545013b1ece9ba7c95cea615"
+    },
+    "parity/counts/campaign-s09c-syreen-vault.toml": {
+      "bytes": 343364,
+      "sha256": "37bc4888ab5616cdd80e4697c4fadb6513e6594bf910dc0459eb4a02a8c00635"
+    },
+    "parity/counts/campaign-s09d-syreen-ambush.toml": {
+      "bytes": 337072,
+      "sha256": "dcf52cea69688eec3c7ca229d84260cd90090b0947da40bd96bc93abafe40eb9"
+    },
+    "parity/counts/campaign-s09e-funded-knowledge.toml": {
+      "bytes": 1244512,
+      "sha256": "87022b211bba752e7593070de19c5577b494413a45e4b3ce2d1ac56f1fdca2cc"
+    },
+    "parity/counts/campaign-s09f-funded-shuttle.toml": {
+      "bytes": 660373,
+      "sha256": "71c93c8d2e4e69df3e56287523e962ee32bc37825fef1d2849584e181f174267"
+    },
+    "parity/counts/campaign-s09g-funded-vault.toml": {
+      "bytes": 186867,
+      "sha256": "11976d76edd63d350598f2a6ea3944232071800a561bf0002d65db0971ec8818"
+    },
+    "parity/counts/campaign-s09h-rainbow-refuel.toml": {
+      "bytes": 610114,
+      "sha256": "a98e3ed19b07408706af099542e9d0ec24ecbc863b1d9c3234f618c20a026351"
+    },
+    "parity/counts/campaign-s09i-refueled-ambush.toml": {
+      "bytes": 247088,
+      "sha256": "e8ed32e138053bc7b4a3fd68f90dcd25504d1c686d6f49d6ebf837967af3442e"
+    },
+    "parity/counts/campaign-s09j-connected-shattered.toml": {
+      "bytes": 409468,
+      "sha256": "8e5587bb51d1dfef71ddeab22e6181eb6e28f922e11e544dd1036319b97d28aa"
+    },
+    "parity/counts/campaign-s09k-connected-syreen.toml": {
+      "bytes": 1029027,
+      "sha256": "60cf3bf500e2a5058c44b57c31943a3bd1c2e82bd06b257ff3a2424c8b741c4f"
+    },
+    "parity/counts/campaign-s09l-connected-vault.toml": {
+      "bytes": 580277,
+      "sha256": "f4ac7e2930833a4e2f5cb8e43fe0ce99f6ddc1c439a3a7b1789c1861ec78e50c"
+    },
+    "parity/counts/campaign-s09m-connected-ambush.toml": {
+      "bytes": 707899,
+      "sha256": "baaa80502b73eca7bd173d352c5e5207e6a2d4bab323e4438160a88bb39373c0"
+    },
+    "parity/counts/campaign-s09n-vault-resupply.toml": {
+      "bytes": 481500,
+      "sha256": "6ce948275e76579ced405f5470c254a6532682e36c9cc6d590b7f00db461fc3f"
+    },
+    "parity/counts/campaign-s10a-crew-refill.toml": {
+      "bytes": 332239,
+      "sha256": "d0da98dfc49043b5c6cd6c231b626194ef8616d135d10f1a4ee6cdb760797ba5"
+    },
+    "parity/counts/campaign-s10a-driven-ambush.toml": {
+      "bytes": 648686,
+      "sha256": "845d489db2a66ccbecd3d1a8558c34889f547fd45a4f1188154ec12d37413005"
+    },
+    "parity/counts/campaign-s10a-full-drives.toml": {
+      "bytes": 121643,
+      "sha256": "0f932c59c5383eb3123518574895837e7f97244a99030569633942ae8702fb50"
+    },
+    "parity/counts/campaign-s10a-lure-refuel.toml": {
+      "bytes": 298047,
+      "sha256": "2fbc71e7e61f96980e84fd0dcd68e29b568a08ff229ffb3955aa77386b40a0c1"
+    },
+    "parity/counts/campaign-s10a-mycon-lure.toml": {
+      "bytes": 383180,
+      "sha256": "c34925ee3e2e0228a76f963d20a7010f247c42e185c1d4e8a95251ea765ea9ef"
+    },
+    "parity/counts/campaign-s10c-fueled-lure.toml": {
+      "bytes": 284983,
+      "sha256": "7611c9ca618dd5ccf0ac762476bef45b906be20b7617b4b0d195cb97ec42d484"
+    },
+    "parity/counts/campaign-s10d-sun-device.toml": {
+      "bytes": 802154,
+      "sha256": "216f9577486d05c6c430be8b5ed84359b4a1e71244220184acbc410d5795e874"
+    },
+    "parity/counts/campaign-s10e-armed-flagship.toml": {
+      "bytes": 449118,
+      "sha256": "a39f2f267b8afb38c9db1b6432fee971c0f0b5641d60948e0fec8e9cacf02b55"
+    },
+    "parity/counts/campaign-s10f-sun-fleet.toml": {
+      "bytes": 173904,
+      "sha256": "f4b20d5a5651467363b21d6c54050e10a55277be6fdfb578c4c664f98577b40e"
+    },
+    "parity/counts/campaign-s10g-connected-lure.toml": {
+      "bytes": 1217415,
+      "sha256": "37b33e63e92a2615234e436a7c5daaa99474ca1b594237cdcb60201f2fdc1ff7"
+    },
+    "parity/counts/campaign-s10h-connected-lure-prep.toml": {
+      "bytes": 454540,
+      "sha256": "83d3f0e5e3e2946e71b00c6782760f63685020051a54b88e5d31f5f521f86273"
+    },
+    "parity/counts/campaign-s10j-connected-combat-prep.toml": {
+      "bytes": 180869,
+      "sha256": "e1acb7aa86b2f4851aa176c3988112b4d923bd0305d966f32d0bdd3d7468848f"
+    },
+    "parity/counts/campaign-s10k-connected-jugger-prep.toml": {
+      "bytes": 154535,
+      "sha256": "5a5dae2af1abd5036fb7b90bcd50c82e2947379170636631959e28bf190b3912"
+    },
+    "parity/counts/campaign-s10l-connected-sun-device.toml": {
+      "bytes": 476376,
+      "sha256": "1fe7215faa15a8ec85a8bee6008d2b9d229cb5fc7e63484d61115fe4d515f1f6"
+    },
+    "parity/counts/campaign-s11a-connected-chmmr.toml": {
+      "bytes": 816144,
+      "sha256": "120fd75af34e2fc762bb17b5276842bb4304d1b0ed8bba49c4b0ddfdf9959391"
+    },
+    "parity/counts/campaign-s11b-connected-final-fleet.toml": {
+      "bytes": 260475,
+      "sha256": "499cd4ee0e49c3740b2748e697698666c20d3bfd29b8d4ad9590498248198213"
+    },
+    "parity/counts/campaign-s12a-connected-samatra.toml": {
+      "bytes": 643594,
+      "sha256": "98f4463ed73eee87c4956c5e678f52d27248f0eb95cbdbc46911a887899cb512"
+    },
+    "parity/counts/campaign-s12b-connected-remnants.toml": {
+      "bytes": 408307,
+      "sha256": "b24449db7a99dfa568b08c27d294f0e2f3a19f6b77325928b778abe15256bd93"
+    },
+    "parity/counts/campaign-s13-connected-ending.toml": {
+      "bytes": 1636128,
+      "sha256": "0a1394b2f64b607ea544c011c8f1ee1d1a69e70d2e46051c1fb6e5ae9716f138"
+    },
+    "parity/counts/collect-moon-energy-v1.toml": {
+      "bytes": 72513,
+      "sha256": "85a015170299a8912bd0cdf099e199b1ced26c42d58aac0bc6714bbe06abf0ed"
+    },
+    "parity/counts/comm-encounter-v1.toml": {
+      "bytes": 385258,
+      "sha256": "184984cf4ba465ec064aee42cf662a6c9318b6f27347c0f6a2a69c105d1e5c2b"
+    },
+    "parity/counts/cyborg-encounter-v1.toml": {
+      "bytes": 242244,
+      "sha256": "6e7d636911f1a525e6eb294b2c84c8835466379aefb8256cbd69fe9c60d5058d"
+    },
+    "parity/counts/device-menu-probe.toml": {
+      "bytes": 14831,
+      "sha256": "50b4b6fb765daf8c8801c43c7e557752754aee8eebd62a5360679a63b5dc21f3"
+    },
+    "parity/counts/explore-planet-v1.toml": {
+      "bytes": 419515,
+      "sha256": "8fbdb692f13cae87daea1a2202a37d00ccb9925e0bd8dbe85c58864963b60ac4"
+    },
+    "parity/counts/first-open-load-empty-v1.toml": {
+      "bytes": 12625,
+      "sha256": "bd65f6c43d1ba9b353c1d6547afd2e6b583e4eb7eac42c5e99512bc8f4dd1862"
+    },
+    "parity/counts/first-open-load-populated-v1.toml": {
+      "bytes": 16944,
+      "sha256": "36e19d63eebe4d0e20ede7e59dbb68b6421eead9cb4256d2802aca81338f4a4d"
+    },
+    "parity/counts/fly-to-alpha-centauri-v1.toml": {
+      "bytes": 197853,
+      "sha256": "f3abb30babcdf934a60b65f56f37ccf4b8a6ce1c6b87bcda4dd3e915512bfd5d"
+    },
+    "parity/counts/hard-hang.toml": {
+      "bytes": 560,
+      "sha256": "c193728b1cdc8d1a6917738dfd41febaec51bf3ca2a6cc998ccc9d294d2d1b28"
+    },
+    "parity/counts/inactive-smoke.toml": {
+      "bytes": 565,
+      "sha256": "fd5e3843b6c48f2083bb4e0093c8c86be81e03417954f69ae87ad7e5fc9023f0"
+    },
+    "parity/counts/introduction-v1.toml": {
+      "bytes": 151253,
+      "sha256": "6e7eb19aa40772bf3894991bf6ff3c97ba74018c5ed3aca8b9b31edc232f225f"
+    },
+    "parity/counts/lander-destroyed-v1.toml": {
+      "bytes": 635629,
+      "sha256": "d72f05104f073b3f37e3cce3f09fefa7c49481cf7437c1b42ee838a4bf509414"
+    },
+    "parity/counts/linked-playable-v1.toml": {
+      "bytes": 34201,
+      "sha256": "ede9c9854fdcd0813c9fbea1a61c60cdb7b72ac28f6f7302abcd3c0184a262ca"
+    },
+    "parity/counts/load-alpha-centauri-v1.toml": {
+      "bytes": 12495,
+      "sha256": "cd7f5835aafc5fbf911fed2e511b6792bf6faa9b89472a9d303d393de7952de7"
+    },
+    "parity/counts/load-bomb-preguard-v1.toml": {
+      "bytes": 12430,
+      "sha256": "954265bc9216545513e1285db6c58291e7c06230aea200db950006c383c587de"
+    },
+    "parity/counts/load-bomb-refueled-v1.toml": {
+      "bytes": 12430,
+      "sha256": "9ca48bd8d95421a920175f7324f5aa17907b8e746f12db83fc826013382f34f1"
+    },
+    "parity/counts/load-broken-ultron-v1.toml": {
+      "bytes": 12430,
+      "sha256": "2727d5a30174f1f45437a42994f08eea230c0dec2f7afecc457cf67c80adf4ea"
+    },
+    "parity/counts/load-burvixese-caster-v1.toml": {
+      "bytes": 10830,
+      "sha256": "8c71f14d9f5e3d5b5ed3f228c800f6fc65b30c59106cb6e92e0cb07c16d32833"
+    },
+    "parity/counts/load-caster-diversion-v1.toml": {
+      "bytes": 12433,
+      "sha256": "ec7e67ec7c5b1f57790f7b99ddafef306ad7661662b17dce6ad7594d28954cf3"
+    },
+    "parity/counts/load-connected-ambush-v1.toml": {
+      "bytes": 5245,
+      "sha256": "35638e0565445219515f21f201ff9d821d1929ca2398f08249e34047c47d13b2"
+    },
+    "parity/counts/load-connected-arilou-v1.toml": {
+      "bytes": 5245,
+      "sha256": "7c8640dbcd1d7b14acdfd59b3f812bd570d3d0549a9cef36132f5b6f8122b4e1"
+    },
+    "parity/counts/load-connected-chmmr-bomb-v1.toml": {
+      "bytes": 5249,
+      "sha256": "86cfd221873949462ee3daa39b682c8272de39f109ef7cf65bf1a1293b29f5df"
+    },
+    "parity/counts/load-connected-combat-prep-v1.toml": {
+      "bytes": 5250,
+      "sha256": "16618e8634f0bdcf53d22807a5c478535c5ff2a016f5bd6322dee271b299722f"
+    },
+    "parity/counts/load-connected-final-fleet-v1.toml": {
+      "bytes": 5250,
+      "sha256": "b4595b9ca82bcdf03e3da6b3b3f8dc346a496a2a4313816d7f072e0800271f65"
+    },
+    "parity/counts/load-connected-full-drives-v1.toml": {
+      "bytes": 5250,
+      "sha256": "cd82d47aa48a3c03b5d28c5e49e0a06136ae37c5a157d3794e6bffeb24065a2d"
+    },
+    "parity/counts/load-connected-funded-fleet-v1.toml": {
+      "bytes": 6466,
+      "sha256": "f69975c106e1a635edc18aa9f24ee3a220c380e7ee650547eec7ab619e6d87c8"
+    },
+    "parity/counts/load-connected-jugger-prep-v1.toml": {
+      "bytes": 5250,
+      "sha256": "b64cfd09450935f5c7566a38343e9092c141b7312a71c1456d4ef0906b1fa011"
+    },
+    "parity/counts/load-connected-lure-prep-v1.toml": {
+      "bytes": 5248,
+      "sha256": "e7869d94c4eb09aeeaa70f8399f74b53faf480a8ba3bdab1d56f71285c7439ce"
+    },
+    "parity/counts/load-connected-lure-v1.toml": {
+      "bytes": 5243,
+      "sha256": "47d98be5fd67b37b17e826a2e26b997f54d4a0a85172744edd16d260920b67a5"
+    },
+    "parity/counts/load-connected-rainbow-funded-v1.toml": {
+      "bytes": 5253,
+      "sha256": "b04d8ddbd3b2b9d3cc593ccdd7f51de3abfdfd93e2069ddf0eb63f7df716c418"
+    },
+    "parity/counts/load-connected-samatra-distraction-v1.toml": {
+      "bytes": 5258,
+      "sha256": "dcf39519f88403432dae4111d07c7cd2c8f1896c40b0c106ea82399cd9447977"
+    },
+    "parity/counts/load-connected-samatra-remnants-v1.toml": {
+      "bytes": 5210,
+      "sha256": "afafa72d235d3ea4146df60c8195d1f1ff352e45bfcb3bb73eb256f1af4ca835"
+    },
+    "parity/counts/load-connected-shattered-v1.toml": {
+      "bytes": 5248,
+      "sha256": "e5edacd9e990b20fd94d038cae69053d37188dba74e87996f9134622cc7acd5d"
+    },
+    "parity/counts/load-connected-sun-device-v1.toml": {
+      "bytes": 5159,
+      "sha256": "fedee8433f1d2ec720c5a4c83f8f7c3a556dc0beffca0c66c9ba7343e84be44e"
+    },
+    "parity/counts/load-connected-syreen-v1.toml": {
+      "bytes": 5245,
+      "sha256": "80859604a26e6726d0580e134eadbce949e792bf40f6937986400eb681c2ede1"
+    },
+    "parity/counts/load-connected-taalo-v1.toml": {
+      "bytes": 5154,
+      "sha256": "40a638e01b881ff848d2bd075cffe965f75c72e3d195cfd85c13a36df0e86e1c"
+    },
+    "parity/counts/load-connected-talking-pet-v1.toml": {
+      "bytes": 5250,
+      "sha256": "a9a2a42cbdecab03a7b17459b605b188c6e24df30e64d70b02e7b2299757c605"
+    },
+    "parity/counts/load-connected-umgah-fleet-v1.toml": {
+      "bytes": 5250,
+      "sha256": "0fe3311001e4220343ba28719b87b06542389f0edaf203b7ebc9833e8a7bb52e"
+    },
+    "parity/counts/load-connected-vault-resupply-v1.toml": {
+      "bytes": 5253,
+      "sha256": "fe6f61cbf391d38acaefc6037c2c3390e8136a616cfe76796c481890c613ca73"
+    },
+    "parity/counts/load-connected-vault-v1.toml": {
+      "bytes": 5154,
+      "sha256": "938ba6bdf4c2cb03cb1cbff6eda5b1b10c286f804181d7c3114f810d10b4a268"
+    },
+    "parity/counts/load-funded-sol-v1.toml": {
+      "bytes": 12491,
+      "sha256": "6a8bb1e9eba3b941c6bb6242b72c8e5169140f4557b120e29d491043605fe0c6"
+    },
+    "parity/counts/load-ilwrath-approach-v1.toml": {
+      "bytes": 12433,
+      "sha256": "e2093554ce299dc657be5268a8f35278d1cbce3c360262db6fcef4ccdb83820a"
+    },
+    "parity/counts/load-north-artifacts-v1.toml": {
+      "bytes": 10829,
+      "sha256": "437beb6887cfa2866ae6c75a3b9187c0d19638c734b65484ad8488798834e4ec"
+    },
+    "parity/counts/load-north-ready-v1.toml": {
+      "bytes": 12428,
+      "sha256": "fe1340fee8044db84487d7c059df4f27647ca26a81c7c1982b4890d34b5b3012"
+    },
+    "parity/counts/load-north-refueled-v1.toml": {
+      "bytes": 12431,
+      "sha256": "5c5b31c1aa8e1c22ccce28cd6b2f8596d3e36d9c8e0f246d08bd38e4fba4e596"
+    },
+    "parity/counts/load-portal-sol-v1.toml": {
+      "bytes": 5239,
+      "sha256": "1d4b8af2ecb8467b2cdaf420243d8e311a220dc74b303ec7dbc5df07994eb5f4"
+    },
+    "parity/counts/load-portal-staging-v1.toml": {
+      "bytes": 5243,
+      "sha256": "1a6c888f737380eef91093229bf3d120f9d69fb985d9052e75cd660d40e30af2"
+    },
+    "parity/counts/load-repaired-ultron-v1.toml": {
+      "bytes": 12432,
+      "sha256": "9be60ef42577c061ffd1b2cee59b65009fe8a8fc6e8067d0d6a9b3aeb8713b66"
+    },
+    "parity/counts/load-save-v1.toml": {
+      "bytes": 109558,
+      "sha256": "816a5a97fee44a2913f8f63bd667a07b955bd1d77c7a4bc54f252dc2385f02aa"
+    },
+    "parity/counts/load-south-refueled-v1.toml": {
+      "bytes": 12431,
+      "sha256": "e6200fdd4775e70e8b94ca0cd0ad35d56c997063774c82d744fde4e00b45d18c"
+    },
+    "parity/counts/load-southeast-staging-v1.toml": {
+      "bytes": 5246,
+      "sha256": "1bf9db8a23e0b72da41a6873d3aefccce6ccabeae1815c7eba3b931c791c978e"
+    },
+    "parity/counts/load-spindle-pkunk-v1.toml": {
+      "bytes": 12430,
+      "sha256": "7f28ee533bbaa74287532c3540520669879b19c18861b6432f9a6cf4794664eb"
+    },
+    "parity/counts/load-starbase-armed-v1.toml": {
+      "bytes": 5243,
+      "sha256": "6e70a4835606a533bbe1d0dc595f7f85a5f59415ae50d1246b65b36574055a3d"
+    },
+    "parity/counts/load-thraddash-diverted-v1.toml": {
+      "bytes": 12435,
+      "sha256": "efc2a38b96e0845b4acf02bf089ec49404973c16bf8d2a43d28cb5cf0663495e"
+    },
+    "parity/counts/load-utwig-alliance-v1.toml": {
+      "bytes": 12431,
+      "sha256": "ca5715908dce748187819b998faf79d3d54c99d9b47a8e426e2145abd1cd8473"
+    },
+    "parity/counts/load-utwig-bomb-v1.toml": {
+      "bytes": 10824,
+      "sha256": "d5c2ccb978e745575a3eb6353f9a762ac5fe245b83bde14deb0d8f06115c201a"
+    },
+    "parity/counts/load-war-cleared-v1.toml": {
+      "bytes": 12428,
+      "sha256": "badbb1c60e8f6a39d3011b85fe438965cbfdb9c9d1ba00df68d9d7cb9dfa0b87"
+    },
+    "parity/counts/load-west-bomb-refueled-v1.toml": {
+      "bytes": 12435,
+      "sha256": "783b6e71c842848d8c7d0cc30ef91f1a0ff7129807899d2b49ff751bc58e1807"
+    },
+    "parity/counts/lost-battle-v1.toml": {
+      "bytes": 232396,
+      "sha256": "8aa2bbbb57a09dd99784b7c708b002194e4557fbb592ed158eecf4358f3b1cf6"
+    },
+    "parity/counts/main-menu-v1.toml": {
+      "bytes": 3469,
+      "sha256": "c0b93c5e243617b0b41c7f51ea4e059945792a2b5574132f85b2437992dd6bd5"
+    },
+    "parity/counts/mineral-sizes-v1.toml": {
+      "bytes": 63078,
+      "sha256": "be9034b948e040580066df43497432a315e53a76732008301b3501ed4187b19a"
+    },
+    "parity/counts/mode-main-menu-v1.toml": {
+      "bytes": 3534,
+      "sha256": "3d351e99183fbde1878aaba99bec6bcc393c16cd0e187eff2b5abec754dc5272"
+    },
+    "parity/counts/netplay-dialog-v1.toml": {
+      "bytes": 5395,
+      "sha256": "e5268b09e840bdfb3d7b55aee857a328b27a301bb9bf96be9a401faf5263e7e4"
+    },
+    "parity/counts/out-of-fuel-v1.toml": {
+      "bytes": 197670,
+      "sha256": "7de153166939890aee802e3767e09bc50e294fa0877a74ce9bf37cdf7fdf9327"
+    },
+    "parity/counts/parity-androsynth-blazer.toml": {
+      "bytes": 19669,
+      "sha256": "487b876947bc59d2fcf2cb1759155fc0dbfdcbbaa64b447965f8269d3c8c5dd8"
+    },
+    "parity/counts/parity-chmmr-satellites.toml": {
+      "bytes": 19668,
+      "sha256": "18db551f1999f0252f8a0d3f3ce40bbbb875d24401f15823ac3d7264f0f5fb81"
+    },
+    "parity/counts/parity-death-spawn.toml": {
+      "bytes": 19663,
+      "sha256": "5333d6d8d100bcba47aacc617a7559213f69b4d328fa3aad4a9785cf153cab12"
+    },
+    "parity/counts/parity-frame-sets.toml": {
+      "bytes": 19662,
+      "sha256": "8e4e395d3a3ddcc52f9f9893817ac6132b0979f203a0fdaeaf99a1c3e1b1dfa3"
+    },
+    "parity/counts/parity-melee-cyborg-a.toml": {
+      "bytes": 19595,
+      "sha256": "fbb22e6e096f40777d8db2df1a0aef5aaf63ee30a9f012315085b89f2c79bce3"
+    },
+    "parity/counts/parity-melee-cyborg-b.toml": {
+      "bytes": 19595,
+      "sha256": "88d4c41be0a67d9e0edb58d36ba70d7744ff4240f095225362c00e6fce10a180"
+    },
+    "parity/counts/parity-melee-cyborg-c.toml": {
+      "bytes": 19595,
+      "sha256": "6645d06ea2bc178be958a0b377bfa7d8f92b144859e7122b79a6ab1561f07baa"
+    },
+    "parity/counts/parity-melee-cyborg-d.toml": {
+      "bytes": 19595,
+      "sha256": "ca2eb58d9445f87fe60261ada33a94b30fdb231e66398f0b3c2a75d5b36873eb"
+    },
+    "parity/counts/parity-mixed-collision.toml": {
+      "bytes": 19667,
+      "sha256": "62bdedb4ed38fbb6eefb3ce6b4c35872540229ab46d058ba28729773e5929301"
+    },
+    "parity/counts/parity-new-game.toml": {
+      "bytes": 5256,
+      "sha256": "2ad44181d5b1d33676643e3be1d7abceeeb50b8ae887ddaa5b477876906773f0"
+    },
+    "parity/counts/parity-pkunk-rebirth.toml": {
+      "bytes": 19665,
+      "sha256": "396bffc218e6b6b0be38eb5416625d3cd9232ffcbc85e1591a8b6c41f6999b4d"
+    },
+    "parity/counts/parity-pool-full.toml": {
+      "bytes": 19661,
+      "sha256": "9cde649b942ac75ed6f9f9b4f914743ec8b617cf708748d5abb324bf3470e686"
+    },
+    "parity/counts/parity-samatra.toml": {
+      "bytes": 474161,
+      "sha256": "bdd0a9995cb5de2f31128637ab32286546372e80c2ccac72c81b921faf0b5a8a"
+    },
+    "parity/counts/parity-star-contact.toml": {
+      "bytes": 62686,
+      "sha256": "8d45da4830611cae69e4b6e68531fe8187c1b2a837c9936f5e06c8001fb0385f"
+    },
+    "parity/counts/pkunk-refuel-v1.toml": {
+      "bytes": 102925,
+      "sha256": "7cba2fb1f5db059c6656dd0ba63d4a83dbf279ef1afc3a919b516a920d700436"
+    },
+    "parity/counts/probe-encounter-v1.toml": {
+      "bytes": 411520,
+      "sha256": "91d8ba52c025c80781f7bafe30166e48f97000622276a2a23ccb6e7ea7cf625d"
+    },
+    "parity/counts/probe-encounter-v2.toml": {
+      "bytes": 423661,
+      "sha256": "4337e431feedbe428e0aede257761352115bd802bf07ec7d94a7788e391e5860"
+    },
+    "parity/counts/probe-encounter-v3.toml": {
+      "bytes": 334762,
+      "sha256": "adc7de4fb690a6d8e068c949eca473b87288241136d8831f1612c1ef53be520e"
+    },
+    "parity/counts/probe-encounter-v4.toml": {
+      "bytes": 347812,
+      "sha256": "90e468b2cca7450288c556e931c5753a807cd1da9dd31bffd8a948378288768e"
+    },
+    "parity/counts/probe-encounter-v5.toml": {
+      "bytes": 424908,
+      "sha256": "793277097eb84ef866a7febab5774bbb8aba820a739e2d2de93b25058d4fb7d3"
+    },
+    "parity/counts/probe-encounter-v6.toml": {
+      "bytes": 432060,
+      "sha256": "f195760f4304012f183150441238b55d9473058f2a5a0cd964eede936e711728"
+    },
+    "parity/counts/probe-encounter-v7.toml": {
+      "bytes": 434882,
+      "sha256": "24a778c9fc93577d6885c2fc13b50185d11fc60cde12626622cc15f6106da814"
+    },
+    "parity/counts/probe-encounter-wait.toml": {
+      "bytes": 362627,
+      "sha256": "3bdea005928e71cc47c9ac5bcab6eafa3d87265e108c65804c2deb914e6c308a"
+    },
+    "parity/counts/quit-v1.toml": {
+      "bytes": 3963,
+      "sha256": "399159a7b076986e80884dad5d5e7224b466561d0e1e6faf4000fd5a40d53bcb"
+    },
+    "parity/counts/real-sol-alliance-from-luna.toml": {
+      "bytes": 260415,
+      "sha256": "a67ef9c5aafaed2d04b4d35b104c05d4c2f5774cbaea488ba04f67862c6edfb9"
+    },
+    "parity/counts/real-sol-alliance-from-mercury.toml": {
+      "bytes": 355236,
+      "sha256": "ecc58f0b54b2b4ad87f576c340b4e489d5415f44c46b09f543a5fb4510f50cc9"
+    },
+    "parity/counts/real-sol-autopilot.toml": {
+      "bytes": 64242,
+      "sha256": "b844d87351cea07643e58ba2583bdb7bdc60767e55efd591a43e6e542b4dab97"
+    },
+    "parity/counts/real-sol-commander-completion.toml": {
+      "bytes": 379018,
+      "sha256": "05036af1ab57142dfb099063af9726e5d18e8250d5a5dcc7862799a4ce755753"
+    },
+    "parity/counts/real-sol-earth-orbit.toml": {
+      "bytes": 371243,
+      "sha256": "4c3340dfdf29128e3b12b76bbc318fd5be94f5209f4b473b7bf41d8bb11630f3"
+    },
+    "parity/counts/real-sol-luna-moonbase-departure.toml": {
+      "bytes": 380476,
+      "sha256": "b184ad3ae4af42f13c0a2649c9853accde4fa5ec6f0590481729ebfb44ff26ca"
+    },
+    "parity/counts/real-sol-mercury-radioactives.toml": {
+      "bytes": 410068,
+      "sha256": "f81074e33b4df5e928337852e6efc32e4b518dd877bb30202a1a63b9b983b4b2"
+    },
+    "parity/counts/real-sol-planetside-collision-proof.toml": {
+      "bytes": 224984,
+      "sha256": "40f213ccc133f1ded4877594a3019109d82b3ec67354f5c63b4e4f5827c0c8a0"
+    },
+    "parity/counts/real-sol-pluto-orbit-scan.toml": {
+      "bytes": 427714,
+      "sha256": "c2eeb7dd4bbb5fe5a3ff8e89f44228413194abb8e275308a1d99e6aee1270f4d"
+    },
+    "parity/counts/real-sol-probe-completion.toml": {
+      "bytes": 72512,
+      "sha256": "882e55b39550320d14b9749cda4b4d1f9f9a7b7d97a55294eaf1feef8fcc061b"
+    },
+    "parity/counts/real-sol-probe-held-seek-completion.toml": {
+      "bytes": 76545,
+      "sha256": "ca3fb35070db7576e63cf0c43641e7453c354835b6dfc5339709088cc3380f0c"
+    },
+    "parity/counts/real-sol-probe-to-commander-responses.toml": {
+      "bytes": 372917,
+      "sha256": "3852fc0353f0982557c4c861aeb7b77e472c75f71f64a8cef08ef5825201b6ba"
+    },
+    "parity/counts/real-sol-rust-planetside-smoke.toml": {
+      "bytes": 167731,
+      "sha256": "8d009a75d03756f1bd0a52499ff77dfa81d031feba0a146da78f371e3014cc7c"
+    },
+    "parity/counts/real-sol-starbase-alliance.toml": {
+      "bytes": 902644,
+      "sha256": "5b7b1a1c4ec6db2fb3829f15dddd8558c60260c7836c35856527fa8c3dad23e1"
+    },
+    "parity/counts/real-sol-starbase-to-mars.toml": {
+      "bytes": 172482,
+      "sha256": "7e5f277b86b8a4d72bf3e139f808fa2dd42297ed31e7248db7cf2c798524d72c"
+    },
+    "parity/counts/repro-comm-menu-initial.toml": {
+      "bytes": 7764,
+      "sha256": "2fc2f1409f48a91fc20390d56d885e89dd425b2448dc185f8f62ada299bcb641"
+    },
+    "parity/counts/repro-game-menu-initial.toml": {
+      "bytes": 7808,
+      "sha256": "db3cdaf11b34ea947e4335ca64f9138fb0953be7ef1115501a6868316311598c"
+    },
+    "parity/counts/repro-sol-probe-comm-ui.toml": {
+      "bytes": 3177,
+      "sha256": "601114da6490c022643509605689100904e741140fb36a1d4843665352181013"
+    },
+    "parity/counts/samatra-dev-fixture-v1.toml": {
+      "bytes": 767603,
+      "sha256": "ee41172e217118b02bc6badd582f3fd6212986006dce4e8e268e08752c50b92a"
+    },
+    "parity/counts/setup-menu-v1.toml": {
+      "bytes": 11588,
+      "sha256": "3a897214d9cbb35a2a39dd26c55e5fcb1da478170b1a72ab79a082f84ac3cfb8"
+    },
+    "parity/counts/sol-probe-scene-v1.toml": {
+      "bytes": 3172,
+      "sha256": "2d8c701e5c3f9c31ea889d0392c2306432e4a6707caa4fd6f131520d295ebb1f"
+    },
+    "parity/counts/starbase-visit-v1.toml": {
+      "bytes": 82068,
+      "sha256": "744627198799501e1ccde3a182a09aebc4060ea36638f2c3787907f52c2d3065"
+    },
+    "parity/counts/state-sync-v1.toml": {
+      "bytes": 3549,
+      "sha256": "925efb9ffa212fe862772eb4d556e8a8970d8298109a5331a62b3073f91a59d6"
+    },
+    "parity/counts/super-melee-mutual-loss-v1.toml": {
+      "bytes": 76803,
+      "sha256": "52ddd2b7447b2da20f3c0e626d6446620577b6218ec6d7714f669556716b5c3f"
+    },
+    "parity/counts/super-melee-v1.toml": {
+      "bytes": 101433,
+      "sha256": "2d332afc7e819d388bbf59df2ffbdad37947549397ed069e0799b155f60be35c"
+    },
+    "parity/counts/thraddash-guard-v1.toml": {
+      "bytes": 1143063,
+      "sha256": "df05b6929d6c9934bf8f2d4c2f1faed15da1266635f596f7732b253fee971a8d"
+    },
+    "parity/counts/watchdog-v1.toml": {
+      "bytes": 466,
+      "sha256": "4a04b94147d7a362f91b6c75d59b5ea0539e77599b178658be762cb211716c7b"
     },
     "parity/death-spawn/parity.fields": {
       "bytes": 11489072,

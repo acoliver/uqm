@@ -81,9 +81,8 @@ impl Options {
     pub fn output(&self, root: &Path, command: &str) -> PathBuf {
         self.out.clone().unwrap_or_else(|| {
             root.join(format!(
-                "tmp/verify/parity-{command}-{}{}",
-                std::process::id(),
-                if command == "counts" { ".toml" } else { "" }
+                "tmp/verify/parity-{command}-{}",
+                std::process::id()
             ))
         })
     }

@@ -2,6 +2,7 @@
 use super::*;
 
 const ENCODING: &str = "delta-dictionary-v1";
+const RUN_ENCODING: &str = "delta-dictionary-rle-v1";
 
 pub(super) fn storage_key(key: &str) -> bool {
     matches!(
@@ -10,11 +11,12 @@ pub(super) fn storage_key(key: &str) -> bool {
     )
 }
 
-pub(super) fn encode(table: &mut Table, phases: &[Phase]) -> Result<()> {
+pub(super) fn encode(table: &mut Table, phases: &[Phase], runs: bool) -> Result<()> {
     let mut actions = Dictionary::default();
     let mut names = Dictionary::default();
     let mut rows = Array::new();
     let mut previous = [0; 3];
+    let mut run = None;
     for phase in phases {
         let counters = [phase.input_seen, phase.present_seen, phase.step];
         let mut row = [0; 5];
@@ -25,10 +27,21 @@ pub(super) fn encode(table: &mut Table, phases: &[Phase]) -> Result<()> {
         }
         row[3] = actions.intern(&phase.action);
         row[4] = names.intern(&phase.phase);
-        rows.push(serde_json::to_string(&row).map_err(|error| error.to_string())?);
+        if runs {
+            match &mut run {
+                Some((previous, repeat)) if *previous == row => *repeat += 1_u64,
+                _ => {
+                    push_run(&mut rows, run.take())?;
+                    run = Some((row, 1));
+                }
+            }
+        } else {
+            rows.push(serde_json::to_string(&row).map_err(|error| error.to_string())?);
+        }
         previous = counters;
     }
-    table["phase_encoding"] = toml_edit::value(ENCODING);
+    push_run(&mut rows, run)?;
+    table["phase_encoding"] = toml_edit::value(if runs { RUN_ENCODING } else { ENCODING });
     table["action_names"] = toml_edit::value(actions.values);
     table["phase_names"] = toml_edit::value(names.values);
     table["action_phases"] = toml_edit::value(rows);
@@ -53,32 +66,54 @@ impl Dictionary {
     }
 }
 
-pub(super) fn decode(table: &Table) -> Result<Vec<Phase>> {
-    if table.get("phase_encoding").and_then(|item| item.as_str()) != Some(ENCODING) {
-        return Err("missing or unsupported phase encoding".into());
+fn push_run(rows: &mut Array, run: Option<([u64; 5], u64)>) -> Result<()> {
+    if let Some(run) = run {
+        rows.push(serde_json::to_string(&run).map_err(|error| error.to_string())?);
     }
+    Ok(())
+}
+
+pub(super) fn decode(table: &Table) -> Result<Vec<Phase>> {
+    let runs = match table.get("phase_encoding").and_then(|item| item.as_str()) {
+        Some(ENCODING) => false,
+        Some(RUN_ENCODING) => true,
+        _ => return Err("missing or unsupported phase encoding".into()),
+    };
     let actions = strings(table, "action_names")?;
     let names = strings(table, "phase_names")?;
     let rows = strings(table, "action_phases")?;
     let mut counters = [0_u64; 3];
-    rows.into_iter()
-        .map(|text| {
-            let row: [u64; 5] =
-                serde_json::from_str(text).map_err(|error| format!("phase row: {error}"))?;
+    let mut phases = Vec::new();
+    for text in rows {
+        let (row, repeat): ([u64; 5], u64) = if runs {
+            serde_json::from_str(text).map_err(|error| format!("phase run: {error}"))?
+        } else {
+            (
+                serde_json::from_str(text).map_err(|error| format!("phase row: {error}"))?,
+                1,
+            )
+        };
+        if repeat == 0 {
+            return Err("phase run must repeat at least once".into());
+        }
+        let action = lookup(&actions, row[3])?;
+        let phase = lookup(&names, row[4])?;
+        for _ in 0..repeat {
             for index in 0..3 {
                 counters[index] = counters[index]
                     .checked_add(row[index])
                     .ok_or("phase counter overflow")?;
             }
-            Ok(Phase {
+            phases.push(Phase {
                 input_seen: counters[0],
                 present_seen: counters[1],
                 step: counters[2],
-                action: lookup(&actions, row[3])?.to_string(),
-                phase: lookup(&names, row[4])?.to_string(),
-            })
-        })
-        .collect()
+                action: action.to_string(),
+                phase: phase.to_string(),
+            });
+        }
+    }
+    Ok(phases)
 }
 
 fn strings<'a>(table: &'a Table, key: &str) -> Result<Vec<&'a str>> {

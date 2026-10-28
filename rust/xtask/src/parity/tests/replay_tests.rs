@@ -223,14 +223,14 @@ fn recording_orchestrates_fresh_payloads_and_keeps_failures_out_of_goldens() {
         &root.join(GOLDEN)
     )
     .is_err());
-    record_counts(&context, &manifest, &root.join("counts.toml")).unwrap();
-    let rows = counts::decode(&fs::read_to_string(root.join("counts.toml")).unwrap()).unwrap();
+    record_counts(&context, &manifest, &root.join("counts")).unwrap();
+    let rows = counts::read_directory(&root.join("counts")).unwrap();
     assert_eq!(rows.len(), 1);
     let failed = BTreeSet::from(["fixture".to_owned()]);
     assert!(counts_with_cache(
         &context,
         &manifest,
-        &root.join("failed.toml"),
+        &root.join("failed-counts"),
         BTreeMap::new(),
         failed
     )
