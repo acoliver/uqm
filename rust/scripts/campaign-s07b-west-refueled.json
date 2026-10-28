@@ -248,6 +248,25 @@
       "count": 120
     },
     {
+      "action": "wait_for_communication_responses",
+      "minimum": 1,
+      "max_ticks": 500
+    },
+    {
+      "action": "select_response",
+      "phrase": "goodbye",
+      "max_ticks": 100
+    },
+    {
+      "action": "wait_for_communication_end",
+      "minimum_completions": 1,
+      "max_ticks": 500
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
       "action": "assert_state",
       "all": [
         {

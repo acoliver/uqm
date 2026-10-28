@@ -142,11 +142,6 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719
 
-[[expectation]]
-scenario = "campaign-s05b-repaired-ultron"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 [[expectation]]
 scenario = "campaign-s06c-utwig-bomb"
@@ -154,17 +149,7 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719
 
-[[expectation]]
-scenario = "campaign-s07-taalo-protected"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
-[[expectation]]
-scenario = "campaign-s07b-west-refueled"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 [[expectation]]
 scenario = "campaign-s08j-connected-talking-pet"
@@ -172,17 +157,7 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719
 
-[[expectation]]
-scenario = "campaign-s09b-syreen-shuttle"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
-[[expectation]]
-scenario = "campaign-s09g-funded-vault"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 [[expectation]]
 scenario = "campaign-s09i-refueled-ambush"
