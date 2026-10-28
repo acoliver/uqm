@@ -497,3 +497,14 @@ jefe and vibetools. Coverage inside xtask: jefe `xtask/src/toolchain.rs:114-128`
 coverage target: UQM before PR #282. No SHA pinning or self-referential proof: owner
 requirement, PR #282. References read: vybestack/llxprt-code-rs `main`,
 vybestack/llxprt-jefe at 9b7e09ca, acoliver/vibetools `branch-1` a6cb22e.
+
+### Stage B accessor unsafe budget (#756)
+
+`cargo xtask quality budget stage_b_access_unsafe <sum> --scope '<identity>=<value>' ...`
+records a finite phase-2 budget for exact `unsafe|unsafe_blocks|...` and
+`unsafe|unsafe_block_lines|...` identities. The sum includes both metrics. Only
+`engine/battle/access.rs`, `battle/context_access.rs` and the five record union
+decoders qualify. Wildcards and other metrics are rejected. Every unsafe block
+needs a SAFETY comment. The workspace `unsafe_lines`, `unsafe_fn` and
+`unsafe_fn_lines` ratchets remain in force. New or enlarged scopes still require
+owner approval; no baseline values are changed by adding this tool support.
