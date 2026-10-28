@@ -1,5 +1,6 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
 
+use uqm_rust::ships::races::init_melnorme;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -13,7 +14,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_melnorme() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
     fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
     fn InitDisplayList();
@@ -272,6 +272,7 @@ unsafe fn collide(pulse: *mut ELEMENT, target: *mut ELEMENT) {
         ptr::null_mut(),
         target,
         ptr::null_mut(),
+        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
     );
 }
 
@@ -363,7 +364,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
                     && d.cyborg_control.intelligence_func.is_some()
             );
             assert!(d.preprocess_func.is_none() && d.uninit_func.is_none());
-            assert!(d.data.is_null() && d.CodeRef.is_null());
+            assert!(d.data.is_null() && d.code_ref.is_null());
             // init_melnorme re-registers callbacks, without resetting loaded data.
             let mut loaded = FrameSet::new(26);
             let frame = loaded.frame(0);
@@ -667,6 +668,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     &mut point,
                     &mut obstacle,
                     &mut point,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
                 assert_ne!({ disp_q.tail }, old_tail);
                 let blast = element(disp_q.tail);
@@ -704,6 +706,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     &mut point,
                     &mut obstacle,
                     &mut point,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
                 assert_eq!(queue(), before);
                 assert_eq!((*e).__bindgen_anon_5.thrust_wait, 67);

@@ -45,7 +45,7 @@ impl ElementTable {
         }
     }
 
-    fn queue(&self) -> *mut QUEUE {
+    pub(super) fn queue(&self) -> *mut QUEUE {
         self.queue.as_ptr()
     }
 
@@ -80,6 +80,11 @@ impl ElementTable {
             slot: slot as u8,
             gen: self.generations[slot],
         })
+    }
+
+    pub fn contains(&self, id: ElementId) -> bool {
+        let slot = usize::from(id.slot);
+        self.allocated[slot] && self.generations[slot] == id.gen
     }
 
     #[inline]
@@ -126,7 +131,7 @@ impl ElementTable {
         self.id(handle)
     }
 
-    pub fn free(&mut self, id: ElementId) {
+    pub(crate) fn free(&mut self, id: ElementId) {
         let handle = self.raw(id);
         let slot = usize::from(id.slot);
         self.allocated[slot] = false;

@@ -7,13 +7,13 @@ use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
 mod collision_motion;
-pub(super) mod dispatch;
+pub(crate) mod dispatch;
 pub mod invoke_collision;
 pub mod invoke_element;
 pub mod invoke_race;
-mod primitives;
+pub(crate) mod primitives;
 mod queue_view;
-use primitives::{alloc_display_prim, free_display_prim, insert_prim_links};
+use primitives::insert_prim_links;
 
 const SKIP_COLLISION: u16 = NONSOLID as u16 | DISAPPEARING as u16;
 const COLLISION_BIT: u16 = COLLISION as u16;
@@ -691,51 +691,13 @@ pub(crate) mod engine {
         })
     }
 
-    impl Cx<'_> {
-        pub fn alloc_element(&mut self) -> Option<ElementId> {
-            // SAFETY: the battle exclusively owns its initialized primitive pool.
-            unsafe {
-                let handle = if let Some(id) = self.b.elements.alloc() {
-                    let index = DisplayFreeList;
-                    if index == END {
-                        crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
-                        libc::exit(libc::EXIT_FAILURE);
-                    }
-                    let index = alloc_display_prim(
-                        (&raw mut DisplayArray).cast(),
-                        &raw mut DisplayFreeList,
-                    );
-                    self.b.elements[id].PrimIndex = index;
-                    (*primitive(index)).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                    self.b.elements.raw(id)
-                } else {
-                    ptr::null_mut()
-                };
-                crate::collections::observation::record(
-                    crate::collections::observation::Event::Allocate(handle as usize),
-                );
-
-                self.b.elements.id(handle)
-            }
-        }
-    }
-
     /// # Safety
     /// `handle` is null or an unlinked allocated element from `disp_q`.
     #[no_mangle]
     pub unsafe extern "C" fn FreeElement(handle: HELEMENT) {
         crate::app::bridge::enter(|cx| {
             if let Some(id) = cx.b.elements.id(handle) {
-                let index = cx.b.elements[id].PrimIndex;
-                free_display_prim(
-                    (&raw mut DisplayArray).cast(),
-                    &raw mut DisplayFreeList,
-                    index,
-                );
-                crate::collections::observation::record(
-                    crate::collections::observation::Event::Free(handle as usize),
-                );
-                cx.b.elements.free(id);
+                cx.dispose(id);
             }
         });
     }
@@ -1053,6 +1015,7 @@ pub use engine::{
 
 #[cfg(test)]
 mod tests {
+    use super::primitives::{alloc_display_prim, free_display_prim};
     use super::*;
 
     #[test]

@@ -2,22 +2,9 @@
 
 use super::*;
 
-pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R {
-    crate::collections::observation::observe(callback, parent);
-    call()
-}
+pub(crate) use crate::engine::battle::access::invoke;
 
-/// # Safety
-/// `call` may use only live legacy storage and must retain no record reference.
-pub(crate) unsafe fn invoke_legacy<R>(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    callback: usize,
-    parent: usize,
-    call: impl FnOnce() -> R,
-) -> R {
-    // SAFETY: publishing suspends context access until the legacy invocation returns.
-    unsafe { invoke(callback, parent, || crate::app::bridge::publish(cx, call)) }
-}
+pub(crate) use crate::engine::battle::access::invoke_legacy;
 
 pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
     crate::collections::observation::record(crate::collections::observation::Event::Spawn {

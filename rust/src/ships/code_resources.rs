@@ -68,7 +68,7 @@ pub(crate) mod engine {
 
     use crate::ships::races::probe_native::engine::init_probe;
     // Resource IDs follow uqm.rmp's SHIP values, not SPECIES_ID ordering.
-    const INITIALIZERS: [Option<Initializer>; 28] = [
+    pub(crate) const INITIALIZERS: [Option<Initializer>; 28] = [
         None,
         Some(init_arilou),
         Some(init_black_urquan),
@@ -99,6 +99,57 @@ pub(crate) mod engine {
         Some(init_probe),
     ];
 
+    /// # Safety
+    /// Call on the game thread; the returned template borrows loaded global resources.
+    pub unsafe fn descriptor(species: u32) -> RACE_DESC {
+        // SAFETY: The caller owns the game-thread resource context and retains all descriptor resources.
+
+        if let Some(race) = crate::ships::races::race(species) {
+            return (race.descriptor)().raw;
+        }
+        const CODE_BY_SPECIES: [usize; 29] = [
+            usize::MAX,
+            1,
+            4,
+            6,
+            11,
+            12,
+            13,
+            15,
+            16,
+            18,
+            21,
+            22,
+            23,
+            8,
+            5,
+            7,
+            10,
+            14,
+            19,
+            20,
+            24,
+            17,
+            2,
+            0,
+            3,
+            9,
+            26,
+            25,
+            27,
+        ];
+        let code = *CODE_BY_SPECIES
+            .get(species as usize)
+            .unwrap_or_else(|| panic!("{}", "known species"));
+        let init = crate::ships::code_resources::engine::INITIALIZERS
+            .get(code)
+            .and_then(|f| *f)
+            .unwrap_or_else(|| panic!("{}", "legacy species initializer"));
+        crate::engine::battle::access::descriptor_template(init)
+            .unwrap_or_else(|| panic!("legacy initializer returned no descriptor"))
+            .raw
+    }
+
     unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
         let which = libc::atoi(ship_id) as u8;
         let mut allocation = rust_hmalloc(mem::size_of::<RACE_DESC>());
@@ -107,25 +158,22 @@ pub(crate) mod engine {
             22 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_VUX_ID),
             _ => None,
         };
-        if let Some(race) = native {
-            allocation.cast::<RACE_DESC>().write((race.descriptor)());
-            (*out).ptr = allocation;
-            return;
-        }
-        let desc = if let Some(Some(init)) = INITIALIZERS.get(which as usize) {
-            init()
+        let descriptor = if let Some(race) = native {
+            Some((race.descriptor)())
+        } else if let Some(Some(init)) = INITIALIZERS.get(which as usize) {
+            crate::engine::battle::access::descriptor_template(*init)
         } else {
             crate::log_abi::log_message(
                 3,
                 &format!("Unknown SHIP identifier '{}'", c_int::from(which)),
             );
-            ptr::null_mut()
+            None
         };
-        if desc.is_null() {
+        if let Some(descriptor) = descriptor {
+            allocation.cast::<RACE_DESC>().write(descriptor.raw);
+        } else {
             rust_hfree(allocation);
             allocation = ptr::null_mut();
-        } else {
-            allocation.cast::<RACE_DESC>().write(*desc);
         }
         (*out).ptr = allocation;
     }

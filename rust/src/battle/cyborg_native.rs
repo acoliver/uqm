@@ -140,7 +140,6 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::process_native::dispatch::battle_input;
-    use crate::battle::process_native::invoke_race::{invoke_intelligence, invoke_weapon};
     use crate::collections::observation::image;
     use crate::ships::native::abi::*;
     const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
@@ -468,7 +467,11 @@ pub(crate) mod engine {
         let mut owner = std::ptr::null_mut();
         GetElementStarShip(&mut moved, &mut owner);
         let mut weapons = [std::ptr::null_mut(); 6];
-        let count = invoke_weapon(owner as usize, &mut moved, weapons.as_mut_ptr());
+        let count = crate::engine::battle::Cx::invoke_weapon(
+            owner as usize,
+            &mut moved,
+            weapons.as_mut_ptr(),
+        );
         let mut remaining = count;
         let mut index = 0usize;
         while remaining != 0 {
@@ -1185,7 +1188,7 @@ pub(crate) mod engine {
             h = next;
         }
 
-        invoke_intelligence(
+        crate::engine::battle::Cx::invoke_intelligence(
             owner as usize,
             &mut ship_copy,
             concerns.as_mut_ptr(),

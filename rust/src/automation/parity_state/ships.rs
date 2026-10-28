@@ -181,7 +181,7 @@ impl<'a> Race<'a> {
             assets,
             custom,
             callbacks: race.callbacks(),
-            code_loaded: !race.CodeRef.is_null(),
+            code_loaded: !race.code_ref.is_null(),
         }
     }
 

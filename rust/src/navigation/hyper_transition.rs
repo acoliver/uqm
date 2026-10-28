@@ -1,6 +1,5 @@
 //! Hyperspace collision and transition callbacks.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
 use super::globals::GlobData;
 use super::hyperspace::live::{height, logx, logy, primitive, universe_x, universe_y, width};
@@ -8,7 +7,7 @@ use super::{get, set};
 use crate::planets::starmap::{star_array, CurStarDescPtr};
 use std::{mem, ptr};
 
-pub(super) unsafe fn element_universe(element: *const ELEMENT) -> POINT {
+pub(crate) unsafe fn element_universe(element: *const ELEMENT) -> POINT {
     POINT {
         x: universe_x(
             GlobData.SIS_state.log_x + (*element).next.location.x as i32 - (width() >> 1),
@@ -109,7 +108,7 @@ pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
             GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
             match (*element).__bindgen_anon_4.turn_wait {
                 0 => {
-                    SaveSisHyperState();
+                    save_sis_hyper_state();
                     GlobData.Game_state.CurrentActivity |= START_ENCOUNTER as u16;
                 }
                 1 => interplanetary(element),
@@ -123,7 +122,7 @@ pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
     }
     crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).current.image.frame, index));
 }
-pub(super) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, kind: u8) {
+pub(crate) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, kind: u8) {
     let dx = (((*source).next.location.x as i32 - (*ship).next.location.x as i32) << 5) as i16;
     let dy = (((*source).next.location.y as i32 - (*ship).next.location.y as i32) << 5) as i16;
     (*ship).state_flags |= NONSOLID as u16;
@@ -273,61 +272,11 @@ pub(super) unsafe fn sis_element() -> HELEMENT {
 }
 /// # Safety
 /// Game-thread access to the live flagship queue and world state.
-pub unsafe fn SaveSisHyperState() {
+pub unsafe fn save_sis_hyper_state() {
     let element = sis_element().cast::<ELEMENT>();
     if element.is_null() {
         return;
     }
     let ship = (*element).pParent.cast::<STARSHIP>();
     GlobData.Game_state.ShipFacing = (*ship).ShipFacing + 1;
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct StarContact {
-    address: usize,
-    position: crate::graphics::native_abi::POINT,
-    current: bool,
-}
-impl crate::engine::battle::Cx<'_> {
-    fn portal_counter(&self) -> u8 {
-        // SAFETY: story state is accessed only on the game thread.
-        get("PORTAL_COUNTER")
-    }
-    fn autopilot(&self) -> crate::graphics::native_abi::POINT {
-        // SAFETY: this is a value projection of the game-thread-owned world.
-        unsafe { GlobData.Game_state.autopilot }
-    }
-    fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
-        let element = self.b.elements.raw(id).cast();
-        // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
-        unsafe {
-            let mut point = element_universe(element);
-            let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
-            assert!(!star.is_null(), "star collision has no catalog entry");
-            StarContact {
-                address: star as usize,
-                position: (*star).star_pt,
-                current: star.cast() == CurStarDescPtr,
-            }
-        }
-    }
-    fn select_star(&mut self, contact: Option<StarContact>) {
-        // SAFETY: catalog addresses originate only in star_contact; None clears selection.
-        unsafe {
-            CurStarDescPtr = contact.map_or(ptr::null_mut(), |c| c.address as *mut _);
-        }
-    }
-    fn init_hyper_transition(
-        &mut self,
-        source: crate::engine::battle::ElementId,
-        ship: crate::engine::battle::ElementId,
-        kind: u8,
-    ) {
-        let source = self.b.elements.raw(source).cast();
-        let ship = self.b.elements.raw(ship).cast();
-        // SAFETY: checked elements remain live and no record references cross the call.
-        unsafe {
-            init_transition(source, ship, kind);
-        }
-    }
 }

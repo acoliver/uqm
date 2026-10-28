@@ -100,6 +100,8 @@ pub(crate) mod engine {
     static mut CHMMR_DESC: RACE_DESC = descriptor();
 
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread before descriptor template mutation or resource cleanup.
     pub unsafe extern "C" fn init_chmmr() -> *mut RACE_DESC {
         CHMMR_DESC.preprocess_func = Some(chmmr_preprocess);
         CHMMR_DESC.postprocess_func = Some(chmmr_postprocess);
@@ -277,7 +279,7 @@ pub(crate) mod engine {
                 element((*ship).hTarget),
             );
             let mut facing: COUNT = 0;
-            if TrackShip(ship, &mut facing) >= 0 {
+            if track_ship(ship, &mut facing) >= 0 {
                 let target = element((*ship).hTarget);
                 let collision_mass = i32::from((*target).__bindgen_anon_3.mass_points) + 1;
                 if collision_mass <= MAX_SHIP_MASS as i32 * 10 {

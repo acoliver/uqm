@@ -4,7 +4,7 @@ use super::{record::QUEUE, table::ElementTable};
 use std::ptr::NonNull;
 
 pub struct Battle {
-    pub elements: ElementTable,
+    pub(crate) elements: ElementTable,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,
@@ -43,14 +43,20 @@ impl Battle {
 pub struct World {
     activity: NonNull<u16>,
     groups: NonNull<QUEUE>,
+    pub shared_frames: [super::views::Frames; 2],
 }
 
 impl World {
     /// # Safety
     /// Pointers must project the game-thread-owned GlobData authority, remain live,
     /// and never have a Rust reference held across a legacy call.
-    pub unsafe fn new(activity: *mut u16, groups: *mut QUEUE) -> Self {
+    pub unsafe fn new(
+        activity: *mut u16,
+        groups: *mut QUEUE,
+        shared_frames: [*mut crate::graphics::native_abi::FRAME; 2],
+    ) -> Self {
         Self {
+            shared_frames: shared_frames.map(super::views::Frames),
             activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
             groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
         }
@@ -67,8 +73,17 @@ impl World {
 }
 
 pub struct Cx<'a> {
-    pub b: &'a mut Battle,
+    pub(crate) b: &'a mut Battle,
     pub world: &'a mut World,
     /// The existing global stream. No seed is copied at context boundaries.
-    pub rng: fn() -> u32,
+    pub(crate) rng: fn() -> u32,
+}
+
+impl Cx<'_> {
+    pub fn random(&mut self) -> u32 {
+        (self.rng)()
+    }
+    pub fn elements(&self) -> &ElementTable {
+        &self.b.elements
+    }
 }

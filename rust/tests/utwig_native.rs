@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_utwig;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -5,9 +6,6 @@ mod native_ship_common;
 use native_ship_common::*;
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
-unsafe extern "C" {
-    fn init_utwig() -> *mut RACE_DESC;
-}
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
@@ -101,6 +99,7 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
                     ptr::null_mut(),
                     &mut projectile,
                     ptr::null_mut(),
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!((*e).__bindgen_anon_1.life_span, 8);

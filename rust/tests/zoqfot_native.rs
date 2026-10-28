@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_zoqfotpik;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -5,9 +6,6 @@ mod native_ship_common;
 use native_ship_common::*;
 use std::mem;
 use uqm_rust::ships::native::{abi::*, cosine, element, frame_index, sine};
-unsafe extern "C" {
-    fn init_zoqfotpik() -> *mut RACE_DESC;
-}
 #[test]
 fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
     battle_context::run(|| {
@@ -141,6 +139,7 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
                     &mut a,
                     enemy.ptr(),
                     &mut b,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!(enemy.desc.ship_info.crew_level, 0);
@@ -159,6 +158,7 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
                 &mut a,
                 &mut target,
                 &mut b,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(ship.ss.special_counter, 1);
             assert_eq!(queued(), before);

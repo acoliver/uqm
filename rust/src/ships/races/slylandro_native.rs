@@ -139,7 +139,7 @@ pub(crate) mod engine {
             if (*e).state_flags & PLAYER_SHIP as u16 == 0 {
                 angle = (*e).velocity.travel_angle;
                 let mut facing = normalize_facing(angle_to_facing(i32::from(angle)));
-                delta = TrackShip(e, &mut facing);
+                delta = track_ship(e, &mut facing);
                 (*laser).__bindgen_anon_4.turn_wait =
                     (*e).__bindgen_anon_4.turn_wait.wrapping_sub(1);
                 (*prim(laser)).color = (*prim(e)).color;
@@ -148,7 +148,7 @@ pub(crate) mod engine {
             } else {
                 let mut facing = (*ss).ShipFacing;
                 (*e).hTarget = ptr::null_mut();
-                delta = TrackShip(e, &mut facing);
+                delta = track_ship(e, &mut facing);
                 (*e).hTarget = ptr::null_mut();
                 angle = facing_to_angle(i32::from(facing)) as COUNT;
                 let mut wait = (*ss).weapon_counter;

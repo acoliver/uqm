@@ -1,5 +1,6 @@
 //! Exercise the Chenjesu descriptor and callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_chenjesu;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -14,7 +15,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_chenjesu() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -138,37 +138,9 @@ impl FrameSet {
     }
 }
 
-struct PoolShip(*mut STARSHIP);
-impl PoolShip {
-    unsafe fn new(player: SIZE) -> Self {
-        let queue = &raw mut uqm_rust::engine::battle::legacy::race_q[player as usize];
-        let pointer = uqm_rust::collections::queue::AllocLink(queue).cast::<STARSHIP>();
-        assert!(!pointer.is_null());
-        pointer.write(mem::zeroed());
-        Self(pointer)
-    }
-}
-impl std::ops::Deref for PoolShip {
-    type Target = STARSHIP;
-    fn deref(&self) -> &STARSHIP {
-        unsafe { &*self.0 }
-    }
-}
-impl std::ops::DerefMut for PoolShip {
-    fn deref_mut(&mut self) -> &mut STARSHIP {
-        unsafe { &mut *self.0 }
-    }
-}
-impl Drop for PoolShip {
-    fn drop(&mut self) {
-        unsafe {
-            uqm_rust::collections::queue::FreeLink(
-                &raw mut uqm_rust::engine::battle::legacy::race_q[(*self.0).playerNr as usize],
-                self.0.cast(),
-            );
-        }
-    }
-}
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 
 struct Ship {
     desc: Box<RACE_DESC>,
@@ -410,7 +382,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.init_weapon_func.is_some());
             assert!(d.uninit_func.is_none());
             assert!(d.data.is_null());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
 
             // init reinstalls the four callbacks without resetting other fields.
             (*template).preprocess_func = None;
@@ -642,6 +614,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                     &mut pa,
                     &mut target,
                     &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             let sparkle = element(disp_q.tail);
@@ -698,6 +671,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 &mut pa,
                 &mut target,
                 &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(
                 { disp_q.tail },
@@ -848,6 +822,8 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             let mut enemy = Ship::new(1);
             let dog = ship.doggy();
             let collide = (*dog).collision_func.unwrap();
+            let mut pa = POINT { x: 0, y: 0 };
+            let mut pb = POINT { x: 0, y: 0 };
             for (energy, remaining) in [(0, 0), (9, 0), (10, 0), (11, 1), (30, 20)] {
                 enemy.desc.ship_info.energy_level = energy;
                 enemy.ss.energy_counter = 99;
@@ -856,9 +832,10 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
                     uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                         collide,
                         dog,
-                        ptr::null_mut(),
+                        &mut pa,
                         enemy.ptr(),
-                        ptr::null_mut(),
+                        &mut pb,
+                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                     )
                 });
                 assert_eq!(enemy.desc.ship_info.energy_level, remaining);
@@ -875,23 +852,27 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
                 uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                     collide,
                     dog,
-                    ptr::null_mut(),
+                    &mut pa,
                     ship.ptr(),
-                    ptr::null_mut(),
+                    &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
                 assert_eq!((*dog).__bindgen_anon_5.thrust_wait, expected);
                 assert_eq!(ship.desc.ship_info.energy_level, 17);
             }
-            let mut object: ELEMENT = mem::zeroed();
+            let object_handle = AllocElement();
+            assert!(!object_handle.is_null());
+            let object = &mut *element(object_handle);
             object.playerNr = 1;
             object.state_flags = FINITE_LIFE as u16;
             (*dog).state_flags &= !(COLLISION as u16);
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 collide,
                 dog,
-                ptr::null_mut(),
-                &mut object,
-                ptr::null_mut(),
+                &mut pa,
+                object,
+                &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*dog).state_flags & COLLISION as u16, 0);
             // The generic collision runs first and damages the DOGI on planets.
@@ -900,12 +881,14 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 collide,
                 dog,
-                ptr::null_mut(),
-                &mut object,
-                ptr::null_mut(),
+                &mut pa,
+                object,
+                &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*dog).__bindgen_anon_2.hit_points, 2);
             assert_ne!((*dog).state_flags & COLLISION as u16, 0);
+            FreeElement(object_handle);
         }
     })
 }

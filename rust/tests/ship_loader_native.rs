@@ -1,3 +1,4 @@
+use uqm_rust::ships::{c_free_ship, c_load_ship, free_ship, load_ship};
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -16,14 +17,10 @@ unsafe extern "C" {
     fn CaptureCodeRes(code: *mut c_void, data: *mut c_void, out: *mut *mut c_void) -> *mut c_void;
     fn ReleaseCodeRes(code: *mut c_void) -> *mut c_void;
     fn DestroyCodeRes(code: *mut c_void) -> u32;
-    fn c_load_ship(species: u32, battle: u32) -> *mut RACE_DESC;
-    fn load_ship(species: u32, battle: u32) -> *mut RACE_DESC;
-    fn c_free_ship(desc: *mut RACE_DESC, icons: u32, battle: u32);
-    fn free_ship(desc: *mut RACE_DESC, icons: u32, battle: u32);
 }
 static UNINIT: AtomicUsize = AtomicUsize::new(0);
 unsafe extern "C" fn uninit(desc: *mut RACE_DESC) {
-    assert!(!(*desc).CodeRef.is_null());
+    assert!(!(*desc).code_ref.is_null());
     UNINIT.fetch_add(1, Ordering::SeqCst);
 }
 
@@ -125,7 +122,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 let loaded = c_load_ship(i as u32 + 1, 0);
                 assert!(!loaded.is_null(), "species {}", i + 1);
                 assert_eq!((*loaded).ship_info.ship_cost, original);
-                assert!(!(*loaded).CodeRef.is_null());
+                assert!(!(*loaded).code_ref.is_null());
                 assert_eq!(
                     (*loaded).preprocess_func.map(|f| f as usize),
                     (*expected).preprocess_func.map(|f| f as usize)

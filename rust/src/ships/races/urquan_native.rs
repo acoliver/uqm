@@ -135,7 +135,7 @@ pub(crate) mod engine {
             let mut dy = (*e).__bindgen_anon_1.life_span as SIZE;
             let orig = frame_index((*e).current.image.frame);
             let mut face = orig;
-            if (dy & 1 != 0 || !(*e).hTarget.is_null() || TrackShip(e, &mut face) >= 0)
+            if (dy & 1 != 0 || !(*e).hTarget.is_null() || track_ship(e, &mut face) >= 0)
                 && (dx == 0 || dy >= 125)
             {
                 (*e).state_flags |= IGNORE_SIMILAR as u16;

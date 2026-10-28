@@ -108,7 +108,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_4.turn_wait -= 1;
         } else {
             let mut face = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
-            if TrackShip(e, &mut face) > 0 {
+            if track_ship(e, &mut face) > 0 {
                 SetVelocityVector(&raw mut (*e).velocity, MISSILE_SPEED as SIZE, face);
             }
             (*e).__bindgen_anon_4.turn_wait = TRACK_WAIT;

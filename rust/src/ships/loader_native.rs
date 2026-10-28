@@ -88,7 +88,7 @@ pub(crate) mod engine {
             return ptr::null_mut();
         }
         let d = desc.cast::<RACE_DESC>();
-        (*d).CodeRef = code;
+        (*d).code_ref = code;
         let info = &mut (*d).ship_info;
         if !info.icons_rsc.is_null() {
             info.icons = CaptureDrawable((LoadGraphicInstance(info.icons_rsc)).cast()).cast();
@@ -102,7 +102,7 @@ pub(crate) mod engine {
                 CaptureStringTable(LoadStringTableInstance(info.race_strings_rsc)).cast();
         }
         if battle != 0 && !load_battle(d) {
-            // Preserve the original failed-load contract: only CodeRef is freed.
+            // Preserve the original failed-load contract: only code_ref is freed.
             DestroyCodeRes(ReleaseCodeRes(code));
             return ptr::null_mut();
         }
@@ -169,11 +169,7 @@ pub(crate) mod engine {
     /// Descriptor must be live and owned by the caller, with no outstanding borrows.
     /// Resource flags must match the parts loaded into this descriptor.
     pub unsafe extern "C" fn c_free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
-        if let Some(race) = (*d).race {
-            if let Some(uninit) = race.uninit {
-                uninit(&mut *d);
-            }
-        } else if let Some(uninit) = (*d).uninit_func {
+        if let Some(uninit) = (&mut *d).cleanup() {
             uninit(d);
         }
         crate::collections::observation::record(
@@ -198,7 +194,7 @@ pub(crate) mod engine {
             DestroyDrawable(ReleaseDrawable(info.icons.cast()));
             DestroyStringTable(ReleaseStringTable(info.race_strings.cast()));
         }
-        DestroyCodeRes(ReleaseCodeRes((*d).CodeRef));
+        DestroyCodeRes(ReleaseCodeRes((*d).code_ref));
     }
 
     #[no_mangle]

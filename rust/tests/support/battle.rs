@@ -2,13 +2,8 @@
     dead_code,
     reason = "shared fixture API used by independent race test binaries"
 )]
-use std::{
-    ffi::c_void,
-    mem,
-    ops::{Deref, DerefMut},
-    ptr,
-};
-use uqm_rust::battle::process_native::{FreeElement, InitDisplayList, RemoveElement};
+use std::{ffi::c_void, mem, ptr};
+use uqm_rust::battle::process_native::InitDisplayList;
 use uqm_rust::collections::queue::{AllocLink, FreeLink, InitQueue, UninitQueue};
 use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::{
@@ -31,12 +26,9 @@ impl Battle {
                 capacity,
                 size_of::<ELEMENT>() as u16
             ));
-            for side in 0..2 {
-                assert!(InitQueue(
-                    &raw mut race_q[side],
-                    32,
-                    size_of::<STARSHIP>() as u16
-                ));
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                assert!(InitQueue(queue, 32, size_of::<STARSHIP>() as u16));
             }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
@@ -54,8 +46,9 @@ impl Drop for Battle {
         // SAFETY: ships and elements created after this owner have already dropped.
         unsafe {
             UninitQueue(&raw mut disp_q);
-            for side in 0..2 {
-                UninitQueue(&raw mut race_q[side]);
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                UninitQueue(queue);
             }
             GlobData.Game_state.DisplayArray = self.display;
             (ScreenWidth, ScreenHeight) = self.dimensions;
@@ -63,33 +56,31 @@ impl Drop for Battle {
     }
 }
 
-pub struct Record<T>(*mut T);
-impl<T> Deref for Record<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        // SAFETY: this non-clone fixture owns the live slot, used between hook calls.
+struct Record<T>(*mut T);
+impl<T> Record<T> {
+    unsafe fn get(&self) -> &T {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe { &*self.0 }
     }
-}
-impl<T> DerefMut for Record<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        // SAFETY: this non-clone fixture owns the live slot, used between hook calls.
+    unsafe fn get_mut(&mut self) -> &mut T {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe { &mut *self.0 }
     }
 }
 
-pub struct Ship {
-    pub desc: Box<RACE_DESC>,
-    pub ss: Record<STARSHIP>,
-    pub el: Record<ELEMENT>,
+pub struct Ship<'a> {
+    battle: &'a Battle,
+    desc: Box<RACE_DESC>,
+    ss: Record<STARSHIP>,
+    el: Record<ELEMENT>,
     pub handle: HELEMENT,
     pub id: ElementId,
     pub ship_id: ShipId,
     frames: Option<[FrameSet; 3]>,
     queued: bool,
 }
-impl Ship {
-    pub fn bare(species: u32, player: SIZE) -> Self {
+impl<'a> Ship<'a> {
+    pub fn bare(battle: &'a Battle, species: u32, player: SIZE) -> Self {
         // SAFETY: construction runs inside the serialized, published test battle.
         unsafe {
             let mut desc = Box::new(descriptor(species));
@@ -106,13 +97,18 @@ impl Ship {
             (*el).playerNr = player;
             (*el).state_flags = PLAYER_SHIP as u16;
             (*raw_ship).hShip = handle;
-            let id = uqm_rust::app::bridge::enter(|cx| cx.b.elements.id(handle).unwrap());
+            let id = uqm_rust::app::bridge::enter(|cx| {
+                cx.elements()
+                    .id(handle)
+                    .unwrap_or_else(|| panic!("allocated element missing from pool"))
+            });
             let ship_id = ShipId {
                 side: player as u8,
                 slot: ((raw_ship as usize - race_q[player as usize].pq_tab as usize)
                     / size_of::<STARSHIP>()) as u8,
             };
             Self {
+                battle,
                 desc,
                 ss: Record(raw_ship),
                 el: Record(el),
@@ -124,29 +120,32 @@ impl Ship {
             }
         }
     }
-    pub fn new(species: u32, player: SIZE) -> Self {
-        let mut ship = Self::bare(species, player);
-        let frames = [FrameSet::new(16), FrameSet::new(16), FrameSet::new(16)];
-        ship.desc.ship_data.ship = [frames[0].frame(0); 3];
-        ship.desc.ship_data.weapon = [frames[1].frame(0); 3];
-        ship.desc.ship_data.special = [frames[2].frame(0); 3];
-        ship.el.set_life_span(NORMAL_LIFE as u16);
-        let crew = ship.desc.ship_info.crew_level;
-        ship.el.set_hit_points(crew);
-        let mass = ship.desc.characteristics.ship_mass;
-        ship.el.set_mass_points(mass);
-        ship.el.current.location = POINT { x: 4000, y: 4000 };
-        ship.el.current.image.farray = ship.ship_frames();
-        ship.el.current.image.frame = frames[0].frame(0);
-        ship.el.next = ship.el.current;
-        ship.el.IntersectControl.IntersectStamp.frame = frames[0].frame(0);
-        // SAFETY: this slot owns its allocated display primitive.
+    pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
+            let mut ship = Self::bare(battle, species, player);
+            let frames = [FrameSet::new(16), FrameSet::new(16), FrameSet::new(16)];
+            ship.desc.ship_data.ship = [frames[0].frame(0); 3];
+            ship.desc.ship_data.weapon = [frames[1].frame(0); 3];
+            ship.desc.ship_data.special = [frames[2].frame(0); 3];
+            ship.element_mut().set_life_span(NORMAL_LIFE as u16);
+            let crew = ship.desc.ship_info.crew_level;
+            ship.element_mut().set_hit_points(crew);
+            let mass = ship.desc.characteristics.ship_mass;
+            ship.element_mut().set_mass_points(mass);
+            ship.element_mut().current.location = POINT { x: 4000, y: 4000 };
+            ship.element_mut().current.image.farray = ship.ship_frames();
+            ship.element_mut().current.image.frame = frames[0].frame(0);
+            ship.element_mut().next = ship.element_mut().current;
+            ship.element_mut().IntersectControl.IntersectStamp.frame = frames[0].frame(0);
+            // SAFETY: this slot owns its allocated display primitive.
+
             (*prim(ship.ptr())).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+
+            ship.frames = Some(frames);
+            ship.queue();
+            ship
         }
-        ship.frames = Some(frames);
-        ship.queue();
-        ship
     }
     pub fn queue(&mut self) {
         assert!(!self.queued);
@@ -155,6 +154,44 @@ impl Ship {
             put_element(self.handle);
         }
         self.queued = true;
+    }
+    fn assert_live(&self) {
+        // SAFETY: only a checked generation is inspected while the fixture retains the battle.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                assert!(cx.elements().contains(self.id), "retired fixture record")
+            });
+        }
+    }
+    /// # Safety
+    /// Do not retain record references across any engine or fixture hook call.
+    pub unsafe fn element_mut(&mut self) -> &mut ELEMENT {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            self.assert_live();
+            self.el.get_mut()
+        }
+    }
+    /// # Safety
+    /// Do not retain record references across any engine or fixture hook call.
+    pub unsafe fn ship_mut(&mut self) -> &mut STARSHIP {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            self.assert_live();
+            self.ss.get_mut()
+        }
+    }
+    /// # Safety
+    /// Do not retain descriptor references across any engine or fixture hook call.
+    pub unsafe fn descriptor_mut(&mut self) -> &mut RACE_DESC {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+
+        self.assert_live();
+        &mut self.desc
+    }
+    pub fn snapshot(&self) -> uqm_rust::engine::battle::views::ElementState {
+        // SAFETY: the fixture retains its battle and checked element through this value projection.
+        unsafe { uqm_rust::app::bridge::enter(|cx| cx.element(self.id)) }
     }
     pub fn ptr(&self) -> *mut ELEMENT {
         self.el.0
@@ -168,13 +205,19 @@ impl Ship {
     pub fn special_frames(&self) -> *mut FRAME {
         (&raw const self.desc.ship_data.special).cast_mut().cast()
     }
-    pub fn guardian_form(mut self) -> Self {
-        self.el.next.image.farray = self.ship_frames();
-        self
+    pub unsafe fn guardian_form(mut self) -> Self {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            self.element_mut().next.image.farray = self.ship_frames();
+            self
+        }
     }
-    pub fn blazer_form(mut self) -> Self {
-        self.el.next.image.farray = self.special_frames();
-        self
+    pub unsafe fn blazer_form(mut self) -> Self {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            self.element_mut().next.image.farray = self.special_frames();
+            self
+        }
     }
     pub fn preprocess(&mut self) {
         self.process(false);
@@ -186,55 +229,57 @@ impl Ship {
         // SAFETY: no fixture record borrow crosses the context handoff.
         unsafe {
             uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::battle::process_native::invoke_race::invoke_ship_process(
-                    cx,
-                    self.ship_id,
-                    post,
-                );
+                uqm_rust::engine::battle::Cx::invoke_ship_process(cx, self.ship_id, post);
             });
         }
     }
-    pub fn weapon(&mut self, expected: COUNT) -> Vec<HELEMENT> {
-        let mut out = [ptr::null_mut(); 6];
-        // SAFETY: the projected subject and six output slots are live for this call.
+    pub fn weapon(&mut self, expected: COUNT) -> Vec<Option<ElementId>> {
+        // SAFETY: the owning battle and ship remain live throughout weapon creation.
         unsafe {
-            assert_eq!(
-                uqm_rust::battle::process_native::invoke_race::invoke_weapon(
-                    self.ss.0 as usize,
-                    self.ptr(),
-                    out.as_mut_ptr()
-                ),
-                expected
-            );
-        }
-        for &h in &out[..expected as usize] {
-            if !h.is_null() {
-                // SAFETY: outputs are live, newly allocated elements.
-                unsafe {
-                    let e = element(h);
-                    (*e).pParent = self.ss.0.cast();
-                    (*e).next = (*e).current;
-                    (*e).IntersectControl.IntersectStamp.frame = (*e).current.image.frame;
+            uqm_rust::app::bridge::enter(|cx| {
+                let origin = cx.weapon_origin(self.id);
+                let out = uqm_rust::engine::battle::Cx::spawn_weapons(cx, self.ship_id, origin);
+                assert_eq!(out.len(), usize::from(expected));
+                for &id in out.iter().flatten() {
+                    cx.set_parent(id, Some(self.ship_id));
+                    let current = cx.element(id).current;
+                    cx.copy_visual_to_next(id, current);
+                    cx.set_intersect_frame(id, current.image.frame);
                 }
-            }
+                out
+            })
         }
-        out[..expected as usize].to_vec()
     }
-    pub fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
+    /// # Safety
+    /// Do not retain the legacy pointer across callbacks or disposal.
+    pub unsafe fn weapon_record(&self, id: Option<ElementId>) -> *mut ELEMENT {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                cx.legacy_element(id.unwrap_or_else(|| panic!("{}", "allocated weapon")))
+            })
+        }
+    }
+    pub unsafe fn intelligence(
+        &mut self,
+        subject: &mut ELEMENT,
+        concerns: &mut [EVALUATE_DESC; 4],
+        count: u16,
+    ) {
         // SAFETY: subject and four concerns live through this synchronous callback.
         unsafe {
-            uqm_rust::battle::process_native::invoke_race::invoke_intelligence(
+            uqm_rust::engine::battle::Cx::invoke_intelligence(
                 self.ss.0 as usize,
-                self.ptr(),
+                subject,
                 concerns.as_mut_ptr(),
-                0,
+                count,
             );
         }
     }
     pub fn uninit(&mut self) {
         if let Some(race) = self.desc.race {
             if let Some(uninit) = race.uninit {
-                uninit(&mut self.desc);
+                uninit(&mut self.desc.race_state);
             }
         }
     }
@@ -245,15 +290,19 @@ impl Ship {
         collision
     }
 }
-impl Drop for Ship {
+impl Drop for Ship<'_> {
     fn drop(&mut self) {
         self.uninit();
         // SAFETY: this fixture uniquely owns its element and ship slots.
         unsafe {
-            if self.queued {
-                RemoveElement(self.handle);
-            }
-            FreeElement(self.handle);
+            uqm_rust::app::bridge::enter(|cx| {
+                if cx.elements().contains(self.id) {
+                    if cx.elements().linked(self.id) {
+                        cx.unlink(self.id);
+                    }
+                    cx.dispose(self.id);
+                }
+            });
             FreeLink(
                 &raw mut race_q[self.ship_id.side as usize],
                 self.ss.0.cast(),
@@ -262,26 +311,64 @@ impl Drop for Ship {
     }
 }
 pub fn descriptor(species: u32) -> RACE_DESC {
-    let race = uqm_rust::ships::races::race(species).expect("converted test race");
-    (race.descriptor)()
+    // SAFETY: the caller owns the serialized test context.
+    unsafe { uqm_rust::ships::races::legacy_descriptor(species) }
 }
 
-pub fn call_element(name: &str, id: ElementId) {
+pub unsafe fn call_element(name: &str, id: ElementId) {
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+
     let address = uqm_rust::ships::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
-        .expect("registered element hook");
+        .unwrap_or_else(|| panic!("{}", "registered element hook"));
     // SAFETY: the serialized fixture owns the checked id and its installed callback.
     unsafe {
         uqm_rust::app::bridge::enter(|cx| {
-            let e = &cx.b.elements[id];
+            let e = &cx.elements()[id];
             let callback = [e.preprocess_func, e.postprocess_func, e.death_func]
                 .into_iter()
                 .flatten()
                 .find(|h| h.address() == address)
-                .expect("named hook installed on element");
+                .unwrap_or_else(|| panic!("{}", "named hook installed on element"));
             uqm_rust::battle::process_native::invoke_element::invoke_element(cx, callback, id);
         });
+    }
+}
+
+pub fn call_collision(name: &str, a: ElementId, pa: &mut POINT, b: ElementId, pb: &mut POINT) {
+    let address = uqm_rust::ships::hook_registry::hooks()
+        .into_iter()
+        .find_map(|(address, n)| (n == name).then_some(address))
+        .unwrap_or_else(|| panic!("{}", "registered collision hook"));
+    // SAFETY: both checked elements belong to the current serialized battle.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let hook = cx
+                .element(a)
+                .collide
+                .unwrap_or_else(|| panic!("{}", "installed collision hook"));
+            assert_eq!(
+                hook.address(),
+                address,
+                "named collision installed on element"
+            );
+            uqm_rust::battle::process_native::invoke_collision::invoke_collision(
+                cx, hook, a, pa, b, pb,
+            );
+        })
+    }
+}
+/// # Safety
+/// The pointer must be live pool storage belonging to the current test battle.
+pub unsafe fn id(pointer: *mut ELEMENT) -> ElementId {
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.elements()
+                .id(pointer.cast())
+                .unwrap_or_else(|| panic!("{}", "pool record"))
+        })
     }
 }
 
@@ -333,19 +420,25 @@ impl FrameSet {
     }
 }
 pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut DisplayArray)
-        .cast::<PRIMITIVE>()
-        .add((*e).PrimIndex as usize)
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+    unsafe {
+        (&raw mut DisplayArray)
+            .cast::<PRIMITIVE>()
+            .add((*e).PrimIndex as usize)
+    }
 }
 pub unsafe fn queued() -> Vec<HELEMENT> {
-    let mut all = Vec::new();
-    let mut h = disp_q.head;
-    while !h.is_null() {
-        all.push(h);
-        assert!(all.len() <= 128, "queue cycle");
-        h = (*element(h)).succ;
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+    unsafe {
+        let mut all = Vec::new();
+        let mut h = disp_q.head;
+        while !h.is_null() {
+            all.push(h);
+            assert!(all.len() <= 128, "queue cycle");
+            h = (*element(h)).succ;
+        }
+        all
     }
-    all
 }
 pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
     [
@@ -361,11 +454,16 @@ pub fn velocity(v: &VELOCITY_DESC) -> [i32; 9] {
     ]
 }
 pub unsafe fn toward(speed: SIZE, face: COUNT) -> [i32; 9] {
-    let mut v = mem::zeroed();
-    SetVelocityVector(&mut v, speed, face);
-    velocity(&v)
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+    unsafe {
+        let mut v = mem::zeroed();
+        SetVelocityVector(&mut v, speed, face);
+        velocity(&v)
+    }
 }
 pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T {
+    // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+
     TFB_SeedRandom(seed);
     for _ in 0..draws {
         TFB_Random();
@@ -377,43 +475,56 @@ pub unsafe fn with_rng<T>(seed: u32, draws: usize, run: impl FnOnce() -> T) -> T
     result
 }
 
-pub struct Object {
-    pub el: Record<ELEMENT>,
+pub struct Object<'a> {
+    battle: &'a Battle,
+    el: Record<ELEMENT>,
     pub id: ElementId,
 }
-impl Object {
-    pub fn new() -> Self {
+impl<'a> Object<'a> {
+    pub fn new(battle: &'a Battle) -> Self {
         // SAFETY: object slots belong to the serialized test battle.
         unsafe {
             let handle = AllocElement();
             assert!(!handle.is_null());
-            let id = uqm_rust::app::bridge::enter(|cx| cx.b.elements.id(handle).unwrap());
+            let id = uqm_rust::app::bridge::enter(|cx| {
+                cx.elements()
+                    .id(handle)
+                    .unwrap_or_else(|| panic!("allocated element missing from pool"))
+            });
             Self {
+                battle,
                 el: Record(handle.cast()),
                 id,
             }
+        }
+    }
+    /// # Safety
+    /// Do not retain record references across any engine or fixture hook call.
+    pub unsafe fn element_mut(&mut self) -> &mut ELEMENT {
+        // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                assert!(cx.elements().contains(self.id), "retired fixture object")
+            });
+            self.el.get_mut()
         }
     }
     pub fn ptr(&mut self) -> *mut ELEMENT {
         self.el.0
     }
 }
-impl Deref for Object {
-    type Target = ELEMENT;
-    fn deref(&self) -> &ELEMENT {
-        &self.el
-    }
-}
-impl DerefMut for Object {
-    fn deref_mut(&mut self) -> &mut ELEMENT {
-        &mut self.el
-    }
-}
-impl Drop for Object {
+impl Drop for Object<'_> {
     fn drop(&mut self) {
         // SAFETY: the fixture owns this unlinked object slot.
         unsafe {
-            FreeElement(self.el.0.cast());
+            uqm_rust::app::bridge::enter(|cx| {
+                if cx.elements().contains(self.id) {
+                    if cx.elements().linked(self.id) {
+                        cx.unlink(self.id);
+                    }
+                    cx.dispose(self.id);
+                }
+            });
         }
     }
 }

@@ -1,5 +1,6 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_pkunk;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -17,7 +18,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_pkunk() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -201,37 +201,9 @@ fn addr(f: ElementProcessFunc) -> Option<usize> {
     f.map(|f| (f).address())
 }
 
-struct PoolShip(*mut STARSHIP);
-impl PoolShip {
-    unsafe fn new(player: SIZE) -> Self {
-        let queue = &raw mut uqm_rust::engine::battle::legacy::race_q[player as usize];
-        let pointer = uqm_rust::collections::queue::AllocLink(queue).cast::<STARSHIP>();
-        assert!(!pointer.is_null());
-        pointer.write(mem::zeroed());
-        Self(pointer)
-    }
-}
-impl std::ops::Deref for PoolShip {
-    type Target = STARSHIP;
-    fn deref(&self) -> &STARSHIP {
-        unsafe { &*self.0 }
-    }
-}
-impl std::ops::DerefMut for PoolShip {
-    fn deref_mut(&mut self) -> &mut STARSHIP {
-        unsafe { &mut *self.0 }
-    }
-}
-impl Drop for PoolShip {
-    fn drop(&mut self) {
-        unsafe {
-            uqm_rust::collections::queue::FreeLink(
-                &raw mut uqm_rust::engine::battle::legacy::race_q[(*self.0).playerNr as usize],
-                self.0.cast(),
-            );
-        }
-    }
-}
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 
 struct Ship {
     desc: Box<RACE_DESC>,
@@ -598,7 +570,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.postprocess_func.is_some());
             assert!(d.init_weapon_func.is_some());
             assert!(d.uninit_func.is_some());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
             assert!(!d.data.is_null());
             assert!(block_is_zero(d.data));
             (d.uninit_func.unwrap())(&mut d);

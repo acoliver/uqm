@@ -89,7 +89,7 @@ mod live {
     operation!(rust_bridge_DeltaCrew(element: *mut ELEMENT, delta: i16) -> u32 { crate::battle::status_native::DeltaCrew(element, delta) });
     operation!(rust_bridge_GetElementStarShip(element: *mut ELEMENT, ship: *mut *mut STARSHIP) { *ship = (*element).pParent.cast(); });
     operation!(rust_bridge_SetElementStarShip(element: *mut ELEMENT, ship: *mut STARSHIP) { (*element).pParent = ship.cast(); });
-    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::TrackShip(element, facing) });
+    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::track_ship(element, facing) });
     operation!(rust_bridge_Untarget(element: *mut ELEMENT) { crate::battle::process_native::Untarget(element); });
     operation!(rust_bridge_ModifySilhouette(element: *mut ELEMENT, stamp: *mut STAMP, flags: u8) -> FRAME { crate::battle::weapon_native::ModifySilhouette(element, stamp, flags) });
     operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::battle::sounds::ProcessSound(sound as *mut _, source); });

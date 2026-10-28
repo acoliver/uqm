@@ -1,5 +1,6 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 
+use uqm_rust::ships::races::{init_orz, intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -14,9 +15,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_orz() -> *mut RACE_DESC;
-    fn intruder_preprocess(e: *mut ELEMENT);
-    fn marine_collision(a: *mut ELEMENT, pa: *mut POINT, b: *mut ELEMENT, pb: *mut POINT);
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: COUNT) -> BOOLEAN;
     fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
     fn InitDisplayList();
@@ -138,37 +136,9 @@ impl FrameSet {
     }
 }
 
-struct PoolShip(*mut STARSHIP);
-impl PoolShip {
-    unsafe fn new(player: SIZE) -> Self {
-        let queue = &raw mut uqm_rust::engine::battle::legacy::race_q[player as usize];
-        let pointer = uqm_rust::collections::queue::AllocLink(queue).cast::<STARSHIP>();
-        assert!(!pointer.is_null());
-        pointer.write(mem::zeroed());
-        Self(pointer)
-    }
-}
-impl std::ops::Deref for PoolShip {
-    type Target = STARSHIP;
-    fn deref(&self) -> &STARSHIP {
-        unsafe { &*self.0 }
-    }
-}
-impl std::ops::DerefMut for PoolShip {
-    fn deref_mut(&mut self) -> &mut STARSHIP {
-        unsafe { &mut *self.0 }
-    }
-}
-impl Drop for PoolShip {
-    fn drop(&mut self) {
-        unsafe {
-            uqm_rust::collections::queue::FreeLink(
-                &raw mut uqm_rust::engine::battle::legacy::race_q[(*self.0).playerNr as usize],
-                self.0.cast(),
-            );
-        }
-    }
-}
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 
 struct Ship {
     desc: Box<RACE_DESC>,
@@ -439,7 +409,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
             assert!(d.postprocess_func.is_none());
             assert!(d.uninit_func.is_none());
             assert!(d.data.is_null());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
             let _: ElementProcessFunc = Some(uqm_rust::engine::battle::ElementHook::Legacy(
                 intruder_preprocess,
             ));
@@ -593,6 +563,7 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     &mut point,
                     ship.ptr(),
                     &mut POINT { x: 0, y: 0 },
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 16);
@@ -604,6 +575,7 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     &mut point,
                     enemy.ptr(),
                     &mut POINT { x: 0, y: 0 },
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 13);

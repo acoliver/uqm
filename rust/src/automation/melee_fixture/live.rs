@@ -22,6 +22,8 @@ mod star;
 pub(super) use production::execute;
 
 struct Ship<'a> {
+    #[cfg(not(test))]
+    callback_addresses: [usize; 5],
     state: &'a mut STARSHIP,
     info: Option<&'a mut SHIP_INFO>,
     data: Option<&'a mut DATA_STUFF>,

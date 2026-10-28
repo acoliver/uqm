@@ -126,7 +126,7 @@ fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16
     }
 }
 
-fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
+pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
     let black = rgb15(0, 0, 0);
     let mut i = (35u16.wrapping_sub(life)) as BYTE;
     let (color, r) = if i <= 4 {
@@ -216,7 +216,7 @@ fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::engine::battle::{Cx, ElementId, ShipId};
+    use crate::engine::battle::{Cx, ElementId};
     use crate::ships::native::{rel_frame_index, starship};
 
     /// # Safety
@@ -226,7 +226,7 @@ pub(crate) mod engine {
         status_y_offsets = status_offsets(ScreenHeight);
     }
 
-    unsafe fn offset(ship: *const STARSHIP) -> COORD {
+    pub(crate) unsafe fn offset(ship: *const STARSHIP) -> COORD {
         assert!((*ship).playerNr >= 0);
         *(&raw const status_y_offsets)
             .cast::<COORD>()
@@ -238,7 +238,7 @@ pub(crate) mod engine {
         DrawFilledRectangle(&mut r);
     }
 
-    unsafe fn CaptainsWindow(
+    pub(crate) unsafe fn CaptainsWindow(
         captain: *mut CAPTAIN_STUFF,
         y: COORD,
         delta: STATUS_FLAGS,
@@ -478,39 +478,6 @@ pub(crate) mod engine {
                 }
             }
             cx.ship_mut(ship).old_status_flags = current;
-        }
-    }
-
-    impl Cx<'_> {
-        fn status_offset(&self, ship: ShipId) -> i16 {
-            // SAFETY: status offsets and this ship's side belong to the game thread.
-            unsafe { offset(self.ship(ship) as *const STARSHIP as *mut STARSHIP) }
-        }
-        fn draw_explosion_flash(&mut self, life: u16, y: i16) {
-            explosion_flash(life, y, |color, mut r, fill| {
-                // SAFETY: the battle owns its active status drawing context.
-                unsafe {
-                    SetContextForeGroundColor(color);
-                    if fill {
-                        DrawFilledRectangle(&mut r);
-                    } else {
-                        DrawRectangle(&mut r);
-                    }
-                }
-            });
-        }
-        fn draw_energy_label(&mut self, y: i16, change: i16) {
-            // SAFETY: the status drawing context and fonts are initialized.
-            unsafe {
-                DrawCrewFuelString(y, change);
-            }
-        }
-        fn draw_captain_controls(&mut self, ship: ShipId, y: i16, delta: u16, current: u16) {
-            let controls = &raw mut self.desc_mut(ship).ship_data.captain_control;
-            // SAFETY: drawing consumes only this ship's loaded captain frames.
-            unsafe {
-                CaptainsWindow(controls, y, delta, current, 2);
-            }
         }
     }
 }

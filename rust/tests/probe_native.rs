@@ -1,11 +1,7 @@
 //! The noncombat drone has a descriptor but no battle callbacks.
 
 use std::ffi::CStr;
-use uqm_rust::ships::native::abi::*;
-
-unsafe extern "C" {
-    fn init_probe() -> *mut RACE_DESC;
-}
+use uqm_rust::ships::races::init_probe;
 
 #[test]
 fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
@@ -79,6 +75,6 @@ fn drone_descriptor_preserves_resources_stats_and_absent_callbacks() {
         assert!(d.init_weapon_func.is_none());
         assert!(d.uninit_func.is_none());
         assert!(d.data.is_null());
-        assert!(d.CodeRef.is_null());
+        assert!(d.code_ref.is_null());
     }
 }

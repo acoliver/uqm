@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_black_urquan;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -5,9 +6,6 @@ mod native_ship_common;
 use native_ship_common::*;
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, frame_index, put_element};
-unsafe extern "C" {
-    fn init_black_urquan() -> *mut RACE_DESC;
-}
 
 #[test]
 fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
@@ -193,6 +191,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 &mut target,
                 &mut p,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*saw).__bindgen_anon_1.life_span, 5);
             assert_eq!(frame_index((*saw).next.image.frame), 2);
@@ -209,6 +208,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 &mut target,
                 &mut p,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*cloud).__bindgen_anon_3.mass_points, 50);
             target.state_flags = PLAYER_SHIP as u16;
@@ -219,6 +219,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 &mut p,
                 &mut target,
                 &mut p,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*cloud).__bindgen_anon_3.mass_points, 3);
         }

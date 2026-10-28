@@ -3,7 +3,7 @@ use super::*;
 
 // The primitive pool stores only link words here. The other fields survive a
 // free/reallocate cycle until the caller writes them, as in the C macros.
-pub(super) unsafe fn alloc_display_prim(array: *mut PRIMITIVE, free: *mut COUNT) -> COUNT {
+pub(crate) unsafe fn alloc_display_prim(array: *mut PRIMITIVE, free: *mut COUNT) -> COUNT {
     // SAFETY: the caller owns the initialized primitive pool and free-list head.
     unsafe {
         let index = *free;
@@ -12,7 +12,7 @@ pub(super) unsafe fn alloc_display_prim(array: *mut PRIMITIVE, free: *mut COUNT)
     }
 }
 
-pub(super) unsafe fn free_display_prim(array: *mut PRIMITIVE, free: *mut COUNT, index: COUNT) {
+pub(crate) unsafe fn free_display_prim(array: *mut PRIMITIVE, free: *mut COUNT, index: COUNT) {
     // SAFETY: index belongs to the caller's primitive pool.
     unsafe {
         (*array.add(usize::from(index))).Links = make_links(END, *free);

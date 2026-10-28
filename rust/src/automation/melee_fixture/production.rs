@@ -181,6 +181,7 @@ fn drive(
 unsafe fn borrow_world<'a>() -> World<'a> {
     use crate::ships::races::pkunk_native::engine::PkunkData;
     let ship_record = |state| Ship {
+        callback_addresses: [0; 5],
         state,
         info: None,
         data: None,
@@ -212,6 +213,7 @@ unsafe fn borrow_world<'a>() -> World<'a> {
                     panic!("projected fixture owner {owner:p} disappeared from its graph");
                 };
                 if let Some(race) = (*slot).as_mut() {
+                    ship.callback_addresses = race.callbacks();
                     if ship.state.SpeciesID == SPECIES_ID_PKUNK_ID {
                         let data = &*race.data.cast::<PkunkData>();
                         ship.phoenix = Some(phoenix(data));
@@ -402,9 +404,7 @@ impl World<'_> {
             }
             Effect::RaceProcess(post, h) => {
                 let address = parent(*h);
-                // SAFETY: this projection owns the live descriptor for metadata reads.
-                let callbacks =
-                    unsafe { (*(*(address as *const STARSHIP)).RaceDescPtr).callbacks() };
+                let callbacks = self.ships[&(address as HLINK)].callback_addresses;
                 Some((callbacks[if *post { 2 } else { 1 }], address))
             }
             Effect::Death(h) => self.elements[h]
@@ -419,6 +419,17 @@ impl World<'_> {
                 callback.map(|callback| (callback as usize, parent(*h)))
             }
             _ => None,
+        }
+    }
+
+    fn projected_thinkers(&mut self, effect: &Effect) -> Vec<(HLINK, u16)> {
+        if let Effect::Think(active) = effect {
+            active
+                .iter()
+                .map(|&(element, crew)| (ptr::from_mut(self.ship_mut(element).state).cast(), crew))
+                .collect()
+        } else {
+            Vec::new()
         }
     }
 
@@ -440,13 +451,7 @@ impl World<'_> {
                     _ => None,
                 };
                 let observed = self.callback_observation(&effect, collision.as_ref());
-                let active = match &effect {
-                    Effect::Think(active) => active
-                        .iter()
-                        .map(|&(element, crew)| (ptr::from_mut(self.ship_mut(element).state), crew))
-                        .collect::<Vec<_>>(),
-                    _ => Vec::new(),
-                };
+                let active = self.projected_thinkers(&effect);
                 (effect, collision, death, observed, active)
             })
             .collect::<Vec<_>>();
@@ -459,10 +464,10 @@ impl World<'_> {
                     match effect {
                         Effect::RaceProcess(_, h) | Effect::Weapon(h) => {
                             crate::app::bridge::enter(|cx| {
-                                let id = cx.b.elements.id(h.cast()).unwrap();
+                                let id = cx.b.elements.id(h.cast()).unwrap_or_else(|| panic!("fixture element missing from pool"));
                                 if let Effect::RaceProcess(post, _) = effect {
                                     let ship = cx.owner(id);
-                                    crate::battle::process_native::invoke_race::invoke_ship_process(cx, ship, post);
+                                    cx.invoke_ship_process(ship, post);
                                 } else { crate::battle::ship_native::ship_postprocess(cx, id); }
                             });
                         }
@@ -472,7 +477,7 @@ impl World<'_> {
                         Effect::Invoke(callback, h) => {
                             let callback = callback.ok_or("fixture is missing its production callback")?;
                             observed.ok_or("fixture callback lacks owner metadata")?;
-                            crate::battle::process_native::invoke_element::invoke_legacy_element(callback, h.cast::<ELEMENT>());
+                            crate::battle::process_native::invoke_element::invoke_legacy_element(callback, h.cast());
                         }
                         Effect::Collide(a, b) => {
                             let Collision {
@@ -485,10 +490,11 @@ impl World<'_> {
                                 &raw mut pa,
                                 b,
                                 &raw mut pb,
-                            );
+                             crate::battle::process_native::invoke_collision::CollisionCall::Hook);
                         }
                         Effect::Think(_) => {
                             for (owner, crew) in active {
+                                let owner=owner.cast();
                                 let input = crate::battle::cyborg_native::tactical_intelligence(
                                     ptr::null_mut(),
                                     owner,

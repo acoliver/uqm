@@ -1,29 +1,14 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
 
-use super::{legacy, record::*, Cx, ElementId, Parent, ShipId};
-use crate::graphics::native_abi::PRIMITIVE;
+#[cfg(not(test))]
+use super::{
+    record::{state__bindgen_ty_1, STATE},
+    Parent,
+};
+use super::{Cx, ElementId, ShipId};
 
+#[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn ship_id(&self, address: usize) -> ShipId {
-        for side in 0..2 {
-            // SAFETY: queue authorities are owned by this game-thread context.
-            let queue = unsafe { &legacy::race_q[side] };
-            let stride = usize::from(queue.object_size);
-            if let Some(offset) = address.checked_sub(queue.pq_tab as usize) {
-                if stride != 0
-                    && offset.is_multiple_of(stride)
-                    && offset / stride < usize::from(queue.num_objects)
-                {
-                    return ShipId {
-                        side: side as u8,
-                        slot: (offset / stride) as u8,
-                    };
-                }
-            }
-        }
-        panic!("ship address {address:#x} is outside the ship pools")
-    }
-
     pub fn owner(&self, id: ElementId) -> ShipId {
         match self.parent(id) {
             Parent::Ship(ship) => ship,
@@ -36,57 +21,20 @@ impl Cx<'_> {
         unsafe {
             self.b.elements.parent(
                 id,
-                [&raw const legacy::race_q[0], &raw const legacy::race_q[1]],
+                [
+                    super::record::ship_queue(0).as_ptr(),
+                    super::record::ship_queue(1).as_ptr(),
+                ],
                 self.world.groups(),
             )
         }
-    }
-
-    pub(crate) fn ship_pointer(&self, id: ShipId) -> *mut STARSHIP {
-        assert!(id.side < 2, "invalid ship side {id:?}");
-        // SAFETY: queue storage is address-stable for the battle's lifetime.
-        unsafe {
-            let queue = &legacy::race_q[usize::from(id.side)];
-            assert!(
-                usize::from(id.slot) < usize::from(queue.num_objects),
-                "invalid ship {id:?}"
-            );
-            queue
-                .pq_tab
-                .add(usize::from(id.slot) * usize::from(queue.object_size))
-                .cast()
-        }
-    }
-
-    pub fn ship(&self, id: ShipId) -> &STARSHIP {
-        // SAFETY: the validated slot belongs to this context's ship authority.
-        unsafe { &*self.ship_pointer(id) }
-    }
-
-    pub fn ship_mut(&mut self, id: ShipId) -> &mut STARSHIP {
-        // SAFETY: this exclusive context borrow scopes the one-record projection.
-        unsafe { &mut *self.ship_pointer(id) }
-    }
-
-    pub fn desc(&self, id: ShipId) -> &RACE_DESC {
-        let pointer = self.ship(id).RaceDescPtr;
-        assert!(!pointer.is_null(), "ship {id:?} has no descriptor");
-        // SAFETY: each live ship owns its descriptor until teardown.
-        unsafe { &*pointer }
-    }
-
-    pub fn desc_mut(&mut self, id: ShipId) -> &mut RACE_DESC {
-        let pointer = self.ship(id).RaceDescPtr;
-        assert!(!pointer.is_null(), "ship {id:?} has no descriptor");
-        // SAFETY: the exclusive context borrow scopes the descriptor projection.
-        unsafe { &mut *pointer }
     }
 
     pub fn ship_element(&self, ship: ShipId) -> ElementId {
         self.b
             .elements
             .id(self.ship(ship).hShip)
-            .expect("ship has no element")
+            .unwrap_or_else(|| panic!("{}", "ship has no element"))
     }
 
     pub fn set_parent(&mut self, element: ElementId, parent: Option<ShipId>) {
@@ -104,15 +52,260 @@ impl Cx<'_> {
     }
 
     pub fn put(&mut self, id: ElementId) {
-        let handle = self.b.elements.raw(id);
-        // SAFETY: id is allocated and unlinked; the caller preserves queue order.
-        unsafe { crate::collections::queue::PutQueue(&raw mut legacy::disp_q, handle) }
+        self.insert_before(id, None);
+    }
+}
+
+use super::views::*;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
+        Frames(self.ship_frames(id, role))
+    }
+    pub fn ship_frame(&self, id: ShipId, role: usize) -> Frame {
+        let array = self.ship_frames(id, role);
+        // SAFETY: the checked owner retains the loaded three-frame array.
+        Frame(unsafe { *array })
+    }
+    pub fn advance_frame(&self, frame: Frame) -> Frame {
+        Frame(self.inc_frame(frame.0))
+    }
+    pub fn equivalent_frame(&self, frame: Frame, source: Frame) -> Frame {
+        Frame(self.equ_frame(frame.0, source.0))
+    }
+    pub fn absolute_frame(&self, frame: Frame, index: u16) -> Frame {
+        Frame(self.abs_frame(frame.0, index))
+    }
+    pub fn frame_number(&self, frame: Frame) -> u16 {
+        self.frame_index(frame.0)
+    }
+    pub fn silhouette_frame(&mut self, id: ElementId, frame: Frame, flags: u8) {
+        self.silhouette(id, frame.0, flags);
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
+        self.decode_subject(&self.b.elements[id])
     }
 
-    pub fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
-        let index = usize::from(self.b.elements[id].PrimIndex);
-        assert!(index < 330, "invalid primitive index {index}");
-        // SAFETY: the display authority remains live for the context's lifetime.
-        unsafe { &mut legacy::DisplayArray[index] }
+    pub fn set_frame(&mut self, id: ElementId, next: bool, frame: Frame) {
+        use crate::collections::observation::image;
+        if next {
+            image!(frame;self.b.elements[id].next.image.frame,frame.0);
+        } else {
+            image!(frame;self.b.elements[id].current.image.frame,frame.0);
+        }
     }
+    pub fn set_frames(&mut self, id: ElementId, next: bool, frames: Frames) {
+        use crate::collections::observation::image;
+        if next {
+            image!(set;self.b.elements[id].next.image.farray,frames.0);
+        } else {
+            image!(set;self.b.elements[id].current.image.farray,frames.0);
+        }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
+        use crate::collections::observation::image;
+        let value = STATE {
+            location: visual.location,
+            image: state__bindgen_ty_1 {
+                frame: visual.image.frame.0,
+                farray: visual.image.frames.0,
+            },
+        };
+        image!(copy;self.b.elements[id].next,value);
+    }
+    pub fn element_frame_set_first(&self, id: ElementId, next: bool) -> Frame {
+        Frame(self.frame_at(id, next))
+    }
+    pub fn set_intersect_frame(&mut self, id: ElementId, frame: Frame) {
+        use crate::collections::observation::image;
+        image!(frame;self.b.elements[id].IntersectControl.IntersectStamp.frame,frame.0);
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn callbacks(&self, ship: ShipId) -> super::Callbacks {
+        self.desc(ship).race_callbacks
+    }
+    pub fn set_preprocess(
+        &mut self,
+        ship: ShipId,
+        selection: super::Selection<super::race::ShipFn>,
+    ) {
+        self.desc_mut(ship).race_callbacks.pre = selection;
+    }
+    pub fn set_postprocess(
+        &mut self,
+        ship: ShipId,
+        selection: super::Selection<super::race::ShipFn>,
+    ) {
+        self.desc_mut(ship).race_callbacks.post = selection;
+    }
+    pub fn set_weapon(&mut self, ship: ShipId, selection: super::Selection<super::race::WeaponFn>) {
+        self.desc_mut(ship).race_callbacks.weapon = selection;
+    }
+}
+
+impl super::ElementTable {
+    pub fn tail(&self) -> Option<ElementId> {
+        // SAFETY: the table's construction contract retains the queue authority.
+        self.id(unsafe { (*self.queue()).tail })
+    }
+    pub fn pred(&self, id: ElementId) -> Option<ElementId> {
+        self.id(self[id].pred)
+    }
+    pub fn linked(&self, id: ElementId) -> bool {
+        self.raw(id);
+        let mut current = self.head();
+        while let Some(entry) = current {
+            if entry == id {
+                return true;
+            }
+            current = self.succ(entry);
+        }
+        false
+    }
+}
+#[cfg(not(test))]
+impl Cx<'_> {}
+
+impl Cx<'_> {
+    pub(super) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
+        // SAFETY: record decoders supply checked pointers retained by this context.
+        unsafe { &*pointer.as_ptr() }
+    }
+    pub(super) fn project_mut<T>(&mut self, pointer: std::ptr::NonNull<T>) -> &mut T {
+        // SAFETY: the exclusive context borrow scopes one checked record projection.
+        unsafe { &mut *pointer.as_ptr() }
+    }
+}
+
+impl Cx<'_> {
+    pub fn element(&self, id: ElementId) -> ElementState {
+        ElementState::decode(&self.b.elements[id])
+    }
+    pub fn ship_state(&self, id: ShipId) -> ShipState {
+        ShipState::decode(self.ship(id))
+    }
+    pub fn race_stats(&self, id: ShipId) -> RaceStats {
+        RaceStats::decode(self.desc(id))
+    }
+}
+
+/// # Safety
+/// `call` may use only live legacy storage and must retain no record reference.
+pub(crate) unsafe fn invoke_legacy<R>(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    callback: usize,
+    parent: usize,
+    call: impl FnOnce() -> R,
+) -> R {
+    // SAFETY: publishing suspends context access until the legacy invocation returns.
+    unsafe { invoke(callback, parent, || crate::app::bridge::publish(cx, call)) }
+}
+
+#[cfg(not(test))]
+/// # Safety
+/// The resource owner thread must retain the initialized descriptor's resources.
+pub(crate) unsafe fn descriptor_template(
+    init: super::record::DescriptorInitializer,
+) -> Option<super::RaceDesc> {
+    // SAFETY: the initializer and its returned template remain live for this synchronous value copy.
+    unsafe {
+        let pointer = init();
+        if pointer.is_null() {
+            None
+        } else {
+            Some(super::RaceDesc::from_legacy(*pointer))
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum CollisionCall {
+    Hook,
+    Direct,
+}
+
+/// # Safety
+/// Pointers name live legacy elements and collision points on the game thread.
+pub(crate) unsafe fn dispatch_legacy_collision<E, P>(
+    hook: super::CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
+    operands: super::record::CollisionOperands<E, P>,
+    call: CollisionCall,
+) {
+    let super::record::CollisionOperands(a, pa, b, pb) = operands;
+    // SAFETY: the caller is a published boundary and retains no record borrow.
+    unsafe {
+        crate::app::bridge::enter(|cx| match hook {
+            super::CollisionHook::Legacy(callback) => {
+                let parent = cx.legacy_parent(
+                    std::ptr::NonNull::new(a).unwrap_or_else(|| panic!("null collision element")),
+                );
+                invoke_legacy(cx, callback as usize, parent, || callback(a, pa, b, pb));
+            }
+            super::CollisionHook::Native(callback) => {
+                let a =
+                    cx.b.elements
+                        .id(a.cast())
+                        .unwrap_or_else(|| panic!("{}", "null first collision element"));
+                let b =
+                    cx.b.elements
+                        .id(b.cast())
+                        .unwrap_or_else(|| panic!("{}", "null second collision element"));
+                match call {
+                    CollisionCall::Hook => {
+                        let parent = cx.b.elements[a].pParent as usize;
+                        invoke(callback as usize, parent, || {
+                            callback(cx, a, &mut *pa.cast(), b, &mut *pb.cast())
+                        });
+                    }
+                    CollisionCall::Direct => callback(cx, a, &mut *pa.cast(), b, &mut *pb.cast()),
+                }
+            }
+        });
+    }
+}
+
+/// # Safety
+/// The pointer is a live element; no record borrow crosses this call.
+pub(crate) unsafe fn dispatch_legacy_element<E>(
+    hook: super::ElementHook<unsafe extern "C" fn(*mut E)>,
+    operand: super::record::ElementOperand<E>,
+) {
+    let super::record::ElementOperand(element) = operand;
+    // SAFETY: this legacy boundary owns the currently published context.
+    unsafe {
+        crate::app::bridge::enter(|cx| match hook {
+            super::ElementHook::Legacy(callback) => {
+                let parent = cx.legacy_parent(
+                    std::ptr::NonNull::new(element)
+                        .unwrap_or_else(|| panic!("null legacy element")),
+                );
+                invoke_legacy(cx, callback as usize, parent, || callback(element));
+            }
+            super::ElementHook::Native(callback) => {
+                let id =
+                    cx.b.elements
+                        .id(element.cast())
+                        .unwrap_or_else(|| panic!("{}", "null native element"));
+                let parent = cx.b.elements[id].pParent as usize;
+                invoke(callback as usize, parent, || callback(cx, id));
+            }
+        });
+    }
+}
+
+pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R {
+    crate::collections::observation::observe(callback, parent);
+    call()
 }

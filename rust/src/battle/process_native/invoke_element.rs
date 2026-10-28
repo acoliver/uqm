@@ -4,23 +4,15 @@ use crate::engine::battle::record::ELEMENT;
 use crate::engine::battle::{Cx, ElementHook, ElementId};
 
 /// # Safety
-/// The pointer is a live element; no record borrow crosses this call.
+/// The pointer names a live legacy element with no record borrow across the hook.
 pub unsafe fn invoke_legacy_element<E>(
     hook: ElementHook<unsafe extern "C" fn(*mut E)>,
     element: *mut E,
 ) {
-    // SAFETY: this legacy boundary owns the currently published context.
+    let operand = crate::engine::battle::record::ElementOperand(element);
+    // SAFETY: the caller retains the element through the synchronous hook.
     unsafe {
-        crate::app::bridge::enter(|cx| match hook {
-            ElementHook::Legacy(callback) => invoke_race_element(cx, callback, element),
-            ElementHook::Native(callback) => {
-                let id =
-                    cx.b.elements
-                        .id(element.cast())
-                        .expect("null native element");
-                invoke_element(cx, ElementHook::Native(callback), id);
-            }
-        });
+        crate::engine::battle::access::dispatch_legacy_element(hook, operand);
     }
 }
 
@@ -45,12 +37,6 @@ pub fn invoke_element(cx: &mut Cx<'_>, hook: ElementHook, element: ElementId) {
             let parent = cx.b.elements[element].pParent as usize;
             super::dispatch::invoke(callback as usize, parent, || callback(cx, element));
         }
-        ElementHook::Legacy(callback) => {
-            let pointer = cx.b.elements.raw(element).cast::<ELEMENT>();
-            // SAFETY: the checked id belongs to this context's live pool.
-            unsafe {
-                invoke_race_element(cx, callback, pointer);
-            }
-        }
+        ElementHook::Legacy(callback) => cx.invoke_legacy_element_id(callback, element),
     }
 }

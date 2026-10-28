@@ -60,11 +60,10 @@ fn aligned_random(random: u32, extent: i32) -> i16 {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::context_access::SharedFrames;
     use crate::collections::observation::image;
+    use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementId, Parent};
     use crate::ships::native::{
         angle_to_facing, cosine, element, normalize_facing, put_element, sine, starship,
@@ -178,28 +177,29 @@ pub(crate) mod engine {
         cx.b.elements[e].state_flags = APPEARING as u16;
         cx.b.elements[e].set_life_span(NORMAL_LIFE as u16);
         cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
-        let value = (cx.rng)() as u16;
+        let value = cx.random() as u16;
         let (w, h) = cx.screen_dimensions();
         if value & 1 != 0 {
             cx.b.elements[e].current.location.x = if value & 2 == 0 { 0 } else { width(w) as i16 };
-            cx.b.elements[e].current.location.y = aligned_random((cx.rng)(), height(h));
+            cx.b.elements[e].current.location.y = aligned_random(cx.random(), height(h));
         } else {
-            cx.b.elements[e].current.location.x = aligned_random((cx.rng)(), width(w));
+            cx.b.elements[e].current.location.x = aligned_random(cx.random(), width(w));
             cx.b.elements[e].current.location.y = if value & 2 == 0 { 0 } else { height(h) as i16 };
         }
-        let magnitude = ((((cx.rng)() as i16 & 7) + 4) as i32) << ONE_SHIFT;
-        let facing = (cx.rng)() as u16;
+        let magnitude = (((cx.random() as i16 & 7) + 4) as i32) << ONE_SHIFT;
+        let facing = cx.random() as u16;
         cx.b.elements[e]
             .velocity
             .set_vector(i32::from(magnitude as i16), facing);
         let array = cx.shared_frames(SharedFrames::Asteroid);
         image!(set; cx.b.elements[e].current.image.farray, array);
-        let facing = normalize_facing((cx.rng)() as i32);
+        let facing = cx.random() as u16 & ((1 << FACING_SHIFT) - 1) as u16;
         let frame = cx.abs_frame(cx.shared_frame(SharedFrames::Asteroid), facing);
         image!(frame; cx.b.elements[e].current.image.frame, frame);
-        let wait = (cx.rng)() as u8 & 3;
+        let wait = cx.random() as u8 & 3;
         cx.b.elements[e].set_turn_wait(wait);
-        cx.b.elements[e].set_thrust_wait(wait | ((cx.rng)() as u8 & 128));
+        let thrust_wait = wait | (cx.random() as u8 & 128);
+        cx.b.elements[e].set_thrust_wait(thrust_wait);
         cx.b.elements[e].preprocess_func = Some(ElementHook::Native(asteroid_preprocess));
         cx.b.elements[e].death_func = Some(ElementHook::Native(spawn_rubble));
         cx.b.elements[e].collision_func = Some(CollisionHook::Native(collision));
@@ -210,25 +210,22 @@ pub(crate) mod engine {
     /// Element and its owning STARSHIP, for player ships, must be live.
     #[no_mangle]
     pub unsafe extern "C" fn do_damage(e: *mut ELEMENT, damage: i16) {
-        // SAFETY: the published game-thread boundary owns this element and its ship.
-        unsafe {
-            crate::app::bridge::enter(|_cx| {
-                if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-                    if DeltaCrew(e, damage.wrapping_neg()) == 0 {
-                        (*e).__bindgen_anon_1.life_span = 0;
-                        (*e).state_flags |= NONSOLID as u16;
-                    }
-                } else {
-                    damage_object(
-                        (*e).__bindgen_anon_3.mass_points,
-                        &mut (*e).__bindgen_anon_2.hit_points,
-                        &mut (*e).__bindgen_anon_1.life_span,
-                        &mut (*e).state_flags,
-                        damage,
-                    );
+        crate::app::bridge::enter(|_cx| {
+            if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
+                if DeltaCrew(e, damage.wrapping_neg()) == 0 {
+                    (*e).__bindgen_anon_1.life_span = 0;
+                    (*e).state_flags |= NONSOLID as u16;
                 }
-            });
-        }
+            } else {
+                damage_object(
+                    (*e).__bindgen_anon_3.mass_points,
+                    &mut (*e).__bindgen_anon_2.hit_points,
+                    &mut (*e).__bindgen_anon_1.life_span,
+                    &mut (*e).state_flags,
+                    damage,
+                );
+            }
+        });
     }
 
     impl Cx<'_> {

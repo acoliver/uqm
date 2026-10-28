@@ -1,6 +1,5 @@
 //! Collision hooks retain the caller's pair ordering and point mutation order.
 
-use crate::engine::battle::record::ELEMENT;
 use crate::engine::battle::{CollisionHook, Cx, ElementId};
 use crate::graphics::native_abi::POINT;
 
@@ -17,56 +16,26 @@ pub fn invoke_collision(
         CollisionHook::Native(callback) => {
             super::dispatch::invoke(callback as usize, parent, || callback(cx, a, pa, b, pb))
         }
-        CollisionHook::Legacy(callback) => {
-            let first = cx.b.elements.raw(a).cast::<ELEMENT>();
-            let second = cx.b.elements.raw(b).cast::<ELEMENT>();
-            // SAFETY: checked ids and publication suspend the context borrow.
-            unsafe {
-                super::dispatch::invoke_legacy(cx, callback as usize, parent, || {
-                    callback(first, pa, second, pb)
-                });
-            }
-        }
+        CollisionHook::Legacy(callback) => cx.invoke_legacy_collision_ids(callback, a, pa, b, pb),
     }
 }
 
+pub use crate::engine::battle::access::CollisionCall;
+
 /// # Safety
-/// Pointers name live legacy elements and collision points on the game thread.
+/// The pointers name live legacy collision operands; Native hooks require live points.
 pub unsafe fn invoke_legacy_collision<E, P>(
     hook: CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
     a: *mut E,
     pa: *mut P,
     b: *mut E,
     pb: *mut P,
+    call: CollisionCall,
 ) {
-    // SAFETY: the caller is a published boundary and retains no record borrow.
+    let operands = crate::engine::battle::record::CollisionOperands(a, pa, b, pb);
+    // SAFETY: the caller retains all operands through the synchronous hook.
     unsafe {
-        crate::app::bridge::enter(|cx| match hook {
-            CollisionHook::Legacy(callback) => {
-                let parent = (*a.cast::<ELEMENT>()).pParent as usize;
-                super::dispatch::invoke_legacy(cx, callback as usize, parent, || {
-                    callback(a, pa, b, pb)
-                });
-            }
-            CollisionHook::Native(callback) => {
-                let a =
-                    cx.b.elements
-                        .id(a.cast())
-                        .expect("null first collision element");
-                let b =
-                    cx.b.elements
-                        .id(b.cast())
-                        .expect("null second collision element");
-                invoke_collision(
-                    cx,
-                    CollisionHook::Native(callback),
-                    a,
-                    &mut *pa.cast(),
-                    b,
-                    &mut *pb.cast(),
-                );
-            }
-        });
+        crate::engine::battle::access::dispatch_legacy_collision(hook, operands, call);
     }
 }
 
@@ -82,7 +51,7 @@ pub fn invoke_pair(
         let (first, second) = if index == 0 { (a, b) } else { (b, a) };
         let hook = cx.b.elements[first]
             .collision_func
-            .expect("solid element has no collision hook");
+            .unwrap_or_else(|| panic!("{}", "solid element has no collision hook"));
         if index == 0 {
             invoke_collision(cx, hook, first, pa, second, pb);
         } else {

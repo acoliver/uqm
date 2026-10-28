@@ -131,16 +131,16 @@ pub(crate) mod engine {
         activity, player_input, rgb15, set_activity,
     };
     use crate::battle::battle_native::BattleSong;
-    use crate::battle::context_access::SharedFrames;
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
     use crate::collections::observation::image;
-    use crate::engine::battle::{Cx, ElementFn, ElementId, Parent, ShipId};
+    use crate::engine::battle::views::SharedFrames;
+    use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine, starship};
     use abi::*;
     use std::{mem, ptr};
 
     static mut DITTY_IS_PLAYING: BOOLEAN = 0;
-    static mut WINNER_STAR_SHIP: *mut STARSHIP = ptr::null_mut();
+    pub(crate) static mut WINNER_STAR_SHIP: *mut STARSHIP = ptr::null_mut();
 
     use crate::battle::world_elements::engine::crew_preprocess;
 
@@ -174,7 +174,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe fn PlayDitty(ship: *mut STARSHIP) {
+    pub(crate) unsafe fn PlayDitty(ship: *mut STARSHIP) {
         PlayMusic((*(*ship).RaceDescPtr).ship_data.victory_ditty, 0, 3);
         DITTY_IS_PLAYING = 1;
     }
@@ -414,7 +414,7 @@ pub(crate) mod engine {
             image!(set; cx.b.elements[e].current.image.farray, array);
             let frame = cx.shared_frame(SharedFrames::Explosion);
             image!(frame; cx.b.elements[e].current.image.frame, frame);
-            let (angle, dist) = explosion_position_random((cx.rng)());
+            let (angle, dist) = explosion_position_random(cx.random());
             cx.b.elements[e].current.location.x = cx.b.elements[ship]
                 .current
                 .location
@@ -426,7 +426,7 @@ pub(crate) mod engine {
                 .y
                 .wrapping_add(sine(angle as i32, dist as i32));
             cx.b.elements[e].preprocess_func = Some(ElementHook::Native(animation_preprocess));
-            let (angle, dist) = explosion_velocity_random((cx.rng)());
+            let (angle, dist) = explosion_velocity_random(cx.random());
             cx.b.elements[e].velocity.set_components(
                 i32::from(cosine(angle as i32, dist as i32)),
                 i32::from(sine(angle as i32, dist as i32)),
@@ -491,12 +491,13 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn RecordShipDeath(dead: *mut ELEMENT) {
         // SAFETY: the legacy ship element is checked before entering native behavior.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let id = cx.b.elements.id(dead.cast()).expect("null dead ship");
-                cx.record_ship_death(id);
-            });
-        }
+        crate::app::bridge::enter(|cx| {
+            let id =
+                cx.b.elements
+                    .id(dead.cast())
+                    .unwrap_or_else(|| panic!("{}", "null dead ship"));
+            cx.record_ship_death(id);
+        });
     }
 
     /// # Safety
@@ -544,65 +545,6 @@ pub(crate) mod engine {
             cx.primitive(e).color = rgb15(r, g, b);
             cx.b.elements[e].state_flags &= !(DISAPPEARING as u16);
             cx.b.elements[e].state_flags |= CHANGING as u16;
-        }
-    }
-
-    impl Cx<'_> {
-        pub fn spawn_ion_trail(&mut self, ship: ElementId) {
-            assert_ne!(self.b.elements[ship].state_flags & PLAYER_SHIP as u16, 0);
-            let Some(e) = self.alloc_element() else {
-                return;
-            };
-            let owner = self.owner(ship);
-            let angle = facing_to_angle(self.ship(owner).ShipFacing as i32) + HALF_CIRCLE as i32;
-            let mut rect: RECT = RECT {
-                corner: POINT { x: 0, y: 0 },
-                extent: EXTENT {
-                    width: 0,
-                    height: 0,
-                },
-            };
-            let frame = self.desc(owner).ship_data.ship[0];
-            // SAFETY: the ship owns the loaded frame; the rectangle is local output.
-            unsafe {
-                GetFrameRect(frame, &mut rect);
-            }
-            rect.extent.height =
-                ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
-            let handle = self.b.elements.raw(e);
-            // SAFETY: the new slot is unlinked and inserted before the current head.
-            unsafe {
-                InsertQueue(&raw mut disp_q, handle, disp_q.head);
-            }
-            self.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
-            self.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-            self.b.elements[e].set_thrust_wait(1);
-            self.b.elements[e].set_life_span(1);
-            self.primitive(e).Type = gfx_object_POINT_PRIM as u8;
-            self.primitive(e).color = rgb15(31, 21, 0);
-            self.b.elements[e].colorCycleIndex = 0;
-            // SAFETY: the loaded shared frame authority remains live for this battle.
-            unsafe {
-                image!(frame; self.b.elements[e].current.image.frame, DecFrameIndex(stars_in_space));
-                image!(set; self.b.elements[e].current.image.farray, &raw mut stars_in_space);
-            }
-            self.b.elements[e].current.location = self.b.elements[ship].current.location;
-            self.b.elements[e].current.location.x = self.b.elements[e]
-                .current
-                .location
-                .x
-                .wrapping_add(cosine(angle, rect.extent.height as i32));
-            self.b.elements[e].current.location.y = self.b.elements[e]
-                .current
-                .location
-                .y
-                .wrapping_add(sine(angle, rect.extent.height as i32));
-            self.b.elements[e].death_func = Some(ElementHook::Native(cycle_ion_trail));
-            self.set_parent(e, Some(owner));
-            image!(copy; self.b.elements[e].next, self.b.elements[e].current);
-            let life = self.b.elements[e].life_span().wrapping_sub(1);
-            self.b.elements[e].set_life_span(life);
-            self.b.elements[e].state_flags |= PRE_PROCESS as u16;
         }
     }
 
@@ -709,67 +651,6 @@ pub(crate) mod engine {
         let ship = cx.owner(e);
         cx.ship_mut(ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
         cx.preprocess_status(e);
-    }
-    impl Cx<'_> {
-        fn silence_battle_sounds(&mut self) {
-            // SAFETY: no record borrow crosses the sound queue boundary.
-            self.queue_sound(usize::MAX, None);
-        }
-        fn winner(&self) -> Option<ShipId> {
-            // SAFETY: winner state belongs to the owning game thread.
-            unsafe {
-                (!WINNER_STAR_SHIP.is_null()).then(|| self.ship_id(WINNER_STAR_SHIP as usize))
-            }
-        }
-        fn play_ditty(&mut self, ship: ShipId) {
-            let pointer = self.ship(ship) as *const STARSHIP as *mut STARSHIP;
-            // SAFETY: the checked winner owns its loaded victory music.
-            unsafe {
-                PlayDitty(pointer);
-            }
-        }
-        fn replace_dead_ship(&mut self, dead: ElementId) {
-            let pointer = self.b.elements.raw(dead).cast();
-            // SAFETY: the transition releases the outgoing descriptor and may enter a picker.
-            unsafe {
-                new_ship_with_picker(self, pointer, |ship, side| GetNextStarShip(ship, side));
-            }
-        }
-        fn stop_battle_music(&mut self) {
-            // SAFETY: music state is owned by the battle thread.
-            unsafe {
-                StopAllBattleMusic();
-            }
-        }
-        fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
-            let pointer = self.b.elements.raw(ship).cast();
-            // SAFETY: the checked dying ship retains its owner and resources.
-            unsafe {
-                StartShipExplosion(pointer, play_sound);
-            }
-        }
-        fn select_winner(&mut self, dead: ElementId) {
-            let pointer = self.b.elements.raw(dead).cast();
-            // SAFETY: the scan and update are synchronous with no retained record borrow.
-            unsafe {
-                SetWinnerStarShip(FindAliveStarShip(pointer));
-            }
-        }
-        fn record_ship_death(&mut self, dead: ElementId) {
-            let owner = self.owner(dead);
-            if u32::from(self.b.elements[dead].mass_points()) <= MAX_SHIP_MASS {
-                let player = self.ship(owner).playerNr;
-                assert!(player >= 0);
-                self.b.ship_lost(player as usize);
-            }
-            if self.world.activity() as u8 == SUPER_MELEE as u8 {
-                let pointer = self.ship(owner) as *const STARSHIP as *mut STARSHIP;
-                // SAFETY: the checked owner remains live while updating melee status.
-                unsafe {
-                    MeleeShipDeath(pointer);
-                }
-            }
-        }
     }
 }
 

@@ -54,6 +54,8 @@ pub(crate) mod engine {
     }
     static mut DESC: RACE_DESC = descriptor();
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread before descriptor template mutation or resource cleanup.
     pub unsafe extern "C" fn init_samatra() -> *mut RACE_DESC {
         DESC.preprocess_func = Some(samatra_preprocess);
         DESC.postprocess_func = Some(samatra_postprocess);
@@ -162,7 +164,7 @@ pub(crate) mod engine {
                 (*c).__bindgen_anon_4.turn_wait -= 1;
             } else {
                 facing = normalize_facing(i32::from(facing));
-                if TrackShip(c, &mut facing) > 0 {
+                if track_ship(c, &mut facing) > 0 {
                     SetVelocityVector(&raw mut (*c).velocity, COMET_SPEED, facing);
                 }
                 (*c).__bindgen_anon_4.turn_wait = 3;
@@ -328,7 +330,7 @@ pub(crate) mod engine {
             facing = normalize_facing(i32::from(facing));
             if (*e).hTarget.is_null() {
                 let mut f = facing;
-                TrackShip(e, &mut f);
+                track_ship(e, &mut f);
             }
             let target = if (*e).hTarget.is_null() {
                 (*ss).hShip

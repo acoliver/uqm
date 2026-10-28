@@ -1,9 +1,8 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::collections::observation::image;
     use crate::engine::battle::{
-        Concerns, Cx, ElementId, Race, RaceDesc, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
+        Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };
     use crate::ships::native::abi::*;
     // Core characteristics
@@ -70,7 +69,7 @@ pub(crate) mod engine {
         (hi << 4) | lo
     }
 
-    pub fn descriptor() -> RACE_DESC {
+    pub fn descriptor() -> crate::engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
         let mut desc = RACE_DESC::EMPTY;
         desc.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
@@ -121,7 +120,7 @@ pub(crate) mod engine {
         desc.cyborg_control.ManeuverabilityIndex = 0;
         desc.cyborg_control.WeaponRange = (LONG_RANGE_WEAPON >> 2) as u16;
         desc.race = Some(&ANDROSYNTH);
-        desc
+        crate::engine::battle::RaceDesc::from_legacy(desc)
     }
 
     pub static ANDROSYNTH: Race = Race {
@@ -140,56 +139,56 @@ pub(crate) mod engine {
         b: ElementId,
         pb: &mut POINT,
     ) {
-        let old_crew_level = cx.b.elements[a].hit_points();
-        let old_life = cx.b.elements[a].life_span();
-        let old_offs = cx.b.elements[a].thrust_wait();
-        cx.b.elements[a].set_thrust_wait(BLAZER_OFFSET);
-        cx.b.elements[a].set_mass_points(BLAZER_DAMAGE);
+        let old_crew_level = cx.element(a).hit_points();
+        let old_life = cx.element(a).life_span();
+        let old_offs = cx.element(a).thrust_wait();
+        cx.element_mut(a).set_thrust_wait(BLAZER_OFFSET);
+        cx.element_mut(a).set_mass_points(BLAZER_DAMAGE);
         cx.weapon_collision(a, pa, b, pb);
-        cx.b.elements[a].set_mass_points(BLAZER_MASS);
-        cx.b.elements[a].set_thrust_wait(old_offs);
-        cx.b.elements[a].set_life_span(old_life);
-        cx.b.elements[a].set_hit_points(old_crew_level);
-        cx.b.elements[a].state_flags &= !((DISAPPEARING | NONSOLID) as u16);
+        cx.element_mut(a).set_mass_points(BLAZER_MASS);
+        cx.element_mut(a).set_thrust_wait(old_offs);
+        cx.element_mut(a).set_life_span(old_life);
+        cx.element_mut(a).set_hit_points(old_crew_level);
+        cx.element_mut(a).flags &= !((DISAPPEARING | NONSOLID) as u16);
         crate::battle::ship_native::collision(cx, a, pa, b, pb);
     }
 
     pub(crate) fn bubble_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
-        let packed = cx.b.elements[missile].turn_wait();
+        let packed = cx.element(missile).turn_wait();
         let mut thrust_wait = packed >> 4;
         let mut turn_wait = packed & 0x0f;
         if thrust_wait > 0 {
             thrust_wait -= 1;
         } else {
-            let frame = cx.inc_frame(cx.b.elements[missile].current.image.frame);
-            image!(frame; cx.b.elements[missile].next.image.frame, frame);
-            cx.b.elements[missile].state_flags |= CHANGING as u16;
-            thrust_wait = ((cx.rng)() as u16 & 3) as u8;
+            let frame = cx.advance_frame(cx.element(missile).current.image.frame);
+            cx.set_frame(missile, true, frame);
+            cx.element_mut(missile).flags |= CHANGING as u16;
+            thrust_wait = (cx.random() as u16 & 3) as u8;
         }
         if turn_wait > 0 {
             turn_wait -= 1;
         } else {
-            let mut facing =
-                (angle_to_facing(i32::from(cx.b.elements[missile].velocity.travel_angle))
-                    & FACING_MASK) as u16;
+            let mut facing = (angle_to_facing(i32::from(cx.element(missile).velocity.travel_angle))
+                & FACING_MASK) as u16;
             let delta_facing = cx.track_ship(missile, &mut facing);
             if delta_facing == -1 {
-                facing = (cx.rng)() as u16;
+                facing = cx.random() as u16;
             } else if i32::from(delta_facing) <= angle_to_facing(HALF_CIRCLE_ANGLE) {
                 facing = facing.wrapping_add(
-                    (cx.rng)() as u16 & (angle_to_facing(HALF_CIRCLE_ANGLE) - 1) as u16,
+                    cx.random() as u16 & (angle_to_facing(HALF_CIRCLE_ANGLE) - 1) as u16,
                 );
             } else {
                 facing = facing.wrapping_sub(
-                    (cx.rng)() as u16 & (angle_to_facing(HALF_CIRCLE_ANGLE) - 1) as u16,
+                    cx.random() as u16 & (angle_to_facing(HALF_CIRCLE_ANGLE) - 1) as u16,
                 );
             }
-            cx.b.elements[missile]
+            cx.element_mut(missile)
                 .velocity
                 .set_vector(i32::from(MISSILE_SPEED), facing);
             turn_wait = TRACK_WAIT;
         }
-        cx.b.elements[missile].set_turn_wait(make_byte(turn_wait, thrust_wait));
+        cx.element_mut(missile)
+            .set_turn_wait(make_byte(turn_wait, thrust_wait));
     }
 
     pub(crate) fn initialize_bubble(
@@ -197,11 +196,11 @@ pub(crate) mod engine {
         ss: ShipId,
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
-        let mut block = MISSILE_BLOCK {
-            cx: origin.location.x,
-            cy: origin.location.y,
-            farray: cx.ship_frames(ss, 1),
-            face: cx.ship(ss).ShipFacing,
+        let mut block = crate::engine::battle::views::Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
             index: 0,
             sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
@@ -210,97 +209,103 @@ pub(crate) mod engine {
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
             life: MISSILE_LIFE,
-            preprocess_func: Some(ElementHook::Native(bubble_preprocess)),
+            preprocess: Some(bubble_preprocess),
             blast_offs: MISSILE_OFFSET,
         };
         let bubble = cx.missile(&mut block);
         if let Some(id) = bubble {
-            cx.b.elements[id].set_turn_wait(0);
+            cx.element_mut(id).set_turn_wait(0);
         }
         vec![bubble]
+    }
+
+    fn blazer_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        let weapon = ENEMY_WEAPON_INDEX as usize;
+
+        concerns.objects[CREW_OBJECT_INDEX as usize].object = None;
+        if let Some(threat) = concerns.objects[weapon].object {
+            if concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE {
+                let flags = cx.element(threat).flags;
+                if flags & FINITE_LIFE as u16 != 0 && flags & CREW_OBJECT as u16 == 0 {
+                    concerns.objects[weapon].movement = MOVEMENT_STATE_AVOID;
+                } else {
+                    concerns.objects[weapon].object = None;
+                }
+            }
+        }
+        cx.ship_intelligence(ss, concerns);
     }
 
     pub(crate) fn androsynth_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
         let enemy = ENEMY_SHIP_INDEX as usize;
-        if concerns.subject.next.image.farray == cx.ship_frames(ss, 2) {
-            concerns.objects[CREW_OBJECT_INDEX as usize].object = None;
-            if let Some(threat) = concerns.objects[weapon].object {
-                if concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE {
-                    let flags = cx.b.elements[threat].state_flags;
-                    if flags & FINITE_LIFE as u16 != 0 && flags & CREW_OBJECT as u16 == 0 {
-                        concerns.objects[weapon].movement = MOVEMENT_STATE_AVOID;
-                    } else {
-                        concerns.objects[weapon].object = None;
-                    }
-                }
-            }
-            cx.ship_intelligence(ss, concerns);
+        if concerns.subject.next.image.frames == cx.ship_frame_set(ss, 2) {
+            blazer_intelligence(cx, ss, concerns);
             return;
         }
         if let Some(target) = concerns.objects[enemy].object {
             let other = cx.owner(target);
-            let intel = cx.desc(other).cyborg_control;
-            let crew = i32::from(cx.b.elements[target].hit_points());
+            let intel = cx.race_stats(other).intelligence;
+            let crew = i32::from(cx.element(target).hit_points());
             if concerns.objects[enemy].which_turn <= 16
-                && (cx.ship(ss).special_counter > 0
-                    || i32::from(cx.desc(ss).ship_info.energy_level) < i32::from(MAX_ENERGY) / 3
-                    || ((i32::from(intel.WeaponRange) <= CLOSE_RANGE_WEAPON
+                && (cx.ship_state(ss).special_counter > 0
+                    || i32::from(cx.race_stats(ss).ship_info.energy_level)
+                        < i32::from(MAX_ENERGY) / 3
+                    || ((i32::from(intel.weapon_range) <= CLOSE_RANGE_WEAPON
                         && crew > i32::from(BLAZER_DAMAGE))
                         || (crew > i32::from(BLAZER_DAMAGE) * 3
-                            && u32::from(intel.ManeuverabilityIndex) > SLOW_SHIP)))
+                            && u32::from(intel.maneuverability) > SLOW_SHIP)))
             {
                 concerns.objects[enemy].movement = MOVEMENT_STATE_ENTICE;
             }
         }
         cx.ship_intelligence(ss, concerns);
-        if cx.ship(ss).special_counter == 0 {
-            cx.ship_mut(ss).ship_input_state &= !(SPECIAL as u8);
+        if cx.ship_state(ss).special_counter == 0 {
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
             let danger = concerns.objects[weapon].object.is_some()
                 && concerns.objects[weapon].which_turn <= 4;
             let lure = concerns.objects[enemy].object.is_some_and(|target| {
-                if i32::from(cx.desc(ss).ship_info.energy_level) < i32::from(MAX_ENERGY) / 3 {
+                if i32::from(cx.race_stats(ss).ship_info.energy_level) < i32::from(MAX_ENERGY) / 3 {
                     return false;
                 }
                 let other = cx.owner(target);
-                let intel = cx.desc(other).cyborg_control;
-                let crew = i32::from(cx.b.elements[target].hit_points());
-                i32::from(intel.WeaponRange)
-                    >= i32::from(cx.desc(ss).cyborg_control.WeaponRange) << 1
+                let intel = cx.race_stats(other).intelligence;
+                let crew = i32::from(cx.element(target).hit_points());
+                i32::from(intel.weapon_range)
+                    >= i32::from(cx.race_stats(ss).intelligence.weapon_range) << 1
                     || (concerns.objects[enemy].which_turn < 16
-                        && (i32::from(intel.WeaponRange) > CLOSE_RANGE_WEAPON
+                        && (i32::from(intel.weapon_range) > CLOSE_RANGE_WEAPON
                             || crew <= i32::from(BLAZER_DAMAGE))
                         && (crew <= i32::from(BLAZER_DAMAGE) * 3
-                            || u32::from(intel.ManeuverabilityIndex) <= SLOW_SHIP))
+                            || u32::from(intel.maneuverability) <= SLOW_SHIP))
             });
             if danger || lure {
-                cx.ship_mut(ss).ship_input_state |= SPECIAL as u8;
+                cx.ship_state_mut(ss).input |= SPECIAL as u8;
             }
         }
-        if cx.ship(ss).ship_input_state & SPECIAL as u8 == 0 && cx.ship(ss).weapon_counter == 0 {
+        if cx.ship_state(ss).input & SPECIAL as u8 == 0 && cx.ship_state(ss).weapon_counter == 0 {
             if let Some(target) = concerns.objects[enemy].object {
                 if concerns.objects[enemy].which_turn <= 4 {
-                    cx.ship_mut(ss).ship_input_state |= WEAPON as u8;
+                    cx.ship_state_mut(ss).input |= WEAPON as u8;
                 } else if concerns.objects[enemy].movement != MOVEMENT_STATE_PURSUE
                     && concerns.objects[enemy].which_turn <= 12
                 {
                     let (dx, dy) = concerns.subject.velocity.get_current_components();
-                    let (other_dx, other_dy) =
-                        cx.b.elements[target].velocity.get_current_components();
+                    let (other_dx, other_dy) = cx.element(target).velocity.get_current_components();
                     let travel =
                         crate::math::arctan((dx - other_dx) as SIZE, (dy - other_dy) as SIZE);
                     let direction = crate::math::arctan(
-                        (i32::from(cx.b.elements[target].next.location.x)
+                        (i32::from(cx.element(target).next.location.x)
                             - i32::from(concerns.subject.next.location.x))
                             as SIZE,
-                        (i32::from(cx.b.elements[target].next.location.y)
+                        (i32::from(cx.element(target).next.location.y)
                             - i32::from(concerns.subject.next.location.y))
                             as SIZE,
                     );
                     if normalize_angle(i32::from(travel) - i32::from(direction) + OCTANT_ANGLE)
                         <= QUADRANT_ANGLE
                     {
-                        cx.ship_mut(ss).ship_input_state |= WEAPON as u8;
+                        cx.ship_state_mut(ss).input |= WEAPON as u8;
                     }
                 }
             }
@@ -309,104 +314,99 @@ pub(crate) mod engine {
 
     pub(crate) fn androsynth_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
-        if cx.b.elements[ship].next.image.farray == cx.ship_frames(ss, 2) {
-            if cx.ship(ss).cur_status_flags & SPECIAL as u16 != 0
-                || cx.desc(ss).ship_info.energy_level == 0
+        if cx.element(ship).next.image.frames == cx.ship_frame_set(ss, 2) {
+            if cx.ship_state(ss).status & SPECIAL as u16 != 0
+                || cx.race_stats(ss).ship_info.energy_level == 0
             {
-                cx.desc_mut(ss).characteristics.energy_regeneration = BLAZER_DEGENERATION as u8;
-                cx.ship_mut(ss).energy_counter = ENERGY_WAIT;
-                if cx.ship(ss).cur_status_flags & SPECIAL as u16 != 0 {
+                cx.race_stats_mut(ss).characteristics.energy_regeneration =
+                    BLAZER_DEGENERATION as u8;
+                cx.ship_state_mut(ss).energy_counter = ENERGY_WAIT;
+                if cx.ship_state(ss).status & SPECIAL as u16 != 0 {
                     cx.process_ship_sound(ss, 1, ship);
-                    cx.b.elements[ship].set_turn_wait(0);
-                    cx.b.elements[ship].set_thrust_wait(0);
-                    cx.desc_mut(ss).characteristics.special_wait =
-                        cx.desc(ss).characteristics.turn_wait;
-                    cx.b.elements[ship].set_mass_points(BLAZER_MASS);
-                    cx.desc_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
-                    cx.desc_mut(ss).race_state = RaceState::Androsynth {
-                        collision: cx.b.elements[ship].collision_func,
+                    cx.element_mut(ship).set_turn_wait(0);
+                    cx.element_mut(ship).set_thrust_wait(0);
+                    cx.race_stats_mut(ss).characteristics.special_wait =
+                        cx.race_stats(ss).characteristics.turn_wait;
+                    cx.element_mut(ship).set_mass_points(BLAZER_MASS);
+                    cx.race_stats_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
+                    cx.race_stats_mut(ss).state = RaceState::Androsynth {
+                        collision: cx.element(ship).collide,
                     };
-                    cx.b.elements[ship].collision_func =
-                        Some(CollisionHook::Native(blazer_collision));
+                    cx.element_mut(ship).collide = Some(CollisionHook::Native(blazer_collision));
                 }
             }
-            if cx.desc(ss).ship_info.energy_level == 0 {
+            if cx.race_stats(ss).ship_info.energy_level == 0 {
                 cx.delta_energy(ship, -BLAZER_DEGENERATION);
-                cx.ship_mut(ss).energy_counter = 1;
+                cx.ship_state_mut(ss).energy_counter = 1;
             }
         }
     }
 
     pub(crate) fn androsynth_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
-        let mut flags = cx.ship(ss).cur_status_flags;
-        if cx.b.elements[ship].next.image.farray == cx.ship_frames(ss, 0) {
+        let mut flags = cx.ship_state(ss).status;
+        if cx.element(ship).next.image.frames == cx.ship_frame_set(ss, 0) {
             if flags & SPECIAL as u16 != 0 {
-                if cx.desc(ss).ship_info.energy_level < SPECIAL_ENERGY_COST {
+                if cx.race_stats(ss).ship_info.energy_level < SPECIAL_ENERGY_COST {
                     cx.delta_energy(ship, -i16::from(SPECIAL_ENERGY_COST));
                 } else {
                     flags &= !(WEAPON as u16);
-                    let frames = cx.ship_frames(ss, 2);
-                    image!(set; cx.b.elements[ship].next.image.farray, frames);
-                    let frame = cx.equ_frame(
-                        cx.desc(ss).ship_data.special[0],
-                        cx.b.elements[ship].next.image.frame,
-                    );
-                    image!(frame; cx.b.elements[ship].next.image.frame, frame);
-                    cx.b.elements[ship].state_flags |= CHANGING as u16;
+                    let frames = cx.ship_frame_set(ss, 2);
+                    cx.set_frames(ship, true, frames);
+                    let frame = cx
+                        .equivalent_frame(cx.ship_frame(ss, 2), cx.element(ship).next.image.frame);
+                    cx.set_frame(ship, true, frame);
+                    cx.element_mut(ship).flags |= CHANGING as u16;
                 }
             }
         } else {
             flags &= !((THRUST | WEAPON | SPECIAL) as u16);
-            if cx.desc(ss).characteristics.turn_wait > BLAZER_TURN_WAIT {
-                cx.desc_mut(ss).characteristics.special_wait = cx
-                    .desc(ss)
-                    .characteristics
-                    .special_wait
-                    .wrapping_add(cx.desc(ss).characteristics.turn_wait - BLAZER_TURN_WAIT);
-                cx.desc_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
+            if cx.race_stats(ss).characteristics.turn_wait > BLAZER_TURN_WAIT {
+                cx.race_stats_mut(ss).characteristics.special_wait =
+                    cx.desc(ss).characteristics.special_wait.wrapping_add(
+                        cx.race_stats(ss).characteristics.turn_wait - BLAZER_TURN_WAIT,
+                    );
+                cx.race_stats_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
             }
-            if cx.desc(ss).ship_info.energy_level == 0 {
-                cx.b.elements[ship].velocity = crate::battle::velocity::VelocityDesc::new();
+            if cx.race_stats(ss).ship_info.energy_level == 0 {
+                cx.element_mut(ship).velocity = crate::battle::velocity::VelocityDesc::new();
                 flags &= !((LEFT | RIGHT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
-                cx.desc_mut(ss).characteristics.turn_wait =
-                    cx.desc(ss).characteristics.special_wait;
-                cx.desc_mut(ss).characteristics.energy_regeneration = ENERGY_REGENERATION;
-                cx.b.elements[ship].set_mass_points(SHIP_MASS);
-                let RaceState::Androsynth { collision } = cx.desc(ss).race_state else {
+                cx.race_stats_mut(ss).characteristics.turn_wait =
+                    cx.race_stats(ss).characteristics.special_wait;
+                cx.race_stats_mut(ss).characteristics.energy_regeneration = ENERGY_REGENERATION;
+                cx.element_mut(ship).set_mass_points(SHIP_MASS);
+                let RaceState::Androsynth { collision } = cx.race_stats(ss).state else {
                     panic!("blazer has no saved collision hook")
                 };
-                cx.b.elements[ship].collision_func = collision;
-                let frames = cx.ship_frames(ss, 0);
-                image!(set; cx.b.elements[ship].next.image.farray, frames);
-                let frame = cx.equ_frame(
-                    cx.desc(ss).ship_data.ship[0],
-                    cx.b.elements[ship].next.image.frame,
-                );
-                image!(frame; cx.b.elements[ship].next.image.frame, frame);
-                cx.b.elements[ship].state_flags |= CHANGING as u16;
-            } else if cx.b.elements[ship].thrust_wait() != 0 {
-                let wait = cx.b.elements[ship].thrust_wait() - 1;
-                cx.b.elements[ship].set_thrust_wait(wait);
+                cx.element_mut(ship).collide = collision;
+                let frames = cx.ship_frame_set(ss, 0);
+                cx.set_frames(ship, true, frames);
+                let frame =
+                    cx.equivalent_frame(cx.ship_frame(ss, 0), cx.element(ship).next.image.frame);
+                cx.set_frame(ship, true, frame);
+                cx.element_mut(ship).flags |= CHANGING as u16;
+            } else if cx.element(ship).thrust_wait() != 0 {
+                let wait = cx.element(ship).thrust_wait() - 1;
+                cx.element_mut(ship).set_thrust_wait(wait);
             } else {
-                let mut facing = cx.ship(ss).ShipFacing;
-                if cx.b.elements[ship].turn_wait() == 0 && flags & (LEFT | RIGHT) as u16 != 0 {
+                let mut facing = cx.ship_state(ss).facing;
+                if cx.element(ship).turn_wait() == 0 && flags & (LEFT | RIGHT) as u16 != 0 {
                     facing = if flags & LEFT as u16 != 0 {
                         facing.wrapping_sub(1)
                     } else {
                         facing.wrapping_add(1)
                     };
                 }
-                cx.b.elements[ship]
+                cx.element_mut(ship)
                     .velocity
                     .set_vector(i32::from(BLAZER_THRUST), facing & FACING_MASK as u16);
                 flags |= (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16;
             }
         }
-        cx.ship_mut(ss).cur_status_flags = flags;
+        cx.ship_state_mut(ss).status = flags;
     }
 
-    pub(crate) fn uninit_androsynth(desc: &mut RaceDesc) {
-        desc.race_state = RaceState::None;
+    pub(crate) fn uninit_androsynth(state: &mut RaceState) {
+        *state = RaceState::None;
     }
 }

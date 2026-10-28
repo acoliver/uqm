@@ -182,6 +182,7 @@ pub(crate) mod engine {
             pa,
             b,
             pb,
+            crate::battle::process_native::invoke_collision::CollisionCall::Direct,
         );
     }
 

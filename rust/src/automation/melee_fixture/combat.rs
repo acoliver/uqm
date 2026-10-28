@@ -188,14 +188,12 @@ pub(super) fn satellites(
                 .ok_or("fixture element or owner is no longer live")?
                 .thrust_or_blast = 0;
             run.before = world.elements.keys().copied().collect();
+            let hook = hooks
+                .satellite
+                .map(crate::engine::battle::ElementHook::Legacy);
             run.next(vec![
                 Effect::Intersect(run.b),
-                Effect::Invoke(
-                    hooks
-                        .satellite
-                        .map(crate::engine::battle::ElementHook::Legacy),
-                    run.object,
-                ),
+                Effect::Invoke(hook, run.object),
             ])
         }
         1 => {

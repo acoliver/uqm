@@ -3,6 +3,7 @@
 mod battle_context;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
+use uqm_rust::ships::races::{init_human, init_mmrnmhrm, init_sis};
 use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
@@ -296,12 +297,6 @@ struct SavedPkunk {
     death: ElementProcessFunc,
 }
 
-extern "C" {
-    fn init_human() -> *mut RACE_DESC;
-    fn init_mmrnmhrm() -> *mut RACE_DESC;
-    fn init_sis() -> *mut RACE_DESC;
-}
-
 fn race_custom_fields(directory: &Path) {
     // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
@@ -350,12 +345,13 @@ fn race_custom_fields(directory: &Path) {
         }
         let (fields, _) = snapshot(directory);
         assert_eq!(fields["ships.0.0.custom.prev_facing"], "27");
-        let mut collision = Some(known_collision());
         ship.SpeciesID = SPECIES_ID_ANDROSYNTH_ID;
-        {
-            let descriptor = &mut descriptor;
-            descriptor.data = ptr::from_mut(&mut collision).cast();
-        }
+        (*ship.RaceDescPtr).data = ptr::null_mut();
+        (*ship.RaceDescPtr).race_state = uqm_rust::engine::battle::RaceState::Androsynth {
+            collision: Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                known_collision(),
+            )),
+        };
         let (fields, _) = snapshot(directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
@@ -517,7 +513,7 @@ fn descriptor_assets(directory: &Path) {
     descriptor.ship_data.ship_sounds_rsc = c"test.sounds".as_ptr();
     descriptor.ship_data.ship_sounds = &mut strings;
     descriptor.ship_data.victory_ditty = &mut music;
-    descriptor.CodeRef = ptr::from_mut(&mut code).cast();
+    descriptor.code_ref = ptr::from_mut(&mut code).cast();
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     ship.RaceDescPtr = &mut descriptor;
     ship.icons = frame_pointer;

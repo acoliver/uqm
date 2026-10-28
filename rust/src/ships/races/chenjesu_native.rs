@@ -174,7 +174,7 @@ pub(crate) mod engine {
         } else {
             let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
             let mut facing = original;
-            if TrackShip(e, &mut facing) < 0 {
+            if track_ship(e, &mut facing) < 0 {
                 facing = normalize_facing(TFB_Random() as i32);
             } else {
                 let target = element((*e).hTarget);
@@ -230,6 +230,7 @@ pub(crate) mod engine {
             pa,
             b,
             pb,
+            crate::battle::process_native::invoke_collision::CollisionCall::Direct,
         );
         if (*b).state_flags & PLAYER_SHIP as u16 != 0 && (*a).playerNr != (*b).playerNr {
             sound(starship(a), 2, a);

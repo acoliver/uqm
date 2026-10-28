@@ -25,7 +25,6 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::sounds::{GameSounds, ProcessSound};
@@ -256,7 +255,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Tracker, facing and any target/queue elements must be live engine records.
-    pub unsafe extern "C" fn TrackShip(tracker: *mut ELEMENT, facing: *mut u16) -> i16 {
+    pub unsafe extern "C" fn track_ship(tracker: *mut ELEMENT, facing: *mut u16) -> i16 {
         let mut best_distance: i16 = 0;
         let mut best_facing: i16 = -1;
         let mut handle = (*tracker).hTarget;

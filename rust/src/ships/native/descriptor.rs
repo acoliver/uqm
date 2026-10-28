@@ -65,9 +65,14 @@ impl race_desc {
         postprocess_func: None,
         init_weapon_func: None,
         data: std::ptr::null_mut(),
-        CodeRef: std::ptr::null_mut(),
+        code_ref: std::ptr::null_mut(),
         race: None,
         race_state: crate::engine::battle::RaceState::None,
+        race_callbacks: crate::engine::battle::Callbacks {
+            pre: crate::engine::battle::Selection::Default,
+            post: crate::engine::battle::Selection::Default,
+            weapon: crate::engine::battle::Selection::Default,
+        },
     };
 }
 
@@ -78,7 +83,7 @@ mod tests {
     #[test]
     fn empty_descriptor_has_no_resources_or_callbacks() {
         let descriptor = race_desc::EMPTY;
-        assert!(descriptor.data.is_null() && descriptor.CodeRef.is_null());
+        assert!(descriptor.data.is_null() && descriptor.code_ref.is_null());
         assert!(descriptor.uninit_func.is_none() && descriptor.preprocess_func.is_none());
         assert!(descriptor.postprocess_func.is_none() && descriptor.init_weapon_func.is_none());
         assert!(descriptor.cyborg_control.intelligence_func.is_none());

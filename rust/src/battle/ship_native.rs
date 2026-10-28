@@ -168,7 +168,6 @@ const GRAVITY_MASS_NATIVE: u16 = 100;
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::process_native::invoke_race::invoke_ship_process;
     use crate::battle::status_native::PostProcessStatus;
     use crate::collections::observation::image;
     use crate::engine::battle::{Cx, ElementId};
@@ -223,7 +222,7 @@ pub(crate) mod engine {
                 cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
                 cx.init_ship_status(ship);
-                invoke_ship_process(cx, ship, false);
+                cx.invoke_ship_process(ship, false);
                 if cx.target(e).is_none() {
                     ship_transition(cx, e);
                 } else {
@@ -253,7 +252,7 @@ pub(crate) mod engine {
             let delta = cx.desc(ship).characteristics.energy_regeneration as i8 as SIZE;
             cx.delta_energy(e, delta);
         }
-        if invoke_ship_process(cx, ship, false) {
+        if cx.invoke_ship_process(ship, false) {
             flags = cx.ship(ship).cur_status_flags;
         }
         if cx.b.elements[e].turn_wait() != 0 {
@@ -310,11 +309,7 @@ pub(crate) mod engine {
                 -SIZE::from(cx.desc(ship).characteristics.weapon_energy_cost),
             )
         {
-            let weapons = crate::battle::process_native::invoke_race::spawn_weapons(
-                cx,
-                ship,
-                cx.weapon_origin(e),
-            );
+            let weapons = crate::engine::battle::Cx::spawn_weapons(cx, ship, cx.weapon_origin(e));
             if !weapons.is_empty() {
                 let mut played = false;
                 for weapon in weapons.into_iter().flatten() {
@@ -334,7 +329,7 @@ pub(crate) mod engine {
         if cx.ship(ship).special_counter != 0 {
             cx.ship_mut(ship).special_counter -= 1;
         }
-        invoke_ship_process(cx, ship, true);
+        cx.invoke_ship_process(ship, true);
         if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
             PostProcessStatus(cx, e);
         }

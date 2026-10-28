@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_samatra;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -7,9 +8,6 @@ use uqm_rust::{
     ships::native::{abi::*, element, frame_index},
     state::game_state_keys::set_game_state,
 };
-unsafe extern "C" {
-    fn init_samatra() -> *mut RACE_DESC;
-}
 
 unsafe fn boss() -> Ship {
     let mut ship = Ship::new(init_samatra, NPC_PLAYER_NUM as SIZE);
@@ -143,7 +141,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
                             &mut point,
                             player.ptr(),
                             &mut point,
-                        );
+                         uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook);
                             assert_eq!(
                                 GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0,
                                 generators == 0 && bomb == 1 && is_ship && owner == RPG_PLAYER_NUM
@@ -233,6 +231,7 @@ fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
                 &mut p,
                 player.ptr(),
                 &mut p,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*sentinel).__bindgen_anon_2.hit_points, 10);
             assert_eq!((*sentinel).__bindgen_anon_1.life_span, 2);

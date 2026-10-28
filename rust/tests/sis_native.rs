@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_sis;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -7,9 +8,6 @@ use uqm_rust::{
     ships::native::{abi::*, element},
     state::game_state_keys::{get_game_state, set_game_state},
 };
-unsafe extern "C" {
-    fn init_sis() -> *mut RACE_DESC;
-}
 unsafe fn modules() {
     uqm_rust::state::ffi::rust_init_game_state();
     GlobData.SIS_state.ModuleSlots = [255; 16];

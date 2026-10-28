@@ -1,9 +1,8 @@
 //! Species behavior and value inputs for AI projections.
 
-use super::{record::RACE_DESC, CollisionHook, Cx, ElementId, ShipId};
-use crate::graphics::native_abi::POINT;
+use super::{CollisionHook, Cx, ElementId, ShipId};
 
-pub type RaceDesc = RACE_DESC;
+pub use super::record::RaceDesc;
 pub type ShipFn = fn(&mut Cx<'_>, ShipId);
 pub type WeaponFn = fn(&mut Cx<'_>, ShipId, WeaponOrigin) -> WeaponSpawn;
 pub type IntelligenceFn = fn(&mut Cx<'_>, ShipId, &mut Concerns);
@@ -16,26 +15,41 @@ pub struct Race {
     pub postprocess: Option<ShipFn>,
     pub init_weapon: WeaponFn,
     pub intelligence: IntelligenceFn,
-    pub uninit: Option<fn(&mut RaceDesc)>,
+    pub uninit: Option<fn(&mut RaceState)>,
 }
 
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Default)]
 pub enum RaceState {
     #[default]
-    None,
-    Vux {
-        entry_done: bool,
-    },
+    None = 0,
     Androsynth {
         collision: Option<CollisionHook>,
-    },
+    } = 1,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct WeaponOrigin {
-    pub location: POINT,
-    pub player: i16,
+#[derive(Clone, Copy)]
+pub struct Subject {
+    pub state: super::views::ElementState,
+    pub target: Option<ElementId>,
+    pub parent: super::Parent,
+    pub(crate) intersect: super::record::INTERSECT_CONTROL,
+    pub(crate) primitive: u16,
+    pub(crate) predecessor: Option<ElementId>,
+    pub(crate) successor: Option<ElementId>,
 }
+impl std::ops::Deref for Subject {
+    type Target = super::views::ElementState;
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+impl std::ops::DerefMut for Subject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.state
+    }
+}
+pub type WeaponOrigin = Subject;
 
 /// A failed allocation still occupies its original weapon slot.
 pub type WeaponSpawn = Vec<Option<ElementId>>;
@@ -51,43 +65,30 @@ pub struct Concern {
 /// The AI evaluates a projected subject without moving the live ship.
 pub struct Concerns {
     pub objects: [Concern; 4],
-    pub subject: super::record::ELEMENT,
+    pub subject: Subject,
     pub count: u16,
 }
 
-impl RaceDesc {
-    pub fn callbacks(&self) -> [usize; 5] {
-        if let Some(race) = self.race {
-            [
-                race.uninit.map_or(0, |f| f as usize),
-                if matches!(self.race_state, RaceState::Vux { entry_done: true }) {
-                    0
-                } else {
-                    race.preprocess.map_or(0, |f| f as usize)
-                },
-                race.postprocess.map_or(0, |f| f as usize),
-                race.init_weapon as usize,
-                race.intelligence as usize,
-            ]
-        } else {
-            [
-                self.uninit_func.map_or(0, |f| f as usize),
-                self.preprocess_func.map_or(0, |f| f as usize),
-                self.postprocess_func.map_or(0, |f| f as usize),
-                self.init_weapon_func.map_or(0, |f| f as usize),
-                self.cyborg_control
-                    .intelligence_func
-                    .map_or(0, |f| f as usize),
-            ]
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(u8)]
+pub enum Selection<T> {
+    #[default]
+    Default = 0,
+    Disabled = 1,
+    Override(T) = 2,
+}
+impl<T: Copy> Selection<T> {
+    pub fn resolve(self, default: Option<T>) -> Option<T> {
+        match self {
+            Self::Default => default,
+            Self::Disabled => None,
+            Self::Override(value) => Some(value),
         }
     }
 }
-
-impl Cx<'_> {
-    pub fn weapon_origin(&self, id: ElementId) -> WeaponOrigin {
-        WeaponOrigin {
-            location: self.b.elements[id].next.location,
-            player: self.b.elements[id].playerNr,
-        }
-    }
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Callbacks {
+    pub pre: Selection<ShipFn>,
+    pub post: Selection<ShipFn>,
+    pub weapon: Selection<WeaponFn>,
 }

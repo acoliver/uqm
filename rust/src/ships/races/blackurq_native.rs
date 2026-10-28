@@ -96,7 +96,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_5.thrust_wait -= 1;
         } else {
             let mut facing = 0;
-            if (*e).hTarget.is_null() && TrackShip(e, &mut facing) < 0 {
+            if (*e).hTarget.is_null() && track_ship(e, &mut facing) < 0 {
                 (*e).velocity = mem::zeroed();
             } else {
                 let target = element((*e).hTarget);
