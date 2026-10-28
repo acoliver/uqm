@@ -101,8 +101,204 @@
       "stop_at_encounter": true
     },
     {
-      "action": "fight_encounter",
-      "max_ticks": 24000
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 5
+          }
+        ]
+      },
+      "max_ticks": 2000
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 4
+          }
+        ]
+      },
+      "max_ticks": 16000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "left",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 3
+          }
+        ]
+      },
+      "max_ticks": 16000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 2
+          }
+        ]
+      },
+      "max_ticks": 16000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "battle:ships_p1",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 16000
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 7537,
+      "max_ticks": 7538
+    },
+    {
+      "action": "wait_for_state",
+      "predicate": {
+        "all": [
+          {
+            "key": "game:flagship_destroyed",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "max_ticks": 16000
+    },
+    {
+      "action": "wait_for_main_menu_ready"
     },
     {
       "action": "capture",

@@ -794,8 +794,8 @@
       "sha256": "2d332afc7e819d388bbf59df2ffbdad37947549397ed069e0799b155f60be35c"
     },
     "parity/counts/thraddash-guard-v1.toml": {
-      "bytes": 1143063,
-      "sha256": "df05b6929d6c9934bf8f2d4c2f1faed15da1266635f596f7732b253fee971a8d"
+      "bytes": 960048,
+      "sha256": "78f28181139f5a72d42632bd2cd1e078fde66a93509675cb3986ca393a77ace9"
     },
     "parity/counts/watchdog-v1.toml": {
       "bytes": 466,

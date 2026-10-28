@@ -203,10 +203,3 @@ scenario = "probe-encounter-v7"
 classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 720
-
-
-[[expectation]]
-scenario = "thraddash-guard-v1"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
