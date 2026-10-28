@@ -137,15 +137,32 @@ impl Baseline {
         }
         self.entries = measured;
         if let Some(base) = base {
-            self.moved.retain(|_, target| {
-                !base
-                    .entries
-                    .keys()
-                    .any(|k| identity(k).is_some_and(|id| prefix_matches(id, target)))
+            self.moved.retain(|source, target| {
+                super::tool::lint_uses_source(&self.lint, source)
+                    || !base
+                        .entries
+                        .keys()
+                        .any(|k| identity(k).is_some_and(|id| prefix_matches(id, target)))
             });
         }
         Ok(())
     }
+    fn remaining_moves(&self, base: &Measurement) -> BTreeMap<String, String> {
+        let mut moves = self.moved.clone();
+        super::transfers::retire(&mut moves, base);
+        moves.extend(
+            self.moved
+                .iter()
+                .filter(|(source, _)| super::tool::lint_uses_source(&self.lint, source))
+                .map(|(source, target)| (source.clone(), target.clone())),
+        );
+        moves
+    }
+
+    pub fn retire_moves(&mut self, base: &Measurement) {
+        self.moved = self.remaining_moves(base);
+    }
+
     pub fn add_move(
         &mut self,
         old: &str,
@@ -153,8 +170,7 @@ impl Baseline {
         current: &Measurement,
         base: &Measurement,
     ) -> Result<(), String> {
-        let mut previous = self.moved.clone();
-        super::transfers::retire(&mut previous, base);
+        let previous = self.remaining_moves(base);
         let mut moves = previous.clone();
         super::transfers::register(&mut moves, old, new)?;
         super::transfers::validate(current, base, &moves)?;

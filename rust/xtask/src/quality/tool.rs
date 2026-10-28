@@ -88,6 +88,25 @@ pub fn file_identity(
     )))
 }
 
+fn path_identity(module: &str) -> Option<String> {
+    let (package, module) = module.split_once("::")?;
+    Some(format!("{package}::@path::src::{module}"))
+}
+
+pub(super) fn lint_uses_source(
+    lint: &BTreeMap<String, BTreeMap<String, u64>>,
+    source: &str,
+) -> bool {
+    let path = path_identity(source);
+    lint.values().flat_map(|values| values.keys()).any(|key| {
+        let identity = key.rsplit_once('|').map_or(key.as_str(), |(_, id)| id);
+        super::layers::prefix(identity, source)
+            || path
+                .as_ref()
+                .is_some_and(|path| super::layers::prefix(identity, path))
+    })
+}
+
 fn transferred<'a>(
     key: &str,
     current: &BTreeMap<String, u64>,
@@ -97,14 +116,7 @@ fn transferred<'a>(
     let mut credits = Vec::new();
     let path_moves = moves
         .iter()
-        .filter_map(|(old, new)| {
-            let (old_package, old_module) = old.split_once("::")?;
-            let (new_package, new_module) = new.split_once("::")?;
-            Some((
-                format!("{old_package}::@path::src::{old_module}"),
-                format!("{new_package}::@path::src::{new_module}"),
-            ))
-        })
+        .filter_map(|(old, new)| Some((path_identity(old)?, path_identity(new)?)))
         .collect::<BTreeMap<_, _>>();
     for (old, new) in moves.iter().chain(&path_moves) {
         // The identity may follow a lint name or target-OS discriminator.

@@ -402,7 +402,7 @@ fn compare_base(
         current.len()
     );
     if options.tighten {
-        transfers::retire(&mut baseline.moved, &base);
+        baseline.retire_moves(&base);
     }
     Ok(recorded)
 }
@@ -565,3 +565,6 @@ mod tests {
         assert!(report(2, &[finding], &options).is_err());
     }
 }
+
+#[cfg(test)]
+mod lint_transfer_tests;
