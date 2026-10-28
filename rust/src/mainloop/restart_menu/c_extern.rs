@@ -42,20 +42,6 @@ pub const MENU_SOUND_SELECT: u16 = 1 << 4;
 /// C `Color` struct (gfxlib.h:26) — four `BYTE` fields, `#[repr(C)]`.
 pub use crate::graphics::native_abi::Color;
 
-impl Color {
-    /// `BUILD_COLOR(MAKE_RGB15(0x1F, 0x1F, 0x1F), 0x0F)` — the gray
-    /// background used after the Utwig bomb self-destruct fade.
-    /// RGB15(0x1F, 0x1F, 0x1F) = (255, 255, 255) with ramp 0x0F.
-    pub const fn white_gray() -> Self {
-        Self {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 0x0F,
-        }
-    }
-}
-
 /// C `POINT` struct (gfxlib.h:157) — two `COORD` (`SWORD` = i16) fields.
 pub use crate::graphics::native_abi::point as Point;
 

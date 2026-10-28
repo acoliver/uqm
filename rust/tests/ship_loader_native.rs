@@ -68,6 +68,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
         let dir = uio_bridge::uio_openDir(repository, c"/".as_ptr(), 0);
         assert!(!dir.is_null());
         ffi_bridge::InitResourceSystem();
+        uqm_rust::ships::native::InstallCodeResType();
         ffi_bridge::LoadResourceIndex(dir.cast(), c"ships.rmp".as_ptr(), ptr::null());
         let keys = [
             "arilou",

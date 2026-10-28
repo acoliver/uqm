@@ -39,8 +39,7 @@ global!(FlagStatFrame: FRAME);
 global!(MiscDataFrame: FRAME);
 global!(FontGradFrame: FRAME);
 global!(GameStrings: STRING);
-global!(repository: *mut uio::uio_Repository);
-global!(rootDir: *mut uio::uio_DirHandle);
+pub use crate::io::handles::{repository, rootDir};
 global!(usingSpeech: u32);
 
 use crate::mainloop::options_abi::loadIndices;
@@ -87,6 +86,8 @@ pub unsafe extern "C" fn LoadKernel(argc: i32, argv: *mut *mut c_char) -> u32 {
     if hResIndex.is_null() {
         return 0;
     }
+    // SAFETY: the resource system was initialized above and registration runs once on the game thread.
+    unsafe { crate::ships::code_resources::engine::InstallCodeResType() };
     if loadIndices(contentDir.cast()) == 0 {
         return 0;
     }

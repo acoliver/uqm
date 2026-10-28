@@ -29,7 +29,7 @@ use crate::automation::{
 };
 use crate::mainloop::options::{DEFAULT_RESOLUTION_HEIGHT, DEFAULT_RESOLUTION_WIDTH};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Read as _, Seek as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -3278,6 +3278,7 @@ fn validate_linked_build_cargo_messages(
         return Err("linked-build Cargo capture has no unique UQM package identity".to_string());
     }
     let package_id = package_ids.into_iter().next().expect("length checked");
+    let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
     let mut executables = std::collections::BTreeSet::new();
     let mut rust_archives = std::collections::BTreeSet::new();
     let mut out_dirs = std::collections::BTreeSet::new();
@@ -3310,7 +3311,7 @@ fn validate_linked_build_cargo_messages(
                 }
             }
             Some("build-script-executed")
-                if message["package_id"].as_str() == Some(package_id.as_str()) =>
+                if message["package_id"].as_str() == Some(build_package.as_str()) =>
             {
                 if let Some(path) = message["out_dir"].as_str() {
                     out_dirs.insert(path.to_string());
@@ -3320,15 +3321,9 @@ fn validate_linked_build_cargo_messages(
             _ => {}
         }
     }
-    if executables
-        != [receipt.cargo_executable_path.clone()]
-            .into_iter()
-            .collect()
-        || rust_archives
-            != [receipt.cargo_rust_archive_path.clone()]
-                .into_iter()
-                .collect()
-        || out_dirs != [receipt.cargo_out_dir.clone()].into_iter().collect()
+    if executables != BTreeSet::from([receipt.cargo_executable_path.clone()])
+        || rust_archives != BTreeSet::from([receipt.cargo_rust_archive_path.clone()])
+        || out_dirs != BTreeSet::from([receipt.cargo_out_dir.clone()])
         || build_finished != [true]
     {
         return Err("linked-build Cargo capture differs from the receipt".to_string());
@@ -4535,7 +4530,7 @@ mod tests {
             }),
             serde_json::json!({
                 "reason": "build-script-executed",
-                "package_id": package_id,
+                "package_id": package_id.replace("#uqm@", "/crates/engine#uqm-engine@"),
                 "out_dir": "/target/release/build/uqm-test/out"
             }),
             serde_json::json!({"reason": "build-finished", "success": true}),

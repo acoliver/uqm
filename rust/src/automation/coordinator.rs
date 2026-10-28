@@ -48,6 +48,7 @@ use crate::automation::trace::{
 use crate::automation::watchdog::{
     watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
 };
+use crate::graphics::presented_frame::PresentedFrame;
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -2586,11 +2587,7 @@ impl Coordinator {
                 .any(|action| super::native_checkpoint::checkpoint_class(action).is_some())
     }
 
-    fn commit_native_checkpoints(
-        &self,
-        inner: &mut CoordInner,
-        frame: &crate::automation::capture::PresentedFrame,
-    ) -> bool {
+    fn commit_native_checkpoints(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
         let Some(identity) = &self.native_checkpoint_identity else {
             return false;
         };
@@ -2610,7 +2607,7 @@ impl Coordinator {
             record.kind = RecordKind::Checkpoint;
             record.input_seen = inner.input_seen;
             record.present_seen = inner.present_seen;
-            record.presentation = Some(frame.presentation_evidence());
+            record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
             record.checkpoint = Some(super::trace::CheckpointEvidence { id });
             match record.to_jsonl() {
                 Ok(line) => {
@@ -2630,7 +2627,7 @@ impl Coordinator {
 
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
-    pub fn process_present(frame: Option<crate::automation::capture::PresentedFrame>) -> bool {
+    pub fn process_present(frame: Option<PresentedFrame>) -> bool {
         let Some(coord) = Self::get() else {
             return false;
         };
@@ -2664,10 +2661,7 @@ impl Coordinator {
         stop
     }
 
-    fn process_present_inner(
-        &self,
-        frame: Option<crate::automation::capture::PresentedFrame>,
-    ) -> bool {
+    fn process_present_inner(&self, frame: Option<PresentedFrame>) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -3071,7 +3065,7 @@ impl Coordinator {
         &self,
         inner: &mut CoordInner,
         effects: &EffectPlan,
-        frame: Option<&crate::automation::capture::PresentedFrame>,
+        frame: Option<&PresentedFrame>,
     ) -> bool {
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
@@ -3320,11 +3314,7 @@ impl Coordinator {
         }
     }
 
-    fn write_presentation_trace(
-        &self,
-        inner: &mut CoordInner,
-        frame: &crate::automation::capture::PresentedFrame,
-    ) -> bool {
+    fn write_presentation_trace(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
         if let Err(error) = self.parity_present(frame) {
             self.capture_failure(inner, format!("parity presentation: {error}"));
             return true;
@@ -3345,7 +3335,7 @@ impl Coordinator {
             to: None,
             terminal_reason: None,
             seed_application: None,
-            presentation: Some(frame.presentation_evidence()),
+            presentation: Some(crate::automation::capture::presentation_evidence(frame)),
             activity: None,
             readiness: None,
             command_acknowledgement: None,
@@ -3370,7 +3360,7 @@ impl Coordinator {
         inner: &mut CoordInner,
         label: &str,
         generation: CaptureGeneration,
-        frame: &crate::automation::capture::PresentedFrame,
+        frame: &PresentedFrame,
     ) {
         if frame.generation != generation.0 {
             return self.capture_failure(inner, "presented-frame generation mismatch");
@@ -3396,7 +3386,7 @@ impl Coordinator {
         record.run = 1;
         record.input_seen = inner.input_seen;
         record.present_seen = inner.present_seen;
-        record.presentation = Some(frame.presentation_evidence());
+        record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
         match record.to_jsonl() {
             Ok(jsonl) => reservation.commit_record(jsonl),
             Err(error) => {
@@ -3860,7 +3850,7 @@ mod tests {
             super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
         Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
         let coord = Coordinator::get().unwrap();
-        let frame = |count, generation| super::super::capture::PresentedFrame {
+        let frame = |count, generation| PresentedFrame {
             count,
             generation,
             width: 1,
@@ -3943,15 +3933,13 @@ mod tests {
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(coord.inner.lock().pending_main_menu_ready);
         for count in 1..=2 {
-            assert!(!Coordinator::process_present(Some(
-                super::super::capture::PresentedFrame {
-                    count,
-                    generation: 0,
-                    width: 1,
-                    height: 1,
-                    rgba: vec![1, 2, 3, 255]
-                }
-            )));
+            assert!(!Coordinator::process_present(Some(PresentedFrame {
+                count,
+                generation: 0,
+                width: 1,
+                height: 1,
+                rgba: vec![1, 2, 3, 255]
+            })));
             let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
                 .unwrap()
                 .lines()
@@ -3987,7 +3975,7 @@ mod tests {
         .unwrap();
         Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
         let coord = Coordinator::get().unwrap();
-        let frame = |count, generation| super::super::capture::PresentedFrame {
+        let frame = |count, generation| PresentedFrame {
             count,
             generation,
             width: 1,
@@ -4069,7 +4057,7 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             assert!(coord.inner.lock().armed_capture_label.is_none());
         }
-        let frame = |count, generation| super::super::capture::PresentedFrame {
+        let frame = |count, generation| PresentedFrame {
             count,
             generation,
             width: 1,

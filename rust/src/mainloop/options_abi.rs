@@ -1,5 +1,7 @@
 //! Runtime options and resource-index loading, ported from options.c.
 #![allow(non_snake_case)]
+pub use crate::input::templates::input_templates;
+pub use crate::io::handles::{configDir, contentDir, contentMountHandle, meleeDir, saveDir};
 use crate::io::uio_bridge::*;
 use std::{
     ffi::{c_char, CStr},
@@ -15,10 +17,7 @@ global!(
     optAddons: *const *const c_char,
     opt3doMusic: u32, optRemixMusic: u32, optSpeech: u32, optSubtitles: u32,
     optStereoSFX: u32, optKeepAspectRatio: u32, optGamma: f32,
-    contentDir: *mut uio_DirHandle, configDir: *mut uio_DirHandle,
-    saveDir: *mut uio_DirHandle, meleeDir: *mut uio_DirHandle,
-    contentMountHandle: *mut uio_MountHandle,
-    baseContentPath: [c_char; super::dir_prep::PATH_MAX], input_templates: [[c_char; 30]; 6],
+    baseContentPath: [c_char; super::dir_prep::PATH_MAX],
 );
 
 /// # Safety

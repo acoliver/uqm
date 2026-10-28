@@ -13,8 +13,12 @@ extern "C" {
 fn fullscreen_and_resize_keep_the_window_and_screen_owners() {
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
+    let options = uqm_rust::graphics::sdl::lifecycle_abi::GraphicsOptions::default();
     unsafe {
-        assert_eq!(TFB_InitGraphics(1, 0, ptr::null(), 640, 480), 0);
+        assert_eq!(
+            TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 640, 480),
+            0
+        );
         let window = sys::SDL_GetWindowFromID(1);
         assert!(!window.is_null());
         let surfaces: [*mut c_void; 3] =

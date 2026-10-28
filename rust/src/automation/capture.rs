@@ -15,62 +15,18 @@ use crate::automation::scheduler::{
     validate_capture_completion, CaptureGeneration, CaptureValidation,
 };
 use crate::automation::trace::{PresentationEvidence, RecordKind, TraceRecord};
-use image::ImageEncoder;
 
-/// Immutable RGBA readback of the exact renderer output immediately before
-/// the backend presents it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PresentedFrame {
-    pub count: u64,
-    pub generation: u64,
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-}
+use crate::graphics::presented_frame::PresentedFrame;
 
-impl PresentedFrame {
-    /// Validate dimensions and packed RGBA byte length.
-    pub fn validate(&self) -> Result<(), &'static str> {
-        if self.count == 0 || self.width == 0 || self.height == 0 {
-            return Err("presented frame metadata contains zero");
-        }
-        let expected = u64::from(self.width)
-            .checked_mul(u64::from(self.height))
-            .and_then(|pixels| pixels.checked_mul(4))
-            .and_then(|bytes| usize::try_from(bytes).ok())
-            .ok_or("presented frame dimensions overflow")?;
-        if self.rgba.len() != expected {
-            return Err("presented frame byte length does not match dimensions");
-        }
-        Ok(())
-    }
-
-    /// Convert immutable frame metadata into trace evidence.
-    #[must_use]
-    pub fn presentation_evidence(&self) -> PresentationEvidence {
-        PresentationEvidence {
-            count: self.count,
-            generation: self.generation,
-            width: self.width,
-            height: self.height,
-        }
-    }
-
-    /// Encode the exact immutable presented-frame bytes as RGBA PNG.
-    pub fn encode_png(&self) -> Result<Vec<u8>, String> {
-        self.validate().map_err(str::to_owned)?;
-        let mut png = Vec::new();
-        image::codecs::png::PngEncoder::new(&mut png)
-            .write_image(
-                &self.rgba,
-                self.width,
-                self.height,
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|error| format!("PNG encoding failed: {error}"))?;
-        Ok(png)
+pub(crate) fn presentation_evidence(frame: &PresentedFrame) -> PresentationEvidence {
+    PresentationEvidence {
+        count: frame.count,
+        generation: frame.generation,
+        width: frame.width,
+        height: frame.height,
     }
 }
+
 // ===========================================================================
 //  Surface validation model (REQ-SHOT-002)
 // ===========================================================================
@@ -577,7 +533,7 @@ mod tests {
         let png = frame.encode_png().unwrap();
         let decoded = image::load_from_memory(&png).unwrap().to_rgba8();
         assert_eq!(decoded.as_raw(), &frame.rgba);
-        assert_eq!(frame.presentation_evidence().generation, 9);
+        assert_eq!(presentation_evidence(&frame).generation, 9);
     }
 
     // --- Present classification (REQ-PRESENT-001/002) ---

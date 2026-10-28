@@ -1,25 +1,14 @@
 //! Shared battle record layouts during the storage transition.
 use crate::battle::velocity::VelocityDesc as VELOCITY_DESC;
-use crate::collections::queue::{HLink, HLink as HELEMENT, HLink as HLINK};
+use crate::collections::queue::{HLink as HELEMENT, HLink as HLINK};
 use crate::graphics::native_abi::{
-    Color, BYTE, COUNT, COUNT as TIME_VALUE, FRAME, GRAPHICS_PRIM, POINT, PRIM_LINKS, RESOURCE,
-    SIZE, STAMP, STRING, STRING as SOUND, UWORD, UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
+    BYTE, COUNT, FRAME, POINT, RESOURCE, SIZE, STRING, STRING as SOUND, UWORD,
+    UWORD as ELEMENT_FLAGS, UWORD as STATUS_FLAGS,
 };
 use std::os::raw::c_uint as SPECIES_ID;
 
-/// QUEUE — the queue control structure
-/// C: `typedef struct queue { HLINK head; HLINK tail; BYTE *pq_tab;
-///      HLINK free_list; COUNT object_size; BYTE num_objects; } QUEUE;`
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Queue {
-    pub head: HLink,
-    pub tail: HLink,
-    pub pq_tab: *mut u8,
-    pub free_list: HLink,
-    pub object_size: u16,
-    pub num_objects: u8,
-}
+pub use crate::collections::queue::Queue;
+pub use crate::graphics::native_abi::{INTERSECT_CONTROL, PRIMITIVE};
 
 pub type QUEUE = Queue;
 
@@ -28,23 +17,14 @@ pub use abi::{
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
     tfb_soundsample, ElementCollisionFunc, ElementProcessFunc, IntelligenceFunc, TFB_SoundSample,
     CAPTAIN_STUFF, CHARACTERISTIC_STUFF, DATA_STUFF, ELEMENT, EVALUATE_DESC, FLEET_STUFF,
-    INIT_WEAPON_FUNC, INTEL_STUFF, INTERSECT_CONTROL, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF,
-    POSTPROCESS_FUNC, PREPROCESS_FUNC, PRIMITIVE, PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE,
-    UNINIT_FUNC,
+    INIT_WEAPON_FUNC, INTEL_STUFF, MAX_DISPLAY_PRIMS, MOVEMENT_STATE, MUSIC_REF, POSTPROCESS_FUNC,
+    PREPROCESS_FUNC, PRIM_DESC, RACE_DESC, SHIP_INFO, STARSHIP, STATE, UNINIT_FUNC,
 };
 
 #[allow(non_camel_case_types, non_snake_case)]
 mod abi {
     use super::*;
     pub use crate::graphics::native_abi::PRIM_DESC;
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct PRIMITIVE {
-        pub Links: PRIM_LINKS,
-        pub Type: GRAPHICS_PRIM,
-        pub color: Color,
-        pub Object: PRIM_DESC,
-    }
 
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
@@ -191,14 +171,6 @@ mod abi {
         pub ShipFacing: COUNT,
         pub playerNr: SIZE,
         pub control: BYTE,
-    }
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    pub struct INTERSECT_CONTROL {
-        pub last_time_val: TIME_VALUE,
-        pub EndPoint: POINT,
-        pub IntersectStamp: STAMP,
     }
 
     #[repr(C)]

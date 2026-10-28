@@ -18,6 +18,7 @@ fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
 #[cfg(not(test))]
 mod live {
 
+    use crate::automation::input_ffi::graphics_options;
     use crate::mainloop::{dir_prep, options, options_abi as globals};
     use crate::{game_init::kernel_abi, sound::volume_globals};
     use std::{
@@ -136,11 +137,11 @@ mod live {
         crate::network::manager::NetManager_init();
 
         let (driver, flags) = super::graphics_config(parsed);
-        let backend = c_option(&parsed.graphics_backend);
+        let backend = graphics_options(c_option(&parsed.graphics_backend));
         if crate::graphics::sdl::lifecycle_abi::TFB_InitGraphics(
             driver,
             flags,
-            backend.as_ref().map_or(ptr::null(), |value| value.as_ptr()),
+            ptr::from_ref(&backend).cast(),
             parsed.resolution_width,
             parsed.resolution_height,
         ) != 0

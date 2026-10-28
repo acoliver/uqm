@@ -569,6 +569,37 @@ pub fn init_automation_runtime() {
     let _ = AUTOMATION_RT.get_or_init(RuntimeModel::new);
 }
 
+pub(crate) fn graphics_options(
+    renderer: Option<std::ffi::CString>,
+) -> crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
+    crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
+        renderer,
+        #[cfg(feature = "debug-process")]
+        native_position: crate::automation::native_window::active_native_window_config()
+            .map(|config| (config.client_bounds.x, config.client_bounds.y)),
+        #[cfg(not(feature = "debug-process"))]
+        native_position: None,
+        present_hook: Some(present_hook),
+        readback_hook: Some(readback_hook),
+    }
+}
+
+fn present_hook(presented: bool) -> i32 {
+    if presented {
+        rust_automation_presented_frame()
+    } else {
+        rust_automation_present_callback()
+    }
+}
+
+fn readback_hook() -> Option<u64> {
+    if Coordinator::is_active() {
+        get_runtime().map(|runtime| runtime.mirror.capture_generation())
+    } else {
+        None
+    }
+}
+
 /// Check if automation is active.
 fn is_automation_active() -> bool {
     if let Some(rt) = AUTOMATION_RT.get() {
@@ -1124,5 +1155,16 @@ mod tests {
             planet_display_target(false, (200, 40), 0, &geometry),
             (0, 0)
         );
+    }
+}
+
+#[cfg(test)]
+mod graphics_hook_tests {
+    #[test]
+    fn options_install_both_live_observers() {
+        let options = super::graphics_options(None);
+        assert!(options.present_hook.is_some());
+        assert!(options.readback_hook.is_some());
+        assert!(options.renderer.is_none());
     }
 }

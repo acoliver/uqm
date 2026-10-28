@@ -59,8 +59,12 @@ fn movie_frames_never_alternate_with_the_cleared_game_screen() {
 
     // This process owns its SDL instance; no native window or user config is used.
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
+    let options = uqm_rust::graphics::sdl::lifecycle_abi::GraphicsOptions::default();
     unsafe {
-        assert_eq!(TFB_InitGraphics(0, 0, ptr::null(), 320, 240), 0);
+        assert_eq!(
+            TFB_InitGraphics(0, 0, ptr::from_ref(&options).cast(), 320, 240),
+            0
+        );
         FadeScreen(253, 0);
         let screen = uqm_rust::graphics::ffi::rust_gfx_get_screen_surface(0);
         assert_eq!(sdl2_sys::SDL_FillRect(screen.cast(), ptr::null(), 0), 0);

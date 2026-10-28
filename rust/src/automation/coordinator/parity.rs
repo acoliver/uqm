@@ -62,7 +62,7 @@ impl Coordinator {
 
     pub(super) fn parity_present(
         &self,
-        frame: &crate::automation::capture::PresentedFrame,
+        frame: &crate::graphics::presented_frame::PresentedFrame,
     ) -> std::io::Result<()> {
         if let Some(journal) = &self.parity {
             journal.lock().present(frame)?;

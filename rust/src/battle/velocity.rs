@@ -32,19 +32,6 @@ pub struct VelocityDesc {
 /// Matches C's EXTENT (width, height as i16)
 pub use crate::graphics::native_abi::extent as Extent;
 
-impl Extent {
-    pub const fn new(width: i16, height: i16) -> Self {
-        Extent { width, height }
-    }
-
-    pub const fn zero() -> Self {
-        Extent {
-            width: 0,
-            height: 0,
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // VelocityDesc Implementation
 // ---------------------------------------------------------------------------

@@ -3821,6 +3821,7 @@ fn validate_linked_cargo_messages(
         return Err(NativeWindowProofError::Receipt);
     }
     let package_id = package_ids.into_iter().next().expect("length checked");
+    let build_package = package_id.replace("#uqm@", "/crates/engine#uqm-engine@");
     let mut executables = BTreeSet::new();
     let mut rust_archives = BTreeSet::new();
     let mut out_dirs = BTreeSet::new();
@@ -3853,7 +3854,7 @@ fn validate_linked_cargo_messages(
                 }
             }
             Some("build-script-executed")
-                if message["package_id"].as_str() == Some(package_id.as_str()) =>
+                if message["package_id"].as_str() == Some(build_package.as_str()) =>
             {
                 if let Some(path) = message["out_dir"].as_str() {
                     out_dirs.insert(path.to_string());
@@ -3863,15 +3864,9 @@ fn validate_linked_cargo_messages(
             _ => {}
         }
     }
-    if executables
-        != [receipt.cargo_executable_path.clone()]
-            .into_iter()
-            .collect()
-        || rust_archives
-            != [receipt.cargo_rust_archive_path.clone()]
-                .into_iter()
-                .collect()
-        || out_dirs != [receipt.cargo_out_dir.clone()].into_iter().collect()
+    if executables != BTreeSet::from([receipt.cargo_executable_path.clone()])
+        || rust_archives != BTreeSet::from([receipt.cargo_rust_archive_path.clone()])
+        || out_dirs != BTreeSet::from([receipt.cargo_out_dir.clone()])
         || build_finished != [true]
     {
         return Err(NativeWindowProofError::Receipt);
@@ -4521,7 +4516,7 @@ mod tests {
                 concat!(
                     "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm\",\"kind\":[\"bin\"]},\"executable\":\"/tmp/uqm\",\"filenames\":[]}\n",
                     "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"target\":{\"name\":\"uqm_rust\",\"kind\":[\"rlib\"]},\"executable\":null,\"filenames\":[\"/tmp/libuqm_rust-a.rlib\"]}\n",
-                    "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///repo/rust#uqm@0.8.0\",\"out_dir\":\"/tmp/out\"}\n",
+                    "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///repo/rust/crates/engine#uqm-engine@0.8.0\",\"out_dir\":\"/tmp/out\"}\n",
                     "{\"reason\":\"build-finished\",\"success\":true}\n"
                 )
                 .as_bytes(),

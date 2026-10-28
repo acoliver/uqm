@@ -5,8 +5,7 @@
 
 pub mod clock_abi;
 pub mod clock_bridge;
-pub mod counter_abi;
-pub mod source;
+pub use uqm_engine::time::{counter_abi, source};
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
