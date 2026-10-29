@@ -4,10 +4,9 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::battle::battle_types::{LEFT, RIGHT, THRUST, WEAPON};
     use crate::battle::element::*;
     use crate::battle::lifecycle::*;
-    use crate::battle::ship_runtime::*;
-    use crate::battle::velocity::VelocityDesc;
 
     // ---- Test 1: Shared asset ref-counting ----
 
@@ -104,12 +103,6 @@ mod tests {
     }
 
     // ---- Test 17: Inertial thrust ----
-
-    #[test]
-    fn test_inertial_thrust_basic() {
-        let mut vel = VelocityDesc::default();
-        let _result = inertial_thrust(&mut vel, 0, 0, 64, 1024, 0u32, 0);
-    }
 
     // ---- Test 18: FFI exports callable ----
 

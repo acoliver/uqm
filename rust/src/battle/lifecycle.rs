@@ -164,19 +164,19 @@ pub enum BattleSequenceState {
 pub fn map_battle_input(input: BattleInputState) -> u32 {
     let mut flags = 0u32;
     if input.0 & BattleInputState::LEFT.0 != 0 {
-        flags |= super::ship_runtime::LEFT;
+        flags |= super::battle_types::LEFT;
     }
     if input.0 & BattleInputState::RIGHT.0 != 0 {
-        flags |= super::ship_runtime::RIGHT;
+        flags |= super::battle_types::RIGHT;
     }
     if input.0 & BattleInputState::THRUST.0 != 0 {
-        flags |= super::ship_runtime::THRUST;
+        flags |= super::battle_types::THRUST;
     }
     if input.0 & BattleInputState::WEAPON.0 != 0 {
-        flags |= super::ship_runtime::WEAPON;
+        flags |= super::battle_types::WEAPON;
     }
     if input.0 & BattleInputState::SPECIAL.0 != 0 {
-        flags |= super::ship_runtime::SPECIAL;
+        flags |= super::battle_types::SPECIAL;
     }
     flags
 }
@@ -334,7 +334,7 @@ mod tests {
             BattleInputState::LEFT.0 | BattleInputState::THRUST.0 | BattleInputState::WEAPON.0,
         );
         let flags = map_battle_input(input);
-        use super::super::ship_runtime::{LEFT, RIGHT, THRUST, WEAPON};
+        use super::super::battle_types::{LEFT, RIGHT, THRUST, WEAPON};
         assert!(flags & LEFT != 0);
         assert!(flags & THRUST != 0);
         assert!(flags & WEAPON != 0);

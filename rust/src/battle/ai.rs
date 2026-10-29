@@ -121,19 +121,19 @@ impl AiInput {
     pub fn to_status_flags(&self) -> u32 {
         let mut flags = 0u32;
         if self.turn_left {
-            flags |= super::ship_runtime::LEFT;
+            flags |= super::battle_types::LEFT;
         }
         if self.turn_right {
-            flags |= super::ship_runtime::RIGHT;
+            flags |= super::battle_types::RIGHT;
         }
         if self.thrust {
-            flags |= super::ship_runtime::THRUST;
+            flags |= super::battle_types::THRUST;
         }
         if self.fire_weapon {
-            flags |= super::ship_runtime::WEAPON;
+            flags |= super::battle_types::WEAPON;
         }
         if self.fire_special {
-            flags |= super::ship_runtime::SPECIAL;
+            flags |= super::battle_types::SPECIAL;
         }
         flags
     }
@@ -309,7 +309,7 @@ mod tests {
             ..Default::default()
         };
         let flags = input.to_status_flags();
-        use super::super::ship_runtime::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+        use super::super::battle_types::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
         assert!(flags & LEFT != 0);
         assert!(flags & THRUST != 0);
         assert!(flags & WEAPON != 0);
