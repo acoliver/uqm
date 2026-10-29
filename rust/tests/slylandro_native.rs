@@ -1,73 +1,46 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
 use uqm_rust::ships::races::init_slylandro;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{Battle as PoolBattle, PoolElement, PoolShip};
 
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
-    sync::{Mutex, MutexGuard},
 };
 use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, normalize_facing, put_element, sine,
 };
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
-    fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
 }
-static LOCK: Mutex<()> = Mutex::new(());
 struct Battle {
-    _guard: MutexGuard<'static, ()>,
+    _pool: PoolBattle,
     globals: GLOBDATA,
-    screen: (i32, i32),
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let guard = LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let globals = GlobData;
-        let screen = (ScreenWidth, ScreenHeight);
-        assert_ne!(
-            InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-            0
-        );
-        for side in 0..2 {
-            assert_ne!(
-                InitQueue(
-                    &raw mut uqm_rust::engine::battle::legacy::race_q[side],
-                    64,
-                    mem::size_of::<STARSHIP>() as u16
-                ),
-                0
-            );
-        }
-        InitDisplayList();
-        GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
+        let pool = PoolBattle::new(capacity);
         GlobData.Game_state.CurrentActivity = 0;
-        ScreenWidth = 320;
-        ScreenHeight = 240;
         Self {
-            _guard: guard,
+            _pool: pool,
             globals,
-            screen,
         }
     }
 }
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            UninitQueue(&raw mut disp_q);
-            for side in 0..2 {
-                UninitQueue(&raw mut uqm_rust::engine::battle::legacy::race_q[side]);
-            }
             GlobData = self.globals;
-            (ScreenWidth, ScreenHeight) = self.screen;
         }
     }
 }
+
 #[repr(C)]
 struct FrameDesc {
     kind: u16,
@@ -115,9 +88,6 @@ impl FrameSet {
         (&raw const self.frames[index]).cast_mut().cast()
     }
 }
-#[path = "support/ship_pool.rs"]
-mod ship_pool;
-use ship_pool::PoolShip;
 
 struct Ship {
     desc: Box<RACE_DESC>,
@@ -724,7 +694,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
         let collide = (*beam).collision_func.unwrap();
         let mut pa = POINT { x: 10, y: 20 };
         let mut pb = POINT { x: 30, y: 40 };
-        let mut target: ELEMENT = mem::zeroed();
+        let mut target = PoolElement::new();
         target.__bindgen_anon_1.life_span = 2;
         target.__bindgen_anon_2.hit_points = 3;
         target.__bindgen_anon_3.mass_points = 2;
@@ -734,7 +704,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
                 collide,
                 beam,
                 &mut pa,
-                &mut target,
+                &mut *target,
                 &mut pb,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             )
@@ -766,7 +736,7 @@ fn lightning_collision_folds_and_subtracts_counter_then_calls_generic_weapon_col
                         collide,
                         beam,
                         &mut pa,
-                        &mut target,
+                        &mut *target,
                         &mut pb,
                         uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                     )

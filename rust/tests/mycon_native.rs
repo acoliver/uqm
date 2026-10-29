@@ -1,8 +1,11 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
 
 use uqm_rust::ships::races::init_mycon;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{Battle as PoolBattle, PoolElement, PoolShip};
 
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
@@ -10,9 +13,6 @@ use uqm_rust::ships::native::{abi::*, element};
 static ENGINE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
 }
 
@@ -85,16 +85,12 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
     battle_context::run(|| {
         let _engine = ENGINE.lock().unwrap();
         unsafe {
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
+            let _battle = PoolBattle::new(8);
             let mut desc = Box::new(*init_mycon());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(0);
             ss.RaceDescPtr = &raw mut *desc;
             ss.playerNr = 0;
-            let mut ship: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut ship = PoolElement::new();
             ship.pParent = (&raw mut *ss).cast();
             ship.playerNr = 0;
             ship.next.location = POINT { x: 100, y: 200 };
@@ -140,7 +136,6 @@ fn plasma_launch_and_postprocess_boundaries_match_c() {
             assert_eq!(ship.__bindgen_anon_2.crew_level, 10);
             assert_eq!(desc.ship_info.energy_level, 39);
             FreeElement(handles[0]);
-            UninitQueue(&raw mut disp_q);
         }
     })
 }

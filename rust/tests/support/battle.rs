@@ -560,3 +560,54 @@ impl Drop for Object<'_> {
         }
     }
 }
+
+#[path = "ship_pool.rs"]
+mod ship_pool;
+pub use ship_pool::PoolShip;
+
+/// An unlinked pool slot for legacy callback operands.
+pub struct PoolElement {
+    pointer: *mut ELEMENT,
+    id: ElementId,
+}
+impl PoolElement {
+    /// # Safety
+    /// The serialized fixture must retain its battle pools until this owner drops.
+    pub unsafe fn new() -> Self {
+        // SAFETY: the caller retains the initialized, serialized element pool.
+        unsafe {
+            let pointer = AllocElement().cast::<ELEMENT>();
+            assert!(!pointer.is_null(), "fixture element pool exhausted");
+            let id = id(pointer);
+            Self { pointer, id }
+        }
+    }
+}
+impl std::ops::Deref for PoolElement {
+    type Target = ELEMENT;
+    fn deref(&self) -> &ELEMENT {
+        // SAFETY: this owner retains the allocated operand slot.
+        unsafe { &*self.pointer }
+    }
+}
+impl std::ops::DerefMut for PoolElement {
+    fn deref_mut(&mut self) -> &mut ELEMENT {
+        // SAFETY: this exclusive fixture borrow owns the operand slot.
+        unsafe { &mut *self.pointer }
+    }
+}
+impl Drop for PoolElement {
+    fn drop(&mut self) {
+        // SAFETY: the construction contract retains the serialized fixture pools.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                if cx.elements().contains(self.id) {
+                    if cx.elements().linked(self.id) {
+                        cx.unlink(self.id);
+                    }
+                    cx.dispose(self.id);
+                }
+            });
+        }
+    }
+}

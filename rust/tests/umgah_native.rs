@@ -1,70 +1,26 @@
 //! Live Umgah callbacks, private cone state, collision cleanup and AI RNG order.
 
 use uqm_rust::ships::races::init_umgah;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
-    sync::{Mutex, MutexGuard},
 };
 use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
 }
 
-static ENGINE: Mutex<()> = Mutex::new(());
-
-struct Battle {
-    _guard: MutexGuard<'static, ()>,
-    display: *mut PRIMITIVE,
-    width: i32,
-    height: i32,
-}
-
-impl Battle {
-    fn new(capacity: COUNT) -> Self {
-        let guard = ENGINE.lock().unwrap();
-        unsafe {
-            let display = GlobData.Game_state.DisplayArray;
-            let width = ScreenWidth;
-            let height = ScreenHeight;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-            ScreenWidth = 320;
-            ScreenHeight = 240;
-            Self {
-                _guard: guard,
-                display,
-                width,
-                height,
-            }
-        }
-    }
-}
-
-impl Drop for Battle {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-            GlobData.Game_state.DisplayArray = self.display;
-            ScreenWidth = self.width;
-            ScreenHeight = self.height;
-        }
-    }
-}
+use battle::Battle;
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 #[repr(C)]
@@ -121,7 +77,7 @@ impl FrameSet {
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     _ship_frames: FrameSet,
     cone_frames: FrameSet,
@@ -135,7 +91,7 @@ impl Ship {
         let cone_frames = FrameSet::new(48);
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.special = [cone_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -585,8 +541,8 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
     })
 }
 
-unsafe fn target(finite: bool) -> ELEMENT {
-    let mut e: ELEMENT = mem::zeroed();
+unsafe fn target(finite: bool) -> PoolElement {
+    let mut e = PoolElement::new();
     e.playerNr = 1;
     e.state_flags = if finite { FINITE_LIFE as u16 } else { 0 };
     e.__bindgen_anon_1.life_span = 2;
@@ -598,7 +554,7 @@ unsafe fn target(finite: bool) -> ELEMENT {
 #[test]
 fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solidity() {
     battle_context::run(|| {
-        let _battle = Battle::new(3);
+        let _battle = Battle::new(4);
         unsafe {
             let mut ship = Ship::new(0);
             let h = ship.fire();
@@ -612,7 +568,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                     (*cone).collision_func.unwrap(),
                     cone,
                     &mut a,
-                    &mut hit,
+                    &mut *hit,
                     &mut b,
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
@@ -640,7 +596,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
 #[test]
 fn collision_preserves_disappearing_when_blast_allocation_fails() {
     battle_context::run(|| {
-        let _battle = Battle::new(2);
+        let _battle = Battle::new(3);
         unsafe {
             let mut ship = Ship::new(0);
             let h = ship.fire();
@@ -651,7 +607,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
                 (*cone).collision_func.unwrap(),
                 cone,
                 &mut p,
-                &mut hit,
+                &mut *hit,
                 ptr::null_mut(),
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
@@ -682,7 +638,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                     collide,
                     cone,
                     ptr::null_mut(),
-                    &mut hit,
+                    &mut *hit,
                     ptr::null_mut(),
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
@@ -696,7 +652,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                 collide,
                 cone,
                 ptr::null_mut(),
-                &mut hit,
+                &mut *hit,
                 ptr::null_mut(),
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );

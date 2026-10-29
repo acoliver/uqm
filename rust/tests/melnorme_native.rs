@@ -1,65 +1,27 @@
 //! Exercise the Melnorme descriptor and callbacks against the linked battle engine.
 
 use uqm_rust::ships::races::init_melnorme;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
-    sync::{Mutex, MutexGuard},
 };
 use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
-    fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     fn RemoveElement(handle: HLINK);
     static mut DisplayArray: [PRIMITIVE; 330];
 }
 
-static ENGINE: Mutex<()> = Mutex::new(());
-
-struct Battlefield {
-    _guard: MutexGuard<'static, ()>,
-    screen: (i32, i32),
-}
-
-impl Battlefield {
-    fn new() -> Self {
-        let guard = ENGINE.lock().unwrap_or_else(|p| p.into_inner());
-        unsafe {
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 32, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-            let screen = (ScreenWidth, ScreenHeight);
-            ScreenWidth = 320;
-            ScreenHeight = 240;
-            Self {
-                _guard: guard,
-                screen,
-            }
-        }
-    }
-}
-
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            GlobData.Game_state.DisplayArray = ptr::null_mut();
-            ScreenWidth = self.screen.0;
-            ScreenHeight = self.screen.1;
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
+use battle::Battle as Battlefield;
 
 // These layouts are from libs/graphics/drawable.h. Bindgen exposes FRAME as opaque.
 #[repr(C)]
@@ -116,7 +78,7 @@ impl FrameSet {
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     el: *mut ELEMENT,
     _ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -133,7 +95,7 @@ impl Ship {
             desc.ship_data.ship = [ship_frames.frame(0); 3];
             desc.ship_data.weapon = [weapon_frames.frame(0); 3];
             desc.ship_data.special = [special_frames.frame(0); 3];
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(player);
             ss.RaceDescPtr = &raw mut *desc;
             ss.playerNr = player;
             let handle = AllocElement();
@@ -279,7 +241,7 @@ unsafe fn collide(pulse: *mut ELEMENT, target: *mut ELEMENT) {
 #[test]
 fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let p = init_melnorme();
             assert_eq!(p, init_melnorme());
@@ -386,7 +348,7 @@ fn descriptor_matches_all_c_resources_values_and_empty_runtime_fields() {
 #[test]
 fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             for facing in 0..16 {
@@ -449,7 +411,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
 #[test]
 fn appearing_charge_only_zeros_the_entire_velocity_record() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let e = ship.pump();
@@ -476,7 +438,7 @@ fn appearing_charge_only_zeros_the_entire_velocity_record() {
 #[test]
 fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             for level in 0..4u8 {
@@ -528,7 +490,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
 #[test]
 fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_chain() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let e = ship.pump();
@@ -555,7 +517,7 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
 #[test]
 fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_units() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             for (current, old) in [(0, 0), (WEAPON, 0), (0, WEAPON), (WEAPON, WEAPON)] {
@@ -593,7 +555,7 @@ fn release_requires_both_weapon_status_words_to_hold_and_uses_full_velocity_unit
 #[test]
 fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_level() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let e = ship.pump();
@@ -647,7 +609,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
 #[test]
 fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_animation() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             for (level, width) in [(0, 22), (1, 23), (2, 1026), (3, 22)] {
@@ -658,7 +620,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 ship.weapon_frames.frames[index].bounds[0] = width;
                 (*e).next.image.frame = ship.weapon_frames.frame(index);
                 (*e).velocity.travel_angle = 0;
-                let mut obstacle: ELEMENT = mem::zeroed();
+                let mut obstacle = PoolElement::new();
                 let mut point = POINT { x: 20, y: 30 };
                 let old_tail = disp_q.tail;
                 TFB_SeedRandom(33);
@@ -666,7 +628,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     (*e).collision_func.unwrap(),
                     e,
                     &mut point,
-                    &mut obstacle,
+                    &mut *obstacle,
                     &mut point,
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
@@ -704,7 +666,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                     (*e).collision_func.unwrap(),
                     e,
                     &mut point,
-                    &mut obstacle,
+                    &mut *obstacle,
                     &mut point,
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
@@ -720,7 +682,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
 #[test]
 fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             for (energy, status, counter, fired) in [
                 (19, SPECIAL, 0, false),
@@ -785,7 +747,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
 #[test]
 fn failed_initialization_returns_one_null_slot_and_special_still_spends_energy() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let exhausted = exhaust_queue();
@@ -813,7 +775,7 @@ fn failed_initialization_returns_one_null_slot_and_special_still_spends_energy()
 #[test]
 fn solid_confusion_animation_wraps_in_the_first_eight_frames() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let e = ship.confusion();
@@ -834,7 +796,7 @@ fn solid_confusion_animation_wraps_in_the_first_eight_frames() {
 #[test]
 fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_draw() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let victim = Ship::new(1);
@@ -888,7 +850,7 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
 #[test]
 fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let victim = Ship::new(1);
@@ -956,16 +918,16 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
 #[test]
 fn confusion_ignores_nonships_and_consumes_no_rng_when_controller_allocation_fails() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let victim = Ship::new(1);
             let e = ship.confusion();
-            let mut obstacle: ELEMENT = mem::zeroed();
+            let mut obstacle = PoolElement::new();
             let before = queue();
             let flags = (*e).state_flags;
             TFB_SeedRandom(62);
-            collide(e, &mut obstacle);
+            collide(e, &mut *obstacle);
             assert_eq!(queue(), before);
             assert_eq!((*e).state_flags, flags);
             assert_eq!((*e).__bindgen_anon_2.hit_points, 200);
@@ -988,7 +950,7 @@ fn confusion_ignores_nonships_and_consumes_no_rng_when_controller_allocation_fai
 #[test]
 fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_frame_trails() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let mut victim = Ship::new(1);
@@ -1058,7 +1020,7 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
 #[test]
 fn controller_still_overrides_controls_when_trail_allocation_fails() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let mut victim = Ship::new(1);
@@ -1089,7 +1051,7 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
 #[test]
 fn ai_without_targets_preserves_c_toggle_thresholds_counters_and_rng_order() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             for (energy, special_counter, weapon_counter, initial, expected) in [
                 (19, 0, 0, 0, 0),
@@ -1138,7 +1100,7 @@ fn ai_without_targets_preserves_c_toggle_thresholds_counters_and_rng_order() {
 #[test]
 fn ai_enemy_move_state_matches_energy_held_weapon_and_immediate_weapon_rules() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let mut enemy = Ship::new(1);
@@ -1175,7 +1137,7 @@ fn ai_enemy_move_state_matches_energy_held_weapon_and_immediate_weapon_rules() {
 #[test]
 fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let enemy = Ship::new(1);
@@ -1229,7 +1191,7 @@ fn ai_tests_the_confusion_trajectory_and_restores_waits_and_initializer() {
 #[test]
 fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             ship.ss.cur_status_flags = WEAPON as u16;
@@ -1266,7 +1228,7 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
 #[test]
 fn ai_first_pass_tests_the_full_speed_pump_and_toggles_an_existing_charge_to_release() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let enemy = Ship::new(1);
@@ -1316,7 +1278,7 @@ fn ai_first_pass_tests_the_full_speed_pump_and_toggles_an_existing_charge_to_rel
 #[test]
 fn ai_pursuit_uses_the_shared_half_turn_rng_draw_without_extra_draws() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(32);
         unsafe {
             let mut ship = Ship::new(0);
             let enemy = Ship::new(1);

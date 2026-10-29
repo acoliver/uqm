@@ -1,59 +1,32 @@
 use uqm_rust::ships::races::init_druuge;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
-use std::{
-    ffi::CStr,
-    mem, ptr,
-    sync::{Mutex, MutexGuard},
-};
+use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
 }
 
-static ENGINE: Mutex<()> = Mutex::new(());
-struct Battlefield {
-    _engine: MutexGuard<'static, ()>,
-}
-impl Battlefield {
-    fn new() -> Self {
-        let lock = ENGINE.lock().unwrap_or_else(|e| e.into_inner());
-        unsafe {
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-        }
-        Self { _engine: lock }
-    }
-}
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
+use battle::Battle as Battlefield;
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
-    el: Box<ELEMENT>,
+    ss: PoolShip,
+    el: PoolElement,
 }
 impl Ship {
     fn new(player: SIZE) -> Self {
         unsafe {
             let mut desc = Box::new(*init_druuge());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(player);
             ss.RaceDescPtr = &raw mut *desc;
             ss.playerNr = player;
-            let mut el: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut el = PoolElement::new();
             el.pParent = (&raw mut *ss).cast();
             el.playerNr = player;
             el.state_flags = PLAYER_SHIP as u16;
@@ -68,7 +41,7 @@ impl Ship {
 #[test]
 fn descriptor_matches_druuge_c_data() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let d = *init_druuge();
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
@@ -132,7 +105,7 @@ fn descriptor_matches_druuge_c_data() {
 #[test]
 fn cannon_launch_uses_mass_driver_missile_parameters() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::new(0);
             ship.ss.ShipFacing = 5;
@@ -157,7 +130,7 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
 #[test]
 fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         let mut ship = Ship::new(0);
         unsafe {
             let preprocess = ship.desc.preprocess_func.unwrap();
@@ -182,7 +155,7 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
 #[test]
 fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::new(0);
             let mut enemy = Ship::new(1);
@@ -208,7 +181,7 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
 #[test]
 fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::new(0);
             ship.ss.ShipFacing = 4;

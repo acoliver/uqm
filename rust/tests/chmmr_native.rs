@@ -1,67 +1,27 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
 
 use uqm_rust::ships::races::init_chmmr;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
 use std::{
     ffi::{c_void, CStr},
     mem, ptr,
-    sync::{Mutex, MutexGuard},
 };
 use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     fn RemoveElement(handle: HLINK);
     static mut DisplayArray: [PRIMITIVE; 330];
 }
 
-static ENGINE: Mutex<()> = Mutex::new(());
-
-struct Battlefield {
-    _engine: MutexGuard<'static, ()>,
-    old_screen: (i32, i32),
-    old_display: *mut PRIMITIVE,
-}
-
-impl Battlefield {
-    fn new(capacity: COUNT) -> Self {
-        let engine = ENGINE.lock().unwrap_or_else(|e| e.into_inner());
-        unsafe {
-            let old_screen = (ScreenWidth, ScreenHeight);
-            let old_display = GlobData.Game_state.DisplayArray;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-            ScreenWidth = 320;
-            ScreenHeight = 240;
-            Self {
-                _engine: engine,
-                old_screen,
-                old_display,
-            }
-        }
-    }
-}
-
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            GlobData.Game_state.DisplayArray = self.old_display;
-            (ScreenWidth, ScreenHeight) = self.old_screen;
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
+use battle::Battle as Battlefield;
 
 // Layouts from libs/graphics/drawable.h. These are real frame arrays and parent
 // descriptors, so SetAbsFrameIndex and GetFrameRect exercise the engine ABI.
@@ -119,7 +79,7 @@ impl FrameSet {
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     _ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -135,7 +95,7 @@ impl Ship {
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
         desc.ship_data.special = [special_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -742,13 +702,13 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             let mut ship = Ship::new(0);
             let satellites = ship.satellites();
             let s = element(satellites[0]);
-            let mut other: ELEMENT = mem::zeroed();
+            let mut other = PoolElement::new();
             let mut p = POINT { x: 1, y: 2 };
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 (*s).collision_func.unwrap(),
                 s,
                 &mut p,
-                &mut other,
+                &mut *other,
                 ptr::null_mut(),
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
