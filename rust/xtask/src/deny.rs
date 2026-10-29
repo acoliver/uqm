@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Command;
 
 pub const VERSION: &str = "0.20.2";
 
@@ -11,7 +10,7 @@ fn run_with_cargo(root: &Path, args: &[String], cargo: &std::ffi::OsStr) -> Resu
     if !args.is_empty() {
         return Err("usage: cargo xtask deny".into());
     }
-    let version = Command::new(cargo)
+    let version = crate::quality::tool::command(cargo)
         .args(["deny", "--version"])
         .output()
         .map_err(|e| format!("cargo-deny: {e}"))?;
@@ -22,15 +21,19 @@ fn run_with_cargo(root: &Path, args: &[String], cargo: &std::ffi::OsStr) -> Resu
             actual.trim()
         ));
     }
-    crate::quality::tool::status(Command::new(cargo).current_dir(root.join("rust")).args([
-        "deny",
-        "--locked",
-        "check",
-        "advisories",
-        "bans",
-        "licenses",
-        "sources",
-    ]))?;
+    crate::quality::tool::status(
+        crate::quality::tool::command(cargo)
+            .current_dir(root.join("rust"))
+            .args([
+                "deny",
+                "--locked",
+                "check",
+                "advisories",
+                "bans",
+                "licenses",
+                "sources",
+            ]),
+    )?;
     println!("deny: 0 findings");
     Ok(())
 }
