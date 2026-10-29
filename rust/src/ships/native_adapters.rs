@@ -89,7 +89,7 @@ mod live {
     operation!(rust_bridge_DeltaCrew(element: *mut ELEMENT, delta: i16) -> u32 { crate::battle::status_native::DeltaCrew(element, delta) });
     operation!(rust_bridge_GetElementStarShip(element: *mut ELEMENT, ship: *mut *mut STARSHIP) { *ship = (*element).pParent.cast(); });
     operation!(rust_bridge_SetElementStarShip(element: *mut ELEMENT, ship: *mut STARSHIP) { (*element).pParent = ship.cast(); });
-    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::TrackShip(element, facing) });
+    operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::track_ship(element, facing) });
     operation!(rust_bridge_Untarget(element: *mut ELEMENT) { crate::battle::process_native::Untarget(element); });
     operation!(rust_bridge_ModifySilhouette(element: *mut ELEMENT, stamp: *mut STAMP, flags: u8) -> FRAME { crate::battle::weapon_native::ModifySilhouette(element, stamp, flags) });
     operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::battle::sounds::ProcessSound(sound as *mut _, source); });
@@ -133,10 +133,10 @@ mod live {
                 if CalculateGravity(element) == 0 && TimeSpaceMatterConflict(element) == 0 { break; }
             }
         }
-        (*element).preprocess_func = Some(ElementHook::Legacy(crate::battle::ship_native::ship_preprocess));
-        (*element).postprocess_func = Some(ElementHook::Legacy(crate::battle::ship_native::ship_postprocess));
-        (*element).death_func = Some(ElementHook::Legacy(crate::battle::tactrans_native::ship_death));
-        (*element).collision_func = Some(CollisionHook::Legacy(crate::battle::ship_native::collision));
+        (*element).preprocess_func = Some(ElementHook::Native(crate::battle::ship_native::ship_preprocess));
+        (*element).postprocess_func = Some(ElementHook::Native(crate::battle::ship_native::ship_postprocess));
+        (*element).death_func = Some(ElementHook::Native(crate::battle::tactrans_native::ship_death));
+        (*element).collision_func = Some(CollisionHook::Native(crate::battle::ship_native::collision));
         (*element).velocity = mem::zeroed();
         (*element).pParent = ship.cast();
         (*element).hTarget = ptr::null_mut();
@@ -162,7 +162,7 @@ mod live {
             let old = SetContext(ScreenContext);
             SetContextBackGroundColor(Color {r:0,g:0,b:0,a:255}); ClearDrawable(); SetContext(old);
             if uqm_get_current_activity_lobyte() == IN_LAST_BATTLE as u8 { crate::game_init::world_resources::free_gravity_well(); }
-            else { for _ in 0..5 { crate::battle::world_elements::spawn_asteroid(ptr::null_mut()); } crate::battle::world_elements::spawn_planet(); }
+            else { for _ in 0..5 { crate::app::bridge::enter(|cx| crate::battle::world_elements::create_asteroid(cx, None)); } crate::battle::world_elements::spawn_planet(); }
             2
         }
     });

@@ -31,10 +31,10 @@ pub fn observation() -> DeviceObservation {
 }
 
 #[cfg(not(test))]
-use crate::navigation::hyper_transition::SaveSisHyperState;
+use crate::navigation::hyper_transition::save_sis_hyper_state;
 #[cfg(test)]
 extern "C" {
-    fn SaveSisHyperState();
+    fn save_sis_hyper_state();
 }
 
 use crate::battle::build_native::engine::StartSphereTracking;
@@ -278,7 +278,7 @@ unsafe fn invoke(id: u8) -> u8 {
                     set("SHIP_TO_COMPEL", 1);
                 }
                 GlobData.Game_state.CurrentActivity &= !0x0200;
-                SaveSisHyperState();
+                save_sis_hyper_state();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;
                 if !GlobData.Game_state.ip_group_q.head.is_null() {

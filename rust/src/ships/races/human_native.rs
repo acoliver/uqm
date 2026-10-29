@@ -124,7 +124,7 @@ pub(crate) mod engine {
         if (*missile).__bindgen_anon_4.turn_wait > 0 {
             (*missile).__bindgen_anon_4.turn_wait -= 1;
         } else {
-            if TrackShip(missile, &mut facing) > 0 {
+            if track_ship(missile, &mut facing) > 0 {
                 image!(frame; (*missile).next.image.frame, SetAbsFrameIndex((*missile).next.image.frame, facing));
                 (*missile).state_flags |= CHANGING as u16;
             }

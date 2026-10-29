@@ -1,5 +1,6 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_pkunk;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -17,7 +18,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_pkunk() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -63,6 +63,16 @@ impl Battle {
                 InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
                 0
             );
+            for side in 0..2 {
+                assert_ne!(
+                    InitQueue(
+                        &raw mut uqm_rust::engine::battle::legacy::race_q[side],
+                        64,
+                        mem::size_of::<STARSHIP>() as u16
+                    ),
+                    0
+                );
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -81,6 +91,9 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            for side in 0..2 {
+                UninitQueue(&raw mut uqm_rust::engine::battle::legacy::race_q[side]);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -188,9 +201,13 @@ fn addr(f: ElementProcessFunc) -> Option<usize> {
     f.map(|f| (f).address())
 }
 
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
+
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -204,7 +221,7 @@ impl Ship {
         let weapon_frames = FrameSet::new(8);
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -553,7 +570,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.postprocess_func.is_some());
             assert!(d.init_weapon_func.is_some());
             assert!(d.uninit_func.is_some());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
             assert!(!d.data.is_null());
             assert!(block_is_zero(d.data));
             (d.uninit_func.unwrap())(&mut d);

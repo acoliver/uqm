@@ -1,5 +1,6 @@
 //! Exercise the race entry point and registered callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_human;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -7,7 +8,6 @@ use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
 unsafe extern "C" {
-    fn init_human() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -45,7 +45,7 @@ fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
             assert!(desc.preprocess_func.is_none());
             assert!(desc.uninit_func.is_none());
             assert!(desc.data.is_null());
-            assert!(desc.CodeRef.is_null());
+            assert!(desc.code_ref.is_null());
 
             assert_ne!(
                 InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),

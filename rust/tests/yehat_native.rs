@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_yehat;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -5,9 +6,6 @@ mod native_ship_common;
 use native_ship_common::*;
 use std::mem;
 use uqm_rust::ships::native::{abi::*, element, frame_index};
-unsafe extern "C" {
-    fn init_yehat() -> *mut RACE_DESC;
-}
 #[test]
 fn descriptor_and_twin_missile_launch() {
     battle_context::run(|| {

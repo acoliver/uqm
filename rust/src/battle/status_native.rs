@@ -126,7 +126,7 @@ fn turn_frames(delta: STATUS_FLAGS, current: STATUS_FLAGS, pass: COUNT) -> ([i16
     }
 }
 
-fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
+pub(crate) fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool)) {
     let black = rgb15(0, 0, 0);
     let mut i = (35u16.wrapping_sub(life)) as BYTE;
     let (color, r) = if i <= 4 {
@@ -216,6 +216,7 @@ fn explosion_flash(life: COUNT, y: COORD, mut draw: impl FnMut(Color, RECT, bool
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    use crate::engine::battle::{Cx, ElementId};
     use crate::ships::native::{rel_frame_index, starship};
 
     /// # Safety
@@ -225,7 +226,7 @@ pub(crate) mod engine {
         status_y_offsets = status_offsets(ScreenHeight);
     }
 
-    unsafe fn offset(ship: *const STARSHIP) -> COORD {
+    pub(crate) unsafe fn offset(ship: *const STARSHIP) -> COORD {
         assert!((*ship).playerNr >= 0);
         *(&raw const status_y_offsets)
             .cast::<COORD>()
@@ -237,7 +238,7 @@ pub(crate) mod engine {
         DrawFilledRectangle(&mut r);
     }
 
-    unsafe fn CaptainsWindow(
+    pub(crate) unsafe fn CaptainsWindow(
         captain: *mut CAPTAIN_STUFF,
         y: COORD,
         delta: STATUS_FLAGS,
@@ -444,32 +445,25 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Element, owning ship, captain frames, and active status context must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn PostProcessStatus(e: *mut ELEMENT) {
-        let ship = starship(e);
-        if (*ship).captains_name_index != 0 || (*ship).playerNr == RPG_PLAYER_NUM as SIZE {
-            let current = (*ship).cur_status_flags;
-            let y = offset(ship);
-            if (*e).__bindgen_anon_2.crew_level == 0 {
-                (*ship).cur_status_flags &= !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
-                if (*(*ship).RaceDescPtr).ship_info.crew_level == 0 {
-                    explosion_flash((*e).__bindgen_anon_1.life_span, y, |color, mut r, fill| {
-                        SetContextForeGroundColor(color);
-                        if fill {
-                            DrawFilledRectangle(&mut r);
-                        } else {
-                            DrawRectangle(&mut r);
-                        }
-                    });
+    pub fn PostProcessStatus(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
+        if cx.ship(ship).captains_name_index != 0
+            || cx.ship(ship).playerNr == RPG_PLAYER_NUM as SIZE
+        {
+            let current = cx.ship(ship).cur_status_flags;
+            let y = cx.status_offset(ship);
+            if cx.b.elements[e].hit_points() == 0 {
+                cx.ship_state_mut(ship).status &=
+                    !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
+                if cx.desc(ship).ship_info.crew_level == 0 {
+                    cx.draw_explosion_flash(cx.b.elements[e].life_span(), y);
                 }
             }
-            let mut delta = ((*ship).old_status_flags ^ current)
+            let mut delta = (cx.ship(ship).old_status_flags ^ current)
                 & (LEFT | RIGHT | THRUST | WEAPON | SPECIAL | LOW_ON_ENERGY) as u16;
             if delta != 0 {
                 if delta & LOW_ON_ENERGY as u16 != 0 {
-                    DrawCrewFuelString(
+                    cx.draw_energy_label(
                         y,
                         if current & LOW_ON_ENERGY as u16 == 0 {
                             1
@@ -480,16 +474,10 @@ pub(crate) mod engine {
                 }
                 delta &= (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
                 if delta != 0 {
-                    CaptainsWindow(
-                        &raw mut (*(*ship).RaceDescPtr).ship_data.captain_control,
-                        y,
-                        delta,
-                        current,
-                        2,
-                    );
+                    cx.draw_captain_controls(ship, y, delta, current);
                 }
             }
-            (*ship).old_status_flags = current;
+            cx.ship_state_mut(ship).old_status = current;
         }
     }
 }

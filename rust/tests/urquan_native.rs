@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_urquan;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -5,9 +6,6 @@ mod native_ship_common;
 use native_ship_common::*;
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, frame_index};
-unsafe extern "C" {
-    fn init_urquan() -> *mut RACE_DESC;
-}
 
 #[test]
 fn descriptor_and_fusion_match_c() {
@@ -93,6 +91,7 @@ fn fighters_launch_left_then_right_and_return_crew() {
                         ptr::null_mut(),
                         ship.ptr(),
                         ptr::null_mut(),
+                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                     )
                 });
                 assert_eq!((*e).__bindgen_anon_1.life_span, 0);
@@ -206,6 +205,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
                     &mut pa,
                     &mut planet,
                     &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             let clone = element(disp_q.tail);

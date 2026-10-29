@@ -1,5 +1,6 @@
 //! Exercise the Mmrnmhrm callbacks through the linked engine ABI.
 
+use uqm_rust::ships::races::init_mmrnmhrm;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -11,7 +12,6 @@ use std::{
 use uqm_rust::ships::native::abi::*;
 
 unsafe extern "C" {
-    fn init_mmrnmhrm() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -265,6 +265,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
                 &mut point,
                 &mut target,
                 &mut point,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(target.__bindgen_anon_2.crew_level, 20);
             assert_eq!((*first).__bindgen_anon_2.hit_points, 1);

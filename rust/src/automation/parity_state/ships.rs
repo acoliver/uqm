@@ -159,7 +159,7 @@ struct Race<'a> {
     intel: &'a INTEL_STUFF,
     assets: assets::Assets<'a>,
     custom: RaceData<'a>,
-    callbacks: [usize; 4],
+    callbacks: [usize; 5],
     code_loaded: bool,
 }
 
@@ -180,13 +180,8 @@ impl<'a> Race<'a> {
             intel: &race.cyborg_control,
             assets,
             custom,
-            callbacks: [
-                race.uninit_func.map_or(0, |f| f as usize),
-                race.preprocess_func.map_or(0, |f| f as usize),
-                race.postprocess_func.map_or(0, |f| f as usize),
-                race.init_weapon_func.map_or(0, |f| f as usize),
-            ],
-            code_loaded: !race.CodeRef.is_null(),
+            callbacks: race.callbacks(),
+            code_loaded: !race.code_ref.is_null(),
         }
     }
 
@@ -234,11 +229,9 @@ impl<'a> Race<'a> {
             "race.weapon",
         ]
         .into_iter()
+        .chain(std::iter::once("race.intelligence"))
         .zip(self.callbacks)
-        .chain(std::iter::once((
-            "race.intelligence",
-            self.intel.intelligence_func.map_or(0, |f| f as usize),
-        ))) {
+        {
             value(
                 fields,
                 prefix,
@@ -330,7 +323,7 @@ mod tests {
                 intel: &descriptor.cyborg_control,
                 assets,
                 custom: RaceData::None,
-                callbacks: [0; 4],
+                callbacks: [0; 5],
                 code_loaded: false,
             }),
         };

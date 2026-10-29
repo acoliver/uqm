@@ -260,3 +260,19 @@ fn mutual_loss_captain_effect_comes_from_the_live_shofixti_descriptor() {
         Point::new(4160, 4000)
     );
 }
+
+#[test]
+fn blazer_setup_dispatches_pre_then_post_for_the_same_ship() {
+    let (mut elements, mut states, mut races) = records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::AndrosynthBlazer);
+    run.stage = 1;
+    let effects = combat::blazer(&mut run, &mut world, &super::tests::test_hooks())
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(effects.as_slice(),[Effect::RaceProcess(false,a),Effect::RaceProcess(true,b)] if *a==run.a && *b==run.a)
+    );
+    assert_eq!(world.ship(run.a).info.as_ref().unwrap().energy_level, 100);
+    assert_ne!(world.ship(run.a).state.cur_status_flags & SPECIAL as u16, 0);
+}

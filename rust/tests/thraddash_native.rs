@@ -1,5 +1,6 @@
 //! Live Thraddash callbacks, using the engine queue, frames, velocity and RNG.
 
+use uqm_rust::ships::races::init_thraddash;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -12,10 +13,11 @@ use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,
 };
 
+use uqm_rust::collections::queue::{InitQueue, UninitQueue};
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 unsafe extern "C" {
-    fn init_thraddash() -> *mut RACE_DESC;
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     static mut DisplayArray: [PRIMITIVE; 330];
@@ -55,10 +57,15 @@ impl Battle {
             let height = ScreenHeight;
             let graphics = _GraphicsStatusFlags;
             _GraphicsStatusFlags &= !4;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
+            assert!(InitQueue(
+                &raw mut disp_q,
+                capacity,
+                mem::size_of::<ELEMENT>() as u16
+            ));
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                assert!(InitQueue(queue, 32, mem::size_of::<STARSHIP>() as u16));
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -78,6 +85,10 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                UninitQueue(queue);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -167,7 +178,7 @@ impl Drop for FrameSet {
 
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     _ship_frames: FrameSet,
     horn_frames: FrameSet,
@@ -183,7 +194,8 @@ impl Ship {
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [horn_frames.frame(0); 3];
         desc.ship_data.special = [napalm_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        // SAFETY: Battle retains the initialized fixture ship pools.
+        let mut ss = unsafe { PoolShip::new(player) };
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -192,7 +204,7 @@ impl Ship {
         (*e).playerNr = player;
         (*e).pParent = (&raw mut *ss).cast();
         (*e).state_flags = PLAYER_SHIP as u16;
-        (*e).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+        (*e).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
             uqm_rust::battle::ship_native::collision,
         ));
         (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
@@ -407,7 +419,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                 d.postprocess_func.is_none()
                     && d.uninit_func.is_none()
                     && d.data.is_null()
-                    && d.CodeRef.is_null()
+                    && d.code_ref.is_null()
             );
             (*p).preprocess_func = None;
             (*p).init_weapon_func = None;
@@ -955,7 +967,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             (*trail).__bindgen_anon_1.life_span = 20;
             // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
             (*enemy.ptr()).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
-            (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+            (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
                 uqm_rust::battle::ship_native::collision,
             ));
             (*enemy.ptr()).current.location = (*trail).current.location;
@@ -965,13 +977,13 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             (*enemy.ptr()).IntersectControl = (*trail).IntersectControl;
             (*enemy.ptr()).IntersectControl.IntersectStamp.frame = enemy._ship_frames.frame(0);
             (*ship.ptr()).__bindgen_anon_1.life_span = 0;
-            (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Legacy(
+            (*ship.ptr()).death_func = Some(uqm_rust::engine::battle::ElementHook::Native(
                 uqm_rust::battle::tactrans_native::cleanup_dead_ship,
             ));
             _GraphicsStatusFlags |= 4;
             let result = uqm_rust::app::bridge::enter(|cx| {
-                let next = cx.b.elements.id(ship.handle);
-                let element = cx.b.elements.id(trail.cast()).unwrap();
+                let next = cx.elements().id(ship.handle);
+                let element = cx.elements().id(trail.cast()).unwrap();
                 uqm_rust::battle::process_native::process_collisions(
                     cx,
                     next,
@@ -1034,7 +1046,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     (*t).__bindgen_anon_2.hit_points = hp;
                     (*t).__bindgen_anon_3.mass_points = mass;
                     (*t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
-                        Some(uqm_rust::engine::battle::CollisionHook::Legacy(
+                        Some(uqm_rust::engine::battle::CollisionHook::Native(
                             uqm_rust::battle::ship_native::collision,
                         ))
                     } else {
@@ -1045,8 +1057,8 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     let mut context: uqm_rust::graphics::native_abi::context_desc = mem::zeroed();
                     let old_context = uqm_rust::graphics::context_abi::SetContext(&mut context);
                     uqm_rust::app::bridge::enter(|cx| {
-                        let next = cx.b.elements.id(target.handle);
-                        let element = cx.b.elements.id(weapon.cast()).unwrap();
+                        let next = cx.elements().id(target.handle);
+                        let element = cx.elements().id(weapon.cast()).unwrap();
                         uqm_rust::battle::process_native::process_collisions(
                             cx,
                             next,

@@ -3,7 +3,7 @@
 use crate::ships::native::abi::{ELEMENT, SOUND};
 use std::ptr;
 
-struct SoundQueue {
+pub(crate) struct SoundQueue {
     count: usize,
     sounds: [SOUND; 8],
     objects: [*mut ELEMENT; 8],
@@ -18,7 +18,7 @@ impl SoundQueue {
         }
     }
 
-    fn push(&mut self, sound: SOUND, object: *mut ELEMENT) {
+    pub(crate) fn push(&mut self, sound: SOUND, object: *mut ELEMENT) {
         if sound as usize == usize::MAX {
             self.sounds.fill(ptr::null_mut());
             self.objects.fill(ptr::null_mut());
@@ -75,7 +75,7 @@ pub(crate) mod engine {
     pub static mut MenuSounds: SOUND = ptr::null_mut();
     #[no_mangle]
     pub static mut GameSounds: SOUND = ptr::null_mut();
-    static mut QUEUE: SoundQueue = SoundQueue::new();
+    pub(crate) static mut QUEUE: SoundQueue = SoundQueue::new();
     static mut CHANNELS: Channels = Channels::new();
 
     /// # Safety
@@ -121,7 +121,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
         let queue = &raw mut QUEUE;
-        // SAFETY: the game-thread publication exclusively owns this sound queue.
+        // SAFETY: the published game thread exclusively owns this sound queue.
         unsafe {
             crate::app::bridge::enter(|_cx| (*queue).push(sound, object));
         }

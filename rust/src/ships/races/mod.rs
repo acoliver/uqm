@@ -31,3 +31,84 @@ pub(crate) mod zoqfot_native;
 #[path = "samatra_native.rs"]
 pub mod samatra;
 pub mod samatra_state;
+
+#[cfg(not(test))]
+pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
+    use crate::ships::native::abi::{SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_VUX_ID};
+    match species {
+        SPECIES_ID_VUX_ID => Some(&vux_native::engine::VUX),
+        SPECIES_ID_ANDROSYNTH_ID => Some(&androsynth_native::engine::ANDROSYNTH),
+        _ => None,
+    }
+}
+
+#[cfg(not(test))]
+pub use {
+    human_native::engine::init_human, melnorme_native::engine::init_melnorme,
+    mmrnmhrm_native::engine::init_mmrnmhrm, mycon_native::engine::init_mycon,
+    sis_native::engine::init_sis, thraddash_native::engine::init_thraddash,
+    utwig_native::engine::init_utwig,
+};
+
+#[cfg(not(test))]
+pub use crate::ships::code_resources::engine::descriptor as legacy_descriptor;
+
+#[cfg(not(test))]
+pub use orz_native::engine::init_orz;
+
+#[cfg(not(test))]
+pub use spathi_native::engine::init_spathi;
+
+#[cfg(not(test))]
+pub use slylandro_native::engine::init_slylandro;
+
+#[cfg(not(test))]
+pub use pkunk_native::engine::init_pkunk;
+
+#[cfg(not(test))]
+pub use urquan_native::engine::init_urquan;
+
+#[cfg(not(test))]
+pub use samatra::engine::init_samatra;
+
+#[cfg(not(test))]
+pub use yehat_native::engine::init_yehat;
+
+#[cfg(not(test))]
+pub use chenjesu_native::engine::init_chenjesu;
+
+#[cfg(not(test))]
+pub use probe_native::engine::init_probe;
+
+#[cfg(not(test))]
+pub use shofixti_native::engine::init_shofixti;
+
+#[cfg(not(test))]
+pub use chmmr_native::engine::init_chmmr;
+
+#[cfg(not(test))]
+pub use ilwrath_native::engine::init_ilwrath;
+
+#[cfg(not(test))]
+pub use syreen_native::engine::init_syreen;
+
+#[cfg(not(test))]
+pub use supox_native::engine::init_supox;
+
+#[cfg(not(test))]
+pub use druuge_native::engine::init_druuge;
+
+#[cfg(not(test))]
+pub use arilou_native::engine::init_arilou;
+
+#[cfg(not(test))]
+pub use zoqfot_native::engine::init_zoqfotpik;
+
+#[cfg(not(test))]
+pub use umgah_native::engine::init_umgah;
+
+#[cfg(not(test))]
+pub use blackurq_native::engine::init_black_urquan;
+
+#[cfg(not(test))]
+pub use orz_native::engine::{intruder_preprocess, marine_collision};

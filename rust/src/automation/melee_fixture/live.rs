@@ -22,6 +22,8 @@ mod star;
 pub(super) use production::execute;
 
 struct Ship<'a> {
+    #[cfg(not(test))]
+    callback_addresses: [usize; 5],
     state: &'a mut STARSHIP,
     info: Option<&'a mut SHIP_INFO>,
     data: Option<&'a mut DATA_STUFF>,
@@ -153,20 +155,21 @@ struct Hooks {
     blazer_collision: usize,
     satellite: PREPROCESS_FUNC,
     defense: usize,
-    limpets: PREPROCESS_FUNC,
+    limpets: crate::engine::battle::record::ElementProcessFunc,
     fighters: PREPROCESS_FUNC,
     fighter_preprocess: usize,
     pkunk: PREPROCESS_FUNC,
     intercept: usize,
     rebirth: usize,
-    ship_death: PREPROCESS_FUNC,
+    ship_death: crate::engine::battle::record::ElementProcessFunc,
     star_collision: usize,
     unhyper: usize,
 }
 
 /// Only operations that invalidate live borrows leave the safe phase logic.
 enum Effect {
-    Invoke(PREPROCESS_FUNC, HElement),
+    RaceProcess(bool, HElement),
+    Invoke(crate::engine::battle::record::ElementProcessFunc, HElement),
     Death(HElement),
     Weapon(HElement),
     Collide(HElement, HElement),

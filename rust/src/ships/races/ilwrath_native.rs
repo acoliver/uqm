@@ -284,7 +284,7 @@ pub(crate) mod engine {
     /// where the target will be `LOOK_AHEAD` frames from now.
     unsafe fn aim_flame_after_decloak(ship: *mut ELEMENT, ss: *mut STARSHIP) {
         let mut facing = (*ss).ShipFacing;
-        if TrackShip(ship, &mut facing) >= 0 {
+        if track_ship(ship, &mut facing) >= 0 {
             let target = element((*ship).hTarget);
             let mut v = (*target).velocity;
             let (mut dx0, mut dy0, mut dx1, mut dy1): (SIZE, SIZE, SIZE, SIZE) = (0, 0, 0, 0);

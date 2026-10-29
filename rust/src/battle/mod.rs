@@ -10,6 +10,7 @@ pub mod battle_types;
 pub mod build_native;
 pub mod c_bridge;
 pub mod collision;
+pub(crate) mod context_access;
 pub mod cyborg_native;
 pub mod element;
 pub mod encount_native;

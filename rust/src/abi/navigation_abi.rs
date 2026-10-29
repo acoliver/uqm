@@ -3968,10 +3968,10 @@ extern "C" {
     pub fn HyperspaceMenu();
 }
 #[cfg(not(test))]
-pub use crate::navigation::hyper_transition::SaveSisHyperState;
+pub use crate::navigation::hyper_transition::save_sis_hyper_state;
 #[cfg(test)]
 extern "C" {
-    pub fn SaveSisHyperState();
+    pub fn save_sis_hyper_state();
 }
 
 #[cfg(not(test))]

@@ -369,7 +369,7 @@ pub(crate) mod engine {
             let wait = (*e).__bindgen_anon_4.turn_wait >> 4;
             if wait != 0 {
                 let mut face = normalize_facing(angle_to_facing((*e).velocity.travel_angle as i32));
-                if TrackShip(e, &mut face) > 0 {
+                if track_ship(e, &mut face) > 0 {
                     SetVelocityVector(&raw mut (*e).velocity, 24 << ONE_SHIFT, face);
                 }
                 (*e).__bindgen_anon_4.turn_wait = (wait << 4) | wait;
@@ -548,6 +548,8 @@ pub(crate) mod engine {
                 (*d).characteristics.special_energy_cost.min(8);
         }
     }
+    /// # Safety
+    /// Initialize only on the game thread with SIS state and resources loaded.
     #[no_mangle]
     pub unsafe extern "C" fn init_sis() -> *mut RACE_DESC {
         let d = &raw mut DESC;

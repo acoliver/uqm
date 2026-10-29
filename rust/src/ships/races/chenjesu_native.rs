@@ -160,7 +160,7 @@ pub(crate) mod engine {
             (*blast).__bindgen_anon_1.life_span = NUM_SPARKLES;
             (*blast).__bindgen_anon_4.turn_wait = 0;
             (*blast).__bindgen_anon_5.next_turn = 0;
-            (*blast).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+            (*blast).preprocess_func = Some(ElementHook::Native(animation_preprocess));
             image!(copy; (*blast).current.image.farray, (*a).next.image.farray);
             image!(frame; (*blast).current.image.frame, SetAbsFrameIndex((*blast).current.image.farray.read(), 2));
         }
@@ -174,7 +174,7 @@ pub(crate) mod engine {
         } else {
             let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
             let mut facing = original;
-            if TrackShip(e, &mut facing) < 0 {
+            if track_ship(e, &mut facing) < 0 {
                 facing = normalize_facing(TFB_Random() as i32);
             } else {
                 let target = element((*e).hTarget);
@@ -210,7 +210,7 @@ pub(crate) mod engine {
         (*e).state_flags &= !(DISAPPEARING as u16);
         (*e).state_flags |= (NONSOLID | FINITE_LIFE) as u16;
         (*e).__bindgen_anon_1.life_span = 6;
-        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+        (*e).preprocess_func = Some(ElementHook::Native(animation_preprocess));
         (*e).death_func = None;
         (*e).collision_func = None;
         (*e).velocity = mem::zeroed();
@@ -224,7 +224,14 @@ pub(crate) mod engine {
         b: *mut ELEMENT,
         pb: *mut POINT,
     ) {
-        collision(a, pa, b, pb);
+        crate::battle::process_native::invoke_collision::invoke_legacy_collision(
+            CollisionHook::Native(collision),
+            a,
+            pa,
+            b,
+            pb,
+            crate::battle::process_native::invoke_collision::CollisionCall::Direct,
+        );
         if (*b).state_flags & PLAYER_SHIP as u16 != 0 && (*a).playerNr != (*b).playerNr {
             sound(starship(a), 2, a);
             let enemy = starship(b);

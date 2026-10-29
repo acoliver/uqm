@@ -148,10 +148,13 @@ fn thrust(
 
 #[cfg(not(test))]
 fn install_ship_hooks(e: &mut ELEMENT, parent: *mut std::ffi::c_void, side: SIZE, species: u32) {
-    e.preprocess_func = Some(ElementHook::Legacy(engine::ship_preprocess));
-    e.postprocess_func = Some(ElementHook::Legacy(engine::ship_postprocess));
-    e.death_func = Some(ElementHook::Legacy(ship_death));
-    e.collision_func = Some(CollisionHook::Legacy(engine::collision));
+    crate::engine::battle::ElementHooks {
+        pre: Some(engine::ship_preprocess),
+        post: Some(engine::ship_postprocess),
+        death: Some(ship_death),
+        collide: Some(engine::collision),
+    }
+    .install(e);
     e.velocity.zero();
     e.pParent = parent;
     crate::battle::process_native::dispatch::record_spawn(parent as usize, side, species);
@@ -165,31 +168,25 @@ const GRAVITY_MASS_NATIVE: u16 = 100;
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::process_native::invoke_element::invoke_race_element;
-    use crate::battle::sounds::{GameSounds, ProcessSound};
-    use crate::battle::status_native::{
-        DeltaEnergy, DrawCaptainsWindow, PostProcessStatus, PreProcessStatus,
-    };
-    use crate::battle::world_elements::do_damage;
+    use crate::battle::status_native::PostProcessStatus;
     use crate::collections::observation::image;
-    use crate::ships::native::{
-        element, init_intersect_points, normalize_facing, object_cloaked, put_element, starship,
-    };
+    use crate::engine::battle::{Cx, ElementId};
+    use crate::ships::native::{element, normalize_facing, starship};
     use std::{mem, ptr};
 
     const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
 
-    /// # Safety
-    /// Element and attached STARSHIP/RACE_DESC records must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn animation_preprocess(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
+    pub fn animation_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        let wait = cx.b.elements[e].turn_wait();
+        if wait > 0 {
+            cx.b.elements[e].set_turn_wait(wait - 1);
         } else {
-            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).current.image.frame));
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_5.next_turn;
+            let frame = cx.inc_frame(cx.b.elements[e].current.image.frame);
+            image!(frame; cx.b.elements[e].next.image.frame, frame);
+            cx.b.elements[e].state_flags |= CHANGING as u16;
+            let wait = cx.b.elements[e].thrust_wait();
+            cx.b.elements[e].set_turn_wait(wait);
         }
     }
 
@@ -208,151 +205,133 @@ pub(crate) mod engine {
         )
     }
 
-    /// # Safety
-    /// Element, owner, loaded race callbacks, and battle/UI state must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_preprocess(e: *mut ELEMENT) {
-        let ship = starship(e);
-        let rd = (*ship).RaceDescPtr;
+    pub fn ship_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        let ship = cx.owner(e);
         let mut flags = input_flags(
-            (*ship).cur_status_flags,
-            (*ship).ship_input_state,
-            (*e).state_flags & APPEARING as u16 != 0,
+            cx.ship(ship).cur_status_flags,
+            cx.ship(ship).ship_input_state,
+            cx.b.elements[e].state_flags & APPEARING as u16 != 0,
         );
-        if (*e).state_flags & APPEARING as u16 != 0 {
-            (*e).__bindgen_anon_2.crew_level = (*rd).ship_info.crew_level;
-            let activity = GlobData.Game_state.CurrentActivity as BYTE;
-            if (*e).playerNr == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE {
-                let old = SetContext(StatusContext);
-                let mut stamp = STAMP {
-                    origin: POINT { x: 0, y: 0 },
-                    frame: (*rd).ship_data.captain_control.background,
-                };
-                DrawStamp(&mut stamp);
-                DestroyDrawable(ReleaseDrawable(stamp.frame));
-                (*rd).ship_data.captain_control.background = ptr::null_mut();
-                SetContext(old);
+        if cx.b.elements[e].state_flags & APPEARING as u16 != 0 {
+            let crew = cx.desc(ship).ship_info.crew_level;
+            cx.b.elements[e].set_hit_points(crew);
+            let activity = cx.world.activity() as BYTE;
+            if cx.b.elements[e].playerNr == NPC_PLAYER_NUM as SIZE
+                && activity == IN_LAST_BATTLE as BYTE
+            {
+                cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
-                InitShipStatus(&raw mut (*rd).ship_info, ship, ptr::null_mut());
-                let old = SetContext(StatusContext);
-                DrawCaptainsWindow(ship);
-                SetContext(old);
-                if let Some(preprocess) = (*rd).preprocess_func {
-                    crate::app::bridge::enter(|cx| invoke_race_element(cx, preprocess, e));
-                }
-                if (*e).hTarget.is_null() {
-                    ship_transition(e);
+                cx.init_ship_status(ship);
+                cx.invoke_ship_process(ship, false);
+                if cx.target(e).is_none() {
+                    ship_transition(cx, e);
                 } else {
-                    (*e).hTarget = ptr::null_mut();
-                    if PLRPlaying(usize::MAX as MUSIC_REF) == 0 && OpponentAlive(ship) != 0 {
-                        BattleSong(1);
-                    }
+                    cx.set_target(e, None);
+                    cx.start_battle_song_if_ready(ship);
                 }
                 return;
             } else {
-                (*e).current.location.x = (((ScreenWidth - STATUS_WIDTH as i32)
-                    << (ONE_SHIFT + MAX_REDUCTION))
-                    >> 1) as COORD;
-                (*e).current.location.y =
-                    ((ScreenHeight << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
-                (*e).next.location = (*e).current.location;
-                init_intersect_points(e);
-                if hyper_transition(e) != 0 {
+                let (w, h) = cx.screen_dimensions();
+                cx.b.elements[e].current.location.x =
+                    (((w - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
+                cx.b.elements[e].current.location.y =
+                    ((h << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
+                cx.b.elements[e].next.location = cx.b.elements[e].current.location;
+                cx.init_intersect(e);
+                if cx.hyper_transition(e) {
                     return;
                 }
             }
         }
-        (*ship).cur_status_flags = flags;
-        if (*ship).energy_counter != 0 {
-            (*ship).energy_counter -= 1;
-        } else if (*rd).ship_info.energy_level < (*rd).ship_info.max_energy
-            || ((*rd).characteristics.energy_regeneration as i8) < 0
+        cx.ship_state_mut(ship).status = flags;
+        if cx.ship(ship).energy_counter != 0 {
+            cx.ship_state_mut(ship).energy_counter -= 1;
+        } else if cx.desc(ship).ship_info.energy_level < cx.desc(ship).ship_info.max_energy
+            || (cx.desc(ship).characteristics.energy_regeneration as i8) < 0
         {
-            DeltaEnergy(e, (*rd).characteristics.energy_regeneration as i8 as SIZE);
+            let delta = cx.desc(ship).characteristics.energy_regeneration as i8 as SIZE;
+            cx.delta_energy(e, delta);
         }
-        if let Some(preprocess) = (*rd).preprocess_func {
-            crate::app::bridge::enter(|cx| invoke_race_element(cx, preprocess, e));
-            flags = (*ship).cur_status_flags;
+        if cx.invoke_ship_process(ship, false) {
+            flags = cx.ship(ship).cur_status_flags;
         }
-        if (*e).__bindgen_anon_4.turn_wait != 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
+        if cx.b.elements[e].turn_wait() != 0 {
+            let wait = cx.b.elements[e].turn_wait() - 1;
+            cx.b.elements[e].set_turn_wait(wait);
         } else if flags & (LEFT | RIGHT) as u16 != 0 {
-            (*ship).ShipFacing = normalize_facing(
-                i32::from((*ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
+            let facing = normalize_facing(
+                i32::from(cx.ship(ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
-            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).next.image.frame, (*ship).ShipFacing));
-            (*e).state_flags |= CHANGING as u16;
-            (*e).__bindgen_anon_4.turn_wait = (*rd).characteristics.turn_wait;
+            cx.ship_state_mut(ship).facing = facing;
+            let frame = cx.abs_frame(cx.b.elements[e].next.image.frame, facing);
+            image!(frame; cx.b.elements[e].next.image.frame, frame);
+            cx.b.elements[e].state_flags |= CHANGING as u16;
+            let wait = cx.desc(ship).characteristics.turn_wait;
+            cx.b.elements[e].set_turn_wait(wait);
         }
-        if (*e).__bindgen_anon_5.thrust_wait != 0 {
-            (*e).__bindgen_anon_5.thrust_wait -= 1;
+        if cx.b.elements[e].thrust_wait() != 0 {
+            let wait = cx.b.elements[e].thrust_wait() - 1;
+            cx.b.elements[e].set_thrust_wait(wait);
         } else if flags & THRUST as u16 != 0 {
-            let thrust = inertial_thrust(e);
-            (*ship).cur_status_flags &=
+            let facing = cx.ship(ship).ShipFacing;
+            let status = cx.ship(ship).cur_status_flags;
+            let characteristics = cx.desc(ship).characteristics;
+            let result = thrust(
+                &mut cx.b.elements[e].velocity,
+                facing,
+                status,
+                characteristics.thrust_increment,
+                characteristics.max_thrust,
+            );
+            cx.ship_state_mut(ship).status &=
                 !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
-            (*ship).cur_status_flags |= thrust;
-            (*e).__bindgen_anon_5.thrust_wait = (*rd).characteristics.thrust_wait;
-            if !object_cloaked(e)
-                && GlobData.Game_state.CurrentActivity as BYTE <= IN_ENCOUNTER as BYTE
-            {
-                spawn_ion_trail(e);
+            cx.ship_state_mut(ship).status |= result;
+            cx.b.elements[e].set_thrust_wait(characteristics.thrust_wait);
+            if !cx.object_cloaked(e) && cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
+                cx.spawn_ion_trail(e);
             }
         }
-        if GlobData.Game_state.CurrentActivity as BYTE <= IN_ENCOUNTER as BYTE {
-            PreProcessStatus(e);
+        if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
+            cx.preprocess_status(e);
         }
     }
 
-    /// # Safety
-    /// Element, ship weapon callbacks, element pool, and sound/UI state must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_postprocess(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_2.crew_level == 0 {
+    pub fn ship_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.b.elements[e].hit_points() == 0 {
             return;
         }
-        let ship = starship(e);
-        let rd = (*ship).RaceDescPtr;
-        if (*ship).weapon_counter != 0 {
-            (*ship).weapon_counter -= 1;
-        } else if (*ship).cur_status_flags & WEAPON as u16 != 0
-            && DeltaEnergy(e, -SIZE::from((*rd).characteristics.weapon_energy_cost)) != 0
-        {
-            let mut weapons = [ptr::null_mut(); 6];
-            let initialize = (*rd).init_weapon_func.expect("ship weapon initializer");
-            let count = crate::battle::process_native::invoke_race::invoke_weapon(
-                initialize,
-                (*e).pParent as usize,
+        let ship = cx.owner(e);
+        if cx.ship(ship).weapon_counter != 0 {
+            cx.ship_state_mut(ship).weapon_counter -= 1;
+        } else if cx.ship(ship).cur_status_flags & WEAPON as u16 != 0
+            && cx.delta_energy(
                 e,
-                weapons.as_mut_ptr(),
-            );
-            if count != 0 {
-                let owner = starship(e);
+                -SIZE::from(cx.desc(ship).characteristics.weapon_energy_cost),
+            )
+        {
+            let weapons = crate::engine::battle::Cx::spawn_weapons(cx, ship, cx.weapon_origin(e));
+            if !weapons.is_empty() {
                 let mut played = false;
-                for &weapon in &weapons[..count as usize] {
-                    if !weapon.is_null() {
-                        let w = element(weapon);
-                        (*w).pParent = owner.cast();
-                        if !played {
-                            ProcessSound((*rd).ship_data.ship_sounds, w);
-                            played = true;
-                        }
-                        put_element(weapon);
+                for weapon in weapons.into_iter().flatten() {
+                    cx.set_parent(weapon, Some(ship));
+                    if !played {
+                        cx.process_ship_sound(ship, 0, weapon);
+                        played = true;
                     }
+                    cx.put(weapon);
                 }
                 if !played {
-                    ProcessSound((*rd).ship_data.ship_sounds, e);
+                    cx.process_ship_sound(ship, 0, e);
                 }
             }
-            (*ship).weapon_counter = (*rd).characteristics.weapon_wait;
+            cx.ship_state_mut(ship).weapon_counter = cx.desc(ship).characteristics.weapon_wait;
         }
-        if (*ship).special_counter != 0 {
-            (*ship).special_counter -= 1;
+        if cx.ship(ship).special_counter != 0 {
+            cx.ship_state_mut(ship).special_counter -= 1;
         }
-        if let Some(postprocess) = (*rd).postprocess_func {
-            crate::app::bridge::enter(|cx| invoke_race_element(cx, postprocess, e));
-        }
-        if GlobData.Game_state.CurrentActivity as BYTE <= IN_ENCOUNTER as BYTE {
-            PostProcessStatus(e);
+        cx.invoke_ship_process(ship, true);
+        if cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
+            PostProcessStatus(cx, e);
         }
     }
 
@@ -489,23 +468,21 @@ pub(crate) mod engine {
         1
     }
 
-    /// # Safety
-    /// Both elements and collision point pointers must be live.
-    #[no_mangle]
-    pub unsafe extern "C" fn collision(
-        e0: *mut ELEMENT,
-        _p0: *mut POINT,
-        e1: *mut ELEMENT,
-        _p1: *mut POINT,
+    pub fn collision(
+        cx: &mut Cx<'_>,
+        e0: ElementId,
+        _p0: &mut POINT,
+        e1: ElementId,
+        _p1: &mut POINT,
     ) {
-        if (*e1).state_flags & FINITE_LIFE as u16 == 0 {
-            (*e0).state_flags |= COLLISION as u16;
-            if u16::from((*e1).__bindgen_anon_3.mass_points) > GRAVITY_MASS_NATIVE {
-                let damage = ((*e0).__bindgen_anon_2.hit_points >> 2).max(1);
-                do_damage(e0, damage as i16);
+        if cx.b.elements[e1].state_flags & FINITE_LIFE as u16 == 0 {
+            cx.b.elements[e0].state_flags |= COLLISION as u16;
+            if u16::from(cx.b.elements[e1].mass_points()) > GRAVITY_MASS_NATIVE {
+                let damage = (cx.b.elements[e0].hit_points() >> 2).max(1);
+                cx.damage(e0, damage as i16);
                 let sound = (TARGET_DAMAGED_FOR_1_PT_NATIVE + (damage >> 1) as i16)
                     .min(TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE);
-                ProcessSound(SetAbsStringTableIndex(GameSounds, sound as u16), e0);
+                cx.game_sound(sound as u16, e0);
             }
         }
     }

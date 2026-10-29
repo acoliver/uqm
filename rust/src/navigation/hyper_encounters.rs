@@ -63,7 +63,7 @@ pub(super) unsafe fn ambient() {
     (*element).playerNr = NEUTRAL_PLAYER_NUM as i16;
     (*element).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
     (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-    (*element).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+    (*element).preprocess_func = Some(ElementHook::Native(animation_preprocess));
     let random = TFB_Random();
     let dx = (random as u8 as i32 % (ScreenWidth - 64)) - ((ScreenWidth - 64) >> 1);
     let dy = ((random >> 8) as u8 as i32 % ScreenHeight) - (ScreenHeight >> 1);

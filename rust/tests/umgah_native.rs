@@ -1,5 +1,6 @@
 //! Live Umgah callbacks, private cone state, collision cleanup and AI RNG order.
 
+use uqm_rust::ships::races::init_umgah;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -13,7 +14,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_umgah() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -378,7 +378,7 @@ fn descriptor_matches_all_c_initializer_fields_and_resources() {
                     && d.uninit_func.is_some()
                     && d.cyborg_control.intelligence_func.is_some()
             );
-            assert!(d.data.is_null() && d.CodeRef.is_null());
+            assert!(d.data.is_null() && d.code_ref.is_null());
         }
     })
 }
@@ -614,6 +614,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                     &mut a,
                     &mut hit,
                     &mut b,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!(queued(), before, "the generic collision blast was unlinked");
@@ -652,6 +653,7 @@ fn collision_preserves_disappearing_when_blast_allocation_fails() {
                 &mut p,
                 &mut hit,
                 ptr::null_mut(),
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(
                 (*cone).state_flags & (DISAPPEARING | COLLISION | NONSOLID) as u16,
@@ -682,6 +684,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                     ptr::null_mut(),
                     &mut hit,
                     ptr::null_mut(),
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
@@ -695,6 +698,7 @@ fn finite_weapon_hit_damages_once_without_a_blast_and_does_not_clear_disappearin
                 ptr::null_mut(),
                 &mut hit,
                 ptr::null_mut(),
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(hit.__bindgen_anon_2.hit_points, 2);
             assert_eq!(queued(), vec![ship.handle]);

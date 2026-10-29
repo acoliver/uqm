@@ -1,3 +1,4 @@
+use uqm_rust::ships::races::init_druuge;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -9,7 +10,6 @@ use std::{
 use uqm_rust::ships::native::{abi::*, element};
 
 unsafe extern "C" {
-    fn init_druuge() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();

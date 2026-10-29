@@ -1,6 +1,5 @@
 //! Hyperspace collision and transition callbacks.
 #![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
 use super::globals::GlobData;
 use super::hyperspace::live::{height, logx, logy, primitive, universe_x, universe_y, width};
@@ -8,7 +7,7 @@ use super::{get, set};
 use crate::planets::starmap::{star_array, CurStarDescPtr};
 use std::{mem, ptr};
 
-pub(super) unsafe fn element_universe(element: *const ELEMENT) -> POINT {
+pub(crate) unsafe fn element_universe(element: *const ELEMENT) -> POINT {
     POINT {
         x: universe_x(
             GlobData.SIS_state.log_x + (*element).next.location.x as i32 - (width() >> 1),
@@ -109,7 +108,7 @@ pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
             GlobData.Game_state.CurrentActivity &= !(IN_BATTLE as u16);
             match (*element).__bindgen_anon_4.turn_wait {
                 0 => {
-                    SaveSisHyperState();
+                    save_sis_hyper_state();
                     GlobData.Game_state.CurrentActivity |= START_ENCOUNTER as u16;
                 }
                 1 => interplanetary(element),
@@ -123,7 +122,7 @@ pub(crate) unsafe extern "C" fn unhyper(element: *mut ELEMENT) {
     }
     crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).current.image.frame, index));
 }
-pub(super) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, kind: u8) {
+pub(crate) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, kind: u8) {
     let dx = (((*source).next.location.x as i32 - (*ship).next.location.x as i32) << 5) as i16;
     let dy = (((*source).next.location.y as i32 - (*ship).next.location.y as i32) << 5) as i16;
     (*ship).state_flags |= NONSOLID as u16;
@@ -173,8 +172,8 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             }
             let ship = (*element).pParent.cast::<STARSHIP>();
             if index == (*ship).ShipFacing {
-                (*element).preprocess_func = Some(ElementHook::Legacy(ship_preprocess));
-                (*element).postprocess_func = Some(ElementHook::Legacy(ship_postprocess));
+                (*element).preprocess_func = Some(ElementHook::Native(ship_preprocess));
+                (*element).postprocess_func = Some(ElementHook::Native(ship_postprocess));
                 (*element).state_flags &= !(NONSOLID as u16);
             }
         }
@@ -188,45 +187,50 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
     }
     1
 }
-pub(crate) unsafe extern "C" fn star_collision(
-    source: *mut ELEMENT,
-    _p0: *mut POINT,
-    ship: *mut ELEMENT,
-    _p1: *mut POINT,
+pub(crate) fn star_collision(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    source: crate::engine::battle::ElementId,
+    _p0: &mut POINT,
+    ship: crate::engine::battle::ElementId,
+    _p1: &mut POINT,
 ) {
-    if (*ship).state_flags & PLAYER_SHIP as u16 == 0 || get("PORTAL_COUNTER") != 0 {
+    if cx.b.elements[ship].state_flags & PLAYER_SHIP as u16 == 0 || cx.portal_counter() != 0 {
         return;
     }
-    let mut point = element_universe(source);
-    let star = FindStar(ptr::null_mut(), &mut point, 5, 5);
-    let parent = (*ship).pParent.cast::<STARSHIP>();
-    let (mut dx, mut dy) = (0, 0);
-    GetCurrentVelocityComponents(&mut (*ship).velocity, &mut dx, &mut dy);
-    if star.cast() == CurStarDescPtr
-        || (*ship).state_flags & APPEARING as u16 != 0
+    let contact = cx.star_contact(source);
+    let parent = cx.owner(ship);
+    let (dx, dy) = cx.b.elements[ship].velocity.get_current_components();
+    if contact.current
+        || cx.b.elements[ship].state_flags & APPEARING as u16 != 0
         || (dx == 0
             && dy == 0
-            && (*parent).cur_status_flags & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
+            && cx.ship(parent).cur_status_flags
+                & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
                 == 0)
     {
-        CurStarDescPtr = star.cast();
-        (*source).state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
-    } else if GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0
-        && (GlobData.Game_state.autopilot.x == -1
-            || GlobData.Game_state.autopilot.y == -1
-            || (GlobData.Game_state.autopilot.x == (*star).star_pt.x
-                && GlobData.Game_state.autopilot.y == (*star).star_pt.y))
-    {
-        CurStarDescPtr = star.cast();
-        (*source).state_flags |= COLLISION as u16;
-        init_transition(source, ship, 1);
+        cx.select_star(Some(contact));
+        cx.b.elements[source].state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
+    } else {
+        let autopilot = cx.autopilot();
+        if cx.world.activity() & IN_BATTLE as u16 != 0
+            && (autopilot.x == -1
+                || autopilot.y == -1
+                || (autopilot.x == contact.position.x && autopilot.y == contact.position.y))
+        {
+            cx.select_star(Some(contact));
+            cx.b.elements[source].state_flags |= COLLISION as u16;
+            cx.init_hyper_transition(source, ship, 1);
+        }
     }
 }
-pub(crate) unsafe extern "C" fn star_death(element: *mut ELEMENT) {
-    if (*element).state_flags & DEFY_PHYSICS as u16 == 0
-        && GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 != 0
+pub(crate) fn star_death(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    if cx.b.elements[element].state_flags & DEFY_PHYSICS as u16 == 0
+        && cx.world.activity() & IN_BATTLE as u16 != 0
     {
-        CurStarDescPtr = ptr::null_mut();
+        cx.select_star(None);
     }
 }
 pub(crate) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
@@ -268,7 +272,7 @@ pub(super) unsafe fn sis_element() -> HELEMENT {
 }
 /// # Safety
 /// Game-thread access to the live flagship queue and world state.
-pub unsafe fn SaveSisHyperState() {
+pub unsafe fn save_sis_hyper_state() {
     let element = sis_element().cast::<ELEMENT>();
     if element.is_null() {
         return;

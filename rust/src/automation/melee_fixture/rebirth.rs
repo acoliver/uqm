@@ -91,7 +91,10 @@ fn install(
     run.next(if exists {
         vec![]
     } else {
-        vec![Effect::Invoke(hooks.pkunk, a)]
+        vec![Effect::Invoke(
+            hooks.pkunk.map(crate::engine::battle::ElementHook::Legacy),
+            a,
+        )]
     })
 }
 

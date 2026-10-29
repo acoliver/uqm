@@ -1,5 +1,6 @@
 //! Exercise Orz's native callbacks with the linked engine queue and physics.
 
+use uqm_rust::ships::races::{init_orz, intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -14,9 +15,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_orz() -> *mut RACE_DESC;
-    fn intruder_preprocess(e: *mut ELEMENT);
-    fn marine_collision(a: *mut ELEMENT, pa: *mut POINT, b: *mut ELEMENT, pb: *mut POINT);
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: COUNT) -> BOOLEAN;
     fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
     fn InitDisplayList();
@@ -49,6 +47,16 @@ impl Battle {
                 ),
                 0
             );
+            for side in 0..2 {
+                assert_ne!(
+                    InitQueue(
+                        &raw mut uqm_rust::engine::battle::legacy::race_q[side],
+                        64,
+                        mem::size_of::<STARSHIP>() as u16
+                    ),
+                    0
+                );
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
@@ -67,6 +75,9 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            for side in 0..2 {
+                UninitQueue(&raw mut uqm_rust::engine::battle::legacy::race_q[side]);
+            }
             GlobData = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
         }
@@ -125,9 +136,13 @@ impl FrameSet {
     }
 }
 
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
+
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     _ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -144,7 +159,7 @@ impl Ship {
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
         desc.ship_data.special = [special_frames.frame(0); 3];
         desc.ship_info.icons = ship_frames.frame(0);
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -394,7 +409,7 @@ fn descriptor_preserves_c_resources_characteristics_and_callback_abi() {
             assert!(d.postprocess_func.is_none());
             assert!(d.uninit_func.is_none());
             assert!(d.data.is_null());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
             let _: ElementProcessFunc = Some(uqm_rust::engine::battle::ElementHook::Legacy(
                 intruder_preprocess,
             ));
@@ -548,6 +563,7 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     &mut point,
                     ship.ptr(),
                     &mut POINT { x: 0, y: 0 },
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!((*ship.ptr()).__bindgen_anon_2.crew_level, 16);
@@ -559,6 +575,7 @@ fn howitzer_ignores_friendlies_but_damages_enemies_through_engine_collision() {
                     &mut point,
                     enemy.ptr(),
                     &mut POINT { x: 0, y: 0 },
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             assert_eq!((*enemy.ptr()).__bindgen_anon_2.crew_level, 13);

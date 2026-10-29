@@ -507,9 +507,9 @@ fn generated_records_have_the_layout_the_headers_give_them() {
 const STARSHIP_SIZE: usize = 80;
 const STARSHIP_HSHIP: usize = 64;
 const STARSHIP_SHIP_FACING: usize = 72;
-const ELEMENT_SIZE: usize = 176;
-const ELEMENT_STATE_FLAGS: usize = 50;
-const ELEMENT_PARENT: usize = 160;
+const ELEMENT_SIZE: usize = 208;
+const ELEMENT_STATE_FLAGS: usize = 82;
+const ELEMENT_PARENT: usize = 192;
 
 #[test]
 fn reading_the_flagship_facing_returns_the_owner_facing_and_writes_nothing() {

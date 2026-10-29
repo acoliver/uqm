@@ -1,5 +1,6 @@
 //! Linked callback checks against the Chmmr C rules, without a running renderer.
 
+use uqm_rust::ships::races::init_chmmr;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -13,7 +14,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_chmmr() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -355,7 +355,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
             );
             assert!(d.uninit_func.is_none());
             assert!(d.data.is_null());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
             assert!(d.preprocess_func.is_some());
             assert!(d.postprocess_func.is_some());
             assert!(d.init_weapon_func.is_some());
@@ -750,6 +750,7 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
                 &mut p,
                 &mut other,
                 ptr::null_mut(),
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*s).__bindgen_anon_2.hit_points, 10);
             assert_eq!(point(p), (1, 2));

@@ -1,6 +1,9 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
+use uqm_rust::collections::queue::{InitQueue, UninitQueue};
+use uqm_rust::ships::races::{init_shofixti, intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
+mod native_ship_common;
 
 use std::{
     ffi::{c_void, CStr},
@@ -14,20 +17,14 @@ use uqm_rust::ships::native::{
 use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
 unsafe extern "C" {
-    fn init_shofixti() -> *mut RACE_DESC;
+
     static mut PlayerControls: [u32; 2];
     static mut race_q: [QUEUE; 2];
     static mut PlayerInput: [*mut InputContext; 2];
     static mut OffScreenContext: *mut uqm_rust::graphics::native_abi::context_desc;
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> BOOLEAN;
-    fn UninitQueue(queue: *mut QUEUE) -> BOOLEAN;
     fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
     fn ResetWinnerStarShip();
-    fn GetWinnerStarShip() -> *mut STARSHIP;
-    fn SetWinnerStarShip(winner: *mut STARSHIP);
-    fn intruder_preprocess(e: *mut ELEMENT);
-    fn marine_collision(a: *mut ELEMENT, pa: *mut POINT, b: *mut ELEMENT, pb: *mut POINT);
     fn TFB_DrawCanvas_New_Paletted(
         w: i32,
         h: i32,
@@ -61,14 +58,15 @@ impl Battle {
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
         let counters = uqm_rust::app::bridge::battle(|b| b.counters);
-        assert_ne!(
-            InitQueue(
-                &raw mut disp_q,
-                capacity,
-                mem::size_of::<ELEMENT>() as COUNT
-            ),
-            0
-        );
+        assert!(InitQueue(
+            &raw mut disp_q,
+            capacity,
+            mem::size_of::<ELEMENT>() as COUNT
+        ));
+        let queues = &raw mut race_q;
+        for queue in &mut *queues {
+            assert!(InitQueue(queue, 32, mem::size_of::<STARSHIP>() as u16));
+        }
         InitDisplayList();
         GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
         GlobData.Game_state.CurrentActivity = IN_ENCOUNTER as _;
@@ -93,6 +91,10 @@ impl Drop for Battle {
         unsafe {
             ResetWinnerStarShip();
             UninitQueue(&raw mut disp_q);
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                UninitQueue(queue);
+            }
             GlobData = self.globals;
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
@@ -180,9 +182,12 @@ impl Drop for FrameSet {
         }
     }
 }
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -200,7 +205,8 @@ impl Ship {
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
         desc.ship_data.special = [special_frames.frame(0); 3];
         desc.ship_data.captain_control.special = captain.frame(14);
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        // SAFETY: Battle owns the initialized ship pools through this fixture's lifetime.
+        let mut ss = unsafe { PoolShip::new(player) };
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -429,7 +435,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
                 d.preprocess_func.is_none()
                     && d.uninit_func.is_none()
                     && d.data.is_null()
-                    && d.CodeRef.is_null()
+                    && d.code_ref.is_null()
             );
             (*p).characteristics.max_thrust = 999;
             (*p).ship_info.crew_level = 0;
@@ -936,7 +942,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let mut other = Ship::new(1);
                     ship.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                     other.ss.SpeciesID = SPECIES_ID_SHOFIXTI_ID;
-                    let mut reserves: [STARSHIP; 2] = mem::zeroed();
+                    let mut reserves = [PoolShip::new(0), PoolShip::new(1)];
                     let mut handlers = BattleInputHandlers {
                         frameInput: None,
                         selectShip: None,
@@ -958,13 +964,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
                         reserves[side].playerNr = side as SIZE;
-                        race_q[side] = mem::zeroed();
                         race_q[side].head = active.cast();
                         race_q[side].tail = active.cast();
                         if initial[side] > 1 {
-                            (*active).succ = (&raw mut reserves[side]).cast();
+                            (*active).succ = (&raw mut *reserves[side]).cast();
                             reserves[side].pred = active.cast();
-                            race_q[side].tail = (&raw mut reserves[side]).cast();
+                            race_q[side].tail = (&raw mut *reserves[side]).cast();
                         }
                     }
                     // Arm the real glory device, execute its area damage, then
@@ -985,15 +990,15 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         (*ship.ptr()).death_func.unwrap(),
                         ship.ptr(),
                     );
-                    transitions::ship_death(other.ptr());
+                    native_ship_common::core(transitions::ship_death, other.ptr());
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
                         (ship.ss.SpeciesID, other.ss.SpeciesID),
                         (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
                     );
-                    transitions::cleanup_dead_ship(ship.ptr());
-                    transitions::cleanup_dead_ship(other.ptr());
+                    native_ship_common::core(transitions::cleanup_dead_ship, ship.ptr());
+                    native_ship_common::core(transitions::cleanup_dead_ship, other.ptr());
                     transitions::StopDitty();
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];
@@ -1009,45 +1014,47 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         desc.ship_data.ship = [ptr::null_mut(); 3];
                         desc.ship_data.weapon = [ptr::null_mut(); 3];
                         desc.ship_data.special = [ptr::null_mut(); 3];
-                        transitions::new_ship_with_picker(outgoing, |last, player| {
-                            assert_eq!(player as usize, side);
-                            let chosen = get_encounter_star_ship_with_picker(
-                                last.cast(),
-                                player,
-                                |player, out| {
-                                    selected[side] = true;
-                                    let mut state: GETMELEE_STATE = mem::zeroed();
-                                    let p = &mut state.player[player as usize];
-                                    p.selecting = 1;
-                                    p.ships_left = 1;
-                                    p.col = 1;
-                                    // Expire the computer's display delay without a sleep.
-                                    p.timeIn = u32::MAX - 419;
-                                    let result = if computer && side == 1 {
-                                        selectShipComputer(
-                                            (&mut inputs[side] as *mut InputContext).cast(),
-                                            &mut state,
-                                        )
-                                    } else {
-                                        PlayerControls[side] = side as u32;
-                                        PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
-                                        selectShipHuman(
-                                            (&mut inputs[side] as *mut InputContext).cast(),
-                                            &mut state,
-                                        )
-                                    };
-                                    assert_eq!(result, 1);
-                                    assert_eq!(state.player[side].done, 1);
-                                    assert_eq!(
-                                        state.player[side].hBattleShip,
-                                        (&raw mut reserves[side]).cast()
-                                    );
-                                    *out = state.player[side].hBattleShip;
-                                    1
-                                },
-                            );
-                            assert_eq!(!chosen.is_null(), expected_selection);
-                            (!chosen.is_null()) as BOOLEAN
+                        uqm_rust::app::bridge::enter(|cx| {
+                            transitions::new_ship_with_picker(cx, outgoing, |last, player| {
+                                assert_eq!(player as usize, side);
+                                let chosen = get_encounter_star_ship_with_picker(
+                                    last.cast(),
+                                    player,
+                                    |player, out| {
+                                        selected[side] = true;
+                                        let mut state: GETMELEE_STATE = mem::zeroed();
+                                        let p = &mut state.player[player as usize];
+                                        p.selecting = 1;
+                                        p.ships_left = 1;
+                                        p.col = 1;
+                                        // Expire the computer's display delay without a sleep.
+                                        p.timeIn = u32::MAX - 419;
+                                        let result = if computer && side == 1 {
+                                            selectShipComputer(
+                                                (&mut inputs[side] as *mut InputContext).cast(),
+                                                &mut state,
+                                            )
+                                        } else {
+                                            PlayerControls[side] = side as u32;
+                                            PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
+                                            selectShipHuman(
+                                                (&mut inputs[side] as *mut InputContext).cast(),
+                                                &mut state,
+                                            )
+                                        };
+                                        assert_eq!(result, 1);
+                                        assert_eq!(state.player[side].done, 1);
+                                        assert_eq!(
+                                            state.player[side].hBattleShip,
+                                            (&raw mut *reserves[side]).cast()
+                                        );
+                                        *out = state.player[side].hBattleShip;
+                                        1
+                                    },
+                                );
+                                assert_eq!(!chosen.is_null(), expected_selection);
+                                (!chosen.is_null()) as BOOLEAN
+                            })
                         });
                     }
                     assert_eq!(selected, [expected_selection; 2]);

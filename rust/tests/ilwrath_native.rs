@@ -1,5 +1,6 @@
 //! Exercise the Ilwrath live descriptor and registered callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_ilwrath;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -9,7 +10,6 @@ use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn init_ilwrath() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -275,7 +275,7 @@ fn avenger_descriptor_matches_the_c_template() {
             assert!(desc.postprocess_func.is_none());
             assert!(desc.uninit_func.is_none());
             assert!(desc.data.is_null());
-            assert!(desc.CodeRef.is_null());
+            assert!(desc.code_ref.is_null());
         }
     })
 }
@@ -395,6 +395,7 @@ fn flame_that_hits_goes_nonsolid_without_disappearing() {
                 &mut flame_point,
                 target,
                 &mut target_point,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
 
             // weapon_collision marks it DISAPPEARING | COLLISION | NONSOLID; the

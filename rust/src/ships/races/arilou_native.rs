@@ -169,7 +169,7 @@ pub(crate) mod engine {
         let ss = starship(ship);
         let orig_facing = (*ss).ShipFacing;
         let mut face = orig_facing;
-        let delta_facing = TrackShip(ship, &mut face);
+        let delta_facing = track_ship(ship, &mut face);
         if delta_facing > 0 {
             face = normalize_facing(i32::from(orig_facing) + i32::from(delta_facing));
         }

@@ -1,5 +1,6 @@
 //! Mycon native entry point and callbacks linked against the engine archive.
 
+use uqm_rust::ships::races::init_mycon;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -9,7 +10,6 @@ use uqm_rust::ships::native::{abi::*, element};
 static ENGINE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 unsafe extern "C" {
-    fn init_mycon() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();

@@ -22,3 +22,6 @@ pub mod ffi;
 pub mod native_adapters;
 
 pub mod hook_registry;
+
+#[cfg(not(test))]
+pub use loader_native::engine::{c_free_ship, c_load_ship, free_ship, load_ship};

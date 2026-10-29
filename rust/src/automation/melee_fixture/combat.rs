@@ -63,7 +63,7 @@ pub(super) fn mutual_loss(
                 .ok_or("fixture requires loaded descriptor fields")?
                 .captain_control
                 .special = run.captain;
-            run.next(vec![Effect::Invoke(ship.postprocess, run.a)])
+            run.next(vec![Effect::RaceProcess(true, run.a)])
         }
         _ => {
             assert_eq!(world.elements[&run.a].life_span, 0);
@@ -97,7 +97,7 @@ pub(super) fn blazer(
                 .ok_or("fixture requires loaded descriptor fields")?
                 .energy_level = 0;
             run.next(if transformed {
-                vec![Effect::Invoke(ship.preprocess, a)]
+                vec![Effect::RaceProcess(false, a)]
             } else {
                 vec![]
             })
@@ -112,8 +112,8 @@ pub(super) fn blazer(
             info.energy_level = info.max_energy;
             ship.state.cur_status_flags |= SPECIAL as u16;
             run.next(vec![
-                Effect::Invoke(ship.preprocess, a),
-                Effect::Invoke(ship.postprocess, a),
+                Effect::RaceProcess(false, a),
+                Effect::RaceProcess(true, a),
             ])
         }
         2 => {
@@ -128,7 +128,7 @@ pub(super) fn blazer(
                 .as_mut()
                 .ok_or("fixture requires loaded descriptor fields")?
                 .energy_level = 0;
-            run.next(vec![Effect::Invoke(ship.preprocess, a)])
+            run.next(vec![Effect::RaceProcess(false, a)])
         }
         3 => {
             run.proof.require(
@@ -188,9 +188,12 @@ pub(super) fn satellites(
                 .ok_or("fixture element or owner is no longer live")?
                 .thrust_or_blast = 0;
             run.before = world.elements.keys().copied().collect();
+            let hook = hooks
+                .satellite
+                .map(crate::engine::battle::ElementHook::Legacy);
             run.next(vec![
                 Effect::Intersect(run.b),
-                Effect::Invoke(hooks.satellite, run.object),
+                Effect::Invoke(hook, run.object),
             ])
         }
         1 => {
@@ -274,7 +277,7 @@ pub(super) fn death_spawn(
             )?;
             run.proof.require(
                 world.elements[&run.b].death_func.map(|f| f.address())
-                    == hooks.ship_death.map(|f| f as usize),
+                    == hooks.ship_death.map(|f| f.address()),
                 "death-hook",
             )?;
             run.before = world.elements.keys().copied().collect();
@@ -403,7 +406,14 @@ pub(super) fn pool(
             run.before = world.elements.keys().copied().collect();
             run.next(
                 (0..76)
-                    .map(|_| Effect::Invoke(hooks.fighters, run.a))
+                    .map(|_| {
+                        Effect::Invoke(
+                            hooks
+                                .fighters
+                                .map(crate::engine::battle::ElementHook::Legacy),
+                            run.a,
+                        )
+                    })
                     .collect(),
             )
         }

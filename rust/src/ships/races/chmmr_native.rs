@@ -100,6 +100,8 @@ pub(crate) mod engine {
     static mut CHMMR_DESC: RACE_DESC = descriptor();
 
     #[no_mangle]
+    /// # Safety
+    /// Call on the game thread before descriptor template mutation or resource cleanup.
     pub unsafe extern "C" fn init_chmmr() -> *mut RACE_DESC {
         CHMMR_DESC.preprocess_func = Some(chmmr_preprocess);
         CHMMR_DESC.postprocess_func = Some(chmmr_postprocess);
@@ -155,7 +157,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.weapon[0],
                             (angle_to_facing(FULL_CIRCLE as i32) << 1) as COUNT,
                         ));
-                        (*spot).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+                        (*spot).preprocess_func = Some(ElementHook::Native(animation_preprocess));
                         (*spot).pParent = ss.cast();
                         (*GlobData
                             .Game_state
@@ -277,7 +279,7 @@ pub(crate) mod engine {
                 element((*ship).hTarget),
             );
             let mut facing: COUNT = 0;
-            if TrackShip(ship, &mut facing) >= 0 {
+            if track_ship(ship, &mut facing) >= 0 {
                 let target = element((*ship).hTarget);
                 let collision_mass = i32::from((*target).__bindgen_anon_3.mass_points) + 1;
                 if collision_mass <= MAX_SHIP_MASS as i32 * 10 {
@@ -539,7 +541,7 @@ pub(crate) mod engine {
         (*e).__bindgen_anon_4.turn_wait = 1;
         (*e).__bindgen_anon_5.next_turn = 0;
         image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, 8));
-        (*e).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+        (*e).preprocess_func = Some(ElementHook::Native(animation_preprocess));
         (*e).death_func = None;
         (*e).postprocess_func = None;
         (*e).collision_func = None;

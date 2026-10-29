@@ -131,7 +131,7 @@ pub(crate) mod engine {
             (*element).__bindgen_anon_4.turn_wait -= 1;
         } else {
             let mut facing = crate::ships::native::frame_index((*element).next.image.frame);
-            if TrackShip(element, &mut facing) > 0 {
+            if track_ship(element, &mut facing) > 0 {
                 image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).next.image.frame, facing));
                 (*element).state_flags |= CHANGING as u16;
                 SetVelocityVector(&mut (*element).velocity, 20 << ONE_SHIFT, facing);

@@ -1,13 +1,11 @@
-//! Live vux callbacks translated from ships/vux/vux.c.
+//! VUX behavior over the battle context's ids and per-ship descriptor.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::collections::observation::image;
+    use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, element, facing_to_angle, init_intersect_points,
-        normalize_facing, put_element, sine, starship,
+        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };
-    use std::{mem, ptr};
-    const fn descriptor() -> RACE_DESC {
+    pub fn descriptor() -> crate::engine::battle::RaceDesc {
         let mut d = RACE_DESC::EMPTY;
         d.ship_info.ship_flags =
             (FIRES_FORE as i32 | SEEKING_SPECIAL as i32 | IMMEDIATE_WEAPON as i32) as _;
@@ -51,114 +49,111 @@ pub(crate) mod engine {
         d.ship_data.victory_ditty_rsc = c"ship.vux.ditty".as_ptr();
         d.ship_data.ship_sounds_rsc = c"ship.vux.sounds".as_ptr();
         d.cyborg_control.WeaponRange = (50 << ONE_SHIFT) as u16;
-        d
+        d.race = Some(&VUX);
+        crate::engine::battle::RaceDesc::from_legacy(d)
     }
-    static mut DESC: RACE_DESC = descriptor();
-    #[no_mangle]
-    pub extern "C" fn init_vux() -> *mut RACE_DESC {
-        unsafe {
-            DESC.preprocess_func = Some(vux_preprocess);
-            DESC.postprocess_func = Some(vux_postprocess);
-            DESC.init_weapon_func = Some(initialize_horrific_laser);
-            DESC.cyborg_control.intelligence_func = Some(vux_intelligence);
-        }
-        &raw mut DESC
-    }
-    pub(crate) unsafe extern "C" fn limpet_preprocess(e: *mut ELEMENT) {
-        let original = normalize_facing(angle_to_facing(i32::from((*e).velocity.travel_angle)));
+
+    pub static VUX: Race = Race {
+        descriptor,
+        preprocess: Some(vux_preprocess),
+        postprocess: Some(vux_postprocess),
+        init_weapon: initialize_horrific_laser,
+        intelligence: vux_intelligence,
+        uninit: None,
+    };
+
+    pub(crate) fn limpet_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        let original = normalize_facing(angle_to_facing(i32::from(
+            cx.element(e).velocity.travel_angle,
+        )));
         let mut face = original;
-        let delta = TrackShip(e, &mut face);
+        let delta = cx.track_ship(e, &mut face);
         if delta > 0 {
             face = (i32::from(original) + i32::from(delta)) as COUNT;
-            SetVelocityVector(&raw mut (*e).velocity, 25, face);
+            cx.element_mut(e).velocity.set_vector(25, face);
         }
-        image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
-        (*e).state_flags |= CHANGING as u16;
+        let frame = cx.advance_frame(cx.element(e).next.image.frame);
+        cx.set_frame(e, true, frame);
+        cx.element_mut(e).flags |= CHANGING as u16;
     }
-    pub(crate) unsafe extern "C" fn limpet_collision(
-        a: *mut ELEMENT,
-        _pa: *mut POINT,
-        b: *mut ELEMENT,
-        _pb: *mut POINT,
+
+    pub(crate) fn limpet_collision(
+        cx: &mut Cx<'_>,
+        a: ElementId,
+        _pa: &mut POINT,
+        b: ElementId,
+        _pb: &mut POINT,
     ) {
-        if (*b).state_flags & PLAYER_SHIP as u16 != 0 {
-            let other = starship(b);
-            let rd = (*other).RaceDescPtr;
-            (*rd).characteristics.turn_wait = (*rd).characteristics.turn_wait.wrapping_add(1);
-            if (*rd).characteristics.turn_wait == 0 {
-                (*rd).characteristics.turn_wait = (*rd).characteristics.turn_wait.wrapping_sub(1);
+        if cx.element(b).flags & PLAYER_SHIP as u16 != 0 {
+            let other = cx.owner(b);
+            let mut d = cx.race_stats_mut(other);
+            d.characteristics.turn_wait = d.characteristics.turn_wait.wrapping_add(1);
+            if d.characteristics.turn_wait == 0 {
+                d.characteristics.turn_wait = d.characteristics.turn_wait.wrapping_sub(1);
             }
-            (*rd).characteristics.thrust_wait = (*rd).characteristics.thrust_wait.wrapping_add(1);
-            if (*rd).characteristics.thrust_wait == 0 {
-                (*rd).characteristics.thrust_wait =
-                    (*rd).characteristics.thrust_wait.wrapping_sub(1);
+            d.characteristics.thrust_wait = d.characteristics.thrust_wait.wrapping_add(1);
+            if d.characteristics.thrust_wait == 0 {
+                d.characteristics.thrust_wait = d.characteristics.thrust_wait.wrapping_sub(1);
             }
-            if (*rd).characteristics.thrust_increment <= 1 << ONE_SHIFT {
-                (*rd).characteristics.max_thrust =
-                    (*rd).characteristics.thrust_increment.wrapping_shl(1);
+            if d.characteristics.thrust_increment <= 1 << ONE_SHIFT {
+                d.characteristics.max_thrust = d.characteristics.thrust_increment.wrapping_shl(1);
             } else {
-                let n = (*rd).characteristics.max_thrust / (*rd).characteristics.thrust_increment;
-                (*rd).characteristics.thrust_increment -= 1;
-                (*rd).characteristics.max_thrust =
-                    (*rd).characteristics.thrust_increment.wrapping_mul(n);
+                let n = d.characteristics.max_thrust / d.characteristics.thrust_increment;
+                d.characteristics.thrust_increment -= 1;
+                d.characteristics.max_thrust = d.characteristics.thrust_increment.wrapping_mul(n);
             }
-            (*rd).cyborg_control.ManeuverabilityIndex = 0;
-            let ss = starship(a);
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 2),
-                b,
-            );
-            let mut stamp: STAMP = mem::zeroed();
-            stamp.frame = SetAbsFrameIndex(
-                (*(*ss).RaceDescPtr).ship_data.weapon[0],
-                TFB_Random() as COUNT,
-            );
-            ModifySilhouette(b, &mut stamp, MODIFY_IMAGE as BYTE);
+            d.intelligence.maneuverability = 0;
+            drop(d);
+            let ss = cx.owner(a);
+            cx.process_ship_sound(ss, 2, b);
+            let index = cx.random() as COUNT;
+            let frame = cx.absolute_frame(cx.ship_frame(ss, 1), index);
+            cx.silhouette_frame(b, frame, MODIFY_IMAGE as BYTE);
         }
-        (*a).__bindgen_anon_2.hit_points = 0;
-        (*a).__bindgen_anon_1.life_span = 0;
-        (*a).state_flags |= (COLLISION | DISAPPEARING) as u16;
+        cx.element_mut(a).set_hit_points(0);
+        cx.element_mut(a).set_life_span(0);
+        cx.element_mut(a).flags |= (COLLISION | DISAPPEARING) as u16;
     }
-    pub(crate) unsafe extern "C" fn spawn_limpets(e: *mut ELEMENT) {
-        let ss = starship(e);
-        let mut block = MISSILE_BLOCK {
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast(),
-            // The C expression adds HALF_CIRCLE directly to the facing.
-            face: (i32::from((*ss).ShipFacing) + HALF_CIRCLE as i32) as COUNT,
+
+    pub(crate) fn spawn_limpets(cx: &mut Cx<'_>, e: ElementId) {
+        let ss = cx.owner(e);
+        let mut block = crate::engine::battle::views::Missile {
+            farray: cx.ship_frame_set(ss, 2),
+            // The original expression adds HALF_CIRCLE directly to the facing.
+            face: (i32::from(cx.ship_state(ss).facing) + HALF_CIRCLE as i32) as COUNT,
             index: 0,
-            sender: (*e).playerNr,
+            sender: cx.element(e).player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 8,
             speed: 25,
             hit_points: 1,
             damage: 0,
             life: 80,
-            preprocess_func: Some(ElementHook::Legacy(limpet_preprocess)),
+            preprocess: Some(limpet_preprocess),
             blast_offs: 0,
-            cx: (*e).next.location.x,
-            cy: (*e).next.location.y,
+            cx: cx.element(e).next.location.x,
+            cy: cx.element(e).next.location.y,
         };
-        let h = initialize_missile(&mut block);
-        if !h.is_null() {
-            let limpet = element(h);
-            (*limpet).collision_func = Some(CollisionHook::Legacy(limpet_collision));
-            (*limpet).pParent = ss.cast();
-            put_element(h);
+        if let Some(limpet) = cx.missile(&mut block) {
+            cx.element_mut(limpet).collide = Some(CollisionHook::Native(limpet_collision));
+            cx.set_parent(limpet, Some(ss));
+            cx.put(limpet);
         }
     }
-    pub(crate) unsafe extern "C" fn initialize_horrific_laser(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let face = (*ss).ShipFacing;
+
+    pub(crate) fn initialize_horrific_laser(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let face = cx.ship_state(ss).facing;
         let mut block = LASER_BLOCK {
             face,
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
             ex: cosine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
             ey: sine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
-            sender: (*ship).playerNr,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 12,
             color: Color {
@@ -168,113 +163,119 @@ pub(crate) mod engine {
                 a: 255,
             },
         };
-        *out = initialize_laser(&mut block);
-        1
+        vec![cx.laser(&mut block)]
     }
-    pub(crate) unsafe extern "C" fn vux_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-        (*enemy).MoveState = MOVEMENT_STATE_PURSUE;
-        let weapon = concerns.add(ENEMY_WEAPON_INDEX as usize);
-        if !(*weapon).ObjectPtr.is_null() && (*weapon).MoveState == MOVEMENT_STATE_ENTICE {
-            (*weapon).MoveState = if (*(*weapon).ObjectPtr).state_flags & FINITE_LIFE as u16 != 0
-                && (*(*weapon).ObjectPtr).state_flags & CREW_OBJECT as u16 == 0
-            {
-                MOVEMENT_STATE_AVOID
-            } else {
-                MOVEMENT_STATE_PURSUE
-            };
+
+    pub(crate) fn vux_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        let enemy = ENEMY_SHIP_INDEX as usize;
+        let weapon = ENEMY_WEAPON_INDEX as usize;
+        concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
+        if let Some(threat) = concerns.objects[weapon].object {
+            if concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE {
+                let flags = cx.element(threat).flags;
+                concerns.objects[weapon].movement =
+                    if flags & FINITE_LIFE as u16 != 0 && flags & CREW_OBJECT as u16 == 0 {
+                        MOVEMENT_STATE_AVOID
+                    } else {
+                        MOVEMENT_STATE_PURSUE
+                    };
+            }
         }
-        ship_intelligence(ship, concerns, count);
-        let ss = starship(ship);
-        if (*ss).special_counter == 0
-            && !(*enemy).ObjectPtr.is_null()
-            && (*enemy).which_turn <= 12
-            && (*ss).ship_input_state & (LEFT | RIGHT) as u8 != 0
-            && (*(*ss).RaceDescPtr).ship_info.energy_level
-                >= (*(*ss).RaceDescPtr).ship_info.max_energy >> 1
+        cx.ship_intelligence(ss, concerns);
+        if cx.ship_state(ss).special_counter == 0
+            && concerns.objects[enemy].object.is_some()
+            && concerns.objects[enemy].which_turn <= 12
+            && cx.ship_state(ss).input & (LEFT | RIGHT) as u8 != 0
+            && cx.race_stats(ss).ship_info.energy_level
+                >= cx.race_stats(ss).ship_info.max_energy >> 1
         {
-            (*ss).ship_input_state |= SPECIAL as u8;
+            cx.ship_state_mut(ss).input |= SPECIAL as u8;
         } else {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         }
     }
-    pub(crate) unsafe extern "C" fn vux_postprocess(e: *mut ELEMENT) {
-        let ss = starship(e);
-        if (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && (*ss).special_counter == 0
-            && DeltaEnergy(e, -2) != 0
+
+    pub(crate) fn vux_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let e = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(e, -2)
         {
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-                e,
-            );
-            spawn_limpets(e);
-            (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+            cx.process_ship_sound(ss, 1, e);
+            spawn_limpets(cx, e);
+            cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }
-    pub(crate) unsafe extern "C" fn vux_preprocess(e: *mut ELEMENT) {
-        if (*e).state_flags & APPEARING as u16 != 0 {
-            let ss = starship(e);
-            let mut face = (*ss).ShipFacing;
-            if GlobData.Game_state.CurrentActivity as u8 != IN_ENCOUNTER as u8
-                && TrackShip(e, &mut face) >= 0
-            {
-                let other = element((*e).hTarget);
+
+    pub(crate) fn vux_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let e = cx.ship_element(ss);
+        if cx.element(e).flags & APPEARING as u16 != 0 {
+            let mut face = cx.ship_state(ss).facing;
+            if cx.world.activity() as u8 != IN_ENCOUNTER as u8 && cx.track_ship(e, &mut face) >= 0 {
+                let other = cx
+                    .target(e)
+                    .unwrap_or_else(|| panic!("{}", "track_ship found no target"));
                 const ENTRY: i32 = ((150 + 12 + 46) * 2) << ONE_SHIFT;
                 loop {
-                    (*e).current.location.x = (i32::from((*other).current.location.x)
-                        - (ENTRY >> 1)
-                        + i32::from(TFB_Random() as COUNT) % ENTRY)
-                        as COORD;
-                    (*e).current.location.y = (i32::from((*other).current.location.y)
-                        - (ENTRY >> 1)
-                        + i32::from(TFB_Random() as COUNT) % ENTRY)
-                        as COORD;
-                    let dx = (*other)
+                    cx.element_mut(e).current.location.x =
+                        (i32::from(cx.element(other).current.location.x) - (ENTRY >> 1)
+                            + i32::from(cx.random() as COUNT) % ENTRY)
+                            as COORD;
+                    cx.element_mut(e).current.location.y =
+                        (i32::from(cx.element(other).current.location.y) - (ENTRY >> 1)
+                            + i32::from(cx.random() as COUNT) % ENTRY)
+                            as COORD;
+                    let dx = cx
+                        .element(other)
                         .current
                         .location
                         .x
-                        .wrapping_sub((*e).current.location.x);
-                    let dy = (*other)
+                        .wrapping_sub(cx.element(e).current.location.x);
+                    let dy = cx
+                        .element(other)
                         .current
                         .location
                         .y
-                        .wrapping_sub((*e).current.location.y);
-                    face = normalize_facing(angle_to_facing(i32::from(ARCTAN(dx, dy))));
-                    image!(frame; (*e).current.image.frame, SetAbsFrameIndex((*e).current.image.frame, face));
-                    let x = i32::from((*e).current.location.x) & !((1 << ONE_SHIFT) - 1);
-                    let y = i32::from((*e).current.location.y) & !((1 << ONE_SHIFT) - 1);
-                    let width = (ScreenWidth - 64) << (ONE_SHIFT + 3);
-                    let height = ScreenHeight << (ONE_SHIFT + 3);
-                    (*e).current.location.x = (if x < 0 {
+                        .wrapping_sub(cx.element(e).current.location.y);
+                    face =
+                        normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))));
+                    let frame = cx.absolute_frame(cx.element(e).current.image.frame, face);
+                    cx.set_frame(e, false, frame);
+                    let x = i32::from(cx.element(e).current.location.x) & !((1 << ONE_SHIFT) - 1);
+                    let y = i32::from(cx.element(e).current.location.y) & !((1 << ONE_SHIFT) - 1);
+                    let (pixel_width, pixel_height) = cx.screen_dimensions();
+                    let width = (pixel_width - 64) << (ONE_SHIFT + 3);
+                    let height = pixel_height << (ONE_SHIFT + 3);
+                    cx.element_mut(e).current.location.x = (if x < 0 {
                         x + width
                     } else if x >= width {
                         x - width
                     } else {
                         x
                     }) as COUNT as COORD;
-                    (*e).current.location.y = (if y < 0 {
+                    cx.element_mut(e).current.location.y = (if y < 0 {
                         y + height
                     } else if y >= height {
                         y - height
                     } else {
                         y
                     }) as COUNT as COORD;
-                    if CalculateGravity(e) == 0 && TimeSpaceMatterConflict(e) == 0 {
+                    if !cx.gravity(e) && !cx.matter_conflict(e) {
                         break;
                     }
                 }
-                (*e).hTarget = ptr::null_mut();
-                image!(copy; (*e).next, (*e).current);
-                init_intersect_points(e);
-                image!(frame; (*e).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*e).next.image.farray, (*e).next.image.frame));
-                (*ss).ShipFacing = face;
+                cx.set_target(e, None);
+                let current = cx.element(e).current;
+                cx.copy_visual_to_next(e, current);
+                cx.init_intersect(e);
+                let frame = cx.equivalent_frame(
+                    cx.element_frame_set_first(e, true),
+                    cx.element(e).next.image.frame,
+                );
+                cx.set_intersect_frame(e, frame);
+                cx.ship_state_mut(ss).facing = face;
             }
-            (*(*ss).RaceDescPtr).preprocess_func = None;
+            cx.set_preprocess(ss, crate::engine::battle::Selection::Disabled);
         }
     }
 }

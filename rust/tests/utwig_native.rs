@@ -1,13 +1,11 @@
+use uqm_rust::ships::races::init_utwig;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
 mod native_ship_common;
 use native_ship_common::*;
-use std::{mem, ptr};
+use std::mem;
 use uqm_rust::ships::native::{abi::*, cosine, element, facing_to_angle, frame_index, sine};
-unsafe extern "C" {
-    fn init_utwig() -> *mut RACE_DESC;
-}
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
@@ -91,18 +89,24 @@ fn shield_absorbs_damage_before_collision_and_recharges_on_next_preprocess() {
             assert_eq!((*e).colorCycleIndex, 1);
             assert_eq!((*prim(e)).Type, gfx_object_STAMPFILL_PRIM as GRAPHICS_PRIM);
             ship.ss.weapon_counter = 1;
-            let mut projectile: ELEMENT = mem::zeroed();
+            let handle = AllocElement();
+            assert!(!handle.is_null());
+            let projectile = &mut *element(handle);
+            let mut pa = POINT { x: 0, y: 0 };
+            let mut pb = POINT { x: 0, y: 0 };
             projectile.state_flags = FINITE_LIFE as u16;
             projectile.__bindgen_anon_3.mass_points = 6;
             with_rng(1, 0, || {
                 uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                     (*e).collision_func.unwrap(),
                     e,
-                    ptr::null_mut(),
-                    &mut projectile,
-                    ptr::null_mut(),
+                    &mut pa,
+                    projectile,
+                    &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
+            FreeElement(handle);
             assert_eq!((*e).__bindgen_anon_1.life_span, 8);
             assert_eq!(ship.desc.ship_info.crew_level, 20);
             ship.ss.special_counter = 11;

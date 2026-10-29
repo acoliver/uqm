@@ -207,7 +207,7 @@ pub(crate) mod engine {
             (*e).__bindgen_anon_4.turn_wait = 3;
             (*e).__bindgen_anon_5.thrust_wait = 4;
             (*e).colorCycleIndex = 0;
-            (*e).preprocess_func = Some(ElementHook::Legacy(flee_preprocess));
+            (*e).preprocess_func = Some(ElementHook::Native(flee_preprocess));
             (*e).__bindgen_anon_3.mass_points = (MAX_SHIP_MASS * 10) as u8;
             (*e).velocity = mem::zeroed();
             (*ship).cur_status_flags &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);

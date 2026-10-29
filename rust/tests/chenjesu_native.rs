@@ -1,5 +1,6 @@
 //! Exercise the Chenjesu descriptor and callbacks against the linked engine.
 
+use uqm_rust::ships::races::init_chenjesu;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
@@ -14,7 +15,6 @@ use uqm_rust::ships::native::{
 };
 
 unsafe extern "C" {
-    fn init_chenjesu() -> *mut RACE_DESC;
     fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
     fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
@@ -47,6 +47,16 @@ impl Battle {
                 InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
                 0
             );
+            for side in 0..2 {
+                assert_ne!(
+                    InitQueue(
+                        &raw mut uqm_rust::engine::battle::legacy::race_q[side],
+                        64,
+                        mem::size_of::<STARSHIP>() as u16
+                    ),
+                    0
+                );
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -65,6 +75,9 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            for side in 0..2 {
+                UninitQueue(&raw mut uqm_rust::engine::battle::legacy::race_q[side]);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -125,9 +138,13 @@ impl FrameSet {
     }
 }
 
+#[path = "support/ship_pool.rs"]
+mod ship_pool;
+use ship_pool::PoolShip;
+
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
+    ss: PoolShip,
     handle: HELEMENT,
     ship_frames: FrameSet,
     weapon_frames: FrameSet,
@@ -143,7 +160,7 @@ impl Ship {
         desc.ship_data.ship = [ship_frames.frame(0); 3];
         desc.ship_data.weapon = [weapon_frames.frame(0); 3];
         desc.ship_data.special = [special_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut ss = PoolShip::new(player);
         ss.RaceDescPtr = &raw mut *desc;
         ss.playerNr = player;
         let handle = AllocElement();
@@ -365,7 +382,7 @@ fn descriptor_matches_every_c_initializer_field() {
             assert!(d.init_weapon_func.is_some());
             assert!(d.uninit_func.is_none());
             assert!(d.data.is_null());
-            assert!(d.CodeRef.is_null());
+            assert!(d.code_ref.is_null());
 
             // init reinstalls the four callbacks without resetting other fields.
             (*template).preprocess_func = None;
@@ -597,6 +614,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                     &mut pa,
                     &mut target,
                     &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
             let sparkle = element(disp_q.tail);
@@ -653,6 +671,7 @@ fn crystal_collision_creates_sparkles_at_the_target_and_animates_current_frame()
                 &mut pa,
                 &mut target,
                 &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!(
                 { disp_q.tail },
@@ -803,6 +822,8 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             let mut enemy = Ship::new(1);
             let dog = ship.doggy();
             let collide = (*dog).collision_func.unwrap();
+            let mut pa = POINT { x: 0, y: 0 };
+            let mut pb = POINT { x: 0, y: 0 };
             for (energy, remaining) in [(0, 0), (9, 0), (10, 0), (11, 1), (30, 20)] {
                 enemy.desc.ship_info.energy_level = energy;
                 enemy.ss.energy_counter = 99;
@@ -811,9 +832,10 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
                     uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                         collide,
                         dog,
-                        ptr::null_mut(),
+                        &mut pa,
                         enemy.ptr(),
-                        ptr::null_mut(),
+                        &mut pb,
+                        uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                     )
                 });
                 assert_eq!(enemy.desc.ship_info.energy_level, remaining);
@@ -830,23 +852,27 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
                 uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                     collide,
                     dog,
-                    ptr::null_mut(),
+                    &mut pa,
                     ship.ptr(),
-                    ptr::null_mut(),
+                    &mut pb,
+                    uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 );
                 assert_eq!((*dog).__bindgen_anon_5.thrust_wait, expected);
                 assert_eq!(ship.desc.ship_info.energy_level, 17);
             }
-            let mut object: ELEMENT = mem::zeroed();
+            let object_handle = AllocElement();
+            assert!(!object_handle.is_null());
+            let object = &mut *element(object_handle);
             object.playerNr = 1;
             object.state_flags = FINITE_LIFE as u16;
             (*dog).state_flags &= !(COLLISION as u16);
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 collide,
                 dog,
-                ptr::null_mut(),
-                &mut object,
-                ptr::null_mut(),
+                &mut pa,
+                object,
+                &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*dog).state_flags & COLLISION as u16, 0);
             // The generic collision runs first and damages the DOGI on planets.
@@ -855,12 +881,14 @@ fn doggy_collision_drains_only_enemy_ships_and_extends_only_short_waits() {
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 collide,
                 dog,
-                ptr::null_mut(),
-                &mut object,
-                ptr::null_mut(),
+                &mut pa,
+                object,
+                &mut pb,
+                uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
             assert_eq!((*dog).__bindgen_anon_2.hit_points, 2);
             assert_ne!((*dog).state_flags & COLLISION as u16, 0);
+            FreeElement(object_handle);
         }
     })
 }

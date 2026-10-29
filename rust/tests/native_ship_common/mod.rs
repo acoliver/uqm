@@ -8,11 +8,10 @@ use std::{
     mem, ptr,
     sync::{Mutex, MutexGuard},
 };
+use uqm_rust::collections::queue::{InitQueue, UninitQueue};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
     fn InitDisplayList();
     static mut DisplayArray: [PRIMITIVE; 330];
 }
@@ -30,10 +29,15 @@ impl Battle {
             let display = GlobData.Game_state.DisplayArray;
             let width = ScreenWidth;
             let height = ScreenHeight;
-            assert_ne!(
-                InitQueue(&raw mut disp_q, capacity, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
+            assert!(InitQueue(
+                &raw mut disp_q,
+                capacity,
+                mem::size_of::<ELEMENT>() as u16
+            ));
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                assert!(InitQueue(queue, 64, size_of::<STARSHIP>() as u16));
+            }
             InitDisplayList();
             GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
             ScreenWidth = 320;
@@ -51,6 +55,10 @@ impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
             UninitQueue(&raw mut disp_q);
+            let queues = &raw mut race_q;
+            for queue in &mut *queues {
+                UninitQueue(queue);
+            }
             GlobData.Game_state.DisplayArray = self.display;
             ScreenWidth = self.width;
             ScreenHeight = self.height;
@@ -104,9 +112,37 @@ impl FrameSet {
         (&raw const self.frames[index]).cast_mut().cast()
     }
 }
+pub struct Record<T>(*mut T);
+impl<T> std::ops::Deref for Record<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        // SAFETY: this fixture record owns a live slot until its battle drops.
+        unsafe { &*self.0 }
+    }
+}
+impl<T> std::ops::DerefMut for Record<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        // SAFETY: this exclusive fixture borrow owns the live slot.
+        unsafe { &mut *self.0 }
+    }
+}
+
+pub unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEMENT) {
+    // SAFETY: The caller retains a live element and the published game-thread context.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let id = cx
+                .elements()
+                .id(element.cast())
+                .unwrap_or_else(|| panic!("fixture element missing from pool"));
+            callback(cx, id);
+        });
+    }
+}
+
 pub struct Ship {
     pub desc: Box<RACE_DESC>,
-    pub ss: Box<STARSHIP>,
+    pub ss: Record<STARSHIP>,
     pub handle: HELEMENT,
     pub ship_frames: FrameSet,
     pub weapon_frames: FrameSet,
@@ -114,40 +150,47 @@ pub struct Ship {
 }
 impl Ship {
     pub unsafe fn new(init: unsafe extern "C" fn() -> *mut RACE_DESC, player: SIZE) -> Self {
-        let mut desc = Box::new(*init());
-        let ship_frames = FrameSet::new(16);
-        let weapon_frames = FrameSet::new(16);
-        let special_frames = FrameSet::new(16);
-        desc.ship_data.ship = [ship_frames.frame(0); 3];
-        desc.ship_data.weapon = [weapon_frames.frame(0); 3];
-        desc.ship_data.special = [special_frames.frame(0); 3];
-        let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
-        ss.RaceDescPtr = &raw mut *desc;
-        ss.playerNr = player;
-        let handle = AllocElement();
-        assert!(!handle.is_null());
-        let e = element(handle);
-        (*e).pParent = (&raw mut *ss).cast();
-        (*e).playerNr = player;
-        (*e).state_flags = PLAYER_SHIP as u16;
-        (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
-        (*e).__bindgen_anon_2.crew_level = desc.ship_info.crew_level;
-        (*e).__bindgen_anon_3.mass_points = desc.characteristics.ship_mass;
-        (*e).current.location = POINT { x: 4000, y: 4000 };
-        (*e).current.image.farray = (&raw mut desc.ship_data.ship).cast();
-        (*e).current.image.frame = ship_frames.frame(0);
-        (*e).next = (*e).current;
-        (*e).IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
-        (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-        ss.hShip = handle;
-        put_element(handle);
-        Self {
-            desc,
-            ss,
-            handle,
-            ship_frames,
-            weapon_frames,
-            special_frames,
+        // SAFETY: the caller initialized the serialized fixture pools and retains all loaded frame sets.
+        unsafe {
+            let mut desc = Box::new(*init());
+            let ship_frames = FrameSet::new(16);
+            let weapon_frames = FrameSet::new(16);
+            let special_frames = FrameSet::new(16);
+            desc.ship_data.ship = [ship_frames.frame(0); 3];
+            desc.ship_data.weapon = [weapon_frames.frame(0); 3];
+            desc.ship_data.special = [special_frames.frame(0); 3];
+            let raw = uqm_rust::collections::queue::AllocLink(&raw mut race_q[player as usize])
+                .cast::<STARSHIP>();
+            assert!(!raw.is_null());
+            raw.write(mem::zeroed());
+            let mut ss = Record(raw);
+            ss.RaceDescPtr = &raw mut *desc;
+            ss.playerNr = player;
+            let handle = AllocElement();
+            assert!(!handle.is_null());
+            let e = element(handle);
+            (*e).pParent = (&raw mut *ss).cast();
+            (*e).playerNr = player;
+            (*e).state_flags = PLAYER_SHIP as u16;
+            (*e).__bindgen_anon_1.life_span = NORMAL_LIFE as COUNT;
+            (*e).__bindgen_anon_2.crew_level = desc.ship_info.crew_level;
+            (*e).__bindgen_anon_3.mass_points = desc.characteristics.ship_mass;
+            (*e).current.location = POINT { x: 4000, y: 4000 };
+            (*e).current.image.farray = (&raw mut desc.ship_data.ship).cast();
+            (*e).current.image.frame = ship_frames.frame(0);
+            (*e).next = (*e).current;
+            (*e).IntersectControl.IntersectStamp.frame = ship_frames.frame(0);
+            (*prim(e)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+            ss.hShip = handle;
+            put_element(handle);
+            Self {
+                desc,
+                ss,
+                handle,
+                ship_frames,
+                weapon_frames,
+                special_frames,
+            }
         }
     }
     pub fn ptr(&self) -> *mut ELEMENT {
@@ -171,6 +214,17 @@ impl Ship {
     }
     pub unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
         (self.desc.cyborg_control.intelligence_func.unwrap())(self.ptr(), concerns.as_mut_ptr(), 0);
+    }
+}
+impl Drop for Ship {
+    fn drop(&mut self) {
+        // SAFETY: this fixture owns its element and ship slots in the retained battle pools.
+        unsafe {
+            uqm_rust::collections::queue::FreeLink(
+                &raw mut race_q[self.ss.playerNr as usize],
+                self.ss.0.cast(),
+            );
+        }
     }
 }
 pub unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {

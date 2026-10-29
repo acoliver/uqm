@@ -187,10 +187,10 @@ pub unsafe fn SeedUniverse() {
         ));
         (*element).preprocess_func = None;
         (*element).postprocess_func = None;
-        (*element).collision_func = Some(CollisionHook::Legacy(star_collision));
+        (*element).collision_func = Some(CollisionHook::Native(star_collision));
         SetUpElement(element);
         if star.cast() == CurStarDescPtr && get("PORTAL_COUNTER") == 0 {
-            (*element).death_func = Some(ElementHook::Legacy(star_death));
+            (*element).death_func = Some(ElementHook::Native(star_death));
         } else {
             (*element).death_func = None;
             crate::collections::observation::image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));

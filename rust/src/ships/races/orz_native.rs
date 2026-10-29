@@ -273,7 +273,7 @@ pub(crate) mod engine {
                 let mut facing = normalize_facing(
                     i32::from((*ss).ShipFacing) + i32::from((*turret).__bindgen_anon_5.thrust_wait),
                 );
-                let mut delta = TrackShip(turret, &mut facing);
+                let mut delta = track_ship(turret, &mut facing);
                 if delta > 0 {
                     (*ss).ship_input_state |= SPECIAL as u8;
                     if i32::from(delta) == angle_to_facing(HALF_CIRCLE as i32) {
@@ -328,7 +328,9 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub(crate) unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
+    /// # Safety
+    /// Operands and their owning ships must remain live on the game thread.
+    pub unsafe extern "C" fn intruder_preprocess(e: *mut ELEMENT) {
         let ss = starship(e);
         let owner = element((*ss).hShip);
         if (*owner).__bindgen_anon_2.crew_level == 0
@@ -572,7 +574,9 @@ pub(crate) mod engine {
     }
 
     #[no_mangle]
-    pub(crate) unsafe extern "C" fn marine_collision(
+    /// # Safety
+    /// Operands and their owning ships must remain live on the game thread.
+    pub unsafe extern "C" fn marine_collision(
         a: *mut ELEMENT,
         _pa: *mut POINT,
         b: *mut ELEMENT,
@@ -711,7 +715,7 @@ pub(crate) mod engine {
                             (*(*ss).RaceDescPtr).ship_data.special[0],
                             angle_to_facing(FULL_CIRCLE as i32) as COUNT,
                         ));
-                        (*effect).preprocess_func = Some(ElementHook::Legacy(animation_preprocess));
+                        (*effect).preprocess_func = Some(ElementHook::Native(animation_preprocess));
                         (*effect).pParent = ss.cast();
                         (*prim(effect)).Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
                         put_element(effect_h);
@@ -730,7 +734,7 @@ pub(crate) mod engine {
             && (*ss).cur_status_flags & WEAPON as u16 != 0
             && (*ship).__bindgen_anon_2.crew_level > 1
             && count_marines(ss, false) < MAX_MARINES
-            && TrackShip(ship, &mut facing) >= 0
+            && track_ship(ship, &mut facing) >= 0
         {
             let h = AllocElement();
             if !h.is_null() {
