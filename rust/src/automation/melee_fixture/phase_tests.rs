@@ -154,7 +154,7 @@ fn arilou_threat_and_collision_operands_are_snapshots_of_the_real_borrowed_recor
         .unwrap()
         .unwrap();
     assert!(
-        matches!(effects.as_slice(), [Effect::Intelligence(a, concerns)] if *a == run.a && concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr == run.object.cast() && concerns[ENEMY_WEAPON_INDEX as usize].which_turn == 1)
+        matches!(effects.as_slice(), [Effect::Intelligence(a, concerns)] if *a == run.a && concerns.len() == 4 && concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr == run.object.cast() && concerns[ENEMY_WEAPON_INDEX as usize].which_turn == 1)
     );
     let effects = frames::advance(&mut run, &mut world, &hooks)
         .unwrap()
@@ -170,6 +170,27 @@ fn arilou_threat_and_collision_operands_are_snapshots_of_the_real_borrowed_recor
         Point::new(1000 >> ONE_SHIFT, 2000 >> ONE_SHIFT)
     );
     assert_eq!(metadata.parent, world.elements[&run.a].p_parent as usize);
+}
+
+#[test]
+fn phoenix_install_invokes_the_native_preprocess_on_its_live_ship() {
+    fn preprocess(_: &mut crate::engine::battle::Cx<'_>, _: crate::engine::battle::ShipId) {}
+    let (mut elements, mut states, mut races) = records();
+    let mut world = world(&mut elements, &mut states, &mut races);
+    let mut run = run(&world, FixtureName::PkunkRebirth);
+    let mut hooks = super::tests::test_hooks();
+    hooks.intercept = 1;
+    hooks.pkunk = Some(preprocess);
+    let effects = rebirth::advance(&mut run, &mut world, &hooks)
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(effects.as_slice(), [Effect::NativeShip(callback, ship)]
+        if std::ptr::fn_addr_eq(*callback, preprocess as crate::engine::battle::race::ShipFn) && *ship == run.a)
+    );
+    assert!(world.elements[&run.a]
+        .state_flags
+        .contains(ElementFlags::APPEARING));
 }
 
 #[test]

@@ -183,7 +183,7 @@ enum Effect {
     FreeRetained,
     Reset,
     Think([(HElement, u16); 2]),
-    Intelligence(HElement, [EVALUATE_DESC; 10]),
+    Intelligence(HElement, [EVALUATE_DESC; 4]),
     Scale(i32),
     RestoreScale,
     ZoomProof([FRAME; 3], HElement, usize, u16),

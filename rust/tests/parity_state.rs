@@ -300,7 +300,7 @@ fn race_custom_fields(directory: &Path) {
             .find_map(|(address, name)| {
                 (name == "ships::races::human_native::nuke_preprocess").then_some(address)
             })
-            .expect("registered native Cruiser element hook");
+            .unwrap_or_else(|| panic!("registered native Cruiser element hook"));
         // SAFETY: nuke_preprocess has the Native element signature.
         let human: uqm_rust::engine::battle::ElementFn = std::mem::transmute(human);
         let human = Some(uqm_rust::engine::battle::ElementHook::Native(human));

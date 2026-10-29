@@ -168,7 +168,7 @@ fn threat(run: &mut Battle, world: &mut World<'_>) -> Result<Option<Vec<Effect>>
         facing: 0,
         which_turn: 0,
         MoveState: 0,
-    }; 10];
+    }; 4];
     concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = run.replacement.cast();
     concerns[ENEMY_SHIP_INDEX as usize].MoveState = MOVEMENT_STATE_ENTICE;
     concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = run.object.cast();

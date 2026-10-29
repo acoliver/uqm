@@ -2,7 +2,6 @@
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]
 mod battle_context;
-mod native_ship_common;
 #[path = "support/battle.rs"]
 mod shared;
 
@@ -16,7 +15,7 @@ use uqm_rust::ships::native::{
 
 use uqm_rust::supermelee::native::battle_picker::live::{selectShipComputer, selectShipHuman};
 
-use uqm_rust::battle::process_native::{FreeElement, RemoveElement};
+use uqm_rust::battle::process_native::FreeElement;
 use uqm_rust::engine::battle::legacy::DisplayArray;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 use uqm_rust::graphics::native_canvas::{
@@ -146,9 +145,7 @@ impl Drop for FrameSet {
         }
     }
 }
-#[path = "support/ship_pool.rs"]
-mod ship_pool;
-use ship_pool::PoolShip;
+use shared::PoolShip;
 struct Ship<'a> {
     inner: shared::Ship<'a>,
     handle: HELEMENT,
@@ -223,6 +220,11 @@ impl<'a> Ship<'a> {
         }
     }
 }
+unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ELEMENT) {
+    let id = shared::id(element);
+    uqm_rust::app::bridge::enter(|cx| callback(cx, id));
+}
+
 unsafe fn prim(e: *mut ELEMENT) -> *mut PRIMITIVE {
     (&raw mut DisplayArray)
         .cast::<PRIMITIVE>()
@@ -978,7 +980,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         (*ship.ptr()).death_func.unwrap(),
                         ship.ptr(),
                     );
-                    native_ship_common::core(transitions::ship_death, other.ptr());
+                    core(transitions::ship_death, other.ptr());
                     let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
@@ -988,8 +990,8 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         ),
                         (SPECIES_ID_NO_ID, SPECIES_ID_NO_ID)
                     );
-                    native_ship_common::core(transitions::cleanup_dead_ship, ship.ptr());
-                    native_ship_common::core(transitions::cleanup_dead_ship, other.ptr());
+                    core(transitions::cleanup_dead_ship, ship.ptr());
+                    core(transitions::cleanup_dead_ship, other.ptr());
                     transitions::StopDitty();
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];

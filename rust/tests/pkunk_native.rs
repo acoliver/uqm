@@ -216,6 +216,15 @@ impl<'a> Ship<'a> {
             saved_death,
         }
     }
+    unsafe fn intelligence(&mut self, concerns: &mut [EVALUATE_DESC; 4]) {
+        let mut subject = *self.ptr();
+        // The AI operand is a value copy, not a member of the live queue.
+        // Its phoenix predecessor may be disposed during intelligence.
+        subject.pred = ptr::null_mut();
+        subject.succ = ptr::null_mut();
+        self.inner.intelligence(&mut subject, concerns, 0);
+    }
+
     unsafe fn at(&mut self, x: COORD, y: COORD) {
         (*self.ptr()).current.location = POINT { x, y };
         (*self.ptr()).next.location = POINT { x, y };
@@ -442,7 +451,7 @@ fn descriptor_matches_every_c_initializer_field() {
     battle_context::run(|| {
         let _battle = Battle::new();
         unsafe {
-            let mut d = shared::descriptor(SPECIES_ID_PKUNK_ID);
+            let d = shared::descriptor(SPECIES_ID_PKUNK_ID);
             assert_eq!(
                 d.ship_info.ship_flags,
                 (FIRES_FORE | FIRES_LEFT | FIRES_RIGHT) as u16
@@ -1606,8 +1615,7 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
             for control in [0u8, 1 << 1, GOOD_RATING, 1 << 6] {
                 ship.inner.ship_mut().control = control;
                 with_rng(3, 0, || {
-                    let mut subject = *ship.ptr();
-                    ship.inner.intelligence(&mut subject, &mut concerns, 0);
+                    ship.intelligence(&mut concerns);
                 });
                 assert_eq!(ship.data().phoenix, phoenix, "control {control:#x}");
                 assert_eq!(queued().len(), 2);
@@ -1615,15 +1623,13 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
 
             ship.inner.ship_mut().control = STANDARD_RATING | (1 << 1);
             with_rng(3, 0, || {
-                let mut subject = *ship.ptr();
-                ship.inner.intelligence(&mut subject, &mut concerns, 0);
+                ship.intelligence(&mut concerns);
             });
             assert!(ship.data().phoenix.is_null());
             assert_eq!(queued(), vec![ship.handle]);
             // Nothing left to drop the second time.
             with_rng(3, 0, || {
-                let mut subject = *ship.ptr();
-                ship.inner.intelligence(&mut subject, &mut concerns, 0);
+                ship.intelligence(&mut concerns);
             });
             assert_eq!(queued(), vec![ship.handle]);
         }
@@ -1659,8 +1665,7 @@ fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
                     ship.inner.ship_mut().special_counter = counter;
                     ship.inner.ship_mut().ship_input_state = start | (LEFT | THRUST) as u8;
                     with_rng(seed, draws, || {
-                        let mut subject = *ship.ptr();
-                        ship.inner.intelligence(&mut subject, &mut concerns, 0);
+                        ship.intelligence(&mut concerns);
                     });
                     assert_eq!(
                         ship.inner.ship_mut().ship_input_state,
@@ -1688,8 +1693,7 @@ fn ai_finishes_with_the_shared_pass_after_deciding_on_the_taunt() {
                 ship.inner.ship_mut().weapon_counter = counter;
                 ship.inner.ship_mut().ship_input_state = WEAPON as u8;
                 with_rng(9, 0, || {
-                    let mut subject = *ship.ptr();
-                    ship.inner.intelligence(&mut subject, &mut concerns, 0);
+                    ship.intelligence(&mut concerns);
                 });
                 assert_eq!(
                     ship.inner.ship_mut().ship_input_state & WEAPON as u8 != 0,

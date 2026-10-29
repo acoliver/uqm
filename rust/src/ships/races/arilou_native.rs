@@ -273,7 +273,7 @@ pub(crate) mod engine {
                 let frame = cx.absolute_frame(cx.ship_frame(ss, 0), cx.ship_state(ss).facing);
                 cx.set_frame(ship, false, frame);
                 cx.set_frame(ship, true, frame);
-                cx.init_intersect(ship);
+                cx.init_intersect_start(ship);
             } else {
                 life = life.wrapping_sub(1);
                 if life != 2 {
