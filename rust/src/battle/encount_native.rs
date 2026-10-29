@@ -60,11 +60,12 @@ fn text(x: i16, y: i16, align: TEXT_ALIGN, string: *const UNICODE) -> TEXT {
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::{
-        activity, game_state, player_input, race_queue, rgb15, set_activity, set_game_state,
+        activity, game_state, player_input, rgb15, set_activity, set_game_state,
         set_player_control, set_player_input, sis_height, sis_width, AWESOME_RATING,
         CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::battle::battle_native::Battle;
+    use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -143,7 +144,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
+    pub(crate) unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
         if player == RPG_PLAYER_NUM as u16 {
             &raw mut GlobData.Game_state.built_ship_q
         } else {
@@ -173,51 +174,53 @@ pub(crate) mod engine {
             }
         }
         let q = GetShipFragQueueForPlayer(player);
-        let ships = race_queue(player as usize);
-        ReinitQueue(ships);
+        link_queue::ships(player as usize).reinit();
         let mut h = (*q).head;
         while !h.is_null() {
             let frag = h.cast::<SHIP_FRAGMENT>();
             h = (*frag).succ;
-            let built = Build(
-                ships,
+            let built = link_queue::ships(player as usize).build(
                 if (*frag).race_id == SAMATRA_SHIP as u8 {
                     SPECIES_ID_SA_MATRA_ID
                 } else {
                     (*frag).SpeciesID
                 },
             );
-            if !built.is_null() {
-                let ship = built.cast::<STARSHIP>();
-                (*ship).captains_name_index = (*frag).captains_name_index;
-                (*ship).playerNr = player as i16;
-                (*ship).crew_level = if (*frag).crew_level != COUNT::MAX {
+            if let Some(id) = built {
+                let mut ships = link_queue::ships(player as usize);
+                let mut ship = ships.get(id);
+                ship.captain = (*frag).captains_name_index;
+                ship.player = player as i16;
+                ship.crew = if (*frag).crew_level != COUNT::MAX {
                     (*frag).crew_level
                 } else {
                     (*frag).max_crew
                 };
-                (*ship).max_crew = (*frag).max_crew;
-                (*ship).race_strings = (*frag).race_strings;
-                (*ship).icons = (*frag).icons;
-                (*ship).index = (*frag).index as u16;
-                (*ship).ship_cost = 0;
-                (*ship).RaceDescPtr = ptr::null_mut();
+                ship.max_crew = (*frag).max_crew;
+                ship.strings = (*frag).race_strings as usize;
+                ship.icons = (*frag).icons as usize;
+                ship.index = (*frag).index as u16;
+                ship.cost = 0;
+                ships.set(id, ship);
+                ships.clear_descriptor(id);
             }
         }
         if player == RPG_PLAYER_NUM as u16 {
-            let built = Build(race_queue(0), SPECIES_ID_SIS_SHIP_ID);
-            if !built.is_null() {
-                let ship = built.cast::<STARSHIP>();
-                (*ship).captains_name_index = 0;
-                (*ship).playerNr = RPG_PLAYER_NUM as i16;
-                (*ship).crew_level = 0;
-                (*ship).max_crew = 0;
-                (*ship).race_strings = ptr::null_mut();
-                (*ship).icons = ptr::null_mut();
-                (*ship).index = COUNT::MAX;
-                (*ship).ship_cost = 0;
-                (*ship).energy_counter = MAX_ENERGY_SIZE as u8;
-                (*ship).RaceDescPtr = ptr::null_mut();
+            let built = link_queue::ships(0).build(SPECIES_ID_SIS_SHIP_ID);
+            if let Some(id) = built {
+                let mut ships = link_queue::ships(0);
+                let mut ship = ships.get(id);
+                ship.captain = 0;
+                ship.player = RPG_PLAYER_NUM as i16;
+                ship.crew = 0;
+                ship.max_crew = 0;
+                ship.strings = 0;
+                ship.icons = 0;
+                ship.index = COUNT::MAX;
+                ship.cost = 0;
+                ship.energy_counter = MAX_ENERGY_SIZE as u8;
+                ships.set(id, ship);
+                ships.clear_descriptor(id);
             }
         }
     }
@@ -233,26 +236,9 @@ pub(crate) mod engine {
         ((*h.cast::<SHIP_FRAGMENT>()).crew_level == COUNT::MAX) as BOOLEAN
     }
 
-    /// # Safety
-    /// `owner` must be a live starship whose player fleet and battle queues have matching order.
-    #[no_mangle]
-    pub unsafe extern "C" fn UpdateShipFragCrew(owner: *mut STARSHIP) {
-        let frag_q = GetShipFragQueueForPlayer((*owner).playerNr as COUNT);
-        let ship_q = race_queue((*owner).playerNr as usize);
-        let mut hf = (*frag_q).head;
-        let mut hs = (*ship_q).head;
-        while !hf.is_null() && !hs.is_null() {
-            let ship = hs.cast::<STARSHIP>();
-            let frag = hf.cast::<SHIP_FRAGMENT>();
-            hs = (*ship).succ;
-            hf = (*frag).succ;
-            if ship == owner {
-                assert_ne!((*frag).crew_level, COUNT::MAX);
-                (*frag).crew_level = (*ship).crew_level;
-                break;
-            }
-        }
-    }
+    pub use crate::battle::context_access::reader_legacy::UpdateShipFragCrew;
+
+    pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
     /// # Safety
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
@@ -416,26 +402,24 @@ pub(crate) mod engine {
             return killed;
         }
         if game_state(BATTLE_SEGUE, END_BATTLE_SEGUE) == 0 {
-            ReinitQueue(race_queue(0));
-            ReinitQueue(race_queue(1));
+            link_queue::ships(0).reinit();
+            link_queue::ships(1).reinit();
             return killed;
         }
         let mut recycle = 0u16;
         let mut rect: RECT = mem::zeroed();
         let mut salvage_rect: RECT = mem::zeroed();
         let mut t: TEXT;
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: ptr::null_mut(),
-        };
+        let mut stamp: STAMP = mem::zeroed();
         let mut str1 = ptr::null();
         let mut str2 = ptr::null();
         let mut buf = [0 as UNICODE; 80];
         set_game_state(BATTLE_SEGUE, END_BATTLE_SEGUE, 0);
         set_game_state(BOMB_CARRIER, END_BOMB_CARRIER, 0);
+        let counters = crate::app::bridge::battle(|b| b.counters);
         let mut victory = victory_state(
-            crate::app::bridge::battle(|b| b.counters[1]),
-            crate::app::bridge::battle(|b| b.counters[0]),
+            counters[1],
+            counters[0],
             game_state(URQUAN_PROTECTING_SAMATRA, END_URQUAN_PROTECTING_SAMATRA) != 0,
         );
         let frag = GlobData
@@ -478,7 +462,7 @@ pub(crate) mod engine {
                 }
                 &raw mut GlobData.Game_state.npc_built_ship_q
             };
-            ReinitQueue(race_queue(NUM_SIDES as usize - 1 - side));
+            link_queue::ships(NUM_SIDES as usize - 1 - side).reinit();
             let mut h = (*q).head;
             while !h.is_null() {
                 let frag = h.cast::<SHIP_FRAGMENT>();

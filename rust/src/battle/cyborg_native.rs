@@ -3,9 +3,8 @@
 //! The arithmetic helpers are kept independent of engine state so their C
 //! integer-width behavior can be tested without linking the game archive.
 
-use crate::ships::native::{
-    abi, angle_to_facing, facing_to_angle, normalize_angle, normalize_facing,
-};
+use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
+use crate::ships::native::abi;
 
 #[inline]
 fn c_size(v: i32) -> i16 {
@@ -27,7 +26,7 @@ fn velocity_to_world(v: i64) -> i16 {
 ///
 /// This is the integer-only broad phase from `PlotIntercept`; the engine
 /// narrow-phase collision callback is applied by the live implementation.
-fn intercept_window(
+pub(crate) fn intercept_window(
     p0: (i16, i16),
     v0: (i16, i16),
     p1: (i16, i16),
@@ -136,161 +135,92 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 }
 
 #[cfg(not(test))]
-#[allow(non_snake_case)]
-pub(crate) mod engine {
+pub(crate) use crate::battle::context_access::ai_legacy as engine;
+#[cfg(not(test))]
+use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
+#[cfg(not(test))]
+use abi::*;
+#[cfg(not(test))]
+pub use engine::{ship_intelligence, ship_weapons, tactical_intelligence, PlotIntercept};
+
+#[cfg(not(test))]
+fn subject_owner(subject: &Subject) -> ShipId {
+    match subject.parent {
+        Parent::Ship(id) => id,
+        other => panic!("AI subject has no ship owner: {other:?}"),
+    }
+}
+#[cfg(not(test))]
+fn is_crew_preprocess(subject: &Subject) -> bool {
+    subject.pre.is_some_and(|f| {
+        f.address() == crate::battle::world_elements::engine::crew_preprocess as *const () as usize
+    })
+}
+#[cfg(not(test))]
+fn ai_arctan(x: i16, y: i16) -> u16 {
+    crate::math::arctan(x, y)
+}
+#[cfg(not(test))]
+fn next_velocity(v: &mut crate::battle::velocity::VelocityDesc, turns: u16) -> (i16, i16) {
+    let (x, y) = v.get_next_components(turns);
+    (x as i16, y as i16)
+}
+#[cfg(not(test))]
+fn collision_possible(element: &Subject, ship: &Subject) -> bool {
+    element.flags & (NONSOLID | DISAPPEARING) as u16 == 0
+        && (ship.flags & element.flags) & COLLISION as u16 == 0
+        && ((ship.flags & element.flags) & IGNORE_SIMILAR as u16 == 0
+            || ship.parent != element.parent)
+        && (ship.mass != 0 || element.mass != 0)
+}
+#[cfg(not(test))]
+const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
+#[cfg(not(test))]
+const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
+#[cfg(not(test))]
+const FAST_SHIP: u16 = 150;
+
+mod intercept {
+    #[cfg(not(test))]
     use super::*;
-    use crate::battle::process_native::dispatch::battle_input;
-    use crate::collections::observation::image;
-    use crate::ships::native::abi::*;
-    const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
-    const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
-    const FAST_SHIP: u16 = 150;
-
-    use crate::battle::world_elements::engine::crew_preprocess;
-
-    unsafe fn validate_element_handle(handle: HELEMENT) {
-        if !handle.is_null() {
-            debug_assert!(
-                !disp_q.pq_tab.is_null()
-                    && handle as usize >= disp_q.pq_tab as usize
-                    && (handle as usize)
-                        < disp_q.pq_tab as usize
-                            + usize::from(disp_q.object_size) * usize::from(disp_q.num_objects)
-            );
-        }
+    #[cfg(not(test))]
+    fn current_velocity(v: &crate::battle::velocity::VelocityDesc) -> (i16, i16) {
+        let (x, y) = v.get_current_components();
+        (x as i16, y as i16)
     }
-
-    unsafe fn LockElement(handle: HELEMENT, element: *mut *mut ELEMENT) {
-        validate_element_handle(handle);
-        *element = handle.cast();
-    }
-
-    unsafe fn UnlockElement(handle: HELEMENT) {
-        validate_element_handle(handle);
-    }
-
-    unsafe fn GetHeadElement() -> HELEMENT {
-        disp_q.head
-    }
-
-    unsafe fn GetSuccElement(element: *mut ELEMENT) -> HELEMENT {
-        (*element).succ
-    }
-
-    unsafe fn CollisionPossible(element: *mut ELEMENT, ship: *mut ELEMENT) -> bool {
-        (*element).state_flags & (NONSOLID | DISAPPEARING) as u16 == 0
-            && ((*ship).state_flags & (*element).state_flags) & COLLISION as u16 == 0
-            && (((*ship).state_flags & (*element).state_flags) & IGNORE_SIMILAR as u16 == 0
-                || (*ship).pParent != (*element).pParent)
-            && ((*ship).__bindgen_anon_3.mass_points != 0
-                || (*element).__bindgen_anon_3.mass_points != 0)
-    }
-
-    unsafe fn elementsOfSamePlayer(a: *mut ELEMENT, b: *mut ELEMENT) -> bool {
-        (*a).playerNr == (*b).playerNr
-    }
-
-    unsafe fn IsVelocityZero(velocity: *mut VELOCITY_DESC) -> bool {
-        let v = &*velocity;
-        v.vector.width == 0
-            && v.vector.height == 0
-            && v.incr.width == 0
-            && v.incr.height == 0
-            && v.fract.width == 0
-            && v.fract.height == 0
-    }
-
-    unsafe fn GetVelocityTravelAngle(velocity: *mut VELOCITY_DESC) -> COUNT {
-        (*velocity).travel_angle
-    }
-
-    unsafe fn object_cloaked(element: *mut ELEMENT) -> bool {
-        let primitive = &*GlobData
-            .Game_state
-            .DisplayArray
-            .add((*element).PrimIndex as usize);
-        u32::from(primitive.Type) >= gfx_object_NUM_PRIMS
-            || (u32::from(primitive.Type) == gfx_object_STAMPFILL_PRIM
-                && primitive.color.r == 0
-                && primitive.color.g == 0
-                && primitive.color.b == 0
-                && primitive.color.a == 255)
-    }
-
-    unsafe fn is_crew_preprocess(element: *mut ELEMENT) -> bool {
-        (*element)
-            .preprocess_func
-            .is_some_and(|f| f.address() == crew_preprocess as *const () as usize)
-    }
-
-    unsafe fn InitIntersectStartPoint(element: *mut ELEMENT) {
-        (*element).IntersectControl.IntersectStamp.origin.x =
-            (*element).current.location.x >> ONE_SHIFT;
-        (*element).IntersectControl.IntersectStamp.origin.y =
-            (*element).current.location.y >> ONE_SHIFT;
-    }
-
-    unsafe fn InitIntersectEndPoint(element: *mut ELEMENT) {
-        (*element).IntersectControl.EndPoint.x = (*element).next.location.x >> ONE_SHIFT;
-        (*element).IntersectControl.EndPoint.y = (*element).next.location.y >> ONE_SHIFT;
-    }
-
-    unsafe fn InitIntersectFrame(element: *mut ELEMENT) {
-        image!(frame; (*element).IntersectControl.IntersectStamp.frame, SetEquFrameIndex(*(*element).next.image.farray, (*element).next.image.frame));
-    }
-
-    unsafe fn GetElementStarShip(element: *mut ELEMENT, ship: *mut *mut STARSHIP) {
-        *ship = (*element).pParent.cast();
-    }
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn PlotIntercept(
-        a: *mut ELEMENT,
-        b: *mut ELEMENT,
+    #[cfg(not(test))]
+    pub(crate) fn plot_intercept(
+        cx: &mut Cx<'_>,
+        a: &Subject,
+        b: &Subject,
         mut turns: COUNT,
         margin: COUNT,
     ) -> COUNT {
-        if ((*a).state_flags | (*b).state_flags) & FINITE_LIFE as u16 != 0 {
-            if (*a).state_flags & FINITE_LIFE as u16 == 0 {
-                turns = turns.min((*b).__bindgen_anon_1.life_span);
-            } else if (*b).state_flags & FINITE_LIFE as u16 == 0 {
-                turns = turns.min((*a).__bindgen_anon_1.life_span);
+        if (a.flags | b.flags) & FINITE_LIFE as u16 != 0 {
+            if a.flags & FINITE_LIFE as u16 == 0 {
+                turns = turns.min(b.life);
+            } else if b.flags & FINITE_LIFE as u16 == 0 {
+                turns = turns.min(a.life);
             } else {
-                turns = turns
-                    .min((*a).__bindgen_anon_1.life_span)
-                    .min((*b).__bindgen_anon_1.life_span);
+                turns = turns.min(a.life).min(b.life);
             }
         }
-        let mut avx = 0;
-        let mut avy = 0;
-        let mut bvx = 0;
-        let mut bvy = 0;
-        GetCurrentVelocityComponents(&mut (*a).velocity, &mut avx, &mut avy);
-        GetCurrentVelocityComponents(&mut (*b).velocity, &mut bvx, &mut bvy);
-        let mut ar = RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
-                width: 0,
-                height: 0,
-            },
-        };
-        let mut br = ar;
+        let (avx, avy) = current_velocity(&a.velocity);
+        let (bvx, bvy) = current_velocity(&b.velocity);
         let (ha, hb, pos_a, pos_b) = if margin != 0 {
             let m = i32::from(margin);
             (
                 (1, 1),
                 ((m << 1) as i16, (m << 1) as i16),
-                ((*a).current.location.x, (*a).current.location.y),
+                (a.current.location.x, a.current.location.y),
                 (
-                    (*b).current.location.x.wrapping_sub(m as i16),
-                    (*b).current.location.y.wrapping_sub(m as i16),
+                    b.current.location.x.wrapping_sub(m as i16),
+                    b.current.location.y.wrapping_sub(m as i16),
                 ),
             )
         } else {
-            GetFrameRect((*a).IntersectControl.IntersectStamp.frame, &mut ar);
-            GetFrameRect((*b).IntersectControl.IntersectStamp.frame, &mut br);
+            let ar = cx.frame_rect(cx.subject_intersect_frame(a));
+            let br = cx.frame_rect(cx.subject_intersect_frame(b));
             let ax = (ar.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
             let ay = (ar.corner.y as i32).wrapping_shl(ONE_SHIFT) as i16;
             let bx = (br.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
@@ -305,12 +235,12 @@ pub(crate) mod engine {
                     (i32::from(br.extent.height) << ONE_SHIFT) as i16,
                 ),
                 (
-                    (*a).current.location.x.wrapping_add(ax),
-                    (*a).current.location.y.wrapping_add(ay),
+                    a.current.location.x.wrapping_add(ax),
+                    a.current.location.y.wrapping_add(ay),
                 ),
                 (
-                    (*b).current.location.x.wrapping_add(bx),
-                    (*b).current.location.y.wrapping_add(by),
+                    b.current.location.x.wrapping_add(bx),
+                    b.current.location.y.wrapping_add(by),
                 ),
             )
         };
@@ -323,21 +253,19 @@ pub(crate) mod engine {
             return (first as u16).wrapping_add(1);
         }
 
-        let mut ca = (*a).IntersectControl;
-        let mut cb = (*b).IntersectControl;
-        let mut pa = (*a).current.location;
-        let mut pb = (*b).current.location;
-        let mut va = (*a).velocity;
-        let mut vb = (*b).velocity;
-        let mut x = 0;
-        let mut y = 0;
+        let mut ca = a.intersection();
+        let mut cb = b.intersection();
+        let mut pa = a.current.location;
+        let mut pb = b.current.location;
+        let mut va = a.velocity;
+        let mut vb = b.velocity;
         if first != 0 {
-            GetNextVelocityComponents(&mut va, &mut x, &mut y, first as u16);
+            let (x, y) = next_velocity(&mut va, first as u16);
             pa.x = pa.x.wrapping_add(x);
             pa.y = pa.y.wrapping_add(y);
             ca.EndPoint.x = pa.x >> ONE_SHIFT;
             ca.EndPoint.y = pa.y >> ONE_SHIFT;
-            GetNextVelocityComponents(&mut vb, &mut x, &mut y, first as u16);
+            let (x, y) = next_velocity(&mut vb, first as u16);
             pb.x = pb.x.wrapping_add(x);
             pb.y = pb.y.wrapping_add(y);
             cb.EndPoint.x = pb.x >> ONE_SHIFT;
@@ -346,10 +274,10 @@ pub(crate) mod engine {
         let mut turn = first;
         loop {
             turn = turn.wrapping_add(1);
-            GetNextVelocityComponents(&mut va, &mut x, &mut y, 1);
+            let (x, y) = next_velocity(&mut va, 1);
             pa.x = pa.x.wrapping_add(x);
             pa.y = pa.y.wrapping_add(y);
-            GetNextVelocityComponents(&mut vb, &mut x, &mut y, 1);
+            let (x, y) = next_velocity(&mut vb, 1);
             pb.x = pb.x.wrapping_add(x);
             pb.y = pb.y.wrapping_add(y);
             ca.IntersectStamp.origin = ca.EndPoint;
@@ -358,12 +286,9 @@ pub(crate) mod engine {
             cb.IntersectStamp.origin = cb.EndPoint;
             cb.EndPoint.x = pb.x >> ONE_SHIFT;
             cb.EndPoint.y = pb.y >> ONE_SHIFT;
-            let hit = DrawablesIntersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
+            let hit = cx.projected_intersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
             if hit != 0 {
-                if hit == 1
-                    && turn == 1
-                    && ((*a).state_flags | (*b).state_flags) & APPEARING as u16 != 0
-                {
+                if hit == 1 && turn == 1 && (a.flags | b.flags) & APPEARING as u16 != 0 {
                     ca.EndPoint.x = pa.x >> ONE_SHIFT;
                     ca.EndPoint.y = pa.y >> ONE_SHIFT;
                     cb.EndPoint.x = pb.x >> ONE_SHIFT;
@@ -378,903 +303,749 @@ pub(crate) mod engine {
         }
         0
     }
+}
+#[cfg(not(test))]
+pub(crate) use intercept::plot_intercept;
 
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn TurnShip(ship: *mut ELEMENT, angle: COUNT) -> BOOLEAN {
-        let mut starship = std::ptr::null_mut();
-        GetElementStarShip(ship, &mut starship);
-        let facing = (*starship).ShipFacing;
-        let mut delta = normalize_facing(angle_to_facing(i32::from(angle)) - i32::from(facing));
-        if delta == 0 {
-            return 0;
-        }
-        if delta == angle_to_facing(HALF_CIRCLE as i32) as u16 {
-            delta = break_opposite_facing_tie(delta, TFB_Random);
-        }
-        let mut f = i32::from(facing);
-        if delta < angle_to_facing(HALF_CIRCLE as i32) as u16 {
-            (*starship).ship_input_state |= RIGHT as u8;
-            f += 1;
-            image!(frame; (*ship).next.image.frame, IncFrameIndex((*ship).current.image.frame));
-        } else {
-            (*starship).ship_input_state |= LEFT as u8;
-            f -= 1;
-            image!(frame; (*ship).next.image.frame, DecFrameIndex((*ship).current.image.frame));
-        }
-        (*starship).ShipFacing = normalize_facing(f);
-        1
+#[cfg(not(test))]
+pub(crate) fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BOOLEAN {
+    let starship = subject_owner(ship);
+    let facing = cx.ship_state(starship).facing;
+    let mut delta = normalize_facing(angle_to_facing(i32::from(angle)) - i32::from(facing));
+    if delta == 0 {
+        return 0;
     }
-
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn ThrustShip(ship: *mut ELEMENT, angle: COUNT) -> BOOLEAN {
-        let mut starship = std::ptr::null_mut();
-        GetElementStarShip(ship, &mut starship);
-        let mut should = (*starship).ship_input_state & THRUST as u8 != 0;
-        if !should {
-            let travel = GetVelocityTravelAngle(&mut (*ship).velocity);
-            let at_cap = (*starship).cur_status_flags
-                & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
-                != 0;
-            if normalize_facing(
-                angle_to_facing(i32::from(angle)) - angle_to_facing(i32::from(travel)),
-            ) == 0
-                && at_cap
-                && (*starship).cur_status_flags & SHIP_IN_GRAVITY_WELL as u16 == 0
-            {
-                should = false;
-            } else {
-                let d = normalize_facing(
-                    angle_to_facing(i32::from(angle)) - i32::from((*starship).ShipFacing)
-                        + angle_to_facing(QUADRANT as i32),
-                );
-                should = d == angle_to_facing(QUADRANT as i32) as u16
-                    || ((*starship).cur_status_flags & SHIP_BEYOND_MAX_SPEED as u16 != 0
-                        && d <= angle_to_facing(HALF_CIRCLE as i32) as u16);
-            }
-        }
-        if should {
-            inertial_thrust(ship);
-            (*starship).ship_input_state |= THRUST as u8;
-        }
-        should as BOOLEAN
+    if delta == angle_to_facing(HALF_CIRCLE as i32) as u16 {
+        delta = break_opposite_facing_tie(delta, || cx.random());
     }
-
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_weapons(
-        ship: *mut ELEMENT,
-        other: *mut ELEMENT,
-        mut margin: COUNT,
-    ) -> BOOLEAN {
-        if object_cloaked(other) {
-            margin = margin.wrapping_add((40 << ONE_SHIFT) as u16);
-        }
-        let mut moved = *ship;
-        let mut dx = 0;
-        let mut dy = 0;
-        GetNextVelocityComponents(&mut moved.velocity, &mut dx, &mut dy, 1);
-        moved.next.location.x = moved.current.location.x.wrapping_add(dx);
-        moved.next.location.y = moved.current.location.y.wrapping_add(dy);
-        moved.current.location = moved.next.location;
-        let mut owner = std::ptr::null_mut();
-        GetElementStarShip(&mut moved, &mut owner);
-        let mut weapons = [std::ptr::null_mut(); 6];
-        let count = crate::engine::battle::Cx::invoke_weapon(
-            owner as usize,
-            &mut moved,
-            weapons.as_mut_ptr(),
-        );
-        let mut remaining = count;
-        let mut index = 0usize;
-        while remaining != 0 {
-            let handle = weapons[index];
-            index += 1;
-            remaining -= 1;
-            if handle.is_null() {
-                continue;
-            }
-            let mut weapon = std::ptr::null_mut();
-            LockElement(handle, &mut weapon);
-            if (*weapon).state_flags & APPEARING as u16 != 0 {
-                image!(copy; (*weapon).next, (*weapon).current);
-                InitIntersectStartPoint(weapon);
-                InitIntersectEndPoint(weapon);
-                InitIntersectFrame(weapon);
-            }
-            let hit =
-                PlotIntercept(weapon, other, (*weapon).__bindgen_anon_1.life_span, margin) != 0;
-            UnlockElement(handle);
-            if hit {
-                FreeElement(handle);
-                while remaining != 0 {
-                    let unused = weapons[index];
-                    index += 1;
-                    remaining -= 1;
-                    if !unused.is_null() {
-                        FreeElement(unused);
-                    }
-                }
-                return 1;
-            }
-            FreeElement(handle);
-        }
-        0
+    let mut f = i32::from(facing);
+    if delta < angle_to_facing(HALF_CIRCLE as i32) as u16 {
+        cx.ship_state_mut(starship).input |= RIGHT as u8;
+        f += 1;
+        ship.next.image.frame = cx.advance_frame(ship.current.image.frame);
+    } else {
+        cx.ship_state_mut(starship).input |= LEFT as u8;
+        f -= 1;
+        ship.next.image.frame = cx.retreat_frame(ship.current.image.frame);
     }
+    cx.ship_state_mut(starship).facing = normalize_facing(f);
+    1
+}
 
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn ship_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let mut owner = std::ptr::null_mut();
-        GetElementStarShip(ship, &mut owner);
-        let mut ship_moved =
-            (*ship).__bindgen_anon_4.turn_wait != 0 && (*ship).__bindgen_anon_5.thrust_wait != 0;
-        let mut ship_fired = true;
-        if (*owner).weapon_counter == 0 {
-            (*owner).ship_input_state &= !(WEAPON as u8);
-            if (*(*owner).RaceDescPtr).ship_info.ship_flags & SEEKING_WEAPON as u16 == 0 {
-                ship_fired = false;
-            }
-        }
-        let margin = if (*owner).control & AWESOME_RATING != 0 {
-            0
-        } else if (*owner).control & GOOD_RATING != 0 {
-            (20 << ONE_SHIFT) as u16
-        } else {
-            (40 << ONE_SHIFT) as u16
-        };
-        let mut i = count;
-        let mut current = concerns.add(count as usize);
-        while i != 0 {
-            i -= 1;
-            current = current.sub(1);
-            let item = &mut *current;
-            if item.ObjectPtr.is_null() {
-                continue;
-            }
-            if !ship_moved
-                && (i != ENEMY_WEAPON_INDEX as u16
-                    || item.MoveState == MOVEMENT_STATE_PURSUE
-                    || (*item.ObjectPtr).state_flags & CREW_OBJECT as u16 != 0
-                    || (*(*owner).RaceDescPtr).cyborg_control.ManeuverabilityIndex
-                        >= MEDIUM_SHIP as u16)
-            {
-                if item.which_turn == 0 {
-                    item.which_turn = 1;
-                }
-                match item.MoveState {
-                    MOVEMENT_STATE_PURSUE => Pursue(ship, item),
-                    MOVEMENT_STATE_AVOID | MOVEMENT_STATE_ENTICE => Entice(ship, item),
-                    _ => {}
-                }
-                ship_moved = true;
-            }
-            if !ship_fired
-                && (i == ENEMY_SHIP_INDEX as u16
-                    || (i == ENEMY_WEAPON_INDEX as u16 && item.MoveState != MOVEMENT_STATE_AVOID))
-            {
-                ship_fired = ship_weapons(ship, item.ObjectPtr, margin) != 0;
-                if ship_fired {
-                    (*owner).ship_input_state |= WEAPON as u8;
-                }
-            }
-        }
-    }
-
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn Pursue(ship: *mut ELEMENT, eval: *mut EVALUATE_DESC) {
-        let other = (*eval).ObjectPtr;
-        let mut ship_velocity = (*ship).velocity;
-        let mut other_velocity = (*other).velocity;
-        let mut sx = 0i16;
-        let mut sy = 0i16;
-        let mut ox = 0i16;
-        let mut oy = 0i16;
-        GetNextVelocityComponents(&mut ship_velocity, &mut sx, &mut sy, (*eval).which_turn);
-        (*ship).next.location.x = (*ship).current.location.x.wrapping_add(sx);
-        (*ship).next.location.y = (*ship).current.location.y.wrapping_add(sy);
-        GetNextVelocityComponents(&mut other_velocity, &mut ox, &mut oy, (*eval).which_turn);
-        let mut dx = ((*other).current.location.x as i32 + ox as i32
-            - (*ship).next.location.x as i32) as i16;
-        let mut dy = ((*other).current.location.y as i32 + oy as i32
-            - (*ship).next.location.y as i32) as i16;
-        dx =
-            crate::ships::native::wrap_delta(dx, (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION));
-        dy = crate::ships::native::wrap_delta(dy, ScreenHeight << (ONE_SHIFT + MAX_REDUCTION));
-        let mut thrust_angle = ARCTAN(dx, dy);
-        let mut maneuver: u8 = 0;
-        if (*ship).__bindgen_anon_4.turn_wait == 0 {
-            maneuver |= (LEFT | RIGHT) as u8;
-        }
-        if (*ship).__bindgen_anon_5.thrust_wait == 0
-            && ((*other).state_flags & PLAYER_SHIP as u16 != 0
-                || elementsOfSamePlayer(other, ship)
-                || is_crew_preprocess(other))
+#[cfg(not(test))]
+pub(crate) fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BOOLEAN {
+    let starship = subject_owner(ship);
+    let mut should = cx.ship_state(starship).input & THRUST as u8 != 0;
+    if !should {
+        let travel = ship.velocity.travel_angle;
+        let at_cap = cx.ship_state(starship).status
+            & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
+            != 0;
+        if normalize_facing(angle_to_facing(i32::from(angle)) - angle_to_facing(i32::from(travel)))
+            == 0
+            && at_cap
+            && cx.ship_state(starship).status & SHIP_IN_GRAVITY_WELL as u16 == 0
         {
-            maneuver |= THRUST as u8;
-        }
-        let turn_angle = normalize_angle(thrust_angle as i32 + HALF_CIRCLE as i32) as u16;
-        if (*other).state_flags & PLAYER_SHIP as u16 != 0
-            && (*other).__bindgen_anon_3.mass_points <= MAX_SHIP_MASS as u8
-        {
-            let mut us = std::ptr::null_mut();
-            GetElementStarShip(ship, &mut us);
-            let mut enemy = std::ptr::null_mut();
-            GetElementStarShip(other, &mut enemy);
-            let ur = (*us).RaceDescPtr;
-            let er = (*enemy).RaceDescPtr;
-            if ((*ur).cyborg_control.ManeuverabilityIndex >= FAST_SHIP
-                && (*ur).cyborg_control.WeaponRange > CLOSE_RANGE_WEAPON)
-                || ((*eval).which_turn >= 24
-                    && (((*ur).characteristics.max_thrust as u32 * 2 / 3)
-                        < (*er).characteristics.max_thrust as u32
-                        || (*enemy).cur_status_flags & SHIP_BEYOND_MAX_SPEED as u16 != 0))
-            {
-                let flags = (*er).ship_info.ship_flags;
-                if (*ur).cyborg_control.ManeuverabilityIndex >= MEDIUM_SHIP as u16 {
-                    let mut fire = FIRES_FORE as u16;
-                    let mut facing = (*eval).facing;
-                    while fire <= FIRES_LEFT as u16 {
-                        if flags & fire != 0
-                            && normalize_angle(turn_angle as i32 - facing as i32 + OCTANT as i32)
-                                <= QUADRANT as i32
-                            && (ox != 0 || oy != 0)
-                            && normalize_angle(
-                                GetVelocityTravelAngle(&mut other_velocity) as i32
-                                    + HALF_CIRCLE as i32
-                                    - facing as i32
-                                    + OCTANT as i32
-                                    + (OCTANT >> 1) as i32,
-                            ) <= ((OCTANT + (OCTANT >> 1)) << 1) as i32
-                        {
-                            thrust_angle = turn_angle;
-                            break;
-                        }
-                        fire <<= 1;
-                        facing = facing.wrapping_add(QUADRANT as u16);
-                    }
-                }
-                if thrust_angle != turn_angle
-                    && (ox != 0 || oy != 0)
-                    && (*eval).which_turn >= 24
-                    && normalize_angle(
-                        thrust_angle as i32 - GetVelocityTravelAngle(&mut other_velocity) as i32
-                            + OCTANT as i32,
-                    ) <= QUADRANT as i32
-                    && ((normalize_angle(
-                        GetVelocityTravelAngle(&mut other_velocity) as i32
-                            - GetVelocityTravelAngle(&mut ship_velocity) as i32
-                            + OCTANT as i32,
-                    ) <= QUADRANT as i32
-                        && (((*us).cur_status_flags & SHIP_AT_MAX_SPEED as u16 != 0
-                            && (*us).cur_status_flags & SHIP_BEYOND_MAX_SPEED as u16 == 0)
-                            || flags & DONT_CHASE as u16 != 0))
-                        || normalize_angle(
-                            turn_angle as i32 - facing_to_angle((*us).ShipFacing as i32)
-                                + OCTANT as i32,
-                        ) <= QUADRANT as i32)
-                {
-                    thrust_angle = turn_angle;
-                }
-            }
-        }
-        if maneuver & (LEFT | RIGHT) as u8 != 0 {
-            TurnShip(ship, thrust_angle);
-        }
-        if maneuver & THRUST as u8 != 0 {
-            ThrustShip(ship, thrust_angle);
-        }
-    }
-
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn Entice(ship: *mut ELEMENT, eval: *mut EVALUATE_DESC) {
-        let other = (*eval).ObjectPtr;
-        let mut ship_velocity = (*ship).velocity;
-        let mut other_velocity = (*other).velocity;
-        let (mut sx, mut sy, mut ox, mut oy) = (0i16, 0i16, 0i16, 0i16);
-        GetNextVelocityComponents(&mut ship_velocity, &mut sx, &mut sy, (*eval).which_turn);
-        (*ship).next.location.x = (*ship).current.location.x.wrapping_add(sx);
-        (*ship).next.location.y = (*ship).current.location.y.wrapping_add(sy);
-        GetNextVelocityComponents(&mut other_velocity, &mut ox, &mut oy, (*eval).which_turn);
-        let mut dx = ((*other).current.location.x as i32 + ox as i32
-            - (*ship).next.location.x as i32) as i16;
-        let mut dy = ((*other).current.location.y as i32 + oy as i32
-            - (*ship).next.location.y as i32) as i16;
-        dx =
-            crate::ships::native::wrap_delta(dx, (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION));
-        dy = crate::ships::native::wrap_delta(dy, ScreenHeight << (ONE_SHIFT + MAX_REDUCTION));
-        let mut thrust_angle = ARCTAN(dx, dy);
-        let mut maneuver = 0u8;
-        if (*ship).__bindgen_anon_4.turn_wait == 0 {
-            maneuver |= (LEFT | RIGHT) as u8;
-        }
-        if (*ship).__bindgen_anon_5.thrust_wait == 0 {
-            maneuver |= THRUST as u8;
-        }
-        let travel = ARCTAN(sx.wrapping_sub(ox), sy.wrapping_sub(oy));
-        let mut turn_angle = normalize_angle(thrust_angle as i32 + HALF_CIRCLE as i32) as u16;
-        let mut owner = std::ptr::null_mut();
-        GetElementStarShip(ship, &mut owner);
-        let rd = (*owner).RaceDescPtr;
-
-        if (*eval).MoveState == MOVEMENT_STATE_AVOID {
-            turn_angle = normalize_angle(turn_angle as i32 - (*eval).facing as i32) as u16;
-            let direction = if normalize_facing(angle_to_facing(turn_angle as i32)) != 0 {
-                if turn_angle <= HALF_CIRCLE as u16 {
-                    RIGHT as u16
-                } else {
-                    LEFT as u16
-                }
-            } else {
-                turn_angle = normalize_angle(
-                    facing_to_angle((*owner).ShipFacing as i32) - (*eval).facing as i32,
-                ) as u16;
-                if turn_angle & (HALF_CIRCLE as u16 - 1) == 0 {
-                    if TFB_Random() & 1 != 0 {
-                        RIGHT as u16
-                    } else {
-                        LEFT as u16
-                    }
-                } else if turn_angle < HALF_CIRCLE as u16 {
-                    RIGHT as u16
-                } else {
-                    LEFT as u16
-                }
-            };
-            thrust_angle = if direction == LEFT as u16 {
-                (*eval)
-                    .facing
-                    .wrapping_sub(QUADRANT as u16)
-                    .wrapping_add(OCTANT as u16 / 2)
-            } else {
-                (*eval)
-                    .facing
-                    .wrapping_add(QUADRANT as u16)
-                    .wrapping_sub(OCTANT as u16 / 2)
-            };
-            thrust_angle = normalize_angle(thrust_angle as i32) as u16;
-        } else if (*other).__bindgen_anon_3.mass_points as u16 > (MAX_SHIP_MASS * 10) as u16 {
-            let planet_facing = normalize_facing(angle_to_facing(thrust_angle as i32));
-            let cone = normalize_facing(
-                i32::from(planet_facing) - i32::from((*owner).ShipFacing)
+            should = false;
+        } else {
+            let d = normalize_facing(
+                angle_to_facing(i32::from(angle)) - i32::from(cx.ship_state(starship).facing)
                     + angle_to_facing(QUADRANT as i32),
             );
-            if (*rd).characteristics.thrust_increment != (*rd).characteristics.max_thrust {
-                maneuver &= !(THRUST as u8);
-            }
-            if cone > angle_to_facing((QUADRANT << 1) as i32) as u16 {
-                turn_angle = thrust_angle;
-            } else if cone == angle_to_facing(QUADRANT as i32) as u16
-                && normalize_facing(angle_to_facing(travel as i32)) != planet_facing
-            {
-                turn_angle = travel;
-            } else if cone == 0
-                || cone == angle_to_facing((QUADRANT << 1) as i32) as u16
-                || (maneuver & THRUST as u8 == 0
-                    && (cone < angle_to_facing(OCTANT as i32) as u16
-                        || cone > angle_to_facing(((QUADRANT << 1) - OCTANT) as i32) as u16))
-            {
-                turn_angle = facing_to_angle((*owner).ShipFacing as i32) as u16;
-                if normalize_angle(turn_angle as i32 - travel as i32 + QUADRANT as i32)
-                    > HALF_CIRCLE as i32
-                {
-                    turn_angle = travel;
-                }
-                if (*ship).__bindgen_anon_5.thrust_wait == 0 {
-                    maneuver |= THRUST as u8;
-                }
-            }
-            thrust_angle = turn_angle;
-        } else {
-            let wrange = (*rd).cyborg_control.WeaponRange;
-            let mut cone =
-                normalize_angle(turn_angle as i32 - (*eval).facing as i32 + OCTANT as i32) as u16;
-            if (*other).state_flags & PLAYER_SHIP as u16 != 0 {
-                let mut enemy = std::ptr::null_mut();
-                GetElementStarShip(other, &mut enemy);
-                let flags = (*(*enemy).RaceDescPtr).ship_info.ship_flags;
-                let mut fire = FIRES_FORE as u16;
-                let mut facing = (*eval).facing;
-                let mut go_maneuver = false;
-                while fire <= FIRES_LEFT as u16 {
-                    if flags & fire != 0 {
-                        cone = normalize_angle(turn_angle as i32 - facing as i32 + OCTANT as i32)
-                            as u16;
-                        if cone <= QUADRANT as u16
-                            && (ox != 0 || oy != 0)
-                            && normalize_angle(
-                                GetVelocityTravelAngle(&mut other_velocity) as i32
-                                    + HALF_CIRCLE as i32
-                                    - facing as i32
-                                    + OCTANT as i32,
-                            ) <= QUADRANT as i32
-                        {
-                            if wrange < (1000 << ONE_SHIFT) as u16 && (*eval).which_turn <= 32 {
-                                thrust_angle = turn_angle;
-                                go_maneuver = true;
-                                break;
-                            }
-                            break;
-                        }
-                    }
-                    fire <<= 1;
-                    facing = facing.wrapping_add(QUADRANT as u16);
-                }
-                if go_maneuver {
-                    if maneuver & (LEFT | RIGHT) as u8 != 0 {
-                        TurnShip(ship, thrust_angle);
-                    }
-                    if maneuver & THRUST as u8 != 0 {
-                        ThrustShip(ship, thrust_angle);
-                    }
-                    return;
-                }
-                if (*eval).which_turn <= 8
-                    && (*rd).characteristics.max_thrust
-                        <= (*(*enemy).RaceDescPtr).characteristics.max_thrust
-                {
-                    if maneuver & (LEFT | RIGHT) as u8 != 0 {
-                        TurnShip(ship, thrust_angle);
-                    }
-                    if maneuver & THRUST as u8 != 0 {
-                        ThrustShip(ship, thrust_angle);
-                    }
-                    return;
-                }
-            }
-            if (*owner).cur_status_flags & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16 == 0
-                && PlotIntercept(ship, other, 40, CLOSE_RANGE_WEAPON << 1) != 0
-            {
-                if normalize_angle(
-                    thrust_angle as i32 - facing_to_angle((*owner).ShipFacing as i32)
-                        + OCTANT as i32,
-                ) <= QUADRANT as i32
-                    || cone > QUADRANT as u16
-                {
-                    thrust_angle = turn_angle;
-                } else {
-                    thrust_angle = facing_to_angle((*owner).ShipFacing as i32) as u16;
-                }
-            } else {
-                cone = PlotIntercept(ship, other, 10, wrange.wrapping_sub(wrange >> 2));
-                if cone != 0 {
-                    if (*rd).characteristics.thrust_increment != (*rd).characteristics.max_thrust
-                        && (*owner).cur_status_flags
-                            & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
-                            != 0
-                        && (normalize_angle(
-                            turn_angle as i32 - ARCTAN(sx, sy) as i32 + OCTANT as i32 + 2,
-                        ) <= ((OCTANT + 2) << 1) as i32
-                            || PlotIntercept(ship, other, 30, CLOSE_RANGE_WEAPON << 1) == 0)
-                    {
-                        maneuver &= !(THRUST as u8);
-                    } else if cone == 1
-                        || (*rd).characteristics.thrust_increment
-                            != (*rd).characteristics.max_thrust
-                    {
-                        if maneuver & (LEFT | RIGHT) as u8 != 0 {
-                            TurnShip(ship, turn_angle);
-                            maneuver &= !((LEFT | RIGHT) as u8);
-                        }
-                        if normalize_angle(
-                            thrust_angle as i32 - ARCTAN(sx, sy) as i32 + OCTANT as i32 + 2,
-                        ) <= ((OCTANT + 2) << 1) as i32
-                        {
-                            thrust_angle = facing_to_angle((*owner).ShipFacing as i32) as u16;
-                        } else {
-                            thrust_angle = turn_angle;
-                        }
-                    }
-                }
-            }
-        }
-        if maneuver & (LEFT | RIGHT) as u8 != 0 {
-            TurnShip(ship, thrust_angle);
-        }
-        if maneuver & THRUST as u8 != 0 {
-            ThrustShip(ship, thrust_angle);
+            should = d == angle_to_facing(QUADRANT as i32) as u16
+                || (cx.ship_state(starship).status & SHIP_BEYOND_MAX_SPEED as u16 != 0
+                    && d <= angle_to_facing(HALF_CIRCLE as i32) as u16);
         }
     }
-
-    /// C retains this entry point as a no-op; AVOID dispatches to Entice.
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn Avoid(ship: *mut ELEMENT, eval: *mut EVALUATE_DESC) {
-        let _ = (ship, eval);
-    }
-
-    unsafe fn init_cyborg(ship: *mut STARSHIP) {
-        let race = (*ship).RaceDescPtr;
-        let characteristics = (*race).characteristics;
-        let product = (u32::from(characteristics.max_thrust)
-            * u32::from(characteristics.thrust_increment)) as u16;
-        let divisor =
-            (u32::from(characteristics.turn_wait) + u32::from(characteristics.thrust_wait)) as u16;
-        (*race).cyborg_control.ManeuverabilityIndex =
-            product.checked_div(divisor).unwrap_or(product >> 1);
-    }
-
-    /// # Safety
-    /// Pointers must reference live engine records and their initialized dependent
-    /// records. The caller must serialize access to battle and graphics state.
-    #[no_mangle]
-    pub unsafe extern "C" fn tactical_intelligence(
-        _context: *mut ComputerInputContext,
-        owner: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE {
-        let rd = (*owner).RaceDescPtr;
-        if (*rd).cyborg_control.ManeuverabilityIndex == 0 {
-            init_cyborg(owner);
-        }
-        let handle = (*owner).hShip;
-        let mut ship = std::ptr::null_mut();
-        LockElement(handle, &mut ship);
-        if (*rd).ship_info.crew_level == 0
-            || u32::from(DisplayArray[(*ship).PrimIndex as usize].Type) == gfx_object_NUM_PRIMS
-        {
-            UnlockElement(handle);
-            return 0;
-        }
-        let mut ship_copy = *ship;
-        if (*owner).control & STANDARD_RATING != 0 {
-            (*owner).special_counter = (*owner).special_counter.wrapping_add(1);
-        }
-        UnlockElement(handle);
-        let original_facing = (*owner).ShipFacing;
-        let mut concerns: [EVALUATE_DESC; 10] = std::mem::zeroed();
-        for concern in &mut concerns[..=FIRST_EMPTY_INDEX as usize] {
-            concern.ObjectPtr = std::ptr::null_mut();
-            concern.MoveState = MOVEMENT_STATE_NO_MOVEMENT;
-            concern.which_turn = u16::MAX;
-        }
-        let ultra = (*rd).characteristics.thrust_increment == (*rd).characteristics.max_thrust
-            && (*rd).cyborg_control.ManeuverabilityIndex >= MEDIUM_SHIP as u16;
-        let mut moved = true;
-        if ship_copy.__bindgen_anon_4.turn_wait == 0 {
-            moved = false;
-            (*owner).ship_input_state &= !((LEFT | RIGHT) as u8);
-        }
-        if ship_copy.__bindgen_anon_5.thrust_wait == 0 {
-            moved = false;
-            (*owner).ship_input_state &= !(THRUST as u8);
-        }
-
-        let mut h = GetHeadElement();
-        while !h.is_null() {
-            let mut e = std::ptr::null_mut();
-            LockElement(h, &mut e);
-            let next = GetSuccElement(e);
-            if CollisionPossible(e, &mut ship_copy) {
-                let mut dx = e
-                    .as_ref()
-                    .unwrap()
-                    .next
-                    .location
-                    .x
-                    .wrapping_sub(ship_copy.next.location.x);
-                let mut dy = e
-                    .as_ref()
-                    .unwrap()
-                    .next
-                    .location
-                    .y
-                    .wrapping_sub(ship_copy.next.location.y);
-                dx = crate::ships::native::wrap_delta(
-                    dx,
-                    (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION),
-                );
-                dy = crate::ships::native::wrap_delta(
-                    dy,
-                    ScreenHeight << (ONE_SHIFT + MAX_REDUCTION),
-                );
-                let mass = (*e).__bindgen_anon_3.mass_points;
-                if mass as u16 > (MAX_SHIP_MASS * 10) as u16 {
-                    let turn = if ultra {
-                        16
-                    } else if (*rd).cyborg_control.ManeuverabilityIndex <= MEDIUM_SHIP as u16 {
-                        48
-                    } else {
-                        32
-                    };
-                    let mut rect: RECT = std::mem::zeroed();
-                    let frame =
-                        SetAbsFrameIndex(ship_copy.IntersectControl.IntersectStamp.frame, 0);
-                    GetFrameRect(frame, &mut rect);
-                    let bounds =
-                        (i32::from(rect.extent.width) + i32::from(rect.extent.height)) as u16;
-                    let mut intercept_turn = 0;
-                    if !moved {
-                        intercept_turn = PlotIntercept(
-                            e,
-                            &mut ship_copy,
-                            turn,
-                            ((30 + bounds as i32 * 3) << ONE_SHIFT) as u16,
-                        );
-                    }
-                    if intercept_turn != 0 {
-                        if intercept_turn > 1
-                            || PlotIntercept(
-                                e,
-                                &mut ship_copy,
-                                1,
-                                ((35 + bounds as i32) << ONE_SHIFT) as u16,
-                            ) != 0
-                            || PlotIntercept(
-                                e,
-                                &mut ship_copy,
-                                turn << 1,
-                                ((40 + bounds as i32) << ONE_SHIFT) as u16,
-                            ) > 1
-                        {
-                            concerns[GRAVITY_MASS_INDEX as usize].ObjectPtr = e;
-                            concerns[GRAVITY_MASS_INDEX as usize].which_turn = intercept_turn;
-                            concerns[GRAVITY_MASS_INDEX as usize].facing =
-                                ARCTAN(dx.wrapping_neg(), dy.wrapping_neg());
-                            concerns[GRAVITY_MASS_INDEX as usize].MoveState = if ultra {
-                                MOVEMENT_STATE_AVOID
-                            } else {
-                                MOVEMENT_STATE_ENTICE
-                            };
-                        } else if !ultra && !IsVelocityZero(&mut ship_copy.velocity) {
-                            ship_copy.__bindgen_anon_5.thrust_wait =
-                                ship_copy.__bindgen_anon_5.thrust_wait.wrapping_add(1);
-                            if ship_copy.__bindgen_anon_4.turn_wait != 0 {
-                                moved = true;
-                            }
-                        }
-                    }
-                } else if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-                    let mut enemy = std::ptr::null_mut();
-                    GetElementStarShip(e, &mut enemy);
-                    let erd = (*enemy).RaceDescPtr;
-                    if (*erd).cyborg_control.ManeuverabilityIndex == 0 {
-                        init_cyborg(enemy);
-                    }
-                    let dist2 = (dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32;
-                    let mut turns = square_root(dist2) >> 6;
-                    let idx = ENEMY_SHIP_INDEX as usize;
-                    if turns <= concerns[idx].which_turn {
-                        if turns == 0 {
-                            turns = 1;
-                        }
-                        concerns[idx].ObjectPtr = e;
-                        concerns[idx].which_turn = turns;
-                        concerns[idx].facing = facing_to_angle((*enemy).ShipFacing as i32) as u16;
-                        let pursue = moved
-                            || mass > MAX_SHIP_MASS as u8
-                            || ((*rd).cyborg_control.WeaponRange < LONG_RANGE_WEAPON
-                                && ((*rd).cyborg_control.WeaponRange <= CLOSE_RANGE_WEAPON
-                                    || ((*erd).cyborg_control.WeaponRange >= LONG_RANGE_WEAPON
-                                        && (*erd).ship_info.ship_flags & SEEKING_WEAPON as u16
-                                            != 0)
-                                    || ((*rd).characteristics.max_thrust
-                                        < (*erd).characteristics.max_thrust
-                                        && (*rd).cyborg_control.WeaponRange
-                                            < (*erd).cyborg_control.WeaponRange)));
-                        concerns[idx].MoveState = if pursue {
-                            MOVEMENT_STATE_PURSUE
-                        } else {
-                            MOVEMENT_STATE_ENTICE
-                        };
-                        if (*erd).ship_info.ship_flags & IMMEDIATE_WEAPON as u16 != 0
-                            && ship_weapons(e, &mut ship_copy, 0) != 0
-                        {
-                            concerns[ENEMY_WEAPON_INDEX as usize] = concerns[idx];
-                            concerns[ENEMY_WEAPON_INDEX as usize].which_turn = 1;
-                            concerns[ENEMY_WEAPON_INDEX as usize].MoveState = MOVEMENT_STATE_AVOID;
-                        }
-                    }
-                } else if (*e).pParent.is_null() {
-                    if (*e).state_flags & FINITE_LIFE as u16 == 0 {
-                        let turns =
-                            square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32)
-                                >> 6;
-                        let idx = FIRST_EMPTY_INDEX as usize;
-                        if turns < concerns[idx].which_turn {
-                            concerns[idx].ObjectPtr = e;
-                            concerns[idx].which_turn = turns;
-                            concerns[idx].MoveState = MOVEMENT_STATE_PURSUE;
-                            concerns[idx].facing = GetVelocityTravelAngle(&mut (*e).velocity);
-                        }
-                    }
-                } else if !elementsOfSamePlayer(e, &mut ship_copy)
-                    && !is_crew_preprocess(e)
-                    && concerns[ENEMY_WEAPON_INDEX as usize].which_turn > 1
-                    && (*e).__bindgen_anon_1.life_span > 0
-                {
-                    let mut enemy = std::ptr::null_mut();
-                    GetElementStarShip(e, &mut enemy);
-                    let erd = (*enemy).RaceDescPtr;
-                    let special_frames = (*erd).ship_data.special.as_mut_ptr();
-                    let seeking = ((*erd).ship_info.ship_flags & SEEKING_WEAPON as u16 != 0
-                        && (*e).next.image.farray != special_frames)
-                        || ((*erd).ship_info.ship_flags & SEEKING_SPECIAL as u16 != 0
-                            && (*e).next.image.farray == special_frames);
-                    let mut turns = 0u16;
-                    let mut movement = MOVEMENT_STATE_NO_MOVEMENT;
-                    if seeking {
-                        let travel = GetVelocityTravelAngle(&mut (*e).velocity);
-                        let too_fast = (*e).state_flags & (FINITE_LIFE | CREW_OBJECT) as u16 == 0
-                            && (*rd).characteristics.max_thrust > (8 << ONE_SHIFT) as u16;
-                        let behind = normalize_angle(
-                            travel as i32 - ARCTAN(dx.wrapping_neg(), dy.wrapping_neg()) as i32
-                                + QUADRANT as i32,
-                        ) > HALF_CIRCLE as i32;
-                        if !too_fast && !behind {
-                            turns =
-                                square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32)
-                                    >> 6;
-                            movement = MOVEMENT_STATE_ENTICE;
-                            if ultra {
-                                if turns == 0 {
-                                    turns = 1;
-                                } else if turns > 16 {
-                                    turns = 0;
-                                }
-                            } else if turns == 0 {
-                                turns = 1;
-                            } else if turns > 16
-                                || ((*rd).cyborg_control.ManeuverabilityIndex > MEDIUM_SHIP as u16
-                                    && turns > 8)
-                            {
-                                turns = 0;
-                            }
-                        }
-                    } else if (*owner).control & AWESOME_RATING != 0 {
-                        turns = PlotIntercept(
-                            e,
-                            &mut ship_copy,
-                            (*e).__bindgen_anon_1.life_span,
-                            (40 << ONE_SHIFT) as u16,
-                        );
-                        movement = MOVEMENT_STATE_AVOID;
-                    }
-                    let idx = ENEMY_WEAPON_INDEX as usize;
-                    if turns > 0
-                        && (turns < concerns[idx].which_turn
-                            || (turns == concerns[idx].which_turn
-                                && movement == MOVEMENT_STATE_AVOID))
-                    {
-                        concerns[idx].ObjectPtr = e;
-                        concerns[idx].which_turn = turns;
-                        concerns[idx].MoveState = movement;
-                        concerns[idx].facing = GetVelocityTravelAngle(&mut (*e).velocity);
-                    }
-                } else if (*e).state_flags & CREW_OBJECT as u16 != 0
-                    && (((*e).state_flags & IGNORE_SIMILAR as u16 == 0
-                        && elementsOfSamePlayer(e, &mut ship_copy))
-                        || is_crew_preprocess(e))
-                    && concerns[CREW_OBJECT_INDEX as usize].which_turn > 1
-                {
-                    let mut turns =
-                        square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32) >> 6;
-                    if turns == 0 {
-                        turns = 1;
-                    }
-                    let idx = CREW_OBJECT_INDEX as usize;
-                    let enemy_turns = concerns[ENEMY_SHIP_INDEX as usize].which_turn;
-                    if turns < concerns[idx].which_turn
-                        && (enemy_turns > 32 || (enemy_turns > 8 && (*owner).hShip == (*e).hTarget))
-                    {
-                        concerns[idx].ObjectPtr = e;
-                        concerns[idx].which_turn = turns;
-                        concerns[idx].MoveState = MOVEMENT_STATE_PURSUE;
-                        concerns[idx].facing = 0;
-                    }
-                }
-            }
-            UnlockElement(h);
-            h = next;
-        }
-
-        crate::engine::battle::Cx::invoke_intelligence(
-            owner as usize,
-            &mut ship_copy,
-            concerns.as_mut_ptr(),
-            FIRST_EMPTY_INDEX as u16,
+    if should {
+        let stats = cx.race_stats(starship);
+        crate::battle::ship_native::thrust(
+            &mut ship.velocity,
+            cx.ship_state(starship).facing,
+            cx.ship_state(starship).status,
+            stats.characteristics.thrust_increment,
+            stats.characteristics.max_thrust,
         );
-        (*owner).ShipFacing = original_facing;
-        battle_input((*owner).ship_input_state)
+        cx.ship_state_mut(starship).input |= THRUST as u8;
     }
+    should as BOOLEAN
+}
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn collision_filter_matches_shared_flags_parent_and_mass_rules() {
-            unsafe {
-                let mut a: ELEMENT = std::mem::zeroed();
-                let mut b: ELEMENT = std::mem::zeroed();
-                assert!(!CollisionPossible(&mut a, &mut b));
-                a.__bindgen_anon_3.mass_points = 1;
-                assert!(CollisionPossible(&mut a, &mut b));
-                for flag in [NONSOLID, DISAPPEARING] {
-                    a.state_flags = flag as u16;
-                    assert!(!CollisionPossible(&mut a, &mut b));
-                    a.state_flags = 0;
-                    b.state_flags = flag as u16;
-                    assert!(CollisionPossible(&mut a, &mut b));
-                }
-                a.state_flags = COLLISION as u16;
-                b.state_flags = COLLISION as u16;
-                assert!(!CollisionPossible(&mut a, &mut b));
-                b.state_flags = 0;
-                assert!(CollisionPossible(&mut a, &mut b));
-                a.state_flags = IGNORE_SIMILAR as u16;
-                b.state_flags = IGNORE_SIMILAR as u16;
-                assert!(!CollisionPossible(&mut a, &mut b));
-                a.pParent = (&raw mut b).cast();
-                assert!(CollisionPossible(&mut a, &mut b));
-            }
+#[cfg(not(test))]
+pub(crate) fn weapons(
+    cx: &mut Cx<'_>,
+    ship: &Subject,
+    other: &Subject,
+    mut margin: COUNT,
+) -> BOOLEAN {
+    if cx.subject_cloaked(other) {
+        margin = margin.wrapping_add((40 << ONE_SHIFT) as u16);
+    }
+    let mut moved = *ship;
+    let (dx, dy) = next_velocity(&mut moved.velocity, 1);
+    moved.next.location.x = moved.current.location.x.wrapping_add(dx);
+    moved.next.location.y = moved.current.location.y.wrapping_add(dy);
+    moved.current.location = moved.next.location;
+    let weapons = cx.spawn_weapons(subject_owner(&moved), moved);
+    for (index, id) in weapons.iter().copied().enumerate() {
+        let Some(id) = id else {
+            continue;
+        };
+        if cx.element(id).flags & APPEARING as u16 != 0 {
+            let current = cx.element(id).current;
+            cx.copy_visual_to_next(id, current);
+            cx.init_intersect(id);
+            let frame = cx.equivalent_frame(
+                cx.element_frame_set_first(id, true),
+                cx.element(id).next.image.frame,
+            );
+            cx.set_intersect_frame(id, frame);
         }
-
-        #[test]
-        fn zero_velocity_ignores_travel_angle_and_error_but_checks_all_six_components() {
-            unsafe {
-                let mut velocity: VELOCITY_DESC = std::mem::zeroed();
-                velocity.travel_angle = FULL_CIRCLE as u16;
-                velocity.error = EXTENT {
-                    width: 31,
-                    height: 31,
-                };
-                assert!(IsVelocityZero(&mut velocity));
-                for i in 0..6 {
-                    let mut moving = velocity;
-                    let components = [
-                        &raw mut moving.vector.width,
-                        &raw mut moving.vector.height,
-                        &raw mut moving.incr.width,
-                        &raw mut moving.incr.height,
-                        &raw mut moving.fract.width,
-                        &raw mut moving.fract.height,
-                    ];
-                    *components[i] = -1;
-                    assert!(!IsVelocityZero(&mut moving));
-                }
+        let weapon = cx.weapon_origin(id);
+        let hit = plot_intercept(cx, &weapon, other, weapon.life, margin) != 0;
+        cx.dispose(id);
+        if hit {
+            for unused in weapons[index + 1..].iter().flatten() {
+                cx.dispose(*unused);
             }
+            return 1;
         }
+    }
+    0
+}
 
-        #[test]
-        fn same_player_uses_player_number_including_neutral_objects() {
-            unsafe {
-                let mut a: ELEMENT = std::mem::zeroed();
-                let mut b: ELEMENT = std::mem::zeroed();
-                a.playerNr = -1;
-                b.playerNr = -1;
-                assert!(elementsOfSamePlayer(&mut a, &mut b));
-                b.playerNr = 0;
-                assert!(!elementsOfSamePlayer(&mut a, &mut b));
+#[cfg(not(test))]
+pub(crate) fn intelligence(
+    cx: &mut Cx<'_>,
+    ship: &mut Subject,
+    concerns: &mut [Concern],
+    count: COUNT,
+) {
+    let owner = subject_owner(ship);
+    let mut ship_moved = ship.turn != 0 && ship.thrust != 0;
+    let mut ship_fired = true;
+    if cx.ship_state(owner).weapon_counter == 0 {
+        cx.ship_state_mut(owner).input &= !(WEAPON as u8);
+        if cx.race_stats(owner).ship_info.ship_flags & SEEKING_WEAPON as u16 == 0 {
+            ship_fired = false;
+        }
+    }
+    let margin = if cx.pick_ship(owner).control & AWESOME_RATING != 0 {
+        0
+    } else if cx.pick_ship(owner).control & GOOD_RATING != 0 {
+        (20 << ONE_SHIFT) as u16
+    } else {
+        (40 << ONE_SHIFT) as u16
+    };
+    let mut i = count;
+
+    while i != 0 {
+        i -= 1;
+        let item = &mut concerns[i as usize];
+        if item.object.is_none() {
+            continue;
+        }
+        if !ship_moved
+            && (i != ENEMY_WEAPON_INDEX as u16
+                || item.movement == MOVEMENT_STATE_PURSUE
+                || cx.element(item.object.unwrap()).flags & CREW_OBJECT as u16 != 0
+                || cx.race_stats(owner).intelligence.maneuverability >= MEDIUM_SHIP as u16)
+        {
+            if item.which_turn == 0 {
+                item.which_turn = 1;
+            }
+            match item.movement {
+                MOVEMENT_STATE_PURSUE => pursue(cx, ship, item),
+                MOVEMENT_STATE_AVOID | MOVEMENT_STATE_ENTICE => entice(cx, ship, item),
+                _ => {}
+            }
+            ship_moved = true;
+        }
+        if !ship_fired
+            && (i == ENEMY_SHIP_INDEX as u16
+                || (i == ENEMY_WEAPON_INDEX as u16 && item.movement != MOVEMENT_STATE_AVOID))
+        {
+            ship_fired = weapons(cx, ship, &cx.weapon_origin(item.object.unwrap()), margin) != 0;
+            if ship_fired {
+                cx.ship_state_mut(owner).input |= WEAPON as u8;
             }
         }
     }
 }
+
 #[cfg(not(test))]
-pub use engine::{
-    ship_intelligence, ship_weapons, tactical_intelligence, Avoid, Entice, PlotIntercept, Pursue,
-    ThrustShip, TurnShip,
-};
+pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
+    let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
+    let other = cx.weapon_origin(object);
+    let mut ship_velocity = ship.velocity;
+    let mut other_velocity = other.velocity;
+    let (sx, sy) = next_velocity(&mut ship_velocity, eval.which_turn);
+    ship.next.location.x = ship.current.location.x.wrapping_add(sx);
+    ship.next.location.y = ship.current.location.y.wrapping_add(sy);
+    let (ox, oy) = next_velocity(&mut other_velocity, eval.which_turn);
+    let mut dx = (other.current.location.x as i32 + ox as i32 - ship.next.location.x as i32) as i16;
+    let mut dy = (other.current.location.y as i32 + oy as i32 - ship.next.location.y as i32) as i16;
+    dx = crate::math::wrap_delta(
+        dx,
+        (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
+    );
+    dy = crate::math::wrap_delta(dy, cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION));
+    let mut thrust_angle = ai_arctan(dx, dy);
+    let mut maneuver: u8 = 0;
+    if ship.turn == 0 {
+        maneuver |= (LEFT | RIGHT) as u8;
+    }
+    if ship.thrust == 0
+        && (other.flags & PLAYER_SHIP as u16 != 0
+            || (other.player == ship.player)
+            || is_crew_preprocess(&other))
+    {
+        maneuver |= THRUST as u8;
+    }
+    let turn_angle = normalize_angle(thrust_angle as i32 + HALF_CIRCLE as i32) as u16;
+    if other.flags & PLAYER_SHIP as u16 != 0 && other.mass <= MAX_SHIP_MASS as u8 {
+        let us = subject_owner(ship);
+        let enemy = subject_owner(&other);
+        let ur = us;
+        let er = enemy;
+        if (cx.race_stats(ur).intelligence.maneuverability >= FAST_SHIP
+            && cx.race_stats(ur).intelligence.weapon_range > CLOSE_RANGE_WEAPON)
+            || (eval.which_turn >= 24
+                && ((cx.race_stats(ur).characteristics.max_thrust as u32 * 2 / 3)
+                    < cx.race_stats(er).characteristics.max_thrust as u32
+                    || cx.ship_state(enemy).status & SHIP_BEYOND_MAX_SPEED as u16 != 0))
+        {
+            let flags = cx.race_stats(er).ship_info.ship_flags;
+            if cx.race_stats(ur).intelligence.maneuverability >= MEDIUM_SHIP as u16 {
+                let mut fire = FIRES_FORE as u16;
+                let mut facing = eval.facing;
+                while fire <= FIRES_LEFT as u16 {
+                    if flags & fire != 0
+                        && normalize_angle(turn_angle as i32 - facing as i32 + OCTANT as i32)
+                            <= QUADRANT as i32
+                        && (ox != 0 || oy != 0)
+                        && normalize_angle(
+                            other_velocity.travel_angle as i32 + HALF_CIRCLE as i32 - facing as i32
+                                + OCTANT as i32
+                                + (OCTANT >> 1) as i32,
+                        ) <= ((OCTANT + (OCTANT >> 1)) << 1) as i32
+                    {
+                        thrust_angle = turn_angle;
+                        break;
+                    }
+                    fire <<= 1;
+                    facing = facing.wrapping_add(QUADRANT as u16);
+                }
+            }
+            if thrust_angle != turn_angle
+                && (ox != 0 || oy != 0)
+                && eval.which_turn >= 24
+                && normalize_angle(
+                    thrust_angle as i32 - other_velocity.travel_angle as i32 + OCTANT as i32,
+                ) <= QUADRANT as i32
+                && ((normalize_angle(
+                    other_velocity.travel_angle as i32 - ship_velocity.travel_angle as i32
+                        + OCTANT as i32,
+                ) <= QUADRANT as i32
+                    && ((cx.ship_state(us).status & SHIP_AT_MAX_SPEED as u16 != 0
+                        && cx.ship_state(us).status & SHIP_BEYOND_MAX_SPEED as u16 == 0)
+                        || flags & DONT_CHASE as u16 != 0))
+                    || normalize_angle(
+                        turn_angle as i32 - facing_to_angle(cx.ship_state(us).facing as i32)
+                            + OCTANT as i32,
+                    ) <= QUADRANT as i32)
+            {
+                thrust_angle = turn_angle;
+            }
+        }
+    }
+    if maneuver & (LEFT | RIGHT) as u8 != 0 {
+        turn_ship(cx, ship, thrust_angle);
+    }
+    if maneuver & THRUST as u8 != 0 {
+        thrust_ship(cx, ship, thrust_angle);
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
+    let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
+    let other = cx.weapon_origin(object);
+    let mut ship_velocity = ship.velocity;
+    let mut other_velocity = other.velocity;
+    let (sx, sy) = next_velocity(&mut ship_velocity, eval.which_turn);
+    ship.next.location.x = ship.current.location.x.wrapping_add(sx);
+    ship.next.location.y = ship.current.location.y.wrapping_add(sy);
+    let (ox, oy) = next_velocity(&mut other_velocity, eval.which_turn);
+    let mut dx = (other.current.location.x as i32 + ox as i32 - ship.next.location.x as i32) as i16;
+    let mut dy = (other.current.location.y as i32 + oy as i32 - ship.next.location.y as i32) as i16;
+    dx = crate::math::wrap_delta(
+        dx,
+        (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
+    );
+    dy = crate::math::wrap_delta(dy, cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION));
+    let mut thrust_angle = ai_arctan(dx, dy);
+    let mut maneuver = 0u8;
+    if ship.turn == 0 {
+        maneuver |= (LEFT | RIGHT) as u8;
+    }
+    if ship.thrust == 0 {
+        maneuver |= THRUST as u8;
+    }
+    let travel = ai_arctan(sx.wrapping_sub(ox), sy.wrapping_sub(oy));
+    let mut turn_angle = normalize_angle(thrust_angle as i32 + HALF_CIRCLE as i32) as u16;
+    let rd = subject_owner(ship);
+
+    if eval.movement == MOVEMENT_STATE_AVOID {
+        turn_angle = normalize_angle(turn_angle as i32 - eval.facing as i32) as u16;
+        let direction = if normalize_facing(angle_to_facing(turn_angle as i32)) != 0 {
+            if turn_angle <= HALF_CIRCLE as u16 {
+                RIGHT as u16
+            } else {
+                LEFT as u16
+            }
+        } else {
+            turn_angle = normalize_angle(
+                facing_to_angle(cx.ship_state(rd).facing as i32) - eval.facing as i32,
+            ) as u16;
+            if turn_angle & (HALF_CIRCLE as u16 - 1) == 0 {
+                if cx.random() & 1 != 0 {
+                    RIGHT as u16
+                } else {
+                    LEFT as u16
+                }
+            } else if turn_angle < HALF_CIRCLE as u16 {
+                RIGHT as u16
+            } else {
+                LEFT as u16
+            }
+        };
+        thrust_angle = if direction == LEFT as u16 {
+            eval.facing
+                .wrapping_sub(QUADRANT as u16)
+                .wrapping_add(OCTANT as u16 / 2)
+        } else {
+            eval.facing
+                .wrapping_add(QUADRANT as u16)
+                .wrapping_sub(OCTANT as u16 / 2)
+        };
+        thrust_angle = normalize_angle(thrust_angle as i32) as u16;
+    } else if other.mass as u16 > (MAX_SHIP_MASS * 10) as u16 {
+        let planet_facing = normalize_facing(angle_to_facing(thrust_angle as i32));
+        let cone = normalize_facing(
+            i32::from(planet_facing) - i32::from(cx.ship_state(rd).facing)
+                + angle_to_facing(QUADRANT as i32),
+        );
+        if cx.race_stats(rd).characteristics.thrust_increment
+            != cx.race_stats(rd).characteristics.max_thrust
+        {
+            maneuver &= !(THRUST as u8);
+        }
+        if cone > angle_to_facing((QUADRANT << 1) as i32) as u16 {
+            turn_angle = thrust_angle;
+        } else if cone == angle_to_facing(QUADRANT as i32) as u16
+            && normalize_facing(angle_to_facing(travel as i32)) != planet_facing
+        {
+            turn_angle = travel;
+        } else if cone == 0
+            || cone == angle_to_facing((QUADRANT << 1) as i32) as u16
+            || (maneuver & THRUST as u8 == 0
+                && (cone < angle_to_facing(OCTANT as i32) as u16
+                    || cone > angle_to_facing(((QUADRANT << 1) - OCTANT) as i32) as u16))
+        {
+            turn_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
+            if normalize_angle(turn_angle as i32 - travel as i32 + QUADRANT as i32)
+                > HALF_CIRCLE as i32
+            {
+                turn_angle = travel;
+            }
+            if ship.thrust == 0 {
+                maneuver |= THRUST as u8;
+            }
+        }
+        thrust_angle = turn_angle;
+    } else {
+        let wrange = cx.race_stats(rd).intelligence.weapon_range;
+        let mut cone =
+            normalize_angle(turn_angle as i32 - eval.facing as i32 + OCTANT as i32) as u16;
+        if other.flags & PLAYER_SHIP as u16 != 0 {
+            let enemy = subject_owner(&other);
+            let flags = cx.race_stats(enemy).ship_info.ship_flags;
+            let mut fire = FIRES_FORE as u16;
+            let mut facing = eval.facing;
+            let mut go_maneuver = false;
+            while fire <= FIRES_LEFT as u16 {
+                if flags & fire != 0 {
+                    cone =
+                        normalize_angle(turn_angle as i32 - facing as i32 + OCTANT as i32) as u16;
+                    if cone <= QUADRANT as u16
+                        && (ox != 0 || oy != 0)
+                        && normalize_angle(
+                            other_velocity.travel_angle as i32 + HALF_CIRCLE as i32 - facing as i32
+                                + OCTANT as i32,
+                        ) <= QUADRANT as i32
+                    {
+                        if wrange < (1000 << ONE_SHIFT) as u16 && eval.which_turn <= 32 {
+                            thrust_angle = turn_angle;
+                            go_maneuver = true;
+                            break;
+                        }
+                        break;
+                    }
+                }
+                fire <<= 1;
+                facing = facing.wrapping_add(QUADRANT as u16);
+            }
+            if go_maneuver {
+                if maneuver & (LEFT | RIGHT) as u8 != 0 {
+                    turn_ship(cx, ship, thrust_angle);
+                }
+                if maneuver & THRUST as u8 != 0 {
+                    thrust_ship(cx, ship, thrust_angle);
+                }
+                return;
+            }
+            if eval.which_turn <= 8
+                && cx.race_stats(rd).characteristics.max_thrust
+                    <= cx.race_stats(enemy).characteristics.max_thrust
+            {
+                if maneuver & (LEFT | RIGHT) as u8 != 0 {
+                    turn_ship(cx, ship, thrust_angle);
+                }
+                if maneuver & THRUST as u8 != 0 {
+                    thrust_ship(cx, ship, thrust_angle);
+                }
+                return;
+            }
+        }
+        if cx.ship_state(rd).status & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16 == 0
+            && plot_intercept(cx, ship, &other, 40, CLOSE_RANGE_WEAPON << 1) != 0
+        {
+            if normalize_angle(
+                thrust_angle as i32 - facing_to_angle(cx.ship_state(rd).facing as i32)
+                    + OCTANT as i32,
+            ) <= QUADRANT as i32
+                || cone > QUADRANT as u16
+            {
+                thrust_angle = turn_angle;
+            } else {
+                thrust_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
+            }
+        } else {
+            cone = plot_intercept(cx, ship, &other, 10, wrange.wrapping_sub(wrange >> 2));
+            if cone != 0 {
+                if cx.race_stats(rd).characteristics.thrust_increment
+                    != cx.race_stats(rd).characteristics.max_thrust
+                    && cx.ship_state(rd).status & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
+                        != 0
+                    && (normalize_angle(
+                        turn_angle as i32 - ai_arctan(sx, sy) as i32 + OCTANT as i32 + 2,
+                    ) <= ((OCTANT + 2) << 1) as i32
+                        || plot_intercept(cx, ship, &other, 30, CLOSE_RANGE_WEAPON << 1) == 0)
+                {
+                    maneuver &= !(THRUST as u8);
+                } else if cone == 1
+                    || cx.race_stats(rd).characteristics.thrust_increment
+                        != cx.race_stats(rd).characteristics.max_thrust
+                {
+                    if maneuver & (LEFT | RIGHT) as u8 != 0 {
+                        turn_ship(cx, ship, turn_angle);
+                        maneuver &= !((LEFT | RIGHT) as u8);
+                    }
+                    if normalize_angle(
+                        thrust_angle as i32 - ai_arctan(sx, sy) as i32 + OCTANT as i32 + 2,
+                    ) <= ((OCTANT + 2) << 1) as i32
+                    {
+                        thrust_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
+                    } else {
+                        thrust_angle = turn_angle;
+                    }
+                }
+            }
+        }
+    }
+    if maneuver & (LEFT | RIGHT) as u8 != 0 {
+        turn_ship(cx, ship, thrust_angle);
+    }
+    if maneuver & THRUST as u8 != 0 {
+        thrust_ship(cx, ship, thrust_angle);
+    }
+}
+
+#[cfg(not(test))]
+fn init_cyborg(cx: &mut Cx<'_>, ship: ShipId) {
+    let race = ship;
+    let characteristics = cx.race_stats(race).characteristics;
+    let product = (u32::from(characteristics.max_thrust)
+        * u32::from(characteristics.thrust_increment)) as u16;
+    let divisor =
+        (u32::from(characteristics.turn_wait) + u32::from(characteristics.thrust_wait)) as u16;
+    cx.race_stats_mut(race).intelligence.maneuverability =
+        product.checked_div(divisor).unwrap_or(product >> 1);
+}
+
+#[cfg(not(test))]
+pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
+    let rd = owner;
+    if cx.race_stats(rd).intelligence.maneuverability == 0 {
+        init_cyborg(cx, owner);
+    }
+    let handle = cx.ship_element(owner);
+    let ship = cx.weapon_origin(handle);
+    if cx.race_stats(rd).ship_info.crew_level == 0
+        || u32::from(cx.subject_style(&ship).kind) == gfx_object_NUM_PRIMS
+    {
+        return 0;
+    }
+    let mut ship_copy = ship;
+    if cx.pick_ship(owner).control & STANDARD_RATING != 0 {
+        cx.ship_state_mut(owner).special_counter =
+            cx.ship_state(owner).special_counter.wrapping_add(1);
+    }
+
+    let original_facing = cx.ship_state(owner).facing;
+    let mut concerns = [Concern {
+        object: None,
+        facing: 0,
+        which_turn: 0,
+        movement: 0,
+    }; 5];
+    for concern in &mut concerns[..=FIRST_EMPTY_INDEX as usize] {
+        concern.object = None;
+        concern.movement = MOVEMENT_STATE_NO_MOVEMENT;
+        concern.which_turn = u16::MAX;
+    }
+    let ultra = cx.race_stats(rd).characteristics.thrust_increment
+        == cx.race_stats(rd).characteristics.max_thrust
+        && cx.race_stats(rd).intelligence.maneuverability >= MEDIUM_SHIP as u16;
+    let mut moved = true;
+    if ship_copy.turn == 0 {
+        moved = false;
+        cx.ship_state_mut(owner).input &= !((LEFT | RIGHT) as u8);
+    }
+    if ship_copy.thrust == 0 {
+        moved = false;
+        cx.ship_state_mut(owner).input &= !(THRUST as u8);
+    }
+
+    let mut h = cx.elements().head();
+    while let Some(e_id) = h {
+        let e = cx.weapon_origin(e_id);
+        let next = cx.elements().succ(e_id);
+        if collision_possible(&e, &ship_copy) {
+            let mut dx = e.next.location.x.wrapping_sub(ship_copy.next.location.x);
+            let mut dy = e.next.location.y.wrapping_sub(ship_copy.next.location.y);
+            dx = crate::math::wrap_delta(
+                dx,
+                (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
+            );
+            dy = crate::math::wrap_delta(
+                dy,
+                cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION),
+            );
+            let mass = e.mass;
+            if mass as u16 > (MAX_SHIP_MASS * 10) as u16 {
+                let turn = if ultra {
+                    16
+                } else if cx.race_stats(rd).intelligence.maneuverability <= MEDIUM_SHIP as u16 {
+                    48
+                } else {
+                    32
+                };
+
+                let frame = cx.absolute_frame(cx.subject_intersect_frame(&ship_copy), 0);
+                let rect = cx.frame_rect(frame);
+                let bounds = (i32::from(rect.extent.width) + i32::from(rect.extent.height)) as u16;
+                let mut intercept_turn = 0;
+                if !moved {
+                    intercept_turn = plot_intercept(
+                        cx,
+                        &e,
+                        &ship_copy,
+                        turn,
+                        ((30 + bounds as i32 * 3) << ONE_SHIFT) as u16,
+                    );
+                }
+                if intercept_turn != 0 {
+                    if intercept_turn > 1
+                        || plot_intercept(
+                            cx,
+                            &e,
+                            &ship_copy,
+                            1,
+                            ((35 + bounds as i32) << ONE_SHIFT) as u16,
+                        ) != 0
+                        || plot_intercept(
+                            cx,
+                            &e,
+                            &ship_copy,
+                            turn << 1,
+                            ((40 + bounds as i32) << ONE_SHIFT) as u16,
+                        ) > 1
+                    {
+                        concerns[GRAVITY_MASS_INDEX as usize].object = Some(e_id);
+                        concerns[GRAVITY_MASS_INDEX as usize].which_turn = intercept_turn;
+                        concerns[GRAVITY_MASS_INDEX as usize].facing =
+                            ai_arctan(dx.wrapping_neg(), dy.wrapping_neg());
+                        concerns[GRAVITY_MASS_INDEX as usize].movement = if ultra {
+                            MOVEMENT_STATE_AVOID
+                        } else {
+                            MOVEMENT_STATE_ENTICE
+                        };
+                    } else if !ultra && !ship_copy.velocity.is_zero() {
+                        ship_copy.thrust = ship_copy.thrust.wrapping_add(1);
+                        if ship_copy.turn != 0 {
+                            moved = true;
+                        }
+                    }
+                }
+            } else if e.flags & PLAYER_SHIP as u16 != 0 {
+                let enemy = cx.owner(e_id);
+                let erd = enemy;
+                if cx.race_stats(erd).intelligence.maneuverability == 0 {
+                    init_cyborg(cx, enemy);
+                }
+                let dist2 = (dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32;
+                let mut turns = square_root(dist2) >> 6;
+                let idx = ENEMY_SHIP_INDEX as usize;
+                if turns <= concerns[idx].which_turn {
+                    if turns == 0 {
+                        turns = 1;
+                    }
+                    concerns[idx].object = Some(e_id);
+                    concerns[idx].which_turn = turns;
+                    concerns[idx].facing =
+                        facing_to_angle(cx.ship_state(enemy).facing as i32) as u16;
+                    let pursue = moved
+                        || mass > MAX_SHIP_MASS as u8
+                        || (cx.race_stats(rd).intelligence.weapon_range < LONG_RANGE_WEAPON
+                            && (cx.race_stats(rd).intelligence.weapon_range <= CLOSE_RANGE_WEAPON
+                                || (cx.race_stats(erd).intelligence.weapon_range
+                                    >= LONG_RANGE_WEAPON
+                                    && cx.race_stats(erd).ship_info.ship_flags
+                                        & SEEKING_WEAPON as u16
+                                        != 0)
+                                || (cx.race_stats(rd).characteristics.max_thrust
+                                    < cx.race_stats(erd).characteristics.max_thrust
+                                    && cx.race_stats(rd).intelligence.weapon_range
+                                        < cx.race_stats(erd).intelligence.weapon_range)));
+                    concerns[idx].movement = if pursue {
+                        MOVEMENT_STATE_PURSUE
+                    } else {
+                        MOVEMENT_STATE_ENTICE
+                    };
+                    if cx.race_stats(erd).ship_info.ship_flags & IMMEDIATE_WEAPON as u16 != 0
+                        && weapons(cx, &e, &ship_copy, 0) != 0
+                    {
+                        concerns[ENEMY_WEAPON_INDEX as usize] = concerns[idx];
+                        concerns[ENEMY_WEAPON_INDEX as usize].which_turn = 1;
+                        concerns[ENEMY_WEAPON_INDEX as usize].movement = MOVEMENT_STATE_AVOID;
+                    }
+                }
+            } else if e.parent == Parent::None {
+                if e.flags & FINITE_LIFE as u16 == 0 {
+                    let turns =
+                        square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32) >> 6;
+                    let idx = FIRST_EMPTY_INDEX as usize;
+                    if turns < concerns[idx].which_turn {
+                        concerns[idx].object = Some(e_id);
+                        concerns[idx].which_turn = turns;
+                        concerns[idx].movement = MOVEMENT_STATE_PURSUE;
+                        concerns[idx].facing = e.velocity.travel_angle;
+                    }
+                }
+            } else if !(e.player == ship_copy.player)
+                && !is_crew_preprocess(&e)
+                && concerns[ENEMY_WEAPON_INDEX as usize].which_turn > 1
+                && e.life > 0
+            {
+                let enemy = cx.owner(e_id);
+                let erd = enemy;
+                let special_frames = cx.ship_frame_set(erd, 2);
+                let seeking = (cx.race_stats(erd).ship_info.ship_flags & SEEKING_WEAPON as u16
+                    != 0
+                    && e.next.image.frames != special_frames)
+                    || (cx.race_stats(erd).ship_info.ship_flags & SEEKING_SPECIAL as u16 != 0
+                        && e.next.image.frames == special_frames);
+                let mut turns = 0u16;
+                let mut movement = MOVEMENT_STATE_NO_MOVEMENT;
+                if seeking {
+                    let travel = e.velocity.travel_angle;
+                    let too_fast = e.flags & (FINITE_LIFE | CREW_OBJECT) as u16 == 0
+                        && cx.race_stats(rd).characteristics.max_thrust > (8 << ONE_SHIFT) as u16;
+                    let behind = normalize_angle(
+                        travel as i32 - ai_arctan(dx.wrapping_neg(), dy.wrapping_neg()) as i32
+                            + QUADRANT as i32,
+                    ) > HALF_CIRCLE as i32;
+                    if !too_fast && !behind {
+                        turns = square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32)
+                            >> 6;
+                        movement = MOVEMENT_STATE_ENTICE;
+                        if ultra {
+                            if turns == 0 {
+                                turns = 1;
+                            } else if turns > 16 {
+                                turns = 0;
+                            }
+                        } else if turns == 0 {
+                            turns = 1;
+                        } else if turns > 16
+                            || (cx.race_stats(rd).intelligence.maneuverability > MEDIUM_SHIP as u16
+                                && turns > 8)
+                        {
+                            turns = 0;
+                        }
+                    }
+                } else if cx.pick_ship(owner).control & AWESOME_RATING != 0 {
+                    turns = plot_intercept(cx, &e, &ship_copy, e.life, (40 << ONE_SHIFT) as u16);
+                    movement = MOVEMENT_STATE_AVOID;
+                }
+                let idx = ENEMY_WEAPON_INDEX as usize;
+                if turns > 0
+                    && (turns < concerns[idx].which_turn
+                        || (turns == concerns[idx].which_turn && movement == MOVEMENT_STATE_AVOID))
+                {
+                    concerns[idx].object = Some(e_id);
+                    concerns[idx].which_turn = turns;
+                    concerns[idx].movement = movement;
+                    concerns[idx].facing = e.velocity.travel_angle;
+                }
+            } else if e.flags & CREW_OBJECT as u16 != 0
+                && ((e.flags & IGNORE_SIMILAR as u16 == 0 && (e.player == ship_copy.player))
+                    || is_crew_preprocess(&e))
+                && concerns[CREW_OBJECT_INDEX as usize].which_turn > 1
+            {
+                let mut turns =
+                    square_root((dx as i64 * dx as i64 + dy as i64 * dy as i64) as u32) >> 6;
+                if turns == 0 {
+                    turns = 1;
+                }
+                let idx = CREW_OBJECT_INDEX as usize;
+                let enemy_turns = concerns[ENEMY_SHIP_INDEX as usize].which_turn;
+                if turns < concerns[idx].which_turn
+                    && (enemy_turns > 32
+                        || (enemy_turns > 8 && Some(cx.ship_element(owner)) == e.target))
+                {
+                    concerns[idx].object = Some(e_id);
+                    concerns[idx].which_turn = turns;
+                    concerns[idx].movement = MOVEMENT_STATE_PURSUE;
+                    concerns[idx].facing = 0;
+                }
+            }
+        }
+
+        h = next;
+    }
+
+    let mut evaluation = Concerns {
+        objects: concerns[..4].try_into().unwrap(),
+        subject: ship_copy,
+        count: FIRST_EMPTY_INDEX as u16,
+    };
+    cx.race_intelligence_with_junk(owner, &mut evaluation, concerns[4]);
+    cx.ship_state_mut(owner).facing = original_facing;
+    crate::battle::process_native::dispatch::battle_input(cx.ship_state(owner).input)
+}
 
 #[cfg(test)]
 mod tests {

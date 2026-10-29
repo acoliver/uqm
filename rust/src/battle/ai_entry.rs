@@ -1,5 +1,7 @@
 //! Live computer-input routing, preserving intel.c's battle and selection rules.
 
+#[cfg(not(test))]
+use crate::engine::battle::{Cx, ShipId};
 use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SUPER_MELEE};
 
 #[derive(Debug, PartialEq)]
@@ -30,42 +32,33 @@ fn route(activity: u8, ship: Option<(u8, i16)>, player_control: u8) -> Route {
     }
 }
 
-/// # Safety
-/// Context and any non-null ship must be live engine records, on the game thread.
 #[cfg(not(test))]
-#[no_mangle]
-pub unsafe extern "C" fn computer_intelligence(
-    context: *mut crate::ships::native::abi::ComputerInputContext,
-    ship: *mut crate::ships::native::abi::STARSHIP,
+pub(crate) fn computer_input(
+    cx: &mut Cx<'_>,
+    player: u16,
+    ship: Option<ShipId>,
+    player_control: u8,
 ) -> u8 {
-    use crate::ships::native::abi::*;
-    let activity = GlobData.Game_state.CurrentActivity as u8;
-    if activity == IN_LAST_BATTLE as u8 {
-        return 0;
-    }
-    let player = (*context).playerNr;
-    let ship_control = if ship.is_null() {
-        None
-    } else {
-        Some(((*ship).control, (*ship).playerNr))
-    };
-    let player_control = if ship.is_null() {
-        *(&raw const PlayerControl).cast::<u8>().add(player as usize)
-    } else {
-        0
-    };
-    match route(activity, ship_control, player_control) {
+    let activity = cx.world.activity() as u8;
+    let control = ship.map(|id| {
+        let s = cx.pick_ship(id);
+        (s.control, s.player)
+    });
+    match route(activity, control, player_control) {
         Route::None => 0,
-        Route::Human => CurrentInputToBattleInput(player),
+        Route::Human => cx.human_input(player),
         Route::Tactical(escape) => {
-            let mut input = tactical_intelligence(context, ship);
+            let mut input = crate::battle::cyborg_native::tactical(
+                cx,
+                ship.unwrap_or_else(|| panic!("missing checked battle value")),
+            );
             if escape {
-                input |= CurrentInputToBattleInput(player) & (1 << 5);
+                input |= cx.human_input(player) & (1 << 5);
             }
             input
         }
         Route::Select => {
-            SleepThread(ONE_SECOND >> 1);
+            cx.selection_delay();
             1 << 3
         }
         Route::Unexpected => {

@@ -181,9 +181,7 @@ impl Drop for FrameSet {
         }
     }
 }
-#[path = "support/ship_pool.rs"]
-mod ship_pool;
-use ship_pool::PoolShip;
+use native_ship_common::PoolShip;
 struct Ship {
     desc: Box<RACE_DESC>,
     ss: PoolShip,

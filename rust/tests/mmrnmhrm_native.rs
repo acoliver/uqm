@@ -1,57 +1,25 @@
 //! Exercise the Mmrnmhrm callbacks through the linked engine ABI.
 
 use uqm_rust::ships::races::init_mmrnmhrm;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
-use std::{
-    ffi::CStr,
-    mem, ptr,
-    sync::{Mutex, MutexGuard},
-};
+use std::{ffi::CStr, ptr};
 use uqm_rust::ships::native::abi::*;
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
 }
 
-static ENGINE: Mutex<()> = Mutex::new(());
-
-struct Battlefield {
-    _engine: MutexGuard<'static, ()>,
-}
-
-impl Battlefield {
-    fn new() -> Self {
-        let guard = ENGINE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        unsafe {
-            assert_ne!(
-                InitQueue(&raw mut disp_q, 8, mem::size_of::<ELEMENT>() as u16),
-                0
-            );
-            InitDisplayList();
-        }
-        Self { _engine: guard }
-    }
-}
-
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
+use battle::Battle as Battlefield;
 
 #[test]
 fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut desc = *init_mmrnmhrm();
             assert_eq!(
@@ -105,13 +73,13 @@ fn descriptor_exposes_xwing_defaults_and_both_form_resources() {
 #[test]
 fn special_transform_checks_appearance_energy_and_cooldown() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut desc = Box::new(*init_mmrnmhrm());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(0);
             ss.RaceDescPtr = &raw mut *desc;
             ss.cur_status_flags = SPECIAL as u16;
-            let mut ship: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut ship = PoolElement::new();
             ship.pParent = (&raw mut *ss).cast();
             ship.next.image.farray = desc.ship_data.ship.as_mut_ptr();
             ship.next.image.frame = desc.ship_data.ship[0];
@@ -141,13 +109,13 @@ fn special_transform_checks_appearance_energy_and_cooldown() {
 #[test]
 fn missile_mode_returns_two_missiles_with_c_boundary_values() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut desc = Box::new(*init_mmrnmhrm());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(0);
             ss.RaceDescPtr = &raw mut *desc;
             ss.ShipFacing = 0;
-            let mut ship: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut ship = PoolElement::new();
             ship.pParent = (&raw mut *ss).cast();
             ship.next.location = POINT { x: 1200, y: -900 };
             ship.next.image.farray = desc.ship_data.special.as_mut_ptr();
@@ -176,14 +144,14 @@ fn missile_mode_returns_two_missiles_with_c_boundary_values() {
 #[test]
 fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut first = Box::new(*init_mmrnmhrm());
             let mut second = Box::new(*init_mmrnmhrm());
             assert_ne!(first.data, second.data);
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(0);
             ss.RaceDescPtr = &raw mut *first;
-            let mut ship: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut ship = PoolElement::new();
             ship.pParent = (&raw mut *ss).cast();
             ship.current.image.farray = first.ship_data.ship.as_mut_ptr();
             ship.next.image.farray = first.ship_data.special.as_mut_ptr();
@@ -232,12 +200,12 @@ fn transforming_swaps_characteristics_and_each_ship_owns_its_alternate_form() {
 #[test]
 fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(8);
         unsafe {
             let mut desc = Box::new(*init_mmrnmhrm());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(0);
             ss.RaceDescPtr = &raw mut *desc;
-            let mut ship: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut ship = PoolElement::new();
             ship.pParent = (&raw mut *ss).cast();
             ship.next.image.farray = desc.ship_data.ship.as_mut_ptr();
             ship.next.location = POINT { x: 1000, y: 1000 };
@@ -254,7 +222,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
                 2000
             );
             assert_eq!((*first).current.location.y, (*second).current.location.y);
-            let mut target: ELEMENT = mem::zeroed();
+            let mut target = PoolElement::new();
             target.state_flags = PLAYER_SHIP as u16;
             target.playerNr = (*first).playerNr;
             target.__bindgen_anon_2.crew_level = 20;
@@ -263,7 +231,7 @@ fn xwing_launches_two_lasers_and_preserves_friendly_ships() {
                 (*first).collision_func.unwrap(),
                 first,
                 &mut point,
-                &mut target,
+                &mut *target,
                 &mut point,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );

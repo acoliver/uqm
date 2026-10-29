@@ -1,23 +1,19 @@
 //! Exercise the Spathi live descriptor and registered callbacks against the linked engine.
 
 use uqm_rust::ships::races::init_spathi;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{Battle as PoolBattle, PoolShip};
 
 use std::ffi::{c_void, CStr};
-use std::sync::{Mutex, MutexGuard};
 use std::{mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     static mut DisplayArray: [PRIMITIVE; 330];
 }
-
-/// The engine's queue, display list and screen size are process globals.
-static BATTLE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
@@ -92,44 +88,25 @@ unsafe fn queue_tail() -> HELEMENT {
 /// An initialized element queue and display list, with the screen size the
 /// engine uses to size logical space.
 struct Battle {
-    _guard: MutexGuard<'static, ()>,
+    _pool: PoolBattle,
 }
-
 impl Battle {
     unsafe fn begin() -> Self {
-        let guard = BATTLE_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert_ne!(
-            InitQueue(&raw mut disp_q, 16, mem::size_of::<ELEMENT>() as u16),
-            0
-        );
-        InitDisplayList();
-        GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-        ScreenWidth = 320;
-        ScreenHeight = 240;
-        Self { _guard: guard }
-    }
-}
-
-impl Drop for Battle {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-        }
+        let pool = PoolBattle::new(16);
+        Self { _pool: pool }
     }
 }
 
 /// A ship owned by `player`, living in `disp_q` with a visible primitive.
 struct Fleet {
     desc: Box<RACE_DESC>,
-    starship: Box<STARSHIP>,
+    starship: PoolShip,
 }
 
 impl Fleet {
     unsafe fn new() -> Self {
         let mut desc = Box::new(*init_spathi());
-        let mut starship: Box<STARSHIP> = Box::new(mem::zeroed());
+        let mut starship = PoolShip::new(0);
         starship.RaceDescPtr = &mut *desc;
         Self { desc, starship }
     }

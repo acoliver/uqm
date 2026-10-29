@@ -1,78 +1,41 @@
 //! Exercise Syreen descriptor registration and callbacks against the linked engine.
 
 use uqm_rust::ships::races::init_syreen;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{PoolElement, PoolShip};
 
-use std::{
-    ffi::CStr,
-    mem, ptr,
-    sync::{Mutex, MutexGuard},
-};
+use std::{ffi::CStr, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
 }
-
-/// The element queue is process-wide engine state.
-static ENGINE: Mutex<()> = Mutex::new(());
 
 /// The queue holds exactly the elements a test creates, so a test can also
 /// exhaust the allocator.
 const QUEUE_SLOTS: u16 = 6;
 
-struct Battlefield {
-    _engine: MutexGuard<'static, ()>,
-}
-
-impl Battlefield {
-    fn new() -> Self {
-        let engine = ENGINE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        unsafe {
-            assert_ne!(
-                InitQueue(
-                    &raw mut disp_q,
-                    QUEUE_SLOTS,
-                    mem::size_of::<ELEMENT>() as u16
-                ),
-                0
-            );
-            InitDisplayList();
-        }
-        Self { _engine: engine }
-    }
-}
-
-impl Drop for Battlefield {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-        }
-    }
-}
+use battle::Battle as Battlefield;
 
 /// A ship element with its own race descriptor copy, as the engine builds them.
 struct Ship {
     desc: Box<RACE_DESC>,
-    ss: Box<STARSHIP>,
-    el: Box<ELEMENT>,
+    ss: PoolShip,
+    el: PoolElement,
 }
 
 impl Ship {
     fn new(player: SIZE) -> Self {
         unsafe {
             let mut desc = Box::new(*init_syreen());
-            let mut ss: Box<STARSHIP> = Box::new(mem::zeroed());
+            let mut ss = PoolShip::new(player);
             ss.RaceDescPtr = &raw mut *desc;
             ss.playerNr = player;
             ss.hShip = ptr::null_mut();
-            let mut el: Box<ELEMENT> = Box::new(mem::zeroed());
+            let mut el = PoolElement::new();
             el.pParent = (&raw mut *ss).cast();
             el.playerNr = player;
             el.state_flags = PLAYER_SHIP as u16;
@@ -194,7 +157,7 @@ fn descriptor_matches_the_c_race_data() {
 #[test]
 fn dagger_is_launched_with_the_c_missile_block() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::new(0);
             ship.ss.ShipFacing = 4;
@@ -224,7 +187,7 @@ fn dagger_is_launched_with_the_c_missile_block() {
 #[test]
 fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::new(0);
             let postprocess = ship.desc.postprocess_func.unwrap();
@@ -255,7 +218,7 @@ fn song_needs_the_special_key_a_ready_cooldown_and_energy() {
 #[test]
 fn song_pays_energy_and_queues_the_deferred_scan() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::new(0);
             ship.el.next.location = POINT { x: 1234, y: 4321 };
@@ -301,7 +264,7 @@ unsafe fn queued_scan(ship: &mut Ship) -> (*mut ELEMENT, uqm_rust::engine::battl
 #[test]
 fn deferred_scan_requeues_nothing_and_leaves_out_of_range_crews_alone() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::new(0);
             ship.el.next.location = POINT { x: 5000, y: 5000 };
@@ -352,7 +315,7 @@ unsafe fn walk_queue() -> Vec<HELEMENT> {
 #[test]
 fn deferred_scan_survives_a_ship_in_range_when_no_crew_elements_are_available() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         unsafe {
             let mut ship = Ship::new(0);
             ship.el.next.location = POINT { x: 5000, y: 5000 };
@@ -424,30 +387,34 @@ impl Duel {
 #[test]
 fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
     battle_context::run(|| {
-        let _battle = Battlefield::new();
+        let _battle = Battlefield::new(QUEUE_SLOTS + 5);
         let special = SPECIAL as u8;
 
         let mut duel = Duel::new(14);
         duel.run();
         assert_eq!(duel.input(), special);
 
+        drop(duel);
         let mut duel = Duel::new(15);
         duel.ship.ss.ship_input_state = special;
         duel.run();
         assert_eq!(duel.input(), 0, "too many turns away drops the request");
 
+        drop(duel);
         let mut duel = Duel::new(14);
         duel.ship.ss.special_counter = 1;
         duel.ship.ss.ship_input_state = special;
         duel.run();
         assert_eq!(duel.input(), 0, "cooling down");
 
+        drop(duel);
         let mut duel = Duel::new(14);
         duel.enemy.el.__bindgen_anon_2.crew_level = 1;
         duel.ship.ss.ship_input_state = special;
         duel.run();
         assert_eq!(duel.input(), 0, "nothing to take from a last crew member");
 
+        drop(duel);
         let mut duel = Duel::new(14);
         duel.enemy.desc.ship_info.ship_flags = CREW_IMMUNE as u16;
         duel.ship.ss.ship_input_state = special;
@@ -455,6 +422,7 @@ fn ai_sings_only_when_it_can_drain_a_reachable_crew() {
         assert_eq!(duel.input(), 0, "crew immune");
 
         // Without a target the request is left alone.
+        drop(duel);
         let mut duel = Duel::new(14);
         duel.concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = ptr::null_mut();
         duel.ship.ss.ship_input_state = special;

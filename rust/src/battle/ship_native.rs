@@ -65,7 +65,7 @@ fn acceleration(
     }
 }
 
-fn thrust(
+pub(crate) fn thrust(
     velocity: &mut crate::battle::velocity::VelocityDesc,
     facing: u16,
     status: u16,

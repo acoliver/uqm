@@ -987,7 +987,7 @@ pub type COLORMAP = STRING;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
 pub const gfx_object_STAMP_PRIM: gfx_object = 1;
 pub const gfx_object_STAMPFILL_PRIM: gfx_object = 2;
-pub const gfx_object_LINE_PRIM: gfx_object = 3;
+pub const gfx_object_LINE_PRIM: gfx_object = crate::graphics::native_abi::LINE_PRIMITIVE as gfx_object;
 pub const gfx_object_TEXT_PRIM: gfx_object = 4;
 pub const gfx_object_RECT_PRIM: gfx_object = 5;
 pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
@@ -1671,20 +1671,10 @@ pub use crate::battle::cyborg_native::engine::ship_intelligence;
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::ship_weapons;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Pursue;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Entice;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Avoid;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::TurnShip;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ThrustShip;
 unsafe extern "C" {}
 
 #[cfg(not(test))]

@@ -3,68 +3,17 @@
     reason = "shared live-engine fixture used by independent race test binaries"
 )]
 
-use std::{
-    ffi::c_void,
-    mem, ptr,
-    sync::{Mutex, MutexGuard},
-};
-use uqm_rust::collections::queue::{InitQueue, UninitQueue};
+use std::{ffi::c_void, mem, ptr};
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
-    fn InitDisplayList();
     static mut DisplayArray: [PRIMITIVE; 330];
 }
-static ENGINE: Mutex<()> = Mutex::new(());
-pub struct Battle {
-    _guard: MutexGuard<'static, ()>,
-    display: *mut PRIMITIVE,
-    width: i32,
-    height: i32,
-}
-impl Battle {
-    pub fn new(capacity: COUNT) -> Self {
-        let guard = ENGINE.lock().unwrap_or_else(|p| p.into_inner());
-        unsafe {
-            let display = GlobData.Game_state.DisplayArray;
-            let width = ScreenWidth;
-            let height = ScreenHeight;
-            assert!(InitQueue(
-                &raw mut disp_q,
-                capacity,
-                mem::size_of::<ELEMENT>() as u16
-            ));
-            let queues = &raw mut race_q;
-            for queue in &mut *queues {
-                assert!(InitQueue(queue, 64, size_of::<STARSHIP>() as u16));
-            }
-            InitDisplayList();
-            GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-            ScreenWidth = 320;
-            ScreenHeight = 240;
-            Self {
-                _guard: guard,
-                display,
-                width,
-                height,
-            }
-        }
-    }
-}
-impl Drop for Battle {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
-            let queues = &raw mut race_q;
-            for queue in &mut *queues {
-                UninitQueue(queue);
-            }
-            GlobData.Game_state.DisplayArray = self.display;
-            ScreenWidth = self.width;
-            ScreenHeight = self.height;
-        }
-    }
-}
+#[path = "../support/battle.rs"]
+mod battle;
+pub type Battle = battle::Battle;
+pub type PoolShip = battle::PoolShip;
+pub type PoolElement = battle::PoolElement;
 #[repr(C)]
 struct FrameDesc {
     kind: u16,

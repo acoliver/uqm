@@ -181,7 +181,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
             let mut ship = Ship::new(init_black_urquan, 0);
             let h = ship.weapon(1)[0];
             let saw = element(h);
-            let mut target: ELEMENT = mem::zeroed();
+            let mut target = PoolElement::new();
             target.playerNr = 1;
             target.__bindgen_anon_1.life_span = 2;
             let mut p = POINT { x: 100, y: 200 };
@@ -189,7 +189,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 (*saw).collision_func.unwrap(),
                 saw,
                 &mut p,
-                &mut target,
+                &mut *target,
                 &mut p,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
@@ -206,7 +206,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 collide,
                 cloud,
                 &mut p,
-                &mut target,
+                &mut *target,
                 &mut p,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
@@ -217,7 +217,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
                 collide,
                 cloud,
                 &mut p,
-                &mut target,
+                &mut *target,
                 &mut p,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
@@ -231,12 +231,12 @@ fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(init_black_urquan, 0);
-            let mut threat: ELEMENT = mem::zeroed();
+            let mut threat = PoolElement::new();
             threat.state_flags = CREW_OBJECT as u16;
             for (turn, pursue) in [(8, true), (9, false)] {
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_WEAPON_INDEX as usize] = EVALUATE_DESC {
-                    ObjectPtr: &mut threat,
+                    ObjectPtr: &mut *threat,
                     facing: 0,
                     which_turn: turn,
                     MoveState: MOVEMENT_STATE_ENTICE,

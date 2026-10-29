@@ -1,6 +1,12 @@
 //! Native fleet construction and escort bookkeeping ported from build.c.
 
 use crate::ships::native::abi::*;
+#[cfg(not(test))]
+use std::ptr;
+#[cfg(not(test))]
+const INFINITE_RADIUS_NATIVE: u16 = u16::MAX;
+#[cfg(not(test))]
+pub use crate::battle::context_access::fleet_legacy::{Build, GetIndexFromStarShip, NameCaptain};
 
 const SHIP_COSTS: [COUNT; 23] = [
     1600, 3000, 1100, 2300, 2000, 500, 1800, 1600, 1000, 2200, 1200, 2300, 3600, 1700, 1000, 2100,
@@ -11,16 +17,9 @@ fn matches_race(stored: BYTE, requested: COUNT) -> bool {
     COUNT::from(stored) == requested
 }
 
-unsafe fn ship_from_index(queue: *const QUEUE, mut index: COUNT) -> HLINK {
-    let mut handle = (*queue).head;
-    while index > 0 && !handle.is_null() {
-        handle = (*handle.cast::<LINK>()).succ;
-        index -= 1;
-    }
-    handle
-}
+use crate::battle::context_access::fleet_legacy::ship_from_index;
 
-unsafe fn escort_window(queue: *const QUEUE, window: &mut BYTE) -> HLINK {
+unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
     loop {
         let old = ship_from_index(queue, COUNT::from(*window));
         *window = window.wrapping_add(1);
@@ -34,70 +33,14 @@ unsafe fn escort_window(queue: *const QUEUE, window: &mut BYTE) -> HLINK {
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use std::ptr;
 
-    const INFINITE_RADIUS_NATIVE: u16 = u16::MAX;
-
-    /// # Safety
-    /// Queue must be initialized and use STARSHIP or SHIP_FRAGMENT links.
-    #[no_mangle]
-    pub unsafe extern "C" fn Build(queue: *mut QUEUE, species: SPECIES_ID) -> HLINK {
-        if queue.is_null() {
-            return ptr::null_mut();
-        }
-        crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
-    }
+    pub use super::{Build, GetIndexFromStarShip, NameCaptain};
 
     /// # Safety
     /// Queue must be initialized and its links remain locked only while read.
     #[no_mangle]
     pub unsafe extern "C" fn GetStarShipFromIndex(queue: *mut QUEUE, index: COUNT) -> HLINK {
         ship_from_index(queue, index)
-    }
-
-    /// # Safety
-    /// Queue and handle must refer to the same live linked record.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetIndexFromStarShip(queue: *mut QUEUE, mut handle: HLINK) -> COUNT {
-        let mut index: COUNT = 0;
-        while handle != (*queue).head {
-            let link = handle.cast::<LINK>();
-            handle = (*link).pred;
-            index = index.wrapping_add(1);
-        }
-        index
-    }
-
-    /// # Safety
-    /// Queue must be initialized and links must contain SHIP_BASE records.
-    #[no_mangle]
-    pub unsafe extern "C" fn NameCaptain(queue: *mut QUEUE, species: SPECIES_ID) -> BYTE {
-        assert!(
-            matches!((*queue).object_size as usize, size if size == std::mem::size_of::<STARSHIP>() || size == std::mem::size_of::<SHIP_FRAGMENT>())
-        );
-        loop {
-            let name = (((TFB_Random() as COUNT) & (NUM_CAPTAINS_NAMES - 1) as COUNT)
-                + NAME_OFFSET as COUNT) as BYTE;
-            let mut handle = (*queue).head;
-            let mut matched = false;
-            while !handle.is_null() {
-                let ship = handle.cast::<SHIP_BASE>();
-                let next = (*ship).succ;
-                let test_name = if (*ship).SpeciesID == species {
-                    (*ship).captains_name_index
-                } else {
-                    BYTE::MAX
-                };
-                if test_name == name {
-                    matched = true;
-                    break;
-                }
-                handle = next;
-            }
-            if !matched {
-                return name;
-            }
-        }
     }
 
     /// # Safety
@@ -380,10 +323,10 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    AddEscortShips, Build, CalculateEscortsWorth, CheckAlliance, CloneShipFragment,
-    CountEscortShips, EscortFeasibilityStudy, GetEscortByStarShipIndex, GetIndexFromStarShip,
-    GetStarShipFromIndex, HaveEscortShip, NameCaptain, RemoveEscortShips, RemoveSomeEscortShips,
-    SetEscortCrewComplement, SetRaceAllied, StartSphereTracking,
+    AddEscortShips, CalculateEscortsWorth, CheckAlliance, CloneShipFragment, CountEscortShips,
+    EscortFeasibilityStudy, GetEscortByStarShipIndex, GetStarShipFromIndex, HaveEscortShip,
+    RemoveEscortShips, RemoveSomeEscortShips, SetEscortCrewComplement, SetRaceAllied,
+    StartSphereTracking,
 };
 
 #[cfg(test)]
@@ -410,14 +353,17 @@ mod tests {
             second.pred = (&raw mut first).cast();
             queue.head = (&raw mut first).cast();
             let mut window = 0;
-            assert_eq!(escort_window(&queue, &mut window), (&raw mut second).cast());
+            assert_eq!(
+                escort_window(&raw mut queue, &mut window),
+                (&raw mut second).cast()
+            );
             assert_eq!(window - 1, 1);
-            assert_eq!(ship_from_index(&queue, 0), (&raw mut first).cast());
-            assert_eq!(ship_from_index(&queue, 1), (&raw mut second).cast());
-            assert_eq!(ship_from_index(&queue, 2), ptr::null_mut());
+            assert_eq!(ship_from_index(&raw mut queue, 0), (&raw mut first).cast());
+            assert_eq!(ship_from_index(&raw mut queue, 1), (&raw mut second).cast());
+            assert_eq!(ship_from_index(&raw mut queue, 2), ptr::null_mut());
             queue.head = ptr::null_mut();
             window = 0;
-            assert!(escort_window(&queue, &mut window).is_null());
+            assert!(escort_window(&raw mut queue, &mut window).is_null());
             assert_eq!(window - 1, 0);
         }
     }

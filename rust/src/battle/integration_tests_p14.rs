@@ -4,10 +4,9 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::battle::battle_types::{LEFT, RIGHT, THRUST, WEAPON};
     use crate::battle::element::*;
     use crate::battle::lifecycle::*;
-    use crate::battle::ship_runtime::*;
-    use crate::battle::velocity::VelocityDesc;
 
     // ---- Test 1: Shared asset ref-counting ----
 
@@ -105,29 +104,7 @@ mod tests {
 
     // ---- Test 17: Inertial thrust ----
 
-    #[test]
-    fn test_inertial_thrust_basic() {
-        let mut vel = VelocityDesc::default();
-        let _result = inertial_thrust(&mut vel, 0, 0, 64, 1024, 0u32, 0);
-    }
-
     // ---- Test 18: FFI exports callable ----
-
-    #[test]
-    fn test_all_ffi_exports_callable() {
-        unsafe {
-            use crate::battle::ffi::*;
-            let _ = rust_battle_entry();
-            let _ = rust_battle_frame();
-            let _ = rust_battle_init_ships();
-            rust_battle_uninit_ships();
-            rust_battle_init_space();
-            rust_battle_uninit_space();
-            rust_battle_song(0);
-            rust_free_battle_song();
-            let _ = rust_get_player_order();
-        }
-    }
 
     // ---- Test 19: Element flag transitions ----
 

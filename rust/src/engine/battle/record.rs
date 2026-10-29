@@ -655,13 +655,13 @@ pub static mut DisplayArray: [PRIMITIVE; abi::MAX_DISPLAY_PRIMS as usize] =
 #[no_mangle]
 pub static mut DisplayLinks: PRIM_LINKS = 0;
 
-pub(super) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
+pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
     assert!(side < 2);
     std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
         .unwrap_or_else(|| panic!("{}", "static ship queues"))
 }
 #[cfg(not(test))]
-pub(super) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
+pub(crate) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
     assert!(index < 330);
     std::ptr::NonNull::new(
         (&raw mut DisplayArray)
@@ -981,5 +981,28 @@ mod kernel_tests {
         assert!(fresh.winner.is_null());
         assert_eq!(fresh.sounds.count, 0);
         assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
+    }
+}
+
+use super::link_queue::QueueRecord;
+impl QueueRecord for crate::engine::battle::link_queue::Starship {
+    type Storage = STARSHIP;
+    fn links(record: &Self::Storage) -> (HLINK, HLINK) {
+        (record.pred, record.succ)
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn legacy_intercept_subject(&self, e: &ELEMENT) -> Subject {
+        Subject {
+            state: ElementState::decode(e),
+            intersect: e.IntersectControl,
+            primitive: e.PrimIndex,
+            target: None,
+            parent: Parent::None,
+            predecessor: None,
+            successor: None,
+        }
     }
 }

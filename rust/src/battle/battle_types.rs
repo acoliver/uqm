@@ -44,6 +44,12 @@ pub const STATUS_WIDTH: i32 = 64;
 // Frame rate
 pub const BATTLE_FRAME_RATE: u16 = 24;
 
+pub const LEFT: u32 = 0x0100;
+pub const RIGHT: u32 = 0x0200;
+pub const THRUST: u32 = 0x0400;
+pub const WEAPON: u32 = 0x0800;
+pub const SPECIAL: u32 = 0x1000;
+
 // ---------------------------------------------------------------------------
 // Element Constants (imported from element module)
 // ---------------------------------------------------------------------------

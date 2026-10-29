@@ -124,10 +124,7 @@ unsafe extern "C" fn unsafe_frame_input_computer(
 ) -> BattleInputState {
     #[cfg(not(test))]
     {
-        crate::battle::ai_entry::computer_intelligence(
-            ctx.cast::<crate::ships::native::abi::ComputerInputContext>(),
-            ship.cast::<crate::ships::native::abi::STARSHIP>(),
-        )
+        crate::battle::context_access::reader_legacy::computer_frame(ctx, ship)
     }
     #[cfg(test)]
     {
@@ -144,10 +141,7 @@ unsafe extern "C" fn unsafe_frame_input_human(
 ) -> BattleInputState {
     #[cfg(not(test))]
     {
-        crate::battle::battle_native::frameInputHuman(
-            ctx.cast::<crate::ships::native::abi::HumanInputContext>(),
-            ship.cast::<crate::ships::native::abi::STARSHIP>(),
-        )
+        crate::battle::context_access::reader_legacy::human_frame(ctx, ship)
     }
     #[cfg(test)]
     {

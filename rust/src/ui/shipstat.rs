@@ -1,7 +1,9 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+pub use crate::battle::context_access::reader_legacy::InitShipStatus;
 use crate::engine::battle::record::Kernel;
+use crate::engine::battle::{link_queue, ShipId};
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -115,25 +117,27 @@ pub unsafe extern "C" fn OutlineShipStatus(y: COORD) {
 
 /// # Safety
 /// SIPtr must point to writable ship info. Optional pointers must be null or point to valid game objects.
-#[no_mangle]
-pub unsafe extern "C" fn InitShipStatus(
+pub(crate) unsafe fn init_ship_status(
     siptr: *mut SHIP_INFO,
-    starship: *mut STARSHIP,
+    starship: Option<ShipId>,
     clip_rect: *mut RECT,
 ) {
-    let mut r: RECT = mem::zeroed();
+    let starship = starship.map(|id| {
+        let ships = link_queue::ships(id.side as usize);
+        ships.get(ships.link(id))
+    });
     let mut y: COORD = 0;
     let mut stamp: STAMP = mem::zeroed();
     let mut old_clip: RECT = mem::zeroed();
     let mut old_origin = POINT { x: 0, y: 0 };
-    if !starship.is_null() {
-        assert!((*starship).playerNr >= 0);
-        y = Kernel::current().status_offsets[(*starship).playerNr as usize];
+    if let Some(ship) = starship {
+        assert!(ship.player >= 0);
+        y = Kernel::current().status_offsets[ship.player as usize];
     }
     let old_context = SetContext(StatusContext);
     if !clip_rect.is_null() {
         GetContextClipRect(&mut old_clip);
-        r = old_clip;
+        let mut r = old_clip;
         r.corner.x += (*clip_rect).corner.x;
         r.corner.y += (*clip_rect).corner.y & !1;
         r.extent = (*clip_rect).extent;
@@ -151,89 +155,9 @@ pub unsafe extern "C" fn InitShipStatus(
     stamp.origin.y = 31 + y;
     stamp.frame = IncFrameIndex((*siptr).icons);
     DrawStamp(&mut stamp);
-    let crew_height = (((std::cmp::min((*siptr).max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
-    let energy_height = (((((*siptr).max_energy + 1) >> 1) << 1) + 1) as COORD;
-    SetContextForeGroundColor(rgb15(0x08, 0x08, 0x08));
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS + 1 + y;
-    r.extent.width = STAT_WIDTH + 2;
-    r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS - 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS + STAT_WIDTH;
-    r.corner.y -= energy_height;
-    r.extent.width = 1;
-    r.extent.height = energy_height;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = CREW_XOFFS + STAT_WIDTH;
-    r.corner.y = GAUGE_YOFFS + 1 + y - crew_height;
-    r.extent.height = crew_height;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - crew_height + y;
-    r.extent.width = STAT_WIDTH + 2;
-    r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - energy_height + y;
-    DrawFilledRectangle(&mut r);
-    r.extent.width = 1;
-    r.extent.height = energy_height + 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - crew_height + y;
-    r.extent.height = crew_height + 1;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0, 0, 0));
-    r.extent.width = STAT_WIDTH;
-    r.corner.x = CREW_XOFFS;
-    r.extent.height = crew_height;
-    r.corner.y = y - r.extent.height + GAUGE_YOFFS + 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS;
-    r.extent.height = energy_height;
-    r.corner.y = y - r.extent.height + GAUGE_YOFFS + 1;
-    DrawFilledRectangle(&mut r);
+    draw_gauge_frames(&*siptr, y);
 
-    if starship.is_null() || (*starship).captains_name_index != 0 {
-        DrawCrewFuelString(y, 0);
-        let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
-        draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
-        let old_font = SetContextFont(TinyFont);
-        let mut buf = [0u8; 30];
-        let (name, count) = if starship.is_null() {
-            libc::sprintf(
-                buf.as_mut_ptr().cast(),
-                c"%d".as_ptr(),
-                (*siptr).ship_cost as libc::c_int,
-            );
-            (buf.as_mut_ptr().cast(), !0)
-        } else {
-            let name = SetAbsStringTableIndex(
-                (*siptr).race_strings,
-                (*starship).captains_name_index as COUNT,
-            );
-            (GetStringAddress(name).cast(), GetStringLength(name))
-        };
-        let mut text: TEXT = mem::zeroed();
-        text.pStr = name;
-        text.CharCount = count;
-        text.align = TEXT_ALIGN_ALIGN_CENTER;
-        text.baseline.x = STATUS_WIDTH >> 1;
-        text.baseline.y = y + GAUGE_YOFFS + 3;
-        SetContextForeGroundColor(rgb15(0, 0, 0));
-        font_DrawText(&mut text);
-        SetContextFont(old_font);
-    } else if (*starship).playerNr == RPG_PLAYER_NUM {
-        DrawCrewFuelString(y, 0);
-        draw_ship_name_string(
-            std::ptr::addr_of_mut!(crate::navigation::globals::GlobData.SIS_state.ShipName).cast(),
-            !0,
-            y,
-        );
-    }
+    draw_status_title(siptr, starship, y);
     let crew_delta = (*siptr).crew_level as SIZE;
     let energy_delta = (*siptr).energy_level as SIZE;
     (*siptr).crew_level = 0;
@@ -245,6 +169,51 @@ pub unsafe extern "C" fn InitShipStatus(
         SetContextClipRect(&mut old_clip);
     }
     SetContext(old_context);
+}
+
+unsafe fn draw_status_title(
+    siptr: *mut SHIP_INFO,
+    starship: Option<crate::engine::battle::link_queue::PickShip>,
+    y: COORD,
+) {
+    if starship.is_none_or(|ship| ship.captain != 0) {
+        DrawCrewFuelString(y, 0);
+        let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
+        draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
+        let old_font = SetContextFont(TinyFont);
+        let mut buf = [0u8; 30];
+        let (name, count) = if let Some(ship) = starship {
+            let name = SetAbsStringTableIndex((*siptr).race_strings, ship.captain as COUNT);
+            (GetStringAddress(name).cast(), GetStringLength(name))
+        } else {
+            libc::sprintf(
+                buf.as_mut_ptr().cast(),
+                c"%d".as_ptr(),
+                (*siptr).ship_cost as libc::c_int,
+            );
+            (buf.as_mut_ptr().cast(), !0)
+        };
+        let mut text: TEXT = mem::zeroed();
+        text.pStr = name;
+        text.CharCount = count;
+        text.align = TEXT_ALIGN_ALIGN_CENTER;
+        text.baseline.x = STATUS_WIDTH >> 1;
+        text.baseline.y = y + GAUGE_YOFFS + 3;
+        SetContextForeGroundColor(rgb15(0, 0, 0));
+        font_DrawText(&mut text);
+        SetContextFont(old_font);
+    } else if starship
+        .unwrap_or_else(|| panic!("missing checked battle value"))
+        .player
+        == RPG_PLAYER_NUM
+    {
+        DrawCrewFuelString(y, 0);
+        draw_ship_name_string(
+            std::ptr::addr_of_mut!(crate::navigation::globals::GlobData.SIS_state.ShipName).cast(),
+            !0,
+            y,
+        );
+    }
 }
 
 /// # Safety
@@ -346,4 +315,30 @@ pub unsafe extern "C" fn DeltaStatistics(
             }
         }
     }
+}
+
+pub(crate) unsafe fn draw_gauge_frames(siptr: &SHIP_INFO, y: COORD) {
+    let crew = (((std::cmp::min(siptr.max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
+    let energy = ((((siptr.max_energy + 1) >> 1) << 1) + 1) as COORD;
+    let bottom = GAUGE_YOFFS + y;
+    let draw = |x, y, width, height| {
+        let mut rect = RECT {
+            corner: POINT { x, y },
+            extent: EXTENT { width, height },
+        };
+        DrawFilledRectangle(&mut rect);
+    };
+    SetContextForeGroundColor(rgb15(0x08, 0x08, 0x08));
+    draw(CREW_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
+    draw(ENERGY_XOFFS - 1, bottom + 1, STAT_WIDTH + 2, 1);
+    draw(ENERGY_XOFFS + STAT_WIDTH, bottom + 1 - energy, 1, energy);
+    draw(CREW_XOFFS + STAT_WIDTH, bottom + 1 - crew, 1, crew);
+    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
+    draw(CREW_XOFFS - 1, bottom - crew, STAT_WIDTH + 2, 1);
+    draw(ENERGY_XOFFS - 1, bottom - energy, STAT_WIDTH + 2, 1);
+    draw(ENERGY_XOFFS - 1, bottom - energy, 1, energy + 1);
+    draw(CREW_XOFFS - 1, bottom - crew, 1, crew + 1);
+    SetContextForeGroundColor(rgb15(0, 0, 0));
+    draw(CREW_XOFFS, bottom + 1 - crew, STAT_WIDTH, crew);
+    draw(ENERGY_XOFFS, bottom + 1 - energy, STAT_WIDTH, energy);
 }
