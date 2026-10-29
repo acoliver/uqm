@@ -110,8 +110,8 @@
       "sha256": "4fb57a1dc351dbe1cab9dd6b9410dfd24f73ab6563e059a410bd001bca706e86"
     },
     "parity/counts/campaign-s06c-utwig-bomb.toml": {
-      "bytes": 80389,
-      "sha256": "9159d08ed4a18c292f276a28b574f1bd9bb698f3c58d6634a83779a90544ac85"
+      "bytes": 1070539,
+      "sha256": "caa3706cf3240896ff164bb14cd0011bb1fb3e0fe5fdad4c68b5d4460c197339"
     },
     "parity/counts/campaign-s07-taalo-protected.toml": {
       "bytes": 672324,
