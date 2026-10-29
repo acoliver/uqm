@@ -178,15 +178,15 @@ pub(crate) mod engine {
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
 
     pub fn animation_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let wait = cx.b.elements[e].turn_wait();
+        let wait = cx.element(e).turn_wait();
         if wait > 0 {
-            cx.b.elements[e].set_turn_wait(wait - 1);
+            cx.element_mut(e).set_turn_wait(wait - 1);
         } else {
-            let frame = cx.inc_frame(cx.b.elements[e].current.image.frame);
-            image!(frame; cx.b.elements[e].next.image.frame, frame);
-            cx.b.elements[e].state_flags |= CHANGING as u16;
-            let wait = cx.b.elements[e].thrust_wait();
-            cx.b.elements[e].set_turn_wait(wait);
+            let frame = cx.advance_frame(cx.element(e).current.image.frame);
+            cx.set_frame(e, true, frame);
+            cx.element_mut(e).flags |= CHANGING as u16;
+            let wait = cx.element(e).thrust_wait();
+            cx.element_mut(e).set_turn_wait(wait);
         }
     }
 
@@ -210,14 +210,13 @@ pub(crate) mod engine {
         let mut flags = input_flags(
             cx.ship(ship).cur_status_flags,
             cx.ship(ship).ship_input_state,
-            cx.b.elements[e].state_flags & APPEARING as u16 != 0,
+            cx.element(e).flags & APPEARING as u16 != 0,
         );
-        if cx.b.elements[e].state_flags & APPEARING as u16 != 0 {
+        if cx.element(e).flags & APPEARING as u16 != 0 {
             let crew = cx.desc(ship).ship_info.crew_level;
-            cx.b.elements[e].set_hit_points(crew);
+            cx.element_mut(e).set_hit_points(crew);
             let activity = cx.world.activity() as BYTE;
-            if cx.b.elements[e].playerNr == NPC_PLAYER_NUM as SIZE
-                && activity == IN_LAST_BATTLE as BYTE
+            if cx.element(e).player == NPC_PLAYER_NUM as SIZE && activity == IN_LAST_BATTLE as BYTE
             {
                 cx.draw_final_battle_captain(ship);
             } else if activity <= IN_ENCOUNTER as BYTE {
@@ -232,11 +231,11 @@ pub(crate) mod engine {
                 return;
             } else {
                 let (w, h) = cx.screen_dimensions();
-                cx.b.elements[e].current.location.x =
+                cx.element_mut(e).current.location.x =
                     (((w - STATUS_WIDTH as i32) << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
-                cx.b.elements[e].current.location.y =
+                cx.element_mut(e).current.location.y =
                     ((h << (ONE_SHIFT + MAX_REDUCTION)) >> 1) as COORD;
-                cx.b.elements[e].next.location = cx.b.elements[e].current.location;
+                cx.element_mut(e).next.location = cx.element(e).current.location;
                 cx.init_intersect(e);
                 if cx.hyper_transition(e) {
                     return;
@@ -255,29 +254,29 @@ pub(crate) mod engine {
         if cx.invoke_ship_process(ship, false) {
             flags = cx.ship(ship).cur_status_flags;
         }
-        if cx.b.elements[e].turn_wait() != 0 {
-            let wait = cx.b.elements[e].turn_wait() - 1;
-            cx.b.elements[e].set_turn_wait(wait);
+        if cx.element(e).turn_wait() != 0 {
+            let wait = cx.element(e).turn_wait() - 1;
+            cx.element_mut(e).set_turn_wait(wait);
         } else if flags & (LEFT | RIGHT) as u16 != 0 {
             let facing = normalize_facing(
                 i32::from(cx.ship(ship).ShipFacing) + if flags & LEFT as u16 != 0 { -1 } else { 1 },
             );
             cx.ship_state_mut(ship).facing = facing;
-            let frame = cx.abs_frame(cx.b.elements[e].next.image.frame, facing);
-            image!(frame; cx.b.elements[e].next.image.frame, frame);
-            cx.b.elements[e].state_flags |= CHANGING as u16;
+            let frame = cx.absolute_frame(cx.element(e).next.image.frame, facing);
+            cx.set_frame(e, true, frame);
+            cx.element_mut(e).flags |= CHANGING as u16;
             let wait = cx.desc(ship).characteristics.turn_wait;
-            cx.b.elements[e].set_turn_wait(wait);
+            cx.element_mut(e).set_turn_wait(wait);
         }
-        if cx.b.elements[e].thrust_wait() != 0 {
-            let wait = cx.b.elements[e].thrust_wait() - 1;
-            cx.b.elements[e].set_thrust_wait(wait);
+        if cx.element(e).thrust_wait() != 0 {
+            let wait = cx.element(e).thrust_wait() - 1;
+            cx.element_mut(e).set_thrust_wait(wait);
         } else if flags & THRUST as u16 != 0 {
             let facing = cx.ship(ship).ShipFacing;
             let status = cx.ship(ship).cur_status_flags;
             let characteristics = cx.desc(ship).characteristics;
             let result = thrust(
-                &mut cx.b.elements[e].velocity,
+                &mut cx.element_mut(e).velocity,
                 facing,
                 status,
                 characteristics.thrust_increment,
@@ -286,7 +285,8 @@ pub(crate) mod engine {
             cx.ship_state_mut(ship).status &=
                 !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
             cx.ship_state_mut(ship).status |= result;
-            cx.b.elements[e].set_thrust_wait(characteristics.thrust_wait);
+            cx.element_mut(e)
+                .set_thrust_wait(characteristics.thrust_wait);
             if !cx.object_cloaked(e) && cx.world.activity() as BYTE <= IN_ENCOUNTER as BYTE {
                 cx.spawn_ion_trail(e);
             }
@@ -297,7 +297,7 @@ pub(crate) mod engine {
     }
 
     pub fn ship_postprocess(cx: &mut Cx<'_>, e: ElementId) {
-        if cx.b.elements[e].hit_points() == 0 {
+        if cx.element(e).hit_points() == 0 {
             return;
         }
         let ship = cx.owner(e);
@@ -475,10 +475,10 @@ pub(crate) mod engine {
         e1: ElementId,
         _p1: &mut POINT,
     ) {
-        if cx.b.elements[e1].state_flags & FINITE_LIFE as u16 == 0 {
-            cx.b.elements[e0].state_flags |= COLLISION as u16;
-            if u16::from(cx.b.elements[e1].mass_points()) > GRAVITY_MASS_NATIVE {
-                let damage = (cx.b.elements[e0].hit_points() >> 2).max(1);
+        if cx.element(e1).flags & FINITE_LIFE as u16 == 0 {
+            cx.element_mut(e0).flags |= COLLISION as u16;
+            if u16::from(cx.element(e1).mass_points()) > GRAVITY_MASS_NATIVE {
+                let damage = (cx.element(e0).hit_points() >> 2).max(1);
                 cx.damage(e0, damage as i16);
                 let sound = (TARGET_DAMAGED_FOR_1_PT_NATIVE + (damage >> 1) as i16)
                     .min(TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE);

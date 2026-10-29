@@ -298,7 +298,7 @@ impl ELEMENT {
 }
 
 impl ElementState {
-    pub(crate) fn decode(e: &ELEMENT) -> Self {
+    pub(super) fn decode(e: &ELEMENT) -> Self {
         Self {
             player: e.playerNr,
             flags: e.state_flags,
@@ -329,7 +329,7 @@ impl ElementState {
             death: e.death_func,
         }
     }
-    pub(crate) fn apply(e: &mut ELEMENT, value: Self) {
+    pub(super) fn apply(e: &mut ELEMENT, value: Self) {
         e.playerNr = value.player;
         e.state_flags = value.flags;
         e.set_life_span(value.life);
@@ -353,7 +353,7 @@ impl ElementState {
 }
 
 impl ShipState {
-    pub(crate) fn decode(s: &STARSHIP) -> Self {
+    pub(super) fn decode(s: &STARSHIP) -> Self {
         Self {
             facing: s.ShipFacing,
             player: s.playerNr,
@@ -380,7 +380,7 @@ impl ShipState {
 }
 
 impl RaceStats {
-    pub(crate) fn decode(d: &RACE_DESC) -> Self {
+    pub(super) fn decode(d: &RACE_DESC) -> Self {
         let i = d.ship_info;
         Self {
             ship_info: Info {
@@ -399,7 +399,7 @@ impl RaceStats {
             state: d.race_state,
         }
     }
-    pub(crate) fn apply(d: &mut RACE_DESC, v: Self) {
+    pub(super) fn apply(d: &mut RACE_DESC, v: Self) {
         d.ship_info.ship_flags = v.ship_info.ship_flags;
         d.ship_info.ship_cost = v.ship_info.ship_cost;
         d.ship_info.crew_level = v.ship_info.crew_level;
@@ -415,6 +415,17 @@ impl RaceStats {
 
 use super::views::*;
 use super::{Cx, ElementId, Parent, ShipId};
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    /// # Safety
+    /// Every pointer in the supplied legacy record must belong to this context's live resources.
+    pub(crate) unsafe fn legacy_subject(&self, e: &ELEMENT) -> super::Subject {
+        self.decode_subject(e)
+    }
+}
+
+pub(crate) type Tracker = unsafe extern "C" fn(*mut ELEMENT, *mut u16) -> i16;
 
 impl Cx<'_> {
     pub(crate) fn ship_id(&self, address: usize) -> ShipId {
@@ -483,7 +494,7 @@ impl Cx<'_> {
     pub(crate) fn captain_controls(&mut self, id: ShipId) -> std::ptr::NonNull<CAPTAIN_STUFF> {
         std::ptr::NonNull::from(&mut self.desc_mut(id).ship_data.captain_control)
     }
-    pub(crate) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
+    pub(super) fn decode_subject(&self, e: &ELEMENT) -> super::Subject {
         super::Subject {
             state: ElementState::decode(e),
             target: self.b.elements.id(e.hTarget),
@@ -519,13 +530,12 @@ impl Cx<'_> {
             .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
         e
     }
-    /// # Safety
-    /// Callers must keep the checked slot live and retain no raw record reference across a context handoff.
-    pub unsafe fn legacy_element(&self, id: ElementId) -> *mut ELEMENT {
+    /// Return the checked legacy address; dereferencing it requires the owning game-thread boundary.
+    pub fn legacy_element(&self, id: ElementId) -> *mut ELEMENT {
         self.b.elements.raw(id).cast()
     }
     #[cfg(not(test))]
-    pub(crate) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
+    pub(super) fn primitive(&mut self, id: ElementId) -> &mut PRIMITIVE {
         let index = usize::from(self.b.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
         // SAFETY: the display authority remains live for the context's lifetime.
@@ -568,15 +578,14 @@ impl Cx<'_> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct RaceDesc {
-    pub(crate) raw: RACE_DESC,
+    pub(super) raw: RACE_DESC,
 }
 impl RaceDesc {
-    pub(crate) fn from_legacy(raw: RACE_DESC) -> Self {
+    pub(super) fn from_legacy(raw: RACE_DESC) -> Self {
         Self { raw }
     }
-    /// # Safety
-    /// Legacy callers must retain descriptor resources and obey their lifetime contracts.
-    pub unsafe fn into_legacy(self) -> RACE_DESC {
+    /// Extract the legacy record; dereferencing its resource pointers remains unsafe.
+    pub fn into_legacy(self) -> RACE_DESC {
         self.raw
     }
 }
@@ -722,8 +731,9 @@ mod projection_tests {
         // SAFETY: these local queue authorities and projections outlive the context.
         let mut battle = unsafe { super::super::Battle::new(&mut queue) };
         // SAFETY: the local world authorities remain live and exclusively borrowed.
-        let mut world =
-            unsafe { super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2]) };
+        let mut world = unsafe {
+            super::super::World::new(&mut activity, &mut groups, [ptr::null_mut(); 2], None)
+        };
         let cx = Cx {
             b: &mut battle,
             world: &mut world,
@@ -743,6 +753,7 @@ mod projection_tests {
         raw.current.location = POINT { x: 11, y: 12 };
         raw.next.location = POINT { x: 21, y: 22 };
         raw.IntersectControl.last_time_val = 31;
+        assert!(cx.world.tracking.is_none());
         let mut subject = cx.decode_subject(&raw);
         assert_eq!(subject.life_span(), 21);
         assert_eq!(subject.hit_points(), 7);
@@ -803,7 +814,7 @@ mod projection_tests {
         assert_eq!(descriptor.ship_data.ship_rsc[0], c"retained".as_ptr());
         let value = RaceDesc::from_legacy(descriptor);
         // SAFETY: this value retains only test-local static resource tokens.
-        let raw = unsafe { value.into_legacy() };
+        let raw = value.into_legacy();
         assert_eq!(raw.ship_info.energy_level, 10);
     }
 }
@@ -847,13 +858,13 @@ impl Cx<'_> {
     }
 }
 
-pub(crate) struct CollisionOperands<E, P>(
-    pub(crate) *mut E,
-    pub(crate) *mut P,
-    pub(crate) *mut E,
-    pub(crate) *mut P,
+pub(super) struct CollisionOperands<E, P>(
+    pub(super) *mut E,
+    pub(super) *mut P,
+    pub(super) *mut E,
+    pub(super) *mut P,
 );
-pub(crate) struct ElementOperand<E>(pub(crate) *mut E);
+pub(super) struct ElementOperand<E>(pub(super) *mut E);
 
 #[repr(C)]
 #[repr(align(16))]

@@ -5,9 +5,21 @@ use super::{CollisionHook, ElementHook};
 use crate::graphics::native_abi::{FRAME, POINT};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Frame(pub(crate) FRAME);
+pub struct Frame(pub(super) FRAME);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Frames(pub(crate) *mut FRAME);
+pub struct Frames(pub(super) *mut FRAME);
+#[cfg(not(test))]
+impl Frame {
+    pub(crate) fn raw(self) -> FRAME {
+        self.0
+    }
+}
+#[cfg(not(test))]
+impl Frames {
+    pub(crate) fn raw(self) -> *mut FRAME {
+        self.0
+    }
+}
 #[derive(Clone, Copy)]
 pub struct Image {
     pub frame: Frame,
@@ -103,9 +115,9 @@ pub struct RaceStats {
 }
 
 pub struct Edit<'a, T: Copy, R> {
-    pub(crate) value: T,
-    pub(crate) record: &'a mut R,
-    pub(crate) commit: fn(&mut R, T),
+    pub(super) value: T,
+    pub(super) record: &'a mut R,
+    pub(super) commit: fn(&mut R, T),
 }
 impl<T: Copy, R> std::ops::Deref for Edit<'_, T, R> {
     type Target = T;
@@ -146,4 +158,33 @@ pub struct Missile {
 pub enum SharedFrames {
     Asteroid,
     Explosion,
+}
+
+use super::ElementId;
+#[derive(Clone, Copy)]
+pub struct Subject {
+    pub state: ElementState,
+    pub target: Option<ElementId>,
+    pub parent: super::Parent,
+    pub(super) intersect: super::record::INTERSECT_CONTROL,
+    pub(super) primitive: u16,
+    pub(super) predecessor: Option<ElementId>,
+    pub(super) successor: Option<ElementId>,
+}
+impl std::ops::Deref for Subject {
+    type Target = ElementState;
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+impl std::ops::DerefMut for Subject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.state
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct PrimitiveStyle {
+    pub kind: u8,
+    pub color: crate::graphics::native_abi::Color,
 }

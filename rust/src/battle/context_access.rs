@@ -11,11 +11,12 @@ impl Cx<'_> {
         _ship: ShipId,
         concerns: &mut crate::engine::battle::Concerns,
     ) {
+        use crate::battle::cyborg_native::ship_intelligence;
         let mut subject = self.encode_subject(&concerns.subject);
         let mut raw = concerns.objects.map(|c| EVALUATE_DESC {
             ObjectPtr: c
                 .object
-                .map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id).cast()),
+                .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast()),
             facing: c.facing,
             which_turn: c.which_turn,
             MoveState: c.movement,
@@ -23,16 +24,12 @@ impl Cx<'_> {
         // SAFETY: the subject is a value projection and the object ids were checked.
         unsafe {
             crate::app::bridge::publish(self, || {
-                crate::battle::cyborg_native::ship_intelligence(
-                    &mut subject,
-                    raw.as_mut_ptr(),
-                    concerns.count,
-                )
+                ship_intelligence(&mut subject, raw.as_mut_ptr(), concerns.count)
             });
+            concerns.subject = self.legacy_subject(&subject);
         }
-        concerns.subject = self.decode_subject(&subject);
         concerns.objects = raw.map(|c| crate::engine::battle::Concern {
-            object: self.b.elements.id(c.ObjectPtr.cast()),
+            object: self.elements().id(c.ObjectPtr.cast()),
             facing: c.facing,
             which_turn: c.which_turn,
             movement: c.MoveState,
@@ -40,79 +37,32 @@ impl Cx<'_> {
     }
 
     pub fn track_ship(&mut self, id: ElementId, facing: &mut u16) -> i16 {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: no record reference crosses this game-thread legacy call.
         unsafe { track_ship(pointer, facing) }
     }
 
     pub fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: checked element and its attached descriptor are live.
         unsafe { crate::battle::status_native::DeltaEnergy(pointer, delta) != 0 }
     }
 
     pub fn gravity(&mut self, id: ElementId) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked element and display queue belong to this context.
         unsafe { CalculateGravity(pointer) != 0 }
     }
 
     pub fn matter_conflict(&mut self, id: ElementId) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: no record projection survives the legacy resource operation.
         unsafe { TimeSpaceMatterConflict(pointer) != 0 }
-    }
-
-    pub fn init_intersect(&mut self, id: ElementId) {
-        let e = &mut self.b.elements[id];
-        e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> ONE_SHIFT;
-        e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> ONE_SHIFT;
-        e.IntersectControl.EndPoint.x = e.next.location.x >> ONE_SHIFT;
-        e.IntersectControl.EndPoint.y = e.next.location.y >> ONE_SHIFT;
     }
 
     pub fn screen_dimensions(&self) -> (i32, i32) {
         // SAFETY: dimensions are initialized by the owning game thread.
         unsafe { (ScreenWidth, ScreenHeight) }
-    }
-
-    pub(crate) fn ship_frames(&self, ship: ShipId, role: usize) -> *mut FRAME {
-        let pointer = self.ship(ship).RaceDescPtr;
-        // SAFETY: the ship owns this descriptor and its stable embedded arrays.
-        unsafe {
-            match role {
-                0 => (&raw mut (*pointer).ship_data.ship).cast(),
-                1 => (&raw mut (*pointer).ship_data.weapon).cast(),
-                2 => (&raw mut (*pointer).ship_data.special).cast(),
-                _ => panic!("invalid frame role {role}"),
-            }
-        }
-    }
-
-    pub(crate) fn abs_frame(&self, frame: FRAME, index: u16) -> FRAME {
-        // SAFETY: resource handles come from this battle's loaded descriptors.
-        unsafe { SetAbsFrameIndex(frame, index) }
-    }
-
-    pub(crate) fn equ_frame(&self, frame: FRAME, source: FRAME) -> FRAME {
-        // SAFETY: both resource handles remain loaded for this battle.
-        unsafe { SetEquFrameIndex(frame, source) }
-    }
-
-    pub(crate) fn inc_frame(&self, frame: FRAME) -> FRAME {
-        // SAFETY: the current element's resource remains loaded.
-        unsafe { IncFrameIndex(frame) }
-    }
-
-    pub(crate) fn frame_at(&self, element: ElementId, next: bool) -> FRAME {
-        let array = if next {
-            self.b.elements[element].next.image.farray
-        } else {
-            self.b.elements[element].current.image.farray
-        };
-        assert!(!array.is_null(), "element {element:?} has no frame set");
-        // SAFETY: the array is retained by the descriptor or shared battle resources.
-        unsafe { *array }
     }
 
     pub fn process_ship_sound(&mut self, ship: ShipId, index: u16, source: ElementId) {
@@ -124,11 +74,16 @@ impl Cx<'_> {
         }
     }
 
-    pub(crate) fn silhouette(&mut self, source: ElementId, frame: FRAME, flags: u8) {
-        let pointer = self.b.elements.raw(source).cast();
+    pub(crate) fn silhouette(
+        &mut self,
+        source: ElementId,
+        frame: crate::engine::battle::views::Frame,
+        flags: u8,
+    ) {
+        let pointer = self.elements().raw(source).cast();
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
-            frame,
+            frame: frame.raw(),
         };
         // SAFETY: the checked ship and supplied loaded frame remain live.
         unsafe {
@@ -152,20 +107,20 @@ impl Cx<'_> {
             face: value.face,
             index: value.index,
             life: value.life,
-            farray: value.farray.0,
+            farray: value.farray.raw(),
             preprocess_func: value.preprocess.map(ElementHook::Native),
             blast_offs: value.blast_offs,
         };
         // SAFETY: the block's frame array belongs to a loaded race descriptor.
         let handle =
             unsafe { crate::app::bridge::publish(self, || initialize_missile(&mut block)) };
-        self.b.elements.id(handle)
+        self.elements().id(handle)
     }
 
     pub(crate) fn laser(&mut self, block: &mut LASER_BLOCK) -> Option<ElementId> {
         // SAFETY: the synchronous constructor allocates through this context's pool.
         let handle = unsafe { crate::app::bridge::publish(self, || initialize_laser(block)) };
-        self.b.elements.id(handle)
+        self.elements().id(handle)
     }
 }
 
@@ -217,19 +172,19 @@ impl Cx<'_> {
     }
 
     pub fn hyper_transition(&mut self, id: ElementId) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked flagship element belongs to this context.
         unsafe { crate::navigation::hyper_transition::hyper_transition(pointer) != 0 }
     }
 
     pub fn object_cloaked(&mut self, id: ElementId) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: checked element and its primitive are live.
         unsafe { crate::ships::native::object_cloaked(pointer) }
     }
 
     pub fn preprocess_status(&mut self, id: ElementId) {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked ship's status resources remain loaded.
         unsafe { crate::battle::status_native::PreProcessStatus(pointer) }
     }
@@ -249,42 +204,22 @@ impl Cx<'_> {
         b: ElementId,
         pb: &mut POINT,
     ) -> Option<ElementId> {
-        let a = self.b.elements.raw(a).cast();
-        let b = self.b.elements.raw(b).cast();
+        let a = self.elements().raw(a).cast();
+        let b = self.elements().raw(b).cast();
         // SAFETY: both checked elements and points outlive this synchronous collision.
         let handle = unsafe {
             crate::app::bridge::publish(self, || {
                 crate::battle::weapon_native::weapon_collision(a, pa, b, pb)
             })
         };
-        self.b.elements.id(handle)
+        self.elements().id(handle)
     }
 }
 
 #[cfg(not(test))]
-use crate::engine::battle::views::SharedFrames;
-
-#[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn frame_index(&self, frame: FRAME) -> u16 {
-        // SAFETY: this battle retains the element's loaded frame resources.
-        unsafe { crate::ships::native::frame_index(frame) }
-    }
-
-    pub(crate) fn shared_frames(&self, role: SharedFrames) -> *mut FRAME {
-        match role {
-            SharedFrames::Asteroid => self.world.shared_frames[0].0,
-            SharedFrames::Explosion => self.world.shared_frames[1].0,
-        }
-    }
-
-    pub(crate) fn shared_frame(&self, role: SharedFrames) -> FRAME {
-        // SAFETY: shared frame sets stay loaded until battle cleanup.
-        unsafe { *self.shared_frames(role) }
-    }
-
     pub fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool {
-        let pointer = self.b.elements.raw(id).cast();
+        let pointer = self.elements().raw(id).cast();
         // SAFETY: the checked ship and its descriptor are live.
         unsafe { crate::battle::status_native::DeltaCrew(pointer, amount) != 0 }
     }
@@ -337,7 +272,7 @@ impl Cx<'_> {
             };
             weapons[..usize::from(count)]
                 .iter()
-                .map(|&h| cx.b.elements.id(h))
+                .map(|&h| cx.elements().id(h))
                 .collect()
         }
     }
@@ -368,7 +303,7 @@ impl Cx<'_> {
             };
             if let Some(callback) = callback {
                 let element = cx.ship_element(ship);
-                let pointer = cx.b.elements.raw(element).cast::<ELEMENT>();
+                let pointer = cx.elements().raw(element).cast::<ELEMENT>();
                 // SAFETY: the owner and checked element remain live across this handoff.
                 unsafe {
                     crate::battle::process_native::invoke_element::invoke_race_element(
@@ -391,12 +326,12 @@ impl Cx<'_> {
                 let desc = (*(parent as *mut STARSHIP)).RaceDescPtr;
                 if (*desc).race.is_some() {
                     let ship = cx.ship_id(parent);
-                    let origin = cx.decode_subject(&*element);
+                    let origin = cx.legacy_subject(&*element);
                     let spawned = cx.spawn_weapons(ship, origin);
                     assert!(spawned.len() <= 6, "race produced too many weapons");
                     for (i, id) in spawned.iter().enumerate() {
                         *weapons.add(i) =
-                            id.map_or(std::ptr::null_mut(), |id| cx.b.elements.raw(id));
+                            id.map_or(std::ptr::null_mut(), |id| cx.elements().raw(id));
                     }
                     spawned.len() as u16
                 } else {
@@ -431,7 +366,7 @@ impl Cx<'_> {
                     let objects = std::array::from_fn(|i| {
                         let c = *concerns.add(i);
                         Concern {
-                            object: cx.b.elements.id(c.ObjectPtr.cast()),
+                            object: cx.elements().id(c.ObjectPtr.cast()),
                             facing: c.facing,
                             which_turn: c.which_turn,
                             movement: c.MoveState,
@@ -439,7 +374,7 @@ impl Cx<'_> {
                     });
                     let mut native = Concerns {
                         objects,
-                        subject: cx.decode_subject(&*element),
+                        subject: cx.legacy_subject(&*element),
                         count,
                     };
                     crate::battle::process_native::dispatch::invoke(
@@ -451,7 +386,7 @@ impl Cx<'_> {
                         let output = concerns.add(i);
                         (*output).ObjectPtr = c
                             .object
-                            .map_or(std::ptr::null_mut(), |id| cx.b.elements.raw(id).cast());
+                            .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
                         (*output).facing = c.facing;
                         (*output).which_turn = c.which_turn;
                         (*output).MoveState = c.movement;
@@ -489,7 +424,7 @@ mod tactrans_native_access {
     #[cfg(not(test))]
     impl Cx<'_> {
         pub fn spawn_ion_trail(&mut self, ship: ElementId) {
-            assert_ne!(self.b.elements[ship].state_flags & PLAYER_SHIP as u16, 0);
+            assert_ne!(self.element(ship).flags & PLAYER_SHIP as u16, 0);
             let Some(e) = self.alloc_element() else {
                 return;
             };
@@ -509,40 +444,42 @@ mod tactrans_native_access {
             }
             rect.extent.height =
                 ((rect.extent.height as i32 + rect.corner.y as i32) << ONE_SHIFT) as _;
-            let handle = self.b.elements.raw(e);
+            let handle = self.elements().raw(e);
             // SAFETY: the new slot is unlinked and inserted before the current head.
             unsafe {
                 InsertQueue(&raw mut disp_q, handle, disp_q.head);
             }
-            self.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
-            self.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-            self.b.elements[e].set_thrust_wait(1);
-            self.b.elements[e].set_life_span(1);
-            self.primitive(e).Type = gfx_object_POINT_PRIM as u8;
-            self.primitive(e).color = rgb15(31, 21, 0);
-            self.b.elements[e].colorCycleIndex = 0;
+            self.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
+            self.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            self.element_mut(e).set_thrust_wait(1);
+            self.element_mut(e).set_life_span(1);
+            self.primitive_style_mut(e).kind = gfx_object_POINT_PRIM as u8;
+            self.primitive_style_mut(e).color = rgb15(31, 21, 0);
+            self.element_mut(e).color_cycle = 0;
             // SAFETY: the loaded shared frame authority remains live for this battle.
             unsafe {
-                image!(frame; self.b.elements[e].current.image.frame, DecFrameIndex(stars_in_space));
-                image!(set; self.b.elements[e].current.image.farray, &raw mut stars_in_space);
+                image!(frame; self.records()[e].current.image.frame, DecFrameIndex(stars_in_space));
+                image!(set; self.records()[e].current.image.farray, &raw mut stars_in_space);
             }
-            self.b.elements[e].current.location = self.b.elements[ship].current.location;
-            self.b.elements[e].current.location.x = self.b.elements[e]
+            self.element_mut(e).current.location = self.element(ship).current.location;
+            self.element_mut(e).current.location.x = self
+                .element(e)
                 .current
                 .location
                 .x
                 .wrapping_add(cosine(angle, rect.extent.height as i32));
-            self.b.elements[e].current.location.y = self.b.elements[e]
+            self.element_mut(e).current.location.y = self
+                .element(e)
                 .current
                 .location
                 .y
                 .wrapping_add(sine(angle, rect.extent.height as i32));
-            self.b.elements[e].death_func = Some(ElementHook::Native(cycle_ion_trail));
+            self.element_mut(e).death = Some(ElementHook::Native(cycle_ion_trail));
             self.set_parent(e, Some(owner));
-            image!(copy; self.b.elements[e].next, self.b.elements[e].current);
-            let life = self.b.elements[e].life_span().wrapping_sub(1);
-            self.b.elements[e].set_life_span(life);
-            self.b.elements[e].state_flags |= PRE_PROCESS as u16;
+            self.copy_visual_to_next(e, self.element(e).current);
+            let life = self.element(e).life_span().wrapping_sub(1);
+            self.element_mut(e).set_life_span(life);
+            self.element_mut(e).flags |= PRE_PROCESS as u16;
         }
     }
     #[cfg(not(test))]
@@ -565,7 +502,7 @@ mod tactrans_native_access {
             }
         }
         pub(crate) fn replace_dead_ship(&mut self, dead: ElementId) {
-            let pointer = self.b.elements.raw(dead).cast();
+            let pointer = self.elements().raw(dead).cast();
             // SAFETY: the transition releases the outgoing descriptor and may enter a picker.
             unsafe {
                 new_ship_with_picker(self, pointer, |ship, side| GetNextStarShip(ship, side));
@@ -578,14 +515,14 @@ mod tactrans_native_access {
             }
         }
         pub(crate) fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
-            let pointer = self.b.elements.raw(ship).cast();
+            let pointer = self.elements().raw(ship).cast();
             // SAFETY: the checked dying ship retains its owner and resources.
             unsafe {
                 StartShipExplosion(pointer, play_sound);
             }
         }
         pub(crate) fn select_winner(&mut self, dead: ElementId) {
-            let pointer = self.b.elements.raw(dead).cast();
+            let pointer = self.elements().raw(dead).cast();
             // SAFETY: the scan and update are synchronous with no retained record borrow.
             unsafe {
                 SetWinnerStarShip(FindAliveStarShip(pointer));
@@ -593,7 +530,7 @@ mod tactrans_native_access {
         }
         pub(crate) fn record_ship_death(&mut self, dead: ElementId) {
             let owner = self.owner(dead);
-            if u32::from(self.b.elements[dead].mass_points()) <= MAX_SHIP_MASS {
+            if u32::from(self.elements()[dead].mass_points()) <= MAX_SHIP_MASS {
                 let player = self.ship(owner).playerNr;
                 assert!(player >= 0);
                 self.b.ship_lost(player as usize);
@@ -664,12 +601,12 @@ mod sounds_access {
     use crate::battle::sounds::engine::QUEUE;
     #[cfg(not(test))]
     impl crate::engine::battle::Cx<'_> {
-        pub fn queue_sound(
+        pub(in crate::battle::context_access) fn queue_sound(
             &mut self,
             sound: usize,
             source: Option<crate::engine::battle::ElementId>,
         ) {
-            let pointer = source.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id).cast());
+            let pointer = source.map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast());
             // SAFETY: this context owns the sound queue and validates its source id.
             unsafe {
                 let queue = &raw mut QUEUE;
@@ -708,7 +645,7 @@ mod star_access {
             unsafe { GlobData.Game_state.autopilot }
         }
         pub(crate) fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
-            let element = self.b.elements.raw(id).cast();
+            let element = self.elements().raw(id).cast();
             // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
             unsafe {
                 let mut point = element_universe(element);
@@ -733,8 +670,8 @@ mod star_access {
             ship: crate::engine::battle::ElementId,
             kind: u8,
         ) {
-            let source = self.b.elements.raw(source).cast();
-            let ship = self.b.elements.raw(ship).cast();
+            let source = self.elements().raw(source).cast();
+            let ship = self.elements().raw(ship).cast();
             // SAFETY: checked elements remain live and no record references cross the call.
             unsafe {
                 init_transition(source, ship, kind);
@@ -757,7 +694,7 @@ mod allocation {
         pub fn alloc_element(&mut self) -> Option<ElementId> {
             // SAFETY: the battle exclusively owns its initialized primitive pool.
             unsafe {
-                let handle = if let Some(id) = self.b.elements.alloc() {
+                let handle = if let Some(id) = self.records().alloc() {
                     let index = DisplayFreeList;
                     if index == u16::MAX {
                         crate::log_abi::log_message(2, "AllocElement: Out of display prims!");
@@ -767,9 +704,9 @@ mod allocation {
                         (&raw mut DisplayArray).cast(),
                         &raw mut DisplayFreeList,
                     );
-                    self.b.elements[id].PrimIndex = index;
-                    self.primitive(id).Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                    self.b.elements.raw(id)
+                    self.records()[id].PrimIndex = index;
+                    self.primitive_style_mut(id).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                    self.elements().raw(id)
                 } else {
                     ptr::null_mut()
                 };
@@ -777,7 +714,7 @@ mod allocation {
                     crate::collections::observation::Event::Allocate(handle as usize),
                 );
 
-                self.b.elements.id(handle)
+                self.elements().id(handle)
             }
         }
     }
@@ -785,24 +722,9 @@ mod allocation {
 
 #[cfg(not(test))]
 impl Cx<'_> {
-    pub fn track_subject(
-        &mut self,
-        subject: &mut crate::engine::battle::Subject,
-        facing: &mut u16,
-    ) -> i16 {
-        let mut raw = self.encode_subject(subject);
-        // SAFETY: the local projection and its checked target ids remain live for tracking.
-        let result = unsafe { crate::battle::weapon_native::track_ship(&mut raw, facing) };
-        *subject = self.decode_subject(&raw);
-        result
-    }
-}
-
-#[cfg(not(test))]
-impl Cx<'_> {
     pub fn unlink(&mut self, id: ElementId) {
-        assert!(self.b.elements.linked(id), "element is not linked");
-        let handle = self.b.elements.raw(id);
+        assert!(self.elements().linked(id), "element is not linked");
+        let handle = self.elements().raw(id);
         // SAFETY: the checked live element is currently in the display queue.
         unsafe {
             crate::battle::process_native::RemoveElement(handle);
@@ -814,38 +736,36 @@ impl Cx<'_> {
 impl Cx<'_> {
     pub fn dispose(&mut self, id: ElementId) {
         assert!(
-            !self.b.elements.linked(id),
+            !self.elements().linked(id),
             "dispose requires an unlinked element"
         );
-        let handle = self.b.elements.raw(id);
-        let index = self.b.elements[id].PrimIndex;
-        // SAFETY: this allocation exclusively owns the checked display primitive.
+        let handle = self.elements().raw(id);
+        let index = self.elements()[id].PrimIndex;
+        use crate::battle::process_native::primitives::free_display_prim;
+        use crate::collections::observation::{record, Event};
+        let primitives = (&raw mut crate::engine::battle::legacy::DisplayArray).cast();
+        let free_list = &raw mut crate::engine::battle::legacy::DisplayFreeList;
+        // SAFETY: this allocation exclusively owns the primitive and the unlinked element.
         unsafe {
-            crate::battle::process_native::primitives::free_display_prim(
-                (&raw mut crate::engine::battle::legacy::DisplayArray).cast(),
-                &raw mut crate::engine::battle::legacy::DisplayFreeList,
-                index,
-            );
+            free_display_prim(primitives, free_list, index);
+            record(Event::Free(handle as usize));
+            self.records().free(id);
         }
-        crate::collections::observation::record(crate::collections::observation::Event::Free(
-            handle as usize,
-        ));
-        self.b.elements.free(id);
     }
 }
 
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn insert_before(&mut self, id: ElementId, before: Option<ElementId>) {
-        assert!(!self.b.elements.linked(id), "element already linked");
+        assert!(!self.elements().linked(id), "element already linked");
         if let Some(before) = before {
             assert!(
-                self.b.elements.linked(before),
+                self.elements().linked(before),
                 "insertion reference is not linked"
             );
         }
-        let handle = self.b.elements.raw(id);
-        let before = before.map_or(std::ptr::null_mut(), |id| self.b.elements.raw(id));
+        let handle = self.elements().raw(id);
+        let before = before.map_or(std::ptr::null_mut(), |id| self.elements().raw(id));
         // SAFETY: checked pool membership and queue ordering establish insertion preconditions.
         unsafe {
             InsertQueue(
@@ -863,7 +783,7 @@ impl crate::engine::battle::Cx<'_> {
         callback: crate::engine::battle::hooks::LegacyElementFn,
         id: crate::engine::battle::ElementId,
     ) {
-        let raw = self.b.elements.raw(id).cast();
+        let raw = self.elements().raw(id).cast();
         // SAFETY: checked pool membership holds; the dispatcher publishes the context before calling legacy code.
         unsafe {
             crate::battle::process_native::invoke_element::invoke_race_element(self, callback, raw);
@@ -877,9 +797,9 @@ impl crate::engine::battle::Cx<'_> {
         b: crate::engine::battle::ElementId,
         pb: &mut crate::graphics::native_abi::POINT,
     ) {
-        let parent = self.b.elements[a].pParent as usize;
-        let first = self.b.elements.raw(a).cast();
-        let second = self.b.elements.raw(b).cast();
+        let parent = self.elements()[a].pParent as usize;
+        let first = self.elements().raw(a).cast();
+        let second = self.elements().raw(b).cast();
         // SAFETY: both ids and mutable point borrows remain live for the published legacy call.
         unsafe {
             crate::battle::process_native::dispatch::invoke_legacy(

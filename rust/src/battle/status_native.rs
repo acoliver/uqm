@@ -452,11 +452,11 @@ pub(crate) mod engine {
         {
             let current = cx.ship(ship).cur_status_flags;
             let y = cx.status_offset(ship);
-            if cx.b.elements[e].hit_points() == 0 {
+            if cx.element(e).hit_points() == 0 {
                 cx.ship_state_mut(ship).status &=
                     !((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16);
                 if cx.desc(ship).ship_info.crew_level == 0 {
-                    cx.draw_explosion_flash(cx.b.elements[e].life_span(), y);
+                    cx.draw_explosion_flash(cx.element(e).life_span(), y);
                 }
             }
             let mut delta = (cx.ship(ship).old_status_flags ^ current)

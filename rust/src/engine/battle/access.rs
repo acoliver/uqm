@@ -1,11 +1,13 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
 
 #[cfg(not(test))]
+use super::record::PRIMITIVE;
+#[cfg(not(test))]
 use super::{
     record::{state__bindgen_ty_1, STATE},
     Parent,
 };
-use super::{Cx, ElementId, ShipId};
+use super::{CollisionHook, Cx, ElementHook, ElementId, ShipId};
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -81,7 +83,7 @@ impl Cx<'_> {
         self.frame_index(frame.0)
     }
     pub fn silhouette_frame(&mut self, id: ElementId, frame: Frame, flags: u8) {
-        self.silhouette(id, frame.0, flags);
+        self.silhouette(id, frame, flags);
     }
 }
 
@@ -238,7 +240,7 @@ pub enum CollisionCall {
 
 /// # Safety
 /// Pointers name live legacy elements and collision points on the game thread.
-pub(crate) unsafe fn dispatch_legacy_collision<E, P>(
+pub(super) unsafe fn dispatch_legacy_collision<E, P>(
     hook: super::CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
     operands: super::record::CollisionOperands<E, P>,
     call: CollisionCall,
@@ -278,7 +280,7 @@ pub(crate) unsafe fn dispatch_legacy_collision<E, P>(
 
 /// # Safety
 /// The pointer is a live element; no record borrow crosses this call.
-pub(crate) unsafe fn dispatch_legacy_element<E>(
+pub(super) unsafe fn dispatch_legacy_element<E>(
     hook: super::ElementHook<unsafe extern "C" fn(*mut E)>,
     operand: super::record::ElementOperand<E>,
 ) {
@@ -314,5 +316,158 @@ pub(crate) fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R
 impl Cx<'_> {
     pub(crate) fn clear_captain_background(&mut self, ship: ShipId) {
         self.desc_mut(ship).ship_data.captain_control.background = std::ptr::null_mut();
+    }
+}
+
+#[cfg(not(test))]
+use crate::graphics::native_abi::FRAME;
+#[cfg(not(test))]
+use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(super) fn ship_frames(&self, ship: ShipId, role: usize) -> *mut FRAME {
+        let pointer = self.ship(ship).RaceDescPtr;
+        // SAFETY: the ship owns this descriptor and its stable embedded arrays.
+        unsafe {
+            match role {
+                0 => (&raw mut (*pointer).ship_data.ship).cast(),
+                1 => (&raw mut (*pointer).ship_data.weapon).cast(),
+                2 => (&raw mut (*pointer).ship_data.special).cast(),
+                _ => panic!("invalid frame role {role}"),
+            }
+        }
+    }
+    pub(super) fn abs_frame(&self, frame: FRAME, index: u16) -> FRAME {
+        // SAFETY: resource handles come from this battle's loaded descriptors.
+        unsafe { SetAbsFrameIndex(frame, index) }
+    }
+    pub(super) fn equ_frame(&self, frame: FRAME, source: FRAME) -> FRAME {
+        // SAFETY: both resource handles remain loaded for this battle.
+        unsafe { SetEquFrameIndex(frame, source) }
+    }
+    pub(super) fn inc_frame(&self, frame: FRAME) -> FRAME {
+        // SAFETY: the current element's resource remains loaded.
+        unsafe { IncFrameIndex(frame) }
+    }
+    pub(super) fn frame_at(&self, element: ElementId, next: bool) -> FRAME {
+        let array = if next {
+            self.b.elements[element].next.image.farray
+        } else {
+            self.b.elements[element].current.image.farray
+        };
+        assert!(!array.is_null(), "element {element:?} has no frame set");
+        // SAFETY: the array is retained by the descriptor or shared battle resources.
+        unsafe { *array }
+    }
+    pub(super) fn frame_index(&self, frame: FRAME) -> u16 {
+        // SAFETY: this battle retains the element's loaded frame resources.
+        unsafe { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) }
+    }
+    pub(super) fn shared_frames(&self, role: SharedFrames) -> *mut FRAME {
+        match role {
+            SharedFrames::Asteroid => self.world.shared_frames[0].0,
+            SharedFrames::Explosion => self.world.shared_frames[1].0,
+        }
+    }
+    pub(super) fn shared_frame(&self, role: SharedFrames) -> FRAME {
+        // SAFETY: shared frame sets stay loaded until battle cleanup.
+        unsafe { *self.shared_frames(role) }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
+        Frames(self.shared_frames(role))
+    }
+    pub fn first_shared_frame(&self, role: SharedFrames) -> Frame {
+        Frame(self.shared_frame(role))
+    }
+    pub fn copy_image_to_current(&mut self, id: ElementId, image: Image) {
+        use crate::collections::observation::image;
+        let raw = state__bindgen_ty_1 {
+            frame: image.frame.0,
+            farray: image.frames.0,
+        };
+        image!(copy; self.b.elements[id].current.image, raw);
+    }
+}
+
+/// # Safety
+/// The pointer names a live legacy element with no record borrow across the hook.
+pub unsafe fn invoke_legacy_element<E>(
+    hook: ElementHook<unsafe extern "C" fn(*mut E)>,
+    element: *mut E,
+) {
+    let operand = super::record::ElementOperand(element);
+    // SAFETY: the caller retains the element through the synchronous hook.
+    unsafe {
+        dispatch_legacy_element(hook, operand);
+    }
+}
+
+/// # Safety
+/// The pointers name live legacy collision operands; Native hooks require live points.
+pub unsafe fn invoke_legacy_collision<E, P>(
+    hook: CollisionHook<unsafe extern "C" fn(*mut E, *mut P, *mut E, *mut P)>,
+    a: *mut E,
+    pa: *mut P,
+    b: *mut E,
+    pb: *mut P,
+    call: CollisionCall,
+) {
+    let operands = super::record::CollisionOperands(a, pa, b, pb);
+    // SAFETY: the caller retains all operands through the synchronous hook.
+    unsafe {
+        dispatch_legacy_collision(hook, operands, call);
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn init_intersect(&mut self, id: ElementId) {
+        let e = &mut self.b.elements[id];
+        e.IntersectControl.IntersectStamp.origin.x = e.current.location.x >> 2;
+        e.IntersectControl.IntersectStamp.origin.y = e.current.location.y >> 2;
+        e.IntersectControl.EndPoint.x = e.next.location.x >> 2;
+        e.IntersectControl.EndPoint.y = e.next.location.y >> 2;
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn primitive_style_mut(
+        &mut self,
+        id: ElementId,
+    ) -> impl std::ops::DerefMut<Target = PrimitiveStyle> + '_ {
+        fn apply(p: &mut PRIMITIVE, v: PrimitiveStyle) {
+            p.Type = v.kind;
+            p.color = v.color;
+        }
+        let record = self.primitive(id);
+        let value = PrimitiveStyle {
+            kind: record.Type,
+            color: record.color,
+        };
+        Edit {
+            value,
+            record,
+            commit: apply,
+        }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn track_subject(&mut self, subject: &mut super::Subject, facing: &mut u16) -> i16 {
+        let mut raw = self.encode_subject(subject);
+        let tracking = self
+            .world
+            .tracking
+            .unwrap_or_else(|| panic!("world has no legacy tracking dependency"));
+        // SAFETY: construction supplies the tracker and the checked projection retains its resources.
+        let result = unsafe { tracking(&mut raw, facing) };
+        *subject = self.decode_subject(&raw);
+        result
     }
 }

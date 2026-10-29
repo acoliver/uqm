@@ -6,19 +6,12 @@ pub(crate) mod engine {
     };
     use crate::ships::native::abi::*;
     // Core characteristics
-    const MAX_CREW: u16 = 20;
-    const MAX_ENERGY: u8 = 24;
-    const ENERGY_REGENERATION: u8 = 1;
-    const ENERGY_WAIT: u8 = 8;
-    const MAX_THRUST: u16 = 24;
-    const THRUST_INCREMENT: u16 = 3;
-    const TURN_WAIT: u8 = 4;
-    const THRUST_WAIT: u8 = 0;
-    const SHIP_MASS: u8 = 6;
+    pub(crate) const MAX_ENERGY: u8 = 24;
+    pub(crate) const ENERGY_REGENERATION: u8 = 1;
+    pub(crate) const ENERGY_WAIT: u8 = 8;
+    pub(crate) const SHIP_MASS: u8 = 6;
 
     // Bubbles
-    const WEAPON_ENERGY_COST: u8 = 3;
-    const WEAPON_WAIT: u8 = 0;
     const ANDROSYNTH_OFFSET: i16 = 14;
     const MISSILE_OFFSET: i16 = 3;
     /// DISPLAY_TO_WORLD (8)
@@ -29,9 +22,8 @@ pub(crate) mod engine {
     const TRACK_WAIT: u8 = 2;
 
     // Blazer
-    const SPECIAL_ENERGY_COST: u8 = 2;
+    pub(crate) const SPECIAL_ENERGY_COST: u8 = 2;
     const BLAZER_DEGENERATION: i16 = -1;
-    const SPECIAL_WAIT: u8 = 0;
     const BLAZER_OFFSET: u8 = 10;
     const BLAZER_THRUST: i16 = 60;
     const BLAZER_TURN_WAIT: u8 = 1;
@@ -41,12 +33,7 @@ pub(crate) mod engine {
     // intel.h: DISPLAY_TO_WORLD (50) and DISPLAY_TO_WORLD (1000). They are
     // function-like macros, so bindgen does not emit them.
     const CLOSE_RANGE_WEAPON: i32 = 50 << ONE_SHIFT;
-    const LONG_RANGE_WEAPON: i32 = 1000 << ONE_SHIFT;
     /// races.h: ((COUNT) ~0)
-    const INFINITE_RADIUS: u16 = u16::MAX;
-    /// units.h: MAX_X_UNIVERSE and MAX_Y_UNIVERSE
-    const MAX_UNIVERSE: i32 = 9999;
-
     const FULL_CIRCLE_ANGLE: i32 = FULL_CIRCLE as i32;
     const HALF_CIRCLE_ANGLE: i32 = HALF_CIRCLE as i32;
     const QUADRANT_ANGLE: i32 = QUADRANT as i32;
@@ -69,62 +56,12 @@ pub(crate) mod engine {
         (hi << 4) | lo
     }
 
-    pub fn descriptor() -> crate::engine::battle::RaceDesc {
-        // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc = RACE_DESC::EMPTY;
-        desc.ship_info.ship_flags = (FIRES_FORE | SEEKING_WEAPON) as u16;
-        desc.ship_info.ship_cost = 15;
-        desc.ship_info.crew_level = MAX_CREW;
-        desc.ship_info.max_crew = MAX_CREW;
-        desc.ship_info.energy_level = MAX_ENERGY;
-        desc.ship_info.max_energy = MAX_ENERGY;
-        desc.ship_info.race_strings_rsc = c"ship.androsynth.text".as_ptr();
-        desc.ship_info.icons_rsc = c"ship.androsynth.icons".as_ptr();
-        desc.ship_info.melee_icon_rsc = c"ship.androsynth.meleeicons".as_ptr();
-        desc.fleet.strength = INFINITE_RADIUS;
-        desc.fleet.known_loc = POINT {
-            x: (MAX_UNIVERSE >> 1) as i16,
-            y: (MAX_UNIVERSE >> 1) as i16,
-        };
-        desc.characteristics = CHARACTERISTIC_STUFF {
-            max_thrust: MAX_THRUST,
-            thrust_increment: THRUST_INCREMENT,
-            energy_regeneration: ENERGY_REGENERATION,
-            weapon_energy_cost: WEAPON_ENERGY_COST,
-            special_energy_cost: SPECIAL_ENERGY_COST,
-            energy_wait: ENERGY_WAIT,
-            turn_wait: TURN_WAIT,
-            thrust_wait: THRUST_WAIT,
-            weapon_wait: WEAPON_WAIT,
-            special_wait: SPECIAL_WAIT,
-            ship_mass: SHIP_MASS,
-        };
-        desc.ship_data.ship_rsc = [
-            c"ship.androsynth.graphics.guardian.large".as_ptr(),
-            c"ship.androsynth.graphics.guardian.medium".as_ptr(),
-            c"ship.androsynth.graphics.guardian.small".as_ptr(),
-        ];
-        desc.ship_data.weapon_rsc = [
-            c"ship.androsynth.graphics.bubble.large".as_ptr(),
-            c"ship.androsynth.graphics.bubble.medium".as_ptr(),
-            c"ship.androsynth.graphics.bubble.small".as_ptr(),
-        ];
-        desc.ship_data.special_rsc = [
-            c"ship.androsynth.graphics.blazer.large".as_ptr(),
-            c"ship.androsynth.graphics.blazer.medium".as_ptr(),
-            c"ship.androsynth.graphics.blazer.small".as_ptr(),
-        ];
-        desc.ship_data.captain_control.captain_rsc = c"ship.androsynth.graphics.captain".as_ptr();
-        desc.ship_data.victory_ditty_rsc = c"ship.androsynth.ditty".as_ptr();
-        desc.ship_data.ship_sounds_rsc = c"ship.androsynth.sounds".as_ptr();
-        desc.cyborg_control.ManeuverabilityIndex = 0;
-        desc.cyborg_control.WeaponRange = (LONG_RANGE_WEAPON >> 2) as u16;
-        desc.race = Some(&ANDROSYNTH);
-        crate::engine::battle::RaceDesc::from_legacy(desc)
+    fn build_descriptor() -> crate::engine::battle::RaceDesc {
+        crate::engine::battle::androsynth_template::descriptor(&ANDROSYNTH)
     }
 
     pub static ANDROSYNTH: Race = Race {
-        descriptor,
+        descriptor: build_descriptor,
         preprocess: Some(androsynth_preprocess),
         postprocess: Some(androsynth_postprocess),
         init_weapon: initialize_bubble,

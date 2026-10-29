@@ -118,43 +118,43 @@ pub(crate) mod engine {
             return;
         };
         cx.put(e);
-        cx.b.elements[e].playerNr = cx.b.elements[source].playerNr;
-        cx.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-        cx.b.elements[e].set_life_span(5);
-        cx.b.elements[e].set_turn_wait(0);
-        cx.b.elements[e].set_thrust_wait(0);
-        cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
-        let array = cx.shared_frames(SharedFrames::Asteroid);
-        image!(set; cx.b.elements[e].current.image.farray, array);
-        let frame = cx.abs_frame(
-            cx.shared_frame(SharedFrames::Asteroid),
+        cx.element_mut(e).player = cx.element(source).player;
+        cx.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+        cx.element_mut(e).set_life_span(5);
+        cx.element_mut(e).set_turn_wait(0);
+        cx.element_mut(e).set_thrust_wait(0);
+        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        let array = cx.shared_frame_set(SharedFrames::Asteroid);
+        cx.set_frames(e, false, array);
+        let frame = cx.absolute_frame(
+            cx.first_shared_frame(SharedFrames::Asteroid),
             angle_to_facing(FULL_CIRCLE as i32) as u16,
         );
-        image!(frame; cx.b.elements[e].current.image.frame, frame);
-        cx.b.elements[e].current.location = cx.b.elements[source].current.location;
-        cx.b.elements[e].preprocess_func = Some(ElementHook::Native(animation_preprocess));
-        cx.b.elements[e].death_func = Some(ElementHook::Native(spawn_asteroid));
+        cx.set_frame(e, false, frame);
+        cx.element_mut(e).current.location = cx.element(source).current.location;
+        cx.element_mut(e).pre = Some(ElementHook::Native(animation_preprocess));
+        cx.element_mut(e).death = Some(ElementHook::Native(spawn_asteroid));
     }
 
     pub(crate) fn asteroid_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let wait = cx.b.elements[e].turn_wait();
+        let wait = cx.element(e).turn_wait();
         if wait > 0 {
-            cx.b.elements[e].set_turn_wait(wait - 1);
+            cx.element_mut(e).set_turn_wait(wait - 1);
         } else {
-            let index = cx.frame_index(cx.b.elements[e].current.image.frame);
-            let index = if cx.b.elements[e].thrust_wait() & 128 != 0 {
+            let index = cx.frame_number(cx.element(e).current.image.frame);
+            let index = if cx.element(e).thrust_wait() & 128 != 0 {
                 index.wrapping_sub(1)
             } else {
                 index.wrapping_add(1)
             };
-            let frame = cx.abs_frame(
-                cx.b.elements[e].current.image.frame,
+            let frame = cx.absolute_frame(
+                cx.element(e).current.image.frame,
                 normalize_facing(index as i32),
             );
-            image!(frame; cx.b.elements[e].next.image.frame, frame);
-            cx.b.elements[e].state_flags |= CHANGING as u16;
-            let wait = cx.b.elements[e].thrust_wait() & 127;
-            cx.b.elements[e].set_turn_wait(wait);
+            cx.set_frame(e, true, frame);
+            cx.element_mut(e).flags |= CHANGING as u16;
+            let wait = cx.element(e).thrust_wait() & 127;
+            cx.element_mut(e).set_turn_wait(wait);
         }
     }
 
@@ -165,44 +165,45 @@ pub(crate) mod engine {
     pub fn create_asteroid(cx: &mut Cx<'_>, source: Option<ElementId>) {
         let Some(e) = cx.alloc_element() else {
             if let Some(source) = source {
-                cx.b.elements[source].state_flags &= !(DISAPPEARING as u16);
-                cx.primitive(source).Type = gfx_object_NUM_PRIMS as u8;
-                cx.b.elements[source].set_life_span(1);
+                cx.element_mut(source).flags &= !(DISAPPEARING as u16);
+                cx.primitive_style_mut(source).kind = gfx_object_NUM_PRIMS as u8;
+                cx.element_mut(source).set_life_span(1);
             }
             return;
         };
-        cx.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
-        cx.b.elements[e].set_hit_points(1);
-        cx.b.elements[e].set_mass_points(3);
-        cx.b.elements[e].state_flags = APPEARING as u16;
-        cx.b.elements[e].set_life_span(NORMAL_LIFE as u16);
-        cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
+        cx.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
+        cx.element_mut(e).set_hit_points(1);
+        cx.element_mut(e).set_mass_points(3);
+        cx.element_mut(e).flags = APPEARING as u16;
+        cx.element_mut(e).set_life_span(NORMAL_LIFE as u16);
+        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
         let value = cx.random() as u16;
         let (w, h) = cx.screen_dimensions();
         if value & 1 != 0 {
-            cx.b.elements[e].current.location.x = if value & 2 == 0 { 0 } else { width(w) as i16 };
-            cx.b.elements[e].current.location.y = aligned_random(cx.random(), height(h));
+            cx.element_mut(e).current.location.x = if value & 2 == 0 { 0 } else { width(w) as i16 };
+            cx.element_mut(e).current.location.y = aligned_random(cx.random(), height(h));
         } else {
-            cx.b.elements[e].current.location.x = aligned_random(cx.random(), width(w));
-            cx.b.elements[e].current.location.y = if value & 2 == 0 { 0 } else { height(h) as i16 };
+            cx.element_mut(e).current.location.x = aligned_random(cx.random(), width(w));
+            cx.element_mut(e).current.location.y =
+                if value & 2 == 0 { 0 } else { height(h) as i16 };
         }
         let magnitude = (((cx.random() as i16 & 7) + 4) as i32) << ONE_SHIFT;
         let facing = cx.random() as u16;
-        cx.b.elements[e]
+        cx.element_mut(e)
             .velocity
             .set_vector(i32::from(magnitude as i16), facing);
-        let array = cx.shared_frames(SharedFrames::Asteroid);
-        image!(set; cx.b.elements[e].current.image.farray, array);
+        let array = cx.shared_frame_set(SharedFrames::Asteroid);
+        cx.set_frames(e, false, array);
         let facing = cx.random() as u16 & ((1 << FACING_SHIFT) - 1) as u16;
-        let frame = cx.abs_frame(cx.shared_frame(SharedFrames::Asteroid), facing);
-        image!(frame; cx.b.elements[e].current.image.frame, frame);
+        let frame = cx.absolute_frame(cx.first_shared_frame(SharedFrames::Asteroid), facing);
+        cx.set_frame(e, false, frame);
         let wait = cx.random() as u8 & 3;
-        cx.b.elements[e].set_turn_wait(wait);
+        cx.element_mut(e).set_turn_wait(wait);
         let thrust_wait = wait | (cx.random() as u8 & 128);
-        cx.b.elements[e].set_thrust_wait(thrust_wait);
-        cx.b.elements[e].preprocess_func = Some(ElementHook::Native(asteroid_preprocess));
-        cx.b.elements[e].death_func = Some(ElementHook::Native(spawn_rubble));
-        cx.b.elements[e].collision_func = Some(CollisionHook::Native(collision));
+        cx.element_mut(e).set_thrust_wait(thrust_wait);
+        cx.element_mut(e).pre = Some(ElementHook::Native(asteroid_preprocess));
+        cx.element_mut(e).death = Some(ElementHook::Native(spawn_rubble));
+        cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.put(e);
     }
 
@@ -230,35 +231,35 @@ pub(crate) mod engine {
 
     impl Cx<'_> {
         pub fn damage(&mut self, e: ElementId, damage: i16) {
-            if self.b.elements[e].state_flags & PLAYER_SHIP as u16 != 0 {
+            if self.element(e).flags & PLAYER_SHIP as u16 != 0 {
                 if !self.delta_crew(e, damage.wrapping_neg()) {
-                    self.b.elements[e].set_life_span(0);
-                    self.b.elements[e].state_flags |= NONSOLID as u16;
+                    self.element_mut(e).set_life_span(0);
+                    self.element_mut(e).flags |= NONSOLID as u16;
                 }
             } else {
-                let mut hp = self.b.elements[e].hit_points();
-                let mut life = self.b.elements[e].life_span();
-                let mut flags = self.b.elements[e].state_flags;
+                let mut hp = self.element(e).hit_points();
+                let mut life = self.element(e).life_span();
+                let mut flags = self.element(e).flags;
                 damage_object(
-                    self.b.elements[e].mass_points(),
+                    self.element(e).mass_points(),
                     &mut hp,
                     &mut life,
                     &mut flags,
                     damage,
                 );
-                self.b.elements[e].set_hit_points(hp);
-                self.b.elements[e].set_life_span(life);
-                self.b.elements[e].state_flags = flags;
+                self.element_mut(e).set_hit_points(hp);
+                self.element_mut(e).set_life_span(life);
+                self.element_mut(e).flags = flags;
             }
         }
     }
 
     pub fn crew_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let old = cx.primitive(e).color;
+        let old = cx.primitive_style_mut(e).color;
         let low = crew_color(false);
         let high = old.r == low.r && old.g == low.g && old.b == low.b && old.a == low.a;
-        cx.primitive(e).color = crew_color(high);
-        cx.b.elements[e].state_flags |= CHANGING as u16;
+        cx.primitive_style_mut(e).color = crew_color(high);
+        cx.element_mut(e).flags |= CHANGING as u16;
         let target = cx.target(e);
         if target.is_none() {
             if let Parent::Ship(ship) = cx.parent(e) {
@@ -273,10 +274,10 @@ pub(crate) mod engine {
             }
         }
         if let Some(ship) = target {
-            let current = cx.b.elements[e].current.location;
-            let target = cx.b.elements[ship].current.location;
+            let current = cx.element(e).current.location;
+            let target = cx.element(ship).current.location;
             let (w, h) = cx.screen_dimensions();
-            let next = &mut cx.b.elements[e].next.location;
+            let next = &mut cx.element_mut(e).next.location;
             crew_step(
                 (current.x, current.y),
                 &mut next.x,
@@ -294,9 +295,9 @@ pub(crate) mod engine {
         hit: ElementId,
         _hp: &mut POINT,
     ) {
-        if cx.b.elements[hit].state_flags & PLAYER_SHIP as u16 != 0
-            && cx.b.elements[hit].life_span() >= NORMAL_LIFE as u16
-            && cx.b.elements[crew].hit_points() > 0
+        if cx.element(hit).flags & PLAYER_SHIP as u16 != 0
+            && cx.element(hit).life_span() >= NORMAL_LIFE as u16
+            && cx.element(crew).hit_points() > 0
         {
             let ship = cx.owner(hit);
             if cx.desc(ship).ship_info.ship_flags & CREW_IMMUNE as u16 == 0 {
@@ -304,9 +305,9 @@ pub(crate) mod engine {
                 cx.delta_crew(hit, 1);
             }
         }
-        cx.b.elements[crew].set_hit_points(0);
-        cx.b.elements[crew].set_life_span(0);
-        cx.b.elements[crew].state_flags |= (COLLISION | DISAPPEARING | NONSOLID) as u16;
+        cx.element_mut(crew).set_hit_points(0);
+        cx.element_mut(crew).set_life_span(0);
+        cx.element_mut(crew).flags |= (COLLISION | DISAPPEARING | NONSOLID) as u16;
     }
 
     /// # Safety

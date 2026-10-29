@@ -28,27 +28,7 @@ pub enum RaceState {
     } = 1,
 }
 
-#[derive(Clone, Copy)]
-pub struct Subject {
-    pub state: super::views::ElementState,
-    pub target: Option<ElementId>,
-    pub parent: super::Parent,
-    pub(crate) intersect: super::record::INTERSECT_CONTROL,
-    pub(crate) primitive: u16,
-    pub(crate) predecessor: Option<ElementId>,
-    pub(crate) successor: Option<ElementId>,
-}
-impl std::ops::Deref for Subject {
-    type Target = super::views::ElementState;
-    fn deref(&self) -> &Self::Target {
-        &self.state
-    }
-}
-impl std::ops::DerefMut for Subject {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.state
-    }
-}
+pub use super::views::Subject;
 pub type WeaponOrigin = Subject;
 
 /// A failed allocation still occupies its original weapon slot.

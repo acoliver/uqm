@@ -1,60 +1,16 @@
 //! VUX behavior over the battle context's ids and per-ship descriptor.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    fn build_descriptor() -> crate::engine::battle::RaceDesc {
+        crate::engine::battle::vux_template::descriptor(&VUX)
+    }
     use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };
-    pub fn descriptor() -> crate::engine::battle::RaceDesc {
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags =
-            (FIRES_FORE as i32 | SEEKING_SPECIAL as i32 | IMMEDIATE_WEAPON as i32) as _;
-        d.ship_info.ship_cost = 12;
-        d.ship_info.crew_level = 20;
-        d.ship_info.max_crew = 20;
-        d.ship_info.energy_level = 40;
-        d.ship_info.max_energy = 40;
-        d.ship_info.race_strings_rsc = c"ship.vux.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.vux.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.vux.meleeicons".as_ptr();
-        d.fleet.strength = (900 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet.known_loc = POINT { x: 4412, y: 1558 };
-        d.characteristics.max_thrust = 21;
-        d.characteristics.thrust_increment = 7;
-        d.characteristics.energy_regeneration = 1;
-        d.characteristics.weapon_energy_cost = 1;
-        d.characteristics.special_energy_cost = 2;
-        d.characteristics.energy_wait = 8;
-        d.characteristics.turn_wait = 6;
-        d.characteristics.thrust_wait = 4;
-        d.characteristics.weapon_wait = 0;
-        d.characteristics.special_wait = 7;
-        d.characteristics.ship_mass = 6;
-        d.ship_data.ship_rsc = [
-            c"ship.vux.graphics.intruder.large".as_ptr(),
-            c"ship.vux.graphics.intruder.medium".as_ptr(),
-            c"ship.vux.graphics.intruder.small".as_ptr(),
-        ];
-        d.ship_data.weapon_rsc = [
-            c"ship.vux.graphics.slime".as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-        ];
-        d.ship_data.special_rsc = [
-            c"ship.vux.graphics.limpets.large".as_ptr(),
-            c"ship.vux.graphics.limpets.medium".as_ptr(),
-            c"ship.vux.graphics.limpets.small".as_ptr(),
-        ];
-        d.ship_data.captain_control.captain_rsc = c"ship.vux.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.vux.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.vux.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = (50 << ONE_SHIFT) as u16;
-        d.race = Some(&VUX);
-        crate::engine::battle::RaceDesc::from_legacy(d)
-    }
 
     pub static VUX: Race = Race {
-        descriptor,
+        descriptor: build_descriptor,
         preprocess: Some(vux_preprocess),
         postprocess: Some(vux_postprocess),
         init_weapon: initialize_horrific_laser,

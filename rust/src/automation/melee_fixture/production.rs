@@ -464,7 +464,7 @@ impl World<'_> {
                     match effect {
                         Effect::RaceProcess(_, h) | Effect::Weapon(h) => {
                             crate::app::bridge::enter(|cx| {
-                                let id = cx.b.elements.id(h.cast()).unwrap_or_else(|| panic!("fixture element missing from pool"));
+                                let id = cx.elements().id(h.cast()).unwrap_or_else(|| panic!("fixture element missing from pool"));
                                 if let Effect::RaceProcess(post, _) = effect {
                                     let ship = cx.owner(id);
                                     cx.invoke_ship_process(ship, post);
