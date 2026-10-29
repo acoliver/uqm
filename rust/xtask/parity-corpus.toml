@@ -173,27 +173,3 @@ scenario = "probe-encounter-v1"
 classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 720
-
-[[expectation]]
-scenario = "probe-encounter-v2"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
-scenario = "probe-encounter-v5"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
-scenario = "probe-encounter-v6"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720
-
-[[expectation]]
-scenario = "probe-encounter-v7"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 720

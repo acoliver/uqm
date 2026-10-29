@@ -245,6 +245,75 @@ fn v1_to_v5_fly_a_four_leg_square_with_three_right_angle_turns() {
     }
 }
 
+fn without_probe_contacts(steps: &[Value]) -> Vec<Value> {
+    let mut flight = Vec::new();
+    let mut index = 0;
+    while index < steps.len() {
+        if action_of(&steps[index]) != "wait_for_communication_responses" {
+            flight.push(steps[index].clone());
+            index += 1;
+            continue;
+        }
+        let Some(phrase) = steps[index + 1]["phrase"].as_str() else {
+            panic!("probe farewell must name a response");
+        };
+        assert!(matches!(phrase, "bye_1" | "bye_2" | "bye_3"));
+        let expected = serde_json::json!([
+            {"action": "wait_for_communication_responses", "minimum": 1, "max_ticks": 350},
+            {"action": "select_response", "phrase": phrase, "max_ticks": 20},
+            {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 150},
+            {"action": "wait_input_ticks", "count": 20},
+            {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 1, "settle": 3},
+            {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 1, "settle": 3},
+            {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 1, "settle": 3},
+            {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 3},
+            {"action": "set_player_key", "key": "special", "value": 1},
+            {"action": "fight_battle", "max_ticks": 600},
+            {"action": "wait_for_state", "predicate": {"all": [{"key": "activity", "op": "eq", "value": 515}]}, "max_ticks": 200},
+            {"action": "wait_for_battle_frames", "minimum": 32, "max_ticks": 33},
+            {"action": "set_player_key", "key": "special", "value": 0},
+            {"action": "set_player_key", "key": "thrust", "value": 0}
+        ]);
+        let Value::Array(expected) = expected else {
+            unreachable!("contact contract is an array literal");
+        };
+        assert_eq!(&steps[index..index + expected.len()], expected.as_slice());
+        index += expected.len();
+    }
+    flight
+}
+
+#[test]
+fn incidental_probes_are_fought_and_release_controls_only_after_hyperspace_reentry() {
+    for (name, contacts) in [
+        ("probe-encounter-v2", 2),
+        ("probe-encounter-v5", 2),
+        ("probe-encounter-v6", 3),
+        ("probe-encounter-v7", 3),
+    ] {
+        let steps = script_steps(name);
+        let departure = position(&steps, 0, |step| {
+            action_of(step) == "navigate_to_hyperspace"
+        });
+        let flight = &steps[departure..];
+        let stripped = without_probe_contacts(flight);
+        assert_eq!(flight.len() - stripped.len(), 14 * contacts, "{name}");
+        let phrases: Vec<_> = flight
+            .iter()
+            .filter(|step| action_of(step) == "select_response")
+            .map(|step| step["phrase"].clone())
+            .collect();
+        assert_eq!(
+            phrases,
+            ["bye_1", "bye_2", "bye_3"][..contacts]
+                .iter()
+                .map(|phrase| Value::from(*phrase))
+                .collect::<Vec<_>>(),
+            "{name}"
+        );
+    }
+}
+
 /// Whether the square re-enters Sol is decided by how closely it closes, and
 /// the simulation is deterministic for the fixed seed. v1's recorded real-window
 /// flight closes on Sol, so v5 reuses its flight section action for action;
@@ -263,10 +332,9 @@ fn v5_flies_the_flight_section_recorded_for_v1() {
                 .iter()
                 .position(|step| action_of(step) == "assert_activity" && step["equals"] == 4)
                 .expect("return to Sol assertion");
-        steps[start..=end]
-            .iter()
+        without_probe_contacts(&steps[start..=end])
+            .into_iter()
             .filter(|step| action_of(step) != "capture")
-            .cloned()
             .collect()
     };
     assert_eq!(flight("probe-encounter-v5"), flight("probe-encounter-v1"));
@@ -285,7 +353,15 @@ fn v1_to_v5_end_by_asserting_the_return_to_sol() {
             "assert_hyperspace_displacement",
             "{name}: the fourth leg is still proven"
         );
-        let tail: Vec<&Value> = steps[last_leg + 2..]
+        let mut resumed = without_probe_contacts(&steps[last_leg + 2..]);
+        if name == "probe-encounter-v2" {
+            assert_eq!(
+                resumed.remove(1),
+                serde_json::json!({"action": "fly_to_star", "target": "Sol", "max_ticks": 600}),
+                "v2 explicitly returns to Sol after its fourth leg and second contact"
+            );
+        }
+        let tail: Vec<&Value> = resumed
             .iter()
             .filter(|step| action_of(step) != "capture")
             .collect();

@@ -662,8 +662,8 @@
       "sha256": "91d8ba52c025c80781f7bafe30166e48f97000622276a2a23ccb6e7ea7cf625d"
     },
     "parity/counts/probe-encounter-v2.toml": {
-      "bytes": 423661,
-      "sha256": "4337e431feedbe428e0aede257761352115bd802bf07ec7d94a7788e391e5860"
+      "bytes": 572180,
+      "sha256": "8fe22ebc3303a853c1b258a4343e6a5e71b684d2f81fcdf5de9f49a5d96ccec9"
     },
     "parity/counts/probe-encounter-v3.toml": {
       "bytes": 334762,
@@ -674,16 +674,16 @@
       "sha256": "90e468b2cca7450288c556e931c5753a807cd1da9dd31bffd8a948378288768e"
     },
     "parity/counts/probe-encounter-v5.toml": {
-      "bytes": 424908,
-      "sha256": "793277097eb84ef866a7febab5774bbb8aba820a739e2d2de93b25058d4fb7d3"
+      "bytes": 599704,
+      "sha256": "f85525d66f8a71bdbddca2bd15d3b1b7ccffe64329913673d9f601b970d97d22"
     },
     "parity/counts/probe-encounter-v6.toml": {
-      "bytes": 432060,
-      "sha256": "f195760f4304012f183150441238b55d9473058f2a5a0cd964eede936e711728"
+      "bytes": 650991,
+      "sha256": "0445d3fcbd2e0bd65fd57840b3ef286bac60848f59d6a50142fb62e7310dea04"
     },
     "parity/counts/probe-encounter-v7.toml": {
-      "bytes": 434882,
-      "sha256": "24a778c9fc93577d6885c2fc13b50185d11fc60cde12626622cc15f6106da814"
+      "bytes": 656810,
+      "sha256": "c8f9a0a1caaa0e56296ff6850c215c4b3686821684b8bae3e99d13b55dc19336"
     },
     "parity/counts/probe-encounter-wait.toml": {
       "bytes": 362627,
