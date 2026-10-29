@@ -62,11 +62,6 @@ pub(crate) mod live {
     pub(crate) unsafe fn universe_y(value: i32) -> i16 {
         crate::navigation::hyper_units::universe_y(value, ScreenHeight)
     }
-    pub(crate) unsafe fn primitive(element: *mut ELEMENT) -> *mut PRIMITIVE {
-        ptr::addr_of_mut!(DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*element).PrimIndex as usize)
-    }
     pub(crate) unsafe fn sine(angle: u16, magnitude: i32) -> i16 {
         ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
             as i16
@@ -102,19 +97,20 @@ pub(crate) mod live {
         if x != *dx || y != *dy {
             *dx = x;
             *dy = y;
-            let mut handle = disp_q.tail;
-            while !handle.is_null() {
-                let element = handle.cast::<ELEMENT>();
-                if (*element).state_flags & PLAYER_SHIP as u16 == 0 {
-                    handle = (*element).pred;
-                } else {
-                    (*element).next.location = POINT {
-                        x: ((width() >> 1) - x as i32) as i16,
-                        y: ((height() >> 1) - y as i32) as i16,
-                    };
-                    break;
+            crate::app::bridge::enter(|cx| {
+                let mut handle = cx.elements().tail();
+                while let Some(element) = handle {
+                    if cx.element(element).flags & PLAYER_SHIP as u16 == 0 {
+                        handle = cx.elements().pred(element);
+                    } else {
+                        cx.element_mut(element).next.location = POINT {
+                            x: ((width() >> 1) - x as i32) as i16,
+                            y: ((height() >> 1) - y as i32) as i16,
+                        };
+                        break;
+                    }
                 }
-            }
+            });
         }
         if GlobData.SIS_state.FuelOnBoard != 0 && get("ARILOU_SPACE_SIDE") <= 1 {
             x = x.wrapping_abs();

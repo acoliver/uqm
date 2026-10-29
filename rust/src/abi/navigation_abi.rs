@@ -3467,8 +3467,6 @@ pub use crate::planet_side::init_lander::InitLander;
 
 #[cfg(not(test))]
 pub use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
-pub type HSTARSHIP = HLINK;
-pub type HELEMENT = HLINK;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -3477,7 +3475,6 @@ pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
 pub type STATE = state;
-pub use crate::engine::battle::record::ELEMENT;
 pub use crate::engine::battle::record::{ElementProcessFunc, ElementCollisionFunc};
 pub use crate::engine::battle::record::element;
 pub use crate::engine::battle::record::element__bindgen_ty_1;
@@ -3485,8 +3482,6 @@ pub use crate::engine::battle::record::element__bindgen_ty_2;
 pub use crate::engine::battle::record::element__bindgen_ty_3;
 pub use crate::engine::battle::record::element__bindgen_ty_4;
 pub use crate::engine::battle::record::element__bindgen_ty_5;
-pub use crate::engine::battle::legacy::disp_q;
-pub use crate::engine::battle::legacy::DisplayArray;
 
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::AllocElement;
@@ -3547,28 +3542,13 @@ pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
 pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::EVALUATE_DESC;
-pub type IntelligenceFunc = ::std::option::Option<
-    unsafe extern "C" fn(
-        ShipPtr: *mut ELEMENT,
-        ObjectsOfConcern: *mut EVALUATE_DESC,
-        ConcernCounter: COUNT,
-    ),
->;
 pub use crate::ships::native::abi::CHARACTERISTIC_STUFF;
 pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
-pub use crate::engine::battle::record::RACE_DESC;
-pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-pub type INIT_WEAPON_FUNC = ::std::option::Option<
-    unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT,
->;
-pub type UNINIT_FUNC = ::std::option::Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
 pub use crate::engine::battle::record::race_desc;
 pub use crate::ships::native::abi::SHIP_BASE;
-pub use crate::engine::battle::record::STARSHIP;
 pub type HSHIPFRAG = HLINK;
 pub use crate::ships::native::abi::SHIP_FRAGMENT;
 pub type HFLEETINFO = HLINK;
@@ -3653,7 +3633,7 @@ pub use crate::front_end::uqmdebug::equipShip;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::eventName;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::findPlayerShip;
+pub use crate::front_end::uqmdebug::find_player_ship;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::forAllMoons;
 #[cfg(all(not(test), feature = "debug-process"))]
@@ -3819,7 +3799,7 @@ pub struct brief_ship_info {
 pub struct encounter {
     pub pred: HENCOUNTER,
     pub succ: HENCOUNTER,
-    pub hElement: HELEMENT,
+    pub hElement: HLINK,
     pub transition_state: SIZE,
     pub origin: POINT,
     pub radius: COUNT,
@@ -3910,7 +3890,6 @@ extern "C" {
 extern "C" {
     pub static mut TinyFont: FONT;
 }
-pub use crate::engine::battle::legacy::race_q;
 extern "C" {
     pub static mut LastActivity: ACTIVITY;
 }
@@ -4557,12 +4536,6 @@ pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
-pub type BattleFrameInputFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        context: *mut InputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE,
->;
 pub type SelectShipFunction = ::std::option::Option<
     unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
 >;

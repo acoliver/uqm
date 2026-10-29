@@ -36,13 +36,11 @@ impl Frame {
         self.0.is_null()
     }
 }
-#[cfg(not(test))]
 impl Frame {
     pub(crate) fn raw(self) -> FRAME {
         self.0
     }
 }
-#[cfg(not(test))]
 impl Frames {
     pub(crate) fn raw(self) -> *mut FRAME {
         self.0
@@ -50,13 +48,12 @@ impl Frames {
 }
 #[cfg(not(test))]
 impl Frame {
-    pub(crate) fn from_native(frame: FRAME) -> Self {
+    pub(crate) unsafe fn from_native(frame: FRAME) -> Self {
         Self(frame)
     }
 }
-#[cfg(not(test))]
 impl Frames {
-    pub(crate) fn from_native(frames: std::ptr::NonNull<FRAME>) -> Self {
+    pub(crate) unsafe fn from_native(frames: std::ptr::NonNull<FRAME>) -> Self {
         Self(frames.as_ptr())
     }
 }

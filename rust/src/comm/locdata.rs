@@ -121,6 +121,10 @@ pub struct CGameState {
     pub built_ship_q: CQueue,     // offset 312
 }
 
+impl CGameState {
+    pub(crate) const DISPLAY_ARRAY_OFFSET: usize = std::mem::offset_of!(Self, _display_array);
+}
+
 assert_c_layout!(
     CSisState,
     global_state::SIS_STATE {
@@ -150,7 +154,6 @@ assert_c_layout!(
         fuel_cost: FuelCost,
         module_cost: ModuleCost,
         element_worth: ElementWorth,
-        _display_array: DisplayArray,
         current_activity: CurrentActivity,
         game_clock: GameClock,
         autopilot: autopilot,

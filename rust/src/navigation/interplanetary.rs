@@ -44,23 +44,7 @@ pub(crate) mod live {
         }
     }
     fn flagship_location(cx: &crate::engine::battle::Cx<'_>) -> u8 {
-        let solar = cx.solar();
-        if solar.pBaseDesc == solar.PlanetDesc.as_ptr().cast_mut() {
-            return 0;
-        }
-        assert_eq!(solar.pBaseDesc, solar.MoonDesc.as_ptr().cast_mut());
-        let orbital =
-            cx.project(std::ptr::NonNull::new(solar.pOrbitalDesc).expect("orbital descriptor"));
-        let planet = if orbital.pPrevDesc == solar.SunDesc.as_ptr().cast_mut() {
-            solar.pOrbitalDesc
-        } else {
-            orbital.pPrevDesc
-        };
-        let offset = (planet as usize)
-            .checked_sub(solar.PlanetDesc.as_ptr() as usize)
-            .expect("planet belongs to system");
-        assert!(offset.is_multiple_of(std::mem::size_of::<PLANET_DESC>()));
-        (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
+        cx.flagship_location()
     }
     fn world(cx: &crate::engine::battle::Cx<'_>, point: POINT) -> POINT {
         let (screen_width, screen_height) = cx.screen_dimensions();
@@ -80,8 +64,9 @@ pub(crate) mod live {
     fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
         let mut handle = cx.navigation().Game_state.ip_group_q.head;
         while !handle.is_null() {
-            let pointer = std::ptr::NonNull::new(handle.cast::<IP_GROUP>()).expect("linked group");
-            let mut group = *cx.project(pointer);
+            let pointer = std::ptr::NonNull::new(handle.cast::<IP_GROUP>())
+                .unwrap_or_else(|| panic!("linked group"));
+            let mut group = *cx.group_record(pointer);
             handle = group.succ;
             if group.race_id as u16 != race {
                 continue;
@@ -108,7 +93,7 @@ pub(crate) mod live {
                 group.task |= IGNORE_FLAGSHIP as u8;
                 group.dest_loc = target;
             }
-            *cx.project_mut(pointer) = group;
+            *cx.group_record_mut(pointer) = group;
         }
     }
 
@@ -441,7 +426,7 @@ pub(crate) mod live {
             }
         } else {
             let group_id = cx.ip_group(first).group_id;
-            *cx.project_mut(std::ptr::NonNull::new(&raw mut EncounterGroup).unwrap()) = group_id;
+            cx.set_encounter_group(group_id);
             cx.ip_group_mut(first).task |= REFORM_GROUP as u8;
             cx.ip_group_mut(first).group_counter = 100;
             let race = cx.ip_group(first).race_id as u16;
@@ -450,7 +435,6 @@ pub(crate) mod live {
         }
     }
     fn spawn_group(cx: &mut crate::engine::battle::Cx<'_>, group: std::ptr::NonNull<IP_GROUP>) {
-        use crate::engine::battle::views::{Frame, Frames};
         let Some(element) = cx.alloc_element() else {
             return;
         };
@@ -458,18 +442,12 @@ pub(crate) mod live {
         cx.element_mut(element).hits = 1;
         cx.element_mut(element).flags = (CHANGING | FINITE_LIFE | IGNORE_VELOCITY) as u16;
         cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-        let icon = cx.project(group).melee_icon;
-        let frames = std::ptr::NonNull::from(&cx.project(group).melee_icon);
-        cx.set_single_frames(
-            element,
-            Frames::from_native(frames),
-            Frame::from_native(icon),
-        );
-        let frame = cx.absolute_frame(Frame::from_native(icon), 1);
+        cx.set_group_image(element, group);
+        let frame = cx.absolute_frame(cx.group_icon(group), 1);
         cx.set_frame(element, false, frame);
         cx.element_mut(element).death = Some(ElementHook::Native(group_preprocess));
         cx.element_mut(element).collide = Some(CollisionHook::Native(group_collision));
-        let record = *cx.project(group);
+        let record = *cx.group_record(group);
         cx.element_mut(element).current.location = world(
             cx,
             locationToDisplay(record.loc, radius(cx, record.sys_loc)),
@@ -477,17 +455,17 @@ pub(crate) mod live {
         let queue = &cx.navigation().Game_state.ip_group_q;
         let offset = (group.as_ptr() as usize)
             .checked_sub(queue.pq_tab as usize)
-            .expect("group belongs to pool");
+            .unwrap_or_else(|| panic!("group belongs to pool"));
         let stride = usize::from(queue.object_size);
         assert!(offset.is_multiple_of(stride));
         cx.set_ip_group_parent(
             element,
-            (offset / stride).try_into().expect("IP-group slot"),
+            (offset / stride)
+                .try_into()
+                .unwrap_or_else(|_| panic!("IP-group slot")),
         );
         cx.setup_element(element);
-        let stars = Frame::from_native(
-            *cx.project(std::ptr::NonNull::new(&raw mut stars_in_space).unwrap()),
-        );
+        let stars = cx.navigation_stars();
         let frame = cx.retreat_frame(stars);
         cx.set_intersect_frame(element, frame);
         cx.put(element);
@@ -532,9 +510,7 @@ pub(crate) mod live {
         let point = locationToDisplay(cx.navigation_mut().Game_state.ip_location, zoom);
         cx.element_mut(element).next.location = world(cx, point);
         cx.navigation_mut().Game_state.ShipStamp.origin = point;
-        let frame = crate::engine::battle::views::Frame::from_native(
-            cx.navigation().Game_state.ShipStamp.frame,
-        );
+        let frame = cx.flagship_stamp_frame();
         cx.set_frame(element, true, frame);
         if cx.element_mut(element).turn == flagship {
             cx.element_mut(element).flags &= !(NONSOLID as u16);
@@ -552,7 +528,6 @@ pub(crate) mod live {
         cx.element_mut(element).flags |= CHANGING as u16;
     }
     fn spawn_flagship(cx: &mut crate::engine::battle::Cx<'_>) {
-        use crate::engine::battle::views::{Frame, Frames};
         let Some(element) = cx.alloc_element() else {
             return;
         };
@@ -567,14 +542,7 @@ pub(crate) mod live {
         cx.element_mut(element).life = NORMAL_LIFE as u16;
         cx.element_mut(element).thrust = 42;
         cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-        let frame = cx.navigation().Game_state.ShipStamp.frame;
-        let frames = std::ptr::NonNull::from(&cx.navigation().Game_state.ShipStamp.frame);
-        cx.set_single_frames(
-            element,
-            Frames::from_native(frames),
-            Frame::from_native(frame),
-        );
-        cx.set_frame(element, false, Frame::from_native(frame));
+        cx.set_flagship_image(element);
         cx.element_mut(element).pre = Some(ElementHook::Native(flagship_preprocess));
         cx.element_mut(element).collide = Some(CollisionHook::Native(flagship_collision));
         cx.element_mut(element).current.location =
@@ -593,8 +561,8 @@ pub(crate) mod live {
             }
             let mut handle = cx.navigation().Game_state.ip_group_q.head;
             while let Some(group) = std::ptr::NonNull::new(handle.cast::<IP_GROUP>()) {
-                handle = cx.project(group).succ;
-                if cx.project(group).in_system != 0 {
+                handle = cx.group_record(group).succ;
+                if cx.group_record(group).in_system != 0 {
                     spawn_group(cx, group);
                 }
             }

@@ -5,11 +5,11 @@ use super::get;
 use super::globals::GlobData;
 use super::hyper_data::HYPERSTARS;
 use super::hyper_transition::{init_transition, sis_element};
-use super::hyperspace::live::{
-    cosine, height, logx, logy, primitive, sine, universe_x, universe_y, width,
-};
-use crate::collections::observation::image;
+use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
+use crate::engine::battle::views::{Frame, Frames};
+use crate::engine::battle::{Cx, ElementId};
 use std::ptr;
+use std::ptr::NonNull;
 
 const MAKEUP: [u8; 23] = [
     0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51, 0x11,
@@ -21,28 +21,30 @@ const SPEED: [i16; 23] = [
 pub(super) const XOFFS: i16 = (63 * 12 + 63 * 4) / 2;
 pub(super) const YOFFS: i16 = (50 * 12 + 50 * 4) / 2;
 
-pub(super) unsafe fn allocate(point: POINT) -> HELEMENT {
-    let handle = AllocElement();
-    if handle.is_null() {
-        return handle;
-    }
-    let element = handle.cast::<ELEMENT>();
-    (*element).playerNr = NEUTRAL_PLAYER_NUM as i16;
-    (*element).state_flags = (CHANGING | FINITE_LIFE) as u16;
-    (*element).__bindgen_anon_1.life_span = 1;
-    (*element).__bindgen_anon_3.mass_points = 1;
+pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
+    let element = cx.alloc_element()?;
+    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
+    cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
+    cx.element_mut(element).life = 1;
+    cx.element_mut(element).mass = 1;
     let lx = logx(point.x) + (width() >> 1) - GlobData.SIS_state.log_x;
     let ly = logy(point.y) + (height() >> 1) - GlobData.SIS_state.log_y;
-    (*element).current.location = POINT {
+    cx.element_mut(element).current.location = POINT {
         x: wrap(lx, width()),
         y: wrap(ly, height()),
     };
-    (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
+    cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
     let frames = ptr::addr_of_mut!(HYPERSTARS)
         .cast::<FRAME>()
         .wrapping_add(1 + (get("ARILOU_SPACE_SIDE") >> 1) as usize);
-    image!(single; (*element).current.image.farray, frames, *frames);
-    handle
+    cx.set_single_frames(
+        element,
+        Frames::from_native(
+            NonNull::new(frames).unwrap_or_else(|| panic!("retained navigation authority")),
+        ),
+        Frame::from_native(*frames),
+    );
+    Some(element)
 }
 fn wrap(value: i32, limit: i32) -> i16 {
     if value < 0 {
@@ -54,33 +56,43 @@ fn wrap(value: i32, limit: i32) -> i16 {
     }
 }
 
-pub(super) unsafe fn ambient() {
-    let handle = AllocElement();
-    if handle.is_null() {
+pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
+    let Some(element) = cx.alloc_element() else {
         return;
-    }
-    let element = handle.cast::<ELEMENT>();
-    (*element).playerNr = NEUTRAL_PLAYER_NUM as i16;
-    (*element).state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-    (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-    (*element).preprocess_func = Some(ElementHook::Native(animation_preprocess));
+    };
+    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
+    cx.element_mut(element).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+    cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+    cx.element_mut(element).pre = Some(ElementHook::Native(animation_preprocess));
     let random = TFB_Random();
     let dx = (random as u8 as i32 % (ScreenWidth - 64)) - ((ScreenWidth - 64) >> 1);
     let dy = ((random >> 8) as u8 as i32 % ScreenHeight) - (ScreenHeight >> 1);
-    (*element).current.location = POINT {
+    cx.element_mut(element).current.location = POINT {
         x: ((width() >> 1) + (dx << 2)) as i16,
         y: ((height() >> 1) + (dy << 2)) as i16,
     };
     let stars = stars_in_space;
-    image!(single; (*element).current.image.farray, ptr::addr_of_mut!(stars_in_space), stars);
+    cx.set_single_frames(
+        element,
+        Frames::from_native(
+            NonNull::new(&raw mut stars_in_space)
+                .unwrap_or_else(|| panic!("retained navigation authority")),
+        ),
+        Frame::from_native(stars),
+    );
     if (random >> 16) & 7 != 0 {
-        (*element).__bindgen_anon_1.life_span = 14;
-        image!(frame; (*element).current.image.frame, stars);
+        cx.element_mut(element).life = 14;
+        cx.set_frame(element, false, Frame::from_native(stars));
     } else {
-        (*element).__bindgen_anon_1.life_span = 12;
-        image!(frame; (*element).current.image.frame, SetAbsFrameIndex(stars, 14));
+        cx.element_mut(element).life = 12;
+        cx.set_frame(
+            element,
+            false,
+            Frame::from_native(SetAbsFrameIndex(stars, 14)),
+        );
     }
-    InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
+    let head = cx.elements().head();
+    cx.insert_before(element, head);
 }
 pub fn transition(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -106,39 +118,40 @@ pub fn transition(
         cx.element_mut(element).turn = 1;
     }
 }
-pub(crate) unsafe extern "C" fn collision(
-    source: *mut ELEMENT,
-    _p0: *mut POINT,
-    ship: *mut ELEMENT,
-    _p1: *mut POINT,
+pub(crate) fn collision(
+    cx: &mut Cx<'_>,
+    source: ElementId,
+    _: &mut POINT,
+    ship: ElementId,
+    _: &mut POINT,
 ) {
-    if (*ship).state_flags & PLAYER_SHIP as u16 == 0
-        || GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0
+    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0
+        || cx.world.activity() & IN_BATTLE as u16 == 0
     {
         return;
     }
-    init_transition(source, ship, 0);
-    let mut handle = GlobData.Game_state.encounter_q.head;
-    while !handle.is_null() {
-        let encounter = handle.cast::<ENCOUNTER>();
-        handle = (*encounter).succ;
-        if !(*encounter).hElement.is_null() {
-            (*(*encounter).hElement.cast::<ELEMENT>()).state_flags |=
-                (NONSOLID | IGNORE_SIMILAR) as u16;
+    init_transition(cx, source, ship, 0);
+    let mut handle = cx.navigation().Game_state.encounter_q.head;
+    while let Some(encounter) = NonNull::new(handle.cast::<ENCOUNTER>()) {
+        let encounter = *cx.encounter_record(encounter);
+        handle = encounter.succ;
+        if let Some(element) = cx.elements().id(encounter.hElement) {
+            cx.element_mut(element).flags |= (NONSOLID | IGNORE_SIMILAR) as u16;
         }
     }
-    (*source).hTarget = sis_element();
-    (*source).velocity = std::mem::zeroed();
+    let target = sis_element(cx);
+    cx.set_target(source, target);
+    cx.element_mut(source).velocity.zero();
 }
-unsafe fn add(encounter: *mut ENCOUNTER, universe: POINT) -> HELEMENT {
+unsafe fn add(cx: &mut Cx<'_>, encounter: *mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
     if get("ARILOU_SPACE_SIDE") >= 2 {
-        return ptr::null_mut();
+        return None;
     }
     if (*encounter).flags & ENCOUNTER_REFORMING as u8 != 0 {
         (*encounter).flags &= !(ENCOUNTER_REFORMING as u8);
         (*encounter).transition_state = 100;
         if (*encounter).flags & ONE_SHOT_ENCOUNTER as u8 != 0 || (*encounter).num_ships == 0 {
-            return ptr::null_mut();
+            return None;
         }
     }
     let new = (*encounter).num_ships == 0;
@@ -184,67 +197,84 @@ unsafe fn add(encounter: *mut ENCOUNTER, universe: POINT) -> HELEMENT {
         (*encounter).log_x = logx(point.x);
         (*encounter).log_y = logy(point.y);
     }
-    let handle = allocate(point);
-    if !handle.is_null() {
-        let element = handle.cast::<ELEMENT>();
+    let handle = allocate(cx, point);
+    if let Some(element) = handle {
         let mut i = (*encounter).transition_state;
         if i != 0 || new {
             if i < 0 {
                 i = -i;
-                (*element).__bindgen_anon_2.hit_points = 1;
+                cx.element_mut(element).hits = 1;
             }
             if i == 0 || i > 9 {
                 i = 9;
             }
-            image!(frame; (*element).current.image.frame, SetRelFrameIndex(*(*element).current.image.farray, -i));
-            (*element).death_func = Some(ElementHook::Native(transition));
+            cx.set_frame(
+                element,
+                false,
+                Frame::from_native(SetRelFrameIndex(
+                    cx.element_frame_set_first(element, false).raw(),
+                    -i,
+                )),
+            );
+            cx.element_mut(element).death = Some(ElementHook::Native(transition));
         } else {
-            image!(frame; (*element).current.image.frame, DecFrameIndex(*(*element).current.image.farray));
+            cx.set_frame(
+                element,
+                false,
+                Frame::from_native(DecFrameIndex(
+                    cx.element_frame_set_first(element, false).raw(),
+                )),
+            );
         }
-        (*element).__bindgen_anon_4.turn_wait = 1;
-        (*element).preprocess_func = None;
-        (*element).postprocess_func = None;
-        (*element).collision_func = Some(CollisionHook::Legacy(collision));
-        SetUpElement(element);
-        image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));
-        (*primitive(element)).Type = gfx_object_NUM_PRIMS as u8;
-        (*element).state_flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
-        InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.tail);
+        cx.element_mut(element).turn = 1;
+        cx.element_mut(element).pre = None;
+        cx.element_mut(element).post = None;
+        cx.element_mut(element).collide = Some(CollisionHook::Native(collision));
+        cx.setup_element(element);
+        cx.set_intersect_frame(element, Frame::from_native(DecFrameIndex(stars_in_space)));
+        cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
+        cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
+        let tail = cx.elements().tail();
+        cx.insert_before(element, tail);
     }
-    (*encounter).hElement = handle;
+    (*encounter).hElement = handle.map_or(ptr::null_mut(), |id| cx.elements().raw(id));
     handle
 }
 unsafe fn process(
+    cx: &mut Cx<'_>,
     encounter: *mut ENCOUNTER,
     universe: POINT,
     ox: i16,
     oy: i16,
     stamp: *mut STAMP,
 ) -> bool {
-    if (*encounter).hElement.is_null() && add(encounter, universe).is_null() {
+    if (*encounter).hElement.is_null() && add(cx, encounter, universe).is_none() {
         return false;
     }
-    let element = (*encounter).hElement.cast::<ELEMENT>();
-    if (*element).death_func.is_some() {
-        if (*encounter).transition_state != 0 && (*element).__bindgen_anon_4.turn_wait == 0 {
+    let element = cx
+        .elements()
+        .id((*encounter).hElement)
+        .unwrap_or_else(|| panic!("encounter element"));
+    if cx.element_mut(element).death.is_some() {
+        if (*encounter).transition_state != 0 && cx.element_mut(element).turn == 0 {
             (*encounter).transition_state -= 1;
             if (*encounter).transition_state >= 9 {
-                (*element).__bindgen_anon_4.turn_wait += 1;
+                cx.element_mut(element).turn += 1;
             } else if (*encounter).transition_state == -9 {
-                (*element).death_func = None;
+                cx.element_mut(element).death = None;
                 return false;
             } else {
-                (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
+                cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
             }
         }
     } else {
-        (*element).__bindgen_anon_1.life_span = 1;
-        let (mut dx, mut dy) = (0, 0);
-        GetNextVelocityComponents(&mut (*element).velocity, &mut dx, &mut dy, 1);
-        if (*element).__bindgen_anon_5.thrust_wait != 0 {
-            (*element).__bindgen_anon_5.thrust_wait -= 1;
-        } else if (*element).hTarget.is_null() {
-            let mut facing = ((*element).velocity.travel_angle + 2) >> 2;
+        cx.element_mut(element).life = 1;
+        let components = cx.element_mut(element).velocity.get_next_components(1);
+        let (mut dx, mut dy) = (components.0 as i16, components.1 as i16);
+        if cx.element_mut(element).thrust != 0 {
+            cx.element_mut(element).thrust -= 1;
+        } else if cx.target(element).is_none() {
+            let mut facing = (cx.element_mut(element).velocity.travel_angle + 2) >> 2;
             let target = (ARCTAN(
                 universe.x.wrapping_sub((*encounter).loc_pt.x),
                 universe.y.wrapping_sub((*encounter).loc_pt.y),
@@ -267,13 +297,13 @@ unsafe fn process(
                     speed >>= 1;
                 }
                 let angle = facing.wrapping_shl(2);
-                SetVelocityComponents(
-                    &mut (*element).velocity,
-                    cosine(angle, speed as i32),
-                    sine(angle, speed as i32),
+                cx.element_mut(element).velocity.set_components(
+                    i32::from(cosine(angle, speed as i32)),
+                    i32::from(sine(angle, speed as i32)),
                 );
-                GetNextVelocityComponents(&mut (*element).velocity, &mut dx, &mut dy, 1);
-                (*element).__bindgen_anon_5.thrust_wait = 3;
+                let components = cx.element_mut(element).velocity.get_next_components(1);
+                (dx, dy) = (components.0 as i16, components.1 as i16);
+                cx.element_mut(element).thrust = 3;
             }
         }
         (*encounter).log_x += dx as i32;
@@ -297,14 +327,14 @@ unsafe fn process(
             || dy >= radius
             || dx as u32 * dx as u32 + dy as u32 * dy as u32 >= radius as u32 * radius as u32
         {
-            (*element).state_flags |= NONSOLID as u16;
-            (*element).__bindgen_anon_1.life_span = 0;
+            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.element_mut(element).life = 0;
             if (*encounter).transition_state == 0 {
-                (*element).death_func = Some(ElementHook::Native(transition));
+                cx.element_mut(element).death = Some(ElementHook::Native(transition));
                 (*encounter).transition_state = -1;
-                (*element).__bindgen_anon_2.hit_points = 1;
+                cx.element_mut(element).hits = 1;
             } else {
-                (*element).death_func = None;
+                cx.element_mut(element).death = None;
                 return false;
             }
         }
@@ -313,31 +343,31 @@ unsafe fn process(
     let dx = point.x as i32 - universe.x as i32;
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
-        (*element).next.location = POINT {
+        cx.element_mut(element).next.location = POINT {
             x: (((*encounter).log_x - GlobData.SIS_state.log_x) as i16 as i32 + (width() >> 1))
                 as i16,
             y: (((*encounter).log_y - GlobData.SIS_state.log_y) as i16 as i32 + (height() >> 1))
                 as i16,
         };
-        if (*element).state_flags & NONSOLID as u16 != 0 && (*encounter).transition_state == 0 {
-            (*element).current.location = (*element).next.location;
-            (*primitive(element)).Type = gfx_object_STAMP_PRIM as u8;
-            if (*element).death_func.is_none() {
-                (*element).IntersectControl.IntersectStamp.origin = POINT {
-                    x: (*element).current.location.x >> 2,
-                    y: (*element).current.location.y >> 2,
-                };
-                (*element).state_flags &= !(NONSOLID as u16);
+        if cx.element_mut(element).flags & NONSOLID as u16 != 0
+            && (*encounter).transition_state == 0
+        {
+            let next = cx.element(element).next.location;
+            cx.element_mut(element).current.location = next;
+            cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+            if cx.element_mut(element).death.is_none() {
+                cx.init_intersect_start(element);
+                cx.element_mut(element).flags &= !(NONSOLID as u16);
             }
         }
     } else {
-        (*element).state_flags |= NONSOLID as u16;
+        cx.element_mut(element).flags |= NONSOLID as u16;
         if dx < -(XOFFS as i32) || dx > XOFFS as i32 || dy < -(YOFFS as i32) || dy > YOFFS as i32 {
-            (*element).__bindgen_anon_1.life_span = 0;
-            (*element).death_func = None;
+            cx.element_mut(element).life = 0;
+            cx.element_mut(element).death = None;
             return false;
         }
-        (*primitive(element)).Type = gfx_object_NUM_PRIMS as u8;
+        cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
     }
     (*stamp).origin = POINT {
         x: ((point.x as i32 * 56 / (63 * 12)) as i16).wrapping_sub(ox),
@@ -346,7 +376,7 @@ unsafe fn process(
     DrawStamp(stamp);
     true
 }
-pub(super) unsafe fn process_all(universe: POINT, ox: i16, oy: i16) {
+pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
     let mut stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
         frame: SetAbsFrameIndex(stars_in_space, 91),
@@ -356,7 +386,7 @@ pub(super) unsafe fn process_all(universe: POINT, ox: i16, oy: i16) {
     while !handle.is_null() {
         let encounter = handle.cast::<ENCOUNTER>();
         handle = (*encounter).succ;
-        if !process(encounter, universe, ox, oy, &mut stamp) {
+        if !process(cx, encounter, universe, ox, oy, &mut stamp) {
             RemoveQueue(queue, encounter.cast());
             FreeLink(queue, encounter.cast());
         }
