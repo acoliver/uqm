@@ -2,10 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::ships::native::{
-        abi::*, cosine, element, facing_to_angle, frame_index, sine, starship,
-    };
-    use std::ptr;
+    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 14;
     const MAX_ENERGY: u8 = 32;
@@ -30,19 +27,19 @@ pub(crate) mod engine {
     const SPECIAL_ENERGY_COST: u8 = 16;
     const SPECIAL_WAIT: u8 = 30;
 
-    const fn descriptor() -> RACE_DESC {
-        let mut desc = RACE_DESC::EMPTY;
-        desc.ship_info.ship_flags = FIRES_FORE as u16;
-        desc.ship_info.ship_cost = 17;
-        desc.ship_info.crew_level = MAX_CREW;
-        desc.ship_info.max_crew = MAX_CREW;
-        desc.ship_info.energy_level = MAX_ENERGY;
-        desc.ship_info.max_energy = MAX_ENERGY;
-        desc.ship_info.race_strings_rsc = c"ship.druuge.text".as_ptr();
-        desc.ship_info.icons_rsc = c"ship.druuge.icons".as_ptr();
-        desc.ship_info.melee_icon_rsc = c"ship.druuge.meleeicons".as_ptr();
-        desc.fleet.strength = (1400 / SPHERE_RADIUS_INCREMENT * 2) as u16;
-        desc.fleet.known_loc = POINT { x: 9500, y: 2792 };
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+        let mut desc = RaceTemplate::default();
+        desc.info.ship_flags = FIRES_FORE as u16;
+        desc.info.ship_cost = 17;
+        desc.info.crew_level = MAX_CREW;
+        desc.info.max_crew = MAX_CREW;
+        desc.info.energy_level = MAX_ENERGY;
+        desc.info.max_energy = MAX_ENERGY;
+        desc.resources.strings = Some(c"ship.druuge.text");
+        desc.resources.icons = Some(c"ship.druuge.icons");
+        desc.resources.melee_icon = Some(c"ship.druuge.meleeicons");
+        desc.fleet_strength = (1400 / SPHERE_RADIUS_INCREMENT * 2) as u16;
+        desc.fleet_location = POINT { x: 9500, y: 2792 };
         desc.characteristics = CHARACTERISTIC_STUFF {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
@@ -56,204 +53,191 @@ pub(crate) mod engine {
             special_wait: SPECIAL_WAIT,
             ship_mass: SHIP_MASS,
         };
-        desc.ship_data.ship_rsc = [
-            c"ship.druuge.graphics.mauler.large".as_ptr(),
-            c"ship.druuge.graphics.mauler.medium".as_ptr(),
-            c"ship.druuge.graphics.mauler.small".as_ptr(),
+        desc.resources.ship = [
+            Some(c"ship.druuge.graphics.mauler.large"),
+            Some(c"ship.druuge.graphics.mauler.medium"),
+            Some(c"ship.druuge.graphics.mauler.small"),
         ];
-        desc.ship_data.weapon_rsc = [
-            c"ship.druuge.graphics.cannon.large".as_ptr(),
-            c"ship.druuge.graphics.cannon.medium".as_ptr(),
-            c"ship.druuge.graphics.cannon.small".as_ptr(),
+        desc.resources.weapon = [
+            Some(c"ship.druuge.graphics.cannon.large"),
+            Some(c"ship.druuge.graphics.cannon.medium"),
+            Some(c"ship.druuge.graphics.cannon.small"),
         ];
-        desc.ship_data.captain_control.captain_rsc = c"ship.druuge.graphics.captain".as_ptr();
-        desc.ship_data.victory_ditty_rsc = c"ship.druuge.ditty".as_ptr();
-        desc.ship_data.ship_sounds_rsc = c"ship.druuge.sounds".as_ptr();
-        desc.cyborg_control.WeaponRange = MISSILE_RANGE as u16;
-        desc.cyborg_control.intelligence_func = Some(druuge_intelligence);
-        desc.preprocess_func = Some(druuge_preprocess);
-        desc.postprocess_func = Some(druuge_postprocess);
-        desc.init_weapon_func = Some(initialize_cannon);
-        desc
+        desc.resources.captain = Some(c"ship.druuge.graphics.captain");
+        desc.resources.victory = Some(c"ship.druuge.ditty");
+        desc.resources.sounds = Some(c"ship.druuge.sounds");
+        desc.intelligence.weapon_range = MISSILE_RANGE as u16;
+        desc.descriptor(&DRUUGE)
     }
-
-    static mut DRUUGE_DESC: RACE_DESC = descriptor();
-
-    #[no_mangle]
-    pub extern "C" fn init_druuge() -> *mut RACE_DESC {
-        unsafe {
-            DRUUGE_DESC.preprocess_func = Some(druuge_preprocess);
-            DRUUGE_DESC.postprocess_func = Some(druuge_postprocess);
-            DRUUGE_DESC.init_weapon_func = Some(initialize_cannon);
-            DRUUGE_DESC.cyborg_control.intelligence_func = Some(druuge_intelligence);
-        }
-        &raw mut DRUUGE_DESC
-    }
-
-    pub(crate) unsafe extern "C" fn initialize_cannon(
-        ship: *mut ELEMENT,
-        cannons: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
-            face: (*ss).ShipFacing,
-            index: (*ss).ShipFacing,
-            sender: (*ship).playerNr,
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
+    };
+    pub static DRUUGE: Race = Race {
+        descriptor,
+        preprocess: Some(druuge_preprocess),
+        postprocess: Some(druuge_postprocess),
+        init_weapon: Some(initialize_cannon),
+        intelligence: Some(druuge_intelligence),
+        uninit: None,
+    };
+    pub(crate) fn initialize_cannon(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut out = Vec::new();
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
+            index: cx.ship_state(ss).facing,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: DRUUGE_OFFSET,
             speed: MISSILE_SPEED,
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
             life: MISSILE_LIFE,
-            preprocess_func: None,
+            preprocess: None,
             blast_offs: MISSILE_OFFSET,
         };
-        *cannons = initialize_missile(&mut block);
-        if !(*cannons).is_null() {
-            let cannon = element(*cannons);
-            (*cannon).collision_func = Some(CollisionHook::Legacy(cannon_collision));
+        out.push(cx.missile(&mut block));
+        if let Some(cannon) = out[0] {
+            cx.element_mut(cannon).collide = Some(CollisionHook::Native(cannon_collision));
         }
-        1
+        out
     }
 
-    pub(crate) unsafe extern "C" fn cannon_collision(
-        cannon: *mut ELEMENT,
-        point0: *mut POINT,
-        other: *mut ELEMENT,
-        point1: *mut POINT,
+    pub(crate) fn cannon_collision(
+        cx: &mut Cx<'_>,
+        cannon: ElementId,
+        point0: &mut POINT,
+        other: ElementId,
+        point1: &mut POINT,
     ) {
-        weapon_collision(cannon, point0, other, point1);
-        let collision_mass = i32::from((*other).__bindgen_anon_3.mass_points) + 1;
-        if (*other).state_flags & PLAYER_SHIP as u16 != 0
-            && (*other).__bindgen_anon_2.crew_level != 0
+        cx.weapon_collision(cannon, point0, other, point1);
+        let collision_mass = i32::from(cx.element(other).mass) + 1;
+        if cx.element(other).flags & PLAYER_SHIP as u16 != 0
+            && cx.element(other).hits != 0
             && collision_mass <= MAX_SHIP_MASS as i32 * 10
         {
-            let ss = starship(other);
-            (*ss).cur_status_flags &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
-            let angle = facing_to_angle(i32::from(frame_index((*cannon).next.image.frame)));
-            DeltaVelocityComponents(
-                &raw mut (*other).velocity,
-                cosine(angle, RECOIL_VELOCITY) as SIZE,
-                sine(angle, RECOIL_VELOCITY) as SIZE,
+            let ss = cx.owner(other);
+            cx.ship_state_mut(ss).status &= !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
+            let angle = facing_to_angle(i32::from(
+                cx.frame_number(cx.element(cannon).next.image.frame),
+            ));
+            cx.element_mut(other).velocity.delta_components(
+                i32::from(cosine(angle, RECOIL_VELOCITY) as SIZE),
+                i32::from(sine(angle, RECOIL_VELOCITY) as SIZE),
             );
-            let mut dx: SIZE = 0;
-            let mut dy: SIZE = 0;
-            GetCurrentVelocityComponents(&raw mut (*other).velocity, &mut dx, &mut dy);
+            let (x, y) = cx.element(other).velocity.get_current_components();
+            let (dx, dy) = (x as SIZE, y as SIZE);
             let x = i64::from(dx);
             let y = i64::from(dy);
             let limit = i64::from(MAX_RECOIL_VELOCITY);
             if x * x + y * y > limit * limit {
-                let a = ARCTAN(dx, dy);
-                SetVelocityComponents(
-                    &raw mut (*other).velocity,
-                    cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE,
-                    sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE,
+                let a = crate::math::arctan(dx, dy);
+                cx.element_mut(other).velocity.set_components(
+                    i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
+                    i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
                 );
             }
         }
     }
 
-    pub(crate) unsafe extern "C" fn druuge_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let ss = starship(ship);
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
+    pub(crate) fn druuge_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        let enemy = ENEMY_SHIP_INDEX as usize;
         let mut old_flags = 0u16;
-        let mut enemy_ss = ptr::null_mut();
-        if (*ss).cur_status_flags & SHIP_BEYOND_MAX_SPEED as u16 != 0 {
-            (*enemy).MoveState = MOVEMENT_STATE_ENTICE;
-        } else if !(*enemy).ObjectPtr.is_null()
-            && (*enemy).which_turn <= ((MISSILE_RANGE * 3 / 4) >> 6) as u16
+        let mut enemy_ss = None;
+        if cx.ship_state(ss).status & SHIP_BEYOND_MAX_SPEED as u16 != 0 {
+            concerns.objects[enemy].movement = MOVEMENT_STATE_ENTICE;
+        } else if concerns.objects[enemy].object.is_some()
+            && concerns.objects[enemy].which_turn <= ((MISSILE_RANGE * 3 / 4) >> 6) as u16
         {
-            enemy_ss = starship((*enemy).ObjectPtr);
-            old_flags = (*(*enemy_ss).RaceDescPtr).ship_info.ship_flags;
-            (*(*enemy_ss).RaceDescPtr).ship_info.ship_flags &=
+            let other = cx.owner(
+                concerns.objects[enemy]
+                    .object
+                    .unwrap_or_else(|| panic!("enemy ship")),
+            );
+            enemy_ss = Some(other);
+            old_flags = cx.race_stats(other).ship_info.ship_flags;
+            cx.race_stats_mut(other).ship_info.ship_flags &=
                 !((FIRES_FORE | FIRES_RIGHT | FIRES_AFT | FIRES_LEFT) as u16);
-            (*enemy).MoveState = MOVEMENT_STATE_PURSUE;
-            if (*ship).__bindgen_anon_5.thrust_wait == 0 {
-                (*ship).__bindgen_anon_5.thrust_wait += 1;
+            concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
+            if concerns.subject.thrust == 0 {
+                concerns.subject.thrust += 1;
             }
         }
-        ship_intelligence(ship, concerns, count);
-        if !enemy_ss.is_null() {
-            (*(*enemy_ss).RaceDescPtr).ship_info.ship_flags = old_flags;
+        cx.ship_intelligence(ss, concerns);
+        if let Some(other) = enemy_ss {
+            cx.race_stats_mut(other).ship_info.ship_flags = old_flags;
         }
-        if (*ss).cur_status_flags & SHIP_BEYOND_MAX_SPEED as u16 == 0
-            && ((*enemy).which_turn <= 12
-                || (!(*concerns.add(ENEMY_WEAPON_INDEX as usize))
-                    .ObjectPtr
-                    .is_null()
-                    && (*concerns.add(ENEMY_WEAPON_INDEX as usize)).which_turn <= 6))
+        if cx.ship_state(ss).status & SHIP_BEYOND_MAX_SPEED as u16 == 0
+            && (concerns.objects[enemy].which_turn <= 12
+                || (concerns.objects[ENEMY_WEAPON_INDEX as usize]
+                    .object
+                    .is_some()
+                    && concerns.objects[ENEMY_WEAPON_INDEX as usize].which_turn <= 6))
         {
-            (*ss).ship_input_state |= WEAPON as u8;
-            if (*ship).__bindgen_anon_5.thrust_wait < WEAPON_WAIT + 1 {
-                (*ship).__bindgen_anon_5.thrust_wait = WEAPON_WAIT + 1;
+            cx.ship_state_mut(ss).input |= WEAPON as u8;
+            if concerns.subject.thrust < WEAPON_WAIT + 1 {
+                concerns.subject.thrust = WEAPON_WAIT + 1;
             }
         }
-        if (*ss).ship_input_state & WEAPON as u8 != 0
-            && (*(*ss).RaceDescPtr).ship_info.energy_level < WEAPON_ENERGY_COST
-            && (*ship).__bindgen_anon_2.crew_level > 1
+        if cx.ship_state(ss).input & WEAPON as u8 != 0
+            && cx.race_stats(ss).ship_info.energy_level < WEAPON_ENERGY_COST
+            && concerns.subject.hits > 1
         {
-            (*ss).ship_input_state |= SPECIAL as u8;
+            cx.ship_state_mut(ss).input |= SPECIAL as u8;
         } else {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         }
     }
 
-    pub(crate) unsafe extern "C" fn druuge_postprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        if (*ss).cur_status_flags & WEAPON as u16 == 0
-            || (*ss).weapon_counter != (*(*ss).RaceDescPtr).characteristics.weapon_wait
+    pub(crate) fn druuge_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        if cx.ship_state(ss).status & WEAPON as u16 == 0
+            || cx.ship_state(ss).weapon_counter != cx.race_stats(ss).characteristics.weapon_wait
         {
             return;
         }
-        (*ss).cur_status_flags &= !(SHIP_AT_MAX_SPEED as u16);
-        let angle = facing_to_angle(i32::from((*ss).ShipFacing)) + HALF_CIRCLE as i32;
-        DeltaVelocityComponents(
-            &raw mut (*ship).velocity,
-            cosine(angle, RECOIL_VELOCITY) as SIZE,
-            sine(angle, RECOIL_VELOCITY) as SIZE,
+        cx.ship_state_mut(ss).status &= !(SHIP_AT_MAX_SPEED as u16);
+        let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) + HALF_CIRCLE as i32;
+        cx.element_mut(ship).velocity.delta_components(
+            i32::from(cosine(angle, RECOIL_VELOCITY) as SIZE),
+            i32::from(sine(angle, RECOIL_VELOCITY) as SIZE),
         );
-        let mut dx: SIZE = 0;
-        let mut dy: SIZE = 0;
-        GetCurrentVelocityComponents(&raw mut (*ship).velocity, &mut dx, &mut dy);
+        let (x, y) = cx.element(ship).velocity.get_current_components();
+        let (dx, dy) = (x as SIZE, y as SIZE);
         let x = i64::from(dx);
         let y = i64::from(dy);
         let limit = i64::from(MAX_RECOIL_VELOCITY);
         if x * x + y * y > limit * limit {
-            let a = ARCTAN(dx, dy);
-            SetVelocityComponents(
-                &raw mut (*ship).velocity,
-                cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE,
-                sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE,
+            let a = crate::math::arctan(dx, dy);
+            cx.element_mut(ship).velocity.set_components(
+                i32::from(cosine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
+                i32::from(sine(i32::from(a), MAX_RECOIL_VELOCITY) as SIZE),
             );
         }
     }
 
-    pub(crate) unsafe extern "C" fn druuge_preprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        if (*ss).cur_status_flags & SPECIAL as u16 == 0 {
+    pub(crate) fn druuge_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
             return;
         }
-        if (*ss).special_counter != 0
-            || (*ship).__bindgen_anon_2.crew_level == 1
-            || (*(*ss).RaceDescPtr).ship_info.energy_level
-                == (*(*ss).RaceDescPtr).ship_info.max_energy
+        if cx.ship_state(ss).special_counter != 0
+            || cx.element(ship).hits == 1
+            || cx.race_stats(ss).ship_info.energy_level == cx.race_stats(ss).ship_info.max_energy
         {
-            (*ss).cur_status_flags &= !(SPECIAL as u16);
+            cx.ship_state_mut(ss).status &= !(SPECIAL as u16);
             return;
         }
-        ProcessSound(
-            SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-            ship,
-        );
-        DeltaCrew(ship, -1);
-        DeltaEnergy(ship, i16::from(SPECIAL_ENERGY_COST));
-        (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+        cx.process_ship_sound(ss, 1, ship);
+        cx.delta_crew(ship, -1);
+        cx.delta_energy(ship, i16::from(SPECIAL_ENERGY_COST));
+        cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
     }
 }

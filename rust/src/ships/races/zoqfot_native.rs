@@ -1,25 +1,22 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::collections::observation::image;
     use crate::ships::native::{
-        abi::*, angle_to_facing, cosine, element, facing_to_angle, frame_count, frame_index,
-        normalize_facing, put_element, sine, starship,
+        abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };
-    use std::mem;
-    const fn descriptor() -> RACE_DESC {
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = (FIRES_FORE as i32) as _;
-        d.ship_info.ship_cost = 6;
-        d.ship_info.crew_level = 10;
-        d.ship_info.max_crew = 10;
-        d.ship_info.energy_level = 10;
-        d.ship_info.max_energy = 10;
-        d.ship_info.race_strings_rsc = c"ship.zoqfotpik.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.zoqfotpik.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.zoqfotpik.meleeicons".as_ptr();
-        d.fleet.strength = (320 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
-        d.fleet.known_loc = POINT { x: 3761, y: 5333 };
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+        let mut d = RaceTemplate::default();
+        d.info.ship_flags = (FIRES_FORE as i32) as _;
+        d.info.ship_cost = 6;
+        d.info.crew_level = 10;
+        d.info.max_crew = 10;
+        d.info.energy_level = 10;
+        d.info.max_energy = 10;
+        d.resources.strings = Some(c"ship.zoqfotpik.text");
+        d.resources.icons = Some(c"ship.zoqfotpik.icons");
+        d.resources.melee_icon = Some(c"ship.zoqfotpik.meleeicons");
+        d.fleet_strength = (320 / SPHERE_RADIUS_INCREMENT as i32 * 2) as u16;
+        d.fleet_location = POINT { x: 3761, y: 5333 };
         d.characteristics.max_thrust = 40;
         d.characteristics.thrust_increment = 10;
         d.characteristics.energy_regeneration = 1;
@@ -31,221 +28,238 @@ pub(crate) mod engine {
         d.characteristics.weapon_wait = 0;
         d.characteristics.special_wait = 6;
         d.characteristics.ship_mass = 5;
-        d.ship_data.ship_rsc = [
-            c"ship.zoqfotpik.graphics.stinger.large".as_ptr(),
-            c"ship.zoqfotpik.graphics.stinger.medium".as_ptr(),
-            c"ship.zoqfotpik.graphics.stinger.small".as_ptr(),
+        d.resources.ship = [
+            Some(c"ship.zoqfotpik.graphics.stinger.large"),
+            Some(c"ship.zoqfotpik.graphics.stinger.medium"),
+            Some(c"ship.zoqfotpik.graphics.stinger.small"),
         ];
-        d.ship_data.weapon_rsc = [
-            c"ship.zoqfotpik.graphics.spit.large".as_ptr(),
-            c"ship.zoqfotpik.graphics.spit.medium".as_ptr(),
-            c"ship.zoqfotpik.graphics.spit.small".as_ptr(),
+        d.resources.weapon = [
+            Some(c"ship.zoqfotpik.graphics.spit.large"),
+            Some(c"ship.zoqfotpik.graphics.spit.medium"),
+            Some(c"ship.zoqfotpik.graphics.spit.small"),
         ];
-        d.ship_data.special_rsc = [
-            c"ship.zoqfotpik.graphics.proboscis.large".as_ptr(),
-            c"ship.zoqfotpik.graphics.proboscis.medium".as_ptr(),
-            c"ship.zoqfotpik.graphics.proboscis.small".as_ptr(),
+        d.resources.special = [
+            Some(c"ship.zoqfotpik.graphics.proboscis.large"),
+            Some(c"ship.zoqfotpik.graphics.proboscis.medium"),
+            Some(c"ship.zoqfotpik.graphics.proboscis.small"),
         ];
-        d.ship_data.captain_control.captain_rsc = c"ship.zoqfotpik.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.zoqfotpik.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.zoqfotpik.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = (((10) << ONE_SHIFT as i32) * (10)) as u16;
-        d
+        d.resources.captain = Some(c"ship.zoqfotpik.graphics.captain");
+        d.resources.victory = Some(c"ship.zoqfotpik.ditty");
+        d.resources.sounds = Some(c"ship.zoqfotpik.sounds");
+        d.intelligence.weapon_range = (((10) << ONE_SHIFT as i32) * (10)) as u16;
+        d.descriptor(&ZOQFOT)
     }
-    static mut DESC: RACE_DESC = descriptor();
-    #[no_mangle]
-    pub extern "C" fn init_zoqfotpik() -> *mut RACE_DESC {
-        unsafe {
-            DESC.postprocess_func = Some(zoqfotpik_postprocess);
-            DESC.init_weapon_func = Some(initialize_spit);
-            DESC.cyborg_control.intelligence_func = Some(zoqfotpik_intelligence);
-        }
-        &raw mut DESC
-    }
-    pub(crate) unsafe extern "C" fn spit_preprocess(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait > 0 {
-            (*e).__bindgen_anon_4.turn_wait -= 1;
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
+    };
+    pub static ZOQFOT: Race = Race {
+        descriptor,
+        preprocess: None,
+        postprocess: Some(zoqfotpik_postprocess),
+        init_weapon: Some(initialize_spit),
+        intelligence: Some(zoqfotpik_intelligence),
+        uninit: None,
+    };
+    pub(crate) fn spit_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.element(e).turn > 0 {
+            cx.element_mut(e).turn -= 1;
         } else {
-            image!(frame; (*e).next.image.frame, IncFrameIndex((*e).next.image.frame));
-            let mut angle = (*e).velocity.travel_angle;
-            let index = frame_index((*e).next.image.frame);
+            cx.set_frame(e, true, cx.advance_frame(cx.element(e).next.image.frame));
+            let mut angle = cx.element(e).velocity.travel_angle;
+            let index = cx.frame_number(cx.element(e).next.image.frame);
             if index == 1 {
-                angle = (i32::from(angle) + (i32::from(TFB_Random() as COUNT) % 3) - 1) as COUNT;
+                angle = (i32::from(angle) + (i32::from(cx.random() as COUNT) % 3) - 1) as COUNT;
             }
-            let speed = (((i32::from(frame_count((*e).next.image.frame)) - i32::from(index))
+            let speed = (((i32::from(cx.frame_count(cx.element(e).next.image.frame))
+                - i32::from(index))
                 << ONE_SHIFT)
                 << 1)
                 << VELOCITY_SHIFT;
             let speed = speed as COUNT;
-            SetVelocityComponents(
-                &raw mut (*e).velocity,
-                cosine(i32::from(angle), i32::from(speed)),
-                sine(i32::from(angle), i32::from(speed)),
+            cx.element_mut(e).velocity.set_components(
+                i32::from(cosine(i32::from(angle), i32::from(speed))),
+                i32::from(sine(i32::from(angle), i32::from(speed))),
             );
-            (*e).__bindgen_anon_4.turn_wait = 2;
-            (*e).state_flags |= CHANGING as u16;
+            cx.element_mut(e).turn = 2;
+            cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
-    pub(crate) unsafe extern "C" fn initialize_spit(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
-            face: (*ss).ShipFacing,
+    pub(crate) fn initialize_spit(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut out = Vec::new();
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
             index: 0,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 13,
-            speed: ((i32::from(frame_count((*(*ss).RaceDescPtr).ship_data.weapon[0])) << ONE_SHIFT)
-                << 1) as SIZE,
+            speed: ((i32::from(cx.frame_count(cx.ship_frame(ss, 1))) << ONE_SHIFT) << 1) as SIZE,
             hit_points: 1,
             damage: 1,
             life: 10,
-            preprocess_func: Some(ElementHook::Legacy(spit_preprocess)),
+            preprocess: Some(spit_preprocess),
             blast_offs: 0,
         };
-        *out = initialize_missile(&mut block);
-        1
+        out.push(cx.missile(&mut block));
+        out
     }
-    pub(crate) unsafe extern "C" fn tongue_postprocess(e: *mut ELEMENT) {
-        if (*e).__bindgen_anon_4.turn_wait != 0 {
-            spawn_tongue(e);
+    pub(crate) fn tongue_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.element(e).turn != 0 {
+            spawn_tongue(cx, e);
         }
     }
-    pub(crate) unsafe extern "C" fn tongue_collision(
-        a: *mut ELEMENT,
-        pa: *mut POINT,
-        b: *mut ELEMENT,
-        pb: *mut POINT,
+    pub(crate) fn tongue_collision(
+        cx: &mut Cx<'_>,
+        a: ElementId,
+        pa: &mut POINT,
+        b: ElementId,
+        pb: &mut POINT,
     ) {
-        let ss = starship(a);
-        if (*ss).special_counter == (*(*ss).RaceDescPtr).characteristics.special_wait {
-            weapon_collision(a, pa, b, pb);
+        let ss = cx.owner(a);
+        if cx.ship_state(ss).special_counter == cx.race_stats(ss).characteristics.special_wait {
+            cx.weapon_collision(a, pa, b, pb);
         }
-        (*ss).special_counter = (*ss)
+        cx.ship_state_mut(ss).special_counter = cx
+            .ship_state(ss)
             .special_counter
-            .wrapping_sub((*a).__bindgen_anon_4.turn_wait);
-        (*a).__bindgen_anon_4.turn_wait = 0;
-        (*a).state_flags |= NONSOLID as u16;
+            .wrapping_sub(cx.element(a).turn);
+        cx.element_mut(a).turn = 0;
+        cx.element_mut(a).flags |= NONSOLID as u16;
     }
-    pub(crate) unsafe extern "C" fn spawn_tongue(e: *mut ELEMENT) {
-        let ss = starship(e);
-        let mut block = MISSILE_BLOCK {
-            cx: (*e).next.location.x,
-            cy: (*e).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast(),
-            face: (*ss).ShipFacing,
-            index: (*ss).ShipFacing,
-            sender: (*e).playerNr,
+    pub(crate) fn spawn_tongue(cx: &mut Cx<'_>, e: ElementId) {
+        let ss = cx.owner(e);
+        let mut block = Missile {
+            cx: cx.element(e).next.location.x,
+            cy: cx.element(e).next.location.y,
+            farray: cx.ship_frame_set(ss, 2),
+            face: cx.ship_state(ss).facing,
+            index: cx.ship_state(ss).facing,
+            sender: cx.element(e).player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 0,
             speed: 0,
             hit_points: 1,
             damage: 12,
             life: 1,
-            preprocess_func: None,
+            preprocess: None,
             blast_offs: 4,
         };
-        let h = initialize_missile(&mut block);
-        if !h.is_null() {
-            let tongue = element(h);
-            (*tongue).postprocess_func = Some(ElementHook::Legacy(tongue_postprocess));
-            (*tongue).collision_func = Some(CollisionHook::Legacy(tongue_collision));
-            if (*e).state_flags & PLAYER_SHIP as u16 != 0 {
-                (*tongue).__bindgen_anon_4.turn_wait = (*ss).special_counter;
+        let h = cx.missile(&mut block);
+        if let Some(tongue) = h {
+            cx.element_mut(tongue).post = Some(ElementHook::Native(tongue_postprocess));
+            cx.element_mut(tongue).collide = Some(CollisionHook::Native(tongue_collision));
+            if cx.element(e).flags & PLAYER_SHIP as u16 != 0 {
+                cx.element_mut(tongue).turn = cx.ship_state(ss).special_counter;
             } else {
-                (*tongue).__bindgen_anon_4.turn_wait =
-                    (*e).__bindgen_anon_4.turn_wait.wrapping_sub(1);
-                let mut r: RECT = mem::zeroed();
-                GetFrameRect((*tongue).current.image.frame, &mut r);
+                cx.element_mut(tongue).turn = cx.element(e).turn.wrapping_sub(1);
+                let r = cx.frame_rect(cx.element(tongue).current.image.frame);
                 let x = ((i32::from(r.extent.width) >> 1) << ONE_SHIFT) as SIZE;
                 let y = ((i32::from(r.extent.height) >> 1) << ONE_SHIFT) as SIZE;
-                let angle = facing_to_angle(i32::from((*ss).ShipFacing)) as COUNT;
+                let angle = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;
                 if u32::from(angle) > HALF_CIRCLE && u32::from(angle) < FULL_CIRCLE {
-                    (*tongue).current.location.x = (*tongue).current.location.x.wrapping_sub(x);
+                    cx.element_mut(tongue).current.location.x =
+                        cx.element(tongue).current.location.x.wrapping_sub(x);
                 } else if angle > 0 && u32::from(angle) < HALF_CIRCLE {
-                    (*tongue).current.location.x = (*tongue).current.location.x.wrapping_add(x);
+                    cx.element_mut(tongue).current.location.x =
+                        cx.element(tongue).current.location.x.wrapping_add(x);
                 }
                 if u32::from(angle) < QUADRANT || u32::from(angle) > FULL_CIRCLE - QUADRANT {
-                    (*tongue).current.location.y = (*tongue).current.location.y.wrapping_sub(y);
+                    cx.element_mut(tongue).current.location.y =
+                        cx.element(tongue).current.location.y.wrapping_sub(y);
                 } else if u32::from(angle) > QUADRANT && u32::from(angle) < FULL_CIRCLE - QUADRANT {
-                    (*tongue).current.location.y = (*tongue).current.location.y.wrapping_add(y);
+                    cx.element_mut(tongue).current.location.y =
+                        cx.element(tongue).current.location.y.wrapping_add(y);
                 }
             }
-            (*tongue).pParent = ss.cast();
-            put_element(h);
+            cx.set_parent(tongue, Some(ss));
+            cx.put(tongue);
         }
     }
-    pub(crate) unsafe extern "C" fn zoqfotpik_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        mut count: COUNT,
-    ) {
-        let ss = starship(ship);
+    pub(crate) fn zoqfotpik_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let mut tongue = false;
-        if (*ss).special_counter == 0 {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
-            let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-            if !(*enemy).ObjectPtr.is_null() && (*enemy).which_turn <= 4 {
+        if cx.ship_state(ss).special_counter == 0 {
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
+            let enemy = ENEMY_SHIP_INDEX as usize;
+            if concerns.objects[enemy].object.is_some() && concerns.objects[enemy].which_turn <= 4 {
                 tongue = true;
-                (*enemy).MoveState = MOVEMENT_STATE_PURSUE;
-                let dx = (*(*enemy).ObjectPtr)
+                concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
+                let dx = cx
+                    .element(
+                        concerns.objects[enemy]
+                            .object
+                            .unwrap_or_else(|| panic!("AI concern")),
+                    )
                     .next
                     .location
                     .x
-                    .wrapping_sub((*ship).next.location.x);
-                let dy = (*(*enemy).ObjectPtr)
+                    .wrapping_sub(concerns.subject.next.location.x);
+                let dy = cx
+                    .element(
+                        concerns.objects[enemy]
+                            .object
+                            .unwrap_or_else(|| panic!("AI concern")),
+                    )
                     .next
                     .location
                     .y
-                    .wrapping_sub((*ship).next.location.y);
-                if (*ss).ShipFacing == normalize_facing(angle_to_facing(i32::from(ARCTAN(dx, dy))))
+                    .wrapping_sub(concerns.subject.next.location.y);
+                if cx.ship_state(ss).facing
+                    == normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx, dy))))
                 {
-                    (*ss).ship_input_state |= SPECIAL as u8;
+                    cx.ship_state_mut(ss).input |= SPECIAL as u8;
                 }
             }
         }
-        (*ss).weapon_counter = (*ss).weapon_counter.wrapping_add(1);
-        ship_intelligence(ship, concerns, count);
-        (*ss).weapon_counter = (*ss).weapon_counter.wrapping_sub(1);
-        if (*ss).weapon_counter == 0 {
-            (*ss).ship_input_state &= !(WEAPON as u8);
+        cx.ship_state_mut(ss).weapon_counter = cx.ship_state(ss).weapon_counter.wrapping_add(1);
+        cx.ship_intelligence(ss, concerns);
+        cx.ship_state_mut(ss).weapon_counter = cx.ship_state(ss).weapon_counter.wrapping_sub(1);
+        if cx.ship_state(ss).weapon_counter == 0 {
+            cx.ship_state_mut(ss).input &= !(WEAPON as u8);
             if !tongue {
-                let mut eval = concerns.add(count as usize);
+                let mut count = concerns.count;
+                let mut eval = count as usize;
                 while count != 0 {
                     count -= 1;
-                    eval = eval.sub(1);
-                    if !(*eval).ObjectPtr.is_null()
+                    eval -= 1;
+                    if concerns.objects[eval].object.is_some()
                         && (u32::from(count) == ENEMY_SHIP_INDEX
                             || (u32::from(count) == ENEMY_WEAPON_INDEX
-                                && (*eval).MoveState != MOVEMENT_STATE_AVOID))
-                        && ship_weapons(ship, (*eval).ObjectPtr, 20 << ONE_SHIFT) != 0
+                                && concerns.objects[eval].movement != MOVEMENT_STATE_AVOID))
+                        && cx.ship_weapons(
+                            &concerns.subject,
+                            &cx.weapon_origin(
+                                concerns.objects[eval]
+                                    .object
+                                    .unwrap_or_else(|| panic!("AI concern")),
+                            ),
+                            20 << ONE_SHIFT,
+                        ) != 0
                     {
-                        (*ss).ship_input_state |= WEAPON as u8;
+                        cx.ship_state_mut(ss).input |= WEAPON as u8;
                         break;
                     }
                 }
             }
         }
     }
-    pub(crate) unsafe extern "C" fn zoqfotpik_postprocess(e: *mut ELEMENT) {
-        let ss = starship(e);
-        if (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && (*ss).special_counter == 0
-            && DeltaEnergy(e, -7) != 0
+    pub(crate) fn zoqfotpik_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let e = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(e, -7)
         {
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-                e,
-            );
-            (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+            cx.process_ship_sound(ss, 1, e);
+            cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
-        if (*ss).special_counter != 0 {
-            spawn_tongue(e);
+        if cx.ship_state(ss).special_counter != 0 {
+            spawn_tongue(cx, e);
         }
     }
 }
