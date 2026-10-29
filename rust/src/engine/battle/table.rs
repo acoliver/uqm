@@ -82,6 +82,19 @@ impl ElementTable {
         })
     }
 
+    /// Retained legacy phoenix addresses can outlive their allocation. Foreign
+    /// addresses still fail validation; a retired pool slot has no current id.
+    pub(super) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
+        if handle.is_null() {
+            return None;
+        }
+        let slot = self.slot(handle);
+        self.allocated[slot].then_some(ElementId {
+            slot: slot as u8,
+            gen: self.generations[slot],
+        })
+    }
+
     pub fn contains(&self, id: ElementId) -> bool {
         let slot = usize::from(id.slot);
         self.allocated[slot] && self.generations[slot] == id.gen
@@ -235,8 +248,20 @@ mod tests {
             assert_eq!([a.slot, b.slot, c.slot], [0, 1, 2]);
             assert!(elements.alloc().is_none());
             assert_eq!(elements.id(elements.raw(b)), Some(b));
+            let retained = elements.raw(b);
+            assert_eq!(elements.allocated_id(retained), Some(b));
             elements.free(b);
+            assert_eq!(elements.allocated_id(retained), None);
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || elements.id(retained)
+            ))
+            .is_err());
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || elements.allocated_id(std::ptr::dangling_mut())
+            ))
+            .is_err());
             let replacement = elements.alloc().unwrap();
+            assert_eq!(elements.allocated_id(retained), Some(replacement));
             assert_eq!(b.slot, replacement.slot);
             assert_ne!(b, replacement);
             assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(

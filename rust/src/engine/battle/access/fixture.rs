@@ -126,7 +126,7 @@ impl Cx<'_> {
                 .map(|pointer| {
                     let data = self.project(pointer);
                     Phoenix {
-                        handle: self.elements().id(data.hPhoenix),
+                        handle: self.elements().allocated_id(data.hPhoenix),
                         hooks: [
                             data.saved_preprocess_func,
                             data.saved_postprocess_func,
