@@ -7,7 +7,7 @@ mod battle;
 mod battle_context;
 use battle::{Battle as PoolBattle, PoolElement, PoolShip};
 
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, ptr};
 use uqm_rust::ships::native::{abi::*, element};
 
 static ENGINE: std::sync::Mutex<()> = std::sync::Mutex::new(());

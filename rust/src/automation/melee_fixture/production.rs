@@ -495,7 +495,7 @@ impl World<'_> {
                         Effect::Think(_) => {
                             for (owner, crew) in active {
                                 let owner=owner.cast();
-                                let input = crate::battle::cyborg_native::tactical_intelligence(
+                                let input = crate::battle::cyborg_native::engine::tactical_intelligence(
                                     ptr::null_mut(),
                                     owner,
                                 );

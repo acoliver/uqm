@@ -2,6 +2,8 @@
 pub use super::geometry_ffi::BoxIntersect;
 use super::native_abi::{Color, GRAPHICS_PRIM, POINT, PRIM_DESC, PRIM_LINKS, STAMP};
 
+pub const LINE_PRIMITIVE: u8 = 3;
+
 #[repr(C)]
 #[allow(non_snake_case)]
 pub struct PRIMITIVE {

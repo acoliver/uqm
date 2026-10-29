@@ -14,8 +14,6 @@ unsafe extern "C" {
     fn FreeElement(handle: HELEMENT);
 }
 
-/// The element queue is process-wide engine state.
-
 /// The queue holds exactly the elements a test creates, so a test can also
 /// exhaust the allocator.
 const QUEUE_SLOTS: u16 = 6;

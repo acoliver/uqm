@@ -66,28 +66,8 @@ pub mod live {
             .cast_mut()
             .cast()
     }
-    unsafe fn by_index(player: usize, mut index: u16, used: bool) -> Option<ShipId> {
-        let queue = link_queue::ships(player);
-        let mut link = queue.head();
-        while let Some(id) = link {
-            let ship = queue.get(id);
-            if used {
-                if ship.species != 0 {
-                    if index == 0 {
-                        return Some(queue.ship_id(id, player as u8));
-                    }
-                    index = index.wrapping_sub(1);
-                }
-            } else if ship.index == index {
-                return if ship.species == 0 {
-                    None
-                } else {
-                    Some(queue.ship_id(id, player as u8))
-                };
-            }
-            link = queue.succ(id);
-        }
-        None
+    unsafe fn by_index(player: usize, index: u16, used: bool) -> Option<ShipId> {
+        link_queue::ships(player).by_index(player as u8, index, used)
     }
     unsafe fn changed(state: *mut GETMELEE_STATE, player: usize) {
         let s = &(*state).player[player];
@@ -413,16 +393,16 @@ pub mod live {
                 };
                 DrawStamp(&mut s);
                 let mut queue = link_queue::ships(side);
-                let mut ship = queue.get(built);
-                ship.index = index;
-                ship.cost = (*master).ShipInfo.ship_cost;
-                ship.player = side as i16;
-                ship.captain = captain;
-                ship.crew = 0;
-                ship.max_crew = 0;
-                ship.strings = 0;
-                ship.icons = 0;
-                queue.set(built, ship);
+                queue.edit(built, |ship| {
+                    ship.index = index;
+                    ship.cost = (*master).ShipInfo.ship_cost;
+                    ship.player = side as i16;
+                    ship.captain = captain;
+                    ship.crew = 0;
+                    ship.max_crew = 0;
+                    ship.strings = 0;
+                    ship.icons = 0;
+                });
                 queue.clear_descriptor(built);
             }
         }
@@ -432,15 +412,11 @@ pub mod live {
     /// The live battle ship and pick frame belong to the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn MeleeShipDeath(ship: *mut std::ffi::c_void) {
-        let ship = {
-            let id = link_queue::identify(ship as usize);
-            let mut queue = link_queue::ships(id.side as usize);
-            let id = queue.link(id);
-            let mut value = queue.get(id);
-            value.species = 0;
-            queue.set(id, value);
-            value
-        };
+        let owner = link_queue::identify(ship as usize);
+        let mut queue = link_queue::ships(owner.side as usize);
+        let id = queue.link(owner);
+        queue.edit(id, |ship| ship.species = 0);
+        let ship = queue.get(id);
         let frame = SetAbsFrameIndex(PickMeleeFrame, ship.player as u16);
         let old = SetContext(OffScreenContext);
         drawable_abi::SetContextFGFrame(frame.cast());

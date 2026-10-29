@@ -1,5 +1,7 @@
 //! Live computer-input routing, preserving intel.c's battle and selection rules.
 
+#[cfg(not(test))]
+use crate::engine::battle::{Cx, ShipId};
 use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SUPER_MELEE};
 
 #[derive(Debug, PartialEq)]
@@ -31,13 +33,10 @@ fn route(activity: u8, ship: Option<(u8, i16)>, player_control: u8) -> Route {
 }
 
 #[cfg(not(test))]
-pub use crate::battle::context_access::ai_legacy::computer_intelligence;
-
-#[cfg(not(test))]
 pub(crate) fn computer_input(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut Cx<'_>,
     player: u16,
-    ship: Option<crate::engine::battle::ShipId>,
+    ship: Option<ShipId>,
     player_control: u8,
 ) -> u8 {
     let activity = cx.world.activity() as u8;
@@ -47,19 +46,19 @@ pub(crate) fn computer_input(
     });
     match route(activity, control, player_control) {
         Route::None => 0,
-        Route::Human => crate::battle::context_access::ai_legacy::human_input(player),
+        Route::Human => cx.human_input(player),
         Route::Tactical(escape) => {
             let mut input = crate::battle::cyborg_native::tactical(
                 cx,
                 ship.unwrap_or_else(|| panic!("missing checked battle value")),
             );
             if escape {
-                input |= crate::battle::context_access::ai_legacy::human_input(player) & (1 << 5);
+                input |= cx.human_input(player) & (1 << 5);
             }
             input
         }
         Route::Select => {
-            crate::battle::context_access::ai_legacy::selection_delay();
+            cx.selection_delay();
             1 << 3
         }
         Route::Unexpected => {

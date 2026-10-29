@@ -2,6 +2,8 @@
 //! `DrawArmadaPickShip`, with the drawing and input calls of `pickship.c` in
 //! the order the C made them. The rules they apply are in the parent module.
 
+use crate::comm::dispatch::production_captain_name;
+use crate::engine::battle::link_queue::{LinkQueue, Starship};
 use std::ffi::{c_char, c_int, c_void};
 
 use super::{
@@ -11,11 +13,11 @@ use super::{
 use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
-use crate::comm::dispatch::production_captain_name;
+
 use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
 use crate::engine::battle::{
-    link_queue::{self, PickShip},
+    link_queue::{self},
     ShipId,
 };
 use crate::mainloop::restart_menu::c_extern as base;
@@ -140,38 +142,6 @@ struct PickerState {
     flash: CRect,
 }
 
-fn tail_of(side: usize) -> *mut c_void {
-    // SAFETY: the game thread owns this pool; the view ends before returning its ABI handle.
-    unsafe {
-        let queue = link_queue::ships(side);
-        queue
-            .tail()
-            .map_or(std::ptr::null_mut(), |id| queue.raw(id))
-    }
-}
-fn ship_value(id: ShipId) -> PickShip {
-    // SAFETY: the game thread owns this pool; only a value projection leaves the view.
-    unsafe {
-        let queue = link_queue::ships(id.side as usize);
-        queue.get(queue.link(id))
-    }
-}
-fn ship_id(side: usize, raw: *mut c_void) -> Option<ShipId> {
-    // SAFETY: picker ABI handles name records in this side's live pool.
-    unsafe {
-        let queue = link_queue::ships(side);
-        queue.id(raw).map(|id| queue.ship_id(id, side as u8))
-    }
-}
-fn ship_raw(id: Option<ShipId>) -> *mut c_void {
-    id.map_or(std::ptr::null_mut(), |id| {
-        // SAFETY: the picker retains the side's pool through the handoff.
-        unsafe {
-            let queue = link_queue::ships(id.side as usize);
-            queue.raw(queue.link(id))
-        }
-    })
-}
 #[cfg(not(test))]
 pub(crate) fn live_escort_indices() -> Vec<u16> {
     escort_links()
@@ -183,25 +153,24 @@ pub(crate) fn live_escort_indices() -> Vec<u16> {
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
 /// tail.
 fn escort_links() -> Vec<(ShipId, Escort)> {
-    let mut found = Vec::new();
-    // SAFETY: the game thread reads the pool without crossing a legacy call.
-    unsafe {
-        let queue = link_queue::ships(RPG_PLAYER_NUM);
-        let tail = queue.tail();
-        let mut link = queue.head();
-        while let Some(id) = link.filter(|id| Some(*id) != tail) {
-            let ship = queue.get(id);
-            found.push((
-                queue.ship_id(id, RPG_PLAYER_NUM as u8),
+    let tail = LinkQueue::<Starship>::identify_ship(
+        RPG_PLAYER_NUM,
+        LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM),
+    );
+    LinkQueue::<Starship>::all_links()
+        .into_iter()
+        .filter(|id| Some(*id) != tail)
+        .map(|id| {
+            let ship = LinkQueue::<Starship>::ship_value(id);
+            (
+                id,
                 Escort {
                     index: ship.index,
                     alive: ship.species != NO_ID,
                 },
-            ));
-            link = queue.succ(id);
-        }
-    }
-    found
+            )
+        })
+        .collect()
 }
 
 fn pulsed_directions() -> (Direction, bool) {
@@ -237,7 +206,10 @@ unsafe fn change_selection(state: &mut PickerState) {
     };
 
     state.chosen = match slot(state.cursor) {
-        Slot::Flagship => ship_id(RPG_PLAYER_NUM, tail_of(RPG_PLAYER_NUM)),
+        Slot::Flagship => LinkQueue::<Starship>::identify_ship(
+            RPG_PLAYER_NUM,
+            LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM),
+        ),
         Slot::Escort(ship_index) => {
             let links = escort_links();
             let escorts: Vec<Escort> = links.iter().map(|(_, escort)| *escort).collect();
@@ -255,7 +227,7 @@ unsafe fn change_selection(state: &mut PickerState) {
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
-        let ship = ship_value(chosen);
+        let ship = LinkQueue::<Starship>::ship_value(chosen);
         let (text, length, crew, max_crew) = if ship.captain == 0 {
             // SAFETY: the game thread owns `GlobData`.
             let sis = unsafe { &*std::ptr::addr_of!(GlobData) }.SIS_state;
@@ -391,7 +363,8 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
 
     let chosen = state.chosen;
     if chosen.is_some() {
-        if ship_raw(chosen) == tail_of(RPG_PLAYER_NUM) {
+        if LinkQueue::<Starship>::ship_raw(chosen) == LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM)
+        {
             // Player chose SIS. There will be no more choices.
             // SAFETY: `battle_counter` has a slot for each side.
             unsafe { crate::app::bridge::battle(|b| b.counters[RPG_PLAYER_NUM] = 1) };
@@ -402,7 +375,7 @@ unsafe fn get_armada_star_ship() -> *mut c_void {
 
     // SAFETY: restores the context saved above.
     unsafe { base::SetContext(old_context) };
-    ship_raw(chosen)
+    LinkQueue::<Starship>::ship_raw(chosen)
 }
 
 pub use crate::battle::context_access::reader_legacy::{
@@ -422,16 +395,16 @@ pub(crate) unsafe fn encounter_ship(
     let side = usize::from(which_player);
     // SAFETY: `battle_counter` and `race_q` have a slot for each side.
     // SAFETY: as above.
-    let last_id = ship_id(side, last);
+    let last_id = LinkQueue::<Starship>::identify_ship(side, last);
 
     // SAFETY: plain call.
     if unsafe { inHQSpace() } != 0 {
         assert_eq!(side, RPG_PLAYER_NUM);
         // SIS for the Hyperspace flight
         // SAFETY: `queue` is `race_q[side]`.
-        return ship_raw(first_ship(side));
+        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side));
     }
-    if crate::mainloop::ffi::get_current_activity().0 & 0xFF == SUPER_MELEE {
+    if crate::battle::battle_native::engine::activity() & 0xFF == SUPER_MELEE {
         // Let the player chose their own ship. (May be a computer player).
         // SAFETY: `battle_counter` has a slot for each side.
         let (own, other) =
@@ -456,7 +429,7 @@ pub(crate) unsafe fn encounter_ship(
         if last.is_null() && ships_left == 1 {
             // First time picking a ship and player has no escorts: SIS is the
             // last ship in the queue (though there is only one).
-            return tail_of(side);
+            return LinkQueue::<Starship>::tail_of(side);
         }
         if ships_left != 0 {
             // Player still has ships left
@@ -469,8 +442,10 @@ pub(crate) unsafe fn encounter_ship(
             // the game thread.
             unsafe {
                 let sis = &mut (*std::ptr::addr_of_mut!(GlobData)).SIS_state;
-                if ship_value(last_id.unwrap_or_else(|| panic!("missing checked battle value")))
-                    .crew
+                if LinkQueue::<Starship>::ship_value(
+                    last_id.unwrap_or_else(|| panic!("missing checked battle value")),
+                )
+                .crew
                     == 0
                 {
                     // Died in the line of duty
@@ -508,7 +483,7 @@ pub(crate) unsafe fn encounter_ship(
         // SAFETY: `counter` points into `battle_counter`.
         unsafe { crate::app::bridge::battle(|b| b.counters[side] += 1) };
         // SAFETY: `queue` is `race_q[side]`.
-        return ship_raw(first_ship(side));
+        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side));
     }
     if !last.is_null() {
         // Get the next ship for the computer
@@ -522,7 +497,7 @@ pub(crate) unsafe fn encounter_ship(
     }
     // Get the very first ship for the computer
     // SAFETY: `queue` is `race_q[side]`.
-    ship_raw(first_ship(side))
+    LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side))
 }
 
 /// `DrawArmadaPickShip`: draw the picker frame, the SIS name and the escorts'
@@ -607,9 +582,9 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         u16::MAX,
     );
 
-    for id in all_links() {
+    for id in LinkQueue::<Starship>::all_links() {
         // SAFETY: every link of `race_q` is a `STARSHIP`.
-        let ship = ship_value(id);
+        let ship = LinkQueue::<Starship>::ship_value(id);
         if ship.captain == 0 {
             // SIS, not an escort
             continue;
@@ -653,26 +628,4 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
         base::DestroyDrawable(base::ReleaseDrawable(pick_frame));
         base::SetContext(old_context);
     }
-}
-
-/// Every `STARSHIP` of the player's queue, flagship included.
-fn first_ship(side: usize) -> Option<ShipId> {
-    // SAFETY: the game thread owns this side's initialized ship pool.
-    unsafe {
-        let queue = link_queue::ships(side);
-        queue.head().map(|id| queue.ship_id(id, side as u8))
-    }
-}
-fn all_links() -> Vec<ShipId> {
-    let mut found = Vec::new();
-    // SAFETY: no record borrow crosses a callback or resource operation.
-    unsafe {
-        let queue = link_queue::ships(RPG_PLAYER_NUM);
-        let mut link = queue.head();
-        while let Some(id) = link {
-            found.push(queue.ship_id(id, RPG_PLAYER_NUM as u8));
-            link = queue.succ(id);
-        }
-    }
-    found
 }

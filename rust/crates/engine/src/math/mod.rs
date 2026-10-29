@@ -24,6 +24,26 @@ pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
     }
 }
 
+/// C `ANGLE_TO_FACING`, before the caller applies facing normalization.
+pub const fn angle_to_facing(angle: i32) -> i32 {
+    (angle + (1 << (CIRCLE_SHIFT - FACING_SHIFT - 1))) >> (CIRCLE_SHIFT - FACING_SHIFT)
+}
+
+/// C `FACING_TO_ANGLE`.
+pub const fn facing_to_angle(facing: i32) -> i32 {
+    facing << (CIRCLE_SHIFT - FACING_SHIFT)
+}
+
+/// C `NORMALIZE_ANGLE`.
+pub const fn normalize_angle(angle: i32) -> i32 {
+    angle & (FULL_CIRCLE as i32 - 1)
+}
+
+/// C `NORMALIZE_FACING`.
+pub const fn normalize_facing(facing: i32) -> u16 {
+    (facing & ((1 << FACING_SHIFT) - 1)) as u16
+}
+
 use crate::memory::{rust_hfree, rust_hmalloc};
 use std::os::raw::c_void;
 
@@ -245,6 +265,7 @@ pub static sinetab: [i16; 64] = [
     -10394, -11585, -12665, -13623, -14449, -15137, -15679, -16069, -16305,
 ];
 
+const FACING_SHIFT: u32 = 4;
 const CIRCLE_SHIFT: u32 = 6;
 const FULL_CIRCLE: u16 = 1 << CIRCLE_SHIFT; // 64
 const HALF_CIRCLE: u16 = FULL_CIRCLE >> 1; // 32

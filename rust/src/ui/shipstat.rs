@@ -126,7 +126,6 @@ pub(crate) unsafe fn init_ship_status(
         let ships = link_queue::ships(id.side as usize);
         ships.get(ships.link(id))
     });
-    let mut r: RECT = mem::zeroed();
     let mut y: COORD = 0;
     let mut stamp: STAMP = mem::zeroed();
     let mut old_clip: RECT = mem::zeroed();
@@ -138,7 +137,7 @@ pub(crate) unsafe fn init_ship_status(
     let old_context = SetContext(StatusContext);
     if !clip_rect.is_null() {
         GetContextClipRect(&mut old_clip);
-        r = old_clip;
+        let mut r = old_clip;
         r.corner.x += (*clip_rect).corner.x;
         r.corner.y += (*clip_rect).corner.y & !1;
         r.extent = (*clip_rect).extent;
@@ -156,52 +155,27 @@ pub(crate) unsafe fn init_ship_status(
     stamp.origin.y = 31 + y;
     stamp.frame = IncFrameIndex((*siptr).icons);
     DrawStamp(&mut stamp);
-    let crew_height = (((std::cmp::min((*siptr).max_crew, MAX_CREW_SIZE) + 1) & !1) + 1) as SIZE;
-    let energy_height = (((((*siptr).max_energy + 1) >> 1) << 1) + 1) as COORD;
-    SetContextForeGroundColor(rgb15(0x08, 0x08, 0x08));
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS + 1 + y;
-    r.extent.width = STAT_WIDTH + 2;
-    r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS - 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS + STAT_WIDTH;
-    r.corner.y -= energy_height;
-    r.extent.width = 1;
-    r.extent.height = energy_height;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = CREW_XOFFS + STAT_WIDTH;
-    r.corner.y = GAUGE_YOFFS + 1 + y - crew_height;
-    r.extent.height = crew_height;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - crew_height + y;
-    r.extent.width = STAT_WIDTH + 2;
-    r.extent.height = 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - energy_height + y;
-    DrawFilledRectangle(&mut r);
-    r.extent.width = 1;
-    r.extent.height = energy_height + 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = CREW_XOFFS - 1;
-    r.corner.y = GAUGE_YOFFS - crew_height + y;
-    r.extent.height = crew_height + 1;
-    DrawFilledRectangle(&mut r);
-    SetContextForeGroundColor(rgb15(0, 0, 0));
-    r.extent.width = STAT_WIDTH;
-    r.corner.x = CREW_XOFFS;
-    r.extent.height = crew_height;
-    r.corner.y = y - r.extent.height + GAUGE_YOFFS + 1;
-    DrawFilledRectangle(&mut r);
-    r.corner.x = ENERGY_XOFFS;
-    r.extent.height = energy_height;
-    r.corner.y = y - r.extent.height + GAUGE_YOFFS + 1;
-    DrawFilledRectangle(&mut r);
+    gauge_frames::draw_gauge_frames(&*siptr, y);
 
+    draw_status_title(siptr, starship, y);
+    let crew_delta = (*siptr).crew_level as SIZE;
+    let energy_delta = (*siptr).energy_level as SIZE;
+    (*siptr).crew_level = 0;
+    (*siptr).energy_level = 0;
+    DeltaStatistics(siptr, y, crew_delta, energy_delta);
+    UnbatchGraphics();
+    if !clip_rect.is_null() {
+        SetContextOrigin(old_origin);
+        SetContextClipRect(&mut old_clip);
+    }
+    SetContext(old_context);
+}
+
+unsafe fn draw_status_title(
+    siptr: *mut SHIP_INFO,
+    starship: Option<crate::engine::battle::link_queue::PickShip>,
+    y: COORD,
+) {
     if starship.is_none_or(|ship| ship.captain != 0) {
         DrawCrewFuelString(y, 0);
         let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
@@ -240,17 +214,6 @@ pub(crate) unsafe fn init_ship_status(
             y,
         );
     }
-    let crew_delta = (*siptr).crew_level as SIZE;
-    let energy_delta = (*siptr).energy_level as SIZE;
-    (*siptr).crew_level = 0;
-    (*siptr).energy_level = 0;
-    DeltaStatistics(siptr, y, crew_delta, energy_delta);
-    UnbatchGraphics();
-    if !clip_rect.is_null() {
-        SetContextOrigin(old_origin);
-        SetContextClipRect(&mut old_clip);
-    }
-    SetContext(old_context);
 }
 
 /// # Safety
@@ -353,3 +316,6 @@ pub unsafe extern "C" fn DeltaStatistics(
         }
     }
 }
+
+#[path = "shipstat_gauges.rs"]
+mod gauge_frames;

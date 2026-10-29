@@ -563,7 +563,7 @@ impl Drop for Object<'_> {
 
 #[path = "ship_pool.rs"]
 mod ship_pool;
-pub use ship_pool::PoolShip;
+pub type PoolShip = ship_pool::PoolShip;
 
 /// An unlinked pool slot for legacy callback operands.
 pub struct PoolElement {

@@ -27,7 +27,7 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::sounds::ProcessSound;
+    use crate::battle::sounds::engine::ProcessSound;
     use crate::battle::world_elements::do_damage;
     use crate::collections::observation::image;
     use crate::ships::native::{

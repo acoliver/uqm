@@ -1,6 +1,12 @@
 //! Native fleet construction and escort bookkeeping ported from build.c.
 
 use crate::ships::native::abi::*;
+#[cfg(not(test))]
+use std::ptr;
+#[cfg(not(test))]
+const INFINITE_RADIUS_NATIVE: u16 = u16::MAX;
+#[cfg(not(test))]
+pub use crate::battle::context_access::fleet_legacy::{Build, GetIndexFromStarShip, NameCaptain};
 
 const SHIP_COSTS: [COUNT; 23] = [
     1600, 3000, 1100, 2300, 2000, 500, 1800, 1600, 1000, 2200, 1200, 2300, 3600, 1700, 1000, 2100,
@@ -11,26 +17,7 @@ fn matches_race(stored: BYTE, requested: COUNT) -> bool {
     COUNT::from(stored) == requested
 }
 
-unsafe fn ship_from_index(queue: *mut QUEUE, mut index: COUNT) -> HLINK {
-    // SAFETY: the caller owns the initialized queue and its live links for this operation.
-    unsafe {
-        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-            let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
-            let mut link = ships.head();
-            while let Some(id) = link.filter(|_| index > 0) {
-                link = ships.succ(id);
-                index -= 1;
-            }
-            return link.map_or(std::ptr::null_mut(), |id| ships.raw(id));
-        }
-        let mut handle = (*queue).head;
-        while index > 0 && !handle.is_null() {
-            handle = (*handle.cast::<LINK>()).succ;
-            index -= 1;
-        }
-        handle
-    }
-}
+use crate::battle::context_access::fleet_legacy::ship_from_index;
 
 unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
     loop {
@@ -46,113 +33,14 @@ unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
-    use std::ptr;
 
-    const INFINITE_RADIUS_NATIVE: u16 = u16::MAX;
-
-    /// # Safety
-    /// Queue must be initialized and use STARSHIP or SHIP_FRAGMENT links.
-    #[no_mangle]
-    pub unsafe extern "C" fn Build(queue: *mut QUEUE, species: SPECIES_ID) -> HLINK {
-        // SAFETY: the caller owns the initialized queue and its live links for this operation.
-        unsafe {
-            if queue.is_null() {
-                return ptr::null_mut();
-            }
-            if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-                let mut ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
-                ships
-                    .build(species)
-                    .map_or(ptr::null_mut(), |id| ships.raw(id))
-            } else {
-                crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
-            }
-        }
-    }
+    pub use super::{Build, GetIndexFromStarShip, NameCaptain};
 
     /// # Safety
     /// Queue must be initialized and its links remain locked only while read.
     #[no_mangle]
     pub unsafe extern "C" fn GetStarShipFromIndex(queue: *mut QUEUE, index: COUNT) -> HLINK {
         ship_from_index(queue, index)
-    }
-
-    /// # Safety
-    /// Queue and handle must refer to the same live linked record.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetIndexFromStarShip(queue: *mut QUEUE, mut handle: HLINK) -> COUNT {
-        // SAFETY: the caller owns the initialized queue and its live links for this operation.
-        unsafe {
-            let mut index: COUNT = 0;
-            if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
-                let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
-                let mut link = ships.id(handle);
-                while link != ships.head() {
-                    link = ships.pred(link.unwrap_or_else(|| panic!("ship is not linked")));
-                    index = index.wrapping_add(1);
-                }
-                return index;
-            }
-            while handle != (*queue).head {
-                let link = handle.cast::<LINK>();
-                handle = (*link).pred;
-                index = index.wrapping_add(1);
-            }
-            index
-        }
-    }
-
-    /// # Safety
-    /// Queue must be initialized and links must contain SHIP_BASE records.
-    #[no_mangle]
-    pub unsafe extern "C" fn NameCaptain(queue: *mut QUEUE, species: SPECIES_ID) -> BYTE {
-        // SAFETY: the caller owns the initialized queue and its live links for this operation.
-        unsafe {
-            assert!(
-                matches!((*queue).object_size as usize, size if size == crate::engine::battle::link_queue::ship_size() || size == std::mem::size_of::<SHIP_FRAGMENT>())
-            );
-            loop {
-                let name = (((TFB_Random() as COUNT) & (NUM_CAPTAINS_NAMES - 1) as COUNT)
-                    + NAME_OFFSET as COUNT) as BYTE;
-                let matched = if usize::from((*queue).object_size)
-                    == crate::engine::battle::link_queue::ship_size()
-                {
-                    let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
-                    let mut link = ships.head();
-                    let mut found = false;
-                    while let Some(id) = link {
-                        let ship = ships.get(id);
-                        if ship.species == species && ship.captain == name {
-                            found = true;
-                            break;
-                        }
-                        link = ships.succ(id);
-                    }
-                    found
-                } else {
-                    let mut handle = (*queue).head;
-                    let mut matched = false;
-                    while !handle.is_null() {
-                        let ship = handle.cast::<SHIP_BASE>();
-                        let next = (*ship).succ;
-                        let test_name = if (*ship).SpeciesID == species {
-                            (*ship).captains_name_index
-                        } else {
-                            BYTE::MAX
-                        };
-                        if test_name == name {
-                            matched = true;
-                            break;
-                        }
-                        handle = next;
-                    }
-                    matched
-                };
-                if !matched {
-                    return name;
-                }
-            }
-        }
     }
 
     /// # Safety
@@ -435,10 +323,10 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    AddEscortShips, Build, CalculateEscortsWorth, CheckAlliance, CloneShipFragment,
-    CountEscortShips, EscortFeasibilityStudy, GetEscortByStarShipIndex, GetIndexFromStarShip,
-    GetStarShipFromIndex, HaveEscortShip, NameCaptain, RemoveEscortShips, RemoveSomeEscortShips,
-    SetEscortCrewComplement, SetRaceAllied, StartSphereTracking,
+    AddEscortShips, CalculateEscortsWorth, CheckAlliance, CloneShipFragment, CountEscortShips,
+    EscortFeasibilityStudy, GetEscortByStarShipIndex, GetStarShipFromIndex, HaveEscortShip,
+    RemoveEscortShips, RemoveSomeEscortShips, SetEscortCrewComplement, SetRaceAllied,
+    StartSphereTracking,
 };
 
 #[cfg(test)]

@@ -24,6 +24,16 @@ impl Battle {
         self.counters[side] = self.counters[side].wrapping_sub(1);
     }
 
+    #[cfg(not(test))]
+    pub(crate) fn kernel_channels(&mut self) -> &mut super::record::Channels {
+        &mut self.kernel.channels
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn kernel_sounds(&mut self) -> &mut super::record::SoundQueue {
+        &mut self.kernel.sounds
+    }
+
     /// # Safety
     /// `queue` is the one game-thread element authority, kept live until cleanup.
     pub unsafe fn new(queue: *mut QUEUE) -> Self {

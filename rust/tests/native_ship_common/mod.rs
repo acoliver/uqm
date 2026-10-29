@@ -11,7 +11,9 @@ unsafe extern "C" {
 }
 #[path = "../support/battle.rs"]
 mod battle;
-pub use battle::{Battle, PoolElement};
+pub type Battle = battle::Battle;
+pub type PoolShip = battle::PoolShip;
+pub type PoolElement = battle::PoolElement;
 #[repr(C)]
 struct FrameDesc {
     kind: u16,

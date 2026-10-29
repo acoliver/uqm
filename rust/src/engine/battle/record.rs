@@ -655,7 +655,7 @@ pub static mut DisplayArray: [PRIMITIVE; abi::MAX_DISPLAY_PRIMS as usize] =
 #[no_mangle]
 pub static mut DisplayLinks: PRIM_LINKS = 0;
 
-pub(super) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
+pub(crate) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
     assert!(side < 2);
     std::ptr::NonNull::new((&raw mut race_q).cast::<QUEUE>().wrapping_add(side))
         .unwrap_or_else(|| panic!("{}", "static ship queues"))
@@ -988,5 +988,36 @@ mod kernel_tests {
 impl super::Subject {
     pub(crate) fn intersection(&self) -> crate::graphics::native_abi::INTERSECT_CONTROL {
         self.intersect
+    }
+}
+
+/// Storage mapping for typed views over the transitional intrusive queues.
+mod queue_record {
+    pub trait Sealed {}
+    impl Sealed for super::super::link_queue::Starship {}
+}
+pub trait QueueRecord: queue_record::Sealed + Eq {
+    type Storage;
+    fn links(record: &Self::Storage) -> (HLINK, HLINK);
+}
+impl QueueRecord for super::link_queue::Starship {
+    type Storage = STARSHIP;
+    fn links(record: &Self::Storage) -> (HLINK, HLINK) {
+        (record.pred, record.succ)
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn legacy_intercept_subject(&self, e: &ELEMENT) -> Subject {
+        Subject {
+            state: ElementState::decode(e),
+            intersect: e.IntersectControl,
+            primitive: e.PrimIndex,
+            target: None,
+            parent: Parent::None,
+            predecessor: None,
+            successor: None,
+        }
     }
 }

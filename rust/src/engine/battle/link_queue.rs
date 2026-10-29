@@ -1,7 +1,7 @@
 //! Typed link order over the transitional battle ship pool.
 
-use super::{record::STARSHIP, ShipId};
-use crate::collections::queue::{self, HLink, Queue};
+use super::{record::QueueRecord, ShipId};
+use crate::collections::queue::{HLink, Queue};
 use std::{marker::PhantomData, ptr};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -9,9 +9,9 @@ pub enum Starship {}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct LinkId<T> {
-    slot: u8,
-    pool: usize,
-    marker: PhantomData<T>,
+    pub(crate) slot: u8,
+    pub(crate) pool: usize,
+    pub(crate) marker: PhantomData<T>,
 }
 impl<T> Copy for LinkId<T> {}
 impl<T> Clone for LinkId<T> {
@@ -21,8 +21,8 @@ impl<T> Clone for LinkId<T> {
 }
 
 pub struct LinkQueue<'a, T> {
-    queue: &'a mut Queue,
-    marker: PhantomData<T>,
+    pub(crate) queue: &'a mut Queue,
+    pub(crate) marker: PhantomData<T>,
 }
 
 /// Picker and fleet fields, independent of descriptor and element lifetimes.
@@ -41,23 +41,12 @@ pub struct PickShip {
     pub control: u8,
 }
 
-impl<'a> LinkQueue<'a, Starship> {
-    /// # Safety
-    /// The initialized queue must contain ship records and be exclusively borrowed
-    /// on the owning game thread. End the view before a legacy call can use it.
-    pub unsafe fn new(queue: &'a mut Queue) -> Self {
-        assert_eq!(usize::from(queue.object_size), size_of::<STARSHIP>());
-        Self {
-            queue,
-            marker: PhantomData,
-        }
-    }
-
-    pub fn id(&self, raw: HLink) -> Option<LinkId<Starship>> {
+impl<'a, T: QueueRecord> LinkQueue<'a, T> {
+    pub fn id(&self, raw: HLink) -> Option<LinkId<T>> {
         if raw.is_null() {
             return None;
         }
-        let stride = size_of::<STARSHIP>();
+        let stride = size_of::<T::Storage>();
         let offset = (raw as usize)
             .checked_sub(self.queue.pq_tab as usize)
             .unwrap_or_else(|| panic!("ship link precedes pool"));
@@ -74,46 +63,19 @@ impl<'a> LinkQueue<'a, Starship> {
         Some(id)
     }
 
-    pub fn raw(&self, id: LinkId<Starship>) -> HLink {
-        assert_eq!(
-            id.pool, self.queue.pq_tab as usize,
-            "ship link belongs to another pool"
-        );
-        assert!(id.slot < self.queue.num_objects, "ship link outside pool");
-        let raw = self
-            .queue
-            .pq_tab
-            .wrapping_add(usize::from(id.slot) * size_of::<STARSHIP>())
-            .cast();
-        let mut free = self.queue.free_list;
-        while !free.is_null() {
-            assert_ne!(raw, free, "ship link addresses free storage");
-            // SAFETY: queue initialization writes every free-list link before a view is created.
-            free = unsafe { (*free.cast::<queue::Link>()).succ };
-        }
-        raw
-    }
-    fn record(&self, id: LinkId<Starship>) -> &STARSHIP {
-        // SAFETY: construction guarantees ship storage; raw checks pool membership.
-        unsafe { &*self.raw(id).cast::<STARSHIP>() }
-    }
-    fn record_mut(&mut self, id: LinkId<Starship>) -> &mut STARSHIP {
-        // SAFETY: this exclusive view scopes the checked one-record borrow.
-        unsafe { &mut *self.raw(id).cast::<STARSHIP>() }
-    }
-    pub fn head(&self) -> Option<LinkId<Starship>> {
+    pub fn head(&self) -> Option<LinkId<T>> {
         self.id(self.queue.head)
     }
-    pub fn tail(&self) -> Option<LinkId<Starship>> {
+    pub fn tail(&self) -> Option<LinkId<T>> {
         self.id(self.queue.tail)
     }
-    pub fn succ(&self, id: LinkId<Starship>) -> Option<LinkId<Starship>> {
-        self.id(self.record(id).succ)
+    pub fn succ(&self, id: LinkId<T>) -> Option<LinkId<T>> {
+        self.id(T::links(self.record(id)).1)
     }
-    pub fn pred(&self, id: LinkId<Starship>) -> Option<LinkId<Starship>> {
-        self.id(self.record(id).pred)
+    pub fn pred(&self, id: LinkId<T>) -> Option<LinkId<T>> {
+        self.id(T::links(self.record(id)).0)
     }
-    fn linked(&self, needle: LinkId<Starship>) -> bool {
+    pub(crate) fn linked(&self, needle: LinkId<T>) -> bool {
         let mut link = self.head();
         while let Some(id) = link {
             if id == needle {
@@ -132,37 +94,30 @@ impl<'a> LinkQueue<'a, Starship> {
         }
         count
     }
-    pub fn alloc(&mut self) -> Option<LinkId<Starship>> {
-        // SAFETY: the view exclusively owns this queue's initialized free list.
-        let raw = unsafe { queue::AllocLink(self.queue) };
-        let id = self.id(raw)?;
-        // SAFETY: all fields of a newly allocated legacy ship admit zero.
-        unsafe {
-            ptr::write_bytes(raw.cast::<STARSHIP>(), 0, 1);
+}
+
+impl LinkQueue<'_, Starship> {
+    pub fn by_index(&self, side: u8, mut index: u16, used: bool) -> Option<ShipId> {
+        let mut link = self.head();
+        while let Some(id) = link {
+            let ship = self.get(id);
+            if used {
+                if ship.species != 0 {
+                    if index == 0 {
+                        return Some(self.ship_id(id, side));
+                    }
+                    index = index.wrapping_sub(1);
+                }
+            } else if ship.index == index {
+                return if ship.species == 0 {
+                    None
+                } else {
+                    Some(self.ship_id(id, side))
+                };
+            }
+            link = self.succ(id);
         }
-        Some(id)
-    }
-    pub fn put(&mut self, id: LinkId<Starship>) {
-        assert!(!self.linked(id), "ship is already linked");
-        let raw = self.raw(id);
-        // SAFETY: callers append allocated unlinked records to this pool.
-        unsafe {
-            queue::PutQueue(self.queue, raw);
-        }
-    }
-    pub fn remove(&mut self, id: LinkId<Starship>) {
-        assert!(self.linked(id), "ship is not linked");
-        let raw = self.raw(id);
-        // SAFETY: callers unlink a currently linked record from this pool.
-        unsafe {
-            queue::RemoveQueue(self.queue, raw);
-        }
-    }
-    pub fn reinit(&mut self) {
-        // SAFETY: no record borrow outlives this exclusive view's operation.
-        unsafe {
-            queue::ReinitQueue(self.queue);
-        }
+        None
     }
     pub fn build(&mut self, species: u32) -> Option<LinkId<Starship>> {
         let id = self.alloc()?;
@@ -200,6 +155,11 @@ impl<'a> LinkQueue<'a, Starship> {
         s.playerNr = value.player;
         s.control = value.control;
     }
+    pub fn edit(&mut self, id: LinkId<Starship>, edit: impl FnOnce(&mut PickShip)) {
+        let mut value = self.get(id);
+        edit(&mut value);
+        self.set(id, value);
+    }
     pub fn clear_descriptor(&mut self, id: LinkId<Starship>) {
         self.record_mut(id).RaceDescPtr = ptr::null_mut();
     }
@@ -221,45 +181,14 @@ impl<'a> LinkQueue<'a, Starship> {
     }
 }
 
-/// # Safety
-/// Only the game thread may take a view, and it must end it before a legacy call.
+pub(crate) use super::access::links::ship_size;
 #[cfg(not(test))]
-pub(crate) unsafe fn ships<'a>(side: usize) -> LinkQueue<'a, Starship> {
-    assert!(side < 2, "invalid ship side {side}");
-    // SAFETY: callers serialize the address-stable battle ship authority.
-    unsafe { LinkQueue::new(&mut *super::record::ship_queue(side).as_ptr()) }
-}
-
-pub(crate) const fn ship_size() -> usize {
-    size_of::<STARSHIP>()
-}
-
-/// # Safety
-/// The address is a live ship in a game-thread-owned battle pool, without a retained queue borrow.
-#[cfg(not(test))]
-pub(crate) unsafe fn identify(address: usize) -> ShipId {
-    for side in 0..2 {
-        // SAFETY: the queue headers outlive all battle-side records.
-        let queue = unsafe { &*super::record::ship_queue(side).as_ptr() };
-        if let Some(offset) = address.checked_sub(queue.pq_tab as usize) {
-            let stride = usize::from(queue.object_size);
-            if stride == ship_size()
-                && offset.is_multiple_of(stride)
-                && offset / stride < usize::from(queue.num_objects)
-            {
-                return ShipId {
-                    side: side as u8,
-                    slot: (offset / stride) as u8,
-                };
-            }
-        }
-    }
-    panic!("ship address {address:#x} is outside the ship pools")
-}
+pub(crate) use super::access::links::{identify, ships};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collections::queue;
     use crate::collections::queue::{InitQueue, Queue, UninitQueue};
 
     #[test]

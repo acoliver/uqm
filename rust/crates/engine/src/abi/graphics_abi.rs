@@ -199,7 +199,7 @@ pub union PRIM_DESC {
 pub type PRIM_LINKS = DWORD;
 pub type INTERSECT_CODE = BYTE;
 pub type HOT_SPOT = POINT;
-pub use crate::graphics::records::{BoxIntersect, INTERSECT_CONTROL, PRIMITIVE};
+pub use crate::graphics::records::{BoxIntersect, INTERSECT_CONTROL, LINE_PRIMITIVE, PRIMITIVE};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

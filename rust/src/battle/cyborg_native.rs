@@ -3,9 +3,8 @@
 //! The arithmetic helpers are kept independent of engine state so their C
 //! integer-width behavior can be tested without linking the game archive.
 
-use crate::ships::native::{
-    abi, angle_to_facing, facing_to_angle, normalize_angle, normalize_facing,
-};
+use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
+use crate::ships::native::abi;
 
 #[inline]
 fn c_size(v: i32) -> i16 {
@@ -138,11 +137,9 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 #[cfg(not(test))]
 pub(crate) use crate::battle::context_access::ai_legacy as engine;
 #[cfg(not(test))]
-use crate::battle::context_access::ai_legacy::frame_rect;
-#[cfg(not(test))]
 use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]
-use crate::ships::native::abi::*;
+use abi::*;
 #[cfg(not(test))]
 pub use engine::{ship_intelligence, ship_weapons, tactical_intelligence, PlotIntercept};
 
@@ -161,7 +158,7 @@ fn is_crew_preprocess(subject: &Subject) -> bool {
 }
 #[cfg(not(test))]
 fn ai_arctan(x: i16, y: i16) -> u16 {
-    crate::battle::battle_types::arctan(i32::from(x), i32::from(y))
+    crate::math::arctan(x, y)
 }
 #[cfg(not(test))]
 fn next_velocity(v: &mut crate::battle::velocity::VelocityDesc, turns: u16) -> (i16, i16) {
@@ -183,23 +180,17 @@ const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
 #[cfg(not(test))]
 const FAST_SHIP: u16 = 150;
 
-#[cfg(not(test))]
 mod intercept {
-    use crate::battle::context_access::ai_legacy::{frame_rect, intersect};
-    use crate::battle::cyborg_native::intercept_window;
-    use crate::battle::velocity::VelocityDesc;
-    use crate::engine::battle::{Cx, Subject};
-    use crate::ships::native::abi::*;
-    fn current_velocity(v: &VelocityDesc) -> (i16, i16) {
+    #[cfg(not(test))]
+    use super::*;
+    #[cfg(not(test))]
+    fn current_velocity(v: &crate::battle::velocity::VelocityDesc) -> (i16, i16) {
         let (x, y) = v.get_current_components();
         (x as i16, y as i16)
     }
-    fn next_velocity(v: &mut VelocityDesc, n: u16) -> (i16, i16) {
-        let (x, y) = v.get_next_components(n);
-        (x as i16, y as i16)
-    }
+    #[cfg(not(test))]
     pub(crate) fn plot_intercept(
-        _cx: &mut Cx<'_>,
+        cx: &mut Cx<'_>,
         a: &Subject,
         b: &Subject,
         mut turns: COUNT,
@@ -228,8 +219,8 @@ mod intercept {
                 ),
             )
         } else {
-            let ar = frame_rect(a.intersection().IntersectStamp.frame);
-            let br = frame_rect(b.intersection().IntersectStamp.frame);
+            let ar = cx.projected_frame_rect(a.intersection().IntersectStamp.frame);
+            let br = cx.projected_frame_rect(b.intersection().IntersectStamp.frame);
             let ax = (ar.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
             let ay = (ar.corner.y as i32).wrapping_shl(ONE_SHIFT) as i16;
             let bx = (br.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
@@ -295,7 +286,7 @@ mod intercept {
             cb.IntersectStamp.origin = cb.EndPoint;
             cb.EndPoint.x = pb.x >> ONE_SHIFT;
             cb.EndPoint.y = pb.y >> ONE_SHIFT;
-            let hit = intersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
+            let hit = cx.projected_intersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
             if hit != 0 {
                 if hit == 1 && turn == 1 && (a.flags | b.flags) & APPEARING as u16 != 0 {
                     ca.EndPoint.x = pa.x >> ONE_SHIFT;
@@ -869,7 +860,7 @@ pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
                 };
 
                 let frame = cx.absolute_frame(cx.subject_intersect_frame(&ship_copy), 0);
-                let rect = frame_rect(frame.raw());
+                let rect = cx.projected_frame_rect(frame.raw());
                 let bounds = (i32::from(rect.extent.width) + i32::from(rect.extent.height)) as u16;
                 let mut intercept_turn = 0;
                 if !moved {

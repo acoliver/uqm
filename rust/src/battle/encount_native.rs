@@ -65,7 +65,7 @@ pub(crate) mod engine {
         CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::battle::battle_native::Battle;
-    use crate::engine::battle::{link_queue, ShipId};
+    use crate::engine::battle::link_queue;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -144,7 +144,7 @@ pub(crate) mod engine {
         1
     }
 
-    unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
+    pub(crate) unsafe fn GetShipFragQueueForPlayer(player: COUNT) -> *mut QUEUE {
         if player == RPG_PLAYER_NUM as u16 {
             &raw mut GlobData.Game_state.built_ship_q
         } else {
@@ -238,28 +238,7 @@ pub(crate) mod engine {
 
     pub use crate::battle::context_access::reader_legacy::UpdateShipFragCrew;
 
-    /// # Safety
-    /// The owner's fragment queue matches battle ship link order on the game thread.
-    pub(crate) unsafe fn update_ship_frag_crew(owner: ShipId) {
-        let player = {
-            let ships = link_queue::ships(owner.side as usize);
-            ships.get(ships.link(owner)).player
-        };
-        let frag_q = GetShipFragQueueForPlayer(player as COUNT);
-        let mut hf = (*frag_q).head;
-        let ships = link_queue::ships(player as usize);
-        let mut hs = ships.head();
-        while let Some(id) = hs.filter(|_| !hf.is_null()) {
-            let frag = hf.cast::<SHIP_FRAGMENT>();
-            hs = ships.succ(id);
-            hf = (*frag).succ;
-            if ships.ship_id(id, player as u8) == owner {
-                assert_ne!((*frag).crew_level, COUNT::MAX);
-                (*frag).crew_level = ships.get(id).crew;
-                break;
-            }
-        }
-    }
+    pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
     /// # Safety
     /// The game thread must own initialized encounter, display, input, resource, and audio state.
@@ -431,10 +410,7 @@ pub(crate) mod engine {
         let mut rect: RECT = mem::zeroed();
         let mut salvage_rect: RECT = mem::zeroed();
         let mut t: TEXT;
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: ptr::null_mut(),
-        };
+        let mut stamp: STAMP = mem::zeroed();
         let mut str1 = ptr::null();
         let mut str2 = ptr::null();
         let mut buf = [0 as UNICODE; 80];

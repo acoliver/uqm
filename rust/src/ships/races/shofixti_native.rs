@@ -15,7 +15,7 @@ pub(crate) mod engine {
     const DESTRUCT_SWITCH: u16 = 12 * 3 - 3;
     const PLAY_VICTORY_DITTY: u16 = 1 << 9;
 
-    use crate::battle::sounds::{CalcSoundPosition, PlaySound};
+    use crate::battle::sounds::engine::{CalcSoundPosition, PlaySound};
 
     use crate::navigation::globals::getGameState;
 

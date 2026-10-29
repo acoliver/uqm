@@ -9,7 +9,7 @@ use battle::{PoolElement, PoolShip};
 
 use std::{
     ffi::{c_void, CStr},
-    mem, ptr,
+    ptr,
 };
 use uqm_rust::ships::native::{
     abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine,

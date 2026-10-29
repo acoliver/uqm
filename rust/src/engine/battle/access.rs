@@ -624,16 +624,22 @@ impl Cx<'_> {
     }
 }
 #[cfg(not(test))]
+impl Cx<'_> {}
+
+pub(super) mod links;
+
+#[cfg(not(test))]
 impl Cx<'_> {
-    pub(crate) fn legacy_intercept_subject(&self, e: &super::record::ELEMENT) -> Subject {
-        Subject {
-            state: ElementState::decode(e),
-            intersect: e.IntersectControl,
-            primitive: e.PrimIndex,
-            target: None,
-            parent: Parent::None,
-            predecessor: None,
-            successor: None,
+    pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
+        let index = usize::from(self.elements()[id].PrimIndex);
+        let primitive = self.project(crate::engine::battle::record::primitive_slot(index));
+        // SAFETY: the checked element owns the primitive; its type selects the union variant.
+        unsafe {
+            if primitive.Type == crate::graphics::native_abi::LINE_PRIMITIVE {
+                primitive.Object.Line.first
+            } else {
+                primitive.Object.Point
+            }
         }
     }
 }

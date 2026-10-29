@@ -1,5 +1,7 @@
 //! Battle sound queue, effect-channel reuse and positional-object tracking.
 
+#[cfg(not(test))]
+use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
 use crate::ships::native::abi::SOUND;
 use std::ptr;
@@ -66,16 +68,13 @@ use crate::sound::heart_ffi::{
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
-    use super::*;
-    pub use crate::battle::context_access::sound_legacy::{
-        CalcSoundPosition, FlushSounds, PlaySound, ProcessSound, RemoveSoundsForObject,
-        UpdateSoundPositions,
-    };
+    pub use super::*;
     use crate::ships::native::abi::*;
 
     /// # Safety
     /// Called on the game thread with a live sound and optional live element.
     pub(crate) unsafe fn play_sound(
+        cx: &mut Cx<'_>,
         sound: SOUND,
         pos: SoundPosition,
         object: Option<ElementId>,
@@ -84,8 +83,8 @@ pub(crate) mod engine {
         if sound.is_null() {
             return;
         }
-        let channels = &raw mut Kernel::current().channels;
-        let channel = (*channels).select(sound, |c| {
+        let channels = cx.b.kernel_channels();
+        let channel = channels.select(sound, |c| {
             ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
         PlaySoundEffect(
@@ -111,20 +110,8 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// Called on the game thread; object remains live until removed or flushed.
-    pub(crate) unsafe fn process_sound(sound: SOUND, object: Option<ElementId>) {
-        // SAFETY: the published game thread exclusively owns this sound queue.
-        unsafe {
-            Kernel::current().sounds.push(sound, object);
-        }
-    }
-
-    /// # Safety
     /// Called while the game-thread battle context is published.
-    pub(crate) fn position(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        object: Option<ElementId>,
-    ) -> SoundPosition {
+    pub(crate) fn position(cx: &mut Cx<'_>, object: Option<ElementId>) -> SoundPosition {
         let Some(id) = object.filter(|id| cx.elements().contains(*id)) else {
             return SoundPosition {
                 positional: 0,
@@ -154,7 +141,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Audio positional objects must still be live game elements.
-    pub(crate) unsafe fn update_positions(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(crate) unsafe fn update_positions(cx: &mut Cx<'_>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if ChannelPlaying(i) == 0 {
                 continue;
@@ -180,17 +167,13 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Called on the game thread while queued elements and sounds remain live.
-    pub(crate) unsafe fn flush_sounds(cx: &mut crate::engine::battle::Cx<'_>) {
+    pub(crate) unsafe fn flush_sounds(cx: &mut Cx<'_>) {
         let mut i = 0;
         while Kernel::current().sounds.count > 0 {
             let sound = Kernel::current().sounds.sounds[i];
             let object = Kernel::current().sounds.objects[i];
-            play_sound(
-                sound,
-                position(cx, object),
-                object,
-                GAME_SOUND_PRIORITY as u8,
-            );
+            let pos = position(cx, object);
+            play_sound(cx, sound, pos, object, GAME_SOUND_PRIORITY as u8);
             i += 1;
             Kernel::current().sounds.count -= 1;
         }
@@ -209,7 +192,9 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::*;
+pub use crate::battle::context_access::sound_legacy::*;
+#[cfg(not(test))]
+pub use engine::{NotPositional, PlayMenuSound};
 
 fn encode_object(object: Option<ElementId>) -> usize {
     object.map_or(0, |id| {

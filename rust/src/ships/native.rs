@@ -70,7 +70,7 @@ pub mod abi {
     #[cfg(not(test))]
     pub use crate::battle::process_native::{AllocElement, FreeElement};
     #[cfg(not(test))]
-    pub use crate::battle::sounds::{
+    pub use crate::battle::sounds::engine::{
         CalcSoundPosition, PlaySound, ProcessSound, RemoveSoundsForObject,
     };
     #[cfg(not(test))]
@@ -466,26 +466,7 @@ pub unsafe fn starship(element: *mut abi::ELEMENT) -> *mut abi::STARSHIP {
     (*element).pParent.cast()
 }
 
-/// C `ANGLE_TO_FACING`, before the caller applies facing normalization.
-pub const fn angle_to_facing(angle: i32) -> i32 {
-    (angle + (1 << (abi::CIRCLE_SHIFT - abi::FACING_SHIFT - 1)))
-        >> (abi::CIRCLE_SHIFT - abi::FACING_SHIFT)
-}
-
-/// C `FACING_TO_ANGLE`.
-pub const fn facing_to_angle(facing: i32) -> i32 {
-    facing << (abi::CIRCLE_SHIFT - abi::FACING_SHIFT)
-}
-
-/// C `NORMALIZE_ANGLE`.
-pub const fn normalize_angle(angle: i32) -> i32 {
-    angle & (abi::FULL_CIRCLE as i32 - 1)
-}
-
-/// C `NORMALIZE_FACING`.
-pub const fn normalize_facing(facing: i32) -> u16 {
-    (facing & ((1 << abi::FACING_SHIFT) - 1)) as u16
-}
+pub use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
 
 pub use crate::math::{cosine, sine};
 

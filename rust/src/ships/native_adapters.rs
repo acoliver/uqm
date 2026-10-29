@@ -69,7 +69,7 @@ mod live {
     operation!(rust_bridge_GetFrameIndex(frame: FRAME) -> u16 { crate::graphics::pixmap_abi::GetFrameIndex(frame.cast()) });
     operation!(rust_bridge_initialize_missile(block: *mut MISSILE_BLOCK) -> HELEMENT { crate::battle::weapon_native::initialize_missile(block) });
     operation!(rust_bridge_initialize_laser(block: *mut LASER_BLOCK) -> HELEMENT { crate::battle::weapon_native::initialize_laser(block) });
-    operation!(rust_bridge_ship_intelligence(ship: *mut ELEMENT, objects: *mut EVALUATE_DESC, count: u16) { crate::battle::cyborg_native::ship_intelligence(ship, objects, count); });
+    operation!(rust_bridge_ship_intelligence(ship: *mut ELEMENT, objects: *mut EVALUATE_DESC, count: u16) { crate::battle::cyborg_native::engine::ship_intelligence(ship, objects, count); });
     operation!(rust_bridge_SetAbsSoundIndex(sound: usize, index: u16) -> usize { crate::strings::string_table::SetAbsStringTableIndex(sound as *mut _, index) as usize });
     operation!(rust_bridge_DISPLAY_TO_WORLD(value: i32) -> i32 { value.wrapping_shl(2) });
     operation!(rust_bridge_WORLD_TO_DISPLAY(value: i32) -> i32 { value >> 2 });
@@ -92,7 +92,7 @@ mod live {
     operation!(rust_bridge_TrackShip(element: *mut ELEMENT, facing: *mut u16) -> i16 { crate::battle::weapon_native::track_ship(element, facing) });
     operation!(rust_bridge_Untarget(element: *mut ELEMENT) { crate::battle::process_native::Untarget(element); });
     operation!(rust_bridge_ModifySilhouette(element: *mut ELEMENT, stamp: *mut STAMP, flags: u8) -> FRAME { crate::battle::weapon_native::ModifySilhouette(element, stamp, flags) });
-    operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::battle::sounds::ProcessSound(sound as *mut _, source); });
+    operation!(rust_bridge_ProcessSound(sound: usize, source: *mut ELEMENT) { crate::battle::sounds::engine::ProcessSound(sound as *mut _, source); });
     operation!(rust_bridge_weapon_collision(e0: *mut ELEMENT, p0: *mut POINT, e1: *mut ELEMENT, p1: *mut POINT) -> HELEMENT { crate::battle::weapon_native::weapon_collision(e0, p0, e1, p1) });
 
     operation!(rust_bridge_spawn_element(ship: *mut STARSHIP, descriptor: *mut RACE_DESC, mass: u8, activity: u8) -> u32 {
