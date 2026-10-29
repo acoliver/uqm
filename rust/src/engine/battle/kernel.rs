@@ -1,5 +1,9 @@
 //! Owned sound queues and parallax planes for the game-thread lifecycle.
 use super::record::*;
+
+#[cfg(not(test))]
+pub(crate) static LAST_PKUNK_SOUND: std::sync::atomic::AtomicU16 =
+    std::sync::atomic::AtomicU16::new(0);
 use crate::graphics::native_abi::{POINT, STRING as SOUND};
 
 pub(crate) struct SoundQueue {

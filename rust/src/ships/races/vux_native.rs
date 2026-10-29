@@ -1,7 +1,9 @@
 //! VUX behavior over the battle context's ids and per-ship descriptor.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    fn build_descriptor() -> crate::engine::battle::RaceDesc {
+    fn build_descriptor(
+        _world: &mut crate::engine::battle::World,
+    ) -> crate::engine::battle::RaceDesc {
         crate::engine::battle::vux_template::descriptor(&VUX)
     }
     use crate::engine::battle::{Concerns, Cx, ElementId, Race, ShipId, WeaponOrigin, WeaponSpawn};
@@ -13,8 +15,8 @@ pub(crate) mod engine {
         descriptor: build_descriptor,
         preprocess: Some(vux_preprocess),
         postprocess: Some(vux_postprocess),
-        init_weapon: initialize_horrific_laser,
-        intelligence: vux_intelligence,
+        init_weapon: Some(initialize_horrific_laser),
+        intelligence: Some(vux_intelligence),
         uninit: None,
     };
 

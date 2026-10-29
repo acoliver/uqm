@@ -246,7 +246,7 @@ impl Cx<'_> {
                 .desc(ship)
                 .race_callbacks
                 .weapon
-                .resolve(Some(race.init_weapon))
+                .resolve(race.init_weapon)
             else {
                 return Vec::new();
             };
@@ -361,7 +361,7 @@ impl Cx<'_> {
         unsafe {
             crate::app::bridge::enter(|cx| {
                 let desc = (*(parent as *mut STARSHIP)).RaceDescPtr;
-                if let Some(race) = (*desc).race {
+                if (*desc).race.is_some() {
                     let ship = cx.ship_id(parent);
                     let objects = std::array::from_fn(|i| {
                         let c = *concerns.add(i);
@@ -377,11 +377,7 @@ impl Cx<'_> {
                         subject: cx.legacy_subject(&*element),
                         count,
                     };
-                    crate::battle::process_native::dispatch::invoke(
-                        race.intelligence as usize,
-                        parent,
-                        || (race.intelligence)(cx, ship, &mut native),
-                    );
+                    cx.race_intelligence(ship, &mut native);
                     for (i, c) in native.objects.into_iter().enumerate() {
                         let output = concerns.add(i);
                         (*output).ObjectPtr = c
@@ -488,7 +484,7 @@ mod tactrans_native_access {
             // SAFETY: no record borrow crosses the sound queue boundary.
             self.queue_sound(usize::MAX, None);
         }
-        pub(crate) fn winner(&mut self) -> Option<ShipId> {
+        pub fn winner(&mut self) -> Option<ShipId> {
             // SAFETY: winner state belongs to the owning game thread.
             let winner = unsafe { (*self.kernel()).winner };
             (!winner.is_null()).then(|| self.ship_id(winner as usize))
@@ -507,13 +503,13 @@ mod tactrans_native_access {
                 new_ship_with_picker(self, pointer, |ship, side| GetNextStarShip(ship, side));
             }
         }
-        pub(crate) fn stop_battle_music(&mut self) {
+        pub fn stop_battle_music(&mut self) {
             // SAFETY: music state is owned by the battle thread.
             unsafe {
                 StopAllBattleMusic();
             }
         }
-        pub(crate) fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
+        pub fn start_ship_explosion(&mut self, ship: ElementId, play_sound: bool) {
             let pointer = self.elements().raw(ship).cast();
             // SAFETY: the checked dying ship retains its owner and resources.
             unsafe {
@@ -527,7 +523,7 @@ mod tactrans_native_access {
                 SetWinnerStarShip(FindAliveStarShip(pointer));
             }
         }
-        pub(crate) fn record_ship_death(&mut self, dead: ElementId) {
+        pub fn record_ship_death(&mut self, dead: ElementId) {
             let owner = self.owner(dead);
             if u32::from(self.elements()[dead].mass_points()) <= MAX_SHIP_MASS {
                 let player = self.ship(owner).playerNr;
@@ -638,7 +634,7 @@ mod star_access {
             // SAFETY: story state is accessed only on the game thread.
             get("PORTAL_COUNTER")
         }
-        pub(crate) fn autopilot(&self) -> crate::graphics::native_abi::POINT {
+        pub fn autopilot(&self) -> crate::graphics::native_abi::POINT {
             // SAFETY: this is a value projection of the game-thread-owned world.
             unsafe { GlobData.Game_state.autopilot }
         }
@@ -809,3 +805,6 @@ impl crate::engine::battle::Cx<'_> {
         }
     }
 }
+
+#[path = "race_access.rs"]
+mod race_access;

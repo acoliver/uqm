@@ -1,4 +1,13 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
+#[cfg(not(test))]
+impl super::World {
+    pub fn set_activity(&mut self, activity: u16) {
+        // SAFETY: World construction retains this exclusive game-thread projection.
+        unsafe {
+            self.activity.as_ptr().write(activity);
+        }
+    }
+}
 
 #[cfg(not(test))]
 use super::record::PRIMITIVE;
@@ -219,15 +228,22 @@ pub(crate) unsafe fn invoke_legacy<R>(
 /// # Safety
 /// The resource owner thread must retain the initialized descriptor's resources.
 pub(crate) unsafe fn descriptor_template(
-    init: super::record::DescriptorInitializer,
+    source: super::record::DescriptorSource,
 ) -> Option<super::RaceDesc> {
     // SAFETY: the initializer and its returned template remain live for this synchronous value copy.
     unsafe {
-        let pointer = init();
-        if pointer.is_null() {
-            None
-        } else {
-            Some(super::RaceDesc::from_legacy(*pointer))
+        match source {
+            super::record::DescriptorSource::Native(race) => {
+                Some((race.descriptor)(&mut super::World::for_legacy_lifecycle()))
+            }
+            super::record::DescriptorSource::Legacy(init) => {
+                let pointer = init();
+                if pointer.is_null() {
+                    None
+                } else {
+                    Some(super::RaceDesc::from_legacy(*pointer))
+                }
+            }
         }
     }
 }
@@ -469,5 +485,100 @@ impl Cx<'_> {
         let result = unsafe { tracking(&mut raw, facing) };
         *subject = self.decode_subject(&raw);
         result
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn frame_count(&self, frame: Frame) -> u16 {
+        // SAFETY: opaque frames originate in retained battle resources, or are absent.
+        unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.0.cast()) }
+    }
+    pub fn retreat_frame(&self, frame: Frame) -> Frame {
+        // SAFETY: the context retains the frame's drawable.
+        Frame(unsafe { crate::graphics::pixmap_abi::DecFrameIndex(frame.0.cast()).cast() })
+    }
+    pub fn relative_frame(&self, frame: Frame, offset: i16) -> Frame {
+        // SAFETY: the context retains the frame's drawable.
+        Frame(unsafe {
+            crate::graphics::pixmap_abi::SetRelFrameIndex(frame.0.cast(), offset).cast()
+        })
+    }
+    pub fn frame_rect(&self, frame: Frame) -> crate::graphics::native_abi::RECT {
+        let mut rect = crate::graphics::native_abi::RECT {
+            corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
+            extent: crate::graphics::native_abi::EXTENT {
+                width: 0,
+                height: 0,
+            },
+        };
+        // SAFETY: the resource owner retains the frame and rect is local output.
+        unsafe {
+            crate::graphics::drawable_abi::GetFrameRect(frame.0.cast(), &mut rect);
+        }
+        rect
+    }
+    pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
+        assert!(resolution < 3, "invalid frame resolution {resolution}");
+        let array = self.ship_frames(ship, role);
+        // SAFETY: the checked descriptor retains the slot and both opaque drawable handles.
+        unsafe {
+            let slot = array.add(resolution);
+            assert_eq!(
+                crate::graphics::pixmap_abi::GetFrameParentDrawable((*slot).cast()),
+                crate::graphics::pixmap_abi::GetFrameParentDrawable(frame.0.cast()),
+                "owning frame slot cannot change drawable"
+            );
+            crate::collections::observation::image!(view; *slot, frame.0);
+        }
+    }
+    pub fn captain_special(&self, ship: ShipId) -> Frame {
+        Frame(self.desc(ship).ship_data.captain_control.special)
+    }
+    pub fn set_captain_special(&mut self, ship: ShipId, frame: Frame) {
+        self.desc_mut(ship).ship_data.captain_control.special = frame.0;
+    }
+    pub fn primitive_style(&self, id: ElementId) -> PrimitiveStyle {
+        let index = usize::from(self.b.elements[id].PrimIndex);
+        let record = self.project(super::record::primitive_slot(index));
+        PrimitiveStyle {
+            kind: record.Type,
+            color: record.color,
+        }
+    }
+    /// Copy into an allocated, unlinked slot, retaining its display allocation.
+    pub fn copy_allocated_element(&mut self, destination: ElementId, source: ElementId) {
+        assert_ne!(destination, source, "copy requires distinct slots");
+        assert!(
+            !self.elements().linked(destination),
+            "copy destination is linked"
+        );
+        let index = self.b.elements[destination].PrimIndex;
+        let source_index = usize::from(self.b.elements[source].PrimIndex);
+        let primitive = *self.project(super::record::primitive_slot(source_index));
+        let value = self.b.elements[source];
+        let address = std::ptr::from_ref(&self.b.elements[source]) as usize;
+        crate::collections::observation::copy_image(
+            &mut self.b.elements[destination],
+            value,
+            address,
+        );
+        self.b.elements[destination].PrimIndex = index;
+        *self.primitive(destination) = primitive;
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn set_ship_sound_bank(&mut self, ship: ShipId, index: u16) {
+        let sounds = self.desc(ship).ship_data.ship_sounds;
+        assert!(
+            index < self.ship_sound_count(ship),
+            "invalid sound bank index {index}"
+        );
+        // SAFETY: the checked index names an entry in this ship's loaded sound bank.
+        let sound =
+            unsafe { crate::strings::string_table::SetAbsStringTableIndex(sounds.cast(), index) };
+        self.desc_mut(ship).ship_data.ship_sounds = sound.cast();
     }
 }

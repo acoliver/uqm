@@ -356,6 +356,7 @@ impl ShipState {
     pub(super) fn decode(s: &STARSHIP) -> Self {
         Self {
             facing: s.ShipFacing,
+            control: s.control,
             player: s.playerNr,
             input: s.ship_input_state,
             status: s.cur_status_flags,
@@ -368,6 +369,7 @@ impl ShipState {
     }
     fn apply(s: &mut STARSHIP, v: Self) {
         s.ShipFacing = v.facing;
+        s.control = v.control;
         s.playerNr = v.player;
         s.ship_input_state = v.input;
         s.cur_status_flags = v.status;
@@ -581,6 +583,11 @@ pub struct RaceDesc {
     pub(super) raw: RACE_DESC,
 }
 impl RaceDesc {
+    pub(super) fn empty() -> Self {
+        Self {
+            raw: RACE_DESC::EMPTY,
+        }
+    }
     pub(super) fn from_legacy(raw: RACE_DESC) -> Self {
         Self { raw }
     }
@@ -605,9 +612,9 @@ impl RACE_DESC {
                     .map_or(0, |f| f as usize),
                 self.race_callbacks
                     .weapon
-                    .resolve(Some(race.init_weapon))
+                    .resolve(race.init_weapon)
                     .map_or(0, |f| f as usize),
-                race.intelligence as usize,
+                race.intelligence.map_or(0, |f| f as usize),
             ]
         } else {
             [
@@ -821,10 +828,12 @@ mod projection_tests {
 
 #[cfg(not(test))]
 impl RACE_DESC {
-    pub(crate) fn cleanup(&mut self) -> abi::UNINIT_FUNC {
+    pub(crate) fn cleanup(&mut self, world: &mut super::World) -> abi::UNINIT_FUNC {
         if let Some(race) = self.race {
             if let Some(uninit) = race.uninit {
-                uninit(&mut self.race_state);
+                let mut stats = RaceStats::decode(self);
+                uninit(world, &mut stats);
+                RaceStats::apply(self, stats);
             }
             None
         } else {
@@ -835,6 +844,12 @@ impl RACE_DESC {
 
 #[cfg(not(test))]
 pub(crate) type DescriptorInitializer = unsafe extern "C" fn() -> *mut RACE_DESC;
+
+#[cfg(not(test))]
+pub(crate) enum DescriptorSource {
+    Native(&'static super::Race),
+    Legacy(DescriptorInitializer),
+}
 
 #[cfg(test)]
 mod zero_descriptor_tests {

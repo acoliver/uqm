@@ -104,48 +104,51 @@ pub(crate) mod engine {
     pub unsafe fn descriptor(species: u32) -> RACE_DESC {
         // SAFETY: The caller owns the game-thread resource context and retains all descriptor resources.
 
-        if let Some(race) = crate::ships::races::race(species) {
-            return (race.descriptor)().into_legacy();
-        }
-        const CODE_BY_SPECIES: [usize; 29] = [
-            usize::MAX,
-            1,
-            4,
-            6,
-            11,
-            12,
-            13,
-            15,
-            16,
-            18,
-            21,
-            22,
-            23,
-            8,
-            5,
-            7,
-            10,
-            14,
-            19,
-            20,
-            24,
-            17,
-            2,
-            0,
-            3,
-            9,
-            26,
-            25,
-            27,
-        ];
-        let code = *CODE_BY_SPECIES
-            .get(species as usize)
-            .unwrap_or_else(|| panic!("{}", "known species"));
-        let init = crate::ships::code_resources::engine::INITIALIZERS
-            .get(code)
-            .and_then(|f| *f)
-            .unwrap_or_else(|| panic!("{}", "legacy species initializer"));
-        crate::engine::battle::access::descriptor_template(init)
+        use crate::engine::battle::record::DescriptorSource;
+        let source = if let Some(race) = crate::ships::races::race(species) {
+            DescriptorSource::Native(race)
+        } else {
+            const CODE_BY_SPECIES: [usize; 29] = [
+                usize::MAX,
+                1,
+                4,
+                6,
+                11,
+                12,
+                13,
+                15,
+                16,
+                18,
+                21,
+                22,
+                23,
+                8,
+                5,
+                7,
+                10,
+                14,
+                19,
+                20,
+                24,
+                17,
+                2,
+                0,
+                3,
+                9,
+                26,
+                25,
+                27,
+            ];
+            let code = *CODE_BY_SPECIES
+                .get(species as usize)
+                .unwrap_or_else(|| panic!("{}", "known species"));
+            let init = crate::ships::code_resources::engine::INITIALIZERS
+                .get(code)
+                .and_then(|f| *f)
+                .unwrap_or_else(|| panic!("{}", "legacy species initializer"));
+            DescriptorSource::Legacy(init)
+        };
+        crate::engine::battle::access::descriptor_template(source)
             .unwrap_or_else(|| panic!("legacy initializer returned no descriptor"))
             .into_legacy()
     }
@@ -158,10 +161,11 @@ pub(crate) mod engine {
             22 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_VUX_ID),
             _ => None,
         };
-        let descriptor = if let Some(race) = native {
-            Some((race.descriptor)())
+        use crate::engine::battle::record::DescriptorSource;
+        let source = if let Some(race) = native {
+            Some(DescriptorSource::Native(race))
         } else if let Some(Some(init)) = INITIALIZERS.get(which as usize) {
-            crate::engine::battle::access::descriptor_template(*init)
+            Some(DescriptorSource::Legacy(*init))
         } else {
             crate::log_abi::log_message(
                 3,
@@ -169,6 +173,8 @@ pub(crate) mod engine {
             );
             None
         };
+        let descriptor =
+            source.and_then(|source| crate::engine::battle::access::descriptor_template(source));
         if let Some(descriptor) = descriptor {
             let record = descriptor.into_legacy();
             allocation.cast::<RACE_DESC>().write(record);

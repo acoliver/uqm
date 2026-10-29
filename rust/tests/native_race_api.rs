@@ -216,6 +216,9 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
     }
     let probes = [
         ("control", "fn probe(cx: &mut Cx<'_>, ship: ShipId, id: ElementId) { cx.ship_state_mut(ship).crew = 1; cx.element_mut(id).life = 1; }", ""),
+        ("context_free_world_read", "fn probe() { let _ = crate::battle::flagship_config(); }", "E0425"),
+        ("context_free_world_write", "fn probe() { crate::battle::set_flagship_crew(1); }", "E0425"),
+        ("untyped_story", "fn probe(cx: &mut Cx<'_>) { let _ = cx.story_state(\"SHOFIXTI_RECRUITED\"); }", "E0308"),
         ("ship_record", "fn probe(cx: &mut Cx<'_>, ship: ShipId) { cx.ship_state_mut(ship).record.RaceDescPtr = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.race_stats(ship); }", "E0616"),
         ("element_record", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.element_mut(id).record.pParent = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true); }", "E0616"),
         ("table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.b.elements[id].next.image.farray = std::ptr::NonNull::dangling().as_ptr(); let _ = cx.element_frame_set_first(id, true); }", "E0616"),
