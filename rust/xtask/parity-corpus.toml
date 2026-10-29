@@ -107,12 +107,6 @@ issue = 718
 
 # Existing campaign failures reproduced on pristine main; see issue 719.
 [[expectation]]
-scenario = "campaign-s03b-broken-ultron"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
-
-[[expectation]]
 scenario = "campaign-s04a-north-refueled"
 classification = "known_bug"
 terminal = "semantic_mismatch"
