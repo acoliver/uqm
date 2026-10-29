@@ -28,9 +28,6 @@ struct Ship<'a> {
     info: Option<&'a mut SHIP_INFO>,
     data: Option<&'a mut DATA_STUFF>,
     characteristics: Option<&'a mut CHARACTERISTIC_STUFF>,
-    preprocess: PREPROCESS_FUNC,
-    postprocess: POSTPROCESS_FUNC,
-    intelligence: IntelligenceFunc,
     phoenix: Option<Phoenix>,
 }
 
@@ -40,12 +37,10 @@ impl<'a> Ship<'a> {
         info: &'a mut SHIP_INFO,
         data: &'a mut DATA_STUFF,
         characteristics: &'a mut CHARACTERISTIC_STUFF,
-        hooks: (PREPROCESS_FUNC, POSTPROCESS_FUNC, IntelligenceFunc),
     ) {
         self.info = Some(info);
         self.data = Some(data);
         self.characteristics = Some(characteristics);
-        (self.preprocess, self.postprocess, self.intelligence) = hooks;
     }
 }
 
@@ -158,7 +153,7 @@ struct Hooks {
     limpets: crate::engine::battle::record::ElementProcessFunc,
     fighters: crate::engine::battle::record::ElementProcessFunc,
     fighter_preprocess: usize,
-    pkunk: PREPROCESS_FUNC,
+    pkunk: Option<crate::engine::battle::race::ShipFn>,
     intercept: usize,
     rebirth: usize,
     ship_death: crate::engine::battle::record::ElementProcessFunc,
@@ -169,6 +164,7 @@ struct Hooks {
 /// Only operations that invalidate live borrows leave the safe phase logic.
 enum Effect {
     RaceProcess(bool, HElement),
+    NativeShip(crate::engine::battle::race::ShipFn, HElement),
     Invoke(crate::engine::battle::record::ElementProcessFunc, HElement),
     Death(HElement),
     Weapon(HElement),
@@ -187,7 +183,7 @@ enum Effect {
     FreeRetained,
     Reset,
     Think([(HElement, u16); 2]),
-    Intelligence(IntelligenceFunc, HElement, [EVALUATE_DESC; 10]),
+    Intelligence(HElement, [EVALUATE_DESC; 10]),
     Scale(i32),
     RestoreScale,
     ZoomProof([FRAME; 3], HElement, usize, u16),

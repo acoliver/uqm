@@ -91,8 +91,10 @@ fn install(
     run.next(if exists {
         vec![]
     } else {
-        vec![Effect::Invoke(
-            hooks.pkunk.map(crate::engine::battle::ElementHook::Legacy),
+        vec![Effect::NativeShip(
+            hooks
+                .pkunk
+                .unwrap_or_else(|| panic!("fixture Pkunk callback")),
             a,
         )]
     })

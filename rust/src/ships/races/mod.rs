@@ -48,14 +48,19 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
         SPECIES_ID_SYREEN_ID => Some(&syreen_native::engine::SYREEN),
         SPECIES_ID_MMRNMHRM_ID => Some(&mmrnmhrm_native::engine::MMRNMHRM),
         SPECIES_ID_UR_QUAN_ID => Some(&urquan_native::engine::URQUAN),
+        SPECIES_ID_EARTHLING_ID => Some(&human_native::engine::HUMAN),
+        SPECIES_ID_ARILOU_ID => Some(&arilou_native::engine::ARILOU),
+        SPECIES_ID_PKUNK_ID => Some(&pkunk_native::engine::PKUNK),
+        SPECIES_ID_SHOFIXTI_ID => Some(&shofixti_native::engine::SHOFIXTI),
+        SPECIES_ID_UR_QUAN_PROBE_ID => Some(&probe_native::engine::PROBE),
         _ => None,
     }
 }
 
 #[cfg(not(test))]
 pub use {
-    human_native::engine::init_human, melnorme_native::engine::init_melnorme,
-    sis_native::engine::init_sis, thraddash_native::engine::init_thraddash,
+    melnorme_native::engine::init_melnorme, sis_native::engine::init_sis,
+    thraddash_native::engine::init_thraddash,
 };
 
 #[cfg(not(test))]
@@ -71,28 +76,16 @@ pub use spathi_native::engine::init_spathi;
 pub use slylandro_native::engine::init_slylandro;
 
 #[cfg(not(test))]
-pub use pkunk_native::engine::init_pkunk;
-
-#[cfg(not(test))]
 pub use samatra::engine::init_samatra;
 
 #[cfg(not(test))]
 pub use chenjesu_native::engine::init_chenjesu;
 
 #[cfg(not(test))]
-pub use probe_native::engine::init_probe;
-
-#[cfg(not(test))]
-pub use shofixti_native::engine::init_shofixti;
-
-#[cfg(not(test))]
 pub use chmmr_native::engine::init_chmmr;
 
 #[cfg(not(test))]
 pub use ilwrath_native::engine::init_ilwrath;
-
-#[cfg(not(test))]
-pub use arilou_native::engine::init_arilou;
 
 #[cfg(not(test))]
 pub use umgah_native::engine::init_umgah;

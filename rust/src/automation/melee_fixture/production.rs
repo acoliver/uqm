@@ -181,16 +181,12 @@ fn drive(
 /// on the game thread until the returned borrows are dropped.
 #[cfg(not(test))]
 unsafe fn borrow_world<'a>() -> World<'a> {
-    use crate::ships::races::pkunk_native::engine::PkunkData;
     let ship_record = |state| Ship {
         callback_addresses: [0; 5],
         state,
         info: None,
         data: None,
         characteristics: None,
-        preprocess: None,
-        postprocess: None,
-        intelligence: None,
         phoenix: None,
     };
     // SAFETY: the caller holds the synchronous game-thread boundary, with no callbacks.
@@ -217,18 +213,18 @@ unsafe fn borrow_world<'a>() -> World<'a> {
                 if let Some(race) = (*slot).as_mut() {
                     ship.callback_addresses = race.callbacks();
                     if ship.state.SpeciesID == SPECIES_ID_PKUNK_ID {
-                        let data = &*race.data.cast::<PkunkData>();
-                        ship.phoenix = Some(phoenix(data));
+                        let crate::engine::battle::RaceState::Pkunk { phoenix: token, .. } =
+                            race.race_state
+                        else {
+                            panic!("Pkunk fixture state missing");
+                        };
+                        let handle = crate::automation::parity_state::phoenix_address(token);
+                        ship.phoenix = Some(phoenix(race.race_state, handle));
                     }
                     ship.descriptor(
                         &mut race.ship_info,
                         &mut race.ship_data,
                         &mut race.characteristics,
-                        (
-                            race.preprocess_func,
-                            race.postprocess_func,
-                            race.cyborg_control.intelligence_func,
-                        ),
                     );
                 }
                 owner = next;
@@ -401,6 +397,7 @@ impl World<'_> {
     ) -> Option<(usize, usize)> {
         let parent = |h| self.elements[&h].p_parent as usize;
         match effect {
+            Effect::NativeShip(callback, h) => Some((*callback as usize, parent(*h))),
             Effect::Invoke(callback, h) => {
                 callback.map(|callback| (callback.address(), parent(*h)))
             }
@@ -417,8 +414,9 @@ impl World<'_> {
                     .callback
                     .map(|callback| (callback.address(), collision.parent))
             }),
-            Effect::Intelligence(callback, h, _) => {
-                callback.map(|callback| (callback as usize, parent(*h)))
+            Effect::Intelligence(h, _) => {
+                let address = self.ship(*h).callback_addresses[4];
+                (address != 0).then_some((address, parent(*h)))
             }
             _ => None,
         }
@@ -440,7 +438,6 @@ impl World<'_> {
         effects: Vec<Effect>,
         mut dispatch: impl FnMut(Effect) -> Result<Reply, String>,
     ) -> Vec<Result<Reply, String>> {
-        use crate::battle::process_native::invoke_race::invoke_context;
         let prepared = effects
             .into_iter()
             .map(|effect| {
@@ -464,13 +461,10 @@ impl World<'_> {
                 // SAFETY: callback metadata came from the owned live graph, now fully dropped.
                 unsafe {
                     match effect {
-                        Effect::RaceProcess(_, h) | Effect::Weapon(h) => {
+                        Effect::RaceProcess(_, h) | Effect::Weapon(h) | Effect::NativeShip(_, h) => {
                             crate::app::bridge::enter(|cx| {
                                 let id = cx.elements().id(h.cast()).unwrap_or_else(|| panic!("fixture element missing from pool"));
-                                if let Effect::RaceProcess(post, _) = effect {
-                                    let ship = cx.owner(id);
-                                    cx.invoke_ship_process(ship, post);
-                                } else { crate::battle::ship_native::ship_postprocess(cx, id); }
+                                ship_effect(cx, id, effect, observed);
                             });
                         }
                         Effect::Death(h) => {
@@ -505,10 +499,9 @@ impl World<'_> {
                                     crate::battle::battle_native::ship_input(input, crew);
                             }
                         }
-                        Effect::Intelligence(callback, h, mut concerns) => {
-                            let callback = callback.ok_or("Arilou intelligence callback is unavailable")?;
+                        Effect::Intelligence(h, mut concerns) => {
                             let (_, parent) = observed.ok_or("fixture intelligence lacks owner metadata")?;
-                            invoke_context(callback as usize, parent, || callback(h.cast(), concerns.as_mut_ptr(), 10));
+                            crate::engine::battle::Cx::invoke_intelligence(parent, h.cast(), concerns.as_mut_ptr(), 10);
                         }
                         other => return dispatch(other),
                     }
@@ -520,14 +513,19 @@ impl World<'_> {
 }
 
 #[cfg(not(test))]
-fn phoenix(data: &crate::ships::races::pkunk_native::engine::PkunkData) -> Phoenix {
+fn phoenix(state: crate::engine::battle::RaceState, handle: usize) -> Phoenix {
+    let crate::engine::battle::RaceState::Pkunk {
+        saved_pre,
+        saved_post,
+        saved_death,
+        ..
+    } = state
+    else {
+        panic!("Pkunk fixture state missing");
+    };
     Phoenix {
-        handle: data.hPhoenix.cast(),
-        hooks: [
-            data.saved_preprocess_func.map_or(0, |f| f.address()),
-            data.saved_postprocess_func.map_or(0, |f| f.address()),
-            data.saved_death_func.map_or(0, |f| f.address()),
-        ],
+        handle: handle as HElement,
+        hooks: [saved_pre, saved_post, saved_death].map(|hook| hook.map_or(0, |f| f.address())),
     }
 }
 
@@ -592,5 +590,29 @@ mod zoom_tests {
             assert!(!zoom_matches(1, 700, (11, 5), (11, 5), mipmap));
         }
         assert!(zoom_matches(1, 700, (11, 5), (11, 5), Some((99, 99))));
+    }
+}
+
+#[cfg(not(test))]
+fn ship_effect(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    id: crate::engine::battle::ElementId,
+    effect: Effect,
+    observed: Option<(usize, usize)>,
+) {
+    match effect {
+        Effect::RaceProcess(post, _) => {
+            let ship = cx.owner(id);
+            cx.invoke_ship_process(ship, post);
+        }
+        Effect::NativeShip(callback, _) => {
+            let ship = cx.owner(id);
+            let (_, parent) = observed.unwrap_or_else(|| panic!("fixture native callback owner"));
+            crate::battle::process_native::dispatch::invoke(callback as usize, parent, || {
+                callback(cx, ship)
+            });
+        }
+        Effect::Weapon(_) => crate::battle::ship_native::ship_postprocess(cx, id),
+        _ => unreachable!("non-ship fixture effect"),
     }
 }

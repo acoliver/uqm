@@ -2,22 +2,31 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::ships::native::abi::RACE_DESC;
 
-    const fn descriptor() -> RACE_DESC {
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.crew_level = 1;
-        d.ship_info.max_crew = 1;
-        d.ship_info.energy_level = 1;
-        d.ship_info.max_energy = 1;
-        d.ship_info.melee_icon_rsc = c"ship.drone.meleeicons".as_ptr();
-        d
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
+        let d = crate::engine::battle::template::RaceTemplate {
+            info: crate::engine::battle::views::Info {
+                crew_level: 1,
+                max_crew: 1,
+                energy_level: 1,
+                max_energy: 1,
+                ..Default::default()
+            },
+            resources: crate::engine::battle::template::RaceResources {
+                melee_icon: Some(c"ship.drone.meleeicons"),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        d.descriptor(&PROBE)
     }
 
-    static mut PROBE_DESC: RACE_DESC = descriptor();
-
-    #[no_mangle]
-    pub extern "C" fn init_probe() -> *mut RACE_DESC {
-        &raw mut PROBE_DESC
-    }
+    pub static PROBE: crate::engine::battle::Race = crate::engine::battle::Race {
+        descriptor,
+        preprocess: None,
+        postprocess: None,
+        init_weapon: None,
+        intelligence: None,
+        uninit: None,
+    };
 }
