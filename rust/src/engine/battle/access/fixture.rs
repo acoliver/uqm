@@ -1,7 +1,22 @@
 //! Typed, value-only command planning views for synchronous automation fixtures.
+#[cfg(test)]
+#[test]
+fn ship_detachment_is_an_explicit_fixture_command() {
+    // SAFETY: zero is valid for the native record's scalars and optional pointers.
+    let record: STARSHIP = unsafe { std::mem::zeroed() };
+    let descriptor = RACE_DESC::EMPTY;
+    let id = ElementId { slot: 0, gen: 1 };
+    let mut ship = Ship::for_test(&record, &descriptor, id);
+    assert!(!ship.clear_element);
+    assert_eq!(ship.element, Some(id));
+    ship.clear_element();
+    assert!(ship.clear_element);
+    assert_eq!(ship.element, None);
+}
+
 #[cfg(not(test))]
 use super::super::{link_queue, Cx, ShipId};
-use super::super::{link_queue::PickShip, record::*, views::*, ElementId, Parent};
+use super::super::{record::*, views::*, ElementId, Parent};
 #[derive(Clone, Copy)]
 pub(crate) struct Element {
     pub state: ElementState,
@@ -50,13 +65,21 @@ pub(crate) struct Phoenix {
 }
 pub(crate) struct Ship {
     pub state: ShipState,
-    pub pick: PickShip,
+    pub species: u32,
+    pub index: u16,
     pub element: Option<ElementId>,
+    clear_element: bool,
     pub info: Option<Info>,
     pub data: Option<ShipFrames>,
     pub characteristics: Option<CHARACTERISTIC_STUFF>,
     pub intelligence: Option<usize>,
     pub phoenix: Option<Phoenix>,
+}
+impl Ship {
+    pub(crate) fn clear_element(&mut self) {
+        self.element = None;
+        self.clear_element = true;
+    }
 }
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -85,8 +108,10 @@ impl Cx<'_> {
         let s = self.ship(id);
         let mut view = Ship {
             state: self.ship_state(id),
-            pick: self.pick_ship(id),
-            element: self.elements().id(s.hShip),
+            species: s.SpeciesID,
+            index: s.index,
+            element: self.elements().allocated_id(s.hShip),
+            clear_element: false,
             info: None,
             data: None,
             characteristics: None,
@@ -146,12 +171,14 @@ impl Cx<'_> {
         unsafe {
             let mut queue = link_queue::ships(usize::from(id.side));
             let link = queue.link(id);
-            queue.set(link, ship.pick);
+            queue.edit(link, |pick| {
+                pick.species = ship.species;
+                pick.index = ship.index;
+            });
         }
-        let element = ship
-            .element
-            .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast());
-        self.ship_mut(id).hShip = element;
+        if ship.clear_element {
+            self.ship_mut(id).hShip = std::ptr::null_mut();
+        }
         if let Some(info) = ship.info {
             self.race_stats_mut(id).ship_info = info;
         }
@@ -321,20 +348,10 @@ impl Ship {
     pub(crate) fn for_test(s: &STARSHIP, d: &RACE_DESC, element: ElementId) -> Self {
         Self {
             state: ShipState::decode(s),
-            pick: PickShip {
-                species: s.SpeciesID,
-                captain: s.captains_name_index,
-                crew: s.crew_level,
-                max_crew: s.max_crew,
-                cost: s.ship_cost,
-                index: s.index,
-                strings: s.race_strings as usize,
-                icons: s.icons as usize,
-                energy_counter: s.energy_counter,
-                player: s.playerNr,
-                control: s.control,
-            },
+            species: s.SpeciesID,
+            index: s.index,
             element: Some(element),
+            clear_element: false,
             info: Some(RaceStats::decode(d).ship_info),
             data: Some(ShipFrames {
                 ship: Frames(std::ptr::from_ref(&d.ship_data.ship).cast_mut().cast()),

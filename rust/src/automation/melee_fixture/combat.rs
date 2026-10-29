@@ -12,7 +12,7 @@ pub(super) fn mutual_loss(
                 return Err("mutual-loss fixture requires an active 2-vs-2 Super Melee".into());
             }
             [run.a, run.b] = world.fighters()?.map(Some);
-            if world.ship(run.a()).pick.species != SPECIES_ID_SHOFIXTI_ID
+            if world.ship(run.a()).species != SPECIES_ID_SHOFIXTI_ID
                 || world
                     .ship(run.b())
                     .info
