@@ -66,7 +66,8 @@ impl Cx<'_> {
 
     pub(crate) fn set_ip_group_parent(&mut self, id: ElementId, slot: u8) {
         let queue = self.project(
-            std::ptr::NonNull::new(self.world.groups().cast_mut()).expect("IP-group queue"),
+            std::ptr::NonNull::new(self.world.groups().cast_mut())
+                .unwrap_or_else(|| panic!("IP-group queue")),
         );
         assert!(slot < queue.num_objects, "IP-group slot outside pool");
         let parent = queue
@@ -205,11 +206,11 @@ impl super::ElementTable {
 }
 
 impl Cx<'_> {
-    pub(crate) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
+    pub(super) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
         // SAFETY: record decoders supply checked pointers retained by this context.
         unsafe { &*pointer.as_ptr() }
     }
-    pub(crate) fn project_mut<T>(&mut self, pointer: std::ptr::NonNull<T>) -> &mut T {
+    pub(super) fn project_mut<T>(&mut self, pointer: std::ptr::NonNull<T>) -> &mut T {
         // SAFETY: the exclusive context borrow scopes one checked record projection.
         unsafe { &mut *pointer.as_ptr() }
     }
@@ -683,3 +684,27 @@ impl Cx<'_> {
         crate::collections::observation::image!(copy; record.current, record.next);
     }
 }
+
+mod navigation;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn has_descriptor(&self, ship: ShipId) -> bool {
+        !self.ship(ship).RaceDescPtr.is_null()
+    }
+}
+
+pub(crate) mod lifecycle;
+
+pub(crate) mod save;
+
+pub(crate) mod observe;
+
+pub(crate) mod fixture;
+
+const _: () = {
+    assert!(
+        crate::comm::locdata::CGameState::DISPLAY_ARRAY_OFFSET
+            == std::mem::offset_of!(crate::c_bindings::global_state::GAME_STATE, DisplayArray)
+    );
+};

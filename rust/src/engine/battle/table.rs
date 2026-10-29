@@ -7,13 +7,13 @@ use std::{
     ptr::{self, NonNull},
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ElementId {
     pub slot: u8,
     pub gen: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ShipId {
     pub side: u8,
     pub slot: u8,

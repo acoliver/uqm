@@ -31,8 +31,30 @@ impl<T> Clone for LinkId<T> {
 }
 
 pub struct LinkQueue<'a, T> {
-    pub(crate) queue: &'a mut Queue,
+    pub(crate) queue: QueueBorrow<'a>,
     pub(crate) marker: PhantomData<T>,
+}
+
+pub(crate) enum QueueBorrow<'a> {
+    Shared(&'a Queue),
+    Exclusive(&'a mut Queue),
+}
+impl std::ops::Deref for QueueBorrow<'_> {
+    type Target = Queue;
+    fn deref(&self) -> &Queue {
+        match self {
+            Self::Shared(q) => q,
+            Self::Exclusive(q) => q,
+        }
+    }
+}
+impl std::ops::DerefMut for QueueBorrow<'_> {
+    fn deref_mut(&mut self) -> &mut Queue {
+        match self {
+            Self::Exclusive(q) => q,
+            Self::Shared(_) => panic!("cannot mutate a read-only queue view"),
+        }
+    }
 }
 
 /// Picker and fleet fields, independent of descriptor and element lifetimes.
@@ -285,7 +307,7 @@ mod tests {
                 assert_eq!(ships.count(), 1);
                 ships.remove(id);
                 let raw = ships.raw(id);
-                queue::FreeLink(ships.queue, raw);
+                queue::FreeLink(&mut *ships.queue, raw);
                 assert!(catch_unwind(AssertUnwindSafe(|| ships.get(id))).is_err());
                 assert!(catch_unwind(AssertUnwindSafe(|| ships.id(raw))).is_err());
                 assert!(ships.id(std::ptr::null_mut()).is_none());

@@ -79,7 +79,7 @@ pub unsafe fn HyperspaceMenu() {
     SetContextBackGroundColor(old_color);
     SetContext(old_context);
     if GlobData.Game_state.CurrentActivity & IN_BATTLE as u16 == 0 {
-        cleanup();
+        crate::app::bridge::enter(cleanup);
     }
     BatchGraphics();
 }

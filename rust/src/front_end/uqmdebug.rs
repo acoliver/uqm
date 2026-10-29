@@ -1237,21 +1237,19 @@ mod runtime {
         }
     }
 
-    /// # Safety
-    /// Element queue must be initialized and accessed on the game thread.
-    pub unsafe fn findPlayerShip(player: SIZE) -> *mut STARSHIP {
-        let mut handle = disp_q.head;
-        while !handle.is_null() {
-            let element = handle.cast::<ELEMENT>();
-            let next = (*element).succ;
-            if (*element).state_flags & PLAYER_SHIP as ELEMENT_FLAGS != 0
-                && (*element).playerNr == player
-            {
-                return (*element).pParent.cast();
+    pub fn find_player_ship(
+        cx: &crate::engine::battle::Cx<'_>,
+        player: SIZE,
+    ) -> Option<crate::engine::battle::ShipId> {
+        let mut handle = cx.elements().head();
+        while let Some(element) = handle {
+            let state = cx.element(element);
+            if state.flags & PLAYER_SHIP as u16 != 0 && state.player == player {
+                return Some(cx.owner(element));
             }
-            handle = next;
+            handle = cx.elements().succ(element);
         }
-        ptr::null_mut()
+        None
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
@@ -1259,15 +1257,19 @@ mod runtime {
         if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
             return;
         }
-        let ship = findPlayerShip(RPG_PLAYER_NUM as SIZE);
-        if ship.is_null() || (*ship).RaceDescPtr.is_null() {
-            return;
-        }
-        let info = &(*(*ship).RaceDescPtr).ship_info;
-        let delta = (info.max_crew as c_int - info.crew_level as c_int) as COUNT;
-        let old = SetContext(StatusContext);
-        DeltaCrew((*ship).hShip.cast(), delta as SIZE);
-        SetContext(old);
+        crate::app::bridge::enter(|cx| {
+            let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as SIZE) else {
+                return;
+            };
+            if !cx.has_descriptor(ship) {
+                return;
+            }
+            let info = cx.race_stats(ship).ship_info;
+            let delta = (info.max_crew as c_int - info.crew_level as c_int) as COUNT;
+            let old = SetContext(StatusContext);
+            cx.delta_crew(cx.ship_element(ship), delta as SIZE);
+            SetContext(old);
+        });
     }
     /// # Safety
     /// Must run on the game thread with battle and status context initialized.
@@ -1275,15 +1277,19 @@ mod runtime {
         if GlobData.Game_state.CurrentActivity & IN_BATTLE as ACTIVITY == 0 || inHQSpace() != 0 {
             return;
         }
-        let ship = findPlayerShip(RPG_PLAYER_NUM as SIZE);
-        if ship.is_null() || (*ship).RaceDescPtr.is_null() {
-            return;
-        }
-        let info = &(*(*ship).RaceDescPtr).ship_info;
-        let delta = (info.max_energy as c_int - info.energy_level as c_int) as COUNT;
-        let old = SetContext(StatusContext);
-        DeltaEnergy((*ship).hShip.cast(), delta as SIZE);
-        SetContext(old);
+        crate::app::bridge::enter(|cx| {
+            let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as SIZE) else {
+                return;
+            };
+            if !cx.has_descriptor(ship) {
+                return;
+            }
+            let info = cx.race_stats(ship).ship_info;
+            let delta = (info.max_energy as c_int - info.energy_level as c_int) as COUNT;
+            let old = SetContext(StatusContext);
+            cx.delta_energy(cx.ship_element(ship), delta as SIZE);
+            SetContext(old);
+        });
     }
 
     /// # Safety
@@ -1588,7 +1594,7 @@ pub use runtime::{
     activateAllShips, calculateBioValue, calculateMineralValue, clearEscorts, debugContexts,
     debugKeyPressed, debugKeyPressedSynchronous, doInstantMove, dumpEvent, dumpEvents, dumpMoon,
     dumpPlanet, dumpPlanetType, dumpPlanetTypes, dumpStrings, dumpSystem, dumpUniverse,
-    dumpUniverseToFile, equipShip, findPlayerShip, forAllMoons, forAllPlanetTypes, forAllPlanets,
+    dumpUniverseToFile, equipShip, find_player_ship, forAllMoons, forAllPlanetTypes, forAllPlanets,
     forAllStars, forwardToNextEvent, generateBioIndex, generateMineralIndex, giveDevices,
     planetTypeString, resetCrewBattle, resetEnergyBattle, showSpheres, tallyResources,
     tallyResourcesToFile, tectonicsString, uqm_debug_creature_bio_value, UniverseRecurse,

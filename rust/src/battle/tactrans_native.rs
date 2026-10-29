@@ -353,10 +353,9 @@ pub(crate) mod engine {
         if let Some(net) = &net {
             net.init_end_frames();
         }
-        if net
-            .as_ref()
-            .is_some_and(|net| !net.negotiate(true, NetState_NetState_interBattle))
-        {
+        if net.as_ref().is_some_and(|net| {
+            !crate::app::bridge::publish(cx, || net.negotiate(true, NetState_NetState_interBattle))
+        }) {
             set_activity(activity() & !(IN_BATTLE as u16));
             BatchGraphics();
             return;
@@ -366,10 +365,9 @@ pub(crate) mod engine {
             (*ship).SpeciesID = SPECIES_ID_NO_ID;
         }
         if crate::app::bridge::publish(cx, || pick(ship, (*ship).playerNr as COUNT)) != 0 {
-            if net
-                .as_ref()
-                .is_some_and(|net| !net.negotiate(true, NetState_NetState_inBattle))
-            {
+            if net.as_ref().is_some_and(|net| {
+                !crate::app::bridge::publish(cx, || net.negotiate(true, NetState_NetState_inBattle))
+            }) {
                 set_activity(activity() & !(IN_BATTLE as u16));
                 BatchGraphics();
                 return;

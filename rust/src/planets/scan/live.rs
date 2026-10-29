@@ -1,6 +1,6 @@
 use super::{landing_fuel, move_cursor};
-use crate::battle::element::{Element, ElementFlags};
-use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, live_queues, solar_system};
+use crate::battle::element::ElementFlags;
+use crate::c_bindings::{controller_input::*, global_state::MENU_STATE, solar_system};
 use crate::collections::queue::{CountLinks, Queue, ReinitQueue};
 use crate::comm::dispatch::{clone_ship_fragment, CShipFragment};
 use crate::comm::locdata::{CColor, CPoint, CRect};
@@ -411,51 +411,58 @@ unsafe fn pick_side() -> bool {
 unsafe fn scanned_stuff(y: u16, scan: u16) {
     let g = CffiPlatform;
     let old_color = g.set_fg_color(Rgba::BLACK);
-    let queue = live_queues::display_list();
-    let mut handle = (*queue).head as usize;
-    while handle != 0 {
-        let element = handle as *mut Element;
-        handle = (*element).succ as usize;
-        let mut dy = (i32::from(y) - i32::from((*element).current.location.y)) as i16;
-        if (*element).life_span as u8 != scan as u8
-            || dy < 0
-            || crate::planet_side::orbit_scan::node_retrieved(
-                &*element,
-                &(*solar_system::current()).SysInfo.PlanetInfo,
-            )
-        {
-            continue;
-        }
-        (*element).state_flags |= ElementFlags::APPEARING;
-        let point = CPoint {
-            x: (*element).current.location.x,
-            y: (*element).current.location.y,
-        };
-        if dy >= 8 {
-            draw((*element).next.frame, point, false);
-        } else {
-            let gradient = (255 - 255 * dy / 7) as u8;
-            let mut c = Rgba::rgb15(31, 31, 31);
-            match scan {
-                0 => c.r = gradient,
-                1 => {
-                    c.g = gradient;
-                    c.b = gradient;
+    crate::app::bridge::enter(|cx| {
+        let mut handle = cx.elements().head();
+        while let Some(element) = handle {
+            handle = cx.elements().succ(element);
+            let mut dy = (i32::from(y) - i32::from(cx.element(element).current.location.y)) as i16;
+            if cx.element(element).life as u8 != scan as u8
+                || dy < 0
+                || crate::planet_side::orbit_scan::node_retrieved(
+                    cx.element(element).life,
+                    &(*solar_system::current()).SysInfo.PlanetInfo,
+                )
+            {
+                continue;
+            }
+            cx.element_mut(element).flags |= ElementFlags::APPEARING.bits();
+            let point = CPoint {
+                x: cx.element(element).current.location.x,
+                y: cx.element(element).current.location.y,
+            };
+            if dy >= 8 {
+                draw(
+                    cx.element(element).next.image.frame.raw().cast(),
+                    point,
+                    false,
+                );
+            } else {
+                let gradient = (255 - 255 * dy / 7) as u8;
+                let mut c = Rgba::rgb15(31, 31, 31);
+                match scan {
+                    0 => c.r = gradient,
+                    1 => {
+                        c.g = gradient;
+                        c.b = gradient;
+                    }
+                    2 => c.g = gradient,
+                    _ => unreachable!("scan type"),
                 }
-                2 => c.g = gradient,
-                _ => unreachable!("scan type"),
+                g.set_fg_color(c);
+                let size = g
+                    .frame_index(cx.element(element).next.image.frame.raw() as usize)
+                    .wrapping_sub(
+                        g.frame_index(cx.element(element).current.image.frame.raw() as usize),
+                    );
+                if dy as u16 > size {
+                    dy = size as i16;
+                }
+                let frame = g.rel_frame(cx.element(element).current.image.frame.raw() as usize, dy)
+                    as *mut c_void;
+                draw(frame, point, true);
             }
-            g.set_fg_color(c);
-            let size = g
-                .frame_index((*element).next.frame as usize)
-                .wrapping_sub(g.frame_index((*element).current.frame as usize));
-            if dy as u16 > size {
-                dy = size as i16;
-            }
-            let frame = g.rel_frame((*element).current.frame as usize, dy) as *mut c_void;
-            draw(frame, point, true);
         }
-    }
+    });
     g.set_fg_color(old_color);
 }
 

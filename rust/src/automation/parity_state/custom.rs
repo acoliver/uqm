@@ -3,65 +3,11 @@
 use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
+pub(super) use crate::engine::battle::access::observe::CustomData as RaceData;
 #[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
-
-pub(super) enum RaceData<'a> {
-    None,
-    #[cfg(not(test))]
-    Androsynth(crate::engine::battle::record::ElementCollisionFunc),
-    #[cfg(not(test))]
-    Pkunk {
-        phoenix: usize,
-        hooks: [ElementProcessFunc; 3],
-    },
-    #[cfg(not(test))]
-    Umgah(u16),
-    Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
-    #[cfg(not(test))]
-    Sis(&'a crate::engine::battle::race::SisState),
-}
-
-impl<'a> RaceData<'a> {
-    /// # Safety
-    /// `pointer` is the given species' actual live descriptor data, immutable for `'a`.
-    #[cfg(not(test))]
-    pub(super) unsafe fn borrow(species: u32, descriptor: &'a RACE_DESC) -> Self {
-        if let crate::engine::battle::RaceState::Androsynth { collision } = descriptor.race_state {
-            return Self::Androsynth(collision);
-        }
-        if let crate::engine::battle::RaceState::Mmrnmhrm { ref alternate } = descriptor.race_state
-        {
-            return Self::Mmrnmhrm(alternate);
-        }
-        if let crate::engine::battle::RaceState::Pkunk {
-            phoenix,
-            saved_pre,
-            saved_post,
-            saved_death,
-        } = descriptor.race_state
-        {
-            // SAFETY: this snapshot retains the initialized game-thread pool.
-            let phoenix = unsafe { phoenix_address(phoenix) };
-            return Self::Pkunk {
-                phoenix,
-                hooks: [saved_pre, saved_post, saved_death],
-            };
-        }
-        if let crate::engine::battle::RaceState::Sis(ref data) = descriptor.race_state {
-            return Self::Sis(data);
-        }
-        if let crate::engine::battle::RaceState::Umgah { previous_facing } = descriptor.race_state {
-            return previous_facing.map_or(Self::None, Self::Umgah);
-        }
-        assert!(
-            descriptor.data.is_null(),
-            "unexpected custom data for species {species}"
-        );
-        Self::None
-    }
-
+impl RaceData<'_> {
     pub(super) fn write(
         &self,
         fields: &mut Fields,
@@ -101,7 +47,26 @@ impl<'a> RaceData<'a> {
                 }
             }
             #[cfg(not(test))]
-            Self::Umgah(data) => value(fields, &prefix, "prev_facing", *data),
+            Self::NativePkunk { phoenix, saved } => {
+                value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
+                for (name, callback) in ["saved_preprocess", "saved_postprocess", "saved_death"]
+                    .into_iter()
+                    .zip(saved)
+                {
+                    hook(
+                        fields,
+                        &prefix,
+                        name,
+                        callback.map_or(0, |f| f.address()),
+                        SPECIES_ID_PKUNK_ID,
+                        _hooks,
+                    );
+                }
+            }
+            #[cfg(not(test))]
+            Self::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
+            #[cfg(not(test))]
+            Self::Umgah(data) => value(fields, &prefix, "prev_facing", data.prev_facing),
             Self::Mmrnmhrm(data) => {
                 characteristics(fields, &format!("{prefix}.characteristics"), data)
             }

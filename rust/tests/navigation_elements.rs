@@ -97,7 +97,9 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             GlobData.Game_state.ShipStamp.frame = frames.frame(0);
             GlobData.Game_state.ShipStamp.origin = POINT { x: 80, y: 60 };
             GlobData.Game_state.ip_location = POINT { x: 100, y: 200 };
-            GlobData.Game_state.velocity.set_components(20, -30);
+            let mut velocity = old_velocity;
+            velocity.set_components(20, -30);
+            GlobData.Game_state.velocity = velocity;
             nav::DoMissions();
             uqm_rust::app::bridge::enter(|cx| {
                 let flagship = cx.elements().head().expect("spawned flagship");
@@ -116,8 +118,9 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
                 );
                 assert_eq!(cx.element(flagship).thrust, 41);
             });
-            assert_eq!(GlobData.Game_state.ip_location.x, 120);
-            assert_eq!(GlobData.Game_state.ip_location.y, 170);
+            let location = GlobData.Game_state.ip_location;
+            assert_eq!(location.x, 120);
+            assert_eq!(location.y, 170);
             GlobData.Game_state.ShipStamp = old_stamp;
             GlobData.Game_state.ip_location = old_location;
             GlobData.Game_state.velocity = old_velocity;
