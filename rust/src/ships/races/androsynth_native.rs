@@ -56,7 +56,9 @@ pub(crate) mod engine {
         (hi << 4) | lo
     }
 
-    fn build_descriptor() -> crate::engine::battle::RaceDesc {
+    fn build_descriptor(
+        _world: &mut crate::engine::battle::World,
+    ) -> crate::engine::battle::RaceDesc {
         crate::engine::battle::androsynth_template::descriptor(&ANDROSYNTH)
     }
 
@@ -343,7 +345,10 @@ pub(crate) mod engine {
         cx.ship_state_mut(ss).status = flags;
     }
 
-    pub(crate) fn uninit_androsynth(stats: &mut crate::engine::battle::views::RaceStats) {
+    pub(crate) fn uninit_androsynth(
+        _world: &mut crate::engine::battle::World,
+        stats: &mut crate::engine::battle::views::RaceStats,
+    ) {
         stats.state = RaceState::None;
     }
 }

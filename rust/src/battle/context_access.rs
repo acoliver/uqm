@@ -808,5 +808,3 @@ impl crate::engine::battle::Cx<'_> {
 
 #[path = "race_access.rs"]
 mod race_access;
-#[cfg(not(test))]
-pub use race_access::{flagship_config, set_flagship_crew};

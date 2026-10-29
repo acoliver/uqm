@@ -1,4 +1,13 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
+#[cfg(not(test))]
+impl super::World {
+    pub fn set_activity(&mut self, activity: u16) {
+        // SAFETY: World construction retains this exclusive game-thread projection.
+        unsafe {
+            self.activity.as_ptr().write(activity);
+        }
+    }
+}
 
 #[cfg(not(test))]
 use super::record::PRIMITIVE;
@@ -219,15 +228,22 @@ pub(crate) unsafe fn invoke_legacy<R>(
 /// # Safety
 /// The resource owner thread must retain the initialized descriptor's resources.
 pub(crate) unsafe fn descriptor_template(
-    init: super::record::DescriptorInitializer,
+    source: super::record::DescriptorSource,
 ) -> Option<super::RaceDesc> {
     // SAFETY: the initializer and its returned template remain live for this synchronous value copy.
     unsafe {
-        let pointer = init();
-        if pointer.is_null() {
-            None
-        } else {
-            Some(super::RaceDesc::from_legacy(*pointer))
+        match source {
+            super::record::DescriptorSource::Native(race) => {
+                Some((race.descriptor)(&mut super::World::for_legacy_lifecycle()))
+            }
+            super::record::DescriptorSource::Legacy(init) => {
+                let pointer = init();
+                if pointer.is_null() {
+                    None
+                } else {
+                    Some(super::RaceDesc::from_legacy(*pointer))
+                }
+            }
         }
     }
 }
@@ -505,9 +521,15 @@ impl Cx<'_> {
     pub fn set_ship_frame(&mut self, ship: ShipId, role: usize, resolution: usize, frame: Frame) {
         assert!(resolution < 3, "invalid frame resolution {resolution}");
         let array = self.ship_frames(ship, role);
-        // SAFETY: the checked descriptor retains its three-frame array.
+        // SAFETY: the checked descriptor retains the slot and both opaque drawable handles.
         unsafe {
-            crate::collections::observation::image!(view; *array.add(resolution), frame.0);
+            let slot = array.add(resolution);
+            assert_eq!(
+                crate::graphics::pixmap_abi::GetFrameParentDrawable((*slot).cast()),
+                crate::graphics::pixmap_abi::GetFrameParentDrawable(frame.0.cast()),
+                "owning frame slot cannot change drawable"
+            );
+            crate::collections::observation::image!(view; *slot, frame.0);
         }
     }
     pub fn captain_special(&self, ship: ShipId) -> Frame {

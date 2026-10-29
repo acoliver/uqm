@@ -169,7 +169,9 @@ pub(crate) mod engine {
     /// Descriptor must be live and owned by the caller, with no outstanding borrows.
     /// Resource flags must match the parts loaded into this descriptor.
     pub unsafe extern "C" fn c_free_ship(d: *mut RACE_DESC, icons: u32, battle: u32) {
-        if let Some(uninit) = (&mut *d).cleanup() {
+        if let Some(uninit) =
+            (&mut *d).cleanup(&mut crate::engine::battle::World::for_legacy_lifecycle())
+        {
             uninit(d);
         }
         crate::collections::observation::record(
@@ -179,8 +181,9 @@ pub(crate) mod engine {
                 battle: battle != 0,
             },
         );
+        let descriptor = &mut *d;
         if battle != 0 {
-            let data = &mut (*d).ship_data;
+            let data = &mut descriptor.ship_data;
             free_image((&raw mut data.special).cast());
             free_image((&raw mut data.weapon).cast());
             free_image((&raw mut data.ship).cast());
@@ -189,12 +192,12 @@ pub(crate) mod engine {
             DestroySound((ReleaseStringTable(data.ship_sounds.cast())).cast());
         }
         if icons != 0 {
-            let info = &mut (*d).ship_info;
+            let info = &mut descriptor.ship_info;
             DestroyDrawable(ReleaseDrawable(info.melee_icon.cast()));
             DestroyDrawable(ReleaseDrawable(info.icons.cast()));
             DestroyStringTable(ReleaseStringTable(info.race_strings.cast()));
         }
-        DestroyCodeRes(ReleaseCodeRes((*d).code_ref));
+        DestroyCodeRes(ReleaseCodeRes(descriptor.code_ref));
     }
 
     #[no_mangle]

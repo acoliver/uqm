@@ -9,7 +9,9 @@ pub mod record;
 pub mod table;
 pub use context::{Battle, Cx, World};
 pub use hooks::{CollisionFn, CollisionHook, ElementFn, ElementHook, ElementHooks};
-pub use race::{Concern, Concerns, Race, RaceDesc, RaceState, Subject, WeaponOrigin, WeaponSpawn};
+pub use race::{
+    Concern, Concerns, Race, RaceDesc, RaceState, StoryKey, Subject, WeaponOrigin, WeaponSpawn,
+};
 pub use table::{ElementId, ElementTable, Parent, ShipId};
 
 pub mod views;

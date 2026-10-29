@@ -828,11 +828,11 @@ mod projection_tests {
 
 #[cfg(not(test))]
 impl RACE_DESC {
-    pub(crate) fn cleanup(&mut self) -> abi::UNINIT_FUNC {
+    pub(crate) fn cleanup(&mut self, world: &mut super::World) -> abi::UNINIT_FUNC {
         if let Some(race) = self.race {
             if let Some(uninit) = race.uninit {
                 let mut stats = RaceStats::decode(self);
-                uninit(&mut stats);
+                uninit(world, &mut stats);
                 RaceStats::apply(self, stats);
             }
             None
@@ -844,6 +844,12 @@ impl RACE_DESC {
 
 #[cfg(not(test))]
 pub(crate) type DescriptorInitializer = unsafe extern "C" fn() -> *mut RACE_DESC;
+
+#[cfg(not(test))]
+pub(crate) enum DescriptorSource {
+    Native(&'static super::Race),
+    Legacy(DescriptorInitializer),
+}
 
 #[cfg(test)]
 mod zero_descriptor_tests {

@@ -126,7 +126,9 @@ impl<'a> Ship<'a> {
         player: SIZE,
     ) -> Self {
         let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
-        *ship.desc = (race.descriptor)().into_legacy();
+        // SAFETY: construction runs in this fixture's serialized, published battle.
+        *ship.desc =
+            unsafe { uqm_rust::app::bridge::enter(|cx| (race.descriptor)(cx.world).into_legacy()) };
         ship
     }
     pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
@@ -306,7 +308,7 @@ impl<'a> Ship<'a> {
                 unsafe {
                     uqm_rust::app::bridge::enter(|cx| {
                         let mut stats = cx.race_stats(self.ship_id);
-                        uninit(&mut stats);
+                        uninit(cx.world, &mut stats);
                         *cx.race_stats_mut(self.ship_id) = stats;
                     });
                 }

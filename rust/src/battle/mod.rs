@@ -447,6 +447,3 @@ mod integration_tests {
         );
     }
 }
-
-#[cfg(not(test))]
-pub use context_access::{flagship_config, set_flagship_crew};

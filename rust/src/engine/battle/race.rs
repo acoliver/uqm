@@ -10,12 +10,21 @@ pub type IntelligenceFn = fn(&mut Cx<'_>, ShipId, &mut Concerns);
 /// Immutable behavior shared by all ships of one converted species.
 #[derive(Debug)]
 pub struct Race {
-    pub descriptor: fn() -> RaceDesc,
+    pub descriptor: fn(&mut super::World) -> RaceDesc,
     pub preprocess: Option<ShipFn>,
     pub postprocess: Option<ShipFn>,
     pub init_weapon: Option<WeaponFn>,
     pub intelligence: Option<IntelligenceFn>,
-    pub uninit: Option<fn(&mut super::views::RaceStats)>,
+    pub uninit: Option<fn(&mut super::World, &mut super::views::RaceStats)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoryKey {
+    ShofixtiRecruited,
+    ProbeIlwrathEncounter,
+    ArilouSpaceSide,
+    ChmmrBombState,
+    BombCarrier,
 }
 
 #[repr(u8)]

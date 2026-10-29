@@ -1,6 +1,8 @@
 //! Resource and world handoffs used by Native race callbacks.
 #[cfg(not(test))]
 use super::*;
+#[cfg(not(test))]
+use crate::engine::battle::{StoryKey, World};
 
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -113,22 +115,19 @@ impl Cx<'_> {
     }
 
     pub fn set_activity(&mut self, activity: u16) {
-        // SAFETY: this context owns the single world activity authority.
-        unsafe {
-            GlobData.Game_state.CurrentActivity = activity;
-        }
+        self.world.set_activity(activity);
     }
 
-    pub fn story_state(&self, name: &str) -> u32 {
-        crate::state::game_state_keys::get_game_state(name)
+    pub fn story_state(&self, key: StoryKey) -> u32 {
+        self.world.story_state(key)
     }
 
-    pub fn set_story_state(&mut self, name: &str, value: u32) {
-        crate::state::game_state_keys::set_game_state(name, value);
+    pub fn set_story_state(&mut self, key: StoryKey, value: u32) {
+        self.world.set_story_state(key, value);
     }
 
     pub fn flagship_config(&self) -> crate::engine::battle::views::FlagshipConfig {
-        flagship_config()
+        self.world.flagship_config()
     }
 
     pub fn flagship_velocity(&self) -> crate::engine::battle::record::VELOCITY_DESC {
@@ -154,7 +153,7 @@ impl Cx<'_> {
     }
 
     pub fn set_flagship_crew(&mut self, crew: u16) {
-        set_flagship_crew(crew);
+        self.world.set_flagship_crew(crew);
     }
 
     pub fn hyperspace_menu(&mut self) {
@@ -166,27 +165,75 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
-pub fn flagship_config() -> crate::engine::battle::views::FlagshipConfig {
-    use crate::engine::battle::views::FlagshipConfig;
-    // SAFETY: descriptor construction and callbacks run on the owning game thread.
-    unsafe {
-        let state = GlobData.SIS_state;
-        FlagshipConfig {
-            modules: state.ModuleSlots,
-            drives: state.DriveSlots,
-            jets: state.JetSlots,
-            crew: state.CrewEnlisted,
-            fuel: state.FuelOnBoard,
-            position: (state.log_x, state.log_y),
-            hyperspace: inHQSpace() != 0,
+impl World {
+    /// # Safety
+    /// Legacy resource construction/teardown must run on the game thread, with
+    /// every other World and GlobData borrow suspended until this value is dropped.
+    pub(crate) unsafe fn for_legacy_lifecycle() -> Self {
+        use crate::navigation::globals::GlobData;
+        // SAFETY: the legacy lifecycle caller suspends other authority access;
+        // resource arrays are address-stable even before their handles are loaded.
+        unsafe {
+            Self::new(
+                &raw mut GlobData.Game_state.CurrentActivity,
+                &raw mut GlobData.Game_state.ip_group_q,
+                [
+                    (&raw mut crate::game_init::space_resources::asteroid).cast(),
+                    (&raw mut crate::game_init::space_resources::explosion).cast(),
+                ],
+                Some(crate::battle::weapon_native::track_ship),
+            )
         }
+    }
+
+    pub fn flagship_config(&self) -> crate::engine::battle::views::FlagshipConfig {
+        use crate::engine::battle::views::FlagshipConfig;
+        // SAFETY: World construction retains exclusive game-thread access to GlobData.
+        unsafe {
+            let state = GlobData.SIS_state;
+            FlagshipConfig {
+                modules: state.ModuleSlots,
+                drives: state.DriveSlots,
+                jets: state.JetSlots,
+                crew: state.CrewEnlisted,
+                fuel: state.FuelOnBoard,
+                position: (state.log_x, state.log_y),
+                hyperspace: inHQSpace() != 0,
+            }
+        }
+    }
+
+    pub fn set_flagship_crew(&mut self, crew: u16) {
+        // SAFETY: World construction retains exclusive game-thread access to enlisted crew.
+        unsafe {
+            GlobData.SIS_state.CrewEnlisted = crew;
+        }
+    }
+
+    pub fn story_state(&self, key: StoryKey) -> u32 {
+        crate::state::game_state_keys::get_game_state(story_name(key))
+    }
+
+    pub fn set_story_state(&mut self, key: StoryKey, value: u32) {
+        crate::state::game_state_keys::set_game_state(story_name(key), value);
     }
 }
 
 #[cfg(not(test))]
-pub fn set_flagship_crew(crew: u16) {
-    // SAFETY: race teardown and callbacks run on the owning game thread.
-    unsafe {
-        GlobData.SIS_state.CrewEnlisted = crew;
+fn story_name(key: StoryKey) -> &'static str {
+    match key {
+        StoryKey::ShofixtiRecruited => "SHOFIXTI_RECRUITED",
+        StoryKey::ProbeIlwrathEncounter => "PROBE_ILWRATH_ENCOUNTER",
+        StoryKey::ArilouSpaceSide => "ARILOU_SPACE_SIDE",
+        StoryKey::ChmmrBombState => "CHMMR_BOMB_STATE",
+        StoryKey::BombCarrier => "BOMB_CARRIER",
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn hyperspace_cancel_pressed(&self) -> bool {
+        // SAFETY: the game-thread context retains the input authority during this value read.
+        unsafe { PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0 }
     }
 }

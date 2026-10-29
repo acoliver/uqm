@@ -46,7 +46,7 @@ use super::record::Tracker;
 
 pub struct World {
     pub(super) tracking: Option<Tracker>,
-    activity: NonNull<u16>,
+    pub(super) activity: NonNull<u16>,
     groups: NonNull<QUEUE>,
     pub shared_frames: [super::views::Frames; 2],
 }
@@ -54,7 +54,9 @@ pub struct World {
 impl World {
     /// # Safety
     /// Pointers must project the game-thread-owned GlobData authority, remain live,
-    /// and never have a Rust reference held across a legacy call.
+    /// and never have a Rust reference held across a legacy call. The caller must
+    /// also retain exclusive game-thread access to GlobData, input, and story
+    /// authorities until this World is dropped or its use is suspended.
     pub unsafe fn new(
         activity: *mut u16,
         groups: *mut QUEUE,
