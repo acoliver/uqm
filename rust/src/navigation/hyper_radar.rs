@@ -152,10 +152,10 @@ pub unsafe fn SeedUniverse() {
             ));
             (*element).preprocess_func = None;
             (*element).postprocess_func = None;
-            (*element).collision_func = Some(CollisionHook::Legacy(portal_collision));
+            (*element).collision_func = Some(CollisionHook::Native(portal_collision));
             SetUpElement(element);
             if side == 1 || side == 2 {
-                (*element).death_func = Some(ElementHook::Legacy(portal_death));
+                (*element).death_func = Some(ElementHook::Native(portal_death));
             } else {
                 (*element).death_func = None;
                 crate::collections::observation::image!(frame; (*element).IntersectControl.IntersectStamp.frame, DecFrameIndex(stars_in_space));

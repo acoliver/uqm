@@ -82,23 +82,28 @@ pub(super) unsafe fn ambient() {
     }
     InsertQueue(ptr::addr_of_mut!(disp_q), handle, disp_q.head);
 }
-pub(crate) unsafe extern "C" fn transition(element: *mut ELEMENT) {
-    (*element).state_flags &= !(DISAPPEARING as u16);
-    (*element).__bindgen_anon_1.life_span = 1;
-    if (*element).__bindgen_anon_4.turn_wait != 0 {
-        (*element).__bindgen_anon_4.turn_wait -= 1;
+pub fn transition(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    cx.element_mut(element).flags &= !(DISAPPEARING as u16);
+    cx.element_mut(element).life = 1;
+    let state = cx.element(element);
+    if state.turn != 0 {
+        cx.element_mut(element).turn -= 1;
     } else {
-        if (*element).__bindgen_anon_2.hit_points != 0 {
-            image!(frame; (*element).next.image.frame, DecFrameIndex((*element).current.image.frame));
+        if state.hits != 0 {
+            let frame = cx.retreat_frame(state.current.image.frame);
+            cx.set_frame(element, true, frame);
         } else {
-            let frame = IncFrameIndex((*element).current.image.frame);
-            if frame != *(*element).current.image.farray {
-                image!(frame; (*element).next.image.frame, frame);
+            let frame = cx.advance_frame(state.current.image.frame);
+            if frame != cx.element_frame_set_first(element, false) {
+                cx.set_frame(element, true, frame);
             } else {
-                (*element).death_func = None;
+                cx.element_mut(element).death = None;
             }
         }
-        (*element).__bindgen_anon_4.turn_wait = 1;
+        cx.element_mut(element).turn = 1;
     }
 }
 pub(crate) unsafe extern "C" fn collision(
@@ -192,7 +197,7 @@ unsafe fn add(encounter: *mut ENCOUNTER, universe: POINT) -> HELEMENT {
                 i = 9;
             }
             image!(frame; (*element).current.image.frame, SetRelFrameIndex(*(*element).current.image.farray, -i));
-            (*element).death_func = Some(ElementHook::Legacy(transition));
+            (*element).death_func = Some(ElementHook::Native(transition));
         } else {
             image!(frame; (*element).current.image.frame, DecFrameIndex(*(*element).current.image.farray));
         }
@@ -295,7 +300,7 @@ unsafe fn process(
             (*element).state_flags |= NONSOLID as u16;
             (*element).__bindgen_anon_1.life_span = 0;
             if (*encounter).transition_state == 0 {
-                (*element).death_func = Some(ElementHook::Legacy(transition));
+                (*element).death_func = Some(ElementHook::Native(transition));
                 (*encounter).transition_state = -1;
                 (*element).__bindgen_anon_2.hit_points = 1;
             } else {

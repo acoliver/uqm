@@ -170,10 +170,20 @@ impl Cx<'_> {
         }
     }
 
+    pub fn setup_element(&mut self, id: ElementId) {
+        self.copy_current_to_next(id);
+        if self.element(id).flags & SKIP_COLLISION as u16 == 0 {
+            self.init_intersect(id);
+            let frame = self.equivalent_frame(
+                self.element_frame_set_first(id, true),
+                self.element(id).next.image.frame,
+            );
+            self.set_intersect_frame(id, frame);
+        }
+    }
+
     pub fn hyper_transition(&mut self, id: ElementId) -> bool {
-        let pointer = self.elements().raw(id).cast();
-        // SAFETY: the checked flagship element belongs to this context.
-        unsafe { crate::navigation::hyper_transition::hyper_transition(pointer) != 0 }
+        crate::navigation::hyper_transition::hyper_transition(self, id)
     }
 
     pub fn object_cloaked(&mut self, id: ElementId) -> bool {
