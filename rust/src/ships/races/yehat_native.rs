@@ -161,14 +161,12 @@ pub(crate) mod engine {
     }
     pub(crate) fn yehat_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
-        if cx.element(e).flags & NONSOLID as u16 == 0 {
-            if cx.ship_state(ss).special_counter > 0 {
-                if u32::from(cx.element(e).life) == NORMAL_LIFE {
-                    cx.ship_state_mut(ss).special_counter = 0;
-                } else {
-                    cx.process_ship_sound(ss, 1, e);
-                    cx.delta_energy(e, -3);
-                }
+        if cx.element(e).flags & NONSOLID as u16 == 0 && cx.ship_state(ss).special_counter > 0 {
+            if u32::from(cx.element(e).life) == NORMAL_LIFE {
+                cx.ship_state_mut(ss).special_counter = 0;
+            } else {
+                cx.process_ship_sound(ss, 1, e);
+                cx.delta_energy(e, -3);
             }
         }
     }

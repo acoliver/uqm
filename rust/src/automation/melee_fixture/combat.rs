@@ -406,14 +406,7 @@ pub(super) fn pool(
             run.before = world.elements.keys().copied().collect();
             run.next(
                 (0..76)
-                    .map(|_| {
-                        Effect::Invoke(
-                            hooks
-                                .fighters
-                                .map(crate::engine::battle::ElementHook::Legacy),
-                            run.a,
-                        )
-                    })
+                    .map(|_| Effect::Invoke(hooks.fighters, run.a))
                     .collect(),
             )
         }

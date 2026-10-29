@@ -1,48 +1,16 @@
 //! Exercise the Supox entry point and registered callbacks against the linked engine.
 
-use uqm_rust::ships::races::init_supox;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{PoolElement, PoolShip};
+use battle::*;
 
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, mem};
 use uqm_rust::ships::native::{abi::*, element};
-
-unsafe extern "C" {
-    fn FreeElement(handle: HELEMENT);
-}
 
 /// The element queue and RNG are process-wide engine state.
 use battle::Battle as Battlefield;
-
-/// A ship element with its own race descriptor copy, as the engine builds them.
-struct Ship {
-    desc: Box<RACE_DESC>,
-    ss: PoolShip,
-    el: PoolElement,
-}
-
-impl Ship {
-    fn new(player: SIZE) -> Self {
-        unsafe {
-            let mut desc = Box::new(*init_supox());
-            let mut ss = PoolShip::new(player);
-            ss.RaceDescPtr = &raw mut *desc;
-            ss.playerNr = player;
-            let mut el = PoolElement::new();
-            el.pParent = (&raw mut *ss).cast();
-            el.playerNr = player;
-            el.state_flags = PLAYER_SHIP as u16;
-            Self { desc, ss, el }
-        }
-    }
-
-    fn el(&mut self) -> *mut ELEMENT {
-        &raw mut *self.el
-    }
-}
 
 fn velocity_fields(v: &VELOCITY_DESC) -> [i32; 9] {
     [
@@ -70,9 +38,11 @@ fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 fn descriptor_matches_the_c_race_data() {
     battle_context::run(|| {
         unsafe {
-            let template = init_supox();
-            assert_eq!(template, init_supox());
-            let desc = *template;
+            let desc = descriptor(SPECIES_ID_SUPOX_ID);
+            assert!(std::ptr::eq(
+                desc.race.unwrap(),
+                descriptor(SPECIES_ID_SUPOX_ID).race.unwrap()
+            ));
             assert_eq!(desc.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(desc.ship_info.ship_cost, 16);
             assert_eq!(desc.ship_info.crew_level, 12);
@@ -126,11 +96,11 @@ fn descriptor_matches_the_c_race_data() {
             // (MISSILE_SPEED * MISSILE_LIFE) >> 1 with MISSILE_SPEED = 120
             assert_eq!(desc.cyborg_control.WeaponRange, 600);
             assert_eq!(desc.cyborg_control.ManeuverabilityIndex, 0);
-            assert!(desc.cyborg_control.intelligence_func.is_some());
-            assert!(desc.preprocess_func.is_some());
-            assert!(desc.init_weapon_func.is_some());
-            assert!(desc.uninit_func.is_none());
-            assert!(desc.postprocess_func.is_none());
+            assert!(desc.callbacks()[4] != 0);
+            assert!(desc.callbacks()[1] != 0);
+            assert!(desc.callbacks()[3] != 0);
+            assert!(desc.callbacks()[0] == 0);
+            assert!(desc.callbacks()[2] == 0);
             assert!(desc.data.is_null());
             assert!(desc.code_ref.is_null());
         }
@@ -142,12 +112,11 @@ fn gob_is_launched_with_the_c_missile_block() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            ship.ss.ShipFacing = 4;
-            ship.el.next.location = POINT { x: 100, y: 200 };
-            let mut horns = [ptr::null_mut(); 1];
-            let launch = ship.desc.init_weapon_func.unwrap();
-            assert_eq!(launch(ship.el(), horns.as_mut_ptr()), 1);
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.ship_mut().ShipFacing = 4;
+            ship.element_mut().next.location = POINT { x: 100, y: 200 };
+            let slots = ship.weapon(1);
+            let horns = [ship.weapon_record(slots[0]).cast()];
 
             let gob = element(horns[0]);
             assert!(!gob.is_null());
@@ -166,12 +135,15 @@ fn gob_is_launched_with_the_c_missile_block() {
 
 /// Thrusts a second ship at `expected_facing` and returns what the engine
 /// computes for that heading, as the oracle for the lateral/reverse maths.
-unsafe fn thrust_heading(heading: COUNT, flags: u16) -> ([i32; 9], u16) {
-    let mut oracle = Ship::new(0);
-    oracle.ss.ShipFacing = heading;
-    oracle.ss.cur_status_flags = flags;
-    let status = inertial_thrust(oracle.el());
-    (velocity_fields(&oracle.el.velocity), status)
+unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32; 9], u16) {
+    let mut oracle = Ship::bare(_battle, SPECIES_ID_SUPOX_ID, 0);
+    // SAFETY: the caller holds the serialized battle through these fixture projections.
+    unsafe {
+        oracle.ship_mut().ShipFacing = heading;
+        oracle.ship_mut().cur_status_flags = flags;
+        let status = inertial_thrust(oracle.el());
+        (velocity_fields(&oracle.element_mut().velocity), status)
+    }
 }
 
 #[test]
@@ -191,23 +163,26 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
                 (SPECIAL | THRUST | LEFT | RIGHT, 1, 11),
             ];
             for (held, facing, heading) in cases {
-                let mut ship = Ship::new(0);
-                ship.ss.ShipFacing = facing;
-                ship.ss.cur_status_flags = held as u16;
-                let preprocess = ship.desc.preprocess_func.unwrap();
-                preprocess(ship.el());
+                let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+                ship.ship_mut().ShipFacing = facing;
+                ship.ship_mut().cur_status_flags = held as u16;
+                ship.preprocess();
 
-                let (velocity, status) = thrust_heading(heading, held as u16);
+                let (velocity, status) = thrust_heading(&_battle, heading, held as u16);
                 assert_ne!(velocity, [0; 9], "case {held:#x}/{facing}");
                 assert_eq!(
-                    velocity_fields(&ship.el.velocity),
+                    velocity_fields(&ship.element_mut().velocity),
                     velocity,
                     "case {held:#x}/{facing}"
                 );
-                assert_eq!(ship.ss.ShipFacing, facing, "the real facing is restored");
+                assert_eq!(
+                    ship.ship_mut().ShipFacing,
+                    facing,
+                    "the real facing is restored"
+                );
                 let thrust_flags =
                     (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16;
-                assert_eq!(ship.ss.cur_status_flags, held as u16 | status);
+                assert_eq!(ship.ship_mut().cur_status_flags, held as u16 | status);
                 assert_eq!(status & !thrust_flags, 0);
             }
         }
@@ -219,54 +194,56 @@ fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            ship.ss.ShipFacing = 4;
-            ship.ss.cur_status_flags = (SPECIAL | THRUST | LEFT) as u16;
-            let preprocess = ship.desc.preprocess_func.unwrap();
-            preprocess(ship.el());
-            assert_eq!(ship.el.__bindgen_anon_5.thrust_wait, 1);
-            assert_eq!(ship.el.__bindgen_anon_4.turn_wait, 1);
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | LEFT) as u16;
+            ship.preprocess();
+            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 1);
+            assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 1);
 
             // Existing waits are not rearmed.
-            ship.el.__bindgen_anon_5.thrust_wait = 3;
-            ship.el.__bindgen_anon_4.turn_wait = 5;
-            ship.ss.cur_status_flags = (SPECIAL | THRUST | RIGHT) as u16;
-            preprocess(ship.el());
-            assert_eq!(ship.el.__bindgen_anon_5.thrust_wait, 3);
-            assert_eq!(ship.el.__bindgen_anon_4.turn_wait, 5);
+            ship.element_mut().__bindgen_anon_5.thrust_wait = 3;
+            ship.element_mut().__bindgen_anon_4.turn_wait = 5;
+            ship.ship_mut().cur_status_flags = (SPECIAL | THRUST | RIGHT) as u16;
+            ship.preprocess();
+            assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 3);
+            assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 5);
 
             // Without SPECIAL, or with SPECIAL alone, nothing is changed.
             for held in [THRUST | LEFT, SPECIAL] {
-                let mut ship = Ship::new(0);
-                ship.ss.ShipFacing = 4;
-                ship.ss.cur_status_flags = held as u16;
-                preprocess(ship.el());
-                assert_eq!(velocity_fields(&ship.el.velocity), [0; 9]);
-                assert_eq!(ship.ss.cur_status_flags, held as u16);
-                assert_eq!(ship.ss.ShipFacing, 4);
-                assert_eq!(ship.el.__bindgen_anon_5.thrust_wait, 0);
-                assert_eq!(ship.el.__bindgen_anon_4.turn_wait, 0);
+                let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+                ship.ship_mut().ShipFacing = 4;
+                ship.ship_mut().cur_status_flags = held as u16;
+                ship.preprocess();
+                assert_eq!(velocity_fields(&ship.element_mut().velocity), [0; 9]);
+                assert_eq!(ship.ship_mut().cur_status_flags, held as u16);
+                assert_eq!(ship.ship_mut().ShipFacing, 4);
+                assert_eq!(ship.element_mut().__bindgen_anon_5.thrust_wait, 0);
+                assert_eq!(ship.element_mut().__bindgen_anon_4.turn_wait, 0);
             }
         }
     })
 }
 
 /// An enemy ship placed `distance` units due north of a Supox at the origin.
-struct Chase {
-    ship: Ship,
-    enemy: Ship,
+struct Chase<'a> {
+    ship: Ship<'a>,
+    enemy: Ship<'a>,
     concerns: [EVALUATE_DESC; 4],
 }
 
-impl Chase {
-    fn new(which_turn: u16, enemy_facing: COUNT) -> Self {
+impl<'a> Chase<'a> {
+    unsafe fn new(_battle: &'a Battle, which_turn: u16, enemy_facing: COUNT) -> Self {
         let mut chase = Self {
-            ship: Ship::new(0),
-            enemy: Ship::new(1),
+            ship: Ship::bare(_battle, SPECIES_ID_SUPOX_ID, 0),
+            enemy: Ship::bare(_battle, SPECIES_ID_SUPOX_ID, 1),
             concerns: unsafe { mem::zeroed() },
         };
-        chase.ship.el.next.location = POINT { x: 5000, y: 5000 };
-        chase.enemy.el.next.location = POINT { x: 5000, y: 4000 };
+        // SAFETY: both fixture slots belong to the caller's serialized battle.
+        unsafe {
+            chase.ship.element_mut().next.location = POINT { x: 5000, y: 5000 };
+            chase.enemy.element_mut().next.location = POINT { x: 5000, y: 4000 };
+        }
         let slot = &mut chase.concerns[ENEMY_SHIP_INDEX as usize];
         slot.ObjectPtr = chase.enemy.el();
         slot.which_turn = which_turn;
@@ -279,13 +256,14 @@ impl Chase {
     fn run(&mut self) {
         // A zero concern count leaves only the Supox decisions to run.
         unsafe {
-            let ai = self.ship.desc.cyborg_control.intelligence_func.unwrap();
-            ai(self.ship.el(), self.concerns.as_mut_ptr(), 0);
+            self.ship
+                .intelligence(&mut *self.ship.ptr(), &mut self.concerns, 0);
         }
     }
 
-    fn input(&self) -> u8 {
-        self.ship.ss.ship_input_state
+    unsafe fn input(&mut self) -> u8 {
+        // SAFETY: the caller retains the serialized battle while reading its ship slot.
+        unsafe { self.ship.ship_mut().ship_input_state }
     }
 
     fn enemy_state(&self) -> MOVEMENT_STATE {
@@ -298,59 +276,61 @@ fn ai_lines_up_the_reverse_burst_with_the_c_conditions() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         assert_eq!(ARCTAN(0, -1000), 0, "north is angle 0");
-        let special = SPECIAL as u8;
-        let burst = (SPECIAL | THRUST | WEAPON) as u8;
-        // Head-on: the enemy is north, the Supox faces north and the enemy faces
-        // back at it (angle 32).
-        let mut chase = Chase::new(10, 32);
-        chase.run();
-        assert_eq!(chase.input(), burst);
-        assert_eq!(chase.enemy_state(), MOVEMENT_STATE_PURSUE);
-
-        // Between 13 and 20 turns away a held special request is kept but a new
-        // one is not started.
-        drop(chase);
-        let mut chase = Chase::new(15, 32);
-        chase.run();
-        assert_eq!(chase.input(), 0);
-        assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
-        drop(chase);
-        let mut chase = Chase::new(15, 32);
-        chase.ship.ss.ship_input_state = special;
-        chase.run();
-        assert_eq!(chase.input(), burst);
-        assert_eq!(chase.enemy_state(), MOVEMENT_STATE_PURSUE);
-
-        // Too far, wrong enemy heading, wrong own heading, or cooling down.
-        drop(chase);
-        let mut chase = Chase::new(21, 32);
-        chase.ship.ss.ship_input_state = special;
-        chase.run();
-        assert_eq!(chase.input(), 0);
-        assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
-        drop(chase);
-        let mut chase = Chase::new(10, 0);
-        chase.run();
-        assert_eq!(chase.input(), 0);
-        assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
-        drop(chase);
-        let mut chase = Chase::new(10, 32);
-        chase.ship.ss.ShipFacing = 8;
-        chase.ship.ss.ship_input_state = special;
-        chase.run();
-        assert_eq!(chase.input(), 0);
-        drop(chase);
-        let mut chase = Chase::new(10, 32);
-        chase.ship.ss.special_counter = 1;
-        chase.ship.ss.ship_input_state = special;
-        chase.run();
-        assert_eq!(chase.input(), 0);
-
-        // The enemy's facing window is +-8 around the reverse of the Supox facing.
-        for (enemy_facing, expected) in [(24, burst), (40, burst), (23, 0), (41, 0)] {
-            let mut chase = Chase::new(10, enemy_facing);
+        unsafe {
+            let special = SPECIAL as u8;
+            let burst = (SPECIAL | THRUST | WEAPON) as u8;
+            // Head-on: the enemy is north, the Supox faces north and the enemy faces
+            // back at it (angle 32).
+            let mut chase = Chase::new(&_battle, 10, 32);
             chase.run();
-            assert_eq!(chase.input(), expected, "enemy facing {enemy_facing}");
+            assert_eq!(chase.input(), burst);
+            assert_eq!(chase.enemy_state(), MOVEMENT_STATE_PURSUE);
+
+            // Between 13 and 20 turns away a held special request is kept but a new
+            // one is not started.
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 15, 32);
+            chase.run();
+            assert_eq!(chase.input(), 0);
+            assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 15, 32);
+            chase.ship.ship_mut().ship_input_state = special;
+            chase.run();
+            assert_eq!(chase.input(), burst);
+            assert_eq!(chase.enemy_state(), MOVEMENT_STATE_PURSUE);
+
+            // Too far, wrong enemy heading, wrong own heading, or cooling down.
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 21, 32);
+            chase.ship.ship_mut().ship_input_state = special;
+            chase.run();
+            assert_eq!(chase.input(), 0);
+            assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 10, 0);
+            chase.run();
+            assert_eq!(chase.input(), 0);
+            assert_eq!(chase.enemy_state(), MOVEMENT_STATE_AVOID);
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 10, 32);
+            chase.ship.ship_mut().ShipFacing = 8;
+            chase.ship.ship_mut().ship_input_state = special;
+            chase.run();
+            assert_eq!(chase.input(), 0);
+            drop(chase);
+            let mut chase = Chase::new(&_battle, 10, 32);
+            chase.ship.ship_mut().special_counter = 1;
+            chase.ship.ship_mut().ship_input_state = special;
+            chase.run();
+            assert_eq!(chase.input(), 0);
+
+            // The enemy's facing window is +-8 around the reverse of the Supox facing.
+            for (enemy_facing, expected) in [(24, burst), (40, burst), (23, 0), (41, 0)] {
+                let mut chase = Chase::new(&_battle, 10, enemy_facing);
+                chase.run();
+                assert_eq!(chase.input(), expected, "enemy facing {enemy_facing}");
+            }
         }
     })
 }
@@ -360,12 +340,11 @@ fn ai_without_an_enemy_ship_drops_the_special_request() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            ship.ss.ship_input_state = SPECIAL as u8;
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.ship_mut().ship_input_state = SPECIAL as u8;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
-            ai(ship.el(), concerns.as_mut_ptr(), 0);
-            assert_eq!(ship.ss.ship_input_state, 0);
+            ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
+            assert_eq!(ship.ship_mut().ship_input_state, 0);
         }
     })
 }
@@ -376,8 +355,7 @@ fn dodge(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4], weapon: *mut ELEMEN
     slot.ObjectPtr = weapon;
     slot.MoveState = MOVEMENT_STATE_AVOID;
     unsafe {
-        let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
-        ai(ship.el(), concerns.as_mut_ptr(), 0);
+        ship.intelligence(&mut *ship.ptr(), concerns, 0);
     }
 }
 
@@ -386,20 +364,21 @@ fn ai_dodges_with_the_held_turn_or_a_random_side_from_the_byte_draw() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut missile = PoolElement::new();
+            let mut missile_fixture = Object::new(&_battle);
+            let missile = missile_fixture.ptr();
 
             // No turn held: the side comes from bit 0 of the low byte of one draw.
             let mut seen = [false; 2];
             for seed in 1..64u32 {
                 TFB_SeedRandom(seed);
                 let bit = (TFB_Random() as u8 & 1) as usize;
-                let mut ship = Ship::new(0);
-                ship.ss.ship_input_state = THRUST as u8;
+                let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+                ship.ship_mut().ship_input_state = THRUST as u8;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 TFB_SeedRandom(seed);
-                dodge(&mut ship, &mut concerns, &raw mut *missile);
+                dodge(&mut ship, &mut concerns, missile);
                 let expected = (SPECIAL as u8) | (1u8 << bit);
-                assert_eq!(ship.ss.ship_input_state, expected, "seed {seed}");
+                assert_eq!(ship.ship_mut().ship_input_state, expected, "seed {seed}");
                 assert_eq!(expected & (LEFT | RIGHT) as u8, 1 << bit);
                 // Exactly one draw was used.
                 let after = TFB_Random();
@@ -412,13 +391,13 @@ fn ai_dodges_with_the_held_turn_or_a_random_side_from_the_byte_draw() {
 
             // A held turn is reused and consumes no random numbers.
             for held in [LEFT, RIGHT] {
-                let mut ship = Ship::new(0);
-                ship.ss.cur_status_flags = held as u16;
-                ship.ss.ship_input_state = THRUST as u8;
+                let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+                ship.ship_mut().cur_status_flags = held as u16;
+                ship.ship_mut().ship_input_state = THRUST as u8;
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 TFB_SeedRandom(9);
-                dodge(&mut ship, &mut concerns, &raw mut *missile);
-                assert_eq!(ship.ss.ship_input_state, SPECIAL as u8 | held as u8);
+                dodge(&mut ship, &mut concerns, missile);
+                assert_eq!(ship.ship_mut().ship_input_state, SPECIAL as u8 | held as u8);
                 let after = TFB_Random();
                 TFB_SeedRandom(9);
                 assert_eq!(after, TFB_Random());
@@ -426,28 +405,27 @@ fn ai_dodges_with_the_held_turn_or_a_random_side_from_the_byte_draw() {
 
             // Not while the special is cooling down, while the turn is blocked, or
             // when the incoming object is not being avoided.
-            let mut ship = Ship::new(0);
-            ship.ss.special_counter = 1;
-            ship.ss.ship_input_state = THRUST as u8;
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.ship_mut().special_counter = 1;
+            ship.ship_mut().ship_input_state = THRUST as u8;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            dodge(&mut ship, &mut concerns, &raw mut *missile);
-            assert_eq!(ship.ss.ship_input_state, THRUST as u8);
+            dodge(&mut ship, &mut concerns, missile);
+            assert_eq!(ship.ship_mut().ship_input_state, THRUST as u8);
 
-            let mut ship = Ship::new(0);
-            ship.el.__bindgen_anon_4.turn_wait = 1;
-            ship.ss.ship_input_state = THRUST as u8;
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.element_mut().__bindgen_anon_4.turn_wait = 1;
+            ship.ship_mut().ship_input_state = THRUST as u8;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            dodge(&mut ship, &mut concerns, &raw mut *missile);
-            assert_eq!(ship.ss.ship_input_state, THRUST as u8);
+            dodge(&mut ship, &mut concerns, missile);
+            assert_eq!(ship.ship_mut().ship_input_state, THRUST as u8);
 
-            let mut ship = Ship::new(0);
-            ship.ss.ship_input_state = THRUST as u8;
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
+            ship.ship_mut().ship_input_state = THRUST as u8;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
-            concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = &raw mut *missile;
+            concerns[ENEMY_WEAPON_INDEX as usize].ObjectPtr = missile;
             concerns[ENEMY_WEAPON_INDEX as usize].MoveState = MOVEMENT_STATE_ENTICE;
-            let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
-            ai(ship.el(), concerns.as_mut_ptr(), 0);
-            assert_eq!(ship.ss.ship_input_state, THRUST as u8);
+            ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
+            assert_eq!(ship.ship_mut().ship_input_state, THRUST as u8);
         }
     })
 }

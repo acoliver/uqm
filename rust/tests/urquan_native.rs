@@ -148,7 +148,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
-            let mut enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
+            let enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
             ship.ship_mut().cur_status_flags = SPECIAL as u16;
             ship.postprocess();
             let fighter = element(disp_q.tail);

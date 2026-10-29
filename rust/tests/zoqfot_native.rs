@@ -201,7 +201,7 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
-            let mut enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
+            let enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 3900 };
             ship.descriptor_mut().ship_info.energy_level = 0;
             for (turn, face, tongue) in [(4, 0, true), (4, 1, false), (5, 0, false)] {

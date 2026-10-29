@@ -1,49 +1,20 @@
-use uqm_rust::ships::races::init_druuge;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
-use battle::{PoolElement, PoolShip};
+use battle::*;
 
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, mem};
 use uqm_rust::ships::native::{abi::*, element};
 
-unsafe extern "C" {
-    fn FreeElement(handle: HELEMENT);
-}
-
 use battle::Battle as Battlefield;
-
-struct Ship {
-    desc: Box<RACE_DESC>,
-    ss: PoolShip,
-    el: PoolElement,
-}
-impl Ship {
-    fn new(player: SIZE) -> Self {
-        unsafe {
-            let mut desc = Box::new(*init_druuge());
-            let mut ss = PoolShip::new(player);
-            ss.RaceDescPtr = &raw mut *desc;
-            ss.playerNr = player;
-            let mut el = PoolElement::new();
-            el.pParent = (&raw mut *ss).cast();
-            el.playerNr = player;
-            el.state_flags = PLAYER_SHIP as u16;
-            Self { desc, ss, el }
-        }
-    }
-    fn el(&mut self) -> *mut ELEMENT {
-        &raw mut *self.el
-    }
-}
 
 #[test]
 fn descriptor_matches_druuge_c_data() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let d = *init_druuge();
+            let d = descriptor(SPECIES_ID_DRUUGE_ID);
             assert_eq!(d.ship_info.ship_flags, FIRES_FORE as u16);
             assert_eq!(
                 (
@@ -85,8 +56,8 @@ fn descriptor_matches_druuge_c_data() {
                 (4, 1, 10, 30, 5)
             );
             assert_eq!(d.cyborg_control.WeaponRange, 2400);
-            assert!(d.preprocess_func.is_some() && d.postprocess_func.is_some());
-            assert!(d.init_weapon_func.is_some() && d.cyborg_control.intelligence_func.is_some());
+            assert!(d.callbacks()[1] != 0 && d.callbacks()[2] != 0);
+            assert!(d.callbacks()[3] != 0 && d.callbacks()[4] != 0);
             for (i, size) in ["large", "medium", "small"].iter().enumerate() {
                 assert_eq!(
                     CStr::from_ptr(d.ship_data.ship_rsc[i]).to_str().unwrap(),
@@ -107,14 +78,11 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            ship.ss.ShipFacing = 5;
-            ship.el.next.location = POINT { x: 100, y: 200 };
-            let mut out = [ptr::null_mut()];
-            assert_eq!(
-                ship.desc.init_weapon_func.unwrap()(ship.el(), out.as_mut_ptr()),
-                1
-            );
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
+            ship.ship_mut().ShipFacing = 5;
+            ship.element_mut().next.location = POINT { x: 100, y: 200 };
+            let slots = ship.weapon(1);
+            let out = [ship.weapon_record(slots[0]).cast()];
             let missile = element(out[0]);
             assert!(!missile.is_null());
             assert_eq!((*missile).__bindgen_anon_1.life_span, 20);
@@ -131,23 +99,22 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
 fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
-        let mut ship = Ship::new(0);
         unsafe {
-            let preprocess = ship.desc.preprocess_func.unwrap();
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
             (*ship.el()).__bindgen_anon_2.crew_level = 2;
-            ship.desc.ship_info.energy_level = 15;
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            preprocess(ship.el());
+            ship.descriptor_mut().ship_info.energy_level = 15;
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.preprocess();
             assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
-            assert_eq!(ship.desc.ship_info.energy_level, 31);
-            assert_eq!(ship.ss.special_counter, 30);
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 31);
+            assert_eq!(ship.ship_mut().special_counter, 30);
 
-            ship.desc.ship_info.energy_level = 32;
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            ship.ss.special_counter = 0;
-            preprocess(ship.el());
+            ship.descriptor_mut().ship_info.energy_level = 32;
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.ship_mut().special_counter = 0;
+            ship.preprocess();
             assert_eq!((*ship.el()).__bindgen_anon_2.crew_level, 1);
-            assert_eq!(ship.ss.cur_status_flags & SPECIAL as u16, 0);
+            assert_eq!(ship.ship_mut().cur_status_flags & SPECIAL as u16, 0);
         }
     })
 }
@@ -157,23 +124,28 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            let mut enemy = Ship::new(1);
-            ship.desc.ship_info.energy_level = 3;
-            ship.el.__bindgen_anon_2.crew_level = 14;
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
+            let mut enemy = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 1);
+            ship.descriptor_mut().ship_info.energy_level = 3;
+            ship.element_mut().__bindgen_anon_2.crew_level = 14;
             (*ship.el()).__bindgen_anon_5.thrust_wait = 0;
             let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
             concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.el();
             concerns[ENEMY_SHIP_INDEX as usize].which_turn = 10;
-            let ai = ship.desc.cyborg_control.intelligence_func.unwrap();
-            ai(ship.el(), concerns.as_mut_ptr(), 0);
+            ship.intelligence(&mut *ship.ptr(), &mut concerns, 0);
             assert_eq!(
                 concerns[ENEMY_SHIP_INDEX as usize].MoveState,
                 MOVEMENT_STATE_PURSUE
             );
             assert_eq!((*ship.el()).__bindgen_anon_5.thrust_wait, 11);
-            assert_ne!(ship.ss.ship_input_state & (WEAPON | SPECIAL) as u8, 0);
-            assert_eq!(ship.ss.ship_input_state & SPECIAL as u8, SPECIAL as u8);
+            assert_ne!(
+                ship.ship_mut().ship_input_state & (WEAPON | SPECIAL) as u8,
+                0
+            );
+            assert_eq!(
+                ship.ship_mut().ship_input_state & SPECIAL as u8,
+                SPECIAL as u8
+            );
         }
     })
 }
@@ -183,23 +155,26 @@ fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
     battle_context::run(|| {
         let _battle = Battlefield::new(8);
         unsafe {
-            let mut ship = Ship::new(0);
-            ship.ss.ShipFacing = 4;
-            ship.ss.cur_status_flags = (WEAPON | SHIP_AT_MAX_SPEED) as u16;
-            ship.ss.weapon_counter = 9;
-            ship.desc.postprocess_func.unwrap()(ship.el());
+            let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
+            ship.ship_mut().ShipFacing = 4;
+            ship.ship_mut().cur_status_flags = (WEAPON | SHIP_AT_MAX_SPEED) as u16;
+            ship.ship_mut().weapon_counter = 9;
+            ship.postprocess();
             let (mut dx, mut dy) = (0, 0);
-            GetCurrentVelocityComponents(&raw mut ship.el.velocity, &mut dx, &mut dy);
+            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
             assert_eq!((dx, dy), (0, 0));
-            ship.ss.weapon_counter = 10;
-            ship.desc.postprocess_func.unwrap()(ship.el());
-            GetCurrentVelocityComponents(&raw mut ship.el.velocity, &mut dx, &mut dy);
+            ship.ship_mut().weapon_counter = 10;
+            ship.postprocess();
+            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
             assert_eq!((dx, dy), (-768, 0));
-            assert_eq!(ship.ss.cur_status_flags & SHIP_AT_MAX_SPEED as u16, 0);
+            assert_eq!(
+                ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,
+                0
+            );
             for _ in 0..5 {
-                ship.desc.postprocess_func.unwrap()(ship.el());
+                ship.postprocess();
             }
-            GetCurrentVelocityComponents(&raw mut ship.el.velocity, &mut dx, &mut dy);
+            GetCurrentVelocityComponents(&raw mut ship.element_mut().velocity, &mut dx, &mut dy);
             assert_eq!((dx, dy), (-3072, 0));
         }
     })

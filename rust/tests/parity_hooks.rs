@@ -2,6 +2,52 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::path::Path;
 
+fn callback_assignments() -> Result<regex::Regex, regex::Error> {
+    regex::Regex::new(
+        r"\b(?:preprocess_func|postprocess_func|collision_func|death_func|init_weapon_func|intelligence_func|uninit_func|pre|post|collide|death|preprocess|postprocess|init_weapon|intelligence|uninit)\s*(?:=|:)\s*Some\(\s*(?:[\w:]+::(?:Legacy|Native)\(\s*)?(\w+)\s*\)",
+    )
+}
+
+#[test]
+fn inventory_recognizes_legacy_native_and_race_assignments() -> Result<(), Box<dyn Error>> {
+    let assignments = callback_assignments()?;
+    for field in [
+        "preprocess_func",
+        "postprocess_func",
+        "collision_func",
+        "death_func",
+        "init_weapon_func",
+        "intelligence_func",
+        "uninit_func",
+        "pre",
+        "post",
+        "collide",
+        "death",
+        "preprocess",
+        "postprocess",
+        "init_weapon",
+        "intelligence",
+        "uninit",
+    ] {
+        for callback in [
+            "hook",
+            "ElementHook::Legacy(hook)",
+            "ElementHook::Native(hook)",
+        ] {
+            for separator in ["=", ":"] {
+                let source = format!("{field} {separator} Some({callback})");
+                let capture = assignments
+                    .captures(&source)
+                    .ok_or_else(|| format!("missing callback in {source}"))?;
+                assert_eq!(&capture[1], "hook", "{source}");
+            }
+        }
+    }
+    assert!(assignments.captures("descriptor: Some(hook)").is_none());
+    assert!(assignments.captures("preprocess: None").is_none());
+    Ok(())
+}
+
 #[test]
 fn every_assigned_native_battle_and_navigation_callback_has_a_stable_registry_name(
 ) -> Result<(), Box<dyn Error>> {
@@ -16,9 +62,7 @@ fn every_assigned_native_battle_and_navigation_callback_has_a_stable_registry_na
             .captures_iter(&mode_registry)
             .map(|capture| capture[1].into()),
     );
-    let assigned = regex::Regex::new(
-        r"(?:preprocess_func|postprocess_func|collision_func|death_func|init_weapon_func|intelligence_func|uninit_func)\s*(?:=|:)\s*Some\(\s*(?:[\w:]+::Legacy\(\s*)?(\w+)\s*\)",
-    )?;
+    let assigned = callback_assignments()?;
     let declaration = regex::Regex::new(r"\bfn\s+(\w+)\s*\(")?;
     let mut pending = vec![
         root.join("ships/races"),

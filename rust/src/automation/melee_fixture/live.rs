@@ -156,7 +156,7 @@ struct Hooks {
     satellite: PREPROCESS_FUNC,
     defense: usize,
     limpets: crate::engine::battle::record::ElementProcessFunc,
-    fighters: PREPROCESS_FUNC,
+    fighters: crate::engine::battle::record::ElementProcessFunc,
     fighter_preprocess: usize,
     pkunk: PREPROCESS_FUNC,
     intercept: usize,
