@@ -137,32 +137,36 @@ pub(crate) unsafe fn init_transition(source: *mut ELEMENT, ship: *mut ELEMENT, k
     }
     SetVelocityComponents(&mut (*ship).velocity, dx / turns, dy / turns);
 }
-pub(crate) unsafe extern "C" fn hyper_preprocess(element: *mut ELEMENT) {
-    hyper_transition(element);
+pub(crate) fn hyper_preprocess(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    hyper_transition(cx, element);
 }
 
-/// # Safety
-/// `element` is the live flagship element on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
-    if (*element).state_flags & APPEARING as u16 != 0 {
-        if LastActivity & CHECK_LOAD as u16 != 0 {
-            LastActivity &= !(CHECK_LOAD as u16);
-            crate::collections::observation::image!(copy; (*element).current, (*element).next);
-            SetUpElement(element);
-            (*element).state_flags |= DEFY_PHYSICS as u16;
-            return 0;
+pub fn hyper_transition(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) -> bool {
+    if cx.element(element).flags & APPEARING as u16 != 0 {
+        let last = cx.previous_activity();
+        if last & CHECK_LOAD as u16 != 0 {
+            cx.set_previous_activity(last & !(CHECK_LOAD as u16));
+            cx.copy_next_to_current(element);
+            cx.setup_element(element);
+            cx.element_mut(element).flags |= DEFY_PHYSICS as u16;
+            return false;
         } else {
-            (*element).preprocess_func = Some(ElementHook::Legacy(hyper_preprocess));
-            (*element).postprocess_func = None;
-            (*element).state_flags |= NONSOLID as u16;
-            crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex(
-                (*element).current.image.frame,
-                GetFrameCount((*element).current.image.frame) - 1,
-            ));
+            cx.element_mut(element).pre = Some(ElementHook::Native(hyper_preprocess));
+            cx.element_mut(element).post = None;
+            cx.element_mut(element).flags |= NONSOLID as u16;
+            let current = cx.element(element).current.image.frame;
+            let frame = cx.absolute_frame(current, cx.frame_count(current) - 1);
+            cx.set_frame(element, true, frame);
         }
     } else {
-        let old = GetFrameIndex((*element).current.image.frame.cast());
+        let current = cx.element(element).current.image.frame;
+        let old = cx.frame_number(current);
         let mut index = old.wrapping_sub(1);
         if old <= 16 {
             if index == 15 {
@@ -170,22 +174,22 @@ pub unsafe extern "C" fn hyper_transition(element: *mut ELEMENT) -> BOOLEAN {
             } else {
                 index &= 15;
             }
-            let ship = (*element).pParent.cast::<STARSHIP>();
-            if index == (*ship).ShipFacing {
-                (*element).preprocess_func = Some(ElementHook::Native(ship_preprocess));
-                (*element).postprocess_func = Some(ElementHook::Native(ship_postprocess));
-                (*element).state_flags &= !(NONSOLID as u16);
+            if index == cx.ship_state(cx.owner(element)).facing {
+                cx.element_mut(element).pre = Some(ElementHook::Native(ship_preprocess));
+                cx.element_mut(element).post = Some(ElementHook::Native(ship_postprocess));
+                cx.element_mut(element).flags &= !(NONSOLID as u16);
             }
         }
-        (*element).state_flags |= CHANGING as u16;
-        crate::collections::observation::image!(frame; (*element).next.image.frame, SetAbsFrameIndex((*element).current.image.frame, index));
-        if (*element).state_flags & NONSOLID as u16 == 0 {
-            crate::collections::observation::image!(copy; (*element).current, (*element).next);
-            SetUpElement(element);
-            (*element).state_flags |= DEFY_PHYSICS as u16;
+        cx.element_mut(element).flags |= CHANGING as u16;
+        let frame = cx.absolute_frame(current, index);
+        cx.set_frame(element, true, frame);
+        if cx.element(element).flags & NONSOLID as u16 == 0 {
+            cx.copy_next_to_current(element);
+            cx.setup_element(element);
+            cx.element_mut(element).flags |= DEFY_PHYSICS as u16;
         }
     }
-    1
+    true
 }
 pub(crate) fn star_collision(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -233,32 +237,36 @@ pub(crate) fn star_death(
         cx.select_star(None);
     }
 }
-pub(crate) unsafe extern "C" fn portal_death(element: *mut ELEMENT) {
-    if (*element).state_flags & DEFY_PHYSICS as u16 == 0 || get("ARILOU_SPACE_COUNTER") == 0 {
+pub(crate) fn portal_death(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    element: crate::engine::battle::ElementId,
+) {
+    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0 || get("ARILOU_SPACE_COUNTER") == 0 {
         set(
             "ARILOU_SPACE_SIDE",
             if get("ARILOU_SPACE_SIDE") <= 1 { 0 } else { 3 },
         );
     }
 }
-pub(crate) unsafe extern "C" fn portal_collision(
-    source: *mut ELEMENT,
-    _p0: *mut POINT,
-    ship: *mut ELEMENT,
-    _p1: *mut POINT,
+pub(crate) fn portal_collision(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    source: crate::engine::battle::ElementId,
+    _p0: &mut POINT,
+    ship: crate::engine::battle::ElementId,
+    _p1: &mut POINT,
 ) {
-    if (*ship).state_flags & PLAYER_SHIP as u16 == 0 {
+    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0 {
         return;
     }
     let side = get("ARILOU_SPACE_SIDE");
     if side == 0 || side == 3 {
-        if (*ship).state_flags & DEFY_PHYSICS as u16 != 0 {
+        if cx.element(ship).flags & DEFY_PHYSICS as u16 != 0 {
             set("ARILOU_SPACE_SIDE", side ^ 1);
         } else {
-            init_transition(source, ship, 2);
+            cx.init_hyper_transition(source, ship, 2);
         }
     }
-    (*source).state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
+    cx.element_mut(source).flags |= (DEFY_PHYSICS | COLLISION) as u16;
 }
 pub(super) unsafe fn sis_element() -> HELEMENT {
     let queue = ptr::addr_of_mut!(race_q)
@@ -279,4 +287,57 @@ pub unsafe fn save_sis_hyper_state() {
     }
     let ship = (*element).pParent.cast::<STARSHIP>();
     GlobData.Game_state.ShipFacing = (*ship).ShipFacing + 1;
+}
+
+use crate::engine::battle::{Cx, ElementId, Parent};
+use std::ptr::NonNull;
+
+impl Cx<'_> {
+    pub(crate) fn navigation(&self) -> &GLOBDATA {
+        self.project(NonNull::new(&raw mut GlobData).expect("navigation authority"))
+    }
+
+    pub(crate) fn navigation_mut(&mut self) -> &mut GLOBDATA {
+        self.project_mut(NonNull::new(&raw mut GlobData).expect("navigation authority"))
+    }
+
+    pub(crate) fn solar(&self) -> &SOLARSYS_STATE {
+        let pointer = *self.project(NonNull::new(&raw mut pSolarSysState).unwrap());
+        self.project(NonNull::new(pointer).expect("active solar system"))
+    }
+
+    fn ip_group_pointer(&self, element: ElementId) -> NonNull<IP_GROUP> {
+        let Parent::IpGroup(slot) = self.parent(element) else {
+            panic!("navigation element has no IP-group parent");
+        };
+        let queue = &self.navigation().Game_state.ip_group_q;
+        let pointer = queue
+            .pq_tab
+            .wrapping_add(usize::from(slot) * usize::from(queue.object_size));
+        NonNull::new(pointer.cast()).expect("IP-group pool")
+    }
+
+    pub(crate) fn ip_group(&self, element: ElementId) -> &IP_GROUP {
+        self.project(self.ip_group_pointer(element))
+    }
+
+    pub(crate) fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
+        self.project_mut(self.ip_group_pointer(element))
+    }
+
+    pub(crate) fn previous_activity(&self) -> u16 {
+        *self.project(NonNull::new(&raw mut LastActivity).unwrap())
+    }
+
+    pub(crate) fn set_previous_activity(&mut self, activity: u16) {
+        *self.project_mut(NonNull::new(&raw mut LastActivity).unwrap()) = activity;
+    }
+
+    pub(crate) fn planet_outer_location(&self, planet: u16) -> POINT {
+        let solar = self.solar();
+        displayToLocation(
+            solar.PlanetDesc[usize::from(planet)].image.origin,
+            solar.SunDesc[0].radius,
+        )
+    }
 }

@@ -98,7 +98,7 @@ mod ffi {
 
     pub(super) use crate::battle::process_native::engine::InitDisplayList;
 
-    pub(super) use crate::navigation::interplanetary::live::DoMissions;
+    pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
     pub(super) use crate::state::c_api::planets::GetPlanetInfo;
 

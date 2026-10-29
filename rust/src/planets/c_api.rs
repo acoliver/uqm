@@ -100,7 +100,7 @@ use crate::strings::string_table::SetAbsStringTableIndex;
 
 use crate::battle::build_native::engine::StartSphereTracking;
 
-use crate::navigation::interplanetary::live::NotifyOthers;
+use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
 
 use crate::ui::sis::DeltaSISGauges;
 

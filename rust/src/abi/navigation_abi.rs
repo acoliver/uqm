@@ -4586,10 +4586,10 @@ pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
 pub use crate::battle::cyborg_native::engine::ship_intelligence;
 
 #[cfg(not(test))]
-pub use crate::navigation::interplanetary::live::NotifyOthers;
+pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
 
 #[cfg(not(test))]
-pub use crate::navigation::interplanetary::live::DoMissions;
+pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
 #[cfg(not(test))]
 pub use crate::battle::process_native::engine::InitDisplayList;

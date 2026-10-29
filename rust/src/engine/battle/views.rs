@@ -48,6 +48,19 @@ impl Frames {
         self.0
     }
 }
+#[cfg(not(test))]
+impl Frame {
+    pub(crate) fn from_native(frame: FRAME) -> Self {
+        Self(frame)
+    }
+}
+#[cfg(not(test))]
+impl Frames {
+    pub(crate) fn from_native(frames: std::ptr::NonNull<FRAME>) -> Self {
+        Self(frames.as_ptr())
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Image {
     pub frame: Frame,
