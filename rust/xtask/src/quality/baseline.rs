@@ -174,8 +174,16 @@ impl Baseline {
         let mut moves = previous.clone();
         super::transfers::register(&mut moves, old, new)?;
         super::transfers::validate(current, base, &moves)?;
-        let before = super::transfers::limits(&base.baseline(), current, base, &previous)?;
-        let after = super::transfers::limits(&base.baseline(), current, base, &moves)?;
+        let reverse = previous
+            .iter()
+            .map(|(old, new)| (new.clone(), old.clone()))
+            .collect();
+        let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
+        let measured = super::budgets::scoped_entries(base, &original_budgets);
+        let before =
+            super::transfers::limits(&measured, current, base, &previous, &original_budgets)?;
+        let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
+        let budget = super::budgets::relocated(&self.budget, &[(old.into(), new.into())].into())?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
         let lint = self
             .lint
@@ -183,6 +191,7 @@ impl Baseline {
             .map(|(host, values)| Ok((host.clone(), move_entries(values, old, new, true)?)))
             .collect::<Result<_, String>>()?;
         self.entries = entries;
+        self.budget = budget;
         self.lint = lint;
         self.moved = moves;
         Ok(())
@@ -464,6 +473,74 @@ mod tests {
         };
         baseline.add_move(old, new, &current, &base)
     }
+    #[test]
+    fn scoped_debt_moves_with_its_authority_without_spending_ordinary_credit() {
+        use super::super::{budgets, metrics::Finding};
+        let old = "uqm::engine::battle::access";
+        let new = "uqm::battle::context_access::access";
+        let finding = |module: &str, metric: &str, subsystem: &str, value| Finding {
+            counter: "unsafe".into(),
+            metric: metric.into(),
+            identity: format!("{module}::project"),
+            file: "src/access.rs".into(),
+            package: "uqm".into(),
+            subsystem: subsystem.into(),
+            value,
+        };
+        let base = Measurement {
+            findings: vec![
+                finding(old, "unsafe_blocks", "engine", 1),
+                finding(old, "unsafe_block_lines", "engine", 2),
+                finding(old, "unsafe_lines", "engine", 2),
+            ],
+            ..Default::default()
+        };
+        let current = Measurement {
+            findings: vec![
+                finding(new, "unsafe_blocks", "battle", 1),
+                finding(new, "unsafe_block_lines", "battle", 2),
+                finding(new, "unsafe_lines", "battle", 2),
+            ],
+            ..Default::default()
+        };
+        let mut baseline = Baseline::default();
+        budgets::set_scoped(
+            &mut baseline.budget,
+            "stage_b_access_unsafe",
+            3,
+            [
+                (format!("unsafe|unsafe_blocks|{old}::project"), 1),
+                (format!("unsafe|unsafe_block_lines|{old}::project"), 2),
+            ]
+            .into(),
+            false,
+        )
+        .unwrap();
+        baseline.entries = budgets::scoped_entries(&base, &baseline.budget);
+        baseline.add_move(old, new, &current, &base).unwrap();
+        assert_eq!(baseline.budget["stage_b_access_unsafe"].limit, 3);
+        assert!(baseline.budget["stage_b_access_unsafe"]
+            .scopes
+            .keys()
+            .all(|key| key.contains(new)));
+        assert_eq!(
+            baseline
+                .entries
+                .iter()
+                .filter(|(_, v)| **v != 0)
+                .collect::<BTreeMap<_, _>>(),
+            budgets::scoped_entries(&current, &baseline.budget)
+                .iter()
+                .filter(|(_, v)| **v != 0)
+                .collect::<BTreeMap<_, _>>()
+        );
+        budgets::check(&current, &baseline.budget).unwrap();
+        assert!(baseline.add_move(old, new, &current, &base).is_err());
+        let mut duplicate = current;
+        duplicate.findings.extend(base.findings.clone());
+        assert!(super::super::transfers::validate(&duplicate, &base, &baseline.moved).is_err());
+    }
+
     #[test]
     fn baseline_roundtrip_tightening_and_growth() {
         let b = Baseline {

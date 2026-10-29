@@ -381,7 +381,11 @@ fn compare_base(
 ) -> Result<Option<Baseline>, String> {
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
-    let mut before = base.baseline();
+    let base_budgets = recorded
+        .as_ref()
+        .map(|b| b.budget.clone())
+        .unwrap_or_default();
+    let mut before = budgets::scoped_entries(&base, &base_budgets);
     if options.approved() {
         recorded::check_base(&measured, baseline, &before, recorded.as_ref())?;
     }
@@ -398,8 +402,8 @@ fn compare_base(
     }
     if !options.allow_growth {
         baseline::validate_transfers(measurement, &base, &baseline.moved)?;
-        let transferred = transfers::limits(&before, measurement, &base, &baseline.moved)?;
-        let transferred = budgets::remove_scoped(transferred, &base, &baseline.budget);
+        let transferred =
+            transfers::limits(&before, measurement, &base, &baseline.moved, &base_budgets)?;
         baseline::check_limits(
             &budgets::without_budgeted(&current, &baseline.budget),
             &budgets::without_budgeted(&transferred, &baseline.budget),
@@ -422,9 +426,15 @@ fn compare_base(
                         .map(|(k, v)| (k.clone(), *v)),
                 );
             }
-            budgets::check_growth(&baseline.budget, &recorded.budget)?;
-            let transferred =
-                transfers::limits(&recorded_entries, measurement, &base, &baseline.moved)?;
+            let moved_budgets = budgets::relocated(&recorded.budget, &baseline.moved)?;
+            budgets::check_growth(&baseline.budget, &moved_budgets)?;
+            let transferred = transfers::limits(
+                &recorded_entries,
+                measurement,
+                &base,
+                &baseline.moved,
+                &recorded.budget,
+            )?;
             baseline::check_limits(
                 &budgets::without_budgeted(&baseline.entries, &baseline.budget),
                 &budgets::without_budgeted(&transferred, &baseline.budget),

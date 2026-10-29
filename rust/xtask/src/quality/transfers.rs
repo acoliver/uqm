@@ -25,7 +25,9 @@ fn identities(measurement: &Measurement) -> impl Iterator<Item = &Finding> {
 
 fn root_layer_reference(finding: &Finding) -> bool {
     finding.counter == "layers"
-        && (finding.metric == "module_edges" || finding.metric.starts_with("planned."))
+        && (finding.metric == "module_edges"
+            || finding.metric == "planned_engine_core"
+            || finding.metric.starts_with("planned."))
 }
 
 pub fn validate(
@@ -85,6 +87,7 @@ pub fn limits(
     current: &Measurement,
     base: &Measurement,
     moves: &BTreeMap<String, String>,
+    budgets: &BTreeMap<String, super::budgets::Budget>,
 ) -> Result<BTreeMap<String, u64>, String> {
     validate(current, base, moves)?;
     if moves.is_empty() {
@@ -109,8 +112,9 @@ pub fn limits(
         }
         relocated.findings.push(finding);
     }
-    let before = base.baseline();
-    let mut after = relocated.baseline();
+    let before = super::budgets::scoped_entries(base, budgets);
+    let moved_budgets = super::budgets::relocated(budgets, moves)?;
+    let mut after = super::budgets::scoped_entries(&relocated, &moved_budgets);
     transfer_allows(&mut after, current, base, moves)?;
     adjust(entries, &before, &after)
 }
@@ -264,6 +268,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn staging_accessor_move_retires_disappearing_upward_edges() {
+        let old = "uqm::engine::battle::record";
+        let new = "uqm::battle::context_access::record";
+        let edge = Finding {
+            counter: "layers".into(),
+            metric: "planned_engine_core".into(),
+            identity: format!("{old}::abi::_#1::@file"),
+            file: "src/record.rs".into(),
+            package: "uqm".into(),
+            subsystem: "engine".into(),
+            value: 1,
+        };
+        let declaration = Finding {
+            counter: "declaration".into(),
+            metric: "fn".into(),
+            identity: format!("{old}::project"),
+            ..edge.clone()
+        };
+        let base = Measurement {
+            findings: vec![edge],
+            declarations: vec![declaration.clone()],
+            ..Default::default()
+        };
+        let mut current = Measurement {
+            declarations: vec![Finding {
+                identity: format!("{new}::project"),
+                subsystem: "battle".into(),
+                ..declaration
+            }],
+            ..Default::default()
+        };
+        let moves = [(old.into(), new.into())].into();
+        validate(&current, &base, &moves).unwrap();
+        let transferred =
+            limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()).unwrap();
+        assert!(!transferred
+            .keys()
+            .any(|key| key.contains("planned_engine_core")));
+        current.declarations.clear();
+        assert!(validate(&current, &base, &moves).is_err());
+    }
+
+    #[test]
     fn a_crate_move_may_remove_root_only_layer_edges() {
         let finding = |counter: &str, metric: &str, id: &str, package: &str| Finding {
             counter: counter.into(),
@@ -295,7 +342,7 @@ mod tests {
         };
         let moves = [("uqm::graphics".into(), "uqm-engine::graphics".into())].into();
         validate(&current, &base, &moves).unwrap();
-        let limits = limits(&base.baseline(), &current, &base, &moves).unwrap();
+        let limits = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()).unwrap();
         assert!(!limits.keys().any(|key| key.contains("module_edges")));
         assert!(validate(&Measurement::default(), &base, &moves).is_err());
     }

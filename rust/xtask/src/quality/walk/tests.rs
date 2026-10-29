@@ -454,9 +454,14 @@ fn declaration_transfers_conserve_each_metric_and_cannot_reuse_credit() {
         None,
         false,
     );
-    let next =
-        super::super::transfers::limits(&baseline.entries, &retained, &current, &baseline.moved)
-            .unwrap();
+    let next = super::super::transfers::limits(
+        &baseline.entries,
+        &retained,
+        &current,
+        &baseline.moved,
+        &baseline.budget,
+    )
+    .unwrap();
     assert_eq!(
         next, baseline.entries,
         "already landed moves do not credit twice"
