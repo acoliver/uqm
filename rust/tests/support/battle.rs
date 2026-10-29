@@ -120,6 +120,15 @@ impl<'a> Ship<'a> {
             }
         }
     }
+    pub fn native(
+        battle: &'a Battle,
+        race: &'static uqm_rust::engine::battle::Race,
+        player: SIZE,
+    ) -> Self {
+        let mut ship = Self::bare(battle, SPECIES_ID_VUX_ID, player);
+        *ship.desc = (race.descriptor)().into_legacy();
+        ship
+    }
     pub unsafe fn new(battle: &'a Battle, species: u32, player: SIZE) -> Self {
         // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
         unsafe {
@@ -146,6 +155,20 @@ impl<'a> Ship<'a> {
             ship.queue();
             ship
         }
+    }
+    pub fn frame(&self, role: usize, index: u16) -> uqm_rust::engine::battle::views::Frame {
+        self.assert_live();
+        // SAFETY: the fixture retains its descriptor and loaded frame sets through projection.
+        unsafe {
+            uqm_rust::app::bridge::enter(|cx| {
+                cx.absolute_frame(cx.ship_frame(self.ship_id, role), index)
+            })
+        }
+    }
+    pub fn frame_set(&self, role: usize) -> uqm_rust::engine::battle::views::Frames {
+        self.assert_live();
+        // SAFETY: the fixture retains its descriptor and loaded frame sets through projection.
+        unsafe { uqm_rust::app::bridge::enter(|cx| cx.ship_frame_set(self.ship_id, role)) }
     }
     pub fn queue(&mut self) {
         assert!(!self.queued);
@@ -279,7 +302,14 @@ impl<'a> Ship<'a> {
     pub fn uninit(&mut self) {
         if let Some(race) = self.desc.race {
             if let Some(uninit) = race.uninit {
-                uninit(&mut self.desc.race_state);
+                // SAFETY: the fixture retains the checked ship through its typed teardown.
+                unsafe {
+                    uqm_rust::app::bridge::enter(|cx| {
+                        let mut stats = cx.race_stats(self.ship_id);
+                        uninit(&mut stats);
+                        *cx.race_stats_mut(self.ship_id) = stats;
+                    });
+                }
             }
         }
     }

@@ -13,8 +13,8 @@ pub(crate) mod engine {
         descriptor: build_descriptor,
         preprocess: Some(vux_preprocess),
         postprocess: Some(vux_postprocess),
-        init_weapon: initialize_horrific_laser,
-        intelligence: vux_intelligence,
+        init_weapon: Some(initialize_horrific_laser),
+        intelligence: Some(vux_intelligence),
         uninit: None,
     };
 

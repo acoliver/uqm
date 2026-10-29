@@ -1,6 +1,6 @@
 //! Species behavior and value inputs for AI projections.
 
-use super::{CollisionHook, Cx, ElementId, ShipId};
+use super::{CollisionHook, Cx, ElementHook, ElementId, ShipId};
 
 pub use super::record::RaceDesc;
 pub type ShipFn = fn(&mut Cx<'_>, ShipId);
@@ -13,9 +13,9 @@ pub struct Race {
     pub descriptor: fn() -> RaceDesc,
     pub preprocess: Option<ShipFn>,
     pub postprocess: Option<ShipFn>,
-    pub init_weapon: WeaponFn,
-    pub intelligence: IntelligenceFn,
-    pub uninit: Option<fn(&mut RaceState)>,
+    pub init_weapon: Option<WeaponFn>,
+    pub intelligence: Option<IntelligenceFn>,
+    pub uninit: Option<fn(&mut super::views::RaceStats)>,
 }
 
 #[repr(u8)]
@@ -26,6 +26,50 @@ pub enum RaceState {
     Androsynth {
         collision: Option<CollisionHook>,
     } = 1,
+    Mmrnmhrm {
+        alternate: super::record::CHARACTERISTIC_STUFF,
+    } = 2,
+    Pkunk {
+        phoenix: Option<ElementId>,
+        saved_pre: Option<ElementHook>,
+        saved_post: Option<ElementHook>,
+        saved_death: Option<ElementHook>,
+    } = 3,
+    Umgah {
+        previous_facing: Option<u16>,
+    } = 4,
+    Sis(SisState) = 5,
+    SaMatra(SaMatraState) = 6,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SisState {
+    pub trackers: u16,
+    pub blasters: u16,
+    pub missiles: [Option<FlagshipWeapon>; 6],
+}
+
+/// Module-derived launch parameters exist before the flagship graphics are loaded.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FlagshipWeapon {
+    pub flags: u16,
+    pub blast_offset: i16,
+    pub speed: i16,
+    pub preprocess: Option<super::ElementFn>,
+    pub hit_points: i16,
+    pub damage: i16,
+    pub life: u16,
+    pub index: u16,
+    pub pixel_offset: i16,
+    pub facing: u16,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SaMatraState {
+    pub generation: u64,
+    pub destroyed: u8,
+    pub gate_entered: bool,
+    pub generators: [Option<ElementId>; 8],
 }
 
 pub use super::views::Subject;

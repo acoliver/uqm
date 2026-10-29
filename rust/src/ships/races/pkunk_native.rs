@@ -16,10 +16,7 @@ pub(crate) mod engine {
         sine, starship,
     };
     use crate::strings::string_table::GetStringTableCount;
-    use std::{
-        mem, ptr,
-        sync::atomic::{AtomicU16, Ordering},
-    };
+    use std::{mem, ptr, sync::atomic::Ordering};
 
     // Core characteristics
     const MAX_CREW: COUNT = 8;
@@ -171,8 +168,7 @@ pub(crate) mod engine {
     static mut PKUNK_DESC: RACE_DESC = descriptor();
     /// `new_pkunk_desc`: the copy `init_pkunk` hands out, which owns the data.
     static mut NEW_PKUNK_DESC: RACE_DESC = RACE_DESC::EMPTY;
-    /// `LastSound`
-    pub(crate) static LAST_SOUND: AtomicU16 = AtomicU16::new(0);
+    use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 
     #[no_mangle]
     pub extern "C" fn init_pkunk() -> *mut RACE_DESC {

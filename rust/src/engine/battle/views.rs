@@ -4,10 +4,38 @@ use super::record::VELOCITY_DESC as VelocityDesc;
 use super::{CollisionHook, ElementHook};
 use crate::graphics::native_abi::{FRAME, POINT};
 
+#[derive(Clone, Copy, Debug)]
+pub struct Laser {
+    pub origin: POINT,
+    pub end: POINT,
+    pub flags: u16,
+    pub sender: i16,
+    pub pixoffs: i16,
+    pub face: u16,
+    pub color: crate::graphics::native_abi::Color,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FlagshipConfig {
+    pub modules: [u8; 16],
+    pub drives: [u8; 11],
+    pub jets: [u8; 8],
+    pub crew: u16,
+    pub fuel: u32,
+    pub position: (i32, i32),
+    pub hyperspace: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frame(pub(super) FRAME);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frames(pub(super) *mut FRAME);
+impl Frame {
+    pub const ABSENT: Self = Self(std::ptr::null_mut());
+    pub fn is_absent(self) -> bool {
+        self.0.is_null()
+    }
+}
 #[cfg(not(test))]
 impl Frame {
     pub(crate) fn raw(self) -> FRAME {
@@ -83,6 +111,7 @@ impl ElementState {
 #[derive(Clone, Copy, Debug)]
 pub struct ShipState {
     pub facing: u16,
+    pub control: u8,
     pub player: i16,
     pub input: u8,
     pub status: u16,
@@ -92,7 +121,7 @@ pub struct ShipState {
     pub energy_counter: u8,
     pub crew: u16,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Info {
     pub ship_flags: u16,
     pub ship_cost: u8,
@@ -101,7 +130,7 @@ pub struct Info {
     pub energy_level: u8,
     pub max_energy: u8,
 }
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Intelligence {
     pub maneuverability: u16,
     pub weapon_range: u16,
@@ -136,6 +165,7 @@ impl<T: Copy, R> Drop for Edit<'_, T, R> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Missile {
     pub cx: i16,
     pub cy: i16,

@@ -20,3 +20,5 @@ pub(crate) mod androsynth_template;
 pub(crate) mod vux_template;
 
 pub(crate) mod kernel;
+pub mod template;
+pub use template::{RaceResources, RaceTemplate};

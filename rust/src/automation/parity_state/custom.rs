@@ -3,12 +3,12 @@
 use super::resources::{Frame, FrameSet};
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
+#[cfg(not(test))]
+use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
 use crate::ships::races::{
-    pkunk_native::engine::{PkunkData, LAST_SOUND},
-    sis_native::engine::SisData,
-    umgah_native::engine::UmgahData,
+    pkunk_native::engine::PkunkData, sis_native::engine::SisData, umgah_native::engine::UmgahData,
 };
 
 pub(super) enum RaceData<'a> {
