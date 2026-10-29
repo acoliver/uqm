@@ -3,13 +3,13 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::collections::observation::image;
-    use crate::ships::native::{
-        abi::*, cosine, element, facing_to_angle, frame_index, put_element, sine, starship,
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, Selection, ShipId, WeaponOrigin,
+        WeaponSpawn, World,
     };
-    use std::mem;
 
-    use crate::collections::queue::InsertQueue;
+    use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 20;
     const MAX_ENERGY: u8 = 42;
@@ -41,19 +41,28 @@ pub(crate) mod engine {
     const CMISSILE_OFFSET: i16 = 4;
     const MAX_UNIVERSE: i16 = 9999;
 
-    const fn descriptor() -> RACE_DESC {
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = FIRES_FORE as u16;
-        d.ship_info.ship_cost = 18;
-        d.ship_info.crew_level = MAX_CREW;
-        d.ship_info.max_crew = MAX_CREW;
-        d.ship_info.energy_level = MAX_ENERGY;
-        d.ship_info.max_energy = MAX_ENERGY;
-        d.ship_info.race_strings_rsc = c"ship.melnorme.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.melnorme.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.melnorme.meleeicons".as_ptr();
-        d.fleet.strength = u16::MAX;
-        d.fleet.known_loc = POINT {
+    pub static MELNORME: Race = Race {
+        descriptor,
+        preprocess: None,
+        postprocess: Some(melnorme_postprocess),
+        init_weapon: Some(initialize_pump_up),
+        intelligence: Some(melnorme_intelligence),
+        uninit: None,
+    };
+
+    fn descriptor(_world: &mut World) -> RaceDesc {
+        let mut d = RaceTemplate::default();
+        d.info.ship_flags = FIRES_FORE as u16;
+        d.info.ship_cost = 18;
+        d.info.crew_level = MAX_CREW;
+        d.info.max_crew = MAX_CREW;
+        d.info.energy_level = MAX_ENERGY;
+        d.info.max_energy = MAX_ENERGY;
+        d.resources.strings = Some(c"ship.melnorme.text");
+        d.resources.icons = Some(c"ship.melnorme.icons");
+        d.resources.melee_icon = Some(c"ship.melnorme.meleeicons");
+        d.fleet_strength = u16::MAX;
+        d.fleet_location = POINT {
             x: MAX_UNIVERSE >> 1,
             y: MAX_UNIVERSE >> 1,
         };
@@ -70,417 +79,403 @@ pub(crate) mod engine {
             special_wait: SPECIAL_WAIT,
             ship_mass: SHIP_MASS,
         };
-        d.ship_data.ship_rsc = [
-            c"ship.melnorme.graphics.trader.large".as_ptr(),
-            c"ship.melnorme.graphics.trader.medium".as_ptr(),
-            c"ship.melnorme.graphics.trader.small".as_ptr(),
+        d.resources.ship = [
+            Some(c"ship.melnorme.graphics.trader.large"),
+            Some(c"ship.melnorme.graphics.trader.medium"),
+            Some(c"ship.melnorme.graphics.trader.small"),
         ];
-        d.ship_data.weapon_rsc = [
-            c"ship.melnorme.graphics.pumpup.large".as_ptr(),
-            c"ship.melnorme.graphics.pumpup.medium".as_ptr(),
-            c"ship.melnorme.graphics.pumpup.small".as_ptr(),
+        d.resources.weapon = [
+            Some(c"ship.melnorme.graphics.pumpup.large"),
+            Some(c"ship.melnorme.graphics.pumpup.medium"),
+            Some(c"ship.melnorme.graphics.pumpup.small"),
         ];
-        d.ship_data.special_rsc = [
-            c"ship.melnorme.graphics.confuse.large".as_ptr(),
-            c"ship.melnorme.graphics.confuse.medium".as_ptr(),
-            c"ship.melnorme.graphics.confuse.small".as_ptr(),
+        d.resources.special = [
+            Some(c"ship.melnorme.graphics.confuse.large"),
+            Some(c"ship.melnorme.graphics.confuse.medium"),
+            Some(c"ship.melnorme.graphics.confuse.small"),
         ];
-        d.ship_data.captain_control.captain_rsc = c"ship.melnorme.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.melnorme.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.melnorme.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = (PUMPUP_SPEED as i32 * PUMPUP_LIFE as i32) as u16;
-        d
+        d.resources.captain = Some(c"ship.melnorme.graphics.captain");
+        d.resources.victory = Some(c"ship.melnorme.ditty");
+        d.resources.sounds = Some(c"ship.melnorme.sounds");
+        d.intelligence.weapon_range = (PUMPUP_SPEED as i32 * PUMPUP_LIFE as i32) as u16;
+        d.descriptor(&MELNORME)
     }
-    static mut MELNORME_DESC: RACE_DESC = descriptor();
-
-    #[no_mangle]
-    pub extern "C" fn init_melnorme() -> *mut RACE_DESC {
-        unsafe {
-            MELNORME_DESC.postprocess_func = Some(melnorme_postprocess);
-            MELNORME_DESC.init_weapon_func = Some(initialize_pump_up);
-            MELNORME_DESC.cyborg_control.intelligence_func = Some(melnorme_intelligence);
-        }
-        &raw mut MELNORME_DESC
-    }
-
-    pub(crate) unsafe extern "C" fn pump_up_preprocess(e: *mut ELEMENT) {
-        (*e).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
-        if (*e).__bindgen_anon_5.thrust_wait & 1 != 0 {
-            let mut idx = frame_index((*e).current.image.frame);
-            let turning_back = (*e).__bindgen_anon_4.turn_wait & REVERSE_DIR != 0;
+    pub(crate) fn pump_up_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        cx.element_mut(e).thrust = cx.element(e).thrust.wrapping_sub(1);
+        if cx.element(e).thrust & 1 != 0 {
+            let mut idx = cx.frame_number(cx.element(e).current.image.frame);
+            let turning_back = cx.element(e).turn & REVERSE_DIR != 0;
             if (turning_back && !idx.is_multiple_of(NUM_PUMP_ANIMS))
                 || (!turning_back && (i32::from(idx) + 1) % i32::from(NUM_PUMP_ANIMS) == 0)
             {
                 idx = idx.wrapping_sub(1);
-                (*e).__bindgen_anon_4.turn_wait |= REVERSE_DIR;
+                cx.element_mut(e).turn |= REVERSE_DIR;
             } else {
                 idx = idx.wrapping_add(1);
-                (*e).__bindgen_anon_4.turn_wait &= !REVERSE_DIR;
+                cx.element_mut(e).turn &= !REVERSE_DIR;
             }
-            image!(frame; (*e).next.image.frame, SetAbsFrameIndex((*e).current.image.frame, idx));
-            (*e).state_flags |= CHANGING as u16;
+            cx.set_frame(
+                e,
+                true,
+                cx.absolute_frame(cx.element(e).current.image.frame, idx),
+            );
+            cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
 
-    pub(crate) unsafe extern "C" fn pump_up_postprocess(e: *mut ELEMENT) {
-        if (*e).state_flags & APPEARING as u16 != 0 {
-            (*e).velocity = mem::zeroed();
+    pub(crate) fn pump_up_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.element(e).flags & APPEARING as u16 != 0 {
+            cx.element_mut(e).velocity = crate::engine::battle::record::VELOCITY_DESC::default();
             return;
         }
-        let ss = starship(e);
-        let ship_h = (*ss).hShip;
-        let ship = element(ship_h);
-        let mut handles = [std::ptr::null_mut(); 1];
-        initialize_pump_up(ship, handles.as_mut_ptr());
-        DeltaEnergy(ship, 0);
-        let h = handles[0];
-        let p = element(h);
-        image!(copy; (*p).current.image.frame, (*e).current.image.frame);
-        (*p).__bindgen_anon_4.turn_wait = (*e).__bindgen_anon_4.turn_wait;
-        (*p).__bindgen_anon_5.thrust_wait = (*e).__bindgen_anon_5.thrust_wait;
-        (*p).__bindgen_anon_5.thrust_wait = (*p).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
-        if (*p).__bindgen_anon_5.thrust_wait == 0 {
-            if ((*p).__bindgen_anon_4.turn_wait & !REVERSE_DIR) < MAX_PUMP - 1 {
-                (*p).__bindgen_anon_4.turn_wait += 1;
-                image!(frame; (*p).current.image.frame, crate::ships::native::rel_frame_index(
-                    (*p).current.image.frame,
-                    NUM_PUMP_ANIMS as i16,
-                ));
-                ProcessSound(
-                    SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 2),
+        let ss = cx.owner(e);
+        let ship = cx.ship_element(ss);
+        let origin = cx.weapon_origin(ship);
+        let missile = initialize_pump_up(cx, ss, origin)[0];
+        cx.delta_energy(ship, 0);
+        let p = missile.unwrap_or_else(|| panic!("Melnorme replacement pulse allocation"));
+        cx.set_frame(p, false, cx.element(e).current.image.frame);
+        cx.element_mut(p).turn = cx.element(e).turn;
+        cx.element_mut(p).thrust = cx.element(e).thrust;
+        cx.element_mut(p).thrust = cx.element(p).thrust.wrapping_sub(1);
+        if cx.element(p).thrust == 0 {
+            if (cx.element(p).turn & !REVERSE_DIR) < MAX_PUMP - 1 {
+                cx.element_mut(p).turn += 1;
+                cx.set_frame(
                     p,
+                    false,
+                    cx.relative_frame(cx.element(p).current.image.frame, NUM_PUMP_ANIMS as i16),
                 );
+                cx.process_ship_sound(ss, 2, p);
             }
-            (*p).__bindgen_anon_5.thrust_wait = LEVEL_COUNTER;
+            cx.element_mut(p).thrust = LEVEL_COUNTER;
         }
         // C computes damage from the old pulse, even on the growth tick.
-        let damage = i32::from(PUMPUP_DAMAGE) << ((*e).__bindgen_anon_4.turn_wait & !REVERSE_DIR);
-        (*p).__bindgen_anon_2.hit_points = damage as COUNT;
-        (*p).__bindgen_anon_3.mass_points = (*p).__bindgen_anon_2.hit_points as BYTE;
-        (*p).pParent = ss.cast();
-        if (*p).__bindgen_anon_5.thrust_wait & 1 != 0 {
-            let mut idx = frame_index((*p).current.image.frame);
-            let back = (*p).__bindgen_anon_4.turn_wait & REVERSE_DIR != 0;
+        let damage = i32::from(PUMPUP_DAMAGE) << (cx.element(e).turn & !REVERSE_DIR);
+        cx.element_mut(p).hits = damage as COUNT;
+        cx.element_mut(p).mass = cx.element(p).hits as BYTE;
+        cx.set_parent(p, Some(ss));
+        if cx.element(p).thrust & 1 != 0 {
+            let mut idx = cx.frame_number(cx.element(p).current.image.frame);
+            let back = cx.element(p).turn & REVERSE_DIR != 0;
             if (back && !idx.is_multiple_of(NUM_PUMP_ANIMS))
                 || (!back && (i32::from(idx) + 1) % i32::from(NUM_PUMP_ANIMS) == 0)
             {
                 idx = idx.wrapping_sub(1);
-                (*p).__bindgen_anon_4.turn_wait |= REVERSE_DIR;
+                cx.element_mut(p).turn |= REVERSE_DIR;
             } else {
                 idx = idx.wrapping_add(1);
-                (*p).__bindgen_anon_4.turn_wait &= !REVERSE_DIR;
+                cx.element_mut(p).turn &= !REVERSE_DIR;
             }
-            image!(frame; (*p).current.image.frame, SetAbsFrameIndex((*p).current.image.frame, idx));
-        }
-        if (*ss).cur_status_flags & (*ss).old_status_flags & WEAPON as u16 != 0 {
-            (*ss).weapon_counter = WEAPON_WAIT;
-        } else {
-            (*p).__bindgen_anon_1.life_span = PUMPUP_LIFE;
-            (*p).preprocess_func = Some(ElementHook::Legacy(pump_up_preprocess));
-            (*p).postprocess_func = None;
-            let a = facing_to_angle(i32::from((*ss).ShipFacing)) as COUNT;
-            SetVelocityComponents(
-                &raw mut (*p).velocity,
-                cosine(i32::from(a), i32::from(PUMPUP_SPEED) << VELOCITY_SHIFT),
-                sine(i32::from(a), i32::from(PUMPUP_SPEED) << VELOCITY_SHIFT),
-            );
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 3),
+            cx.set_frame(
                 p,
+                false,
+                cx.absolute_frame(cx.element(p).current.image.frame, idx),
             );
         }
-        put_element(h);
-        (*GlobData
-            .Game_state
-            .DisplayArray
-            .add(usize::from((*e).PrimIndex)))
-        .Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-        (*e).state_flags |= NONSOLID as u16;
+        if cx.ship_state(ss).status & cx.ship_state(ss).old_status & WEAPON as u16 != 0 {
+            cx.ship_state_mut(ss).weapon_counter = WEAPON_WAIT;
+        } else {
+            cx.element_mut(p).life = PUMPUP_LIFE;
+            cx.element_mut(p).pre = Some(ElementHook::Native(pump_up_preprocess));
+            cx.element_mut(p).post = None;
+            let a = facing_to_angle(i32::from(cx.ship_state(ss).facing)) as COUNT;
+            cx.element_mut(p).velocity.set_components(
+                i32::from(cosine(
+                    i32::from(a),
+                    i32::from(PUMPUP_SPEED) << VELOCITY_SHIFT,
+                )),
+                i32::from(sine(
+                    i32::from(a),
+                    i32::from(PUMPUP_SPEED) << VELOCITY_SHIFT,
+                )),
+            );
+            cx.process_ship_sound(ss, 3, p);
+        }
+        cx.put(p);
+        cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+        cx.element_mut(e).flags |= NONSOLID as u16;
     }
 
-    pub(crate) unsafe extern "C" fn pump_up_collision(
-        a: *mut ELEMENT,
-        pa: *mut POINT,
-        b: *mut ELEMENT,
-        pb: *mut POINT,
+    pub(crate) fn pump_up_collision(
+        cx: &mut Cx<'_>,
+        a: ElementId,
+        pa: &mut POINT,
+        b: ElementId,
+        pb: &mut POINT,
     ) {
-        let mut rect: RECT = mem::zeroed();
-        GetFrameRect((*a).next.image.frame, &mut rect);
-        let wait = (*a).__bindgen_anon_5.thrust_wait;
-        (*a).__bindgen_anon_5.blast_offset = (i32::from(rect.extent.width) >> 1) as BYTE;
-        let blast = weapon_collision(a, pa, b, pb);
-        (*a).__bindgen_anon_5.thrust_wait = wait;
-        if !blast.is_null() {
-            let p = element(blast);
-            (*p).__bindgen_anon_1.life_span =
-                MIN_PUMPITUDE_ANIMS + u16::from((*a).__bindgen_anon_4.turn_wait & !REVERSE_DIR);
-            (*p).__bindgen_anon_4.turn_wait = 0;
-            (*p).__bindgen_anon_5.next_turn = 0;
-            (*p).preprocess_func = Some(ElementHook::Native(animation_preprocess));
-            image!(copy; (*p).current.image.farray, (*a).next.image.farray);
-            image!(frame; (*p).current.image.frame, SetAbsFrameIndex(
-                *(*p).current.image.farray,
-                u16::from(MAX_PUMP) * NUM_PUMP_ANIMS,
-            ));
+        let rect = cx.frame_rect(cx.element(a).next.image.frame);
+        let wait = cx.element(a).thrust;
+        cx.element_mut(a).thrust = (i32::from(rect.extent.width) >> 1) as BYTE;
+        let blast = cx.weapon_collision(a, pa, b, pb);
+        cx.element_mut(a).thrust = wait;
+        if let Some(p) = blast {
+            cx.element_mut(p).life =
+                MIN_PUMPITUDE_ANIMS + u16::from(cx.element(a).turn & !REVERSE_DIR);
+            cx.element_mut(p).turn = 0;
+            cx.element_mut(p).thrust = 0;
+            cx.element_mut(p).pre = Some(ElementHook::Native(animation_preprocess));
+            cx.set_frames(p, false, cx.element(a).next.image.frames);
+            cx.set_frame(
+                p,
+                false,
+                cx.absolute_frame(
+                    cx.element_frame_set_first(p, false),
+                    u16::from(MAX_PUMP) * NUM_PUMP_ANIMS,
+                ),
+            );
         }
     }
 
-    pub(crate) unsafe extern "C" fn initialize_pump_up(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
-            face: (*ss).ShipFacing,
+    pub(crate) fn initialize_pump_up(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
             index: 0,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: MELNORME_OFFSET,
             speed: MELNORME_SPEED,
             hit_points: PUMPUP_DAMAGE as i16,
             damage: PUMPUP_DAMAGE as i16,
             life: 2,
-            preprocess_func: None,
+            preprocess: None,
             blast_offs: 0,
         };
-        *out = initialize_missile(&mut block);
-        if !(*out).is_null() {
-            let p = element(*out);
-            (*p).postprocess_func = Some(ElementHook::Legacy(pump_up_postprocess));
-            (*p).collision_func = Some(CollisionHook::Legacy(pump_up_collision));
-            (*p).__bindgen_anon_5.thrust_wait = LEVEL_COUNTER;
+        let missile = cx.missile(&mut block);
+        if let Some(p) = missile {
+            cx.element_mut(p).post = Some(ElementHook::Native(pump_up_postprocess));
+            cx.element_mut(p).collide = Some(CollisionHook::Native(pump_up_collision));
+            cx.element_mut(p).thrust = LEVEL_COUNTER;
         }
-        1
+        vec![missile]
     }
 
-    pub(crate) unsafe extern "C" fn confuse_preprocess(e: *mut ELEMENT) {
-        if (*e).state_flags & NONSOLID as u16 == 0 {
-            image!(frame; (*e).next.image.frame, SetAbsFrameIndex(
-                (*e).current.image.frame,
-                (frame_index((*e).current.image.frame).wrapping_add(1)) & 7,
-            ));
-            (*e).state_flags |= CHANGING as u16;
-        } else if (*e).hTarget.is_null() {
-            (*e).__bindgen_anon_1.life_span = 0;
-            (*e).state_flags |= DISAPPEARING as u16;
+    pub(crate) fn confuse_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+        if cx.element(e).flags & NONSOLID as u16 == 0 {
+            cx.set_frame(
+                e,
+                true,
+                cx.absolute_frame(
+                    cx.element(e).current.image.frame,
+                    (cx.frame_number(cx.element(e).current.image.frame)
+                        .wrapping_add(1))
+                        & 7,
+                ),
+            );
+            cx.element_mut(e).flags |= CHANGING as u16;
+        } else if cx.target(e).is_none() {
+            cx.element_mut(e).life = 0;
+            cx.element_mut(e).flags |= DISAPPEARING as u16;
         } else {
-            let target = element((*e).hTarget);
-            (*e).next.location = (*target).next.location;
-            if (*e).__bindgen_anon_4.turn_wait != 0 {
-                let mut next = IncFrameIndex((*e).current.image.frame);
-                if frame_index(next) == 0 {
-                    next = crate::ships::native::rel_frame_index(next, -8);
+            let target = cx
+                .target(e)
+                .unwrap_or_else(|| panic!("Melnorme confusion target"));
+            cx.element_mut(e).next.location = cx.element(target).next.location;
+            if cx.element(e).turn != 0 {
+                let mut next = cx.advance_frame(cx.element(e).current.image.frame);
+                if cx.frame_number(next) == 0 {
+                    next = cx.relative_frame(next, -8);
                 }
-                image!(frame; (*e).next.image.frame, next);
-                let target_ss = starship(target);
-                (*target_ss).ship_input_state = ((*target_ss).ship_input_state
+                cx.set_frame(e, true, next);
+                let target_ss = cx.owner(target);
+                cx.ship_state_mut(target_ss).input = (cx.ship_state(target_ss).input
                     & !((LEFT | RIGHT | SPECIAL) as u8))
-                    | (*e).__bindgen_anon_4.turn_wait;
-                let effect = AllocElement();
-                if !effect.is_null() {
-                    let p = element(effect);
-                    (*p).playerNr = (*e).playerNr;
-                    (*p).state_flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
-                    (*p).__bindgen_anon_1.life_span = 1;
-                    image!(copy; (*p).current, (*e).next);
-                    image!(copy; (*p).next, (*e).next);
-                    (*p).preprocess_func = Some(ElementHook::Legacy(confuse_preprocess));
-                    (*GlobData
-                        .Game_state
-                        .DisplayArray
-                        .add(usize::from((*p).PrimIndex)))
-                    .Type = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
-                    (*p).pParent = starship(e).cast();
-                    (*p).hTarget = (*e).hTarget;
-                    put_element(effect);
+                    | cx.element(e).turn;
+                if let Some(p) = cx.alloc_element() {
+                    cx.element_mut(p).player = cx.element(e).player;
+                    cx.element_mut(p).flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
+                    cx.element_mut(p).life = 1;
+                    cx.element_mut(p).current.location = cx.element(e).next.location;
+                    cx.copy_image_to_current(p, cx.element(e).next.image);
+                    cx.copy_visual_to_next(p, cx.element(e).next);
+                    cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
+                    cx.primitive_style_mut(p).kind = gfx_object_STAMP_PRIM as GRAPHICS_PRIM;
+                    cx.set_parent(p, Some(cx.owner(e)));
+                    cx.set_target(p, cx.target(e));
+                    cx.put(p);
                 }
             }
         }
     }
 
-    pub(crate) unsafe extern "C" fn confusion_collision(
-        a: *mut ELEMENT,
-        _pa: *mut POINT,
-        b: *mut ELEMENT,
-        _pb: *mut POINT,
+    pub(crate) fn confusion_collision(
+        cx: &mut Cx<'_>,
+        a: ElementId,
+        _pa: &mut POINT,
+        b: ElementId,
+        _pb: &mut POINT,
     ) {
-        if (*b).state_flags & PLAYER_SHIP as u16 == 0 {
+        if cx.element(b).flags & PLAYER_SHIP as u16 == 0 {
             return;
         }
-        let ss = starship(a);
-        let desc = (*ss).RaceDescPtr;
-        let mut h = disp_q.head;
-        let mut found = std::ptr::null_mut();
-        while !h.is_null() {
-            let p = element(h);
-            if (*p).playerNr == (*a).playerNr
-                && (*p).current.image.farray == (&raw mut (*desc).ship_data.special).cast()
-                && (*p).state_flags & NONSOLID as u16 != 0
+        let ss = cx.owner(a);
+        let mut h = cx.elements().head();
+        let mut found = None;
+        while let Some(p) = h {
+            if cx.element(p).player == cx.element(a).player
+                && cx.element(p).current.image.frames == cx.ship_frame_set(ss, 2)
+                && cx.element(p).flags & NONSOLID as u16 != 0
             {
-                found = h;
+                found = Some(p);
                 break;
             }
-            h = (*p).succ;
+            h = cx.elements().succ(p);
         }
-        if found.is_null() {
-            found = AllocElement();
+        if found.is_none() {
+            found = cx.alloc_element();
         }
-        if !found.is_null() {
-            let p = element(found);
-            if (*p).state_flags == 0 {
-                InsertQueue((&raw mut disp_q).cast(), found, disp_q.head);
-                image!(copy; (*p).current, (*a).next);
-                image!(frame; (*p).current.image.frame, SetAbsFrameIndex((*p).current.image.frame, 8));
-                image!(copy; (*p).next, (*p).current);
-                (*p).playerNr = (*a).playerNr;
-                (*p).state_flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
-                (*p).preprocess_func = Some(ElementHook::Legacy(confuse_preprocess));
-                (*GlobData
-                    .Game_state
-                    .DisplayArray
-                    .add(usize::from((*p).PrimIndex)))
-                .Type = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
-                (*p).pParent = ss.cast();
-                let target_ss = starship(b);
-                (*p).hTarget = (*target_ss).hShip;
+        if let Some(p) = found {
+            if cx.element(p).flags == 0 {
+                cx.insert_before(p, cx.elements().head());
+                cx.element_mut(p).current.location = cx.element(a).next.location;
+                cx.copy_image_to_current(p, cx.element(a).next.image);
+                cx.set_frame(
+                    p,
+                    false,
+                    cx.absolute_frame(cx.element(p).current.image.frame, 8),
+                );
+                cx.copy_visual_to_next(p, cx.element(p).current);
+                cx.element_mut(p).player = cx.element(a).player;
+                cx.element_mut(p).flags = (FINITE_LIFE | NONSOLID | CHANGING) as u16;
+                cx.element_mut(p).pre = Some(ElementHook::Native(confuse_preprocess));
+                cx.primitive_style_mut(p).kind = gfx_object_NUM_PRIMS as GRAPHICS_PRIM;
+                cx.set_parent(p, Some(ss));
+                let target_ss = cx.owner(b);
+                cx.set_target(p, Some(cx.ship_element(target_ss)));
             }
-            (*p).__bindgen_anon_1.life_span = 400;
-            (*p).__bindgen_anon_4.turn_wait = 1u8 << (TFB_Random() as u8 & 1);
+            cx.element_mut(p).life = 400;
+            cx.element_mut(p).turn = 1u8 << (cx.random() as u8 & 1);
         }
-        (*a).__bindgen_anon_2.hit_points = 0;
-        (*a).__bindgen_anon_1.life_span = 0;
-        (*a).state_flags |= (DISAPPEARING | COLLISION | NONSOLID) as u16;
+        cx.element_mut(a).hits = 0;
+        cx.element_mut(a).life = 0;
+        cx.element_mut(a).flags |= (DISAPPEARING | COLLISION | NONSOLID) as u16;
     }
 
-    pub(crate) unsafe extern "C" fn initialize_confusion(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.special).cast(),
+    pub(crate) fn initialize_confusion(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 2),
             index: 0,
-            face: (*ss).ShipFacing,
-            sender: (*ship).playerNr,
+            face: cx.ship_state(ss).facing,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: MELNORME_OFFSET,
             speed: CMISSILE_SPEED,
             hit_points: CMISSILE_HITS,
             damage: CMISSILE_DAMAGE,
             life: CMISSILE_LIFE,
-            preprocess_func: Some(ElementHook::Legacy(confuse_preprocess)),
+            preprocess: Some(confuse_preprocess),
             blast_offs: CMISSILE_OFFSET,
         };
-        *out = initialize_missile(&mut block);
-        if !(*out).is_null() {
-            let p = element(*out);
-            (*p).collision_func = Some(CollisionHook::Legacy(confusion_collision));
-            (*p).pParent = ss.cast();
+        let missile = cx.missile(&mut block);
+        if let Some(p) = missile {
+            cx.element_mut(p).collide = Some(CollisionHook::Native(confusion_collision));
+            cx.set_parent(p, Some(ss));
         }
-        1
+        vec![missile]
     }
 
-    pub(crate) unsafe extern "C" fn initialize_test_pump_up(
-        ship: *mut ELEMENT,
-        out: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
-            face: (*ss).ShipFacing,
+    pub(crate) fn initialize_test_pump_up(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
             index: 0,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: MELNORME_OFFSET,
             speed: PUMPUP_SPEED,
             hit_points: PUMPUP_DAMAGE as i16,
             damage: PUMPUP_DAMAGE as i16,
             life: PUMPUP_LIFE,
-            preprocess_func: None,
+            preprocess: None,
             blast_offs: 0,
         };
-        *out = initialize_missile(&mut block);
-        1
+        vec![cx.missile(&mut block)]
     }
 
-    pub(crate) unsafe extern "C" fn melnorme_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let ss = starship(ship);
-        let desc = (*ss).RaceDescPtr;
-        (*desc).init_weapon_func = Some(initialize_test_pump_up);
-        let old = (*ss).weapon_counter;
+    pub(crate) fn melnorme_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        cx.set_weapon(ss, Selection::Override(initialize_test_pump_up));
+        let old = cx.ship_state(ss).weapon_counter;
         if old == WEAPON_WAIT {
-            (*ss).weapon_counter = 0;
+            cx.ship_state_mut(ss).weapon_counter = 0;
         }
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-        if !(*enemy).ObjectPtr.is_null() {
-            if (*desc).ship_info.energy_level < SPECIAL_ENERGY_COST + WEAPON_ENERGY_COST
-                && (*ss).old_status_flags & WEAPON as u16 == 0
+        let enemy = ENEMY_SHIP_INDEX as usize;
+        if let Some(target) = concerns.objects[enemy].object {
+            if cx.race_stats(ss).ship_info.energy_level < SPECIAL_ENERGY_COST + WEAPON_ENERGY_COST
+                && cx.ship_state(ss).old_status & WEAPON as u16 == 0
             {
-                (*enemy).MoveState = MOVEMENT_STATE_ENTICE;
+                concerns.objects[enemy].movement = MOVEMENT_STATE_ENTICE;
             } else {
-                let es = starship((*enemy).ObjectPtr);
-                if (*(*es).RaceDescPtr).ship_info.ship_flags & IMMEDIATE_WEAPON as u16 == 0 {
-                    (*enemy).MoveState = MOVEMENT_STATE_PURSUE;
+                let es = cx.owner(target);
+                if cx.race_stats(es).ship_info.ship_flags & IMMEDIATE_WEAPON as u16 == 0 {
+                    concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
                 }
             }
         }
-        ship_intelligence(ship, concerns, count);
-        if (*ss).weapon_counter == 0
+        cx.ship_intelligence(ss, concerns);
+        if cx.ship_state(ss).weapon_counter == 0
             && (old != 0
-                || (((*ss).special_counter != 0
-                    || (*desc).ship_info.energy_level >= SPECIAL_ENERGY_COST + WEAPON_ENERGY_COST)
-                    && (*ss).ship_input_state & WEAPON as u8 == 0))
+                || ((cx.ship_state(ss).special_counter != 0
+                    || cx.race_stats(ss).ship_info.energy_level
+                        >= SPECIAL_ENERGY_COST + WEAPON_ENERGY_COST)
+                    && cx.ship_state(ss).input & WEAPON as u8 == 0))
         {
-            (*ss).ship_input_state ^= WEAPON as u8;
+            cx.ship_state_mut(ss).input ^= WEAPON as u8;
         }
-        (*ss).ship_input_state &= !(SPECIAL as u8);
-        if (*ss).special_counter == 0 && (*desc).ship_info.energy_level >= SPECIAL_ENERGY_COST {
-            let old_input = (*ss).ship_input_state;
-            (*desc).init_weapon_func = Some(initialize_confusion);
-            (*ship).__bindgen_anon_4.turn_wait = (*ship).__bindgen_anon_4.turn_wait.wrapping_add(1);
-            (*ship).__bindgen_anon_5.thrust_wait =
-                (*ship).__bindgen_anon_5.thrust_wait.wrapping_add(1);
-            ship_intelligence(ship, concerns, (ENEMY_SHIP_INDEX + 1) as COUNT);
-            (*ship).__bindgen_anon_5.thrust_wait =
-                (*ship).__bindgen_anon_5.thrust_wait.wrapping_sub(1);
-            (*ship).__bindgen_anon_4.turn_wait = (*ship).__bindgen_anon_4.turn_wait.wrapping_sub(1);
-            if (*ss).ship_input_state & WEAPON as u8 != 0 {
-                (*ss).ship_input_state &= !(WEAPON as u8);
-                (*ss).ship_input_state |= SPECIAL as u8;
+        cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
+        if cx.ship_state(ss).special_counter == 0
+            && cx.race_stats(ss).ship_info.energy_level >= SPECIAL_ENERGY_COST
+        {
+            let old_input = cx.ship_state(ss).input;
+            cx.set_weapon(ss, Selection::Override(initialize_confusion));
+            concerns.subject.turn = concerns.subject.turn.wrapping_add(1);
+            concerns.subject.thrust = concerns.subject.thrust.wrapping_add(1);
+            let count = concerns.count;
+            concerns.count = (ENEMY_SHIP_INDEX + 1) as COUNT;
+            cx.ship_intelligence(ss, concerns);
+            concerns.count = count;
+            concerns.subject.thrust = concerns.subject.thrust.wrapping_sub(1);
+            concerns.subject.turn = concerns.subject.turn.wrapping_sub(1);
+            if cx.ship_state(ss).input & WEAPON as u8 != 0 {
+                cx.ship_state_mut(ss).input &= !(WEAPON as u8);
+                cx.ship_state_mut(ss).input |= SPECIAL as u8;
             }
-            (*ss).ship_input_state = old_input | ((*ss).ship_input_state & SPECIAL as u8);
+            cx.ship_state_mut(ss).input = old_input | (cx.ship_state(ss).input & SPECIAL as u8);
         }
-        (*ss).weapon_counter = old;
-        (*desc).init_weapon_func = Some(initialize_pump_up);
+        cx.ship_state_mut(ss).weapon_counter = old;
+        cx.set_weapon(ss, Selection::Override(initialize_pump_up));
     }
 
-    pub(crate) unsafe extern "C" fn melnorme_postprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        if (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && (*ss).special_counter == 0
-            && DeltaEnergy(ship, -i16::from(SPECIAL_ENERGY_COST)) != 0
+    pub(crate) fn melnorme_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(ship, -i16::from(SPECIAL_ENERGY_COST))
         {
-            let mut h = std::ptr::null_mut();
-            initialize_confusion(ship, &mut h);
-            if !h.is_null() {
-                let p = element(h);
-                ProcessSound(
-                    SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-                    p,
-                );
-                put_element(h);
-                (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+            let origin = cx.weapon_origin(ship);
+            if let Some(p) = initialize_confusion(cx, ss, origin)[0] {
+                cx.process_ship_sound(ss, 1, p);
+                cx.put(p);
+                cx.ship_state_mut(ss).special_counter =
+                    cx.race_stats(ss).characteristics.special_wait;
             }
         }
     }

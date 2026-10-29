@@ -5,7 +5,6 @@ mod battle;
 mod battle_context;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
-use uqm_rust::ships::races::init_sis;
 use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
@@ -435,7 +434,9 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
     }
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
-    ship.RaceDescPtr = unsafe { init_sis() };
+    let mut descriptor =
+        unsafe { uqm_rust::ships::races::legacy_descriptor(SPECIES_ID_SIS_SHIP_ID) };
+    ship.RaceDescPtr = &raw mut descriptor;
     let (fields, _) = snapshot(directory);
     assert_eq!(fields["ships.0.0.custom.num_trackers"], "1");
     assert_eq!(fields["ships.0.0.custom.num_blasters"], "3");
@@ -467,15 +468,29 @@ unsafe fn sis_fields(directory: &Path, ship: &mut STARSHIP) {
     assert_eq!(fields["ships.0.0.custom.missiles.1.hit_points"], "6");
     assert_eq!(fields["ships.0.0.custom.missiles.0.blast_offs"], "8");
     assert!(fields["ships.0.0.custom.missiles.0.preprocess"].ends_with("::blaster_preprocess"));
-    // SAFETY: init_sis returned this live descriptor; its matching callback frees
-    // its custom allocation after the last snapshot has finished reading it.
+    // SAFETY: the descriptor and published world outlive this synchronous teardown.
     unsafe {
-        ((*ship.RaceDescPtr)
-            .uninit_func
-            .unwrap_or_else(|| panic!("native descriptor has no uninit callback")))(
-            ship.RaceDescPtr,
-        )
-    };
+        uqm_rust::app::bridge::enter(|cx| {
+            let race = descriptor
+                .race
+                .unwrap_or_else(|| panic!("Native SIS descriptor"));
+            let mut stats = uqm_rust::engine::battle::views::RaceStats {
+                ship_info: uqm_rust::engine::battle::views::Info {
+                    ship_flags: descriptor.ship_info.ship_flags,
+                    ship_cost: descriptor.ship_info.ship_cost,
+                    crew_level: descriptor.ship_info.crew_level,
+                    max_crew: descriptor.ship_info.max_crew,
+                    energy_level: descriptor.ship_info.energy_level,
+                    max_energy: descriptor.ship_info.max_energy,
+                },
+                characteristics: descriptor.characteristics,
+                intelligence: uqm_rust::engine::battle::views::Intelligence::default(),
+                state: descriptor.race_state,
+            };
+            race.uninit.unwrap_or_else(|| panic!("SIS teardown"))(cx.world, &mut stats);
+        });
+    }
+    ship.RaceDescPtr = ptr::null_mut();
 }
 
 fn campaign_fields(directory: &Path) {

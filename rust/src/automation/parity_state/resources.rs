@@ -52,51 +52,29 @@ impl StringEntry<'_> {
     }
 }
 
-pub(super) struct FrameSet<'a> {
-    address: usize,
-    views: Vec<Frame<'a>>,
-}
-impl<'a> FrameSet<'a> {
-    /// # Safety
-    /// Every non-null handle in this borrowed frame set must stay live for `'a`.
-    pub(super) unsafe fn borrow(views: &'a [crate::battle::element::FrameHandle]) -> Self {
-        Self {
-            address: views.as_ptr() as usize,
-            views: views
-                .iter()
-                .map(|pointer| {
-                    // SAFETY: the caller holds every frame referenced by this set.
-                    Frame(unsafe { pointer.cast::<frame_desc>().as_ref() })
-                })
-                .collect(),
-        }
-    }
-    pub(super) fn write(&self, fields: &mut Fields, prefix: &str, journal: &Journal) {
-        value(fields, prefix, "role", journal.parent(self.address));
-        for (view, frame) in self.views.iter().enumerate() {
-            frame.write(fields, &format!("{prefix}.{view}"), journal);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn borrowed_live_frame_set_preserves_view_order_and_owner() {
+    fn borrowed_live_frames_preserve_view_order_and_owner() {
         let directory = super::super::test_directory();
         let mut journal =
             Journal::create(directory.path()).unwrap_or_else(|error| panic!("journal: {error}"));
         // SAFETY: frame_desc contains only scalar, pointer and optional callback fields.
         let mut frame: frame_desc = unsafe { std::mem::zeroed() };
         frame.Index = 4;
-        let views = [std::ptr::from_mut(&mut frame).cast(), std::ptr::null_mut()];
+        let views: [*mut frame_desc; 2] = [std::ptr::from_mut(&mut frame), std::ptr::null_mut()];
         journal.register_parent(views.as_ptr() as usize, "test-views".into());
-        // SAFETY: the local frame and views remain live through serialization.
-        let set = unsafe { FrameSet::borrow(&views) };
         let mut fields = Fields::new();
-        set.write(&mut fields, "views", &journal);
-        assert_eq!(fields["views.role"], "test-views");
+        for (index, view) in views.iter().enumerate() {
+            // SAFETY: the local frame and views remain live through serialization.
+            Frame(unsafe { view.cast::<frame_desc>().as_ref() }).write(
+                &mut fields,
+                &format!("views.{index}"),
+                &journal,
+            );
+        }
+        assert_eq!(journal.parent(views.as_ptr() as usize), "test-views");
         assert_eq!(fields["views.0.index"], "4");
         assert_eq!(fields["views.1.index"], "0");
     }

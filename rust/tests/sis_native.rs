@@ -1,9 +1,9 @@
-use uqm_rust::ships::races::init_sis;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-mod native_ship_common;
-use native_ship_common::*;
+#[path = "support/battle.rs"]
+mod battle;
+use battle::*;
 use uqm_rust::{
     ships::native::{abi::*, element},
     state::game_state_keys::{get_game_state, set_game_state},
@@ -45,14 +45,21 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
             }
             GlobData.SIS_state.DriveSlots = [1; 11];
             GlobData.SIS_state.JetSlots = [2; 8];
-            let mut ship = Ship::new(init_sis, RPG_PLAYER_NUM as SIZE);
-            ship.weapon_frames = FrameSet::new(32);
-            ship.desc.ship_data.weapon = [ship.weapon_frames.frame(0); 3];
+            let mut ship = Ship::with_frames(
+                &_battle,
+                SPECIES_ID_SIS_SHIP_ID,
+                RPG_PLAYER_NUM as SIZE,
+                [16, 32, 16],
+                [4, 4],
+            );
             assert_eq!(
-                (ship.desc.ship_info.max_crew, ship.desc.ship_info.crew_level),
+                (
+                    ship.descriptor_mut().ship_info.max_crew,
+                    ship.descriptor_mut().ship_info.crew_level
+                ),
                 (101, 10)
             );
-            let c = &ship.desc.characteristics;
+            let c = ship.descriptor_mut().characteristics;
             assert_eq!((c.max_thrust, c.thrust_wait, c.turn_wait), (36, 1, 1));
             assert_eq!(
                 (
@@ -63,16 +70,16 @@ fn module_configuration_preserves_weapon_order_energy_caps_and_drive_rounding() 
                 ),
                 (2, 4, 2, 24)
             );
-            let out = ship.weapon(6);
+            let out = ship.weapon_handles(6);
             for (h, damage) in out.iter().zip([2, 4, 4, 6, 6, 2]) {
                 assert_eq!((*element(*h)).__bindgen_anon_3.mass_points, damage);
                 assert_eq!((*element(*h)).__bindgen_anon_4.turn_wait, 17);
                 FreeElement(*h);
             }
-            ship.desc.ship_info.crew_level = 4;
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
+            ship.descriptor_mut().ship_info.crew_level = 4;
+            ship.uninit();
             assert_eq!({ GlobData.SIS_state.CrewEnlisted }, 3);
-            assert!(ship.desc.data.is_null());
+            assert!(ship.descriptor_mut().data.is_null());
         }
     })
 }
@@ -84,13 +91,23 @@ fn no_weapons_disable_inputs_and_bomb_state_marks_carrier() {
             modules();
             set_game_state("CHMMR_BOMB_STATE", 3);
             set_game_state("BOMB_CARRIER", 0);
-            let mut ship = Ship::new(init_sis, 0);
+            let mut ship =
+                Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
             assert_eq!(get_game_state("BOMB_CARRIER"), 1);
-            ship.ss.cur_status_flags = (SPECIAL | WEAPON) as u16;
-            (ship.desc.preprocess_func.unwrap())(ship.ptr());
-            assert_eq!(ship.ss.cur_status_flags & (SPECIAL | WEAPON) as u16, 0);
-            assert_eq!((ship.ss.weapon_counter, ship.ss.special_counter), (2, 2));
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
+            ship.ship_mut().cur_status_flags = (SPECIAL | WEAPON) as u16;
+            ship.preprocess();
+            assert_eq!(
+                ship.ship_mut().cur_status_flags & (SPECIAL | WEAPON) as u16,
+                0
+            );
+            assert_eq!(
+                (
+                    ship.ship_mut().weapon_counter,
+                    ship.ship_mut().special_counter
+                ),
+                (2, 2)
+            );
+            ship.uninit();
             set_game_state("BOMB_CARRIER", 0);
             set_game_state("CHMMR_BOMB_STATE", 0);
         }
@@ -105,31 +122,32 @@ fn hyperspace_fuel_brakes_and_quasispace_allows_thrust_without_fuel() {
             GlobData.Game_state.CurrentActivity = IN_HYPERSPACE as u16;
             GlobData.SIS_state.FuelOnBoard = 0;
             GlobData.Game_state.autopilot = POINT { x: -1, y: -1 };
-            let mut ship = Ship::new(init_sis, 0);
-            assert!(ship.desc.init_weapon_func.is_none());
-            assert_eq!(ship.desc.characteristics.max_thrust, 8);
-            assert!(ship.desc.ship_info.icons_rsc.is_null());
+            let mut ship =
+                Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
+            assert!(ship.descriptor_mut().callbacks()[3] == 0);
+            assert_eq!(ship.descriptor_mut().characteristics.max_thrust, 8);
+            assert!(ship.descriptor_mut().ship_info.icons_rsc.is_null());
             SetVelocityComponents(&raw mut (*ship.ptr()).velocity, 256, 0);
-            ship.ss.cur_status_flags = THRUST as u16;
+            ship.ship_mut().cur_status_flags = THRUST as u16;
             set_game_state("ARILOU_SPACE_SIDE", 0);
-            (ship.desc.preprocess_func.unwrap())(ship.ptr());
+            ship.preprocess();
             let mut x = 0;
             let mut y = 0;
             GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut x, &mut y);
             assert_eq!((x, y), (128, 0));
-            assert_eq!(ship.ss.cur_status_flags & THRUST as u16, 0);
-            assert_eq!(ship.ss.weapon_counter, 1);
+            assert_eq!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
+            assert_eq!(ship.ship_mut().weapon_counter, 1);
             set_game_state("ARILOU_SPACE_SIDE", 2);
-            ship.ss.cur_status_flags = THRUST as u16;
+            ship.ship_mut().cur_status_flags = THRUST as u16;
             (*ship.ptr()).__bindgen_anon_5.thrust_wait = 0;
-            (ship.desc.preprocess_func.unwrap())(ship.ptr());
-            assert_ne!(ship.ss.cur_status_flags & THRUST as u16, 0);
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
+            ship.preprocess();
+            assert_ne!(ship.ship_mut().cur_status_flags & THRUST as u16, 0);
+            ship.postprocess();
             assert_eq!(
                 velocity(&{ GlobData.Game_state.velocity }),
                 velocity(&(*ship.ptr()).velocity)
             );
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
+            ship.uninit();
             set_game_state("ARILOU_SPACE_SIDE", 0);
         }
     })
@@ -146,16 +164,20 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
             GlobData.SIS_state.log_y = 0;
             GlobData.Game_state.autopilot = POINT { x: 100, y: 9999 };
             set_game_state("ARILOU_SPACE_SIDE", 0);
-            let mut ship = Ship::new(init_sis, 0);
-            ship.ss.ShipFacing = 4;
-            (ship.desc.preprocess_func.unwrap())(ship.ptr());
+            let mut ship =
+                Ship::with_frames(&_battle, SPECIES_ID_SIS_SHIP_ID, 0, [16, 32, 16], [4, 4]);
+            ship.ship_mut().ShipFacing = 4;
+            ship.preprocess();
             let mut x = 0;
             let mut y = 0;
             GetCurrentVelocityComponents(&raw mut (*ship.ptr()).velocity, &mut x, &mut y);
             assert_eq!((x, y), (128, 0));
-            assert_ne!(ship.ss.cur_status_flags & SHIP_AT_MAX_SPEED as u16, 0);
-            ship.ss.cur_status_flags = LEFT as u16;
-            (ship.desc.preprocess_func.unwrap())(ship.ptr());
+            assert_ne!(
+                ship.ship_mut().cur_status_flags & SHIP_AT_MAX_SPEED as u16,
+                0
+            );
+            ship.ship_mut().cur_status_flags = LEFT as u16;
+            ship.preprocess();
             assert_eq!(
                 (
                     GlobData.Game_state.autopilot.x,
@@ -163,7 +185,7 @@ fn autopilot_accelerates_toward_target_and_cancels_on_manual_turn() {
                 ),
                 (-1, -1)
             );
-            (ship.desc.uninit_func.unwrap())(&raw mut *ship.desc);
+            ship.uninit();
         }
     })
 }

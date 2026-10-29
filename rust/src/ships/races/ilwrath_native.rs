@@ -66,8 +66,13 @@ const fn decloak_step(color: Color) -> Option<Color> {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::collections::observation::image;
-    use crate::ships::native::{abi::*, element, starship};
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, ShipId, StoryKey, WeaponOrigin,
+        WeaponSpawn, World,
+    };
+
+    use crate::ships::native::abi::*;
 
     // Core characteristics
     const MAX_CREW: u16 = 22;
@@ -104,20 +109,29 @@ pub(crate) mod engine {
         x << ONE_SHIFT
     }
 
-    const fn descriptor() -> RACE_DESC {
+    pub static ILWRATH: Race = Race {
+        descriptor,
+        preprocess: Some(ilwrath_preprocess),
+        postprocess: None,
+        init_weapon: Some(initialize_flame),
+        intelligence: Some(ilwrath_intelligence),
+        uninit: None,
+    };
+
+    fn descriptor(_world: &mut World) -> RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut d = RACE_DESC::EMPTY;
-        d.ship_info.ship_flags = FIRES_FORE as u16;
-        d.ship_info.ship_cost = 10;
-        d.ship_info.crew_level = MAX_CREW;
-        d.ship_info.max_crew = MAX_CREW;
-        d.ship_info.energy_level = MAX_ENERGY;
-        d.ship_info.max_energy = MAX_ENERGY;
-        d.ship_info.race_strings_rsc = c"ship.ilwrath.text".as_ptr();
-        d.ship_info.icons_rsc = c"ship.ilwrath.icons".as_ptr();
-        d.ship_info.melee_icon_rsc = c"ship.ilwrath.meleeicons".as_ptr();
-        d.fleet.strength = 1410 / SPHERE_RADIUS_INCREMENT as u16 * 2;
-        d.fleet.known_loc = POINT { x: 48, y: 1700 };
+        let mut d = RaceTemplate::default();
+        d.info.ship_flags = FIRES_FORE as u16;
+        d.info.ship_cost = 10;
+        d.info.crew_level = MAX_CREW;
+        d.info.max_crew = MAX_CREW;
+        d.info.energy_level = MAX_ENERGY;
+        d.info.max_energy = MAX_ENERGY;
+        d.resources.strings = Some(c"ship.ilwrath.text");
+        d.resources.icons = Some(c"ship.ilwrath.icons");
+        d.resources.melee_icon = Some(c"ship.ilwrath.meleeicons");
+        d.fleet_strength = 1410 / SPHERE_RADIUS_INCREMENT as u16 * 2;
+        d.fleet_location = POINT { x: 48, y: 1700 };
         d.characteristics = CHARACTERISTIC_STUFF {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
@@ -131,248 +145,232 @@ pub(crate) mod engine {
             special_wait: SPECIAL_WAIT,
             ship_mass: SHIP_MASS,
         };
-        d.ship_data.ship_rsc = [
-            c"ship.ilwrath.graphics.avenger.large".as_ptr(),
-            c"ship.ilwrath.graphics.avenger.medium".as_ptr(),
-            c"ship.ilwrath.graphics.avenger.small".as_ptr(),
+        d.resources.ship = [
+            Some(c"ship.ilwrath.graphics.avenger.large"),
+            Some(c"ship.ilwrath.graphics.avenger.medium"),
+            Some(c"ship.ilwrath.graphics.avenger.small"),
         ];
-        d.ship_data.weapon_rsc = [
-            c"ship.ilwrath.graphics.fire.large".as_ptr(),
-            c"ship.ilwrath.graphics.fire.medium".as_ptr(),
-            c"ship.ilwrath.graphics.fire.small".as_ptr(),
+        d.resources.weapon = [
+            Some(c"ship.ilwrath.graphics.fire.large"),
+            Some(c"ship.ilwrath.graphics.fire.medium"),
+            Some(c"ship.ilwrath.graphics.fire.small"),
         ];
-        d.ship_data.captain_control.captain_rsc = c"ship.ilwrath.graphics.captain".as_ptr();
-        d.ship_data.victory_ditty_rsc = c"ship.ilwrath.ditty".as_ptr();
-        d.ship_data.ship_sounds_rsc = c"ship.ilwrath.sounds".as_ptr();
-        d.cyborg_control.WeaponRange = CLOSE_RANGE_WEAPON;
-        d.cyborg_control.intelligence_func = Some(ilwrath_intelligence);
-        d.preprocess_func = Some(ilwrath_preprocess);
-        d.init_weapon_func = Some(initialize_flame);
-        d
+        d.resources.captain = Some(c"ship.ilwrath.graphics.captain");
+        d.resources.victory = Some(c"ship.ilwrath.ditty");
+        d.resources.sounds = Some(c"ship.ilwrath.sounds");
+        d.intelligence.weapon_range = CLOSE_RANGE_WEAPON;
+        d.descriptor(&ILWRATH)
     }
 
-    static mut ILWRATH_DESC: RACE_DESC = descriptor();
-
-    /// Returns the static template copied by CaptureCodeRes for each ship.
-    #[no_mangle]
-    pub extern "C" fn init_ilwrath() -> *mut RACE_DESC {
-        &raw mut ILWRATH_DESC
+    fn object_cloaked(cx: &Cx<'_>, e: ElementId) -> bool {
+        let prim = cx.primitive_style(e);
+        prim.kind >= gfx_object_NUM_PRIMS as u8
+            || (prim.kind == gfx_object_STAMPFILL_PRIM as u8 && same_color(prim.color, BLACK_COLOR))
     }
 
-    /// `&(GLOBAL (DisplayArray))[ElementPtr->PrimIndex]`.
-    unsafe fn display_prim(element: *mut ELEMENT) -> *mut PRIMITIVE {
-        GlobData
-            .Game_state
-            .DisplayArray
-            .add(usize::from((*element).PrimIndex))
-    }
-
-    /// `OBJECT_CLOAKED` from `element.h`.
-    unsafe fn object_cloaked(element: *mut ELEMENT) -> bool {
-        let prim = display_prim(element);
-        (*prim).Type >= gfx_object_NUM_PRIMS as u8
-            || ((*prim).Type == gfx_object_STAMPFILL_PRIM as u8
-                && same_color((*prim).color, BLACK_COLOR))
-    }
-
-    pub(crate) unsafe extern "C" fn flame_preprocess(flame: *mut ELEMENT) {
-        if (*flame).__bindgen_anon_4.turn_wait > 0 {
-            (*flame).__bindgen_anon_4.turn_wait -= 1;
+    pub(crate) fn flame_preprocess(cx: &mut Cx<'_>, flame: ElementId) {
+        if cx.element(flame).turn > 0 {
+            cx.element_mut(flame).turn -= 1;
         } else {
-            image!(frame; (*flame).next.image.frame, IncFrameIndex((*flame).current.image.frame));
-            (*flame).state_flags |= CHANGING as u16;
+            cx.set_frame(
+                flame,
+                true,
+                cx.advance_frame(cx.element(flame).current.image.frame),
+            );
+            cx.element_mut(flame).flags |= CHANGING as u16;
 
-            (*flame).__bindgen_anon_4.turn_wait = (*flame).__bindgen_anon_5.next_turn;
+            cx.element_mut(flame).turn = cx.element(flame).thrust;
         }
     }
 
-    pub(crate) unsafe extern "C" fn flame_collision(
-        flame: *mut ELEMENT,
-        flame_point: *mut POINT,
-        other: *mut ELEMENT,
-        other_point: *mut POINT,
+    pub(crate) fn flame_collision(
+        cx: &mut Cx<'_>,
+        flame: ElementId,
+        flame_point: &mut POINT,
+        other: ElementId,
+        other_point: &mut POINT,
     ) {
-        weapon_collision(flame, flame_point, other, other_point);
-        (*flame).state_flags &= !(DISAPPEARING as u16);
-        (*flame).state_flags |= NONSOLID as u16;
+        cx.weapon_collision(flame, flame_point, other, other_point);
+        cx.element_mut(flame).flags &= !(DISAPPEARING as u16);
+        cx.element_mut(flame).flags |= NONSOLID as u16;
     }
 
-    pub(crate) unsafe extern "C" fn ilwrath_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-        (*enemy).MoveState = MOVEMENT_STATE_PURSUE;
-        if !(*enemy).ObjectPtr.is_null() && (*enemy).which_turn <= 10 {
+    pub(crate) fn ilwrath_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        let enemy = ENEMY_SHIP_INDEX as usize;
+        concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
+        if concerns.objects[enemy].object.is_some() && concerns.objects[enemy].which_turn <= 10 {
             // don't want to dodge when you could be flaming
-            (*concerns.add(ENEMY_WEAPON_INDEX as usize)).ObjectPtr = std::ptr::null_mut();
+            concerns.objects[ENEMY_WEAPON_INDEX as usize].object = None;
         }
 
-        ship_intelligence(ship, concerns, count);
+        cx.ship_intelligence(ss, concerns);
 
-        let ss = starship(ship);
-        let enemy_weapon = concerns.add(ENEMY_WEAPON_INDEX as usize);
-        if !(*enemy).ObjectPtr.is_null()
-            && ((*enemy).which_turn <= 6
-                || ((*enemy).which_turn <= 10 && (*enemy_weapon).which_turn <= 10))
+        let ship = cx.ship_element(ss);
+        let enemy_weapon = ENEMY_WEAPON_INDEX as usize;
+        if concerns.objects[enemy].object.is_some()
+            && (concerns.objects[enemy].which_turn <= 6
+                || (concerns.objects[enemy].which_turn <= 10
+                    && concerns.objects[enemy_weapon].which_turn <= 10))
         {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
-            if object_cloaked(ship) {
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
+            if object_cloaked(cx, ship) {
                 // The original reads `&= ~LEFT | RIGHT`, which is
                 // `&= (~LEFT) | RIGHT` and therefore clears only LEFT.
-                (*ss).ship_input_state &= (!(LEFT as i32) | RIGHT as i32) as u8;
-                (*ss).ship_input_state |= THRUST as u8;
+                cx.ship_state_mut(ss).input &= (!(LEFT as i32) | RIGHT as i32) as u8;
+                cx.ship_state_mut(ss).input |= THRUST as u8;
             }
-            (*ss).ship_input_state |= WEAPON as u8;
-        } else if (*ss).special_counter == 0
-            && (GlobData.Game_state.CurrentActivity as u8 != IN_ENCOUNTER as u8
-                || crate::state::ffi::rust_get_game_state(c"PROBE_ILWRATH_ENCOUNTER".as_ptr()) == 0)
+            cx.ship_state_mut(ss).input |= WEAPON as u8;
+        } else if cx.ship_state(ss).special_counter == 0
+            && (cx.world.activity() as u8 != IN_ENCOUNTER as u8
+                || cx.story_state(StoryKey::ProbeIlwrathEncounter) == 0)
         {
-            (*ss).ship_input_state &= !(SPECIAL as u8);
-            if !object_cloaked(ship) && (*ss).ship_input_state & WEAPON as u8 == 0 {
-                (*ss).ship_input_state |= SPECIAL as u8;
+            cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
+            if !object_cloaked(cx, ship) && cx.ship_state(ss).input & WEAPON as u8 == 0 {
+                cx.ship_state_mut(ss).input |= SPECIAL as u8;
             }
         }
     }
 
-    pub(crate) unsafe extern "C" fn initialize_flame(
-        ship: *mut ELEMENT,
-        flames: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
+    pub(crate) fn initialize_flame(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
             flags: IGNORE_SIMILAR as u16,
-            sender: (*ship).playerNr,
+            sender: origin.player,
             pixoffs: ILWRATH_OFFSET,
             speed: MISSILE_SPEED,
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
-            face: (*ss).ShipFacing,
+            face: cx.ship_state(ss).facing,
             index: 0,
             life: MISSILE_LIFE,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast::<FRAME>(),
-            preprocess_func: Some(ElementHook::Legacy(flame_preprocess)),
+            farray: cx.ship_frame_set(ss, 1),
+            preprocess: Some(flame_preprocess),
             blast_offs: MISSILE_OFFSET,
         };
-        *flames = initialize_missile(&mut block);
-
-        if !(*flames).is_null() {
-            let flame = element(*flames);
-            let mut dx: SIZE = 0;
-            let mut dy: SIZE = 0;
-            GetCurrentVelocityComponents(&raw mut (*ship).velocity, &mut dx, &mut dy);
-            DeltaVelocityComponents(&raw mut (*flame).velocity, dx, dy);
+        let missile = cx.missile(&mut block);
+        if let Some(flame) = missile {
+            let (vx, vy) = origin.velocity.get_current_components();
+            let dx = vx as SIZE;
+            let dy = vy as SIZE;
+            cx.element_mut(flame)
+                .velocity
+                .delta_components(i32::from(dx), i32::from(dy));
             // VELOCITY_TO_WORLD (v) is `(v) >> VELOCITY_SHIFT` on a promoted int.
-            (*flame).current.location.x = (i32::from((*flame).current.location.x)
-                - (i32::from(dx) >> VELOCITY_SHIFT))
-                as COORD;
-            (*flame).current.location.y = (i32::from((*flame).current.location.y)
-                - (i32::from(dy) >> VELOCITY_SHIFT))
-                as COORD;
+            cx.element_mut(flame).current.location.x =
+                (i32::from(cx.element(flame).current.location.x)
+                    - (i32::from(dx) >> VELOCITY_SHIFT)) as COORD;
+            cx.element_mut(flame).current.location.y =
+                (i32::from(cx.element(flame).current.location.y)
+                    - (i32::from(dy) >> VELOCITY_SHIFT)) as COORD;
 
-            (*flame).collision_func = Some(CollisionHook::Legacy(flame_collision));
-            (*flame).__bindgen_anon_4.turn_wait = 0;
+            cx.element_mut(flame).collide = Some(CollisionHook::Native(flame_collision));
+            cx.element_mut(flame).turn = 0;
         }
 
-        1
+        vec![missile]
     }
 
     /// The weapon-discharge half of the decloak step: turn the ship toward
     /// where the target will be `LOOK_AHEAD` frames from now.
-    unsafe fn aim_flame_after_decloak(ship: *mut ELEMENT, ss: *mut STARSHIP) {
-        let mut facing = (*ss).ShipFacing;
-        if track_ship(ship, &mut facing) >= 0 {
-            let target = element((*ship).hTarget);
-            let mut v = (*target).velocity;
-            let (mut dx0, mut dy0, mut dx1, mut dy1): (SIZE, SIZE, SIZE, SIZE) = (0, 0, 0, 0);
-            GetNextVelocityComponents(&mut v, &mut dx0, &mut dy0, LOOK_AHEAD);
-            v = (*ship).velocity;
-            GetNextVelocityComponents(&mut v, &mut dx1, &mut dy1, LOOK_AHEAD);
-            dx0 = ((i32::from((*target).current.location.x) + i32::from(dx0))
-                - (i32::from((*ship).current.location.x) + i32::from(dx1)))
+    fn aim_flame_after_decloak(cx: &mut Cx<'_>, ship: ElementId, ss: ShipId) {
+        let mut facing = cx.ship_state(ss).facing;
+        if cx.track_ship(ship, &mut facing) >= 0 {
+            let target = cx
+                .target(ship)
+                .unwrap_or_else(|| panic!("tracked Ilwrath target"));
+            let mut v = cx.element(target).velocity;
+            let (x, y) = v.get_next_components(LOOK_AHEAD);
+            let mut dx0 = x as SIZE;
+            let mut dy0 = y as SIZE;
+            v = cx.element(ship).velocity;
+            let (x, y) = v.get_next_components(LOOK_AHEAD);
+            let dx1 = x as SIZE;
+            let dy1 = y as SIZE;
+            dx0 = ((i32::from(cx.element(target).current.location.x) + i32::from(dx0))
+                - (i32::from(cx.element(ship).current.location.x) + i32::from(dx1)))
                 as SIZE;
-            dy0 = ((i32::from((*target).current.location.y) + i32::from(dy0))
-                - (i32::from((*ship).current.location.y) + i32::from(dy1)))
+            dy0 = ((i32::from(cx.element(target).current.location.y) + i32::from(dy0))
+                - (i32::from(cx.element(ship).current.location.y) + i32::from(dy1)))
                 as SIZE;
 
-            (*ss).ShipFacing = normalize_facing(angle_to_facing(i32::from(ARCTAN(dx0, dy0))));
-            if (*ship).__bindgen_anon_4.turn_wait == 0 {
-                (*ship).__bindgen_anon_4.turn_wait += 1;
+            cx.ship_state_mut(ss).facing =
+                normalize_facing(angle_to_facing(i32::from(crate::math::arctan(dx0, dy0))));
+            if cx.element(ship).turn == 0 {
+                cx.element_mut(ship).turn += 1;
             }
-            image!(frame; (*ship).next.image.frame, SetAbsFrameIndex((*ship).next.image.frame, (*ss).ShipFacing));
+            cx.set_frame(
+                ship,
+                true,
+                cx.absolute_frame(cx.element(ship).next.image.frame, cx.ship_state(ss).facing),
+            );
         }
-        (*ship).hTarget = std::ptr::null_mut();
+        cx.set_target(ship, None);
     }
 
-    pub(crate) unsafe extern "C" fn ilwrath_preprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        let race = (*ss).RaceDescPtr;
+    pub(crate) fn ilwrath_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
         // Local copy: clearing SPECIAL below must not touch cur_status_flags.
-        let mut status_flags: STATUS_FLAGS = (*ss).cur_status_flags;
-        let prim = display_prim(ship);
-        if (*prim).Type == gfx_object_STAMPFILL_PRIM as u8 {
-            let color = (*prim).color;
+        let mut status_flags: STATUS_FLAGS = cx.ship_state(ss).status;
+        let prim = cx.primitive_style(ship);
+        if prim.kind == gfx_object_STAMPFILL_PRIM as u8 {
+            let color = prim.color;
             let weapon_discharge = (status_flags & WEAPON as u16 != 0)
-                && (*race).ship_info.energy_level >= WEAPON_ENERGY_COST;
+                && cx.race_stats(ss).ship_info.energy_level >= WEAPON_ENERGY_COST;
             if weapon_discharge
-                || ((*ss).special_counter == 0
+                || (cx.ship_state(ss).special_counter == 0
                     && ((status_flags & SPECIAL as u16 != 0) || !same_color(color, BLACK_COLOR)))
             {
                 if same_color(color, WHITE_COLOR) {
-                    (*prim).Type = gfx_object_STAMP_PRIM as u8;
+                    cx.primitive_style_mut(ship).kind = gfx_object_STAMP_PRIM as u8;
                 } else if let Some(next) = decloak_step(color) {
-                    (*prim).color = next;
+                    cx.primitive_style_mut(ship).color = next;
                 } else {
                     // CLOAKING_OFF
-                    ProcessSound(
-                        SetAbsStringTableIndex((*race).ship_data.ship_sounds, 2),
-                        ship,
-                    );
-                    (*prim).color = BLUE_DARK;
+                    cx.process_ship_sound(ss, 2, ship);
+                    cx.primitive_style_mut(ship).color = BLUE_DARK;
                     if weapon_discharge {
-                        aim_flame_after_decloak(ship, ss);
+                        aim_flame_after_decloak(cx, ship, ss);
                     }
                 }
 
-                (*ship).state_flags |= CHANGING as u16;
+                cx.element_mut(ship).flags |= CHANGING as u16;
                 status_flags &= !(SPECIAL as u16);
-                (*ss).special_counter = 0;
+                cx.ship_state_mut(ss).special_counter = 0;
             } else if !same_color(color, BLACK_COLOR) {
                 if same_color(color, BLUE_DARK) {
-                    (*prim).color = BLACK_COLOR;
-                    Untarget(ship);
+                    cx.primitive_style_mut(ship).color = BLACK_COLOR;
+                    cx.untarget(ship);
                 } else if same_color(color, BLUE_LIGHT) {
-                    (*prim).color = BLUE_DARK;
+                    cx.primitive_style_mut(ship).color = BLUE_DARK;
                 } else if same_color(color, CYAN_DARK) {
-                    (*prim).color = BLUE_LIGHT;
+                    cx.primitive_style_mut(ship).color = BLUE_LIGHT;
                 } else if same_color(color, CYAN_LIGHT) {
-                    (*prim).color = CYAN_DARK;
+                    cx.primitive_style_mut(ship).color = CYAN_DARK;
                 } else {
-                    (*prim).color = CYAN_LIGHT;
+                    cx.primitive_style_mut(ship).color = CYAN_LIGHT;
                 }
 
-                (*ship).state_flags |= CHANGING as u16;
+                cx.element_mut(ship).flags |= CHANGING as u16;
             }
         }
 
         if (status_flags & SPECIAL as u16 != 0)
-            && (*ss).special_counter == 0
-            && DeltaEnergy(ship, -(SPECIAL_ENERGY_COST as SIZE)) != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(ship, -(SPECIAL_ENERGY_COST as SIZE))
         {
-            (*prim).color = WHITE_COLOR;
-            (*prim).Type = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(ship).color = WHITE_COLOR;
+            cx.primitive_style_mut(ship).kind = gfx_object_STAMPFILL_PRIM as u8;
 
             // CLOAKING_ON
-            ProcessSound(
-                SetAbsStringTableIndex((*race).ship_data.ship_sounds, 1),
-                ship,
-            );
-            (*ss).special_counter = (*race).characteristics.special_wait;
+            cx.process_ship_sound(ss, 1, ship);
+            cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
 
-            (*ship).state_flags |= CHANGING as u16;
+            cx.element_mut(ship).flags |= CHANGING as u16;
         }
     }
 }

@@ -53,15 +53,13 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
         SPECIES_ID_PKUNK_ID => Some(&pkunk_native::engine::PKUNK),
         SPECIES_ID_SHOFIXTI_ID => Some(&shofixti_native::engine::SHOFIXTI),
         SPECIES_ID_UR_QUAN_PROBE_ID => Some(&probe_native::engine::PROBE),
+        SPECIES_ID_THRADDASH_ID => Some(&thraddash_native::engine::THRADDASH),
+        SPECIES_ID_ILWRATH_ID => Some(&ilwrath_native::engine::ILWRATH),
+        SPECIES_ID_MELNORME_ID => Some(&melnorme_native::engine::MELNORME),
+        SPECIES_ID_SIS_SHIP_ID => Some(&sis_native::engine::SIS),
         _ => None,
     }
 }
-
-#[cfg(not(test))]
-pub use {
-    melnorme_native::engine::init_melnorme, sis_native::engine::init_sis,
-    thraddash_native::engine::init_thraddash,
-};
 
 #[cfg(not(test))]
 pub use crate::ships::code_resources::engine::descriptor as legacy_descriptor;
@@ -83,9 +81,6 @@ pub use chenjesu_native::engine::init_chenjesu;
 
 #[cfg(not(test))]
 pub use chmmr_native::engine::init_chmmr;
-
-#[cfg(not(test))]
-pub use ilwrath_native::engine::init_ilwrath;
 
 #[cfg(not(test))]
 pub use umgah_native::engine::init_umgah;
