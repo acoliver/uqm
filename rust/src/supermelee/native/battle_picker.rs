@@ -54,6 +54,7 @@ pub mod live {
         flash::Flash_start(context.cast());
     }
 
+    use crate::engine::battle::{link_queue, ShipId};
     use crate::graphics::drawable_abi;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::teams::*;
@@ -65,26 +66,28 @@ pub mod live {
             .cast_mut()
             .cast()
     }
-    unsafe fn by_index(player: usize, mut index: u16, used: bool) -> HSTARSHIP {
-        let mut ship = (*player_queue(player)).head.cast::<STARSHIP>();
-        while !ship.is_null() {
+    unsafe fn by_index(player: usize, mut index: u16, used: bool) -> Option<ShipId> {
+        let queue = link_queue::ships(player);
+        let mut link = queue.head();
+        while let Some(id) = link {
+            let ship = queue.get(id);
             if used {
-                if (*ship).SpeciesID != 0 {
+                if ship.species != 0 {
                     if index == 0 {
-                        return ship.cast();
+                        return Some(queue.ship_id(id, player as u8));
                     }
                     index = index.wrapping_sub(1);
                 }
-            } else if (*ship).index == index {
-                return if (*ship).SpeciesID == 0 {
-                    ptr::null_mut()
+            } else if ship.index == index {
+                return if ship.species == 0 {
+                    None
                 } else {
-                    ship.cast()
+                    Some(queue.ship_id(id, player as u8))
                 };
             }
-            ship = (*ship).succ.cast();
+            link = queue.succ(id);
         }
-        ptr::null_mut()
+        None
     }
     unsafe fn changed(state: *mut GETMELEE_STATE, player: usize) {
         let s = &(*state).player[player];
@@ -115,11 +118,12 @@ pub mod live {
         } else {
             by_index(player as usize, choice, false)
         };
-        if ship.is_null() {
+        let Some(ship) = ship else {
             return false;
-        }
+        };
         s.choice = choice;
-        s.hBattleShip = ship;
+        let queue = link_queue::ships(player as usize);
+        s.hBattleShip = queue.raw(queue.link(ship));
         PlayMenuSound(1);
         if network {
             if let Some(net) = &(*state).net {
@@ -265,12 +269,16 @@ pub mod live {
     }
     unsafe fn value(frame: FRAME, player: usize) {
         let mut worth = 0u16;
-        let mut ship = (*player_queue(player)).head.cast::<STARSHIP>();
-        while !ship.is_null() {
-            if (*ship).SpeciesID != 0 {
-                worth = worth.wrapping_add((*ship).ship_cost as u16);
+        {
+            let queue = link_queue::ships(player);
+            let mut link = queue.head();
+            while let Some(id) = link {
+                let ship = queue.get(id);
+                if ship.species != 0 {
+                    worth = worth.wrapping_add(ship.cost as u16);
+                }
+                link = queue.succ(id);
             }
-            ship = (*ship).succ.cast();
         }
         let old = SetContext(OffScreenContext);
         drawable_abi::SetContextFGFrame(frame.cast());
@@ -380,7 +388,7 @@ pub mod live {
             t.pStr = text.as_ptr();
             SetContextForeGroundColor(rgb(4, 5, 31));
             font_DrawText(&mut t);
-            assert!((*player_queue(side)).head.is_null());
+            assert!(link_queue::ships(side).head().is_none());
             for index in 0..14 {
                 let ship = MeleeSetup_getShip(setup, side_i as usize, index);
                 if ship == 255 {
@@ -393,7 +401,9 @@ pub mod live {
                     continue;
                 }
                 let captain = NameCaptain(player_queue(side), (*master).SpeciesID);
-                let built = Build(player_queue(side), (*master).SpeciesID).cast::<STARSHIP>();
+                let built = link_queue::ships(side)
+                    .build((*master).SpeciesID)
+                    .unwrap_or_else(|| panic!("battle ship pool exhausted"));
                 let mut s = STAMP {
                     origin: POINT {
                         x: 4 + 18 * (index % 7) as i16,
@@ -402,15 +412,18 @@ pub mod live {
                     frame: (*master).ShipInfo.icons,
                 };
                 DrawStamp(&mut s);
-                (*built).index = index;
-                (*built).ship_cost = (*master).ShipInfo.ship_cost;
-                (*built).playerNr = side as i16;
-                (*built).captains_name_index = captain;
-                (*built).crew_level = 0;
-                (*built).max_crew = 0;
-                (*built).race_strings = ptr::null_mut();
-                (*built).icons = ptr::null_mut();
-                (*built).RaceDescPtr = ptr::null_mut();
+                let mut queue = link_queue::ships(side);
+                let mut ship = queue.get(built);
+                ship.index = index;
+                ship.cost = (*master).ShipInfo.ship_cost;
+                ship.player = side as i16;
+                ship.captain = captain;
+                ship.crew = 0;
+                ship.max_crew = 0;
+                ship.strings = 0;
+                ship.icons = 0;
+                queue.set(built, ship);
+                queue.clear_descriptor(built);
             }
         }
         SetContext(old);
@@ -418,21 +431,29 @@ pub mod live {
     /// # Safety
     /// The live battle ship and pick frame belong to the game thread.
     #[no_mangle]
-    pub unsafe extern "C" fn MeleeShipDeath(ship: *mut STARSHIP) {
-        (*ship).SpeciesID = 0;
-        let frame = SetAbsFrameIndex(PickMeleeFrame, (*ship).playerNr as u16);
+    pub unsafe extern "C" fn MeleeShipDeath(ship: *mut std::ffi::c_void) {
+        let ship = {
+            let id = link_queue::identify(ship as usize);
+            let mut queue = link_queue::ships(id.side as usize);
+            let id = queue.link(id);
+            let mut value = queue.get(id);
+            value.species = 0;
+            queue.set(id, value);
+            value
+        };
+        let frame = SetAbsFrameIndex(PickMeleeFrame, ship.player as u16);
         let old = SetContext(OffScreenContext);
         drawable_abi::SetContextFGFrame(frame.cast());
         let mut s = STAMP {
             origin: POINT {
-                x: 3 + 18 * ((*ship).index % 7) as i16,
-                y: 9 + 18 * ((*ship).index / 7) as i16,
+                x: 3 + 18 * (ship.index % 7) as i16,
+                y: 9 + 18 * (ship.index / 7) as i16,
             },
             frame: SetAbsFrameIndex(StatusFrame, 3),
         };
         DrawStamp(&mut s);
         SetContext(old);
-        value(frame, (*ship).playerNr as usize);
+        value(frame, ship.player as usize);
     }
 
     use crate::automation::input_ffi::nested_input;
@@ -471,7 +492,7 @@ pub mod live {
             }
         }
     }
-    unsafe fn get_ships(mask: u16, ships: *mut HSTARSHIP) -> u32 {
+    unsafe fn get_ships(mask: u16, ships: *mut *mut std::ffi::c_void) -> u32 {
         let mut state: GETMELEE_STATE = mem::zeroed();
         let (counters, net) = crate::app::bridge::battle(|b| (b.counters, b.network()));
         state.net = Some(net.clone());
@@ -539,7 +560,7 @@ pub mod live {
     /// # Safety
     /// Output has two slots and both battle fleets are initialized.
     #[no_mangle]
-    pub unsafe extern "C" fn GetInitialMeleeStarShips(ships: *mut HSTARSHIP) -> u32 {
+    pub unsafe extern "C" fn GetInitialMeleeStarShips(ships: *mut *mut std::ffi::c_void) -> u32 {
         for player in 0..2 {
             value(SetAbsFrameIndex(PickMeleeFrame, player as u16), player);
             draw(player);
@@ -551,7 +572,10 @@ pub mod live {
     /// # Safety
     /// Output has one slot and the selected player's battle fleet is live.
     #[no_mangle]
-    pub unsafe extern "C" fn GetNextMeleeStarShip(player: u16, result: *mut HSTARSHIP) -> u32 {
+    pub unsafe extern "C" fn GetNextMeleeStarShip(
+        player: u16,
+        result: *mut *mut std::ffi::c_void,
+    ) -> u32 {
         draw(player as usize);
         let mut ships = [ptr::null_mut(); 2];
         let ok = get_ships(1 << player, ships.as_mut_ptr());

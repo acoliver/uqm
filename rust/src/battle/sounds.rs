@@ -1,6 +1,7 @@
 //! Battle sound queue, effect-channel reuse and positional-object tracking.
 
-use crate::ships::native::abi::{ELEMENT, SOUND};
+use crate::engine::battle::ElementId;
+use crate::ships::native::abi::SOUND;
 use std::ptr;
 
 use crate::engine::battle::record::{Channels, SoundQueue};
@@ -10,19 +11,26 @@ impl SoundQueue {
         Self {
             count: 0,
             sounds: [ptr::null_mut(); 8],
-            objects: [ptr::null_mut(); 8],
+            objects: [None; 8],
         }
     }
 
-    pub(crate) fn push(&mut self, sound: SOUND, object: *mut ELEMENT) {
+    pub(crate) fn push(&mut self, sound: SOUND, object: Option<ElementId>) {
         if sound as usize == usize::MAX {
             self.sounds.fill(ptr::null_mut());
-            self.objects.fill(ptr::null_mut());
+            self.objects.fill(None);
             self.count = 8;
         } else if self.count < 8 {
             self.sounds[self.count] = sound;
             self.objects[self.count] = object;
             self.count += 1;
+        }
+    }
+    pub(crate) fn remove_object(&mut self, object: Option<ElementId>) {
+        for entry in &mut self.objects[..self.count] {
+            if *entry == object {
+                *entry = None;
+            }
         }
     }
 }
@@ -59,15 +67,18 @@ use crate::sound::heart_ffi::{
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
+    pub use crate::battle::context_access::sound_legacy::{
+        CalcSoundPosition, FlushSounds, PlaySound, ProcessSound, RemoveSoundsForObject,
+        UpdateSoundPositions,
+    };
     use crate::ships::native::abi::*;
 
     /// # Safety
     /// Called on the game thread with a live sound and optional live element.
-    #[no_mangle]
-    pub unsafe extern "C" fn PlaySound(
+    pub(crate) unsafe fn play_sound(
         sound: SOUND,
         pos: SoundPosition,
-        object: *mut ELEMENT,
+        object: Option<ElementId>,
         priority: u8,
     ) {
         if sound.is_null() {
@@ -81,7 +92,7 @@ pub(crate) mod engine {
             sound,
             (channel + MIN_FX_CHANNEL as usize) as u16,
             pos,
-            object.cast(),
+            encode_object(object) as *mut std::ffi::c_void,
             priority,
         );
     }
@@ -101,8 +112,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Called on the game thread; object remains live until removed or flushed.
-    #[no_mangle]
-    pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
+    pub(crate) unsafe fn process_sound(sound: SOUND, object: Option<ElementId>) {
         // SAFETY: the published game thread exclusively owns this sound queue.
         unsafe {
             Kernel::current().sounds.push(sound, object);
@@ -110,28 +120,24 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// A non-null object must have a live DisplayArray primitive.
-    #[no_mangle]
-    pub unsafe extern "C" fn CalcSoundPosition(object: *mut ELEMENT) -> SoundPosition {
-        if object.is_null() {
+    /// Called while the game-thread battle context is published.
+    pub(crate) fn position(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        object: Option<ElementId>,
+    ) -> SoundPosition {
+        let Some(id) = object.filter(|id| cx.elements().contains(*id)) else {
             return SoundPosition {
                 positional: 0,
                 x: 0,
                 y: 0,
             };
-        }
-        let prim = &*(&raw const DisplayArray)
-            .cast::<PRIMITIVE>()
-            .add((*object).PrimIndex as usize);
-        let point = if prim.Type == gfx_object_LINE_PRIM as u8 {
-            prim.Object.Line.first
-        } else {
-            prim.Object.Point
         };
+        let point = cx.sound_point(id);
+        let (width, height) = cx.screen_dimensions();
         SoundPosition {
             positional: 1,
-            x: i32::from(point.x) - ((ScreenWidth - 64) >> 1),
-            y: i32::from(point.y) - (ScreenHeight >> 1),
+            x: i32::from(point.x) - ((width - 64) >> 1),
+            y: i32::from(point.y) - (height >> 1),
         }
     }
 
@@ -139,20 +145,23 @@ pub(crate) mod engine {
     /// Must run on the game thread like the positional variant.
     #[no_mangle]
     pub unsafe extern "C" fn NotPositional() -> SoundPosition {
-        CalcSoundPosition(ptr::null_mut())
+        SoundPosition {
+            positional: 0,
+            x: 0,
+            y: 0,
+        }
     }
 
     /// # Safety
     /// Audio positional objects must still be live game elements.
-    #[no_mangle]
-    pub unsafe extern "C" fn UpdateSoundPositions() {
+    pub(crate) unsafe fn update_positions(cx: &mut crate::engine::battle::Cx<'_>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
             if ChannelPlaying(i) == 0 {
                 continue;
             }
-            let object = get_positional_object(i) as *mut ELEMENT;
-            if !object.is_null() {
-                let pos = CalcSoundPosition(object);
+            let object = decode_object(get_positional_object(i));
+            if object.is_some() {
+                let pos = position(cx, object);
                 if pos.positional != 0 {
                     update_sound_position(
                         i,
@@ -162,6 +171,8 @@ pub(crate) mod engine {
                             y: pos.y,
                         },
                     );
+                } else {
+                    set_positional_object(i, 0);
                 }
             }
         }
@@ -169,15 +180,14 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Called on the game thread while queued elements and sounds remain live.
-    #[no_mangle]
-    pub unsafe extern "C" fn FlushSounds() {
+    pub(crate) unsafe fn flush_sounds(cx: &mut crate::engine::battle::Cx<'_>) {
         let mut i = 0;
         while Kernel::current().sounds.count > 0 {
             let sound = Kernel::current().sounds.sounds[i];
             let object = Kernel::current().sounds.objects[i];
-            PlaySound(
+            play_sound(
                 sound,
-                CalcSoundPosition(object),
+                position(cx, object),
                 object,
                 GAME_SOUND_PRIORITY as u8,
             );
@@ -188,28 +198,49 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Called on the game thread before releasing an element's storage.
-    #[no_mangle]
-    pub unsafe extern "C" fn RemoveSoundsForObject(object: *mut ELEMENT) {
+    pub(crate) unsafe fn remove_sounds(object: Option<ElementId>) {
         for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if get_positional_object(i) == object as usize {
+            if decode_object(get_positional_object(i)) == object {
                 set_positional_object(i, 0);
             }
         }
-        let queue = &mut Kernel::current().sounds;
-        for entry in &mut queue.objects[..queue.count] {
-            if *entry == object {
-                *entry = ptr::null_mut();
-            }
-        }
+        Kernel::current().sounds.remove_object(object);
     }
 }
 
 #[cfg(not(test))]
 pub use engine::*;
 
+fn encode_object(object: Option<ElementId>) -> usize {
+    object.map_or(0, |id| {
+        (((u64::from(id.gen) << 8) | u64::from(id.slot)) + 1) as usize
+    })
+}
+fn decode_object(token: usize) -> Option<ElementId> {
+    token.checked_sub(1).map(|value| ElementId {
+        slot: value as u8,
+        gen: (value >> 8) as u32,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn positional_tokens_keep_generation_and_slot_without_pointer_identity() {
+        assert_eq!(decode_object(encode_object(None)), None);
+        for id in [
+            ElementId { slot: 0, gen: 0 },
+            ElementId {
+                slot: 255,
+                gen: u32::MAX,
+            },
+        ] {
+            assert_eq!(decode_object(encode_object(Some(id))), Some(id));
+            assert_ne!(encode_object(Some(id)), 0);
+        }
+    }
 
     #[test]
     fn channel_reuse_precedes_idle_search_and_lru_eviction() {
@@ -232,14 +263,33 @@ mod tests {
     fn queue_preserves_order_caps_at_eight_and_sentinel_suppresses_sounds() {
         let mut queue = SoundQueue::new();
         for i in 1..=10 {
-            queue.push(i as SOUND, i as *mut ELEMENT);
+            queue.push(
+                i as SOUND,
+                Some(ElementId {
+                    slot: i as u8,
+                    gen: 0,
+                }),
+            );
         }
         assert_eq!(queue.count, 8);
         assert_eq!(queue.sounds[7] as usize, 8);
-        queue.push(usize::MAX as SOUND, ptr::null_mut());
-        queue.push(12 as SOUND, ptr::null_mut());
+        queue.push(usize::MAX as SOUND, None);
+        queue.push(12 as SOUND, None);
         assert_eq!(queue.count, 8);
         assert!(queue.sounds.iter().all(|p| p.is_null()));
-        assert!(queue.objects.iter().all(|p| p.is_null()));
+        assert!(queue.objects.iter().all(Option::is_none));
+    }
+    #[test]
+    fn freeing_a_source_detaches_only_its_generation_without_removing_sounds() {
+        let old = ElementId { slot: 2, gen: 7 };
+        let replacement = ElementId { slot: 2, gen: 8 };
+        let mut queue = SoundQueue::new();
+        queue.push(1 as SOUND, Some(old));
+        queue.push(2 as SOUND, Some(replacement));
+        queue.push(3 as SOUND, None);
+        queue.remove_object(Some(old));
+        assert_eq!(queue.count, 3);
+        assert_eq!(queue.sounds.map(|s| s as usize), [1, 2, 3, 0, 0, 0, 0, 0]);
+        assert_eq!(&queue.objects[..3], &[None, Some(replacement), None]);
     }
 }

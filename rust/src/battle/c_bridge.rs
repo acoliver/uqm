@@ -86,10 +86,10 @@ pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
 pub use crate::battle::sounds::engine::ProcessSound;
 
 #[cfg(not(test))]
-pub use crate::battle::sounds::engine::FlushSounds;
+pub use crate::battle::sounds::FlushSounds;
 
 #[cfg(not(test))]
-pub use crate::battle::sounds::engine::UpdateSoundPositions;
+pub use crate::battle::sounds::UpdateSoundPositions;
 
 #[cfg(not(test))]
 pub use crate::battle::sounds::engine::RemoveSoundsForObject;

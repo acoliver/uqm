@@ -11,16 +11,28 @@ fn matches_race(stored: BYTE, requested: COUNT) -> bool {
     COUNT::from(stored) == requested
 }
 
-unsafe fn ship_from_index(queue: *const QUEUE, mut index: COUNT) -> HLINK {
-    let mut handle = (*queue).head;
-    while index > 0 && !handle.is_null() {
-        handle = (*handle.cast::<LINK>()).succ;
-        index -= 1;
+unsafe fn ship_from_index(queue: *mut QUEUE, mut index: COUNT) -> HLINK {
+    // SAFETY: the caller owns the initialized queue and its live links for this operation.
+    unsafe {
+        if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
+            let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
+            let mut link = ships.head();
+            while let Some(id) = link.filter(|_| index > 0) {
+                link = ships.succ(id);
+                index -= 1;
+            }
+            return link.map_or(std::ptr::null_mut(), |id| ships.raw(id));
+        }
+        let mut handle = (*queue).head;
+        while index > 0 && !handle.is_null() {
+            handle = (*handle.cast::<LINK>()).succ;
+            index -= 1;
+        }
+        handle
     }
-    handle
 }
 
-unsafe fn escort_window(queue: *const QUEUE, window: &mut BYTE) -> HLINK {
+unsafe fn escort_window(queue: *mut QUEUE, window: &mut BYTE) -> HLINK {
     loop {
         let old = ship_from_index(queue, COUNT::from(*window));
         *window = window.wrapping_add(1);
@@ -42,10 +54,20 @@ pub(crate) mod engine {
     /// Queue must be initialized and use STARSHIP or SHIP_FRAGMENT links.
     #[no_mangle]
     pub unsafe extern "C" fn Build(queue: *mut QUEUE, species: SPECIES_ID) -> HLINK {
-        if queue.is_null() {
-            return ptr::null_mut();
+        // SAFETY: the caller owns the initialized queue and its live links for this operation.
+        unsafe {
+            if queue.is_null() {
+                return ptr::null_mut();
+            }
+            if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
+                let mut ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
+                ships
+                    .build(species)
+                    .map_or(ptr::null_mut(), |id| ships.raw(id))
+            } else {
+                crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
+            }
         }
-        crate::ships::ffi::build_ship(&mut *queue.cast(), species as i32)
     }
 
     /// # Safety
@@ -59,43 +81,76 @@ pub(crate) mod engine {
     /// Queue and handle must refer to the same live linked record.
     #[no_mangle]
     pub unsafe extern "C" fn GetIndexFromStarShip(queue: *mut QUEUE, mut handle: HLINK) -> COUNT {
-        let mut index: COUNT = 0;
-        while handle != (*queue).head {
-            let link = handle.cast::<LINK>();
-            handle = (*link).pred;
-            index = index.wrapping_add(1);
+        // SAFETY: the caller owns the initialized queue and its live links for this operation.
+        unsafe {
+            let mut index: COUNT = 0;
+            if usize::from((*queue).object_size) == crate::engine::battle::link_queue::ship_size() {
+                let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
+                let mut link = ships.id(handle);
+                while link != ships.head() {
+                    link = ships.pred(link.unwrap_or_else(|| panic!("ship is not linked")));
+                    index = index.wrapping_add(1);
+                }
+                return index;
+            }
+            while handle != (*queue).head {
+                let link = handle.cast::<LINK>();
+                handle = (*link).pred;
+                index = index.wrapping_add(1);
+            }
+            index
         }
-        index
     }
 
     /// # Safety
     /// Queue must be initialized and links must contain SHIP_BASE records.
     #[no_mangle]
     pub unsafe extern "C" fn NameCaptain(queue: *mut QUEUE, species: SPECIES_ID) -> BYTE {
-        assert!(
-            matches!((*queue).object_size as usize, size if size == std::mem::size_of::<STARSHIP>() || size == std::mem::size_of::<SHIP_FRAGMENT>())
-        );
-        loop {
-            let name = (((TFB_Random() as COUNT) & (NUM_CAPTAINS_NAMES - 1) as COUNT)
-                + NAME_OFFSET as COUNT) as BYTE;
-            let mut handle = (*queue).head;
-            let mut matched = false;
-            while !handle.is_null() {
-                let ship = handle.cast::<SHIP_BASE>();
-                let next = (*ship).succ;
-                let test_name = if (*ship).SpeciesID == species {
-                    (*ship).captains_name_index
+        // SAFETY: the caller owns the initialized queue and its live links for this operation.
+        unsafe {
+            assert!(
+                matches!((*queue).object_size as usize, size if size == crate::engine::battle::link_queue::ship_size() || size == std::mem::size_of::<SHIP_FRAGMENT>())
+            );
+            loop {
+                let name = (((TFB_Random() as COUNT) & (NUM_CAPTAINS_NAMES - 1) as COUNT)
+                    + NAME_OFFSET as COUNT) as BYTE;
+                let matched = if usize::from((*queue).object_size)
+                    == crate::engine::battle::link_queue::ship_size()
+                {
+                    let ships = crate::engine::battle::link_queue::LinkQueue::new(&mut *queue);
+                    let mut link = ships.head();
+                    let mut found = false;
+                    while let Some(id) = link {
+                        let ship = ships.get(id);
+                        if ship.species == species && ship.captain == name {
+                            found = true;
+                            break;
+                        }
+                        link = ships.succ(id);
+                    }
+                    found
                 } else {
-                    BYTE::MAX
+                    let mut handle = (*queue).head;
+                    let mut matched = false;
+                    while !handle.is_null() {
+                        let ship = handle.cast::<SHIP_BASE>();
+                        let next = (*ship).succ;
+                        let test_name = if (*ship).SpeciesID == species {
+                            (*ship).captains_name_index
+                        } else {
+                            BYTE::MAX
+                        };
+                        if test_name == name {
+                            matched = true;
+                            break;
+                        }
+                        handle = next;
+                    }
+                    matched
                 };
-                if test_name == name {
-                    matched = true;
-                    break;
+                if !matched {
+                    return name;
                 }
-                handle = next;
-            }
-            if !matched {
-                return name;
             }
         }
     }
@@ -410,14 +465,17 @@ mod tests {
             second.pred = (&raw mut first).cast();
             queue.head = (&raw mut first).cast();
             let mut window = 0;
-            assert_eq!(escort_window(&queue, &mut window), (&raw mut second).cast());
+            assert_eq!(
+                escort_window(&raw mut queue, &mut window),
+                (&raw mut second).cast()
+            );
             assert_eq!(window - 1, 1);
-            assert_eq!(ship_from_index(&queue, 0), (&raw mut first).cast());
-            assert_eq!(ship_from_index(&queue, 1), (&raw mut second).cast());
-            assert_eq!(ship_from_index(&queue, 2), ptr::null_mut());
+            assert_eq!(ship_from_index(&raw mut queue, 0), (&raw mut first).cast());
+            assert_eq!(ship_from_index(&raw mut queue, 1), (&raw mut second).cast());
+            assert_eq!(ship_from_index(&raw mut queue, 2), ptr::null_mut());
             queue.head = ptr::null_mut();
             window = 0;
-            assert!(escort_window(&queue, &mut window).is_null());
+            assert!(escort_window(&raw mut queue, &mut window).is_null());
             assert_eq!(window - 1, 0);
         }
     }

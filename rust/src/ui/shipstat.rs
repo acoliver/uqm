@@ -1,7 +1,9 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
+pub use crate::battle::context_access::reader_legacy::InitShipStatus;
 use crate::engine::battle::record::Kernel;
+use crate::engine::battle::{link_queue, ShipId};
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -115,20 +117,23 @@ pub unsafe extern "C" fn OutlineShipStatus(y: COORD) {
 
 /// # Safety
 /// SIPtr must point to writable ship info. Optional pointers must be null or point to valid game objects.
-#[no_mangle]
-pub unsafe extern "C" fn InitShipStatus(
+pub(crate) unsafe fn init_ship_status(
     siptr: *mut SHIP_INFO,
-    starship: *mut STARSHIP,
+    starship: Option<ShipId>,
     clip_rect: *mut RECT,
 ) {
+    let starship = starship.map(|id| {
+        let ships = link_queue::ships(id.side as usize);
+        ships.get(ships.link(id))
+    });
     let mut r: RECT = mem::zeroed();
     let mut y: COORD = 0;
     let mut stamp: STAMP = mem::zeroed();
     let mut old_clip: RECT = mem::zeroed();
     let mut old_origin = POINT { x: 0, y: 0 };
-    if !starship.is_null() {
-        assert!((*starship).playerNr >= 0);
-        y = Kernel::current().status_offsets[(*starship).playerNr as usize];
+    if let Some(ship) = starship {
+        assert!(ship.player >= 0);
+        y = Kernel::current().status_offsets[ship.player as usize];
     }
     let old_context = SetContext(StatusContext);
     if !clip_rect.is_null() {
@@ -197,25 +202,22 @@ pub unsafe extern "C" fn InitShipStatus(
     r.corner.y = y - r.extent.height + GAUGE_YOFFS + 1;
     DrawFilledRectangle(&mut r);
 
-    if starship.is_null() || (*starship).captains_name_index != 0 {
+    if starship.is_none_or(|ship| ship.captain != 0) {
         DrawCrewFuelString(y, 0);
         let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
         draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
         let old_font = SetContextFont(TinyFont);
         let mut buf = [0u8; 30];
-        let (name, count) = if starship.is_null() {
+        let (name, count) = if let Some(ship) = starship {
+            let name = SetAbsStringTableIndex((*siptr).race_strings, ship.captain as COUNT);
+            (GetStringAddress(name).cast(), GetStringLength(name))
+        } else {
             libc::sprintf(
                 buf.as_mut_ptr().cast(),
                 c"%d".as_ptr(),
                 (*siptr).ship_cost as libc::c_int,
             );
             (buf.as_mut_ptr().cast(), !0)
-        } else {
-            let name = SetAbsStringTableIndex(
-                (*siptr).race_strings,
-                (*starship).captains_name_index as COUNT,
-            );
-            (GetStringAddress(name).cast(), GetStringLength(name))
         };
         let mut text: TEXT = mem::zeroed();
         text.pStr = name;
@@ -226,7 +228,11 @@ pub unsafe extern "C" fn InitShipStatus(
         SetContextForeGroundColor(rgb15(0, 0, 0));
         font_DrawText(&mut text);
         SetContextFont(old_font);
-    } else if (*starship).playerNr == RPG_PLAYER_NUM {
+    } else if starship
+        .unwrap_or_else(|| panic!("missing checked battle value"))
+        .player
+        == RPG_PLAYER_NUM
+    {
         DrawCrewFuelString(y, 0);
         draw_ship_name_string(
             std::ptr::addr_of_mut!(crate::navigation::globals::GlobData.SIS_state.ShipName).cast(),

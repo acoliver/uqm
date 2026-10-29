@@ -1,6 +1,6 @@
 //! Game and resource operations wired to the explicit battle context.
 #[cfg(not(test))]
-use crate::engine::battle::{Cx, ElementId, ShipId};
+use crate::engine::battle::{Cx, ElementId, ShipId, Subject};
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
@@ -11,29 +11,12 @@ impl Cx<'_> {
         _ship: ShipId,
         concerns: &mut crate::engine::battle::Concerns,
     ) {
-        use crate::battle::cyborg_native::ship_intelligence;
-        let mut subject = self.encode_subject(&concerns.subject);
-        let mut raw = concerns.objects.map(|c| EVALUATE_DESC {
-            ObjectPtr: c
-                .object
-                .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast()),
-            facing: c.facing,
-            which_turn: c.which_turn,
-            MoveState: c.movement,
-        });
-        // SAFETY: the subject is a value projection and the object ids were checked.
-        unsafe {
-            crate::app::bridge::publish(self, || {
-                ship_intelligence(&mut subject, raw.as_mut_ptr(), concerns.count)
-            });
-            concerns.subject = self.legacy_subject(&subject);
-        }
-        concerns.objects = raw.map(|c| crate::engine::battle::Concern {
-            object: self.elements().id(c.ObjectPtr.cast()),
-            facing: c.facing,
-            which_turn: c.which_turn,
-            movement: c.MoveState,
-        });
+        crate::battle::cyborg_native::intelligence(
+            self,
+            &mut concerns.subject,
+            &mut concerns.objects,
+            concerns.count,
+        );
     }
 
     pub fn track_ship(&mut self, id: ElementId, facing: &mut u16) -> i16 {
@@ -226,7 +209,6 @@ impl Cx<'_> {
 }
 
 #[cfg(not(test))]
-use crate::collections::queue::HLink;
 #[cfg(not(test))]
 use crate::engine::battle::record::{ELEMENT, EVALUATE_DESC};
 #[cfg(not(test))]
@@ -317,90 +299,74 @@ impl Cx<'_> {
         }
     }
 
-    /// # Safety
-    /// The owner, projected element and six weapon output slots must be live.
-    pub unsafe fn invoke_weapon(parent: usize, element: *mut ELEMENT, weapons: *mut HLink) -> u16 {
-        // SAFETY: this raw legacy entry retains no record borrow across callbacks.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let desc = (*(parent as *mut STARSHIP)).RaceDescPtr;
-                if (*desc).race.is_some() {
-                    let ship = cx.ship_id(parent);
-                    let origin = cx.legacy_subject(&*element);
-                    let spawned = cx.spawn_weapons(ship, origin);
-                    assert!(spawned.len() <= 6, "race produced too many weapons");
-                    for (i, id) in spawned.iter().enumerate() {
-                        *weapons.add(i) =
-                            id.map_or(std::ptr::null_mut(), |id| cx.elements().raw(id));
-                    }
-                    spawned.len() as u16
-                } else {
-                    let callback = (*desc)
-                        .init_weapon_func
-                        .unwrap_or_else(|| panic!("{}", "ship weapon initializer"));
-                    crate::battle::process_native::dispatch::invoke_legacy(
-                        cx,
-                        callback as usize,
-                        parent,
-                        || callback(element, weapons),
-                    )
-                }
-            })
-        }
+    pub(crate) fn race_intelligence(&mut self, ship: ShipId, concerns: &mut Concerns) {
+        self.race_intelligence_with_junk(
+            ship,
+            concerns,
+            Concern {
+                object: None,
+                facing: 0,
+                which_turn: u16::MAX,
+                movement: 0,
+            },
+        );
     }
 
-    /// # Safety
-    /// The owner, projected element and four concern records must be live.
-    pub unsafe fn invoke_intelligence(
-        parent: usize,
-        element: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: u16,
+    pub(crate) fn race_intelligence_with_junk(
+        &mut self,
+        ship: ShipId,
+        concerns: &mut Concerns,
+        junk: Concern,
     ) {
-        // SAFETY: raw values are copied before any callback can re-enter the context.
-        unsafe {
-            crate::app::bridge::enter(|cx| {
-                let desc = (*(parent as *mut STARSHIP)).RaceDescPtr;
-                if (*desc).race.is_some() {
-                    let ship = cx.ship_id(parent);
-                    let objects = std::array::from_fn(|i| {
-                        let c = *concerns.add(i);
-                        Concern {
-                            object: cx.elements().id(c.ObjectPtr.cast()),
-                            facing: c.facing,
-                            which_turn: c.which_turn,
-                            movement: c.MoveState,
-                        }
-                    });
-                    let mut native = Concerns {
-                        objects,
-                        subject: cx.legacy_subject(&*element),
-                        count,
-                    };
-                    cx.race_intelligence(ship, &mut native);
-                    for (i, c) in native.objects.into_iter().enumerate() {
-                        let output = concerns.add(i);
-                        (*output).ObjectPtr = c
-                            .object
-                            .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast());
-                        (*output).facing = c.facing;
-                        (*output).which_turn = c.which_turn;
-                        (*output).MoveState = c.movement;
-                    }
-                    *element = cx.encode_subject(&native.subject);
-                } else {
-                    let callback = (*desc)
-                        .cyborg_control
-                        .intelligence_func
-                        .unwrap_or_else(|| panic!("{}", "ship intelligence"));
-                    crate::battle::process_native::dispatch::invoke_legacy(
-                        cx,
-                        callback as usize,
-                        parent,
-                        || callback(element, concerns, count),
-                    );
+        let parent = self.ship_pointer(ship) as usize;
+        if let Some(race) = self.desc(ship).race {
+            crate::battle::process_native::dispatch::invoke(
+                race.intelligence as usize,
+                parent,
+                || (race.intelligence)(self, ship, concerns),
+            );
+        } else {
+            let callback = self
+                .desc(ship)
+                .cyborg_control
+                .intelligence_func
+                .unwrap_or_else(|| panic!("ship intelligence"));
+            let mut subject = self.encode_subject(&concerns.subject);
+            // Slylandro's legacy callback reads slot four and can pass count=5 back into the AI.
+            let mut raw = [
+                concerns.objects[0],
+                concerns.objects[1],
+                concerns.objects[2],
+                concerns.objects[3],
+                junk,
+            ]
+            .map(|c| EVALUATE_DESC {
+                ObjectPtr: c
+                    .object
+                    .map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast()),
+                facing: c.facing,
+                which_turn: c.which_turn,
+                MoveState: c.movement,
+            });
+            // SAFETY: A2 retains the subject and five initialized concern slots through the callback.
+            unsafe {
+                crate::battle::process_native::dispatch::invoke_legacy(
+                    self,
+                    callback as usize,
+                    parent,
+                    || callback(&mut subject, raw.as_mut_ptr(), concerns.count),
+                );
+                concerns.subject = self.legacy_subject(&subject);
+            }
+            concerns.objects = std::array::from_fn(|i| {
+                let c = raw[i];
+                Concern {
+                    object: self.elements().id(c.ObjectPtr.cast()),
+                    facing: c.facing,
+                    which_turn: c.which_turn,
+                    movement: c.MoveState,
                 }
-            })
+            });
         }
     }
 }
@@ -513,7 +479,7 @@ mod tactrans_native_access {
             let pointer = self.elements().raw(ship).cast();
             // SAFETY: the checked dying ship retains its owner and resources.
             unsafe {
-                StartShipExplosion(pointer, play_sound);
+                crate::app::bridge::publish(self, || StartShipExplosion(pointer, play_sound));
             }
         }
         pub(crate) fn select_winner(&mut self, dead: ElementId) {
@@ -534,7 +500,7 @@ mod tactrans_native_access {
                 let pointer = self.ship(owner) as *const STARSHIP as *mut STARSHIP;
                 // SAFETY: the checked owner remains live while updating melee status.
                 unsafe {
-                    MeleeShipDeath(pointer);
+                    MeleeShipDeath(pointer.cast());
                 }
             }
         }
@@ -600,11 +566,10 @@ mod sounds_access {
             sound: usize,
             source: Option<crate::engine::battle::ElementId>,
         ) {
-            let pointer = source.map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast());
             // SAFETY: this context owns the sound queue and validates its source id.
             unsafe {
                 let queue = &raw mut (*self.kernel()).sounds;
-                (*queue).push(sound as SOUND, pointer);
+                (*queue).push(sound as SOUND, source);
             }
         }
     }
@@ -719,9 +684,10 @@ impl Cx<'_> {
     pub fn unlink(&mut self, id: ElementId) {
         assert!(self.elements().linked(id), "element is not linked");
         let handle = self.elements().raw(id);
+        use crate::battle::process_native::RemoveElement;
         // SAFETY: the checked live element is currently in the display queue.
         unsafe {
-            crate::battle::process_native::RemoveElement(handle);
+            crate::app::bridge::publish(self, || RemoveElement(handle));
         }
     }
 }
@@ -808,3 +774,41 @@ impl crate::engine::battle::Cx<'_> {
 
 #[path = "race_access.rs"]
 mod race_access;
+#[cfg(not(test))]
+#[allow(non_snake_case)]
+pub(crate) mod ai_legacy;
+#[cfg(not(test))]
+#[allow(non_snake_case)]
+pub(crate) mod reader_legacy;
+#[cfg(not(test))]
+#[allow(non_snake_case)]
+pub(crate) mod sound_legacy;
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn subject_cloaked(&self, subject: &Subject) -> bool {
+        let style = self.subject_style(subject);
+        u32::from(style.kind) >= crate::ships::native::abi::gfx_object_NUM_PRIMS
+            || (u32::from(style.kind) == crate::ships::native::abi::gfx_object_STAMPFILL_PRIM
+                && style.color.r == 0
+                && style.color.g == 0
+                && style.color.b == 0
+                && style.color.a == 255)
+    }
+}
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
+        let index = usize::from(self.elements()[id].PrimIndex);
+        // SAFETY: the checked element retains its display primitive for this read.
+        let primitive = unsafe { &*crate::engine::battle::record::primitive_slot(index).as_ptr() };
+        // SAFETY: the checked element owns the primitive; its type selects the union variant.
+        unsafe {
+            if primitive.Type == crate::ships::native::abi::gfx_object_LINE_PRIM as u8 {
+                primitive.Object.Line.first
+            } else {
+                primitive.Object.Point
+            }
+        }
+    }
+}

@@ -2,6 +2,7 @@ use super::abi::*;
 use super::checkbuf::*;
 use super::crc::*;
 use crate::battle::netplay::CrcState;
+use crate::engine::battle::views::{ElementState, Visual};
 
 pub fn crc_process_extent(state: &mut CrcState, value: &EXTENT) {
     crc_process_u16(state, value.width as u16);
@@ -21,20 +22,20 @@ pub fn crc_process_point(state: &mut CrcState, value: &POINT) {
     crc_process_u16(state, value.y as u16);
 }
 
-pub fn crc_process_element_state(state: &mut CrcState, value: &STATE) {
+pub fn crc_process_element_state(state: &mut CrcState, value: &Visual) {
     crc_process_point(state, &value.location);
 }
 
-pub fn crc_process_element(state: &mut CrcState, value: &ELEMENT) {
-    if value.state_flags & (1 << 15) != 0 {
+pub fn crc_process_element(state: &mut CrcState, value: &ElementState) {
+    if value.flags & (1 << 15) != 0 {
         return;
     }
-    crc_process_u16(state, value.state_flags);
-    crc_process_u16(state, unsafe { value.__bindgen_anon_1.life_span });
-    crc_process_u16(state, unsafe { value.__bindgen_anon_2.crew_level });
-    crc_process_u8(state, unsafe { value.__bindgen_anon_3.mass_points });
-    crc_process_u8(state, unsafe { value.__bindgen_anon_4.turn_wait });
-    crc_process_u8(state, unsafe { value.__bindgen_anon_5.thrust_wait });
+    crc_process_u16(state, value.flags);
+    crc_process_u16(state, value.life);
+    crc_process_u16(state, value.hits);
+    crc_process_u8(state, value.mass);
+    crc_process_u8(state, value.turn);
+    crc_process_u8(state, value.thrust);
     crc_process_velocity(state, &value.velocity);
     crc_process_element_state(state, &value.current);
     crc_process_element_state(state, &value.next);
@@ -43,12 +44,13 @@ pub fn crc_process_element(state: &mut CrcState, value: &ELEMENT) {
 /// # Safety
 /// `state` must be writable; the display queue must not be mutated during traversal.
 pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
-    let mut handle = disp_q.head;
-    while !handle.is_null() {
-        let element = handle.cast::<ELEMENT>();
-        crc_process_element(state, &*element);
-        handle = (*element).succ;
-    }
+    crate::app::bridge::enter(|cx| {
+        let mut link = cx.elements().head();
+        while let Some(id) = link {
+            crc_process_element(state, &cx.element(id));
+            link = cx.elements().succ(id);
+        }
+    });
 }
 
 /// # Safety
@@ -148,13 +150,13 @@ mod tests {
     #[test]
     fn c_element_checksum_vector_excludes_background_objects() {
         // SAFETY: this ABI record contains only zero-valid scalar, union and pointer fields.
-        let mut element: ELEMENT = unsafe { std::mem::zeroed() };
-        element.state_flags = 0x4567;
-        element.__bindgen_anon_1.life_span = 1234;
-        element.__bindgen_anon_2.crew_level = 5678;
-        element.__bindgen_anon_3.mass_points = 255;
-        element.__bindgen_anon_4.turn_wait = 17;
-        element.__bindgen_anon_5.thrust_wait = 33;
+        let mut element: ElementState = unsafe { std::mem::zeroed() };
+        element.flags = 0x4567;
+        element.life = 1234;
+        element.hits = 5678;
+        element.mass = 255;
+        element.turn = 17;
+        element.thrust = 33;
         element.velocity.travel_angle = 42;
         element.velocity.vector = EXTENT {
             width: -123,
@@ -182,7 +184,7 @@ mod tests {
         crc_process_element(&mut state, &element);
         // Captured from the original checksum.c and crc.c integer routines.
         assert_eq!(crc_finish(&state), 0x6850e519);
-        element.state_flags |= 1 << 15;
+        element.flags |= 1 << 15;
         crc_process_element(&mut state, &element);
         assert_eq!(crc_finish(&state), 0x6850e519);
     }

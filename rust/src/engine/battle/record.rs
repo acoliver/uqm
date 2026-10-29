@@ -661,7 +661,7 @@ pub(super) fn ship_queue(side: usize) -> std::ptr::NonNull<QUEUE> {
         .unwrap_or_else(|| panic!("{}", "static ship queues"))
 }
 #[cfg(not(test))]
-pub(super) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
+pub(crate) fn primitive_slot(index: usize) -> std::ptr::NonNull<PRIMITIVE> {
     assert!(index < 330);
     std::ptr::NonNull::new(
         (&raw mut DisplayArray)
@@ -981,5 +981,12 @@ mod kernel_tests {
         assert!(fresh.winner.is_null());
         assert_eq!(fresh.sounds.count, 0);
         assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
+    }
+}
+
+#[cfg(not(test))]
+impl super::Subject {
+    pub(crate) fn intersection(&self) -> crate::graphics::native_abi::INTERSECT_CONTROL {
+        self.intersect
     }
 }

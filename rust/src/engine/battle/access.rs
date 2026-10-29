@@ -582,3 +582,61 @@ impl Cx<'_> {
         self.desc_mut(ship).ship_data.ship_sounds = sound.cast();
     }
 }
+
+#[cfg(not(test))]
+mod reader_projections {
+    use super::*;
+    use crate::engine::battle::{record::ELEMENT, Subject};
+    impl Cx<'_> {
+        pub(crate) fn pick_ship(
+            &self,
+            id: crate::engine::battle::ShipId,
+        ) -> crate::engine::battle::link_queue::PickShip {
+            // SAFETY: Cx owns this pool and no record borrow survives this value read.
+            unsafe {
+                let ships = crate::engine::battle::link_queue::ships(usize::from(id.side));
+                ships.get(ships.link(id))
+            }
+        }
+        pub(crate) fn subject_style(
+            &self,
+            subject: &Subject,
+        ) -> crate::engine::battle::views::PrimitiveStyle {
+            let primitive = self.project(crate::engine::battle::record::primitive_slot(
+                usize::from(subject.primitive),
+            ));
+            crate::engine::battle::views::PrimitiveStyle {
+                kind: primitive.Type,
+                color: primitive.color,
+            }
+        }
+        pub(crate) fn subject_intersect_frame(
+            &self,
+            subject: &Subject,
+        ) -> crate::engine::battle::views::Frame {
+            crate::engine::battle::views::Frame(subject.intersect.IntersectStamp.frame)
+        }
+        pub(crate) fn previous_frame(
+            &self,
+            frame: crate::engine::battle::views::Frame,
+        ) -> crate::engine::battle::views::Frame {
+            // SAFETY: the projected subject retains this loaded frame resource.
+            crate::engine::battle::views::Frame(unsafe {
+                crate::graphics::pixmap_abi::DecFrameIndex(frame.0)
+            })
+        }
+    }
+    impl Cx<'_> {
+        pub(crate) fn legacy_intercept_subject(&self, e: &ELEMENT) -> Subject {
+            Subject {
+                state: ElementState::decode(e),
+                intersect: e.IntersectControl,
+                primitive: e.PrimIndex,
+                target: None,
+                parent: Parent::None,
+                predecessor: None,
+                successor: None,
+            }
+        }
+    }
+}

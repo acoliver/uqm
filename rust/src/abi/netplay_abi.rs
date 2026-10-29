@@ -237,7 +237,6 @@ pub type HLINK = QUEUE_HANDLE;
 pub use crate::ships::native::abi::velocity_desc;
 pub use crate::engine::battle::record::QUEUE;
 pub type VELOCITY_DESC = velocity_desc;
-pub type HELEMENT = HLINK;
 pub type ELEMENT_FLAGS = UWORD;
 pub use crate::engine::battle::record::state;
 pub use crate::engine::battle::record::state__bindgen_ty_1;
@@ -585,36 +584,17 @@ pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
 pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
 pub type MOVEMENT_STATE = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::EVALUATE_DESC;
-pub type IntelligenceFunc = ::std::option::Option<
-    unsafe extern "C" fn(
-        ShipPtr: *mut ELEMENT,
-        ObjectsOfConcern: *mut EVALUATE_DESC,
-        ConcernCounter: COUNT,
-    ),
->;
 pub use crate::ships::native::abi::CHARACTERISTIC_STUFF;
 pub use crate::ships::native::abi::DATA_STUFF;
 pub use crate::ships::native::abi::FLEET_STUFF;
 pub use crate::ships::native::abi::INTEL_STUFF;
 pub use crate::ships::native::abi::SHIP_INFO;
 pub use crate::engine::battle::record::RACE_DESC;
-pub type PREPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-pub type POSTPROCESS_FUNC = ::std::option::Option<unsafe extern "C" fn(ElementPtr: *mut ELEMENT)>;
-pub type INIT_WEAPON_FUNC = ::std::option::Option<
-    unsafe extern "C" fn(ElementPtr: *mut ELEMENT, Weapon: *mut HELEMENT) -> COUNT,
->;
-pub type UNINIT_FUNC = ::std::option::Option<unsafe extern "C" fn(pRaceDesc: *mut RACE_DESC)>;
 pub use crate::engine::battle::record::race_desc;
 pub use crate::engine::battle::record::STARSHIP;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::updateMeleeSelection;
-pub type BattleFrameInputFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        context: *mut InputContext,
-        StarShipPtr: *mut STARSHIP,
-    ) -> BATTLE_INPUT_STATE,
->;
 pub type SelectShipFunction = ::std::option::Option<
     unsafe extern "C" fn(context: *mut InputContext, gms: *mut GETMELEE_STATE) -> BOOLEAN,
 >;

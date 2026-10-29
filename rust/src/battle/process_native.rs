@@ -964,7 +964,7 @@ pub(crate) mod engine {
         let state = preprocess_queue(cx, &mut sx, &mut sy);
         postprocess_queue(cx, state, sx, sy);
         if optStereoSFX != 0 {
-            UpdateSoundPositions();
+            crate::battle::sounds::engine::update_positions(cx);
         }
         SetContext(SpaceContext);
         let activity = cx.world.activity();
@@ -989,10 +989,10 @@ pub(crate) mod engine {
                 DrawBatch((&raw mut DisplayArray).cast(), DisplayLinks, 0);
                 SetGraphicScale(0);
             }
-            FlushSounds();
+            crate::battle::sounds::engine::flush_sounds(cx);
         } else {
             crate::app::bridge::publish(cx, || ProcessSound((!0usize) as SOUND, ptr::null_mut()));
-            FlushSounds();
+            crate::battle::sounds::engine::flush_sounds(cx);
         }
         DisplayLinks = make_links(END, END);
     }

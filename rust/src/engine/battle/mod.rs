@@ -2,6 +2,7 @@ pub(crate) mod access;
 pub mod context;
 pub mod hooks;
 pub mod legacy;
+pub mod link_queue;
 pub mod net;
 pub mod race;
 pub mod record;

@@ -182,9 +182,7 @@ pub(crate) mod engine {
     use crate::engine::battle::legacy::{DisplayFreeList, DisplayLinks};
 
     fn prim(index: usize) -> *mut PRIMITIVE {
-        (&raw mut DisplayArray)
-            .cast::<PRIMITIVE>()
-            .wrapping_add(index)
+        crate::engine::battle::record::primitive_slot(index).as_ptr()
     }
     unsafe fn stars(index: usize) -> *mut POINT {
         Kernel::current().log_stars.as_mut_ptr().add(index)
