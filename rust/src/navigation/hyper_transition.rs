@@ -194,14 +194,14 @@ pub(crate) fn star_collision(
     ship: crate::engine::battle::ElementId,
     _p1: &mut POINT,
 ) {
-    if cx.b.elements[ship].state_flags & PLAYER_SHIP as u16 == 0 || cx.portal_counter() != 0 {
+    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0 || cx.portal_counter() != 0 {
         return;
     }
     let contact = cx.star_contact(source);
     let parent = cx.owner(ship);
-    let (dx, dy) = cx.b.elements[ship].velocity.get_current_components();
+    let (dx, dy) = cx.element(ship).velocity.get_current_components();
     if contact.current
-        || cx.b.elements[ship].state_flags & APPEARING as u16 != 0
+        || cx.element(ship).flags & APPEARING as u16 != 0
         || (dx == 0
             && dy == 0
             && cx.ship(parent).cur_status_flags
@@ -209,7 +209,7 @@ pub(crate) fn star_collision(
                 == 0)
     {
         cx.select_star(Some(contact));
-        cx.b.elements[source].state_flags |= (DEFY_PHYSICS | COLLISION) as u16;
+        cx.element_mut(source).flags |= (DEFY_PHYSICS | COLLISION) as u16;
     } else {
         let autopilot = cx.autopilot();
         if cx.world.activity() & IN_BATTLE as u16 != 0
@@ -218,7 +218,7 @@ pub(crate) fn star_collision(
                 || (autopilot.x == contact.position.x && autopilot.y == contact.position.y))
         {
             cx.select_star(Some(contact));
-            cx.b.elements[source].state_flags |= COLLISION as u16;
+            cx.element_mut(source).flags |= COLLISION as u16;
             cx.init_hyper_transition(source, ship, 1);
         }
     }
@@ -227,7 +227,7 @@ pub(crate) fn star_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
-    if cx.b.elements[element].state_flags & DEFY_PHYSICS as u16 == 0
+    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0
         && cx.world.activity() & IN_BATTLE as u16 != 0
     {
         cx.select_star(None);

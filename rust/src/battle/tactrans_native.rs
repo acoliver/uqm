@@ -130,7 +130,6 @@ pub(crate) mod engine {
     use crate::battle::battle_native::engine::{activity, player_input, rgb15, set_activity};
     use crate::battle::battle_native::BattleSong;
     use crate::battle::encount_native::{FleetIsInfinite, UpdateShipFragCrew};
-    use crate::collections::observation::image;
     use crate::engine::battle::views::SharedFrames;
     use crate::engine::battle::{Cx, ElementFn, ElementId, Parent};
     use crate::ships::native::{cosine, facing_to_angle, sine, starship};
@@ -249,22 +248,22 @@ pub(crate) mod engine {
         let dead_ship = cx.owner(dead);
         cx.ship_state_mut(dead_ship).crew = cx.desc(dead_ship).ship_info.crew_level;
         let mut music_started = false;
-        let mut next = cx.b.elements.head();
+        let mut next = cx.elements().head();
         while let Some(e) = next {
-            next = cx.b.elements.succ(e);
+            next = cx.elements().succ(e);
             let parent = cx.parent(e);
             if parent == Parent::Ship(dead_ship) {
                 cx.set_parent(e, None);
-                if cx.b.elements[e].state_flags & CREW_OBJECT as u16 == 0
-                    || !same_callback(cx.b.elements[e].preprocess_func, crew_preprocess)
+                if cx.element(e).flags & CREW_OBJECT as u16 == 0
+                    || !same_callback(cx.element(e).pre, crew_preprocess)
                 {
-                    cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
-                    cx.b.elements[e].set_life_span(0);
-                    cx.b.elements[e].state_flags = (NONSOLID | DISAPPEARING | FINITE_LIFE) as u16;
-                    cx.b.elements[e].preprocess_func = None;
-                    cx.b.elements[e].postprocess_func = None;
-                    cx.b.elements[e].death_func = None;
-                    cx.b.elements[e].collision_func = None;
+                    cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                    cx.element_mut(e).set_life_span(0);
+                    cx.element_mut(e).flags = (NONSOLID | DISAPPEARING | FINITE_LIFE) as u16;
+                    cx.element_mut(e).pre = None;
+                    cx.element_mut(e).post = None;
+                    cx.element_mut(e).death = None;
+                    cx.element_mut(e).collide = None;
                 }
             }
             if let Parent::Ship(ship) = parent {
@@ -280,10 +279,10 @@ pub(crate) mod engine {
             music_started,
             Some(dead_ship) == cx.winner(),
         );
-        cx.b.elements[dead].set_life_span(life);
-        cx.b.elements[dead].death_func = Some(ElementHook::Native(new_ship));
-        cx.b.elements[dead].preprocess_func = Some(ElementHook::Native(preprocess_dead_ship));
-        cx.b.elements[dead].state_flags &= !(DISAPPEARING as u16);
+        cx.element_mut(dead).set_life_span(life);
+        cx.element_mut(dead).death = Some(ElementHook::Native(new_ship));
+        cx.element_mut(dead).pre = Some(ElementHook::Native(preprocess_dead_ship));
+        cx.element_mut(dead).flags &= !(DISAPPEARING as u16);
         cx.set_parent(dead, Some(dead_ship));
     }
 
@@ -393,42 +392,37 @@ pub(crate) mod engine {
 
     pub(crate) fn explosion_preprocess(cx: &mut Cx<'_>, ship: ElementId) {
         let tick =
-            ((NUM_EXPLOSION_FRAMES * 3) as u16).wrapping_sub(cx.b.elements[ship].life_span()) as u8;
+            ((NUM_EXPLOSION_FRAMES * 3) as u16).wrapping_sub(cx.element(ship).life_span()) as u8;
         let step = explosion_step(tick);
         if step.clear_preprocess {
-            cx.b.elements[ship].preprocess_func = None;
+            cx.element_mut(ship).pre = None;
         }
         if step.hide_primitive {
-            cx.primitive(ship).Type = gfx_object_NUM_PRIMS as u8;
-            cx.b.elements[ship].state_flags |= CHANGING as u16;
+            cx.primitive_style_mut(ship).kind = gfx_object_NUM_PRIMS as u8;
+            cx.element_mut(ship).flags |= CHANGING as u16;
         }
         for _ in 0..step.fragments {
             let Some(e) = cx.alloc_element() else {
                 continue;
             };
             cx.put(e);
-            cx.b.elements[e].playerNr = NEUTRAL_PLAYER_NUM as i16;
-            cx.b.elements[e].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-            cx.b.elements[e].set_life_span(9);
-            cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
-            let array = cx.shared_frames(SharedFrames::Explosion);
-            image!(set; cx.b.elements[e].current.image.farray, array);
-            let frame = cx.shared_frame(SharedFrames::Explosion);
-            image!(frame; cx.b.elements[e].current.image.frame, frame);
+            cx.element_mut(e).player = NEUTRAL_PLAYER_NUM as i16;
+            cx.element_mut(e).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            cx.element_mut(e).set_life_span(9);
+            cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+            let array = cx.shared_frame_set(SharedFrames::Explosion);
+            cx.set_frames(e, false, array);
+            let frame = cx.first_shared_frame(SharedFrames::Explosion);
+            cx.set_frame(e, false, frame);
             let (angle, dist) = explosion_position_random(cx.random());
-            cx.b.elements[e].current.location.x = cx.b.elements[ship]
-                .current
-                .location
-                .x
-                .wrapping_add(cosine(angle as i32, dist as i32));
-            cx.b.elements[e].current.location.y = cx.b.elements[ship]
-                .current
-                .location
-                .y
-                .wrapping_add(sine(angle as i32, dist as i32));
-            cx.b.elements[e].preprocess_func = Some(ElementHook::Native(animation_preprocess));
+            let location = cx.element(ship).current.location;
+            cx.element_mut(e).current.location.x =
+                location.x.wrapping_add(cosine(angle as i32, dist as i32));
+            cx.element_mut(e).current.location.y =
+                location.y.wrapping_add(sine(angle as i32, dist as i32));
+            cx.element_mut(e).pre = Some(ElementHook::Native(animation_preprocess));
             let (angle, dist) = explosion_velocity_random(cx.random());
-            cx.b.elements[e].velocity.set_components(
+            cx.element_mut(e).velocity.set_components(
                 i32::from(cosine(angle as i32, dist as i32)),
                 i32::from(sine(angle as i32, dist as i32)),
             );
@@ -493,10 +487,10 @@ pub(crate) mod engine {
     pub unsafe extern "C" fn RecordShipDeath(dead: *mut ELEMENT) {
         // SAFETY: the legacy ship element is checked before entering native behavior.
         crate::app::bridge::enter(|cx| {
-            let id =
-                cx.b.elements
-                    .id(dead.cast())
-                    .unwrap_or_else(|| panic!("{}", "null dead ship"));
+            let id = cx
+                .elements()
+                .id(dead.cast())
+                .unwrap_or_else(|| panic!("{}", "null dead ship"));
             cx.record_ship_death(id);
         });
     }
@@ -537,116 +531,118 @@ pub(crate) mod engine {
     }
 
     pub(crate) fn cycle_ion_trail(cx: &mut Cx<'_>, e: ElementId) {
-        assert_eq!(cx.b.elements[e].state_flags & PLAYER_SHIP as u16, 0);
-        cx.b.elements[e].colorCycleIndex = cx.b.elements[e].colorCycleIndex.wrapping_add(1);
-        if cx.b.elements[e].colorCycleIndex as usize != ION_COLORS.len() {
-            let life = cx.b.elements[e].thrust_wait() as u16;
-            cx.b.elements[e].set_life_span(life);
-            let (r, g, b) = ION_COLORS[cx.b.elements[e].colorCycleIndex as usize];
-            cx.primitive(e).color = rgb15(r, g, b);
-            cx.b.elements[e].state_flags &= !(DISAPPEARING as u16);
-            cx.b.elements[e].state_flags |= CHANGING as u16;
+        assert_eq!(cx.element(e).flags & PLAYER_SHIP as u16, 0);
+        cx.element_mut(e).color_cycle = cx.element(e).color_cycle.wrapping_add(1);
+        if cx.element(e).color_cycle as usize != ION_COLORS.len() {
+            let life = cx.element(e).thrust_wait() as u16;
+            cx.element_mut(e).set_life_span(life);
+            let (r, g, b) = ION_COLORS[cx.element(e).color_cycle as usize];
+            cx.primitive_style_mut(e).color = rgb15(r, g, b);
+            cx.element_mut(e).flags &= !(DISAPPEARING as u16);
+            cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
 
     pub fn ship_transition(cx: &mut Cx<'_>, e: ElementId) {
-        if cx.b.elements[e].state_flags & PLAYER_SHIP as u16 != 0 {
-            if cx.b.elements[e].state_flags & APPEARING as u16 != 0 {
-                cx.b.elements[e].set_life_span(HYPERJUMP_LIFE as u16);
-                cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_transition));
-                cx.b.elements[e].postprocess_func = None;
-                cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
-                cx.b.elements[e].state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
-            } else if cx.b.elements[e].life_span() < HYPERJUMP_LIFE as u16 {
-                if cx.b.elements[e].life_span() == NORMAL_LIFE as u16
-                    && cx.b.elements[e].hit_points() != 0
+        if cx.element(e).flags & PLAYER_SHIP as u16 != 0 {
+            if cx.element(e).flags & APPEARING as u16 != 0 {
+                cx.element_mut(e).set_life_span(HYPERJUMP_LIFE as u16);
+                cx.element_mut(e).pre = Some(ElementHook::Native(ship_transition));
+                cx.element_mut(e).post = None;
+                cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
+            } else if cx.element(e).life_span() < HYPERJUMP_LIFE as u16 {
+                if cx.element(e).life_span() == NORMAL_LIFE as u16
+                    && cx.element(e).hit_points() != 0
                 {
-                    let frame =
-                        cx.equ_frame(cx.frame_at(e, false), cx.b.elements[e].current.image.frame);
-                    image!(frame; cx.b.elements[e].current.image.frame, frame);
-                    image!(frame; cx.b.elements[e].next.image.frame, frame);
-                    cx.primitive(e).Type = gfx_object_STAMP_PRIM as u8;
+                    let frame = cx.equivalent_frame(
+                        cx.element_frame_set_first(e, false),
+                        cx.element(e).current.image.frame,
+                    );
+                    cx.set_frame(e, false, frame);
+                    cx.set_frame(e, true, frame);
+                    cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
                     cx.init_intersect(e);
-                    let frame =
-                        cx.equ_frame(cx.frame_at(e, true), cx.b.elements[e].next.image.frame);
-                    image!(frame; cx.b.elements[e].IntersectControl.IntersectStamp.frame, frame);
-                    cx.b.elements[e].velocity.zero();
-                    cx.b.elements[e].state_flags &= !((NONSOLID | FINITE_LIFE) as u16);
-                    cx.b.elements[e].state_flags |= CHANGING as u16;
-                    cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_preprocess));
-                    cx.b.elements[e].postprocess_func = Some(ElementHook::Native(ship_postprocess));
+                    let frame = cx.equivalent_frame(
+                        cx.element_frame_set_first(e, true),
+                        cx.element(e).next.image.frame,
+                    );
+                    cx.set_intersect_frame(e, frame);
+                    cx.element_mut(e).velocity.zero();
+                    cx.element_mut(e).flags &= !((NONSOLID | FINITE_LIFE) as u16);
+                    cx.element_mut(e).flags |= CHANGING as u16;
+                    cx.element_mut(e).pre = Some(ElementHook::Native(ship_preprocess));
+                    cx.element_mut(e).post = Some(ElementHook::Native(ship_postprocess));
                 }
                 return;
             }
         }
         let owner = cx.owner(e);
         let original = cx.ship_element(owner);
-        if cx.b.elements[original].state_flags & NONSOLID as u16 == 0 {
-            cx.b.elements[e].preprocess_func = None;
+        if cx.element(original).flags & NONSOLID as u16 == 0 {
+            cx.element_mut(e).pre = None;
         } else if let Some(image) = cx.alloc_element() {
             cx.put(image);
             let angle = facing_to_angle(cx.ship(owner).ShipFacing as i32);
-            cx.b.elements[image].playerNr = NEUTRAL_PLAYER_NUM as i16;
-            cx.b.elements[image].state_flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-            cx.b.elements[image].set_thrust_wait(1);
-            cx.b.elements[image].set_life_span(1);
-            cx.primitive(image).Type = gfx_object_STAMPFILL_PRIM as u8;
-            cx.primitive(image).color = rgb15(31, 21, 0);
-            cx.b.elements[image].colorCycleIndex = 0;
-            let current_image = cx.b.elements[e].current.image;
-            image!(copy; cx.b.elements[image].current.image, current_image);
-            cx.b.elements[image].current.location = cx.b.elements[e].current.location;
+            cx.element_mut(image).player = NEUTRAL_PLAYER_NUM as i16;
+            cx.element_mut(image).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+            cx.element_mut(image).set_thrust_wait(1);
+            cx.element_mut(image).set_life_span(1);
+            cx.primitive_style_mut(image).kind = gfx_object_STAMPFILL_PRIM as u8;
+            cx.primitive_style_mut(image).color = rgb15(31, 21, 0);
+            cx.element_mut(image).color_cycle = 0;
+            let current_image = cx.element(e).current.image;
+            cx.copy_image_to_current(image, current_image);
+            cx.element_mut(image).current.location = cx.element(e).current.location;
             let x = cosine(angle, 40 << ONE_SHIFT) as i32;
             let y = sine(angle, 40 << ONE_SHIFT) as i32;
-            if cx.b.elements[e].state_flags & PLAYER_SHIP as u16 == 0 {
-                cx.b.elements[image].current.location.x =
-                    (cx.b.elements[image].current.location.x as i32 + x) as i16;
-                cx.b.elements[image].current.location.y =
-                    (cx.b.elements[image].current.location.y as i32 + y) as i16;
-                cx.b.elements[e].preprocess_func = None;
-            } else if cx.b.elements[e].hit_points() != 0 {
-                let life = cx.b.elements[e].life_span() as i32 - 1;
+            if cx.element(e).flags & PLAYER_SHIP as u16 == 0 {
+                cx.element_mut(image).current.location.x =
+                    (cx.element(image).current.location.x as i32 + x) as i16;
+                cx.element_mut(image).current.location.y =
+                    (cx.element(image).current.location.y as i32 + y) as i16;
+                cx.element_mut(e).pre = None;
+            } else if cx.element(e).hit_points() != 0 {
+                let life = cx.element(e).life_span() as i32 - 1;
                 let (w, h) = cx.screen_dimensions();
-                cx.b.elements[image].current.location.x =
-                    (cx.b.elements[image].current.location.x as i32 - x * life) as i16;
-                cx.b.elements[image].current.location.y =
-                    (cx.b.elements[image].current.location.y as i32 - y * life) as i16;
-                cx.b.elements[image].current.location.x = wrap_coord(
-                    cx.b.elements[image].current.location.x,
+                cx.element_mut(image).current.location.x =
+                    (cx.element(image).current.location.x as i32 - x * life) as i16;
+                cx.element_mut(image).current.location.y =
+                    (cx.element(image).current.location.y as i32 - y * life) as i16;
+                cx.element_mut(image).current.location.x = wrap_coord(
+                    cx.element(image).current.location.x,
                     (w - 64) << (ONE_SHIFT + MAX_REDUCTION),
                 );
-                cx.b.elements[image].current.location.y = wrap_coord(
-                    cx.b.elements[image].current.location.y,
+                cx.element_mut(image).current.location.y = wrap_coord(
+                    cx.element(image).current.location.y,
                     h << (ONE_SHIFT + MAX_REDUCTION),
                 );
             }
-            cx.b.elements[image].preprocess_func = Some(ElementHook::Native(ship_transition));
-            cx.b.elements[image].death_func = Some(ElementHook::Native(cycle_ion_trail));
+            cx.element_mut(image).pre = Some(ElementHook::Native(ship_transition));
+            cx.element_mut(image).death = Some(ElementHook::Native(cycle_ion_trail));
             cx.set_parent(image, Some(owner));
         }
     }
 
     pub fn flee_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let wait = cx.b.elements[e].turn_wait().wrapping_sub(1);
-        cx.b.elements[e].set_turn_wait(wait);
+        let wait = cx.element(e).turn_wait().wrapping_sub(1);
+        cx.element_mut(e).set_turn_wait(wait);
         if wait == 0 {
-            let (index, thrust, wait) = flee_cycle(
-                cx.b.elements[e].colorCycleIndex,
-                cx.b.elements[e].thrust_wait(),
-            );
-            cx.b.elements[e].colorCycleIndex = index;
+            let (index, thrust, wait) =
+                flee_cycle(cx.element(e).color_cycle, cx.element(e).thrust_wait());
+            cx.element_mut(e).color_cycle = index;
             let (r, g, b) = FLEE_COLORS[index as usize];
-            cx.primitive(e).color = rgb15(r, g, b);
-            cx.b.elements[e].set_thrust_wait(thrust);
-            cx.b.elements[e].set_turn_wait(wait);
+            cx.primitive_style_mut(e).color = rgb15(r, g, b);
+            cx.element_mut(e).set_thrust_wait(thrust);
+            cx.element_mut(e).set_turn_wait(wait);
             if wait == 0 {
-                cx.b.elements[e].death_func = Some(ElementHook::Native(cleanup_dead_ship));
-                cx.b.elements[e].set_hit_points(0);
-                cx.b.elements[e].set_life_span((HYPERJUMP_LIFE + 1) as u16);
-                cx.b.elements[e].preprocess_func = Some(ElementHook::Native(ship_transition));
-                cx.b.elements[e].postprocess_func = None;
-                cx.primitive(e).Type = gfx_object_NUM_PRIMS as u8;
-                cx.b.elements[e].state_flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
+                cx.element_mut(e).death = Some(ElementHook::Native(cleanup_dead_ship));
+                cx.element_mut(e).set_hit_points(0);
+                cx.element_mut(e).set_life_span((HYPERJUMP_LIFE + 1) as u16);
+                cx.element_mut(e).pre = Some(ElementHook::Native(ship_transition));
+                cx.element_mut(e).post = None;
+                cx.primitive_style_mut(e).kind = gfx_object_NUM_PRIMS as u8;
+                cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE | CHANGING) as u16;
             }
         }
         let ship = cx.owner(e);

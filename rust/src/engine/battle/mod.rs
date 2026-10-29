@@ -15,3 +15,6 @@ pub use table::{ElementId, ElementTable, Parent, ShipId};
 pub mod views;
 
 pub use race::{Callbacks, Selection};
+
+pub(crate) mod androsynth_template;
+pub(crate) mod vux_template;

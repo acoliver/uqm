@@ -105,7 +105,7 @@ pub(crate) mod engine {
         // SAFETY: The caller owns the game-thread resource context and retains all descriptor resources.
 
         if let Some(race) = crate::ships::races::race(species) {
-            return (race.descriptor)().raw;
+            return (race.descriptor)().into_legacy();
         }
         const CODE_BY_SPECIES: [usize; 29] = [
             usize::MAX,
@@ -147,7 +147,7 @@ pub(crate) mod engine {
             .unwrap_or_else(|| panic!("{}", "legacy species initializer"));
         crate::engine::battle::access::descriptor_template(init)
             .unwrap_or_else(|| panic!("legacy initializer returned no descriptor"))
-            .raw
+            .into_legacy()
     }
 
     unsafe extern "C" fn get_code_res_data(ship_id: *const c_char, out: *mut ResourceData) {
@@ -170,7 +170,8 @@ pub(crate) mod engine {
             None
         };
         if let Some(descriptor) = descriptor {
-            allocation.cast::<RACE_DESC>().write(descriptor.raw);
+            let record = descriptor.into_legacy();
+            allocation.cast::<RACE_DESC>().write(record);
         } else {
             rust_hfree(allocation);
             allocation = ptr::null_mut();

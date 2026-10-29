@@ -4,7 +4,7 @@ use super::{record::QUEUE, table::ElementTable};
 use std::ptr::NonNull;
 
 pub struct Battle {
-    pub(crate) elements: ElementTable,
+    pub(super) elements: ElementTable,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,
@@ -40,7 +40,10 @@ impl Battle {
 
 /// Projections into the single GlobData authority, not copies of world state.
 /// Phase 4 replaces these projections with the owned World.
+use super::record::Tracker;
+
 pub struct World {
+    pub(super) tracking: Option<Tracker>,
     activity: NonNull<u16>,
     groups: NonNull<QUEUE>,
     pub shared_frames: [super::views::Frames; 2],
@@ -54,9 +57,11 @@ impl World {
         activity: *mut u16,
         groups: *mut QUEUE,
         shared_frames: [*mut crate::graphics::native_abi::FRAME; 2],
+        _tracking: Option<Tracker>,
     ) -> Self {
         Self {
             shared_frames: shared_frames.map(super::views::Frames),
+            tracking: _tracking,
             activity: NonNull::new(activity).unwrap_or_else(|| panic!("null activity projection")),
             groups: NonNull::new(groups).unwrap_or_else(|| panic!("null group queue projection")),
         }
@@ -80,10 +85,22 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    /// # Safety
+    /// Legacy game-thread access must not retain record borrows across callbacks.
+    #[cfg(not(test))]
+    pub(crate) unsafe fn records(&mut self) -> &mut ElementTable {
+        &mut self.b.elements
+    }
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
     pub fn elements(&self) -> &ElementTable {
         &self.b.elements
+    }
+}
+
+impl<'a> Cx<'a> {
+    pub(crate) fn new(b: &'a mut Battle, world: &'a mut World, rng: fn() -> u32) -> Self {
+        Self { b, world, rng }
     }
 }
