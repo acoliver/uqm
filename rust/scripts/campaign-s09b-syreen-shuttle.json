@@ -195,6 +195,7 @@
     {
       "action": "fly_to_star",
       "target": "Betelgeuse",
+      "retreat_encounters": true,
       "max_ticks": 90000
     },
     {
