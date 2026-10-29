@@ -261,10 +261,7 @@ pub(crate) mod engine {
     use crate::ships::native::frame_index;
     use std::ptr;
 
-    extern "C" {
-        static mut SpaceOrg: POINT;
-
-    }
+    extern "C" {}
 
     unsafe fn damage(cx: &mut Cx<'_>, id: ElementId) {
         let pointer = cx.elements().raw(id).cast();
@@ -734,7 +731,7 @@ pub(crate) mod engine {
                 width(ScreenWidth),
                 height(ScreenHeight),
             );
-            SpaceOrg = new_origin;
+            (*cx.kernel()).space_origin = new_origin;
             cx.b.zoom_out = reduction;
             ViewState::Change
         };
@@ -889,7 +886,7 @@ pub(crate) mod engine {
                 if view_state != ViewState::Stable || flags & CHANGE_BITS != 0 {
                     let projection = queue_view::Projection {
                         dimensions: (width(ScreenWidth), height(ScreenHeight)),
-                        origin: SpaceOrg,
+                        origin: (*cx.kernel()).space_origin,
                         reduction,
                         step: optMeleeScale == SCALE_STEP,
                     };

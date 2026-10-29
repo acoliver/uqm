@@ -18,3 +18,5 @@ pub use race::{Callbacks, Selection};
 
 pub(crate) mod androsynth_template;
 pub(crate) mod vux_template;
+
+pub(crate) mod kernel;

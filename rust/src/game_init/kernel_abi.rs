@@ -193,11 +193,11 @@ unsafe fn init_kernel() -> u32 {
     if MicroFont.is_null() {
         return 0;
     }
-    MenuSounds = CaptureStringTable(
+    Kernel::current().menu_sounds = CaptureStringTable(
         crate::sound::resource_types::LoadSoundInstance(c"sounds.menu".as_ptr()).cast(),
     )
     .cast();
-    if MenuSounds.is_null() {
+    if Kernel::current().menu_sounds.is_null() {
         return 0;
     }
     InitStatusOffsets();
@@ -220,9 +220,7 @@ pub fn UninitPlayerInput() {}
 /// Player index is below NUM_PLAYERS and its input context is not already installed.
 #[no_mangle]
 pub unsafe extern "C" fn SetPlayerInput(player: u16) -> bool {
-    let slot = ptr::addr_of_mut!(PlayerInput)
-        .cast::<*mut crate::battle::battle_controls::InputContext>()
-        .add(player as usize);
+    let slot = &mut Kernel::current().player_input[player as usize];
     assert!((*slot).is_null());
     *slot = match PlayerControl[player as usize] & 15 {
         1 => crate::battle::battle_controls::HumanInputContext_new(player).cast(),
@@ -252,15 +250,14 @@ pub unsafe extern "C" fn SetPlayerInputAll() -> bool {
 /// Player index is below NUM_PLAYERS and context is null or owned by this player.
 #[no_mangle]
 pub unsafe extern "C" fn ClearPlayerInput(player: u16) {
-    let slot = ptr::addr_of_mut!(PlayerInput)
-        .cast::<*mut crate::battle::battle_controls::InputContext>()
-        .add(player as usize);
-    if (*slot).is_null() {
+    let input = Kernel::current().player_input[player as usize]
+        .cast::<crate::battle::battle_controls::InputContext>();
+    if input.is_null() {
         log::debug!("ClearPlayerInput(): PlayerInput[{player}] was NULL.");
         return;
     }
-    ((*(**slot).handlers).delete_context.unwrap())(*slot);
-    *slot = ptr::null_mut();
+    ((*(*input).handlers).delete_context.unwrap())(input);
+    Kernel::current().player_input[player as usize] = ptr::null_mut();
 }
 
 /// # Safety

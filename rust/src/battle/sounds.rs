@@ -3,14 +3,10 @@
 use crate::ships::native::abi::{ELEMENT, SOUND};
 use std::ptr;
 
-pub(crate) struct SoundQueue {
-    count: usize,
-    sounds: [SOUND; 8],
-    objects: [*mut ELEMENT; 8],
-}
+use crate::engine::battle::record::{Channels, SoundQueue};
 
 impl SoundQueue {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             count: 0,
             sounds: [ptr::null_mut(); 8],
@@ -30,21 +26,15 @@ impl SoundQueue {
         }
     }
 }
-
-struct Channels {
-    lru: [usize; 4],
-    sounds: [SOUND; 4],
-}
-
 impl Channels {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             lru: [0, 1, 2, 3],
             sounds: [ptr::null_mut(); 4],
         }
     }
 
-    fn select(&mut self, sound: SOUND, mut playing: impl FnMut(usize) -> bool) -> usize {
+    pub(crate) fn select(&mut self, sound: SOUND, mut playing: impl FnMut(usize) -> bool) -> usize {
         let channel = self
             .sounds
             .iter()
@@ -71,13 +61,6 @@ pub(crate) mod engine {
     use super::*;
     use crate::ships::native::abi::*;
 
-    #[no_mangle]
-    pub static mut MenuSounds: SOUND = ptr::null_mut();
-    #[no_mangle]
-    pub static mut GameSounds: SOUND = ptr::null_mut();
-    pub(crate) static mut QUEUE: SoundQueue = SoundQueue::new();
-    static mut CHANNELS: Channels = Channels::new();
-
     /// # Safety
     /// Called on the game thread with a live sound and optional live element.
     #[no_mangle]
@@ -90,7 +73,7 @@ pub(crate) mod engine {
         if sound.is_null() {
             return;
         }
-        let channels = &raw mut CHANNELS;
+        let channels = &raw mut Kernel::current().channels;
         let channel = (*channels).select(sound, |c| {
             ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
         });
@@ -108,7 +91,7 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
         PlaySoundEffect(
-            SetAbsStringTableIndex(MenuSounds, sound as u16),
+            SetAbsStringTableIndex(Kernel::current().menu_sounds, sound as u16),
             0,
             NotPositional(),
             ptr::null_mut(),
@@ -120,10 +103,9 @@ pub(crate) mod engine {
     /// Called on the game thread; object remains live until removed or flushed.
     #[no_mangle]
     pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
-        let queue = &raw mut QUEUE;
         // SAFETY: the published game thread exclusively owns this sound queue.
         unsafe {
-            crate::app::bridge::enter(|_cx| (*queue).push(sound, object));
+            Kernel::current().sounds.push(sound, object);
         }
     }
 
@@ -190,9 +172,9 @@ pub(crate) mod engine {
     #[no_mangle]
     pub unsafe extern "C" fn FlushSounds() {
         let mut i = 0;
-        while QUEUE.count > 0 {
-            let sound = QUEUE.sounds[i];
-            let object = QUEUE.objects[i];
+        while Kernel::current().sounds.count > 0 {
+            let sound = Kernel::current().sounds.sounds[i];
+            let object = Kernel::current().sounds.objects[i];
             PlaySound(
                 sound,
                 CalcSoundPosition(object),
@@ -200,7 +182,7 @@ pub(crate) mod engine {
                 GAME_SOUND_PRIORITY as u8,
             );
             i += 1;
-            QUEUE.count -= 1;
+            Kernel::current().sounds.count -= 1;
         }
     }
 
@@ -213,8 +195,7 @@ pub(crate) mod engine {
                 set_positional_object(i, 0);
             }
         }
-        let queue_ptr = &raw mut QUEUE;
-        let queue = &mut *queue_ptr;
+        let queue = &mut Kernel::current().sounds;
         for entry in &mut queue.objects[..queue.count] {
             if *entry == object {
                 *entry = ptr::null_mut();

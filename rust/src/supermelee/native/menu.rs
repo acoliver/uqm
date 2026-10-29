@@ -248,7 +248,7 @@ pub(crate) mod live {
         state.cur_index = u16::MAX;
         InitMeleeLoadState(&mut state);
         GlobData.Game_state.CurrentActivity = SUPER_MELEE as u16;
-        GameSounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+        Kernel::current().game_sounds = capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
         crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
         MeleeFrame = CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
         crate::supermelee::native::build_picker::live::BuildBuildPickFrame();
@@ -282,8 +282,8 @@ pub(crate) mod live {
         crate::supermelee::native::build_picker::live::DestroyBuildPickFrame();
         state.netplay.close_all_connections();
         state.netplay.setup_input_delay(0);
-        DestroySound(release_sound(GameSounds).cast());
-        GameSounds = ptr::null_mut();
+        DestroySound(release_sound(Kernel::current().game_sounds).cast());
+        Kernel::current().game_sounds = ptr::null_mut();
         UninitMeleeLoadState(&mut state);
         delete_context(state.random_context);
         MeleeSetup_delete(state.melee_setup);

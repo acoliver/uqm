@@ -38,7 +38,7 @@ unsafe fn uninit_contexts() {
 
 unsafe fn uninit_kernel() {
     UninitSpace();
-    DestroySound(crate::strings::string_table::ReleaseStringTable(MenuSounds.cast()).cast());
+    DestroySound(ReleaseStringTable(Kernel::current().menu_sounds.cast()).cast());
     DestroyFont(MicroFont.cast());
     DestroyStringTable(ReleaseStringTable(GameStrings));
     DestroyDrawable(ReleaseDrawable(StatusFrame));

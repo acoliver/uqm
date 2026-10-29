@@ -5,6 +5,7 @@ use std::ptr::NonNull;
 
 pub struct Battle {
     pub(super) elements: ElementTable,
+    kernel: super::record::Kernel,
     pub zoom_out: i16,
     pub nth_frame: u16,
     pub max_zoom_out: i16,
@@ -29,6 +30,7 @@ impl Battle {
         Self {
             // SAFETY: the caller owns the queue for this battle context's lifetime.
             elements: unsafe { ElementTable::from_queue(queue) },
+            kernel: super::record::Kernel::new(),
             zoom_out: 1 << 8,
             nth_frame: 0,
             max_zoom_out: 0,
@@ -102,5 +104,11 @@ impl Cx<'_> {
 impl<'a> Cx<'a> {
     pub(crate) fn new(b: &'a mut Battle, world: &'a mut World, rng: fn() -> u32) -> Self {
         Self { b, world, rng }
+    }
+}
+
+impl Cx<'_> {
+    pub(crate) fn kernel(&mut self) -> *mut super::record::Kernel {
+        &raw mut self.b.kernel
     }
 }

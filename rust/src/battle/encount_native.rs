@@ -657,13 +657,13 @@ pub(crate) mod engine {
                 }
             }
         }
-        GameSounds = crate::strings::string_table::CaptureStringTable(
+        Kernel::current().game_sounds = crate::strings::string_table::CaptureStringTable(
             crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
         )
         .cast();
         Battle(None);
-        DestroySound(ReleaseStringTable(GameSounds));
-        GameSounds = ptr::null_mut();
+        DestroySound(ReleaseStringTable(Kernel::current().game_sounds));
+        Kernel::current().game_sounds = ptr::null_mut();
         if activity() & CHECK_ABORT as u16 != 0 {
             GlobData.SIS_state.CrewEnlisted = COUNT::MAX;
         }

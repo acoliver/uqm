@@ -2,17 +2,51 @@
 
 use crate::ships::native::abi::{Color, POINT};
 
-#[repr(C)]
-pub struct STAR_BLOCK {
-    min_star_index: u16,
-    num_stars: u16,
-    star_array: *mut POINT,
-    pmin_star: *mut POINT,
-    plast_star: *mut POINT,
+pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
+
+fn projected_coords(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> (i32, i32) {
+    let x = i32::from(point.x) - i32::from(dx);
+    let y = i32::from(point.y) - i32::from(dy);
+    if step {
+        (x >> reduction, y >> reduction)
+    } else {
+        (
+            (x << 8) / i32::from(reduction),
+            (y << 8) / i32::from(reduction),
+        )
+    }
+}
+
+fn project(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> POINT {
+    let (x, y) = projected_coords(point, dx, dy, reduction, step);
+    POINT {
+        x: x as i16,
+        y: y as i16,
+    }
+}
+
+fn wrap_x(x: i16, width: i32) -> i16 {
+    let x = i32::from(x);
+    (if x < 0 {
+        x + width
+    } else if x >= width {
+        x - width
+    } else {
+        x
+    }) as i16
+}
+
+const fn color(r: u8, g: u8, b: u8) -> Color {
+    Color {
+        r: (r << 3) | (r >> 2),
+        g: (g << 3) | (g >> 2),
+        b: (b << 3) | (b >> 2),
+        a: 255,
+    }
 }
 
 impl STAR_BLOCK {
-    unsafe fn sort(&mut self) {
+    pub(crate) unsafe fn sort(&mut self) {
         for i in 0..self.num_stars as usize {
             for j in (i + 1..self.num_stars as usize).rev() {
                 if (*self.star_array.add(i)).y > (*self.star_array.add(j)).y {
@@ -25,13 +59,13 @@ impl STAR_BLOCK {
         self.plast_star = self.star_array.add(self.num_stars as usize - 1);
     }
 
-    unsafe fn translate(&mut self, index: usize, dx: i16, dy: i16) {
+    pub(crate) unsafe fn translate(&mut self, index: usize, dx: i16, dy: i16) {
         let point = &mut *self.star_array.add(index);
         point.y = point.y.wrapping_add(dy);
         point.x = point.x.wrapping_add(dx);
     }
 
-    unsafe fn wrap(&mut self, plane: i16, dx: i16, mut dy: i16, log_height: i32) {
+    pub(crate) unsafe fn wrap(&mut self, plane: i16, dx: i16, mut dy: i16, log_height: i32) {
         let mut i = self.min_star_index as usize;
         let mut point = i as isize;
         let count = self.num_stars as usize;
@@ -136,94 +170,27 @@ impl STAR_BLOCK {
     }
 }
 
-fn projected_coords(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> (i32, i32) {
-    let x = i32::from(point.x) - i32::from(dx);
-    let y = i32::from(point.y) - i32::from(dy);
-    if step {
-        (x >> reduction, y >> reduction)
-    } else {
-        (
-            (x << 8) / i32::from(reduction),
-            (y << 8) / i32::from(reduction),
-        )
-    }
-}
-
-fn project(point: POINT, dx: i16, dy: i16, reduction: u16, step: bool) -> POINT {
-    let (x, y) = projected_coords(point, dx, dy, reduction, step);
-    POINT {
-        x: x as i16,
-        y: y as i16,
-    }
-}
-
-fn wrap_x(x: i16, width: i32) -> i16 {
-    let x = i32::from(x);
-    (if x < 0 {
-        x + width
-    } else if x >= width {
-        x - width
-    } else {
-        x
-    }) as i16
-}
-
-const fn color(r: u8, g: u8, b: u8) -> Color {
-    Color {
-        r: (r << 3) | (r >> 2),
-        g: (g << 3) | (g >> 2),
-        b: (b << 3) | (b >> 2),
-        a: 255,
-    }
-}
-
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
     use crate::ships::native::{abi::*, frame_index};
-    use std::ptr;
 
     const COUNTS: [usize; 3] = [30, 60, 90];
-    const ZERO: POINT = POINT { x: 0, y: 0 };
-    static mut LOG_STARS: [POINT; 180] = [ZERO; 180];
-    #[no_mangle]
-    pub static mut SpaceOrg: POINT = ZERO;
-    pub static mut STAR_BLOCK: [super::STAR_BLOCK; 3] = [
-        super::STAR_BLOCK {
-            min_star_index: 0,
-            num_stars: 30,
-            star_array: (&raw mut LOG_STARS).cast::<POINT>(),
-            pmin_star: ptr::null_mut(),
-            plast_star: ptr::null_mut(),
-        },
-        super::STAR_BLOCK {
-            min_star_index: 0,
-            num_stars: 60,
-            star_array: unsafe { (&raw mut LOG_STARS).cast::<POINT>().add(30) },
-            pmin_star: ptr::null_mut(),
-            plast_star: ptr::null_mut(),
-        },
-        super::STAR_BLOCK {
-            min_star_index: 0,
-            num_stars: 90,
-            star_array: unsafe { (&raw mut LOG_STARS).cast::<POINT>().add(90) },
-            pmin_star: ptr::null_mut(),
-            plast_star: ptr::null_mut(),
-        },
-    ];
     extern "C" {}
 
     use crate::engine::battle::legacy::{DisplayFreeList, DisplayLinks};
 
-    unsafe fn prim(index: usize) -> *mut PRIMITIVE {
-        (&raw mut DisplayArray).cast::<PRIMITIVE>().add(index)
+    fn prim(index: usize) -> *mut PRIMITIVE {
+        (&raw mut DisplayArray)
+            .cast::<PRIMITIVE>()
+            .wrapping_add(index)
     }
     unsafe fn stars(index: usize) -> *mut POINT {
-        (&raw mut LOG_STARS).cast::<POINT>().add(index)
+        Kernel::current().log_stars.as_mut_ptr().add(index)
     }
     unsafe fn blocks(index: usize) -> *mut super::STAR_BLOCK {
-        (&raw mut STAR_BLOCK).cast::<super::STAR_BLOCK>().add(index)
+        Kernel::current().star_planes.as_mut_ptr().add(index)
     }
     unsafe fn width() -> i32 {
         (ScreenWidth - 64) << (ONE_SHIFT + MAX_REDUCTION)
@@ -331,8 +298,8 @@ pub(crate) mod engine {
                 (*blocks(plane)).wrap(plane as i16, dx, dy, height());
             }
             if inHQSpace() == 0 {
-                dx = SpaceOrg.x;
-                dy = SpaceOrg.y;
+                dx = Kernel::current().space_origin.x;
+                dy = Kernel::current().space_origin.y;
                 if step {
                     reduction = reduction.wrapping_add(ONE_SHIFT as u16);
                 } else {
@@ -382,7 +349,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{InitGalaxy, MoveGalaxy, SpaceOrg};
+pub use engine::{InitGalaxy, MoveGalaxy};
 
 #[cfg(test)]
 mod tests {

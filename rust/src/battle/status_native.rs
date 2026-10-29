@@ -2,9 +2,6 @@
 
 use crate::ships::native::abi::*;
 
-#[no_mangle]
-pub static mut status_y_offsets: [COORD; 2] = [0; 2];
-
 fn status_offsets(height_pixels: i32) -> [COORD; 2] {
     [(height_pixels >> 1) as COORD, 0]
 }
@@ -223,12 +220,12 @@ pub(crate) mod engine {
     /// Status rendering runs on the game thread after screen initialization.
     #[no_mangle]
     pub unsafe extern "C" fn InitStatusOffsets() {
-        status_y_offsets = status_offsets(ScreenHeight);
+        Kernel::current().status_offsets = status_offsets(ScreenHeight);
     }
 
     pub(crate) unsafe fn offset(ship: *const STARSHIP) -> COORD {
         assert!((*ship).playerNr >= 0);
-        *(&raw const status_y_offsets)
+        *(&raw const Kernel::current().status_offsets)
             .cast::<COORD>()
             .add((*ship).playerNr as usize)
     }
