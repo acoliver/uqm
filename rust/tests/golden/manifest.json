@@ -14,16 +14,16 @@
       "sha256": "f6348a507cf747fb51de29c0e4a1e4b7f4baac7f84376d64d6740de011062318"
     },
     "parity/campaign-battle/parity.fields": {
-      "bytes": 67428282,
-      "sha256": "afdf1840dd29909544591ccf5a6d75b4c78d5f03d08d57a8594c57df47593e50"
+      "bytes": 67346152,
+      "sha256": "6671b966fd563d38198f6564d1b561b956051a372d8c03bf52afaff3e00326c6"
     },
     "parity/campaign-battle/parity.trace": {
-      "bytes": 1350923,
-      "sha256": "5ff8e8b83732de924051461a15e262ec991649eaf0a21e6e66781cbe0d27a2fa"
+      "bytes": 1349928,
+      "sha256": "610c1a10acf702987145dd67ab8f864239d89e7aa45247f35c6cc0deb48bb72c"
     },
     "parity/campaign-battle/summary.json": {
-      "bytes": 1497323,
-      "sha256": "fc2017202a5ca40055768e948eda0d68b6976d7300f7b9a18daf27522a5d4bde"
+      "bytes": 1496762,
+      "sha256": "908ccae973790056519fd60e498514bc9cefe176b96725ce3db98d37f688b99c"
     },
     "parity/chmmr-satellites/parity.fields": {
       "bytes": 11367386,
@@ -66,8 +66,8 @@
       "sha256": "3ffd5eba3a6974f7a9c95dbafe7f3f08df360bf2a9f8f62a3bf3cf32c0083535"
     },
     "parity/counts/campaign-s03b-broken-ultron.toml": {
-      "bytes": 2828500,
-      "sha256": "b887fa22a14a1c2bfc697bc9ce256a26f03b2c67911c9d736f5f6ee189d788b5"
+      "bytes": 2829769,
+      "sha256": "acd3efacb3785562da5ed4bfb867ebc24f6d80a475c81e3fefc3ef8e04badd81"
     },
     "parity/counts/campaign-s03c-thraddash-diverted.toml": {
       "bytes": 1038732,
@@ -86,20 +86,20 @@
       "sha256": "c67a37c5c790d848a66d9b0de9084b098e253dc2711c59dda0c93f13db13ca65"
     },
     "parity/counts/campaign-s04c-ilwrath-approach.toml": {
-      "bytes": 1109568,
-      "sha256": "18a568c6635a7296475ce954442dd9d17990825ed0b0209ab1cfa46354f51ba4"
+      "bytes": 1100718,
+      "sha256": "fad9c95e4d4a982cbbb322fc9538582317cdcce0392d49df446a943c16cc3629"
     },
     "parity/counts/campaign-s04d-caster-diversion.toml": {
       "bytes": 45283,
       "sha256": "45faa82b3fea625cf8213320ddba67bc7902aa2917707b5abe9d1958f2de90ab"
     },
     "parity/counts/campaign-s05a-south-refueled.toml": {
-      "bytes": 515004,
-      "sha256": "d5e3155ed864766bb0369618b6b6fc7c7212a8f0af4705204cf6aa1abaf67320"
+      "bytes": 1093529,
+      "sha256": "9a12212ad6efc501ded3fef8738193bb7577c16147d2fae28c274ec6ebd76d39"
     },
     "parity/counts/campaign-s05b-repaired-ultron.toml": {
-      "bytes": 1002991,
-      "sha256": "c7be247814994878d6c631a40bdfecdc63f4f06d06ac6222ced5b1d426e19c0c"
+      "bytes": 999347,
+      "sha256": "60596f032471a0fb2b3cd6255c2443894d132afbf13d30849d1f21fc29ad71c2"
     },
     "parity/counts/campaign-s06a-utwig-alliance.toml": {
       "bytes": 748527,
@@ -158,8 +158,8 @@
       "sha256": "c01f7fd189821020136ca2115c2432465c516c52f54fcc94211b020d13b2f9f3"
     },
     "parity/counts/campaign-s08a-refitted.toml": {
-      "bytes": 749893,
-      "sha256": "eef6760e155031953ce628bb18e06a52172310d4b07dbf7d2488c69813ffdece"
+      "bytes": 749573,
+      "sha256": "f1a45646d19a4b295d0b21d77c61e0dadc878062d87a3a102bf596a036122dff"
     },
     "parity/counts/campaign-s08b-crew-ready.toml": {
       "bytes": 260056,
@@ -214,8 +214,8 @@
       "sha256": "10346cb3f7731c7fe6fdd2639d6a77351d5e437b9fa601cfe8f0e0fadf0677b1"
     },
     "parity/counts/campaign-s09b-syreen-shuttle.toml": {
-      "bytes": 1160702,
-      "sha256": "0a1796662b3a2f58b6fb633c245871677e9cc5e0e4aa3f26ee1327f0901bb5e3"
+      "bytes": 1105448,
+      "sha256": "59f9adb3b38ee0993c98af69248384aca3ee1b8c71b4a7de337eb28765dc5f30"
     },
     "parity/counts/campaign-s09c-syreen-vault.toml": {
       "bytes": 343364,
@@ -234,8 +234,8 @@
       "sha256": "71c93c8d2e4e69df3e56287523e962ee32bc37825fef1d2849584e181f174267"
     },
     "parity/counts/campaign-s09g-funded-vault.toml": {
-      "bytes": 435546,
-      "sha256": "645774da64549c728aab3f432479ddb056a2c7e5e53b888bc8479573a770b200"
+      "bytes": 444036,
+      "sha256": "91d6126738e33eac976f12d9206bd08d2b9f6f3590273ec786a9db823ebe231e"
     },
     "parity/counts/campaign-s09h-rainbow-refuel.toml": {
       "bytes": 610114,
@@ -250,16 +250,16 @@
       "sha256": "8e5587bb51d1dfef71ddeab22e6181eb6e28f922e11e544dd1036319b97d28aa"
     },
     "parity/counts/campaign-s09k-connected-syreen.toml": {
-      "bytes": 1029027,
-      "sha256": "60cf3bf500e2a5058c44b57c31943a3bd1c2e82bd06b257ff3a2424c8b741c4f"
+      "bytes": 1023168,
+      "sha256": "9639c1e146a8ec9da99fab97e3b954c6a0b18ebe4f1f565fca36a719558d41b5"
     },
     "parity/counts/campaign-s09l-connected-vault.toml": {
       "bytes": 580277,
       "sha256": "f4ac7e2930833a4e2f5cb8e43fe0ce99f6ddc1c439a3a7b1789c1861ec78e50c"
     },
     "parity/counts/campaign-s09m-connected-ambush.toml": {
-      "bytes": 707899,
-      "sha256": "baaa80502b73eca7bd173d352c5e5207e6a2d4bab323e4438160a88bb39373c0"
+      "bytes": 710476,
+      "sha256": "092d61abf4a71a6850bcb378b23db17468085f276bca421b24ef0528b1c4ebec"
     },
     "parity/counts/campaign-s09n-vault-resupply.toml": {
       "bytes": 481500,
@@ -302,8 +302,8 @@
       "sha256": "f4b20d5a5651467363b21d6c54050e10a55277be6fdfb578c4c664f98577b40e"
     },
     "parity/counts/campaign-s10g-connected-lure.toml": {
-      "bytes": 1217415,
-      "sha256": "37b33e63e92a2615234e436a7c5daaa99474ca1b594237cdcb60201f2fdc1ff7"
+      "bytes": 890794,
+      "sha256": "b5af4555adbbcb33beb7448dc47b86e4021289033c2e8be2719cf408e83dba66"
     },
     "parity/counts/campaign-s10h-connected-lure-prep.toml": {
       "bytes": 454540,
@@ -318,12 +318,12 @@
       "sha256": "5a5dae2af1abd5036fb7b90bcd50c82e2947379170636631959e28bf190b3912"
     },
     "parity/counts/campaign-s10l-connected-sun-device.toml": {
-      "bytes": 476376,
-      "sha256": "1fe7215faa15a8ec85a8bee6008d2b9d229cb5fc7e63484d61115fe4d515f1f6"
+      "bytes": 474269,
+      "sha256": "c8b259f179a40a8ae5aa6f653816b793ee7b2ebb841f3e0ba137cbe8abe4519b"
     },
     "parity/counts/campaign-s11a-connected-chmmr.toml": {
-      "bytes": 816144,
-      "sha256": "120fd75af34e2fc762bb17b5276842bb4304d1b0ed8bba49c4b0ddfdf9959391"
+      "bytes": 815941,
+      "sha256": "f84b07e92eb3f52ae5f077da0d131448b918639f5c083f150b07a4b23189b256"
     },
     "parity/counts/campaign-s11b-connected-final-fleet.toml": {
       "bytes": 260475,
@@ -334,8 +334,8 @@
       "sha256": "98f4463ed73eee87c4956c5e678f52d27248f0eb95cbdbc46911a887899cb512"
     },
     "parity/counts/campaign-s12b-connected-remnants.toml": {
-      "bytes": 408307,
-      "sha256": "b24449db7a99dfa568b08c27d294f0e2f3a19f6b77325928b778abe15256bd93"
+      "bytes": 408217,
+      "sha256": "d959806b4d7d5c1e30121d443f43072e98488a1129f0d206e27eadca1f275b22"
     },
     "parity/counts/campaign-s13-connected-ending.toml": {
       "bytes": 2218263,
@@ -574,8 +574,8 @@
       "sha256": "783b6e71c842848d8c7d0cc30ef91f1a0ff7129807899d2b49ff751bc58e1807"
     },
     "parity/counts/lost-battle-v1.toml": {
-      "bytes": 232396,
-      "sha256": "8aa2bbbb57a09dd99784b7c708b002194e4557fbb592ed158eecf4358f3b1cf6"
+      "bytes": 232299,
+      "sha256": "52a7e18128f8e8a7aadbefa2a338ecec3d97adb354e19ff1c8ff0fa4e9657f87"
     },
     "parity/counts/main-menu-v1.toml": {
       "bytes": 3469,

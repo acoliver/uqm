@@ -137,13 +137,6 @@ terminal = "semantic_mismatch"
 issue = 719
 
 [[expectation]]
-scenario = "campaign-s05a-south-refueled"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
-
-
-[[expectation]]
 scenario = "campaign-s06c-utwig-bomb"
 classification = "known_bug"
 terminal = "semantic_mismatch"

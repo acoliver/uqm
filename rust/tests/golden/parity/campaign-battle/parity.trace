@@ -10684,19 +10684,14 @@ P 4754 0 c0b3686b6d3c09f2
 S 3123 514 623405df bffdfdf875a0b9b3
 I 2816 514 menu=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];players=[[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
 P 4755 0 60759c196d91e7e6
-S 3124 514 603de27a abfb5a43140c8cd4 [hook 15 ships::races::ilwrath_native::ilwrath_intelligence] [hook 26 battle::tactrans_native::new_ship] [hook 26 battle::tactrans_native::preprocess_dead_ship] [hook 15 battle::ship_native::ship_preprocess] [hook 15 ships::races::ilwrath_native::ilwrath_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 15 battle::ship_native::ship_postprocess] [hook 0 battle::world_elements::gravity_postprocess]
-P 4756 0 60759c196d91e7e6
-S 3125 514 603de27a 2d115825ecabc2f6
-I 2817 514 menu=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];players=[[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
-P 4757 0 c8ed5bfbcc26ad29
-S 3126 2 1ceaad44 abe0c236194095f6 [hook 15 ships::races::ilwrath_native::ilwrath_intelligence] [hook 26 battle::tactrans_native::new_ship] [drawable-free drawable:133] [drawable-free drawable:134] [drawable-free drawable:135] [drawable-free drawable:130] [drawable-free drawable:131] [drawable-free drawable:132] [drawable-free drawable:136] [drawable-free drawable:129] [hook 15 battle::ship_native::ship_preprocess] [hook 15 ships::races::ilwrath_native::ilwrath_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [free 7:2] [hook 15 battle::ship_native::ship_postprocess] [hook 0 battle::world_elements::gravity_postprocess]
+S 3124 2 d56907e0 2ff41c4e070178e7 [hook 15 ships::races::ilwrath_native::ilwrath_intelligence] [hook 26 battle::tactrans_native::new_ship] [drawable-free drawable:133] [drawable-free drawable:134] [drawable-free drawable:135] [drawable-free drawable:130] [drawable-free drawable:131] [drawable-free drawable:132] [drawable-free drawable:136] [drawable-free drawable:129] [hook 15 battle::ship_native::ship_preprocess] [hook 15 ships::races::ilwrath_native::ilwrath_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [hook 0 battle::world_elements::asteroid_preprocess] [free 7:2] [hook 15 battle::ship_native::ship_postprocess] [hook 0 battle::world_elements::gravity_postprocess]
+P 4756 0 4d856b7a9008759a
+I 2817 0 menu=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];players=[[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
+P 4757 0 4d856b7a9008759a
 P 4758 0 4d856b7a9008759a
+P 4759 0 170a19c7a4533df2
+S 3125 0 d56907e0 9dd7f2368d14e00d [drawable-free drawable:116] [drawable-free drawable:117] [drawable-free drawable:118] [drawable-free drawable:113] [drawable-free drawable:114] [drawable-free drawable:115] [drawable-free drawable:119] [drawable-free drawable:112] [drawable-free drawable:111] [drawable-free drawable:105] [drawable-free drawable:106] [drawable-free drawable:107] [drawable-free drawable:78] [drawable-free drawable:77]
 I 2818 0 menu=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];players=[[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
-P 4759 0 4d856b7a9008759a
-P 4760 0 4d856b7a9008759a
-P 4761 0 170a19c7a4533df2
-S 3127 0 1ceaad44 e08c811e2e016ad0 [drawable-free drawable:116] [drawable-free drawable:117] [drawable-free drawable:118] [drawable-free drawable:113] [drawable-free drawable:114] [drawable-free drawable:115] [drawable-free drawable:119] [drawable-free drawable:112] [drawable-free drawable:111] [drawable-free drawable:105] [drawable-free drawable:106] [drawable-free drawable:107] [drawable-free drawable:78] [drawable-free drawable:77]
-I 2819 0 menu=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];players=[[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
-P 4762 4 9fc97f6c0ba9f0ee
-P 4763 0 9fc97f6c0ba9f0ee
-S 3128 0 1ceaad44 e08c811e2e016ad0
+P 4760 4 9fc97f6c0ba9f0ee
+P 4761 0 9fc97f6c0ba9f0ee
+S 3126 0 d56907e0 9dd7f2368d14e00d

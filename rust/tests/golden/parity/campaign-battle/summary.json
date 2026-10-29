@@ -1,14 +1,14 @@
 {
   "replay": {
     "completed": true,
-    "inputs_admitted": 2820,
-    "presents": 4763,
-    "steps": 5647,
+    "inputs_admitted": 2819,
+    "presents": 4761,
+    "steps": 5645,
     "final_activity": 0
   },
   "counts": {
-    "input_seen": 2820,
-    "present_seen": 4763,
+    "input_seen": 2819,
+    "present_seen": 4761,
     "terminal": "success",
     "completed": true,
     "exit_code": 0,
@@ -53029,83 +53029,62 @@
       {
         "input_seen": 2817,
         "present_seen": 4756,
-        "step": 29,
-        "action": "wait_for_state",
-        "phase": "WaitingCondition { remaining: 5595 }"
+        "step": 30,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
       },
       {
         "input_seen": 2817,
         "present_seen": 4757,
-        "step": 29,
-        "action": "wait_for_state",
-        "phase": "WaitingCondition { remaining: 5595 }"
+        "step": 30,
+        "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
       },
       {
         "input_seen": 2817,
         "present_seen": 4758,
-        "step": 29,
-        "action": "wait_for_state",
-        "phase": "WaitingCondition { remaining: 5595 }"
-      },
-      {
-        "input_seen": 2818,
-        "present_seen": 4758,
         "step": 30,
         "action": "wait_for_main_menu_ready",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 2817,
+        "present_seen": 4759,
+        "step": 31,
+        "action": "capture",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 2818,
         "present_seen": 4759,
-        "step": 30,
-        "action": "wait_for_main_menu_ready",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 2818,
-        "present_seen": 4760,
-        "step": 30,
-        "action": "wait_for_main_menu_ready",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 2818,
-        "present_seen": 4761,
-        "step": 31,
-        "action": "capture",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 2819,
-        "present_seen": 4761,
         "step": 31,
         "action": "capture",
         "phase": "WaitingCapture { generation: CaptureGeneration(4) }"
       },
       {
-        "input_seen": 2819,
-        "present_seen": 4762,
+        "input_seen": 2818,
+        "present_seen": 4760,
+        "step": 32,
+        "action": "finish",
+        "phase": "WaitingForInput"
+      },
+      {
+        "input_seen": 2818,
+        "present_seen": 4761,
         "step": 32,
         "action": "finish",
         "phase": "WaitingForInput"
       },
       {
         "input_seen": 2819,
-        "present_seen": 4763,
+        "present_seen": 4761,
         "step": 32,
         "action": "finish",
         "phase": "WaitingForInput"
       },
       {
-        "input_seen": 2820,
-        "present_seen": 4763,
-        "step": 32,
-        "action": "finish",
-        "phase": "WaitingForInput"
-      },
-      {
-        "input_seen": 2820,
-        "present_seen": 4763,
+        "input_seen": 2819,
+        "present_seen": 4761,
         "step": 32,
         "action": "finish",
         "phase": "WaitingForInput"
