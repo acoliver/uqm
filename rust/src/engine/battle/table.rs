@@ -82,8 +82,8 @@ impl ElementTable {
         })
     }
 
-    /// Retained legacy phoenix addresses can outlive their allocation. Foreign
-    /// addresses still fail validation; a retired pool slot has no current id.
+    /// Legacy bookkeeping can retain an address after its allocation retires.
+    /// Foreign addresses still fail validation; a retired slot has no current id.
     pub(super) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
         if handle.is_null() {
             return None;

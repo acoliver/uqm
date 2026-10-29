@@ -53,7 +53,7 @@ fn opening(
             run.object = Some(run.weapon(world, run.b())?);
             run.array = Some(world.elements[&run.object()].current.image.frames);
             run.owner = Some(world.owner(run.b()));
-            run.species = world.ship(run.b()).pick.species;
+            run.species = world.ship(run.b()).species;
             let mut effects = Vec::new();
             for (&h, e) in &mut world.elements {
                 if e.current.image.frames == run.array() {
@@ -106,8 +106,8 @@ fn replacement(run: &mut Battle, world: &mut World) -> Result<Option<Vec<Effect>
                 .ships
                 .get_mut(&run.owner())
                 .ok_or("fixture element or owner is no longer live")?;
-            ship.element = None;
-            ship.pick.species = run.species;
+            ship.clear_element();
+            ship.species = run.species;
             run.next(vec![Effect::Spawn(run.owner())])
         }
         5 => {

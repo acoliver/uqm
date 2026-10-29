@@ -227,7 +227,7 @@ impl Battle {
         [self.a, self.b] = world.fighters()?.map(Some);
         for (handle, species) in [(self.a(), species[0]), (self.b(), species[1])] {
             let ship = world.ship_mut(handle);
-            if ship.pick.species != species {
+            if ship.species != species {
                 return Err(format!(
                     "{}: live opponents do not match fixture roster",
                     self.proof.fixture.name()

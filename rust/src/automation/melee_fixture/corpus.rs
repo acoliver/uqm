@@ -112,9 +112,7 @@ impl Run {
                         *world
                             .ships
                             .iter()
-                            .find(|(_, s)| {
-                                s.state.player == side as i16 && s.pick.species == species
-                            })
+                            .find(|(_, s)| s.state.player == side as i16 && s.species == species)
                             .ok_or("requested species missing from loaded fleet")?
                             .0,
                     );
@@ -227,7 +225,7 @@ impl Run {
                 .ok_or("active corpus descriptor is unavailable")?
                 .crew_level
                 == 0
-                || ship.pick.species == SPECIES_ID_NO_ID
+                || ship.species == SPECIES_ID_NO_ID
             {
                 return Ok(true);
             }
@@ -238,11 +236,11 @@ impl Run {
 
 fn reset(world: &mut World, fleet: &[u8; 7], catalog: &BTreeMap<u8, u32>) {
     for ship in world.ships.values_mut() {
-        let slot = usize::from(ship.pick.index);
+        let slot = usize::from(ship.index);
         assert!(slot < fleet.len(), "configured corpus fleet slot");
-        ship.element = None;
-        ship.pick.species = catalog[&fleet[slot]];
-        ship.pick.crew = 0;
+        ship.clear_element();
+        ship.species = catalog[&fleet[slot]];
+        ship.state.crew = 0;
         ship.state.input = 0;
         ship.state.status = 0;
         ship.state.old_status = 0;
