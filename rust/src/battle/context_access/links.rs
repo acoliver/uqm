@@ -49,3 +49,30 @@ impl LinkQueue<'_, Starship> {
         })
     }
 }
+
+#[cfg(not(test))]
+impl LinkQueue<'_, Starship> {
+    pub(crate) fn mark_dead(ship: ShipId) -> PickShip {
+        with_fleet(ship.side as usize, |mut queue| {
+            let id = queue.link(ship);
+            queue.edit(id, |value| value.species = 0);
+            queue.get(id)
+        })
+    }
+    pub(crate) fn next_ship(ship: ShipId) -> Option<ShipId> {
+        with_fleet(ship.side as usize, |queue| {
+            queue
+                .succ(queue.link(ship))
+                .map(|id| queue.ship_id(id, ship.side))
+        })
+    }
+    pub(crate) fn restore_ship(ship: ShipId, player: i16, captain: u8) {
+        with_fleet(ship.side as usize, |mut queue| {
+            queue.edit(queue.link(ship), |value| {
+                value.crew = value.max_crew;
+                value.player = player;
+                value.captain = captain;
+            });
+        });
+    }
+}

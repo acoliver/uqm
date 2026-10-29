@@ -16,10 +16,7 @@ use crate::c_bindings::controller_input::{
 
 use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
-use crate::engine::battle::{
-    link_queue::{self},
-    ShipId,
-};
+use crate::engine::battle::ShipId;
 use crate::mainloop::restart_menu::c_extern as base;
 use crate::mainloop::types::activity_flags::CHECK_ABORT;
 use crate::starbase::gfx::Rgba;
@@ -390,6 +387,7 @@ pub use crate::battle::context_access::reader_legacy::{
 pub(crate) unsafe fn encounter_ship(
     last: *mut c_void,
     which_player: u16,
+    activity: u16,
     pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
 ) -> *mut c_void {
     let side = usize::from(which_player);
@@ -404,7 +402,7 @@ pub(crate) unsafe fn encounter_ship(
         // SAFETY: `queue` is `race_q[side]`.
         return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::first_ship(side));
     }
-    if crate::battle::battle_native::engine::activity() & 0xFF == SUPER_MELEE {
+    if activity & 0xFF == SUPER_MELEE {
         // Let the player chose their own ship. (May be a computer player).
         // SAFETY: `battle_counter` has a slot for each side.
         let (own, other) =
@@ -468,17 +466,12 @@ pub(crate) unsafe fn encounter_ship(
             // The current STARSHIP is reused for the next one; update with new
             // info.
             // SAFETY: `last` is a live `STARSHIP`.
-            unsafe {
-                let captain = production_captain_name();
-                let mut queue = link_queue::ships(side);
-                let id =
-                    queue.link(last_id.unwrap_or_else(|| panic!("missing checked battle value")));
-                let mut ship = queue.get(id);
-                ship.crew = ship.max_crew;
-                ship.player = which_player as _;
-                ship.captain = captain;
-                queue.set(id, ship);
-            }
+            let captain = production_captain_name();
+            LinkQueue::<Starship>::restore_ship(
+                last_id.unwrap_or_else(|| panic!("missing checked battle value")),
+                which_player as i16,
+                captain,
+            );
         }
         // SAFETY: `counter` points into `battle_counter`.
         unsafe { crate::app::bridge::battle(|b| b.counters[side] += 1) };
@@ -488,12 +481,9 @@ pub(crate) unsafe fn encounter_ship(
     if !last.is_null() {
         // Get the next ship for the computer
         // SAFETY: `last` is a live `STARSHIP`.
-        return unsafe {
-            let queue = link_queue::ships(side);
-            queue
-                .succ(queue.link(last_id.unwrap_or_else(|| panic!("missing checked battle value"))))
-                .map_or(std::ptr::null_mut(), |id| queue.raw(id))
-        };
+        return LinkQueue::<Starship>::ship_raw(LinkQueue::<Starship>::next_ship(
+            last_id.unwrap_or_else(|| panic!("missing checked battle value")),
+        ));
     }
     // Get the very first ship for the computer
     // SAFETY: `queue` is `race_q[side]`.

@@ -1,6 +1,6 @@
+use super::super::link_queue::*;
 #[cfg(not(test))]
 use super::super::ShipId;
-use super::super::{link_queue::*, record::QueueRecord};
 use crate::collections::queue::{self, HLink, Queue};
 use std::{marker::PhantomData, ptr};
 impl<'a, T: QueueRecord> LinkQueue<'a, T> {

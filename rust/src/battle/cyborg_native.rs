@@ -219,8 +219,8 @@ mod intercept {
                 ),
             )
         } else {
-            let ar = cx.projected_frame_rect(a.intersection().IntersectStamp.frame);
-            let br = cx.projected_frame_rect(b.intersection().IntersectStamp.frame);
+            let ar = cx.frame_rect(cx.subject_intersect_frame(a));
+            let br = cx.frame_rect(cx.subject_intersect_frame(b));
             let ax = (ar.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
             let ay = (ar.corner.y as i32).wrapping_shl(ONE_SHIFT) as i16;
             let bx = (br.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
@@ -326,7 +326,7 @@ pub(crate) fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BO
     } else {
         cx.ship_state_mut(starship).input |= LEFT as u8;
         f -= 1;
-        ship.next.image.frame = cx.previous_frame(ship.current.image.frame);
+        ship.next.image.frame = cx.retreat_frame(ship.current.image.frame);
     }
     cx.ship_state_mut(starship).facing = normalize_facing(f);
     1
@@ -485,14 +485,11 @@ pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let (ox, oy) = next_velocity(&mut other_velocity, eval.which_turn);
     let mut dx = (other.current.location.x as i32 + ox as i32 - ship.next.location.x as i32) as i16;
     let mut dy = (other.current.location.y as i32 + oy as i32 - ship.next.location.y as i32) as i16;
-    dx = crate::ships::native::wrap_delta(
+    dx = crate::math::wrap_delta(
         dx,
         (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
     );
-    dy = crate::ships::native::wrap_delta(
-        dy,
-        cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION),
-    );
+    dy = crate::math::wrap_delta(dy, cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION));
     let mut thrust_angle = ai_arctan(dx, dy);
     let mut maneuver: u8 = 0;
     if ship.turn == 0 {
@@ -582,14 +579,11 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let (ox, oy) = next_velocity(&mut other_velocity, eval.which_turn);
     let mut dx = (other.current.location.x as i32 + ox as i32 - ship.next.location.x as i32) as i16;
     let mut dy = (other.current.location.y as i32 + oy as i32 - ship.next.location.y as i32) as i16;
-    dx = crate::ships::native::wrap_delta(
+    dx = crate::math::wrap_delta(
         dx,
         (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
     );
-    dy = crate::ships::native::wrap_delta(
-        dy,
-        cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION),
-    );
+    dy = crate::math::wrap_delta(dy, cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION));
     let mut thrust_angle = ai_arctan(dx, dy);
     let mut maneuver = 0u8;
     if ship.turn == 0 {
@@ -841,11 +835,11 @@ pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
         if collision_possible(&e, &ship_copy) {
             let mut dx = e.next.location.x.wrapping_sub(ship_copy.next.location.x);
             let mut dy = e.next.location.y.wrapping_sub(ship_copy.next.location.y);
-            dx = crate::ships::native::wrap_delta(
+            dx = crate::math::wrap_delta(
                 dx,
                 (cx.screen_dimensions().0 - 64) << (ONE_SHIFT + MAX_REDUCTION),
             );
-            dy = crate::ships::native::wrap_delta(
+            dy = crate::math::wrap_delta(
                 dy,
                 cx.screen_dimensions().1 << (ONE_SHIFT + MAX_REDUCTION),
             );
@@ -860,7 +854,7 @@ pub(crate) fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
                 };
 
                 let frame = cx.absolute_frame(cx.subject_intersect_frame(&ship_copy), 0);
-                let rect = cx.projected_frame_rect(frame.raw());
+                let rect = cx.frame_rect(frame);
                 let bounds = (i32::from(rect.extent.width) + i32::from(rect.extent.height)) as u16;
                 let mut intercept_turn = 0;
                 if !moved {

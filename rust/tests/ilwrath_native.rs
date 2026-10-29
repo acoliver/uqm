@@ -8,15 +8,12 @@ mod battle_context;
 use battle::{Battle as PoolBattle, PoolShip};
 
 use std::ffi::{c_void, CStr};
-use std::sync::{Mutex, MutexGuard};
-use std::{mem, ptr};
+use std::ptr;
 use uqm_rust::ships::native::{abi::*, element, put_element};
 
 unsafe extern "C" {
     static mut DisplayArray: [PRIMITIVE; 330];
 }
-
-/// The engine's queue, display list and screen size are process globals.
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.

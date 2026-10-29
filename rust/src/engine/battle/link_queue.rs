@@ -1,7 +1,17 @@
 //! Typed link order over the transitional battle ship pool.
 
-use super::{record::QueueRecord, ShipId};
+use super::ShipId;
 use crate::collections::queue::{HLink, Queue};
+/// Storage mapping for typed views over the transitional intrusive queues.
+mod queue_record {
+    pub trait Sealed {}
+    impl Sealed for super::Starship {}
+}
+pub trait QueueRecord: queue_record::Sealed + Eq {
+    type Storage;
+    fn links(record: &Self::Storage) -> (HLink, HLink);
+}
+
 use std::{marker::PhantomData, ptr};
 
 #[derive(Debug, PartialEq, Eq)]

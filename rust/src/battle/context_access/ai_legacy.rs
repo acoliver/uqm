@@ -3,25 +3,8 @@ use crate::battle::cyborg_native as ai;
 #[cfg(not(test))]
 use crate::engine::battle::{record::*, Cx, Subject};
 #[cfg(not(test))]
-use crate::graphics::native_abi::{INTERSECT_CONTROL, RECT};
+use crate::graphics::native_abi::INTERSECT_CONTROL;
 
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn projected_frame_rect(&self, frame: crate::graphics::native_abi::FRAME) -> RECT {
-        let mut rect = RECT {
-            corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
-            extent: crate::graphics::native_abi::EXTENT {
-                width: 0,
-                height: 0,
-            },
-        };
-        // SAFETY: projected subjects retain their loaded frame resources.
-        unsafe {
-            crate::ships::native::abi::GetFrameRect(frame, &mut rect);
-        }
-        rect
-    }
-}
 #[cfg(not(test))]
 impl Cx<'_> {
     pub(crate) fn projected_intersect(
@@ -44,15 +27,16 @@ unsafe fn subject_call<R>(
     call: impl FnOnce(&mut Cx<'_>, &mut Subject) -> R,
 ) -> R {
     // SAFETY: the published context is suspended by the legacy caller; no record borrow crosses call.
-
-    crate::app::bridge::enter(|cx| {
-        let mut subject = cx.legacy_subject(&*pointer);
-        let result = call(cx, &mut subject);
-        if write_back {
-            *pointer = cx.encode_subject(&subject);
-        }
-        result
-    })
+    unsafe {
+        with_context(|cx| {
+            let mut subject = cx.legacy_subject(&*pointer);
+            let result = call(cx, &mut subject);
+            if write_back {
+                *pointer = cx.encode_subject(&subject);
+            }
+            result
+        })
+    }
 }
 
 /// # Safety
@@ -66,16 +50,17 @@ pub unsafe extern "C" fn PlotIntercept(
     margin: u16,
 ) -> u16 {
     // SAFETY: the caller retains both projections through this synchronous calculation.
-
-    crate::app::bridge::enter(|cx| {
-        ai::plot_intercept(
-            cx,
-            &cx.legacy_intercept_subject(&*a),
-            &cx.legacy_intercept_subject(&*b),
-            turns,
-            margin,
-        )
-    })
+    unsafe {
+        with_context(|cx| {
+            ai::plot_intercept(
+                cx,
+                &cx.legacy_intercept_subject(&*a),
+                &cx.legacy_intercept_subject(&*b),
+                turns,
+                margin,
+            )
+        })
+    }
 }
 
 /// # Safety
@@ -84,11 +69,12 @@ pub unsafe extern "C" fn PlotIntercept(
 #[no_mangle]
 pub unsafe extern "C" fn ship_weapons(ship: *mut ELEMENT, other: *mut ELEMENT, margin: u16) -> u32 {
     // SAFETY: the copied values outlive all weapon callbacks; no caller record borrow survives.
-
-    subject_call(ship, false, |cx, subject| {
-        let other = cx.legacy_subject(&*other);
-        ai::weapons(cx, subject, &other, margin)
-    })
+    unsafe {
+        subject_call(ship, false, |cx, subject| {
+            let other = cx.legacy_subject(&*other);
+            ai::weapons(cx, subject, &other, margin)
+        })
+    }
 }
 
 #[cfg(not(test))]
@@ -97,6 +83,8 @@ pub(crate) unsafe fn decode_concerns(
     raw: *const EVALUATE_DESC,
     count: usize,
 ) -> Vec<crate::engine::battle::Concern> {
+    // SAFETY: the function contract retains the serialized context and all operand storage.
+
     (0..count)
         .map(|i| {
             // SAFETY: each caller retains count initialized concern slots.
@@ -116,6 +104,8 @@ pub(crate) unsafe fn encode_concerns(
     raw: *mut EVALUATE_DESC,
     concerns: &[crate::engine::battle::Concern],
 ) {
+    // SAFETY: the function contract retains the serialized context and all operand storage.
+
     for (i, item) in concerns.iter().enumerate() {
         // SAFETY: each caller retains one writable raw slot per concern value.
         unsafe {
@@ -140,12 +130,13 @@ pub unsafe extern "C" fn ship_intelligence(
     count: u16,
 ) {
     // SAFETY: raw slots are copied before Native dispatch and written back after it.
-
-    subject_call(ship, true, |cx, subject| {
-        let mut concerns = decode_concerns(cx, raw, usize::from(count));
-        ai::intelligence(cx, subject, &mut concerns, count);
-        encode_concerns(cx, raw, &concerns);
-    });
+    unsafe {
+        subject_call(ship, true, |cx, subject| {
+            let mut concerns = decode_concerns(cx, raw, usize::from(count));
+            ai::intelligence(cx, subject, &mut concerns, count);
+            encode_concerns(cx, raw, &concerns);
+        });
+    }
 }
 
 /// # Safety
@@ -157,11 +148,12 @@ pub unsafe extern "C" fn tactical_intelligence(
     owner: *mut STARSHIP,
 ) -> u8 {
     // SAFETY: the owner address is decoded before Native dispatch.
-
-    crate::app::bridge::enter(|cx| {
-        let id = cx.ship_id(owner as usize);
-        ai::tactical(cx, id)
-    })
+    unsafe {
+        with_context(|cx| {
+            let id = cx.ship_id(owner as usize);
+            ai::tactical(cx, id)
+        })
+    }
 }
 
 /// # Safety
@@ -173,20 +165,21 @@ pub unsafe extern "C" fn computer_intelligence(
     ship: *mut STARSHIP,
 ) -> u8 {
     // SAFETY: input and ship addresses are decoded before the Native entry.
-
-    crate::app::bridge::enter(|cx| {
-        if cx.world.activity() as u8 == crate::ships::native::abi::IN_LAST_BATTLE as u8 {
-            return 0;
-        }
-        let player = (*context).playerNr;
-        let id = (!ship.is_null()).then(|| cx.ship_id(ship as usize));
-        let control = if id.is_none() {
-            crate::supermelee::c_bridge::PlayerControl[player as usize]
-        } else {
-            0
-        };
-        crate::battle::ai_entry::computer_input(cx, player, id, control)
-    })
+    unsafe {
+        with_context(|cx| {
+            if cx.world.activity() as u8 == crate::ships::native::abi::IN_LAST_BATTLE as u8 {
+                return 0;
+            }
+            let player = (*context).playerNr;
+            let id = (!ship.is_null()).then(|| cx.ship_id(ship as usize));
+            let control = if id.is_none() {
+                crate::supermelee::c_bridge::PlayerControl[player as usize]
+            } else {
+                0
+            };
+            crate::battle::ai_entry::computer_input(cx, player, id, control)
+        })
+    }
 }
 #[cfg(not(test))]
 impl Cx<'_> {
@@ -215,21 +208,39 @@ impl Cx<'_> {
         raw: *mut EVALUATE_DESC,
         count: u16,
     ) {
-        // SAFETY: the shared entry copies all operands before calling the race dispatcher.
+        // SAFETY: the function contract retains the serialized context and all operand storage.
+        unsafe {
+            // SAFETY: the shared entry copies all operands before calling the race dispatcher.
 
-        subject_call(element, true, |cx, subject| {
-            let ship = cx.ship_id(parent);
-            let objects: [crate::engine::battle::Concern; 4] = decode_concerns(cx, raw, 4)
-                .try_into()
-                .unwrap_or_else(|_| panic!("missing checked battle value"));
-            let mut concerns = crate::engine::battle::Concerns {
-                objects,
-                subject: *subject,
-                count,
-            };
-            cx.race_intelligence(ship, &mut concerns);
-            *subject = concerns.subject;
-            encode_concerns(cx, raw, &concerns.objects);
-        });
+            subject_call(element, true, |cx, subject| {
+                let ship = cx.ship_id(parent);
+                let objects: [crate::engine::battle::Concern; 4] = decode_concerns(cx, raw, 4)
+                    .try_into()
+                    .unwrap_or_else(|_| panic!("missing checked battle value"));
+                let mut concerns = crate::engine::battle::Concerns {
+                    objects,
+                    subject: *subject,
+                    count,
+                };
+                cx.race_intelligence_with_junk(
+                    ship,
+                    &mut concerns,
+                    crate::engine::battle::Concern {
+                        object: None,
+                        facing: 0,
+                        which_turn: u16::MAX,
+                        movement: 0,
+                    },
+                );
+                *subject = concerns.subject;
+                encode_concerns(cx, raw, &concerns.objects);
+            });
+        }
     }
+}
+
+#[cfg(not(test))]
+unsafe fn with_context<R>(call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
+    // SAFETY: the legacy entry owns the current game-thread publication.
+    unsafe { crate::app::bridge::enter(call) }
 }

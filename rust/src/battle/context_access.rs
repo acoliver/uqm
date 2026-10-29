@@ -309,19 +309,6 @@ impl Cx<'_> {
         }
     }
 
-    pub(crate) fn race_intelligence(&mut self, ship: ShipId, concerns: &mut Concerns) {
-        self.race_intelligence_with_junk(
-            ship,
-            concerns,
-            Concern {
-                object: None,
-                facing: 0,
-                which_turn: u16::MAX,
-                movement: 0,
-            },
-        );
-    }
-
     pub(crate) fn race_intelligence_with_junk(
         &mut self,
         ship: ShipId,
@@ -329,12 +316,8 @@ impl Cx<'_> {
         junk: Concern,
     ) {
         let parent = self.ship_pointer(ship) as usize;
-        if let Some(race) = self.desc(ship).race {
-            crate::battle::process_native::dispatch::invoke(
-                race.intelligence as usize,
-                parent,
-                || (race.intelligence)(self, ship, concerns),
-            );
+        if self.desc(ship).race.is_some() {
+            self.race_intelligence(ship, concerns);
         } else {
             let callback = self
                 .desc(ship)
@@ -778,9 +761,9 @@ impl crate::engine::battle::Cx<'_> {
     }
 }
 
+pub(crate) mod ai_legacy;
 #[path = "race_access.rs"]
 mod race_access;
-pub(crate) mod ai_legacy;
 pub(crate) mod reader_legacy;
 pub(crate) mod sound_legacy;
 
@@ -796,8 +779,6 @@ impl Cx<'_> {
                 && style.color.a == 255)
     }
 }
-#[cfg(not(test))]
-impl Cx<'_> {}
 
 pub(crate) mod links;
 

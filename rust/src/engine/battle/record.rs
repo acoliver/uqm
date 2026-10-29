@@ -984,23 +984,8 @@ mod kernel_tests {
     }
 }
 
-#[cfg(not(test))]
-impl super::Subject {
-    pub(crate) fn intersection(&self) -> crate::graphics::native_abi::INTERSECT_CONTROL {
-        self.intersect
-    }
-}
-
-/// Storage mapping for typed views over the transitional intrusive queues.
-mod queue_record {
-    pub trait Sealed {}
-    impl Sealed for super::super::link_queue::Starship {}
-}
-pub trait QueueRecord: queue_record::Sealed + Eq {
-    type Storage;
-    fn links(record: &Self::Storage) -> (HLINK, HLINK);
-}
-impl QueueRecord for super::link_queue::Starship {
+use super::link_queue::QueueRecord;
+impl QueueRecord for crate::engine::battle::link_queue::Starship {
     type Storage = STARSHIP;
     fn links(record: &Self::Storage) -> (HLINK, HLINK) {
         (record.pred, record.succ)

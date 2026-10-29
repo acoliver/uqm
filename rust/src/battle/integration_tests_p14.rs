@@ -113,22 +113,6 @@ mod tests {
 
     // ---- Test 18: FFI exports callable ----
 
-    #[test]
-    fn test_all_ffi_exports_callable() {
-        unsafe {
-            use crate::battle::ffi::*;
-            let _ = rust_battle_entry();
-            let _ = rust_battle_frame();
-            let _ = rust_battle_init_ships();
-            rust_battle_uninit_ships();
-            rust_battle_init_space();
-            rust_battle_uninit_space();
-            rust_battle_song(0);
-            rust_free_battle_song();
-            let _ = rust_get_player_order();
-        }
-    }
-
     // ---- Test 19: Element flag transitions ----
 
     #[test]

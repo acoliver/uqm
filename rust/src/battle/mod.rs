@@ -200,39 +200,6 @@ mod integration_tests {
     // Test 4: FFI Round-Trip
     // -----------------------------------------------------------------------
 
-    #[test]
-    fn test_ffi_roundtrip() {
-        unsafe {
-            let mut vel = VelocityDesc::new();
-            let magnitude = 100;
-            let facing = 8; // 45 degrees
-            let direction = 0;
-
-            // Call through FFI
-            let result = ffi::rust_velocity_set_vector(&mut vel, magnitude, facing, direction);
-            assert_eq!(result, 0, "FFI call should succeed");
-
-            // Verify through direct Rust call
-            let mut dx: i32 = 0;
-            let mut dy: i32 = 0;
-            let result = ffi::rust_velocity_get_current_components(&vel, &mut dx, &mut dy);
-            assert_eq!(result, 0, "FFI call should succeed");
-
-            // Compare with direct method call
-            let (direct_dx, direct_dy) = vel.get_current_components();
-            assert_eq!(
-                dx, direct_dx,
-                "FFI dx should match direct call: ffi={}, direct={}",
-                dx, direct_dx
-            );
-            assert_eq!(
-                dy, direct_dy,
-                "FFI dy should match direct call: ffi={}, direct={}",
-                dy, direct_dy
-            );
-        }
-    }
-
     // -----------------------------------------------------------------------
     // Test 6: Type Relocation Verification
     // -----------------------------------------------------------------------

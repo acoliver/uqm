@@ -186,8 +186,6 @@ impl super::ElementTable {
         false
     }
 }
-#[cfg(not(test))]
-impl Cx<'_> {}
 
 impl Cx<'_> {
     pub(super) fn project<T>(&self, pointer: std::ptr::NonNull<T>) -> &T {
@@ -613,18 +611,7 @@ impl Cx<'_> {
     ) -> crate::engine::battle::views::Frame {
         crate::engine::battle::views::Frame(subject.intersect.IntersectStamp.frame)
     }
-    pub(crate) fn previous_frame(
-        &self,
-        frame: crate::engine::battle::views::Frame,
-    ) -> crate::engine::battle::views::Frame {
-        // SAFETY: the projected subject retains this loaded frame resource.
-        crate::engine::battle::views::Frame(unsafe {
-            crate::graphics::pixmap_abi::DecFrameIndex(frame.0)
-        })
-    }
 }
-#[cfg(not(test))]
-impl Cx<'_> {}
 
 pub(super) mod links;
 

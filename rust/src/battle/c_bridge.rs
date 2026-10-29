@@ -124,8 +124,6 @@ pub use crate::navigation::globals::inHQSpace;
 #[cfg(not(test))]
 pub use crate::battle::world_elements::engine::do_damage;
 
-pub use crate::battle::collision::collide;
-
 pub use crate::battle::gravity::CalculateGravity;
 
 #[cfg(not(test))]

@@ -7,7 +7,7 @@ mod battle;
 mod battle_context;
 use battle::{PoolElement, PoolShip};
 
-use std::{ffi::CStr, mem, ptr};
+use std::{ffi::CStr, ptr};
 use uqm_rust::ships::native::abi::*;
 
 unsafe extern "C" {

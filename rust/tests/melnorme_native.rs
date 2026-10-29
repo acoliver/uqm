@@ -18,7 +18,6 @@ use uqm_rust::ships::native::{
 unsafe extern "C" {
     fn FreeElement(handle: HELEMENT);
     fn RemoveElement(handle: HLINK);
-    static mut DisplayArray: [PRIMITIVE; 330];
 }
 
 use battle::Battle as Battlefield;

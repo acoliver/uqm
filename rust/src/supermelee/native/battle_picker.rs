@@ -54,7 +54,10 @@ pub mod live {
         flash::Flash_start(context.cast());
     }
 
-    use crate::engine::battle::{link_queue, ShipId};
+    use crate::engine::battle::{
+        link_queue::{self, LinkQueue, Starship},
+        ShipId,
+    };
     use crate::graphics::drawable_abi;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::teams::*;
@@ -412,11 +415,7 @@ pub mod live {
     /// The live battle ship and pick frame belong to the game thread.
     #[no_mangle]
     pub unsafe extern "C" fn MeleeShipDeath(ship: *mut std::ffi::c_void) {
-        let owner = link_queue::identify(ship as usize);
-        let mut queue = link_queue::ships(owner.side as usize);
-        let id = queue.link(owner);
-        queue.edit(id, |ship| ship.species = 0);
-        let ship = queue.get(id);
+        let ship = LinkQueue::<Starship>::mark_dead(link_queue::identify(ship as usize));
         let frame = SetAbsFrameIndex(PickMeleeFrame, ship.player as u16);
         let old = SetContext(OffScreenContext);
         drawable_abi::SetContextFGFrame(frame.cast());
