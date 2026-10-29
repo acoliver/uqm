@@ -254,7 +254,9 @@ fn without_probe_contacts(steps: &[Value]) -> Vec<Value> {
             index += 1;
             continue;
         }
-        let phrase = steps[index + 1]["phrase"].as_str().expect("probe farewell");
+        let Some(phrase) = steps[index + 1]["phrase"].as_str() else {
+            panic!("probe farewell must name a response");
+        };
         assert!(matches!(phrase, "bye_1" | "bye_2" | "bye_3"));
         let expected = serde_json::json!([
             {"action": "wait_for_communication_responses", "minimum": 1, "max_ticks": 350},
@@ -272,7 +274,9 @@ fn without_probe_contacts(steps: &[Value]) -> Vec<Value> {
             {"action": "set_player_key", "key": "special", "value": 0},
             {"action": "set_player_key", "key": "thrust", "value": 0}
         ]);
-        let expected = expected.as_array().unwrap();
+        let Value::Array(expected) = expected else {
+            unreachable!("contact contract is an array literal");
+        };
         assert_eq!(&steps[index..index + expected.len()], expected.as_slice());
         index += expected.len();
     }
@@ -297,9 +301,16 @@ fn incidental_probes_are_fought_and_release_controls_only_after_hyperspace_reent
         let phrases: Vec<_> = flight
             .iter()
             .filter(|step| action_of(step) == "select_response")
-            .map(|step| step["phrase"].as_str().unwrap())
+            .map(|step| step["phrase"].clone())
             .collect();
-        assert_eq!(phrases, ["bye_1", "bye_2", "bye_3"][..contacts], "{name}");
+        assert_eq!(
+            phrases,
+            ["bye_1", "bye_2", "bye_3"][..contacts]
+                .iter()
+                .map(|phrase| Value::from(*phrase))
+                .collect::<Vec<_>>(),
+            "{name}"
+        );
     }
 }
 
