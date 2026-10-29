@@ -2423,9 +2423,9 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|cognitive|uqm::automation::script::validate_navigation_step" = 46
 "complexity|cognitive|uqm::automation::star_flight::<StarFlight>::observe" = 61
 "complexity|cognitive|uqm::battle::collision::elastic_collide" = 39
-"complexity|cognitive|uqm::battle::cyborg_native::entice" = 132
-"complexity|cognitive|uqm::battle::cyborg_native::pursue" = 37
-"complexity|cognitive|uqm::battle::cyborg_native::tactical" = 191
+"complexity|cognitive|uqm::battle::cyborg_native::engine::Entice" = 132
+"complexity|cognitive|uqm::battle::cyborg_native::engine::Pursue" = 37
+"complexity|cognitive|uqm::battle::cyborg_native::engine::tactical_intelligence" = 191
 "complexity|cognitive|uqm::battle::encount_native::engine::UninitEncounter" = 87
 "complexity|cognitive|uqm::battle::galaxy::<STAR_BLOCK>::wrap" = 67
 "complexity|cognitive|uqm::battle::galaxy::engine::MoveGalaxy" = 72
@@ -2604,9 +2604,9 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|cyclomatic|uqm::automation::script::json_tokenize" = 31
 "complexity|cyclomatic|uqm::automation::script::validate_navigation_step" = 41
 "complexity|cyclomatic|uqm::automation::star_flight::<StarFlight>::observe" = 39
-"complexity|cyclomatic|uqm::battle::cyborg_native::entice" = 53
-"complexity|cyclomatic|uqm::battle::cyborg_native::pursue" = 32
-"complexity|cyclomatic|uqm::battle::cyborg_native::tactical" = 73
+"complexity|cyclomatic|uqm::battle::cyborg_native::engine::Entice" = 53
+"complexity|cyclomatic|uqm::battle::cyborg_native::engine::Pursue" = 32
+"complexity|cyclomatic|uqm::battle::cyborg_native::engine::tactical_intelligence" = 73
 "complexity|cyclomatic|uqm::battle::encount_native::engine::UninitEncounter" = 30
 "complexity|cyclomatic|uqm::battle::gendef::getGenerateFunctions" = 30
 "complexity|cyclomatic|uqm::battle::process_native::engine::process_collisions" = 47
@@ -2787,11 +2787,11 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "complexity|loc|uqm::automation::star_flight::<StarFlight>::observe" = 132
 "complexity|loc|uqm::battle::battle_native::engine::Battle" = 91
 "complexity|loc|uqm::battle::collision::elastic_collide" = 97
-"complexity|loc|uqm::battle::cyborg_native::entice" = 207
-"complexity|loc|uqm::battle::cyborg_native::intercept::plot_intercept" = 126
+"complexity|loc|uqm::battle::cyborg_native::engine::Entice" = 207
+"complexity|loc|uqm::battle::cyborg_native::engine::PlotIntercept" = 126
+"complexity|loc|uqm::battle::cyborg_native::engine::Pursue" = 103
+"complexity|loc|uqm::battle::cyborg_native::engine::tactical_intelligence" = 273
 "complexity|loc|uqm::battle::cyborg_native::intercept_window" = 91
-"complexity|loc|uqm::battle::cyborg_native::pursue" = 103
-"complexity|loc|uqm::battle::cyborg_native::tactical" = 273
 "complexity|loc|uqm::battle::encount_native::engine::InitEncounter" = 93
 "complexity|loc|uqm::battle::encount_native::engine::UninitEncounter" = 222
 "complexity|loc|uqm::battle::galaxy::<STAR_BLOCK>::wrap" = 103
@@ -3115,11 +3115,11 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::battle::cyborg_native::@file" = 5
 "layers|module_edges|uqm::battle::cyborg_native::break_opposite_facing_tie::@file" = 3
 "layers|module_edges|uqm::battle::cyborg_native::engine::@file" = 1
-"layers|module_edges|uqm::battle::cyborg_native::entice::@file" = 31
-"layers|module_edges|uqm::battle::cyborg_native::pursue::@file" = 9
-"layers|module_edges|uqm::battle::cyborg_native::tactical::@file" = 4
-"layers|module_edges|uqm::battle::cyborg_native::thrust_ship::@file" = 8
-"layers|module_edges|uqm::battle::cyborg_native::turn_ship::@file" = 5
+"layers|module_edges|uqm::battle::cyborg_native::engine::Entice::@file" = 31
+"layers|module_edges|uqm::battle::cyborg_native::engine::Pursue::@file" = 9
+"layers|module_edges|uqm::battle::cyborg_native::engine::ThrustShip::@file" = 8
+"layers|module_edges|uqm::battle::cyborg_native::engine::TurnShip::@file" = 5
+"layers|module_edges|uqm::battle::cyborg_native::engine::tactical_intelligence::@file" = 4
 "layers|module_edges|uqm::battle::cyborg_native::velocity_to_world::@file" = 1
 "layers|module_edges|uqm::battle::encount_native::engine::@file" = 2
 "layers|module_edges|uqm::battle::encount_native::engine::DrawFadeText::@file" = 2
@@ -5660,14 +5660,9 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm::uqm" = 1
 
 [moved]
-"uqm::battle::cyborg_native::engine::Entice" = "uqm::battle::cyborg_native::entice"
-"uqm::battle::cyborg_native::engine::PlotIntercept" = "uqm::battle::cyborg_native::intercept::plot_intercept"
-"uqm::battle::cyborg_native::engine::Pursue" = "uqm::battle::cyborg_native::pursue"
-"uqm::battle::cyborg_native::engine::ThrustShip" = "uqm::battle::cyborg_native::thrust_ship"
-"uqm::battle::cyborg_native::engine::TurnShip" = "uqm::battle::cyborg_native::turn_ship"
-"uqm::battle::cyborg_native::engine::ship_intelligence" = "uqm::battle::cyborg_native::intelligence"
-"uqm::battle::cyborg_native::engine::ship_weapons" = "uqm::battle::cyborg_native::weapons"
-"uqm::battle::cyborg_native::engine::tactical_intelligence" = "uqm::battle::cyborg_native::tactical"
+"uqm::battle::galaxy::STAR_BLOCK" = "uqm::engine::battle::kernel::StarPlane"
+"uqm::battle::sounds::Channels" = "uqm::engine::battle::kernel::Channels"
+"uqm::battle::sounds::SoundQueue" = "uqm::engine::battle::kernel::SoundQueue"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
