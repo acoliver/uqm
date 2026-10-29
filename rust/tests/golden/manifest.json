@@ -66,8 +66,8 @@
       "sha256": "3ffd5eba3a6974f7a9c95dbafe7f3f08df360bf2a9f8f62a3bf3cf32c0083535"
     },
     "parity/counts/campaign-s03b-broken-ultron.toml": {
-      "bytes": 2829769,
-      "sha256": "acd3efacb3785562da5ed4bfb867ebc24f6d80a475c81e3fefc3ef8e04badd81"
+      "bytes": 1231857,
+      "sha256": "14bf92468011d2fd2b88146dd9f340419e21304e721e3bd21d6b45ce47d74b58"
     },
     "parity/counts/campaign-s03c-thraddash-diverted.toml": {
       "bytes": 1038732,
