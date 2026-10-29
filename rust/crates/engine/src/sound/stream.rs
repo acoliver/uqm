@@ -21,7 +21,7 @@ use super::formats::AudioFormat;
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::mix as mixer_mix;
 use super::mixer::source as mixer_source;
-use super::mixer::types::{SourceProp, SourceState};
+use super::mixer::types::SourceProp;
 use super::music;
 use super::types::*;
 
@@ -962,7 +962,7 @@ pub fn uninit_stream_decoder() -> AudioResult<()> {
 /// Decoder thread entry point. Loops until `shutdown` is set.
 fn stream_decoder_task() {
     while !ENGINE.shutdown.load(Ordering::Acquire) {
-        let any_active = process_decoder_pass();
+        let any_active = process_decoder_pass(false);
 
         if !any_active {
             let mut guard = ENGINE.wake_mutex.lock();
@@ -974,7 +974,7 @@ fn stream_decoder_task() {
 }
 
 /// One decoder pass, shared by the real decoder thread and replay sleeps.
-fn process_decoder_pass() -> bool {
+fn process_decoder_pass(replay: bool) -> bool {
     process_music_fade();
     let mut any_active = false;
 
@@ -995,7 +995,7 @@ fn process_decoder_pass() -> bool {
         };
 
         drop(source);
-        process_source_stream(source_idx, &sample_arc);
+        process_source_stream(source_idx, &sample_arc, replay);
     }
 
     any_active
@@ -1021,17 +1021,17 @@ fn consume_replay_frames(frames: u64) {
     let frame_bytes = mixer_mix::mixer_get_format().sample_size() as usize;
     let mut output = [0; 1024];
     let mut remaining = frames;
-    process_decoder_pass();
+    process_decoder_pass(true);
     while remaining != 0 {
         let frames = remaining.min((output.len() / frame_bytes) as u64);
         mixer_mix::mixer_mix_channels(&mut output[..frames as usize * frame_bytes])
             .expect("replay mixer failed");
         remaining -= frames;
-        process_decoder_pass();
+        process_decoder_pass(true);
     }
     // Retiring the final processed buffer leaves end-of-stream notification
     // for the next decoder pass; settle it at this same replay boundary.
-    process_decoder_pass();
+    process_decoder_pass(true);
 }
 
 /// Deferred callback actions collected during source processing.
@@ -1043,7 +1043,7 @@ enum DeferredCallback {
 }
 
 /// Process one source's stream: decode, buffer, queue.
-fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample>>) {
+fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample>>, replay: bool) {
     let mut deferred: Vec<DeferredCallback> = Vec::new();
 
     {
@@ -1071,9 +1071,7 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
                 .unwrap_or(0);
 
         if processed == 0 {
-            let state = mixer_source::mixer_get_source_i(source.handle, SourceProp::SourceState)
-                .unwrap_or(0);
-            if state != SourceState::Playing as i32 {
+            if super::replay_audio::source_may_have_drained(source.handle, replay) {
                 let queued =
                     mixer_source::mixer_get_source_i(source.handle, SourceProp::BuffersQueued)
                         .unwrap_or(0);
@@ -1856,6 +1854,47 @@ mod tests {
 mod replay {
     use super::*;
     use crate::sound::{mixer, trackplayer, NullDecoder};
+
+    #[test]
+    fn music_eos_is_observed_at_the_exact_replay_pcm_boundary() {
+        let _lease = crate::sound::test_support::ENGINE_TEST_LOCK.lock();
+        mixer::mixer_init(
+            44100,
+            mixer::MixerFormat::Stereo16,
+            mixer::MixerQuality::Medium,
+            mixer::MixerFlags::None,
+        )
+        .unwrap();
+        let handle = mixer::mixer_gen_sources(1).unwrap()[0];
+        with_source(MUSIC_SOURCE, |source| {
+            *source = SoundSource::new();
+            source.handle = handle;
+        });
+        let mut decoder = NullDecoder::with_duration(1.0);
+        assert!(decoder.init());
+        let sample = Arc::new(Mutex::new(
+            create_sound_sample(Some(Box::new(decoder)), 4, None).unwrap(),
+        ));
+        let reference = MusicRef(Arc::clone(&sample));
+        music::plr_play_song(&reference, false, 0).unwrap();
+        let mut time = crate::sound::replay_audio::ReplayMixer::default();
+        consume_replay_frames(time.frames_until(839, 44100));
+        assert!(music::plr_playing(&reference));
+        std::thread::sleep(Duration::from_millis(2));
+        consume_replay_frames(time.frames_until(839, 44100));
+        assert!(music::plr_playing(&reference));
+        consume_replay_frames(time.frames_until(840, 44100));
+        let playing_at_end = music::plr_playing(&reference);
+        music::plr_stop(&reference).unwrap();
+        with_source(MUSIC_SOURCE, |source| *source = SoundSource::new());
+        destroy_sound_sample(&mut sample.lock()).unwrap();
+        mixer::mixer_delete_sources(&[handle]).unwrap();
+        mixer::mixer_uninit().unwrap();
+        assert!(
+            !playing_at_end,
+            "no additional device sample is due after 44100 replay frames"
+        );
+    }
 
     #[test]
     fn speech_completes_from_decoded_pcm_without_audio_or_decoder_threads() {

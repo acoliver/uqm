@@ -5,8 +5,17 @@ use std::io::Cursor;
 
 use rodio::Source;
 
+use super::mixer::{source as mixer_source, SourceProp, SourceState};
 use super::rodio_audio::AudioCommand;
 use crate::time::counter_abi::ONE_SECOND;
+
+pub(super) fn source_may_have_drained(handle: usize, replay: bool) -> bool {
+    // Replay consumes exactly the frames due at a sleep boundary. The mixer
+    // retires the last buffer there, but stops only on the next device sample.
+    replay
+        || mixer_source::mixer_get_source_i(handle, SourceProp::SourceState).unwrap_or(0)
+            != SourceState::Playing as i32
+}
 
 struct Playback {
     frames: u64,

@@ -8,7 +8,7 @@
 
 use super::*;
 use crate::sound::mixer::ffi::playback_tests as mixer_playback;
-use crate::sound::mixer::types::BufferState;
+use crate::sound::mixer::types::{BufferState, SourceState};
 use crate::sound::test_support::{Probe, ScriptedDecoder, ENGINE_TEST_LOCK};
 
 const CHUNK: usize = 400;
@@ -424,7 +424,7 @@ fn a_finished_buffer_is_recycled_with_the_next_chunk_and_reported() {
     let finished = finish_front_buffer();
     log.lock().clear();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert_eq!(log_of(&log), [format!("queue {finished}")]);
     let source = get_source(TEST_SOURCE).unwrap();
@@ -469,7 +469,7 @@ fn a_pass_over_a_sample_captured_before_the_stream_was_stopped_does_nothing() {
     assert!(stale.lock().decoder.is_some());
     let decoded_before = stale.lock().decoder.as_ref().unwrap().get_frame();
 
-    process_source_stream(TEST_SOURCE, &stale);
+    process_source_stream(TEST_SOURCE, &stale, false);
 
     assert_eq!(
         stale.lock().decoder.as_ref().unwrap().get_frame(),
@@ -515,7 +515,7 @@ fn a_pass_over_a_sample_captured_before_a_new_stream_replaced_it_does_nothing() 
     let decoded_before = replacement.lock().decoder.as_ref().unwrap().get_frame();
     let stale_decoded_before = stale.lock().decoder.as_ref().unwrap().get_frame();
 
-    process_source_stream(TEST_SOURCE, &stale);
+    process_source_stream(TEST_SOURCE, &stale, false);
 
     let source = get_source(TEST_SOURCE).unwrap();
     assert!(Arc::ptr_eq(source.sample.as_ref().unwrap(), &replacement));
@@ -543,7 +543,7 @@ fn a_pass_over_a_paused_stream_leaves_it_to_the_resume() {
     let (sample, log) = playing_stream_with_a_finished_buffer();
     pause_stream(TEST_SOURCE).unwrap();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert_eq!(mixer_int(SourceProp::BuffersProcessed), 1);
     assert!(log_of(&log).is_empty());
@@ -569,7 +569,7 @@ fn a_tagged_buffer_reports_its_tag_when_it_finishes_playing() {
     assert_eq!(finished, front);
     log.lock().clear();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert_eq!(
         log_of(&log),
@@ -589,7 +589,7 @@ fn a_decoder_at_eof_asks_for_a_successor_and_keeps_streaming_from_it() {
     finish_front_buffer();
     log.lock().clear();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     let events = log_of(&log);
     assert_eq!(events.len(), 2, "{events:?}");
@@ -612,7 +612,7 @@ fn when_no_successor_exists_the_failure_is_remembered_and_not_retried() {
     finish_front_buffer();
     log.lock().clear();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
     assert!(get_source(TEST_SOURCE).unwrap().end_chunk_failed);
     let after_first = log_of(&log).len();
     assert_eq!(after_first, 1, "{:?}", log_of(&log));
@@ -623,7 +623,7 @@ fn when_no_successor_exists_the_failure_is_remembered_and_not_retried() {
     );
 
     finish_front_buffer();
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
     assert_eq!(
         log_of(&log).len(),
         after_first,
@@ -641,7 +641,7 @@ fn a_decode_failure_stops_the_stream_without_ending_it_normally() {
     play_stream(Arc::clone(&sample), TEST_SOURCE, false, false, true).unwrap();
     finish_front_buffer();
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert!(!playing_stream(TEST_SOURCE));
     assert!(!log_of(&log).contains(&"end_stream".to_string()));
@@ -662,7 +662,7 @@ fn an_idle_source_with_nothing_left_to_decode_ends_the_stream_once() {
         source.stream_should_be_playing = true;
     }
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert!(!playing_stream(TEST_SOURCE));
     assert_eq!(
@@ -690,7 +690,7 @@ fn an_idle_source_restarts_when_the_decoder_still_has_audio() {
         source.stream_should_be_playing = true;
     }
 
-    process_source_stream(TEST_SOURCE, &sample);
+    process_source_stream(TEST_SOURCE, &sample, false);
 
     assert!(playing_stream(TEST_SOURCE));
     assert_eq!(mixer_int(SourceProp::BuffersQueued), 2);
