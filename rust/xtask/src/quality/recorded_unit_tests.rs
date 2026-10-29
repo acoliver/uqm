@@ -6,7 +6,7 @@ fn entries(rows: &[(&str, u64)]) -> Entries {
 }
 
 #[test]
-fn recording_changes_only_grown_counters_and_preserves_other_sections() {
+fn recording_exact_counters_preserves_other_sections() {
     let mut expected = Baseline {
         entries: entries(&[
             ("unsafe|unsafe_blocks|uqm::battle", 3),
@@ -31,6 +31,9 @@ fn recording_changes_only_grown_counters_and_preserves_other_sections() {
     expected
         .entries
         .insert("unsafe|unsafe_blocks|uqm::battle".into(), 4);
+    expected
+        .entries
+        .insert("unsafe|unsafe_fn|uqm::app".into(), 1);
     assert_eq!(baseline, expected);
     growth(&mut baseline, &measured, false);
     assert_eq!(baseline, expected);
@@ -102,4 +105,20 @@ fn budgets_remain_finite_and_do_not_need_duplicate_ordinary_entries() {
     .unwrap();
     measurement.findings[0].value = 2;
     assert!(budgets::check(&measurement, &baseline.budget).is_err());
+}
+
+#[test]
+fn recording_mixed_growth_and_reduction_satisfies_exact_approval_checks() {
+    let key = "unsafe|unsafe_fn|uqm::battle";
+    let grown = "unsafe|unsafe_lines|uqm::battle";
+    let mut baseline = Baseline {
+        entries: entries(&[(key, 229), (grown, 100)]),
+        ..Default::default()
+    };
+    let measured = entries(&[(key, 228), (grown, 110)]);
+    growth(&mut baseline, &measured, false);
+    assert_eq!(baseline.entries[grown], 110);
+    assert_eq!(baseline.entries[key], 228);
+    check(&measured, &baseline.entries, &Entries::new()).unwrap();
+    check_measured(&measured, &baseline.entries, &entries(&[(key, 227)])).unwrap();
 }
