@@ -655,7 +655,7 @@ Phase 1 · mechanical · lane `battle` · about 1,800 mechanical changed lines �
 - S (check bundle)
 - P (check bundle)
 - `cd rust && for t in ELEMENT STARSHIP RACE_DESC; do cargo xtask quality ident $t --defs --expect 1 || exit 1; done`
-- `cd rust && cargo xtask quality ident disp_q race_q DisplayArray DisplayLinks DisplayFreeList --defs --expect-only engine/battle/legacy.rs`
+- `cd rust && cargo xtask quality ident disp_q race_q DisplayArray DisplayLinks DisplayFreeList --defs --expect 6 --expect-only engine/battle/record.rs,uqm::ships::native::abi::GAME_STATE::DisplayArray`
 - `cd rust && rg -q 'link_name\s*=\s*"(disp_q|race_q|DisplayArray|DisplayLinks|DisplayFreeList)"' src; test $? -eq 1`
 - `cd rust && cargo xtask quality report planned_engine_core`
 - V2 (check bundle)
@@ -695,7 +695,7 @@ Phase 1 · semantic · lane `battle` · about 4,200 semantic and 1,500 mechanica
 **Acceptance**
 - S (check bundle)
 - P (check bundle)
-- `cd rust && cargo test --locked engine::battle::`
+- `cd rust && cargo test --locked --no-default-features --features audio_heart,debug-process engine::battle::`
 - `cd rust && cargo xtask quality report hook_calls --expect 0`
 - `cd rust && rg -q 'static mut (zoom_out|nth_frame|OPT_MAX_ZOOM_OUT|battle_counter)\b' src; test $? -eq 1`
 - `cd rust && cargo xtask quality report legacy_hooks && cargo xtask quality report bridge_calls`
