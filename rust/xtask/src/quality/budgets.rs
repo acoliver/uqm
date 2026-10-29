@@ -104,6 +104,33 @@ pub fn set_scoped(
     Ok(())
 }
 
+pub fn relocated(
+    budgets: &BTreeMap<String, Budget>,
+    moves: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, Budget>, String> {
+    let mut result = budgets.clone();
+    for (name, budget) in &mut result {
+        let mut scopes = BTreeMap::new();
+        for (key, value) in &budget.scopes {
+            let (metric, identity) = key.rsplit_once('|').ok_or("invalid budget scope")?;
+            let target = moves
+                .iter()
+                .find(|(old, _)| super::layers::prefix(identity, old))
+                .map_or_else(
+                    || identity.to_owned(),
+                    |(old, new)| format!("{new}{}", &identity[old.len()..]),
+                );
+            let key = format!("{metric}|{target}");
+            if scopes.insert(key.clone(), *value).is_some() {
+                return Err(format!("duplicate budget move credit: {key}"));
+            }
+        }
+        scoped::validate(name, &scopes, budget.limit)?;
+        budget.scopes = scopes;
+    }
+    Ok(result)
+}
+
 pub fn check_growth(
     current: &BTreeMap<String, Budget>,
     base: &BTreeMap<String, Budget>,

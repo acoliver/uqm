@@ -85,6 +85,7 @@ pub fn limits(
     current: &Measurement,
     base: &Measurement,
     moves: &BTreeMap<String, String>,
+    budgets: &BTreeMap<String, super::budgets::Budget>,
 ) -> Result<BTreeMap<String, u64>, String> {
     validate(current, base, moves)?;
     if moves.is_empty() {
@@ -109,8 +110,9 @@ pub fn limits(
         }
         relocated.findings.push(finding);
     }
-    let before = base.baseline();
-    let mut after = relocated.baseline();
+    let before = super::budgets::scoped_entries(base, budgets);
+    let moved_budgets = super::budgets::relocated(budgets, moves)?;
+    let mut after = super::budgets::scoped_entries(&relocated, &moved_budgets);
     transfer_allows(&mut after, current, base, moves)?;
     adjust(entries, &before, &after)
 }
@@ -295,7 +297,7 @@ mod tests {
         };
         let moves = [("uqm::graphics".into(), "uqm-engine::graphics".into())].into();
         validate(&current, &base, &moves).unwrap();
-        let limits = limits(&base.baseline(), &current, &base, &moves).unwrap();
+        let limits = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()).unwrap();
         assert!(!limits.keys().any(|key| key.contains("module_edges")));
         assert!(validate(&Measurement::default(), &base, &moves).is_err());
     }
