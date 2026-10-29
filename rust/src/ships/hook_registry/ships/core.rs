@@ -101,28 +101,8 @@ fn part2() -> Vec<(usize, &'static str)> {
             "battle::weapon_native::weapon_collision",
         ),
         (
-            crate::battle::cyborg_native::engine::Avoid as *const () as usize,
-            "battle::cyborg_native::Avoid",
-        ),
-        (
-            crate::battle::cyborg_native::engine::Entice as *const () as usize,
-            "battle::cyborg_native::Entice",
-        ),
-        (
             crate::battle::cyborg_native::engine::PlotIntercept as *const () as usize,
             "battle::cyborg_native::PlotIntercept",
-        ),
-        (
-            crate::battle::cyborg_native::engine::Pursue as *const () as usize,
-            "battle::cyborg_native::Pursue",
-        ),
-        (
-            crate::battle::cyborg_native::engine::ThrustShip as *const () as usize,
-            "battle::cyborg_native::ThrustShip",
-        ),
-        (
-            crate::battle::cyborg_native::engine::TurnShip as *const () as usize,
-            "battle::cyborg_native::TurnShip",
         ),
         (
             crate::battle::cyborg_native::engine::ship_intelligence as *const () as usize,

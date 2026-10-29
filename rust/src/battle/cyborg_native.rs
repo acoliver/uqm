@@ -144,10 +144,7 @@ use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 #[cfg(not(test))]
-pub use engine::{
-    ship_intelligence, ship_weapons, tactical_intelligence, Avoid, Entice, PlotIntercept, Pursue,
-    ThrustShip, TurnShip,
-};
+pub use engine::{ship_intelligence, ship_weapons, tactical_intelligence, PlotIntercept};
 
 #[cfg(not(test))]
 fn subject_owner(subject: &Subject) -> ShipId {
@@ -187,7 +184,135 @@ const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
 const FAST_SHIP: u16 = 150;
 
 #[cfg(not(test))]
-mod intercept;
+mod intercept {
+    use crate::battle::context_access::ai_legacy::{frame_rect, intersect};
+    use crate::battle::cyborg_native::intercept_window;
+    use crate::battle::velocity::VelocityDesc;
+    use crate::engine::battle::{Cx, Subject};
+    use crate::ships::native::abi::*;
+    fn current_velocity(v: &VelocityDesc) -> (i16, i16) {
+        let (x, y) = v.get_current_components();
+        (x as i16, y as i16)
+    }
+    fn next_velocity(v: &mut VelocityDesc, n: u16) -> (i16, i16) {
+        let (x, y) = v.get_next_components(n);
+        (x as i16, y as i16)
+    }
+    pub(crate) fn plot_intercept(
+        _cx: &mut Cx<'_>,
+        a: &Subject,
+        b: &Subject,
+        mut turns: COUNT,
+        margin: COUNT,
+    ) -> COUNT {
+        if (a.flags | b.flags) & FINITE_LIFE as u16 != 0 {
+            if a.flags & FINITE_LIFE as u16 == 0 {
+                turns = turns.min(b.life);
+            } else if b.flags & FINITE_LIFE as u16 == 0 {
+                turns = turns.min(a.life);
+            } else {
+                turns = turns.min(a.life).min(b.life);
+            }
+        }
+        let (avx, avy) = current_velocity(&a.velocity);
+        let (bvx, bvy) = current_velocity(&b.velocity);
+        let (ha, hb, pos_a, pos_b) = if margin != 0 {
+            let m = i32::from(margin);
+            (
+                (1, 1),
+                ((m << 1) as i16, (m << 1) as i16),
+                (a.current.location.x, a.current.location.y),
+                (
+                    b.current.location.x.wrapping_sub(m as i16),
+                    b.current.location.y.wrapping_sub(m as i16),
+                ),
+            )
+        } else {
+            let ar = frame_rect(a.intersection().IntersectStamp.frame);
+            let br = frame_rect(b.intersection().IntersectStamp.frame);
+            let ax = (ar.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
+            let ay = (ar.corner.y as i32).wrapping_shl(ONE_SHIFT) as i16;
+            let bx = (br.corner.x as i32).wrapping_shl(ONE_SHIFT) as i16;
+            let by = (br.corner.y as i32).wrapping_shl(ONE_SHIFT) as i16;
+            (
+                (
+                    (i32::from(ar.extent.width) << ONE_SHIFT) as i16,
+                    (i32::from(ar.extent.height) << ONE_SHIFT) as i16,
+                ),
+                (
+                    (i32::from(br.extent.width) << ONE_SHIFT) as i16,
+                    (i32::from(br.extent.height) << ONE_SHIFT) as i16,
+                ),
+                (
+                    a.current.location.x.wrapping_add(ax),
+                    a.current.location.y.wrapping_add(ay),
+                ),
+                (
+                    b.current.location.x.wrapping_add(bx),
+                    b.current.location.y.wrapping_add(by),
+                ),
+            )
+        };
+        let Some((first, last)) =
+            intercept_window(pos_a, (avx, avy), pos_b, (bvx, bvy), turns, [ha, hb])
+        else {
+            return 0;
+        };
+        if margin != 0 {
+            return (first as u16).wrapping_add(1);
+        }
+
+        let mut ca = a.intersection();
+        let mut cb = b.intersection();
+        let mut pa = a.current.location;
+        let mut pb = b.current.location;
+        let mut va = a.velocity;
+        let mut vb = b.velocity;
+        if first != 0 {
+            let (x, y) = next_velocity(&mut va, first as u16);
+            pa.x = pa.x.wrapping_add(x);
+            pa.y = pa.y.wrapping_add(y);
+            ca.EndPoint.x = pa.x >> ONE_SHIFT;
+            ca.EndPoint.y = pa.y >> ONE_SHIFT;
+            let (x, y) = next_velocity(&mut vb, first as u16);
+            pb.x = pb.x.wrapping_add(x);
+            pb.y = pb.y.wrapping_add(y);
+            cb.EndPoint.x = pb.x >> ONE_SHIFT;
+            cb.EndPoint.y = pb.y >> ONE_SHIFT;
+        }
+        let mut turn = first;
+        loop {
+            turn = turn.wrapping_add(1);
+            let (x, y) = next_velocity(&mut va, 1);
+            pa.x = pa.x.wrapping_add(x);
+            pa.y = pa.y.wrapping_add(y);
+            let (x, y) = next_velocity(&mut vb, 1);
+            pb.x = pb.x.wrapping_add(x);
+            pb.y = pb.y.wrapping_add(y);
+            ca.IntersectStamp.origin = ca.EndPoint;
+            ca.EndPoint.x = pa.x >> ONE_SHIFT;
+            ca.EndPoint.y = pa.y >> ONE_SHIFT;
+            cb.IntersectStamp.origin = cb.EndPoint;
+            cb.EndPoint.x = pb.x >> ONE_SHIFT;
+            cb.EndPoint.y = pb.y >> ONE_SHIFT;
+            let hit = intersect(&mut ca, &mut cb, MAX_TIME_VALUE as u16);
+            if hit != 0 {
+                if hit == 1 && turn == 1 && (a.flags | b.flags) & APPEARING as u16 != 0 {
+                    ca.EndPoint.x = pa.x >> ONE_SHIFT;
+                    ca.EndPoint.y = pa.y >> ONE_SHIFT;
+                    cb.EndPoint.x = pb.x >> ONE_SHIFT;
+                    cb.EndPoint.y = pb.y >> ONE_SHIFT;
+                } else {
+                    return turn as u16;
+                }
+            }
+            if turn >= last {
+                break;
+            }
+        }
+        0
+    }
+}
 #[cfg(not(test))]
 pub(crate) use intercept::plot_intercept;
 
@@ -359,10 +484,8 @@ pub(crate) fn intelligence(
 
 #[cfg(not(test))]
 pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
-    let other = cx.weapon_origin(
-        eval.object
-            .unwrap_or_else(|| panic!("AI concern has no object")),
-    );
+    let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
+    let other = cx.weapon_origin(object);
     let mut ship_velocity = ship.velocity;
     let mut other_velocity = other.velocity;
     let (sx, sy) = next_velocity(&mut ship_velocity, eval.which_turn);
@@ -458,10 +581,8 @@ pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
 
 #[cfg(not(test))]
 pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
-    let other = cx.weapon_origin(
-        eval.object
-            .unwrap_or_else(|| panic!("AI concern has no object")),
-    );
+    let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
+    let other = cx.weapon_origin(object);
     let mut ship_velocity = ship.velocity;
     let mut other_velocity = other.velocity;
     let (sx, sy) = next_velocity(&mut ship_velocity, eval.which_turn);
@@ -488,8 +609,7 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     }
     let travel = ai_arctan(sx.wrapping_sub(ox), sy.wrapping_sub(oy));
     let mut turn_angle = normalize_angle(thrust_angle as i32 + HALF_CIRCLE as i32) as u16;
-    let owner = subject_owner(ship);
-    let rd = owner;
+    let rd = subject_owner(ship);
 
     if eval.movement == MOVEMENT_STATE_AVOID {
         turn_angle = normalize_angle(turn_angle as i32 - eval.facing as i32) as u16;
@@ -501,7 +621,7 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
             }
         } else {
             turn_angle = normalize_angle(
-                facing_to_angle(cx.ship_state(owner).facing as i32) - eval.facing as i32,
+                facing_to_angle(cx.ship_state(rd).facing as i32) - eval.facing as i32,
             ) as u16;
             if turn_angle & (HALF_CIRCLE as u16 - 1) == 0 {
                 if cx.random() & 1 != 0 {
@@ -528,7 +648,7 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     } else if other.mass as u16 > (MAX_SHIP_MASS * 10) as u16 {
         let planet_facing = normalize_facing(angle_to_facing(thrust_angle as i32));
         let cone = normalize_facing(
-            i32::from(planet_facing) - i32::from(cx.ship_state(owner).facing)
+            i32::from(planet_facing) - i32::from(cx.ship_state(rd).facing)
                 + angle_to_facing(QUADRANT as i32),
         );
         if cx.race_stats(rd).characteristics.thrust_increment
@@ -548,7 +668,7 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                 && (cone < angle_to_facing(OCTANT as i32) as u16
                     || cone > angle_to_facing(((QUADRANT << 1) - OCTANT) as i32) as u16))
         {
-            turn_angle = facing_to_angle(cx.ship_state(owner).facing as i32) as u16;
+            turn_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
             if normalize_angle(turn_angle as i32 - travel as i32 + QUADRANT as i32)
                 > HALF_CIRCLE as i32
             {
@@ -613,26 +733,25 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                 return;
             }
         }
-        if cx.ship_state(owner).status & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16 == 0
+        if cx.ship_state(rd).status & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16 == 0
             && plot_intercept(cx, ship, &other, 40, CLOSE_RANGE_WEAPON << 1) != 0
         {
             if normalize_angle(
-                thrust_angle as i32 - facing_to_angle(cx.ship_state(owner).facing as i32)
+                thrust_angle as i32 - facing_to_angle(cx.ship_state(rd).facing as i32)
                     + OCTANT as i32,
             ) <= QUADRANT as i32
                 || cone > QUADRANT as u16
             {
                 thrust_angle = turn_angle;
             } else {
-                thrust_angle = facing_to_angle(cx.ship_state(owner).facing as i32) as u16;
+                thrust_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
             }
         } else {
             cone = plot_intercept(cx, ship, &other, 10, wrange.wrapping_sub(wrange >> 2));
             if cone != 0 {
                 if cx.race_stats(rd).characteristics.thrust_increment
                     != cx.race_stats(rd).characteristics.max_thrust
-                    && cx.ship_state(owner).status
-                        & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
+                    && cx.ship_state(rd).status & (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16
                         != 0
                     && (normalize_angle(
                         turn_angle as i32 - ai_arctan(sx, sy) as i32 + OCTANT as i32 + 2,
@@ -652,7 +771,7 @@ pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                         thrust_angle as i32 - ai_arctan(sx, sy) as i32 + OCTANT as i32 + 2,
                     ) <= ((OCTANT + 2) << 1) as i32
                     {
-                        thrust_angle = facing_to_angle(cx.ship_state(owner).facing as i32) as u16;
+                        thrust_angle = facing_to_angle(cx.ship_state(rd).facing as i32) as u16;
                     } else {
                         thrust_angle = turn_angle;
                     }

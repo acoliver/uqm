@@ -6,6 +6,17 @@ use crate::ships::native::abi::*;
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    /// Predicts contact using the supplied value projections, including a moved AI subject.
+    /// Obtain a live element's projection with `weapon_origin(ElementId)`.
+    pub fn plot_intercept(&mut self, a: &Subject, b: &Subject, turns: u16, margin: u16) -> u16 {
+        crate::battle::cyborg_native::plot_intercept(self, a, b, turns, margin)
+    }
+
+    /// Tests temporary weapons from the supplied subject without replacing it with live state.
+    pub fn ship_weapons(&mut self, ship: &Subject, other: &Subject, margin: u16) -> u32 {
+        crate::battle::cyborg_native::weapons(self, ship, other, margin)
+    }
+
     pub fn ship_intelligence(
         &mut self,
         _ship: ShipId,
@@ -775,14 +786,387 @@ impl crate::engine::battle::Cx<'_> {
 #[path = "race_access.rs"]
 mod race_access;
 #[cfg(not(test))]
-#[allow(non_snake_case)]
-pub(crate) mod ai_legacy;
+pub(crate) mod ai_legacy {
+
+    use crate::battle::cyborg_native as ai;
+    use crate::engine::battle::{record::*, Cx, Subject};
+    use crate::graphics::native_abi::{INTERSECT_CONTROL, RECT};
+
+    pub(crate) fn frame_rect(frame: crate::graphics::native_abi::FRAME) -> RECT {
+        let mut rect = RECT {
+            corner: crate::graphics::native_abi::POINT { x: 0, y: 0 },
+            extent: crate::graphics::native_abi::EXTENT {
+                width: 0,
+                height: 0,
+            },
+        };
+        // SAFETY: projected subjects retain their loaded frame resources.
+        unsafe {
+            crate::ships::native::abi::GetFrameRect(frame, &mut rect);
+        }
+        rect
+    }
+    pub(crate) fn intersect(
+        a: &mut INTERSECT_CONTROL,
+        b: &mut INTERSECT_CONTROL,
+        time: u16,
+    ) -> u16 {
+        // SAFETY: the local projections retain both loaded intersect frames.
+        unsafe { crate::ships::native::abi::DrawablesIntersect(a, b, time) }
+    }
+
+    /// # Safety
+    /// The caller retains this projected legacy element and its resources on the game thread.
+    unsafe fn subject_call<R>(
+        pointer: *mut ELEMENT,
+        write_back: bool,
+        call: impl FnOnce(&mut Cx<'_>, &mut Subject) -> R,
+    ) -> R {
+        // SAFETY: the published context is suspended by the legacy caller; no record borrow crosses call.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let mut subject = cx.legacy_subject(&*pointer);
+                let result = call(cx, &mut subject);
+                if write_back {
+                    *pointer = cx.encode_subject(&subject);
+                }
+                result
+            })
+        }
+    }
+
+    /// # Safety
+    /// Both pointers name live legacy element projections and retain their loaded resources.
+    #[no_mangle]
+    pub unsafe extern "C" fn PlotIntercept(
+        a: *mut ELEMENT,
+        b: *mut ELEMENT,
+        turns: u16,
+        margin: u16,
+    ) -> u16 {
+        // SAFETY: the caller retains both projections through this synchronous calculation.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                ai::plot_intercept(
+                    cx,
+                    &cx.legacy_intercept_subject(&*a),
+                    &cx.legacy_intercept_subject(&*b),
+                    turns,
+                    margin,
+                )
+            })
+        }
+    }
+
+    /// # Safety
+    /// Both pointers retain their subjects, owners and loaded resources on the game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn ship_weapons(
+        ship: *mut ELEMENT,
+        other: *mut ELEMENT,
+        margin: u16,
+    ) -> u32 {
+        // SAFETY: the copied values outlive all weapon callbacks; no caller record borrow survives.
+        unsafe {
+            subject_call(ship, false, |cx, subject| {
+                let other = cx.legacy_subject(&*other);
+                ai::weapons(cx, subject, &other, margin)
+            })
+        }
+    }
+
+    pub(crate) unsafe fn decode_concerns(
+        cx: &Cx<'_>,
+        raw: *const EVALUATE_DESC,
+        count: usize,
+    ) -> Vec<crate::engine::battle::Concern> {
+        (0..count)
+            .map(|i| {
+                // SAFETY: each caller retains count initialized concern slots.
+                let item = unsafe { *raw.add(i) };
+                crate::engine::battle::Concern {
+                    object: cx.elements().id(item.ObjectPtr.cast()),
+                    facing: item.facing,
+                    which_turn: item.which_turn,
+                    movement: item.MoveState,
+                }
+            })
+            .collect()
+    }
+    pub(crate) unsafe fn encode_concerns(
+        cx: &Cx<'_>,
+        raw: *mut EVALUATE_DESC,
+        concerns: &[crate::engine::battle::Concern],
+    ) {
+        for (i, item) in concerns.iter().enumerate() {
+            // SAFETY: each caller retains one writable raw slot per concern value.
+            unsafe {
+                *raw.add(i) = EVALUATE_DESC {
+                    ObjectPtr: item
+                        .object
+                        .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id).cast()),
+                    facing: item.facing,
+                    which_turn: item.which_turn,
+                    MoveState: item.movement,
+                };
+            }
+        }
+    }
+    /// # Safety
+    /// The projected ship and count concern records are live for this game-thread call.
+    #[no_mangle]
+    pub unsafe extern "C" fn ship_intelligence(
+        ship: *mut ELEMENT,
+        raw: *mut EVALUATE_DESC,
+        count: u16,
+    ) {
+        // SAFETY: raw slots are copied before Native dispatch and written back after it.
+        unsafe {
+            subject_call(ship, true, |cx, subject| {
+                let mut concerns = decode_concerns(cx, raw, usize::from(count));
+                ai::intelligence(cx, subject, &mut concerns, count);
+                encode_concerns(cx, raw, &concerns);
+            });
+        }
+    }
+
+    /// # Safety
+    /// The owner is a live ship in the published battle context on the game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn tactical_intelligence(
+        _context: *mut crate::ships::native::abi::ComputerInputContext,
+        owner: *mut STARSHIP,
+    ) -> u8 {
+        // SAFETY: the owner address is decoded before Native dispatch.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let id = cx.ship_id(owner as usize);
+                ai::tactical(cx, id)
+            })
+        }
+    }
+
+    /// # Safety
+    /// Context and a non-null ship are live game-thread records in the published battle.
+    #[no_mangle]
+    pub unsafe extern "C" fn computer_intelligence(
+        context: *mut crate::ships::native::abi::ComputerInputContext,
+        ship: *mut STARSHIP,
+    ) -> u8 {
+        // SAFETY: input and ship addresses are decoded before the Native entry.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                if cx.world.activity() as u8 == crate::ships::native::abi::IN_LAST_BATTLE as u8 {
+                    return 0;
+                }
+                let player = (*context).playerNr;
+                let id = (!ship.is_null()).then(|| cx.ship_id(ship as usize));
+                let control = if id.is_none() {
+                    crate::supermelee::c_bridge::PlayerControl[player as usize]
+                } else {
+                    0
+                };
+                crate::battle::ai_entry::computer_input(cx, player, id, control)
+            })
+        }
+    }
+    pub(crate) fn human_input(player: u16) -> u8 {
+        // SAFETY: the owning game thread reads the current admitted input state.
+        unsafe { crate::ships::native::abi::CurrentInputToBattleInput(player) }
+    }
+    pub(crate) fn selection_delay() {
+        // SAFETY: the owning game thread performs the existing half-second picker delay.
+        unsafe {
+            crate::ships::native::abi::SleepThread(crate::ships::native::abi::ONE_SECOND >> 1);
+        }
+    }
+
+    impl Cx<'_> {
+        /// # Safety
+        /// Owner, projected element, and four initialized concern slots remain live on the game thread.
+        pub unsafe fn invoke_intelligence(
+            parent: usize,
+            element: *mut ELEMENT,
+            raw: *mut EVALUATE_DESC,
+            count: u16,
+        ) {
+            // SAFETY: the shared entry copies all operands before calling the race dispatcher.
+            unsafe {
+                subject_call(element, true, |cx, subject| {
+                    let ship = cx.ship_id(parent);
+                    let objects: [crate::engine::battle::Concern; 4] = decode_concerns(cx, raw, 4)
+                        .try_into()
+                        .unwrap_or_else(|_| panic!("missing checked battle value"));
+                    let mut concerns = crate::engine::battle::Concerns {
+                        objects,
+                        subject: *subject,
+                        count,
+                    };
+                    cx.race_intelligence(ship, &mut concerns);
+                    *subject = concerns.subject;
+                    encode_concerns(cx, raw, &concerns.objects);
+                });
+            }
+        }
+    }
+}
 #[cfg(not(test))]
-#[allow(non_snake_case)]
-pub(crate) mod reader_legacy;
+pub(crate) mod reader_legacy {
+    use crate::engine::battle::{
+        link_queue,
+        record::{SHIP_INFO, STARSHIP},
+    };
+    use crate::graphics::native_abi::RECT;
+    use std::ffi::c_void;
+
+    /// # Safety
+    /// The ship is a live member of one battle-side pool on the game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn UpdateShipFragCrew(ship: *mut STARSHIP) {
+        // SAFETY: no caller record borrow crosses the encounter writeback.
+        unsafe {
+            let id = link_queue::identify(ship as usize);
+            crate::battle::encount_native::engine::update_ship_frag_crew(id);
+        }
+    }
+    /// # Safety
+    /// Ship info, optional ship, and optional clip rectangle are live game-thread records.
+    #[no_mangle]
+    pub unsafe extern "C" fn InitShipStatus(
+        info: *mut SHIP_INFO,
+        ship: *mut STARSHIP,
+        clip: *mut RECT,
+    ) {
+        // SAFETY: only the optional owner identity leaves this boundary.
+        unsafe {
+            let id = (!ship.is_null()).then(|| link_queue::identify(ship as usize));
+            crate::ui::shipstat::init_ship_status(info, id, clip);
+        }
+    }
+    /// # Safety
+    /// Last is null or a live ship in the selected player's pool; game thread only.
+    #[export_name = "GetEncounterStarShip"]
+    pub unsafe extern "C" fn get_encounter_star_ship(
+        last: *mut STARSHIP,
+        player: u16,
+    ) -> *mut c_void {
+        // SAFETY: the old ABI address is consumed at the picker boundary.
+        unsafe {
+            get_encounter_star_ship_with_picker(last, player, |player, result| {
+                crate::supermelee::native::battle_picker::live::GetNextMeleeStarShip(player, result)
+            })
+        }
+    }
+    /// # Safety
+    /// Last is null or live; a successful picker must return a live selected ship address.
+    pub unsafe fn get_encounter_star_ship_with_picker(
+        last: *mut STARSHIP,
+        player: u16,
+        pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
+    ) -> *mut c_void {
+        // SAFETY: the Native picker retains only an identity while the blocking UI runs.
+        unsafe { crate::pickship::ffi::encounter_ship(last.cast(), player, pick) }
+    }
+
+    /// # Safety
+    /// Input context and optional ship are initialized game-thread records.
+    pub(crate) unsafe fn computer_frame(
+        context: *mut crate::battle::battle_controls::InputContext,
+        ship: *mut c_void,
+    ) -> u8 {
+        // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
+        unsafe { super::ai_legacy::computer_intelligence(context.cast(), ship.cast()) }
+    }
+    /// # Safety
+    /// Input context and optional ship are initialized game-thread records.
+    pub(crate) unsafe fn human_frame(
+        context: *mut crate::battle::battle_controls::InputContext,
+        ship: *mut c_void,
+    ) -> u8 {
+        // SAFETY: the vtable's common context prefix and opaque ship address preserve the ABI contract.
+        unsafe { crate::battle::battle_native::frameInputHuman(context.cast(), ship.cast()) }
+    }
+}
 #[cfg(not(test))]
-#[allow(non_snake_case)]
-pub(crate) mod sound_legacy;
+pub(crate) mod sound_legacy {
+    use crate::battle::sounds::engine;
+    use crate::engine::battle::{record::ELEMENT, Cx, ElementId};
+    use crate::ships::native::abi::{SoundPosition, SOUND};
+
+    unsafe fn with_object<R>(
+        object: *mut ELEMENT,
+        call: impl FnOnce(&mut Cx<'_>, Option<ElementId>) -> R,
+    ) -> R {
+        // SAFETY: caller holds the published game-thread context and a live optional element.
+        unsafe {
+            crate::app::bridge::enter(|cx| {
+                let id = cx.elements().id(object.cast());
+                call(cx, id)
+            })
+        }
+    }
+
+    /// # Safety
+    /// Sound and a non-null object remain live on the owning game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn PlaySound(
+        sound: SOUND,
+        position: SoundPosition,
+        object: *mut ELEMENT,
+        priority: u8,
+    ) {
+        // SAFETY: legacy storage is decoded before entering the id-based sound queue.
+        unsafe {
+            with_object(object, |_, id| {
+                engine::play_sound(sound, position, id, priority)
+            });
+        }
+    }
+    /// # Safety
+    /// Sound and a non-null object remain live on the owning game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn ProcessSound(sound: SOUND, object: *mut ELEMENT) {
+        // SAFETY: legacy storage is decoded before entering the id-based sound queue.
+        unsafe {
+            with_object(object, |_, id| engine::process_sound(sound, id));
+        }
+    }
+    /// # Safety
+    /// A non-null object is live and owns its display primitive on the game thread.
+    #[no_mangle]
+    pub unsafe extern "C" fn CalcSoundPosition(object: *mut ELEMENT) -> SoundPosition {
+        // SAFETY: no raw record borrow survives the projection.
+        unsafe { with_object(object, engine::position) }
+    }
+    /// # Safety
+    /// Called on the game thread before the element's storage is released.
+    #[no_mangle]
+    pub unsafe extern "C" fn RemoveSoundsForObject(object: *mut ELEMENT) {
+        // SAFETY: the source is decoded before removal and remains live through it.
+        unsafe {
+            with_object(object, |_, id| engine::remove_sounds(id));
+        }
+    }
+
+    /// # Safety
+    /// Called on the owning game thread with a published battle context.
+    #[no_mangle]
+    pub unsafe extern "C" fn UpdateSoundPositions() {
+        // SAFETY: the legacy entry lends the context to the native sound pass.
+        unsafe {
+            with_object(std::ptr::null_mut(), |cx, _| engine::update_positions(cx));
+        }
+    }
+    /// # Safety
+    /// Called on the owning game thread with a published battle context.
+    #[no_mangle]
+    pub unsafe extern "C" fn FlushSounds() {
+        // SAFETY: the legacy entry lends the context to the native sound pass.
+        unsafe {
+            with_object(std::ptr::null_mut(), |cx, _| engine::flush_sounds(cx));
+        }
+    }
+}
 
 #[cfg(not(test))]
 impl Cx<'_> {

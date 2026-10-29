@@ -1,23 +1,15 @@
 //! Exercise the Arilou live descriptor and registered callbacks against the linked engine.
 
 use uqm_rust::ships::races::init_arilou;
+#[path = "support/battle.rs"]
+mod battle;
 #[path = "support/battle_context.rs"]
 mod battle_context;
+use battle::{Battle, Ship};
 
 use std::ffi::{c_void, CStr};
-use std::sync::{Mutex, MutexGuard};
-use std::{mem, ptr};
-use uqm_rust::ships::native::{abi::*, element, put_element};
-
-unsafe extern "C" {
-    fn InitQueue(queue: *mut QUEUE, count: COUNT, size: u16) -> i32;
-    fn UninitQueue(queue: *mut QUEUE) -> i32;
-    fn InitDisplayList();
-    static mut DisplayArray: [PRIMITIVE; 330];
-}
-
-/// The engine's queue, display list and screen size are process globals.
-static BATTLE_LOCK: Mutex<()> = Mutex::new(());
+use std::ptr;
+use uqm_rust::ships::native::{abi::*, element};
 
 /// Mirrors `FRAME_DESC` from `drawable.h` so the engine's frame functions can
 /// walk a drawable built here.
@@ -79,77 +71,31 @@ unsafe fn index_of(frame: FRAME) -> u16 {
 }
 
 unsafe fn prim_of(element: *mut ELEMENT) -> *mut PRIMITIVE {
-    (&raw mut DisplayArray)
+    (&raw mut uqm_rust::engine::battle::legacy::DisplayArray)
         .cast::<PRIMITIVE>()
         .add(usize::from((*element).PrimIndex))
 }
 
-/// An initialized element queue and display list, with the screen size the
-/// engine uses to size logical space.
-struct Battle {
-    _guard: MutexGuard<'static, ()>,
+struct Fleet<'a> {
+    fixture: Ship<'a>,
 }
 
-impl Battle {
-    unsafe fn begin() -> Self {
-        Self::begin_with_screen(320, 240)
-    }
-
-    unsafe fn begin_with_screen(width: i32, height: i32) -> Self {
-        let guard = BATTLE_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        assert_ne!(
-            InitQueue(&raw mut disp_q, 16, mem::size_of::<ELEMENT>() as u16),
-            0
-        );
-        InitDisplayList();
-        GlobData.Game_state.DisplayArray = (&raw mut DisplayArray).cast();
-        ScreenWidth = width;
-        ScreenHeight = height;
-        Self { _guard: guard }
-    }
-}
-
-impl Drop for Battle {
-    fn drop(&mut self) {
-        unsafe {
-            UninitQueue(&raw mut disp_q);
+impl<'a> Fleet<'a> {
+    unsafe fn new(battle: &'a Battle, player: SIZE) -> Self {
+        Self {
+            fixture: Ship::bare(battle, SPECIES_ID_ARILOU_ID, player),
         }
     }
-}
 
-/// One player's copy of the race descriptor and its STARSHIP; ships spawned
-/// from it share both.
-struct Fleet {
-    desc: Box<RACE_DESC>,
-    starship: Box<STARSHIP>,
-}
-
-impl Fleet {
-    unsafe fn new() -> Self {
-        let mut desc = Box::new(*init_arilou());
-        let mut starship: Box<STARSHIP> = Box::new(mem::zeroed());
-        starship.RaceDescPtr = &mut *desc;
-        Self { desc, starship }
-    }
-
-    /// Allocates a queued player ship element at `(x, y)` with a visible
-    /// primitive, owned by this fleet.
     unsafe fn spawn_ship(&mut self, player: SIZE, x: COORD, y: COORD) -> *mut ELEMENT {
-        let handle = AllocElement();
-        assert!(!handle.is_null());
-        let ship = element(handle);
+        let ship = self.fixture.ptr();
         (*ship).playerNr = player;
         (*ship).state_flags = PLAYER_SHIP as u16;
         (*ship).__bindgen_anon_1.life_span = NORMAL_LIFE as u16;
         (*ship).current.location = POINT { x, y };
         (*ship).next.location = POINT { x, y };
-        (*ship).pParent = (&mut *self.starship as *mut STARSHIP).cast();
-        self.starship.playerNr = player;
-        self.starship.hShip = handle;
         (*prim_of(ship)).Type = gfx_object_STAMP_PRIM as u8;
-        put_element(handle);
+        self.fixture.queue();
         ship
     }
 }
@@ -276,7 +222,7 @@ fn skiff_descriptor_matches_the_c_template() {
 unsafe fn fire(fleet: &mut Fleet, ship: *mut ELEMENT) -> *mut ELEMENT {
     let mut out = [ptr::null_mut()];
     assert_eq!(
-        fleet.desc.init_weapon_func.unwrap()(ship, out.as_mut_ptr()),
+        fleet.fixture.descriptor_mut().init_weapon_func.unwrap()(ship, out.as_mut_ptr()),
         1
     );
     element(out[0])
@@ -286,14 +232,14 @@ unsafe fn fire(fleet: &mut Fleet, ship: *mut ELEMENT) -> *mut ELEMENT {
 fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             // Straight along +x: ARCTAN gives angle 16, facing 4, four facings
             // from the ship's facing 0.
             other.spawn_ship(1, 2000, 1000);
-            fleet.starship.ShipFacing = 0;
+            fleet.fixture.ship_mut().ShipFacing = 0;
 
             let laser = fire(&mut fleet, ship);
 
@@ -334,10 +280,10 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
 fn laser_without_a_target_follows_the_ship_facing() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            fleet.starship.ShipFacing = 8;
+            fleet.fixture.ship_mut().ShipFacing = 8;
 
             let laser = fire(&mut fleet, ship);
 
@@ -355,14 +301,14 @@ fn laser_without_a_target_follows_the_ship_facing() {
 fn laser_aims_exactly_at_a_target_directly_behind() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             // Eight facings away: TrackShip turns a random way by one step, but
             // Arilou adds the whole delta, so the beam points straight at it.
             other.spawn_ship(1, 1000, 2000);
-            fleet.starship.ShipFacing = 0;
+            fleet.fixture.ship_mut().ShipFacing = 0;
 
             let seed = seed_where(1, |d| d[0] & 1 == 0);
             TFB_SeedRandom(seed);
@@ -385,9 +331,14 @@ unsafe fn think(
     concerns: &mut [EVALUATE_DESC; 4],
     input: u8,
 ) -> u8 {
-    fleet.starship.ship_input_state = input;
-    fleet.desc.cyborg_control.intelligence_func.unwrap()(ship, concerns.as_mut_ptr(), 0);
-    fleet.starship.ship_input_state
+    fleet.fixture.ship_mut().ship_input_state = input;
+    fleet
+        .fixture
+        .descriptor_mut()
+        .cyborg_control
+        .intelligence_func
+        .unwrap()(ship, concerns.as_mut_ptr(), 0);
+    fleet.fixture.ship_mut().ship_input_state
 }
 
 fn empty_concerns() -> [EVALUATE_DESC; 4] {
@@ -410,8 +361,8 @@ fn threat_concerns(threat: *mut ELEMENT, which_turn: COUNT) -> [EVALUATE_DESC; 4
 fn intelligence_always_thrusts_and_entices_the_enemy() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
             let mut concerns = empty_concerns();
 
@@ -425,7 +376,7 @@ fn intelligence_always_thrusts_and_entices_the_enemy() {
             let input = think(&mut fleet, ship, &mut concerns, SPECIAL as u8);
             assert_eq!(input, THRUST as u8);
             // A running teleporter counter keeps whatever SPECIAL was asked for.
-            fleet.starship.special_counter = 1;
+            fleet.fixture.ship_mut().special_counter = 1;
             let input = think(&mut fleet, ship, &mut concerns, SPECIAL as u8);
             assert_eq!(input, (THRUST | SPECIAL) as u8);
         }
@@ -436,15 +387,15 @@ fn intelligence_always_thrusts_and_entices_the_enemy() {
 fn intelligence_teleports_from_immediate_weapons_one_time_in_four() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             // A PLAYER_SHIP weapon object stands for an IMMEDIATE_WEAPON.
             let beam = other.spawn_ship(1, 1200, 1000);
             let busy = (LEFT | RIGHT | WEAPON) as u8;
             // A running weapon counter keeps the engine pass from clearing WEAPON.
-            fleet.starship.weapon_counter = 1;
+            fleet.fixture.ship_mut().weapon_counter = 1;
 
             let taken = seed_where(1, |d| d[0] & 3 == 0);
             let mut concerns = threat_concerns(beam, 6);
@@ -471,10 +422,10 @@ fn intelligence_teleports_from_immediate_weapons_one_time_in_four() {
 fn intelligence_ignores_threats_past_six_turns_without_touching_the_generator() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             let beam = other.spawn_ship(1, 1200, 1000);
             let seed = seed_where(1, |d| d[0] & 3 == 0);
 
@@ -494,7 +445,7 @@ fn intelligence_ignores_threats_past_six_turns_without_touching_the_generator() 
             assert_eq!(used, 0);
 
             // A running teleporter counter skips the whole block.
-            fleet.starship.special_counter = 2;
+            fleet.fixture.ship_mut().special_counter = 2;
             let mut concerns = threat_concerns(beam, 1);
             let used = draws_consumed(seed, || {
                 think(&mut fleet, ship, &mut concerns, 0);
@@ -508,19 +459,21 @@ fn intelligence_ignores_threats_past_six_turns_without_touching_the_generator() 
 fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             let missile = other.spawn_ship(1, 3000, 1000);
             (*missile).state_flags = 0;
             let taken = seed_where(1, |d| d[0] & 3 == 0);
-            let weapon_frames = (&raw mut other.desc.ship_data.weapon).cast::<FRAME>();
-            let special_frames = (&raw mut other.desc.ship_data.special).cast::<FRAME>();
+            let weapon_frames =
+                (&raw mut other.fixture.descriptor_mut().ship_data.weapon).cast::<FRAME>();
+            let special_frames =
+                (&raw mut other.fixture.descriptor_mut().ship_data.special).cast::<FRAME>();
 
             // A seeking weapon aimed through the enemy's weapon frames: only a
             // hit next turn or a crew object (fighters) counts.
-            other.desc.ship_info.ship_flags = SEEKING_WEAPON as u16;
+            other.fixture.descriptor_mut().ship_info.ship_flags = SEEKING_WEAPON as u16;
             (*missile).next.image.farray = weapon_frames;
             for (which_turn, flags, expected) in [
                 (1, 0, 1),
@@ -537,7 +490,7 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
             }
 
             // The same frames do not count unless the race flags a seeking weapon.
-            other.desc.ship_info.ship_flags = 0;
+            other.fixture.descriptor_mut().ship_info.ship_flags = 0;
             (*missile).state_flags = 0;
             let mut concerns = threat_concerns(missile, 1);
             let used = draws_consumed(taken, || {
@@ -546,7 +499,7 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
             assert_eq!(used, 0);
 
             // Seeking specials are matched against the special frames instead.
-            other.desc.ship_info.ship_flags = SEEKING_SPECIAL as u16;
+            other.fixture.descriptor_mut().ship_info.ship_flags = SEEKING_SPECIAL as u16;
             (*missile).next.image.farray = special_frames;
             let mut concerns = threat_concerns(missile, 1);
             let used = draws_consumed(taken, || {
@@ -569,10 +522,10 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
 fn intelligence_skips_objects_that_cannot_intercept() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
-            let mut other = Fleet::new();
+            let mut other = Fleet::new(&_battle, 1);
             let shell = other.spawn_ship(1, 1150, 1150);
             (*shell).state_flags = 0;
             let taken = seed_where(1, |d| d[0] & 3 == 0);
@@ -598,42 +551,42 @@ fn intelligence_skips_objects_that_cannot_intercept() {
 fn intelligence_stops_firing_when_the_skiff_cannot_afford_both() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut fleet = Fleet::new();
+            let _battle = Battle::new(16);
+            let mut fleet = Fleet::new(&_battle, 0);
             let ship = fleet.spawn_ship(0, 1000, 1000);
             let mut concerns = empty_concerns();
             // A running weapon counter keeps the engine pass from clearing WEAPON.
-            fleet.starship.weapon_counter = 1;
+            fleet.fixture.ship_mut().weapon_counter = 1;
 
             // SPECIAL_ENERGY_COST << 1 is six: at six the weapon is dropped.
-            fleet.desc.ship_info.energy_level = 6;
+            fleet.fixture.descriptor_mut().ship_info.energy_level = 6;
             let input = think(&mut fleet, ship, &mut concerns, WEAPON as u8);
             assert_eq!(input, THRUST as u8);
-            fleet.desc.ship_info.energy_level = 7;
+            fleet.fixture.descriptor_mut().ship_info.energy_level = 7;
             let input = think(&mut fleet, ship, &mut concerns, WEAPON as u8);
             assert_eq!(input, (THRUST | WEAPON) as u8);
         }
     })
 }
 
-struct Skiff {
-    fleet: Fleet,
+struct Skiff<'a> {
+    fleet: Fleet<'a>,
     ship: *mut ELEMENT,
     ship_frames: FrameSet,
     warp_frames: FrameSet,
 }
 
-impl Skiff {
+impl<'a> Skiff<'a> {
     /// A skiff at (100, 200) facing 6, flying on its ship frames.
-    unsafe fn new() -> Self {
-        let mut fleet = Fleet::new();
+    unsafe fn new(battle: &'a Battle) -> Self {
+        let mut fleet = Fleet::new(battle, 0);
         let mut ship_frames = FrameSet::new(16);
         let mut warp_frames = FrameSet::new(8);
-        fleet.desc.ship_data.ship[0] = ship_frames.frame(0);
-        fleet.desc.ship_data.special[0] = warp_frames.frame(0);
+        fleet.fixture.descriptor_mut().ship_data.ship[0] = ship_frames.frame(0);
+        fleet.fixture.descriptor_mut().ship_data.special[0] = warp_frames.frame(0);
         let ship = fleet.spawn_ship(0, 100, 200);
-        fleet.starship.ShipFacing = 6;
-        let ship_array = (&raw mut fleet.desc.ship_data.ship).cast::<FRAME>();
+        fleet.fixture.ship_mut().ShipFacing = 6;
+        let ship_array = (&raw mut fleet.fixture.descriptor_mut().ship_data.ship).cast::<FRAME>();
         (*ship).current.image.farray = ship_array;
         (*ship).next.image.farray = ship_array;
         (*ship).current.image.frame = ship_frames.frame(6);
@@ -646,16 +599,16 @@ impl Skiff {
         }
     }
 
-    unsafe fn preprocess(&self) {
-        self.fleet.desc.preprocess_func.unwrap()(self.ship);
+    unsafe fn preprocess(&mut self) {
+        self.fleet.fixture.descriptor_mut().preprocess_func.unwrap()(self.ship);
     }
 
     unsafe fn warp_array(&mut self) -> *mut FRAME {
-        (&raw mut self.fleet.desc.ship_data.special).cast()
+        (&raw mut self.fleet.fixture.descriptor_mut().ship_data.special).cast()
     }
 
     unsafe fn ship_array(&mut self) -> *mut FRAME {
-        (&raw mut self.fleet.desc.ship_data.ship).cast()
+        (&raw mut self.fleet.fixture.descriptor_mut().ship_data.ship).cast()
     }
 }
 
@@ -663,19 +616,19 @@ impl Skiff {
 fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut skiff = Skiff::new();
+            let _battle = Battle::new(16);
+            let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             (*ship).velocity.travel_angle = 37;
             DeltaVelocityComponents(&raw mut (*ship).velocity, 640, -320);
-            skiff.fleet.starship.cur_status_flags = (SHIP_AT_MAX_SPEED | THRUST) as u16;
+            skiff.fleet.fixture.ship_mut().cur_status_flags = (SHIP_AT_MAX_SPEED | THRUST) as u16;
 
             // thrust_wait != 0: the engine is still coasting the thrust delay.
             (*ship).__bindgen_anon_5.thrust_wait = 3;
             skiff.preprocess();
             assert_eq!(velocity_of(ship), (640, -320));
             assert_eq!(
-                skiff.fleet.starship.cur_status_flags,
+                skiff.fleet.fixture.ship_mut().cur_status_flags,
                 (SHIP_AT_MAX_SPEED | THRUST) as u16
             );
 
@@ -689,7 +642,10 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
             assert_eq!((velocity.fract.width, velocity.fract.height), (0, 0));
             assert_eq!((velocity.error.width, velocity.error.height), (0, 0));
             assert_eq!((velocity.incr.width, velocity.incr.height), (0, 0));
-            assert_eq!(skiff.fleet.starship.cur_status_flags, THRUST as u16);
+            assert_eq!(
+                skiff.fleet.fixture.ship_mut().cur_status_flags,
+                THRUST as u16
+            );
         }
     })
 }
@@ -697,20 +653,26 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
 #[test]
 fn special_key_starts_the_teleport() {
     battle_context::run(|| unsafe {
-        let _battle = Battle::begin();
-        let mut skiff = Skiff::new();
+        let _battle = Battle::new(16);
+        let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
         (*ship).velocity.travel_angle = 37;
         DeltaVelocityComponents(&raw mut (*ship).velocity, 640, -320);
         (*ship).__bindgen_anon_5.thrust_wait = 3;
-        skiff.fleet.starship.cur_status_flags =
+        skiff.fleet.fixture.ship_mut().cur_status_flags =
             (SHIP_AT_MAX_SPEED | LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16;
 
         skiff.preprocess();
 
-        assert_eq!(skiff.fleet.desc.ship_info.energy_level, 17);
-        assert_eq!(skiff.fleet.starship.special_counter, 2);
-        assert_eq!(skiff.fleet.starship.cur_status_flags, SPECIAL as u16);
+        assert_eq!(
+            skiff.fleet.fixture.descriptor_mut().ship_info.energy_level,
+            17
+        );
+        assert_eq!(skiff.fleet.fixture.ship_mut().special_counter, 2);
+        assert_eq!(
+            skiff.fleet.fixture.ship_mut().cur_status_flags,
+            SPECIAL as u16
+        );
         assert_eq!(velocity_of(ship), (0, 0));
         assert_eq!((*ship).velocity.travel_angle, 0);
         assert_eq!(
@@ -731,20 +693,23 @@ fn special_key_starts_the_teleport() {
 #[test]
 fn teleport_needs_the_key_a_ready_counter_and_energy() {
     battle_context::run(|| unsafe {
-        let _battle = Battle::begin();
-        let mut skiff = Skiff::new();
+        let _battle = Battle::new(16);
+        let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
 
         for (flags, counter, energy) in
             [(0, 0, 20), (SPECIAL as u16, 1, 20), (SPECIAL as u16, 0, 2)]
         {
-            skiff.fleet.starship.cur_status_flags = flags;
-            skiff.fleet.starship.special_counter = counter;
-            skiff.fleet.desc.ship_info.energy_level = energy;
+            skiff.fleet.fixture.ship_mut().cur_status_flags = flags;
+            skiff.fleet.fixture.ship_mut().special_counter = counter;
+            skiff.fleet.fixture.descriptor_mut().ship_info.energy_level = energy;
             skiff.preprocess();
             assert_eq!((*ship).state_flags, PLAYER_SHIP as u16);
-            assert_eq!(skiff.fleet.desc.ship_info.energy_level, energy);
-            assert_eq!(skiff.fleet.starship.special_counter, counter);
+            assert_eq!(
+                skiff.fleet.fixture.descriptor_mut().ship_info.energy_level,
+                energy
+            );
+            assert_eq!(skiff.fleet.fixture.ship_mut().special_counter, counter);
             assert_eq!((*ship).next.image.farray, skiff.ship_array());
         }
     })
@@ -753,7 +718,7 @@ fn teleport_needs_the_key_a_ready_counter_and_energy() {
 /// Puts the skiff in mid-teleport the way the key press leaves it, with the
 /// engine's own life countdown applied by hand.
 unsafe fn start_teleport(skiff: &mut Skiff) {
-    skiff.fleet.starship.cur_status_flags = SPECIAL as u16;
+    skiff.fleet.fixture.ship_mut().cur_status_flags = SPECIAL as u16;
     skiff.preprocess();
     assert_ne!((*skiff.ship).state_flags & NONSOLID as u16, 0);
     (*skiff.ship).state_flags &= !(CHANGING as u16);
@@ -767,8 +732,8 @@ unsafe fn set_life(ship: *mut ELEMENT, life: COUNT) {
 fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut skiff = Skiff::new();
+            let _battle = Battle::new(16);
+            let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             start_teleport(&mut skiff);
             let warp = skiff.warp_frames.frame(0);
@@ -845,8 +810,10 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
 fn teleport_destination_scales_with_the_screen_size() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin_with_screen(640, 480);
-            let mut skiff = Skiff::new();
+            let _battle = Battle::new(16);
+            ScreenWidth = 640;
+            ScreenHeight = 480;
+            let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             start_teleport(&mut skiff);
             // 640x480: 576 * 32 = 18432 by 480 * 32 = 15360, neither of which
@@ -876,8 +843,10 @@ fn teleport_wraps_negative_coord_remainders_back_into_logical_space() {
             // At 1280x720 the horizontal extent (1216 * 32 = 38912) exceeds
             // i16::MAX, so a remainder cast to COORD can go negative and WRAP_X
             // adds the extent back.
-            let _battle = Battle::begin_with_screen(1280, 720);
-            let mut skiff = Skiff::new();
+            let _battle = Battle::new(16);
+            ScreenWidth = 1280;
+            ScreenHeight = 720;
+            let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             start_teleport(&mut skiff);
             let seed = seed_where(2, |d| (d[0] as u16 as i32 % 38912) > i32::from(i16::MAX));
@@ -900,11 +869,11 @@ fn teleport_wraps_negative_coord_remainders_back_into_logical_space() {
 fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
     battle_context::run(|| {
         unsafe {
-            let _battle = Battle::begin();
-            let mut skiff = Skiff::new();
+            let _battle = Battle::new(16);
+            let mut skiff = Skiff::new(&_battle);
             let ship = skiff.ship;
             start_teleport(&mut skiff);
-            let starship = &mut skiff.fleet.starship;
+            let starship = skiff.fleet.fixture.ship_mut();
             starship.weapon_counter = 4;
             starship.special_counter = 255;
             starship.energy_counter = 9;
@@ -916,7 +885,7 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
 
             skiff.preprocess();
 
-            let starship = &skiff.fleet.starship;
+            let starship = skiff.fleet.fixture.ship_mut();
             assert_eq!(starship.weapon_counter, 5);
             // BYTE counters wrap rather than saturate.
             assert_eq!(starship.special_counter, 0);
@@ -933,16 +902,16 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
 #[test]
 fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
     battle_context::run(|| unsafe {
-        let _battle = Battle::begin();
-        let mut skiff = Skiff::new();
+        let _battle = Battle::new(16);
+        let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
         (*ship).state_flags |= NONSOLID as u16;
-        skiff.fleet.starship.weapon_counter = 4;
+        skiff.fleet.fixture.ship_mut().weapon_counter = 4;
         set_life(ship, 4);
 
         skiff.preprocess();
 
-        assert_eq!(skiff.fleet.starship.weapon_counter, 4);
+        assert_eq!(skiff.fleet.fixture.ship_mut().weapon_counter, 4);
         assert_eq!((*ship).state_flags, (PLAYER_SHIP | NONSOLID) as u16);
         assert_eq!(index_of((*ship).next.image.frame), 6);
     })

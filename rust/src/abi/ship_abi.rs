@@ -1671,20 +1671,10 @@ pub use crate::battle::cyborg_native::engine::ship_intelligence;
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::ship_weapons;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Pursue;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Entice;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::Avoid;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::TurnShip;
 
-#[cfg(not(test))]
-pub use crate::battle::cyborg_native::engine::ThrustShip;
 unsafe extern "C" {}
 
 #[cfg(not(test))]

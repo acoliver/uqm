@@ -8,9 +8,7 @@
 //! @requirement REQ-FFI-SAFETY, REQ-CALLBACK-SAFETY, REQ-BUILD-COEXISTENCE
 
 pub use crate::math::seed_random as TFB_SeedRandom;
-use std::os::raw::{c_int, c_void};
-
-use super::element::Element;
+use std::os::raw::c_void;
 
 pub use crate::c_bindings::global_state::DrawBatch;
 
@@ -145,91 +143,6 @@ pub use crate::graphics::gfx_common_abi::UnbatchGraphics;
 pub use crate::sound::heart_ffi::DestroyMusic;
 pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-
-// ---------------------------------------------------------------------------
-// Safe Rust wrappers
-// ---------------------------------------------------------------------------
-
-/// Safe wrapper: elastic collision.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn elastic_collide_c(a: *mut Element, b: *mut Element) {
-    if !a.is_null() && !b.is_null() {
-        collide(a, b);
-    }
-}
-
-#[cfg(not(test))]
-/// Safe wrapper: process and flush sounds.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn flush_all_sounds() {
-    FlushSounds();
-}
-
-#[cfg(not(test))]
-/// Safe wrapper: update stereo sound positions.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn update_sound_positions() {
-    UpdateSoundPositions();
-}
-
-/// Safe wrapper: set graphics scale.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn set_graphic_scale(scale: i32) {
-    SetGraphicScale(scale as c_int);
-}
-
-/// Safe wrapper: clear current drawable.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn clear_drawable() {
-    ClearDrawable();
-}
-
-#[cfg(not(test))]
-/// Safe wrapper: check if in HyperSpace/QuasiSpace.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn is_hq_space() -> bool {
-    inHQSpace() != 0
-}
-
-/// Safe wrapper: get current activity flags.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn current_activity() -> u16 {
-    crate::mainloop::ffi::get_current_activity().0
-}
-
-pub use crate::math::random;
-
-pub use crate::time::counter_abi::GetTimeCounter as time_counter;
-
-/// Safe wrapper: task switch / yield.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn task_switch() {
-    TaskSwitch();
-}
-
-/// Safe wrapper: sleep thread for ticks.
-/// # Safety
-///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
-pub unsafe fn sleep_thread(ticks: u32) {
-    SleepThread(ticks);
-}
 
 // ---------------------------------------------------------------------------
 // Constants
