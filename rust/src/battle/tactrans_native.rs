@@ -136,9 +136,6 @@ pub(crate) mod engine {
     use abi::*;
     use std::{mem, ptr};
 
-    static mut DITTY_IS_PLAYING: BOOLEAN = 0;
-    pub(crate) static mut WINNER_STAR_SHIP: *mut STARSHIP = ptr::null_mut();
-
     use crate::battle::world_elements::engine::crew_preprocess;
 
     use crate::battle::ship_native::engine::animation_preprocess;
@@ -173,32 +170,32 @@ pub(crate) mod engine {
 
     pub(crate) unsafe fn PlayDitty(ship: *mut STARSHIP) {
         PlayMusic((*(*ship).RaceDescPtr).ship_data.victory_ditty, 0, 3);
-        DITTY_IS_PLAYING = 1;
+        Kernel::current().ditty_playing = 1;
     }
 
     /// # Safety
     /// The game thread must own initialized audio and battle music state.
     #[no_mangle]
     pub unsafe extern "C" fn StopDitty() {
-        if DITTY_IS_PLAYING != 0 {
+        if Kernel::current().ditty_playing != 0 {
             StopMusic();
         }
-        DITTY_IS_PLAYING = 0;
+        Kernel::current().ditty_playing = 0;
     }
 
     unsafe fn DittyPlaying() -> bool {
-        if DITTY_IS_PLAYING == 0 {
+        if Kernel::current().ditty_playing == 0 {
             return false;
         }
-        DITTY_IS_PLAYING = PLRPlaying(usize::MAX as MUSIC_REF);
-        DITTY_IS_PLAYING != 0
+        Kernel::current().ditty_playing = PLRPlaying(usize::MAX as MUSIC_REF);
+        Kernel::current().ditty_playing != 0
     }
 
     /// # Safety
     /// The game thread must exclusively own battle winner state.
     #[no_mangle]
     pub unsafe extern "C" fn ResetWinnerStarShip() {
-        WINNER_STAR_SHIP = ptr::null_mut();
+        Kernel::current().winner = ptr::null_mut();
     }
 
     /// # Safety
@@ -302,15 +299,13 @@ pub(crate) mod engine {
 
     unsafe fn checkOtherShipLifeSpan(dead: *mut ELEMENT) {
         let owner = starship(dead);
-        if !WINNER_STAR_SHIP.is_null()
-            && owner != WINNER_STAR_SHIP
-            && (*(*WINNER_STAR_SHIP).RaceDescPtr).ship_info.crew_level == 0
+        let winner = Kernel::current().winner;
+        if !winner.is_null()
+            && owner != winner
+            && (*(*winner).RaceDescPtr).ship_info.crew_level == 0
         {
-            setMinStarShipLifeSpan(
-                WINNER_STAR_SHIP,
-                (*dead).__bindgen_anon_1.life_span.wrapping_add(1),
-            );
-        } else if WINNER_STAR_SHIP.is_null() {
+            setMinStarShipLifeSpan(winner, (*dead).__bindgen_anon_1.life_span.wrapping_add(1));
+        } else if winner.is_null() {
             let mut h = disp_q.head;
             while !h.is_null() {
                 let e = h.cast::<ELEMENT>();
@@ -346,7 +341,7 @@ pub(crate) mod engine {
             checkOtherShipLifeSpan(dead);
             return;
         }
-        WINNER_STAR_SHIP = ptr::null_mut();
+        (*cx.kernel()).winner = ptr::null_mut();
         StopDitty();
         StopMusic();
         StopSound();
@@ -467,7 +462,7 @@ pub(crate) mod engine {
     /// The caller must access winner state only on the game thread and not retain the result past ship teardown.
     #[no_mangle]
     pub unsafe extern "C" fn GetWinnerStarShip() -> *mut STARSHIP {
-        WINNER_STAR_SHIP
+        Kernel::current().winner
     }
     /// # Safety
     /// A non-null `winner` must be a live starship that remains live until winner state is reset.
@@ -477,8 +472,8 @@ pub(crate) mod engine {
             return;
         }
         (*winner).cur_status_flags |= PLAY_VICTORY_DITTY as u16;
-        if WINNER_STAR_SHIP.is_null() {
-            WINNER_STAR_SHIP = winner;
+        if Kernel::current().winner.is_null() {
+            Kernel::current().winner = winner;
         }
     }
     /// # Safety
@@ -514,7 +509,7 @@ pub(crate) mod engine {
         (*ship).hTarget = ptr::null_mut();
         if play_sound {
             PlaySound(
-                SetAbsStringTableIndex(GameSounds, 1),
+                SetAbsStringTableIndex(Kernel::current().game_sounds, 1),
                 CalcSoundPosition(ship),
                 ship,
                 (GAME_SOUND_PRIORITY + 1) as u8,

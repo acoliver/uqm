@@ -267,13 +267,12 @@ pub(crate) mod live {
                 break;
             }
             let flags = menu_sound_flags(&ptr::addr_of!(PulsedInputState).read());
-            if !MenuSounds.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
-                let sound = if flags & SOUND_1 != 0 {
-                    crate::strings::string_table::SetAbsStringTableIndex(MenuSounds.cast(), 1)
-                        .cast()
-                } else {
-                    MenuSounds
-                };
+            let mut sound = Kernel::current().menu_sounds;
+            if !sound.is_null() && flags & (SOUND_0 | SOUND_1) != 0 {
+                if flags & SOUND_1 != 0 {
+                    sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
+                        .cast();
+                }
                 crate::ui::settings::PlaySoundEffect(
                     sound.cast(),
                     0,

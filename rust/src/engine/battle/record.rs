@@ -886,3 +886,85 @@ pub struct RaceDescriptor {
     pub race_state: super::race::RaceState,
     pub race_callbacks: super::race::Callbacks,
 }
+
+pub(crate) use super::kernel::{Channels, SoundQueue, StarPlane};
+
+pub(crate) struct Kernel {
+    pub(crate) player_input: [*mut std::ffi::c_void; 2],
+    pub(crate) instant_victory: u32,
+    pub(crate) battle_music: MUSIC_REF,
+    pub(crate) ditty_playing: u32,
+    pub(crate) winner: *mut STARSHIP,
+    pub(crate) status_offsets: [i16; 2],
+    pub(crate) menu_sounds: SOUND,
+    pub(crate) game_sounds: SOUND,
+    pub(crate) sounds: SoundQueue,
+    pub(crate) channels: Channels,
+    pub(crate) log_stars: Box<[POINT; 180]>,
+    pub(crate) space_origin: POINT,
+    pub(crate) star_planes: Box<[StarPlane; 3]>,
+}
+impl Kernel {
+    pub(super) fn new() -> Self {
+        let mut log_stars = Box::new([POINT { x: 0, y: 0 }; 180]);
+        let array = log_stars.as_mut_ptr();
+        let mut offset = 0;
+        let star_planes = Box::new([30, 60, 90].map(|count| {
+            let plane = StarPlane {
+                min_star_index: 0,
+                num_stars: count,
+                star_array: array.wrapping_add(offset),
+                pmin_star: ptr::null_mut(),
+                plast_star: ptr::null_mut(),
+            };
+            offset += usize::from(count);
+            plane
+        }));
+        Self {
+            player_input: [ptr::null_mut(); 2],
+            instant_victory: 0,
+            battle_music: ptr::null_mut(),
+            ditty_playing: 0,
+            winner: ptr::null_mut(),
+            status_offsets: [0; 2],
+            menu_sounds: ptr::null_mut(),
+            game_sounds: ptr::null_mut(),
+            sounds: SoundQueue::new(),
+            channels: Channels::new(),
+            log_stars,
+            space_origin: POINT { x: 0, y: 0 },
+            star_planes,
+        }
+    }
+}
+
+#[cfg(test)]
+mod kernel_tests {
+    use super::*;
+    #[test]
+    fn separate_lifecycles_reset_state_and_keep_parallax_backing_stable_when_moved() {
+        let mut kernel = Kernel::new();
+        let address = kernel.log_stars.as_mut_ptr();
+        kernel.instant_victory = 1;
+        kernel.status_offsets = [7, 11];
+        let mut moved = Box::new(kernel);
+        assert_eq!(moved.log_stars.as_mut_ptr(), address);
+        assert_eq!(moved.star_planes[0].star_array, address);
+        assert_eq!(moved.star_planes[1].star_array, address.wrapping_add(30));
+        assert_eq!(moved.star_planes[2].star_array, address.wrapping_add(90));
+        assert_eq!(moved.status_offsets, [7, 11]);
+        let fresh = Kernel::new();
+        assert_eq!(fresh.instant_victory, 0);
+        assert!(fresh.battle_music.is_null());
+        assert_eq!(fresh.ditty_playing, 0);
+        assert_eq!(fresh.space_origin.x, 0);
+        assert_eq!(fresh.space_origin.y, 0);
+        assert_eq!(fresh.status_offsets, [0; 2]);
+        assert!(fresh.player_input.iter().all(|input| input.is_null()));
+        assert!(fresh.menu_sounds.is_null());
+        assert!(fresh.game_sounds.is_null());
+        assert!(fresh.winner.is_null());
+        assert_eq!(fresh.sounds.count, 0);
+        assert_eq!(fresh.channels.lru, [0, 1, 2, 3]);
+    }
+}

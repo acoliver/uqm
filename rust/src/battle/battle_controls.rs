@@ -229,11 +229,6 @@ unsafe extern "C" fn unsafe_battle_end_ready_human(ctx: *mut InputContext) -> bo
 // Public API functions (matching C signatures)
 // ---------------------------------------------------------------------------
 
-/// C: `InputContext *PlayerInput[NUM_PLAYERS]`
-#[no_mangle]
-pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
-    [std::ptr::null_mut(), std::ptr::null_mut()];
-
 #[cfg(not(test))]
 use crate::supermelee::native::battle_picker::live::selectShipNetwork;
 

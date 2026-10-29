@@ -192,7 +192,7 @@ impl Cx<'_> {
     pub fn game_sound(&mut self, index: u16, source: ElementId) {
         // SAFETY: shared battle sounds and checked source are live.
         unsafe {
-            let sound = SetAbsStringTableIndex(crate::battle::sounds::GameSounds, index);
+            let sound = SetAbsStringTableIndex((*self.kernel()).game_sounds, index);
             self.queue_sound(sound as usize, Some(source));
         }
     }
@@ -488,11 +488,10 @@ mod tactrans_native_access {
             // SAFETY: no record borrow crosses the sound queue boundary.
             self.queue_sound(usize::MAX, None);
         }
-        pub(crate) fn winner(&self) -> Option<ShipId> {
+        pub(crate) fn winner(&mut self) -> Option<ShipId> {
             // SAFETY: winner state belongs to the owning game thread.
-            unsafe {
-                (!WINNER_STAR_SHIP.is_null()).then(|| self.ship_id(WINNER_STAR_SHIP as usize))
-            }
+            let winner = unsafe { (*self.kernel()).winner };
+            (!winner.is_null()).then(|| self.ship_id(winner as usize))
         }
         pub(crate) fn play_ditty(&mut self, ship: ShipId) {
             let pointer = self.ship(ship) as *const STARSHIP as *mut STARSHIP;
@@ -555,9 +554,9 @@ mod status_native_access {
     use crate::battle::status_native::explosion_flash;
     #[cfg(not(test))]
     impl Cx<'_> {
-        pub(crate) fn status_offset(&self, ship: ShipId) -> i16 {
+        pub(crate) fn status_offset(&mut self, ship: ShipId) -> i16 {
             // SAFETY: status offsets and this ship's side belong to the game thread.
-            unsafe { offset(self.ship(ship) as *const STARSHIP as *mut STARSHIP) }
+            unsafe { (*self.kernel()).status_offsets[self.ship_state(ship).player as usize] }
         }
         pub(crate) fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             explosion_flash(life, y, |color, mut r, fill| {
@@ -598,7 +597,6 @@ mod sounds_access {
     #[cfg(not(test))]
     use super::*;
     #[cfg(not(test))]
-    use crate::battle::sounds::engine::QUEUE;
     #[cfg(not(test))]
     impl crate::engine::battle::Cx<'_> {
         pub(in crate::battle::context_access) fn queue_sound(
@@ -609,7 +607,7 @@ mod sounds_access {
             let pointer = source.map_or(std::ptr::null_mut(), |id| self.elements().raw(id).cast());
             // SAFETY: this context owns the sound queue and validates its source id.
             unsafe {
-                let queue = &raw mut QUEUE;
+                let queue = &raw mut (*self.kernel()).sounds;
                 (*queue).push(sound as SOUND, pointer);
             }
         }

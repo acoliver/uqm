@@ -20,7 +20,6 @@ unsafe extern "C" {
 
     static mut PlayerControls: [u32; 2];
     static mut race_q: [QUEUE; 2];
-    static mut PlayerInput: [*mut InputContext; 2];
     static mut OffScreenContext: *mut uqm_rust::graphics::native_abi::context_desc;
     fn InitDisplayList();
     fn FreeElement(handle: HELEMENT);
@@ -930,7 +929,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
                     let saved_queues = race_q;
-                    let saved_inputs = PlayerInput;
+                    let saved_inputs = std::array::from_fn::<_, 2, _>(|side| {
+                        uqm_rust::battle::battle_native::player_input(side)
+                    });
                     let saved_offscreen = OffScreenContext;
                     let saved_controls = PlayerControls;
                     let saved_pulsed = PulsedInputState;
@@ -955,7 +956,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     }; 2];
                     inputs[1].playerNr = 1;
                     for side in 0..2 {
-                        PlayerInput[side] = &mut inputs[side];
+                        uqm_rust::battle::battle_native::set_player_input(side, &mut inputs[side]);
                         let active = if side == 0 {
                             &raw mut *ship.ss
                         } else {
@@ -1066,7 +1067,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         expected_selection
                     );
                     race_q = saved_queues;
-                    PlayerInput = saved_inputs;
+                    for (side, input) in saved_inputs.into_iter().enumerate() {
+                        uqm_rust::battle::battle_native::set_player_input(side, input);
+                    }
                     OffScreenContext = saved_offscreen;
                     PlayerControls = saved_controls;
                     PulsedInputState = saved_pulsed;

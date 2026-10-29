@@ -1,6 +1,8 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
+#[cfg(not(test))]
+use crate::engine::battle::record::Kernel;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -71,7 +73,7 @@ pub(crate) mod runtime {
 
     extern "C" {
         static mut GlobData: crate::ships::native::abi::GLOBDATA;
-        static mut instantVictory: u32;
+
     }
 
     fn get(key: &str) -> u8 {
@@ -141,7 +143,7 @@ pub(crate) mod runtime {
             0 => set("BATTLE_SEGUE", 0),
             1 => set("BATTLE_SEGUE", 1),
             2 => {
-                instantVictory = 1;
+                Kernel::current().instant_victory = 1;
                 set("BATTLE_SEGUE", 1);
             }
             3 => {
@@ -165,7 +167,7 @@ pub(crate) mod runtime {
             } else {
                 0
             }
-        } else if instantVictory != 0 {
+        } else if Kernel::current().instant_victory != 0 {
             2
         } else {
             1

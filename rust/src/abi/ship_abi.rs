@@ -1,4 +1,6 @@
 pub use crate::engine::battle::{ElementHook, CollisionHook};
+#[cfg(not(test))]
+pub(crate) use crate::engine::battle::record::Kernel;
 pub use crate::engine::battle::record::{
     captain_stuff, element, element__bindgen_ty_1, element__bindgen_ty_2, element__bindgen_ty_3,
     element__bindgen_ty_4, element__bindgen_ty_5, race_desc, state, state__bindgen_ty_1,
@@ -1156,7 +1158,6 @@ pub struct battlestate_struct {
 unsafe extern "C" {
 }
 unsafe extern "C" {
-    pub static mut instantVictory: BOOLEAN;
 }
 
 #[cfg(not(test))]
@@ -1653,9 +1654,7 @@ pub struct NetworkInputContext {
     pub playerNr: COUNT,
     pub net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
 }
-unsafe extern "C" {
-    pub static mut PlayerInput: [*mut crate::battle::battle_controls::InputContext;2];
-}
+unsafe extern "C" {}
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_5 = 2;
@@ -1686,9 +1685,7 @@ pub use crate::battle::cyborg_native::engine::TurnShip;
 
 #[cfg(not(test))]
 pub use crate::battle::cyborg_native::engine::ThrustShip;
-unsafe extern "C" {
-    pub static mut status_y_offsets: [i16;2];
-}
+unsafe extern "C" {}
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::InitStatusOffsets;
@@ -1737,10 +1734,8 @@ pub use crate::battle::status_native::engine::PreProcessStatus;
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
 unsafe extern "C" {
-    pub static mut MenuSounds: SOUND;
 }
 unsafe extern "C" {
-    pub static mut GameSounds: SOUND;
 }
 pub type MENU_SOUND_FLAGS = UWORD;
 

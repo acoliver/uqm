@@ -1,13 +1,46 @@
 //! LIFO handoff between legacy entry points and the one owned battle context.
 
-use crate::engine::battle::Cx;
+use crate::engine::battle::{record::Kernel, Cx};
 use std::ptr::{self, NonNull};
 
-static mut CONTEXT: Option<NonNull<Cx<'static>>> = None;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Slot {
+    published: Option<NonNull<Cx<'static>>>,
+    kernel: Option<NonNull<crate::engine::battle::record::Kernel>>,
+}
+impl Slot {
+    fn published(cx: &mut Cx<'_>) -> Self {
+        let kernel = NonNull::new(cx.kernel());
+        Self {
+            published: Some(NonNull::from(cx).cast()),
+            kernel,
+        }
+    }
+    fn entered(self) -> Self {
+        Self {
+            published: None,
+            ..self
+        }
+    }
+    fn context(self) -> NonNull<Cx<'static>> {
+        self.published
+            .unwrap_or_else(|| panic!("bridge entry without a published context"))
+    }
+    fn owner(self) -> *mut crate::engine::battle::record::Kernel {
+        self.kernel
+            .unwrap_or_else(|| panic!("kernel access without a lifecycle context"))
+            .as_ptr()
+    }
+}
+
+static mut CONTEXT: Slot = Slot {
+    published: None,
+    kernel: None,
+};
 
 struct Restore {
-    before: Option<NonNull<Cx<'static>>>,
-    during: Option<NonNull<Cx<'static>>>,
+    before: Slot,
+    during: Slot,
 }
 
 impl Drop for Restore {
@@ -26,13 +59,14 @@ impl Drop for Restore {
 pub unsafe fn publish<R>(cx: &mut Cx<'_>, call: impl FnOnce() -> R) -> R {
     // SAFETY: publication transfers exclusive access for this synchronous call.
     unsafe {
+        let before = ptr::read(&raw const CONTEXT);
         assert!(
-            ptr::read(&raw const CONTEXT).is_none(),
+            before.published.is_none(),
             "bridge already has a published context"
         );
-        let published = Some(NonNull::from(cx).cast());
+        let published = Slot::published(cx);
         let restore = Restore {
-            before: None,
+            before,
             during: published,
         };
         ptr::write(&raw mut CONTEXT, published);
@@ -48,12 +82,11 @@ pub unsafe fn publish<R>(cx: &mut Cx<'_>, call: impl FnOnce() -> R) -> R {
 pub unsafe fn enter<R>(call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
     // SAFETY: taking the slot suspends publication while the unique borrow is live.
     unsafe {
-        let mut context = ptr::replace(&raw mut CONTEXT, None)
-            .unwrap_or_else(|| panic!("bridge entry without a published context"));
-        let restore = Restore {
-            before: Some(context),
-            during: None,
-        };
+        let before = ptr::read(&raw const CONTEXT);
+        let mut context = before.context();
+        let during = before.entered();
+        ptr::write(&raw mut CONTEXT, during);
+        let restore = Restore { before, during };
         let result = call(context.as_mut());
         drop(restore);
         result
@@ -102,6 +135,15 @@ pub unsafe fn with_battle<R>(call: impl FnOnce() -> R) -> R {
     }
 }
 
+impl Kernel {
+    /// # Safety
+    /// Game-thread lifecycle only. No kernel reference may survive a callback or handoff.
+    pub(crate) unsafe fn current<'a>() -> &'a mut Self {
+        // SAFETY: the lifecycle retains this owner projection while Cx is entered.
+        unsafe { &mut *ptr::read(&raw const CONTEXT).owner() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +174,15 @@ mod tests {
         unsafe {
             publish(&mut cx, || {
                 enter(|cx| {
+                    let owner = ptr::from_mut(Kernel::current());
+                    assert_eq!(owner, cx.kernel());
+                    (*owner).instant_victory = 1;
+                    publish(cx, || {
+                        enter(|cx| {
+                            assert_eq!(ptr::from_mut(Kernel::current()), cx.kernel());
+                            assert_eq!(Kernel::current().instant_victory, 1);
+                        })
+                    });
                     cx.b.counters = [3, 4];
                     publish(cx, || enter(|cx| cx.b.counters[0] -= 1));
                     assert_eq!(cx.b.counters, [2, 4]);

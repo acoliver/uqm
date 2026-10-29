@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
-use crate::battle::status_native::status_y_offsets;
+use crate::engine::battle::record::Kernel;
 use crate::navigation::abi::*;
 use std::mem;
 
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn InitShipStatus(
     let mut old_origin = POINT { x: 0, y: 0 };
     if !starship.is_null() {
         assert!((*starship).playerNr >= 0);
-        y = status_y_offsets[(*starship).playerNr as usize];
+        y = Kernel::current().status_offsets[(*starship).playerNr as usize];
     }
     let old_context = SetContext(StatusContext);
     if !clip_rect.is_null() {

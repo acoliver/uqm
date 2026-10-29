@@ -27,7 +27,7 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
-    use crate::battle::sounds::{GameSounds, ProcessSound};
+    use crate::battle::sounds::ProcessSound;
     use crate::battle::world_elements::do_damage;
     use crate::collections::observation::image;
     use crate::ships::native::{
@@ -136,7 +136,10 @@ pub(crate) mod engine {
         {
             if damage != 0 {
                 let sound = (2 + (damage >> 1)).min(5);
-                ProcessSound(SetAbsStringTableIndex(GameSounds, sound as u16), hit);
+                ProcessSound(
+                    SetAbsStringTableIndex(Kernel::current().game_sounds, sound as u16),
+                    hit,
+                );
             }
             if (*primitive(w)).Type != gfx_object_LINE_PRIM as u8 {
                 (*w).state_flags |= DISAPPEARING as u16;
@@ -227,7 +230,7 @@ pub(crate) mod engine {
             object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(31);
         }
         object.IntersectStamp.origin.y = object.IntersectStamp.origin.y.wrapping_add(
-            *(&raw const status_y_offsets)
+            *(&raw const Kernel::current().status_offsets)
                 .cast::<i16>()
                 .offset((*e).playerNr as isize),
         );

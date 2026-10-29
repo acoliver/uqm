@@ -4609,10 +4609,8 @@ pub const MENU_SOUND_EFFECT_MENU_SOUND_FAILURE: MENU_SOUND_EFFECT = 2;
 pub const MENU_SOUND_EFFECT_MENU_SOUND_INVOKED: MENU_SOUND_EFFECT = 3;
 pub type MENU_SOUND_EFFECT = ::std::os::raw::c_uint;
 extern "C" {
-    pub static mut MenuSounds: SOUND;
 }
 extern "C" {
-    pub static mut GameSounds: SOUND;
 }
 pub type MENU_SOUND_FLAGS = UWORD;
 
@@ -4657,9 +4655,7 @@ pub use crate::ui::shipyard::DoShipyard;
 
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
-extern "C" {
-    pub static mut status_y_offsets: [i16;2];
-}
+extern "C" {}
 
 #[cfg(not(test))]
 pub use crate::ui::shipstat::DrawCrewFuelString;

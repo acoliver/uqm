@@ -1,4 +1,6 @@
 //! Real virtual controls, restart dispatch, DoInput reset and save enumeration.
+#[path = "support/battle_context.rs"]
+mod battle_context;
 use std::{ffi::CString, ptr};
 use uqm_rust::{
     front_end::gameopt::{picker_action, LoadGameDescriptions, PickerAction},
@@ -122,113 +124,116 @@ unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
 
 #[test]
 fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("tmp");
-    std::fs::create_dir_all(&root).unwrap();
-    let profile = tempfile::tempdir_in(root).unwrap();
-    unsafe {
-        uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
-        Init_DrawCommandQueue();
-        SetDefaultMenuRepeatDelay();
-        assert_eq!(rust_v_control_init(), 0);
-        assert_eq!(
-            rust_vcontrol_add_key_binding(
-                RETURN,
-                ptr::addr_of_mut!(ImmediateInputState.menu[SELECT])
-            ),
-            0
-        );
-        assert_eq!(
-            rust_vcontrol_add_key_binding(
-                ESCAPE,
-                ptr::addr_of_mut!(ImmediateInputState.menu[CANCEL])
-            ),
-            0
-        );
-
-        let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
-        saveDir = ptr::null_mut();
-        assert!(!profile.path().join("save").exists());
-        LoadGameDescriptions(summaries.as_mut_ptr());
-        assert!(summaries.iter().all(|summary| summary.year_index == 0));
-        open_from_restart_while_select_is_held(false);
-
-        let saves = profile.path().join("save");
-        std::fs::create_dir(&saves).unwrap();
-        uio::uio_init();
-        let repo = uio::uio_openRepository(0);
-        let path = CString::new(saves.to_str().unwrap()).unwrap();
-        assert!(!uio::uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            path.as_ptr(),
-            ptr::null_mut(),
-            4,
-            ptr::null_mut()
-        )
-        .is_null());
-        let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-        saveDir = dir.cast();
-        LoadGameDescriptions(summaries.as_mut_ptr());
-        assert!(summaries.iter().all(|summary| summary.year_index == 0));
-        let slots = SaveSlots::new(saveDir.cast()).unwrap();
-        let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
-        for slot in 0..50 {
-            if slot % 3 == 1 {
-                std::fs::write(saves.join(format!("uqmsave.{slot:02}")), b"corrupt save").unwrap();
-            } else if slot % 3 == 0 {
-                slots.write(slot, &save).unwrap();
-            }
-        }
-        // The old header has alignment words after SIS and at its end.
-        // A valid legacy summary must win over an unreadable current slot.
-        let modern = uqm_rust::savegame::encode_save(&save).unwrap();
-        let body = &modern[12..172];
-        let mut legacy = [0xa5; 164];
-        legacy[..122].copy_from_slice(&body[..122]);
-        legacy[124..162].copy_from_slice(&body[122..160]);
-        std::fs::write(saves.join("starcon2.49"), legacy).unwrap();
-        std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
-        for _ in 0..10 {
-            ffi::set_current_activity(ActivityValue(4));
-            LoadGameDescriptions(summaries.as_mut_ptr());
+    battle_context::run(|| {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("tmp");
+        std::fs::create_dir_all(&root).unwrap();
+        let profile = tempfile::tempdir_in(root).unwrap();
+        unsafe {
+            uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
+            Init_DrawCommandQueue();
+            SetDefaultMenuRepeatDelay();
+            assert_eq!(rust_v_control_init(), 0);
             assert_eq!(
-                ffi::get_current_activity().0,
-                4,
-                "enumeration must not set abort/load flags"
+                rust_vcontrol_add_key_binding(
+                    RETURN,
+                    ptr::addr_of_mut!(ImmediateInputState.menu[SELECT])
+                ),
+                0
             );
-            for (slot, summary) in summaries.iter().enumerate() {
-                assert_eq!(
-                    summary.year_index != 0,
-                    slot % 3 == 0 || slot == 49,
-                    "slot {slot}"
-                );
-            }
-            open_from_restart_while_select_is_held(true);
+            assert_eq!(
+                rust_vcontrol_add_key_binding(
+                    ESCAPE,
+                    ptr::addr_of_mut!(ImmediateInputState.menu[CANCEL])
+                ),
+                0
+            );
+
+            let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
+            saveDir = ptr::null_mut();
+            assert!(!profile.path().join("save").exists());
+            LoadGameDescriptions(summaries.as_mut_ptr());
+            assert!(summaries.iter().all(|summary| summary.year_index == 0));
             open_from_restart_while_select_is_held(false);
+
+            let saves = profile.path().join("save");
+            std::fs::create_dir(&saves).unwrap();
+            uio::uio_init();
+            let repo = uio::uio_openRepository(0);
+            let path = CString::new(saves.to_str().unwrap()).unwrap();
+            assert!(!uio::uio_mountDir(
+                repo,
+                c"/".as_ptr(),
+                1,
+                ptr::null_mut(),
+                ptr::null(),
+                path.as_ptr(),
+                ptr::null_mut(),
+                4,
+                ptr::null_mut()
+            )
+            .is_null());
+            let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
+            saveDir = dir.cast();
+            LoadGameDescriptions(summaries.as_mut_ptr());
+            assert!(summaries.iter().all(|summary| summary.year_index == 0));
+            let slots = SaveSlots::new(saveDir.cast()).unwrap();
+            let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
+            for slot in 0..50 {
+                if slot % 3 == 1 {
+                    std::fs::write(saves.join(format!("uqmsave.{slot:02}")), b"corrupt save")
+                        .unwrap();
+                } else if slot % 3 == 0 {
+                    slots.write(slot, &save).unwrap();
+                }
+            }
+            // The old header has alignment words after SIS and at its end.
+            // A valid legacy summary must win over an unreadable current slot.
+            let modern = uqm_rust::savegame::encode_save(&save).unwrap();
+            let body = &modern[12..172];
+            let mut legacy = [0xa5; 164];
+            legacy[..122].copy_from_slice(&body[..122]);
+            legacy[124..162].copy_from_slice(&body[122..160]);
+            std::fs::write(saves.join("starcon2.49"), legacy).unwrap();
+            std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
+            for _ in 0..10 {
+                ffi::set_current_activity(ActivityValue(4));
+                LoadGameDescriptions(summaries.as_mut_ptr());
+                assert_eq!(
+                    ffi::get_current_activity().0,
+                    4,
+                    "enumeration must not set abort/load flags"
+                );
+                for (slot, summary) in summaries.iter().enumerate() {
+                    assert_eq!(
+                        summary.year_index != 0,
+                        slot % 3 == 0 || slot == 49,
+                        "slot {slot}"
+                    );
+                }
+                open_from_restart_while_select_is_held(true);
+                open_from_restart_while_select_is_held(false);
+            }
+            assert_eq!(
+                picker_action(true, true, true, false, true),
+                PickerAction::Abort
+            );
+            assert_eq!(
+                picker_action(false, true, true, false, true),
+                PickerAction::Cancel
+            );
+            assert_eq!(
+                picker_action(false, false, true, true, false),
+                PickerAction::Select
+            );
+            saveDir = ptr::null_mut();
+            uio::uio_closeDir(dir);
+            uio::uio_closeRepository(repo);
+            uio::uio_unInit();
+            rust_v_control_uninit();
+            Uninit_DrawCommandQueue();
         }
-        assert_eq!(
-            picker_action(true, true, true, false, true),
-            PickerAction::Abort
-        );
-        assert_eq!(
-            picker_action(false, true, true, false, true),
-            PickerAction::Cancel
-        );
-        assert_eq!(
-            picker_action(false, false, true, true, false),
-            PickerAction::Select
-        );
-        saveDir = ptr::null_mut();
-        uio::uio_closeDir(dir);
-        uio::uio_closeRepository(repo);
-        uio::uio_unInit();
-        rust_v_control_uninit();
-        Uninit_DrawCommandQueue();
-    }
+    });
 }

@@ -3040,10 +3040,10 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|raw_pointer_parameters|uqm::ui" = 80
 "ffi|raw_records|uqm::app" = 0
 "ffi|raw_records|uqm::automation" = 7
-"ffi|raw_records|uqm::battle" = 198
+"ffi|raw_records|uqm::battle" = 197
 "ffi|raw_records|uqm::c_bindings" = 3
 "ffi|raw_records|uqm::comm" = 1
-"ffi|raw_records|uqm::engine" = 4
+"ffi|raw_records|uqm::engine" = 5
 "ffi|raw_records|uqm::front_end" = 7
 "ffi|raw_records|uqm::game_init" = 12
 "ffi|raw_records|uqm::mainloop" = 2
@@ -3056,10 +3056,10 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "ffi|raw_records|uqm::ui" = 1
 "ffi|repr_c|uqm-engine::uqm-engine" = 128
 "ffi|repr_c|uqm::automation" = 5
-"ffi|repr_c|uqm::battle" = 14
+"ffi|repr_c|uqm::battle" = 13
 "ffi|repr_c|uqm::c_bindings" = 1
 "ffi|repr_c|uqm::comm" = 25
-"ffi|repr_c|uqm::engine" = 18
+"ffi|repr_c|uqm::engine" = 19
 "ffi|repr_c|uqm::front_end" = 8
 "ffi|repr_c|uqm::mainloop" = 1
 "ffi|repr_c|uqm::navigation" = 45
@@ -3146,9 +3146,6 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "layers|module_edges|uqm::battle::sounds::<Channels>::select::@file" = 1
 "layers|module_edges|uqm::battle::sounds::<SoundQueue>::push::@file" = 2
 "layers|module_edges|uqm::battle::sounds::@file" = 2
-"layers|module_edges|uqm::battle::sounds::Channels::sounds::@file" = 1
-"layers|module_edges|uqm::battle::sounds::SoundQueue::objects::@file" = 1
-"layers|module_edges|uqm::battle::sounds::SoundQueue::sounds::@file" = 1
 "layers|module_edges|uqm::battle::sounds::engine::@file" = 1
 "layers|module_edges|uqm::battle::sounds::engine::CalcSoundPosition::@file" = 1
 "layers|module_edges|uqm::battle::sounds::engine::GameSounds::@file" = 1
@@ -5662,26 +5659,14 @@ stage_b_raw = { limit = 42, ends = "phase-2", scopes = { "ffi|raw_pointer_parame
 "unsafe|unsafe_lines|uqm::uqm" = 1
 
 [moved]
-"uqm::battle::context_access::<Cx<'_>>::abs_frame" = "uqm::engine::battle::access::<Cx<'_>>::abs_frame"
-"uqm::battle::context_access::<Cx<'_>>::equ_frame" = "uqm::engine::battle::access::<Cx<'_>>::equ_frame"
-"uqm::battle::context_access::<Cx<'_>>::frame_at" = "uqm::engine::battle::access::<Cx<'_>>::frame_at"
-"uqm::battle::context_access::<Cx<'_>>::frame_index" = "uqm::engine::battle::access::<Cx<'_>>::frame_index"
-"uqm::battle::context_access::<Cx<'_>>::inc_frame" = "uqm::engine::battle::access::<Cx<'_>>::inc_frame"
-"uqm::battle::context_access::<Cx<'_>>::init_intersect" = "uqm::engine::battle::access::<Cx<'_>>::init_intersect"
-"uqm::battle::context_access::<Cx<'_>>::shared_frame" = "uqm::engine::battle::access::<Cx<'_>>::shared_frame"
-"uqm::battle::context_access::<Cx<'_>>::shared_frames" = "uqm::engine::battle::access::<Cx<'_>>::shared_frames"
-"uqm::battle::context_access::<Cx<'_>>::ship_frames" = "uqm::engine::battle::access::<Cx<'_>>::ship_frames"
-"uqm::battle::context_access::<Cx<'_>>::track_subject" = "uqm::engine::battle::access::<Cx<'_>>::track_subject"
-"uqm::battle::process_native::invoke_collision::invoke_legacy_collision" = "uqm::engine::battle::access::invoke_legacy_collision"
-"uqm::battle::process_native::invoke_element::invoke_legacy_element" = "uqm::engine::battle::access::invoke_legacy_element"
-"uqm::engine::battle::race::Subject" = "uqm::engine::battle::views::Subject"
+"uqm::battle::galaxy::STAR_BLOCK" = "uqm::engine::battle::kernel::StarPlane"
+"uqm::battle::sounds::Channels" = "uqm::engine::battle::kernel::Channels"
+"uqm::battle::sounds::SoundQueue" = "uqm::engine::battle::kernel::SoundQueue"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input"
 "uqm::io" = "uqm-engine::io"
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
-"uqm::ships::races::androsynth_native::engine::descriptor" = "uqm::engine::battle::androsynth_template::descriptor"
-"uqm::ships::races::vux_native::engine::descriptor" = "uqm::engine::battle::vux_template::descriptor"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
 "uqm::video" = "uqm-engine::video"

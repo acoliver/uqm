@@ -100,10 +100,6 @@ pub(crate) mod engine {
     // gfx_common.h SCALE enum starts with the stepped scaler.
     pub const SCALE_STEP: i32 = 0;
 
-    #[no_mangle]
-    pub static mut instantVictory: BOOLEAN = 0;
-    static mut BATTLE_REF: MUSIC_REF = ptr::null_mut();
-
     use crate::automation::battle_observer::rust_battle_frame_reset;
 
     use crate::automation::battle_observer::rust_battle_frame_advance;
@@ -139,14 +135,12 @@ pub(crate) mod engine {
     /// # Safety
     /// `side` must be a valid player index with initialized input state.
     pub unsafe fn player_input(side: usize) -> *mut InputContext {
-        *(&raw const PlayerInput)
-            .cast::<*mut InputContext>()
-            .add(side)
+        Kernel::current().player_input[side].cast()
     }
     /// # Safety
     /// `side` must be valid and `input` must remain live while installed, or be null during input replacement.
     pub unsafe fn set_player_input(side: usize, input: *mut InputContext) {
-        *(&raw mut PlayerInput).cast::<*mut InputContext>().add(side) = input;
+        Kernel::current().player_input[side] = input.cast();
     }
     /// # Safety
     /// `side` must be a valid player index on the game thread.
@@ -270,7 +264,7 @@ pub(crate) mod engine {
     /// The game thread must own initialized audio, activity, and resource state.
     #[no_mangle]
     pub unsafe extern "C" fn BattleSong(play: BOOLEAN) {
-        if BATTLE_REF.is_null() {
+        if Kernel::current().battle_music.is_null() {
             let resource = if inHyperSpace() != 0 {
                 HYPERSPACE_MUSIC.as_ptr()
             } else if inQuasiSpace() != 0 {
@@ -278,10 +272,11 @@ pub(crate) mod engine {
             } else {
                 BATTLE_MUSIC.as_ptr()
             };
-            BATTLE_REF = crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
+            Kernel::current().battle_music =
+                crate::sound::resource_types::LoadMusicInstance(resource.cast()).cast();
         }
         if play != 0 {
-            PlayMusic(BATTLE_REF, 1, 1);
+            PlayMusic(Kernel::current().battle_music, 1, 1);
         }
     }
 
@@ -289,8 +284,8 @@ pub(crate) mod engine {
     /// The game thread must own the battle music handle and initialized audio state.
     #[no_mangle]
     pub unsafe extern "C" fn FreeBattleSong() {
-        DestroyMusic(BATTLE_REF);
-        BATTLE_REF = ptr::null_mut();
+        DestroyMusic(Kernel::current().battle_music);
+        Kernel::current().battle_music = ptr::null_mut();
     }
 
     unsafe extern "C" fn DoBattle(bs: *mut battlestate_struct) -> BOOLEAN {
@@ -412,10 +407,10 @@ pub(crate) mod engine {
         }
         BattleSong(0);
         let mut count = InitShips();
-        if instantVictory != 0 {
+        if Kernel::current().instant_victory != 0 {
             count = 0;
             (*battle).counters = [1, 0];
-            instantVictory = 0;
+            Kernel::current().instant_victory = 0;
         }
         if count != 0 {
             let mut bs: battlestate_struct = mem::zeroed();
@@ -492,7 +487,8 @@ pub(crate) mod engine {
 
 #[cfg(not(test))]
 pub use engine::{
-    frameInputHuman, instantVictory, Battle, BattleSong, FreeBattleSong, GetPlayerOrder,
+    frameInputHuman, player_input, set_player_input, Battle, BattleSong, FreeBattleSong,
+    GetPlayerOrder,
 };
 
 #[cfg(test)]
