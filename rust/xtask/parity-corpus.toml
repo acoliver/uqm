@@ -112,11 +112,6 @@ classification = "known_bug"
 terminal = "semantic_mismatch"
 issue = 719
 
-[[expectation]]
-scenario = "campaign-s04b-burvixese-caster"
-classification = "known_bug"
-terminal = "semantic_mismatch"
-issue = 719
 
 
 [[expectation]]
