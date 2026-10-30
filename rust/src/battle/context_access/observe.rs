@@ -1,10 +1,10 @@
 //! Immutable observations of typed element and ship links for automation.
-use super::super::{
+use crate::comm::locdata::CQueue;
+use crate::engine::battle::{
     link_queue::{LinkQueue, Starship},
     record::*,
     views::*,
 };
-use crate::comm::locdata::CQueue;
 use crate::savegame::runtime::queues::{walk, QueueKind};
 
 #[derive(Clone, Copy)]
@@ -25,9 +25,12 @@ impl std::ops::Deref for ElementObservation {
     }
 }
 impl ElementObservation {
-    pub(crate) fn decode(record: &ELEMENT) -> Self {
+    /// # Safety
+    /// The caller retains the live source record and its reachable resource graph.
+    pub(crate) unsafe fn decode(record: &ELEMENT) -> Self {
         Self {
-            state: ElementState::decode(record),
+            // SAFETY: the snapshot retains the source element and its live graph.
+            state: unsafe { crate::engine::battle::access::observe_element_record(record) },
             address: std::ptr::from_ref(record) as usize,
             pred: record.pred as usize,
             succ: record.succ as usize,
@@ -42,7 +45,7 @@ impl ElementObservation {
 /// The queue and pool stay live and immutable until this observation completes.
 pub(crate) unsafe fn elements(
     queue: &CQueue,
-    #[cfg(not(test))] elements: &super::super::ElementTable,
+    #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ElementObservation> {
     if queue.pq_tab.is_null() && queue.head.is_null() {
         assert!(
@@ -65,14 +68,15 @@ pub(crate) unsafe fn elements(
         #[cfg(test)]
         // SAFETY: the validator checked every link in the retained local immutable test pool.
         let record = unsafe { &*pointer };
-        result.push(ElementObservation::decode(record));
+        // SAFETY: the checked display pool remains immutable during this observation.
+        result.push(unsafe { ElementObservation::decode(record) });
     }
     result
 }
 
 pub(crate) struct ShipObservation<'a> {
     pub state: ShipState,
-    pub pick: super::super::link_queue::PickShip,
+    pub pick: crate::engine::battle::link_queue::PickShip,
     pub address: usize,
     pub pred: usize,
     pub succ: usize,
@@ -103,11 +107,9 @@ pub(crate) enum CustomData<'a> {
     #[cfg(not(test))]
     Androsynth(ElementCollisionFunc),
     #[cfg(not(test))]
-    Pkunk(&'a crate::ships::races::pkunk_native::engine::PkunkData),
-    #[cfg(not(test))]
     NativePkunk {
         phoenix: usize,
-        saved: [Option<super::super::ElementHook>; 3],
+        saved: [Option<crate::engine::battle::ElementHook>; 3],
     },
     #[cfg(not(test))]
     Umgah(&'a crate::ships::races::umgah_native::engine::UmgahData),
@@ -115,16 +117,12 @@ pub(crate) enum CustomData<'a> {
     NativeUmgah(u16),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
     #[cfg(not(test))]
-    Sis(&'a crate::ships::races::sis_native::engine::SisData),
+    Sis(&'a crate::engine::battle::race::SisState),
 }
 #[cfg(not(test))]
 impl<'a> CustomData<'a> {
-    unsafe fn decode(
-        species: u32,
-        descriptor: &'a RACE_DESC,
-        elements: &super::super::ElementTable,
-    ) -> Self {
-        use super::super::RaceState;
+    unsafe fn decode(species: u32, descriptor: &'a RACE_DESC) -> Self {
+        use crate::engine::battle::RaceState;
         match &descriptor.race_state {
             RaceState::Androsynth { collision } => return Self::Androsynth(*collision),
             RaceState::Mmrnmhrm { alternate } => return Self::Mmrnmhrm(alternate),
@@ -134,12 +132,26 @@ impl<'a> CustomData<'a> {
                 saved_post,
                 saved_death,
             } => {
-                let address = phoenix.map_or(0, |id| elements.raw(id) as usize);
+                let address = phoenix.map_or(0, |id| {
+                    // SAFETY: the snapshot retains the pool; retired tokens preserve slot addresses.
+                    let queue = unsafe { &*crate::c_bindings::live_queues::display_list() };
+                    assert!(
+                        !queue.pq_tab.is_null(),
+                        "Pkunk snapshot pool is not initialized"
+                    );
+                    assert!(
+                        id.slot < queue.num_objects,
+                        "Pkunk snapshot slot outside pool"
+                    );
+                    assert!(queue.object_size > 0, "Pkunk snapshot has no record stride");
+                    queue.pq_tab as usize + usize::from(id.slot) * usize::from(queue.object_size)
+                });
                 return Self::NativePkunk {
                     phoenix: address,
                     saved: [*saved_pre, *saved_post, *saved_death],
                 };
             }
+            RaceState::Sis(data) => return Self::Sis(data),
             RaceState::Umgah { previous_facing } => {
                 return previous_facing.map_or(Self::None, Self::NativeUmgah)
             }
@@ -152,9 +164,7 @@ impl<'a> CustomData<'a> {
         // SAFETY: unconverted initializers retain the corresponding species allocation.
         unsafe {
             match species {
-                crate::ships::native::abi::SPECIES_ID_PKUNK_ID => Self::Pkunk(&*pointer.cast()),
                 crate::ships::native::abi::SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
-                crate::ships::native::abi::SPECIES_ID_SIS_SHIP_ID => Self::Sis(&*pointer.cast()),
                 _ => panic!("unexpected custom data for species {species}"),
             }
         }
@@ -162,10 +172,7 @@ impl<'a> CustomData<'a> {
 }
 /// # Safety
 /// The queue, ship resources and descriptor allocations remain immutable for the borrow.
-pub(crate) unsafe fn ships<'a>(
-    queue: &'a CQueue,
-    #[cfg(not(test))] elements: &super::super::ElementTable,
-) -> Vec<ShipObservation<'a>> {
+pub(crate) unsafe fn ships<'a>(queue: &'a CQueue) -> Vec<ShipObservation<'a>> {
     if queue.pq_tab.is_null() && queue.head.is_null() {
         assert!(queue.tail.is_null(), "uninitialized ship queue has a tail");
         return Vec::new();
@@ -193,7 +200,7 @@ pub(crate) unsafe fn ships<'a>(
                 callbacks: d.callbacks(),
                 code_loaded: !d.code_ref.is_null(),
                 #[cfg(not(test))]
-                custom: CustomData::decode(s.SpeciesID, d, elements),
+                custom: CustomData::decode(s.SpeciesID, d),
                 #[cfg(test)]
                 custom: CustomData::None,
             });
@@ -206,7 +213,8 @@ pub(crate) unsafe fn ships<'a>(
             )
         };
         result.push(ShipObservation {
-            state: ShipState::decode(s),
+            // SAFETY: the retained ship pool remains immutable during observation.
+            state: unsafe { crate::engine::battle::access::observe_ship_record(s) },
             pick: ships.get(id),
             address: ships.raw(id) as usize,
             pred: s.pred as usize,

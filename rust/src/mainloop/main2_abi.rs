@@ -6,6 +6,5 @@ macro_rules! operation {
         pub unsafe fn $name($($arg: $ty),*) $(-> $ret)? $body
     };
 }
-operation!(uqm_get_head_element() -> *mut std::ffi::c_void { crate::app::bridge::enter(|cx| cx.elements().head().map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))) });
 operation!(uqm_wrap_delta_x(delta: i16) -> i16 { crate::ships::native::wrap_delta(delta, (crate::ships::native::abi::ScreenWidth - 64) << 5) });
 operation!(uqm_wrap_delta_y(delta: i16) -> i16 { crate::ships::native::wrap_delta(delta, crate::ships::native::abi::ScreenHeight << 5) });

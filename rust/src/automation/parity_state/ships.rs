@@ -9,26 +9,17 @@ use crate::ships::native::abi::*;
 mod assets;
 
 pub(super) struct Ship<'a> {
-    pub(super) observation: crate::engine::battle::access::observe::ShipObservation<'a>,
+    pub(super) observation: crate::battle::context_access::observe::ShipObservation<'a>,
 }
 impl<'a> Ship<'a> {
     /// # Safety
     /// The pool and all resource allocations remain immutable for the observation.
-    pub(super) unsafe fn queue(
-        queue: &'a crate::comm::locdata::CQueue,
-        #[cfg(not(test))] elements: &crate::engine::battle::ElementTable,
-    ) -> Vec<Self> {
+    pub(super) unsafe fn queue(queue: &'a crate::comm::locdata::CQueue) -> Vec<Self> {
         // SAFETY: the caller retains the immutable pool and every reachable resource.
-        unsafe {
-            crate::engine::battle::access::observe::ships(
-                queue,
-                #[cfg(not(test))]
-                elements,
-            )
-        }
-        .into_iter()
-        .map(|observation| Self { observation })
-        .collect()
+        unsafe { crate::battle::context_access::observe::ships(queue) }
+            .into_iter()
+            .map(|observation| Self { observation })
+            .collect()
     }
     pub(super) fn address(&self) -> usize {
         self.observation.address

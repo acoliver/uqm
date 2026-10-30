@@ -278,6 +278,9 @@ unsafe fn invoke(id: u8) -> u8 {
                     set("SHIP_TO_COMPEL", 1);
                 }
                 GlobData.Game_state.CurrentActivity &= !0x0200;
+                #[cfg(not(test))]
+                crate::app::bridge::enter(save_sis_hyper_state);
+                #[cfg(test)]
                 save_sis_hyper_state();
             } else {
                 crate::c_bindings::global_state::EncounterGroup = 0;

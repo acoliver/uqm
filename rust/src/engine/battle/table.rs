@@ -84,7 +84,7 @@ impl ElementTable {
 
     /// Legacy bookkeeping can retain an address after its allocation retires.
     /// Foreign addresses still fail validation; a retired slot has no current id.
-    pub(super) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
+    pub(crate) fn allocated_id(&self, handle: HLink) -> Option<ElementId> {
         if handle.is_null() {
             return None;
         }

@@ -408,10 +408,10 @@ unsafe fn pick_side() -> bool {
     result
 }
 
-unsafe fn scanned_stuff(y: u16, scan: u16) {
+unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
     let g = CffiPlatform;
     let old_color = g.set_fg_color(Rgba::BLACK);
-    crate::app::bridge::enter(|cx| {
+    {
         let mut handle = cx.elements().head();
         while let Some(element) = handle {
             handle = cx.elements().succ(element);
@@ -462,11 +462,11 @@ unsafe fn scanned_stuff(y: u16, scan: u16) {
                 draw(frame, point, true);
             }
         }
-    });
+    }
     g.set_fg_color(old_color);
 }
 
-unsafe fn scan_planet(scan_type: u16) {
+unsafe fn scan_planet(cx: &mut crate::engine::battle::Cx<'_>, scan_type: u16) {
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -512,19 +512,19 @@ unsafe fn scan_planet(scan_type: u16) {
         let mut line = 0;
         while line < 84 {
             timeout = timeout.wrapping_add((840 * 7 / 4) / 84);
-            if WaitForAnyButtonUntil(1, timeout, 0) != 0 {
+            if crate::app::bridge::publish(cx, || WaitForAnyButtonUntil(1, timeout, 0)) != 0 {
                 break;
             }
             CffiPlatform.batch();
             DrawPlanet(line, tint);
-            scanned_stuff(line as u16, scan);
+            scanned_stuff(cx, line as u16, scan);
             CffiPlatform.unbatch();
             line += 1;
         }
         if line < 84 {
             CffiPlatform.batch();
             DrawPlanet(83, tint);
-            scanned_stuff(83, scan);
+            scanned_stuff(cx, 83, scan);
             CffiPlatform.unbatch();
         }
     }
@@ -533,7 +533,7 @@ unsafe fn scan_planet(scan_type: u16) {
     SetContext(SCAN_CONTEXT);
     if scan_type == 4 {
         DrawPlanet(0, black());
-        DrawScannedObjects(0);
+        crate::app::bridge::publish(cx, || DrawScannedObjects(0));
     }
     FlushInput();
 }
@@ -578,7 +578,7 @@ unsafe extern "C" fn scan_input(menu: *mut MENU_STATE) -> u32 {
             PlayMenuSound(2);
             return 1;
         }
-        scan_planet(u16::from((*menu).CurState));
+        crate::app::bridge::enter(|cx| scan_planet(cx, u16::from((*menu).CurState)));
         if (*menu).CurState == 4 {
             (*menu).CurState = 5;
             crate::automation::ui_observation::rust_automation_observe_planet_menu(3);

@@ -1,8 +1,8 @@
 //! Scalar element observation, shared by the live journal and checksum.
 use super::{value, Fields};
 use crate::automation::parity::Journal;
+use crate::battle::context_access::observe::ElementObservation;
 use crate::battle::velocity::VelocityDesc;
-use crate::engine::battle::access::observe::ElementObservation;
 
 pub(super) fn element(
     fields: &mut Fields,
@@ -116,7 +116,7 @@ mod tests {
         owners: &BTreeSet<usize>,
     ) {
         // SAFETY: the test owns the source and matching record layout.
-        let view = ElementObservation::decode(unsafe { &*std::ptr::from_ref(e).cast() });
+        let view = unsafe { ElementObservation::decode(&*std::ptr::from_ref(e).cast()) };
         super::element(fields, prefix, &view, journal, hooks, owners);
     }
     use std::collections::BTreeSet;

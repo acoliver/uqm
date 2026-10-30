@@ -3,7 +3,7 @@
 use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
-pub(super) use crate::engine::battle::access::observe::CustomData as RaceData;
+pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
 #[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
@@ -28,24 +28,6 @@ impl RaceData<'_> {
                 SPECIES_ID_ANDROSYNTH_ID,
                 _hooks,
             ),
-            #[cfg(not(test))]
-            Self::Pkunk { phoenix, hooks } => {
-                value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
-                for (name, callback) in [
-                    ("saved_preprocess", hooks[0]),
-                    ("saved_postprocess", hooks[1]),
-                    ("saved_death", hooks[2]),
-                ] {
-                    hook(
-                        fields,
-                        &prefix,
-                        name,
-                        callback.map_or(0, |f| f.address()),
-                        SPECIES_ID_PKUNK_ID,
-                        _hooks,
-                    );
-                }
-            }
             #[cfg(not(test))]
             Self::NativePkunk { phoenix, saved } => {
                 value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
@@ -185,31 +167,4 @@ mod tests {
             Fields::from([("ship.custom.present".into(), "false".into())])
         );
     }
-}
-
-/// Decode the legacy address token without accessing its element record.
-///
-/// # Safety
-/// The initialized display pool must remain owned by this synchronous snapshot.
-#[cfg(not(test))]
-pub(in crate::automation) unsafe fn phoenix_address(
-    phoenix: Option<crate::engine::battle::ElementId>,
-) -> usize {
-    let Some(id) = phoenix else {
-        return 0;
-    };
-    // Pkunk retains this token after free. Legacy observation follows the pool
-    // address even if its slot is reused; live element operations still check gen.
-    // SAFETY: the snapshot owns the initialized queue; only its address is read.
-    let queue = unsafe { &*crate::c_bindings::live_queues::display_list() };
-    assert!(
-        !queue.pq_tab.is_null(),
-        "Pkunk snapshot pool is not initialized"
-    );
-    assert!(
-        id.slot < queue.num_objects,
-        "Pkunk snapshot slot outside pool"
-    );
-    assert!(queue.object_size > 0, "Pkunk snapshot has no record stride");
-    queue.pq_tab as usize + usize::from(id.slot) * usize::from(queue.object_size)
 }
