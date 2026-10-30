@@ -1,4 +1,39 @@
 #[test]
+fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
+    battle_context::run(|| {
+        let battle = Battle::new(64);
+        // SAFETY: this fixture owns the published battle, descriptors and activity.
+        unsafe {
+            use uqm_rust::automation::samatra::observe;
+            uqm_rust::state::ffi::rust_init_game_state();
+            GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            let mut ship = boss(&battle);
+            let expected = uqm_rust::ships::races::samatra::observation::Events {
+                generation: 1,
+                destroyed: 255,
+                gate_entered: true,
+            };
+            let RaceState::SaMatra(ref mut state) = ship.descriptor_mut().race_state else {
+                panic!("boss owns Sa-Matra state")
+            };
+            state.destroyed = expected.destroyed;
+            state.gate_entered = expected.gate_entered;
+            uqm_rust::app::bridge::enter(|cx| cx.finish_battle());
+            assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
+            drop(ship);
+            uqm_rust::battle::process_native::InitDisplayList();
+            assert_eq!(observe(), (expected, None));
+            // A non-boss battle must clear the result too, before any ship spawns.
+            GlobData.Game_state.CurrentActivity = (IN_ENCOUNTER | IN_BATTLE) as u16;
+            uqm_rust::app::bridge::battle(|battle| battle.initialize());
+            uqm_rust::app::bridge::enter(|cx| assert!(cx.terminal_outcome().is_none()));
+            GlobData.Game_state.CurrentActivity = IN_LAST_BATTLE as u16;
+            assert_eq!(observe(), (Default::default(), None));
+        }
+    });
+}
+
+#[test]
 fn live_observation_projects_owned_events_generators_hazards_and_player() {
     battle_context::run(|| {
         let battle = Battle::new(64);

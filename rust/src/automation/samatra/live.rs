@@ -18,10 +18,22 @@ pub fn observe() -> (Events, Option<Snapshot>) {
 }
 
 #[cfg(not(test))]
+fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
+    Events {
+        generation: state.generation,
+        destroyed: state.destroyed,
+        gate_entered: state.gate_entered,
+    }
+}
+
+#[cfg(not(test))]
 fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
     let activity = cx.world.activity();
     if activity & 0xff != IN_LAST_BATTLE as u16 {
         return (Events::default(), None);
+    }
+    if let Some(RaceState::SaMatra(state)) = cx.terminal_outcome() {
+        return (project_events(state), None);
     }
     let (width, height) = cx.screen_dimensions();
     let arena = ((width - 64) << (ONE_SHIFT + 3), height << (ONE_SHIFT + 3));
@@ -37,11 +49,7 @@ fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
                 project_player(cx, id, owner, &mut result);
             } else if let RaceState::SaMatra(state) = cx.race_stats(owner).state {
                 boss = true;
-                events = Events {
-                    generation: state.generation,
-                    destroyed: state.destroyed,
-                    gate_entered: state.gate_entered,
-                };
+                events = project_events(&state);
                 result.remaining = cx.race_stats(owner).characteristics.max_thrust as u8;
             }
         }
