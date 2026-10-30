@@ -365,6 +365,13 @@ fn race_custom_fields(directory: &Path) {
                 assert!(fields[&format!("ships.0.0.custom.{name}")]
                     .starts_with("ships::races::human_native::"));
             }
+            // The fixture drops its descriptor directly rather than through the loader.
+            // Retire its observation before a later descriptor can reuse this allocation.
+            observation::record(Event::ResourcesFree {
+                descriptor: ptr::from_mut(owner.descriptor_mut()) as usize,
+                icons: true,
+                battle: true,
+            });
         }
         let mut ship: STARSHIP = std::mem::zeroed();
         ship.RaceDescPtr = &mut descriptor;
