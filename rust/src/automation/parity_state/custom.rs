@@ -47,8 +47,6 @@ impl RaceData<'_> {
             }
             #[cfg(not(test))]
             Self::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
-            #[cfg(not(test))]
-            Self::Umgah(data) => value(fields, &prefix, "prev_facing", data.prev_facing),
             Self::Mmrnmhrm(data) => {
                 characteristics(fields, &format!("{prefix}.characteristics"), data)
             }

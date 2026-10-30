@@ -246,9 +246,17 @@ impl Cx<'_> {
         objects: [crate::engine::battle::Concern; 4],
     ) {
         let ship = self.owner(element);
+        let count = objects.len() as u16;
+        let mut scratch = [crate::engine::battle::Concern {
+            object: None,
+            facing: 0,
+            which_turn: 0,
+            movement: 0,
+        }; 10];
+        scratch[..objects.len()].copy_from_slice(&objects);
         let mut concerns = crate::engine::battle::Concerns {
-            count: objects.len() as u16,
-            objects,
+            count,
+            objects: scratch,
             subject: self.weapon_origin(element),
         };
         assert!(
