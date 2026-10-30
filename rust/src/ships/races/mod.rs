@@ -34,10 +34,20 @@ pub mod samatra_state;
 
 #[cfg(not(test))]
 pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
-    use crate::ships::native::abi::{SPECIES_ID_ANDROSYNTH_ID, SPECIES_ID_VUX_ID};
+    use crate::ships::native::abi::*;
     match species {
         SPECIES_ID_VUX_ID => Some(&vux_native::engine::VUX),
         SPECIES_ID_ANDROSYNTH_ID => Some(&androsynth_native::engine::ANDROSYNTH),
+        SPECIES_ID_KOHR_AH_ID => Some(&blackurq_native::engine::BLACKURQ),
+        SPECIES_ID_DRUUGE_ID => Some(&druuge_native::engine::DRUUGE),
+        SPECIES_ID_UTWIG_ID => Some(&utwig_native::engine::UTWIG),
+        SPECIES_ID_ZOQFOTPIK_ID => Some(&zoqfot_native::engine::ZOQFOT),
+        SPECIES_ID_MYCON_ID => Some(&mycon_native::engine::MYCON),
+        SPECIES_ID_YEHAT_ID => Some(&yehat_native::engine::YEHAT),
+        SPECIES_ID_SUPOX_ID => Some(&supox_native::engine::SUPOX),
+        SPECIES_ID_SYREEN_ID => Some(&syreen_native::engine::SYREEN),
+        SPECIES_ID_MMRNMHRM_ID => Some(&mmrnmhrm_native::engine::MMRNMHRM),
+        SPECIES_ID_UR_QUAN_ID => Some(&urquan_native::engine::URQUAN),
         _ => None,
     }
 }
@@ -45,9 +55,7 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
 #[cfg(not(test))]
 pub use {
     human_native::engine::init_human, melnorme_native::engine::init_melnorme,
-    mmrnmhrm_native::engine::init_mmrnmhrm, mycon_native::engine::init_mycon,
     sis_native::engine::init_sis, thraddash_native::engine::init_thraddash,
-    utwig_native::engine::init_utwig,
 };
 
 #[cfg(not(test))]
@@ -66,13 +74,7 @@ pub use slylandro_native::engine::init_slylandro;
 pub use pkunk_native::engine::init_pkunk;
 
 #[cfg(not(test))]
-pub use urquan_native::engine::init_urquan;
-
-#[cfg(not(test))]
 pub use samatra::engine::init_samatra;
-
-#[cfg(not(test))]
-pub use yehat_native::engine::init_yehat;
 
 #[cfg(not(test))]
 pub use chenjesu_native::engine::init_chenjesu;
@@ -90,25 +92,10 @@ pub use chmmr_native::engine::init_chmmr;
 pub use ilwrath_native::engine::init_ilwrath;
 
 #[cfg(not(test))]
-pub use syreen_native::engine::init_syreen;
-
-#[cfg(not(test))]
-pub use supox_native::engine::init_supox;
-
-#[cfg(not(test))]
-pub use druuge_native::engine::init_druuge;
-
-#[cfg(not(test))]
 pub use arilou_native::engine::init_arilou;
 
 #[cfg(not(test))]
-pub use zoqfot_native::engine::init_zoqfotpik;
-
-#[cfg(not(test))]
 pub use umgah_native::engine::init_umgah;
-
-#[cfg(not(test))]
-pub use blackurq_native::engine::init_black_urquan;
 
 #[cfg(not(test))]
 pub use orz_native::engine::{intruder_preprocess, marine_collision};

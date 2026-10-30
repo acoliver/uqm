@@ -3,7 +3,7 @@
 mod battle_context;
 
 use std::{collections::BTreeMap, fs, path::Path, process::Command, ptr};
-use uqm_rust::ships::races::{init_human, init_mmrnmhrm, init_sis};
+use uqm_rust::ships::races::{init_human, init_sis};
 use uqm_rust::{
     automation::{
         battle_fight::BattleSnapshot,
@@ -355,18 +355,15 @@ fn race_custom_fields(directory: &Path) {
         let (fields, _) = snapshot(directory);
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
-        ship.RaceDescPtr = init_mmrnmhrm();
-        (*ship.RaceDescPtr)
-            .data
-            .cast::<CHARACTERISTIC_STUFF>()
-            .write(sample_characteristics());
+        let mut mmrnmhrm = Box::new(uqm_rust::ships::races::legacy_descriptor(
+            SPECIES_ID_MMRNMHRM_ID,
+        ));
+        mmrnmhrm.race_state = uqm_rust::engine::battle::RaceState::Mmrnmhrm {
+            alternate: sample_characteristics(),
+        };
+        ship.RaceDescPtr = &raw mut *mmrnmhrm;
         let (fields, _) = snapshot(directory);
         assert_characteristics(&fields, "ships.0.0.custom.characteristics");
-        ((*ship.RaceDescPtr)
-            .uninit_func
-            .unwrap_or_else(|| panic!("native descriptor has no uninit callback")))(
-            ship.RaceDescPtr,
-        );
         sis_fields(directory, &mut ship);
         clear_queues();
     }

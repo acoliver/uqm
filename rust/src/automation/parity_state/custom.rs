@@ -32,6 +32,10 @@ impl<'a> RaceData<'a> {
         if let crate::engine::battle::RaceState::Androsynth { collision } = descriptor.race_state {
             return Self::Androsynth(collision);
         }
+        if let crate::engine::battle::RaceState::Mmrnmhrm { ref alternate } = descriptor.race_state
+        {
+            return Self::Mmrnmhrm(alternate);
+        }
         let pointer = descriptor.data;
         if pointer.is_null() {
             return Self::None;
@@ -41,7 +45,6 @@ impl<'a> RaceData<'a> {
             match species {
                 SPECIES_ID_PKUNK_ID => Self::Pkunk(&*pointer.cast()),
                 SPECIES_ID_UMGAH_ID => Self::Umgah(&*pointer.cast()),
-                SPECIES_ID_MMRNMHRM_ID => Self::Mmrnmhrm(&*pointer.cast()),
                 SPECIES_ID_SIS_SHIP_ID => Self::Sis(&*pointer.cast()),
                 _ => panic!("unexpected custom data for species {species}"),
             }

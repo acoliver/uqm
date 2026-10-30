@@ -53,7 +53,9 @@ fn hooks() -> Hooks {
         limpets: Some(crate::engine::battle::ElementHook::Native(
             vux_native::engine::spawn_limpets,
         )),
-        fighters: Some(urquan_native::engine::spawn_fighters),
+        fighters: Some(crate::engine::battle::ElementHook::Native(
+            urquan_native::engine::spawn_fighters,
+        )),
         fighter_preprocess: urquan_native::engine::fighter_preprocess as *const () as usize,
         pkunk: Some(pkunk_native::engine::pkunk_preprocess),
         intercept: pkunk_native::engine::intercept_pkunk_death as *const () as usize,

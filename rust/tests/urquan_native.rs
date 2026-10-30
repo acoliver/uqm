@@ -1,10 +1,10 @@
-use uqm_rust::ships::races::init_urquan;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-mod native_ship_common;
-use native_ship_common::*;
-use std::{mem, ptr};
+#[path = "support/battle.rs"]
+mod battle;
+use battle::*;
+use std::mem;
 use uqm_rust::ships::native::{abi::*, element, frame_index};
 
 #[test]
@@ -12,25 +12,37 @@ fn descriptor_and_fusion_match_c() {
     battle_context::run(|| {
         let _battle = Battle::new(16);
         unsafe {
-            let mut ship = Ship::new(init_urquan, 0);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
             assert_eq!(
-                ship.desc.ship_info.ship_flags,
+                ship.descriptor_mut().ship_info.ship_flags,
                 (FIRES_FORE | SEEKING_SPECIAL) as u16
             );
             assert_eq!(
                 (
-                    ship.desc.ship_info.crew_level,
-                    ship.desc.ship_info.energy_level
+                    ship.descriptor_mut().ship_info.crew_level,
+                    ship.descriptor_mut().ship_info.energy_level
                 ),
                 (42, 42)
             );
-            assert_eq!(ship.desc.cyborg_control.WeaponRange, 1600);
+            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 1600);
             assert_eq!(
-                (ship.desc.fleet.known_loc.x, ship.desc.fleet.known_loc.y),
+                (
+                    ship.descriptor_mut().fleet.known_loc.x,
+                    ship.descriptor_mut().fleet.known_loc.y
+                ),
                 (5750, 6000)
             );
-            ship.ss.ShipFacing = 11;
-            let h = with_rng(8, 0, || ship.weapon(1))[0];
+            ship.ship_mut().ShipFacing = 11;
+            let h = with_rng(8, 0, || {
+                ship.weapon(1)
+                    .into_iter()
+                    .map(|id| {
+                        id.map_or(std::ptr::null_mut(), |id| {
+                            ship.weapon_record(Some(id)).cast()
+                        })
+                    })
+                    .collect::<Vec<HELEMENT>>()
+            })[0];
             let e = element(h);
             assert_eq!(
                 (
@@ -53,12 +65,12 @@ fn fighters_launch_left_then_right_and_return_crew() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            let mut ship = Ship::new(init_urquan, 0);
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            with_rng(7, 0, || (ship.desc.postprocess_func.unwrap())(ship.ptr()));
-            assert_eq!(ship.desc.ship_info.crew_level, 40);
-            assert_eq!(ship.desc.ship_info.energy_level, 34);
-            assert_eq!(ship.ss.special_counter, 9);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            with_rng(7, 0, || ship.postprocess());
+            assert_eq!(ship.descriptor_mut().ship_info.crew_level, 40);
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 34);
+            assert_eq!(ship.ship_mut().special_counter, 9);
             let all = queued();
             assert_eq!(all.len(), 3);
             for (i, &h) in all[1..].iter().enumerate() {
@@ -88,9 +100,9 @@ fn fighters_launch_left_then_right_and_return_crew() {
                     uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                         (*e).collision_func.unwrap(),
                         e,
-                        ptr::null_mut(),
+                        &mut POINT { x: 0, y: 0 },
                         ship.ptr(),
-                        ptr::null_mut(),
+                        &mut POINT { x: 0, y: 0 },
                         uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                     )
                 });
@@ -99,7 +111,7 @@ fn fighters_launch_left_then_right_and_return_crew() {
                 assert_ne!((*e).state_flags & NONSOLID as u16, 0);
                 assert_eq!((*e).state_flags & DISAPPEARING as u16, 0);
             }
-            assert_eq!(ship.desc.ship_info.crew_level, 42);
+            assert_eq!(ship.descriptor_mut().ship_info.crew_level, 42);
         }
     })
 }
@@ -109,15 +121,15 @@ fn two_crew_launches_one_right_fighter_and_allocation_failure_keeps_crew() {
         for capacity in [1, 2] {
             let _battle = Battle::new(capacity);
             unsafe {
-                let mut ship = Ship::new(init_urquan, 0);
-                ship.ss.cur_status_flags = SPECIAL as u16;
-                ship.desc.ship_info.crew_level = 2;
+                let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
+                ship.ship_mut().cur_status_flags = SPECIAL as u16;
+                ship.descriptor_mut().ship_info.crew_level = 2;
                 (*ship.ptr()).__bindgen_anon_2.crew_level = 2;
-                (ship.desc.postprocess_func.unwrap())(ship.ptr());
-                assert_eq!(ship.desc.ship_info.energy_level, 34);
-                assert_eq!(ship.ss.special_counter, 9);
+                ship.postprocess();
+                assert_eq!(ship.descriptor_mut().ship_info.energy_level, 34);
+                assert_eq!(ship.ship_mut().special_counter, 9);
                 assert_eq!(
-                    ship.desc.ship_info.crew_level,
+                    ship.descriptor_mut().ship_info.crew_level,
                     if capacity == 1 { 2 } else { 1 }
                 );
                 if capacity == 2 {
@@ -135,10 +147,10 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            let mut ship = Ship::new(init_urquan, 0);
-            let enemy = Ship::new(init_urquan, 1);
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
+            let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
+            let enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.postprocess();
             let fighter = element(disp_q.tail);
             (*fighter).next = (*fighter).current;
             let initial = velocity(&(*fighter).velocity);
@@ -170,7 +182,7 @@ fn fighter_tracking_delay_then_return_and_fire_use_exact_ranges() {
             assert_eq!((*fighter).__bindgen_anon_5.thrust_wait, 8);
             assert!((*fighter).postprocess_func.is_none());
             let laser = element(disp_q.tail);
-            assert_eq!((*laser).pParent, (&raw mut *ship.ss).cast());
+            assert_eq!((*laser).pParent, (&raw mut *ship.ship_mut()).cast());
             assert_eq!((*laser).__bindgen_anon_3.mass_points, 1);
             // On the return leg the ship becomes collidable with its own fighters.
             (*fighter).state_flags &= !(CHANGING as u16);
@@ -188,14 +200,15 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            let mut ship = Ship::new(init_urquan, 0);
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
+            let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.postprocess();
             let e = element(disp_q.tail);
             (*e).next = (*e).current;
             SetVelocityVector(&raw mut (*e).velocity, 8 << ONE_SHIFT, 0);
-            let mut planet: ELEMENT = mem::zeroed();
-            planet.__bindgen_anon_3.mass_points = 101;
+            let mut planet_fixture = Object::new(&_battle);
+            let planet = planet_fixture.ptr();
+            (*planet).__bindgen_anon_3.mass_points = 101;
             let mut pa = POINT { x: 0, y: 0 };
             let mut pb = POINT { x: 0, y: -10 };
             with_rng(18, 0, || {
@@ -203,7 +216,7 @@ fn fighter_planet_collision_clones_and_deflects_without_rng() {
                     (*e).collision_func.unwrap(),
                     e,
                     &mut pa,
-                    &mut planet,
+                    planet,
                     &mut pb,
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
@@ -222,26 +235,28 @@ fn ai_fighter_budget_point_defense_and_crew_boundaries() {
     battle_context::run(|| {
         let _battle = Battle::new(16);
         unsafe {
-            let mut ship = Ship::new(init_urquan, 0);
-            let mut enemy = Ship::new(init_urquan, 1);
-            ship.ss.weapon_counter = 1;
-            enemy.desc.cyborg_control.ManeuverabilityIndex = 100;
+            let mut ship = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 0);
+            let mut enemy = Ship::new(&_battle, SPECIES_ID_UR_QUAN_ID, 1);
+            ship.ship_mut().weapon_counter = 1;
+            enemy.descriptor_mut().cyborg_control.ManeuverabilityIndex = 100;
             for crew in [10, 11] {
                 for fighters in [5, 6] {
                     for defense in [false, true] {
-                        ship.desc.ship_info.crew_level = crew;
-                        ship.desc.characteristics.special_wait = fighters;
-                        enemy.desc.ship_info.ship_flags =
+                        ship.descriptor_mut().ship_info.crew_level = crew;
+                        ship.descriptor_mut().characteristics.special_wait = fighters;
+                        enemy.descriptor_mut().ship_info.ship_flags =
                             if defense { POINT_DEFENSE as u16 } else { 0 };
                         let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                         concerns[ENEMY_SHIP_INDEX as usize].ObjectPtr = enemy.ptr();
                         concerns[ENEMY_SHIP_INDEX as usize].which_turn = 20;
-                        with_rng(12, 0, || ship.intelligence(&mut concerns));
+                        with_rng(12, 0, || {
+                            ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
+                        });
                         assert_eq!(
-                            ship.ss.ship_input_state & SPECIAL as u8 != 0,
+                            ship.ship_mut().ship_input_state & SPECIAL as u8 != 0,
                             crew > 10 && fighters < 6 && !defense
                         );
-                        assert_eq!(ship.desc.characteristics.special_wait, 0);
+                        assert_eq!(ship.descriptor_mut().characteristics.special_wait, 0);
                         assert_eq!(
                             concerns[ENEMY_SHIP_INDEX as usize].MoveState,
                             MOVEMENT_STATE_PURSUE

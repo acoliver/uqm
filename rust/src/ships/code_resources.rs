@@ -18,23 +18,15 @@ pub(crate) mod engine {
 
     use crate::ships::races::arilou_native::engine::init_arilou;
 
-    use crate::ships::races::blackurq_native::engine::init_black_urquan;
-
     use crate::ships::races::chenjesu_native::engine::init_chenjesu;
 
     use crate::ships::races::chmmr_native::engine::init_chmmr;
-
-    use crate::ships::races::druuge_native::engine::init_druuge;
 
     use crate::ships::races::human_native::engine::init_human;
 
     use crate::ships::races::ilwrath_native::engine::init_ilwrath;
 
     use crate::ships::races::melnorme_native::engine::init_melnorme;
-
-    use crate::ships::races::mmrnmhrm_native::engine::init_mmrnmhrm;
-
-    use crate::ships::races::mycon_native::engine::init_mycon;
 
     use crate::ships::races::orz_native::engine::init_orz;
 
@@ -46,21 +38,9 @@ pub(crate) mod engine {
 
     use crate::ships::races::spathi_native::engine::init_spathi;
 
-    use crate::ships::races::supox_native::engine::init_supox;
-
-    use crate::ships::races::syreen_native::engine::init_syreen;
-
     use crate::ships::races::thraddash_native::engine::init_thraddash;
 
     use crate::ships::races::umgah_native::engine::init_umgah;
-
-    use crate::ships::races::urquan_native::engine::init_urquan;
-
-    use crate::ships::races::utwig_native::engine::init_utwig;
-
-    use crate::ships::races::yehat_native::engine::init_yehat;
-
-    use crate::ships::races::zoqfot_native::engine::init_zoqfotpik;
 
     use crate::ships::races::samatra::engine::init_samatra;
 
@@ -71,29 +51,29 @@ pub(crate) mod engine {
     pub(crate) const INITIALIZERS: [Option<Initializer>; 28] = [
         None,
         Some(init_arilou),
-        Some(init_black_urquan),
+        None,
         Some(init_chenjesu),
         Some(init_chmmr),
-        Some(init_druuge),
+        None,
         Some(init_human),
         Some(init_ilwrath),
         Some(init_melnorme),
-        Some(init_mmrnmhrm),
-        Some(init_mycon),
+        None,
+        None,
         Some(init_orz),
         Some(init_pkunk),
         Some(init_shofixti),
         Some(init_slylandro),
         Some(init_spathi),
-        Some(init_supox),
-        Some(init_syreen),
+        None,
+        None,
         Some(init_thraddash),
         Some(init_umgah),
-        Some(init_urquan),
-        Some(init_utwig),
         None,
-        Some(init_yehat),
-        Some(init_zoqfotpik),
+        None,
+        None,
+        None,
+        None,
         Some(init_samatra),
         Some(init_sis),
         Some(init_probe),
@@ -159,6 +139,16 @@ pub(crate) mod engine {
         let native = match which {
             0 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ANDROSYNTH_ID),
             22 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_VUX_ID),
+            2 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_KOHR_AH_ID),
+            5 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_DRUUGE_ID),
+            21 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UTWIG_ID),
+            24 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_ZOQFOTPIK_ID),
+            10 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MYCON_ID),
+            23 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_YEHAT_ID),
+            16 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SUPOX_ID),
+            17 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_SYREEN_ID),
+            9 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_MMRNMHRM_ID),
+            20 => crate::ships::races::race(crate::ships::native::abi::SPECIES_ID_UR_QUAN_ID),
             _ => None,
         };
         use crate::engine::battle::record::DescriptorSource;

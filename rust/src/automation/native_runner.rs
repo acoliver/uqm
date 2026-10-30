@@ -4146,9 +4146,7 @@ mod tests {
         let metadata = fs::symlink_metadata(scratch_root).unwrap();
         BoundedNativeObserver {
             executable: executable.clone(),
-            executable_digest: sha256_hex(
-                &read_regular_file_nofollow_bounded(&executable, 64 * 1024 * 1024).unwrap(),
-            ),
+            executable_digest: command_executable_digest(&Command::new(&executable)).unwrap(),
             helper_script: None,
             scratch_root: scratch_root.to_path_buf(),
             scratch_directory: open_directory_path_nofollow(scratch_root).unwrap(),
@@ -4158,6 +4156,30 @@ mod tests {
             sequence: 0,
             contract,
         }
+    }
+
+    #[test]
+    fn observer_fixture_accepts_trusted_system_program_symlinks(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+        fs::create_dir_all(&temporary)?;
+        let base = tempfile::Builder::new()
+            .prefix("observer-fixture-")
+            .tempdir_in(temporary)?;
+        let scratch = base.path().join("scratch");
+        fs::create_dir(&scratch)?;
+        let executable = base.path().join("echo");
+        symlink("/bin/echo", &executable)?;
+        let observer = observer_for_helper_test(&scratch, executable, runtime_contract());
+        assert_eq!(
+            observer.executable_digest,
+            command_executable_digest(&Command::new("/bin/echo"))?
+        );
+        observer.finish()?;
+        assert!(!scratch.exists());
+        Ok(())
     }
 
     fn acceptance_policy() -> NativeAcceptancePolicy {

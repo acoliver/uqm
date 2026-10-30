@@ -5,8 +5,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    use crate::ships::native::{abi::*, element, put_element, starship};
-    use std::ptr;
+    use crate::ships::native::abi::*;
 
     // Core characteristics
     const MAX_CREW: u16 = 12;
@@ -41,20 +40,20 @@ pub(crate) mod engine {
     const ABANDONER_RANGE_SQUARED: u32 = (ABANDONER_RANGE * ABANDONER_RANGE) as u32;
     const MAX_ABANDONERS: i32 = 8;
 
-    const fn descriptor() -> RACE_DESC {
+    fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         // All zero fields are null handles, absent callbacks, or zero counters.
-        let mut desc = RACE_DESC::EMPTY;
-        desc.ship_info.ship_flags = FIRES_FORE as u16;
-        desc.ship_info.ship_cost = 13;
-        desc.ship_info.crew_level = MAX_CREW;
-        desc.ship_info.max_crew = SYREEN_MAX_CREW_SIZE;
-        desc.ship_info.energy_level = MAX_ENERGY;
-        desc.ship_info.max_energy = MAX_ENERGY;
-        desc.ship_info.race_strings_rsc = c"ship.syreen.text".as_ptr();
-        desc.ship_info.icons_rsc = c"ship.syreen.icons".as_ptr();
-        desc.ship_info.melee_icon_rsc = c"ship.syreen.meleeicons".as_ptr();
-        desc.fleet.strength = 0;
-        desc.fleet.known_loc = POINT { x: 0, y: 0 };
+        let mut desc = RaceTemplate::default();
+        desc.info.ship_flags = FIRES_FORE as u16;
+        desc.info.ship_cost = 13;
+        desc.info.crew_level = MAX_CREW;
+        desc.info.max_crew = SYREEN_MAX_CREW_SIZE;
+        desc.info.energy_level = MAX_ENERGY;
+        desc.info.max_energy = MAX_ENERGY;
+        desc.resources.strings = Some(c"ship.syreen.text");
+        desc.resources.icons = Some(c"ship.syreen.icons");
+        desc.resources.melee_icon = Some(c"ship.syreen.meleeicons");
+        desc.fleet_strength = 0;
+        desc.fleet_location = POINT { x: 0, y: 0 };
         desc.characteristics = CHARACTERISTIC_STUFF {
             max_thrust: MAX_THRUST,
             thrust_increment: THRUST_INCREMENT,
@@ -68,100 +67,100 @@ pub(crate) mod engine {
             special_wait: SPECIAL_WAIT,
             ship_mass: SHIP_MASS,
         };
-        desc.ship_data.ship_rsc = [
-            c"ship.syreen.graphics.penetrator.large".as_ptr(),
-            c"ship.syreen.graphics.penetrator.medium".as_ptr(),
-            c"ship.syreen.graphics.penetrator.small".as_ptr(),
+        desc.resources.ship = [
+            Some(c"ship.syreen.graphics.penetrator.large"),
+            Some(c"ship.syreen.graphics.penetrator.medium"),
+            Some(c"ship.syreen.graphics.penetrator.small"),
         ];
-        desc.ship_data.weapon_rsc = [
-            c"ship.syreen.graphics.dagger.large".as_ptr(),
-            c"ship.syreen.graphics.dagger.medium".as_ptr(),
-            c"ship.syreen.graphics.dagger.small".as_ptr(),
+        desc.resources.weapon = [
+            Some(c"ship.syreen.graphics.dagger.large"),
+            Some(c"ship.syreen.graphics.dagger.medium"),
+            Some(c"ship.syreen.graphics.dagger.small"),
         ];
         // special_rsc stays NULL_RESOURCE for all three views.
-        desc.ship_data.captain_control.captain_rsc = c"ship.syreen.graphics.captain".as_ptr();
-        desc.ship_data.victory_ditty_rsc = c"ship.syreen.ditty".as_ptr();
-        desc.ship_data.ship_sounds_rsc = c"ship.syreen.sounds".as_ptr();
-        desc.cyborg_control.ManeuverabilityIndex = 0;
-        desc.cyborg_control.WeaponRange =
+        desc.resources.captain = Some(c"ship.syreen.graphics.captain");
+        desc.resources.victory = Some(c"ship.syreen.ditty");
+        desc.resources.sounds = Some(c"ship.syreen.sounds");
+        desc.intelligence.maneuverability = 0;
+        desc.intelligence.weapon_range =
             (MISSILE_SPEED as i32 * MISSILE_LIFE as i32 * 2 / 3) as u16;
-        desc.cyborg_control.intelligence_func = Some(syreen_intelligence);
-        desc.postprocess_func = Some(syreen_postprocess);
-        desc.init_weapon_func = Some(initialize_dagger);
-        desc
+        desc.descriptor(&SYREEN)
     }
-
-    static mut SYREEN_DESC: RACE_DESC = descriptor();
-
-    /// Returns the static template the engine copies for each Syreen ship.
-    #[no_mangle]
-    pub extern "C" fn init_syreen() -> *mut RACE_DESC {
-        &raw mut SYREEN_DESC
-    }
-
-    pub(crate) unsafe extern "C" fn initialize_dagger(
-        ship: *mut ELEMENT,
-        daggers: *mut HELEMENT,
-    ) -> COUNT {
-        let ss = starship(ship);
-        let mut block = MISSILE_BLOCK {
-            cx: (*ship).next.location.x,
-            cy: (*ship).next.location.y,
-            farray: (&raw mut (*(*ss).RaceDescPtr).ship_data.weapon).cast(),
-            face: (*ss).ShipFacing,
-            index: (*ss).ShipFacing,
-            sender: (*ship).playerNr,
+    use crate::engine::battle::views::Missile;
+    use crate::engine::battle::{
+        Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,
+    };
+    pub static SYREEN: Race = Race {
+        descriptor,
+        preprocess: None,
+        postprocess: Some(syreen_postprocess),
+        init_weapon: Some(initialize_dagger),
+        intelligence: Some(syreen_intelligence),
+        uninit: None,
+    };
+    pub(crate) fn initialize_dagger(
+        cx: &mut Cx<'_>,
+        ss: ShipId,
+        origin: WeaponOrigin,
+    ) -> WeaponSpawn {
+        let mut out = Vec::new();
+        let mut block = Missile {
+            cx: origin.next.location.x,
+            cy: origin.next.location.y,
+            farray: cx.ship_frame_set(ss, 1),
+            face: cx.ship_state(ss).facing,
+            index: cx.ship_state(ss).facing,
+            sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: SYREEN_OFFSET,
             speed: MISSILE_SPEED,
             hit_points: MISSILE_HITS,
             damage: MISSILE_DAMAGE,
             life: MISSILE_LIFE,
-            preprocess_func: None,
+            preprocess: None,
             blast_offs: MISSILE_OFFSET,
         };
-        *daggers = initialize_missile(&mut block);
-
-        1
+        out.push(cx.missile(&mut block));
+        out
     }
 
     /// Queued by the song's first pass and run again as the element's death
     /// function, which is when the nearby enemy ships actually lose crew.
-    pub(crate) unsafe extern "C" fn spawn_crew(source: *mut ELEMENT) {
-        if (*source).state_flags & PLAYER_SHIP as u16 != 0 {
-            let crew_handle = AllocElement();
-            if !crew_handle.is_null() {
-                let crew = element(crew_handle);
-                (*crew).next.location = (*source).next.location;
-                (*crew).playerNr = (*source).playerNr;
-                (*crew).state_flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
-                (*crew).__bindgen_anon_1.life_span = 0;
-                (*crew).death_func = Some(ElementHook::Legacy(spawn_crew));
-                (*crew).pParent = (*source).pParent;
-                (*crew).hTarget = ptr::null_mut();
+    pub(crate) fn spawn_crew(cx: &mut Cx<'_>, source: ElementId) {
+        if cx.element(source).flags & PLAYER_SHIP as u16 != 0 {
+            let crew_handle = cx.alloc_element();
+            if let Some(crew) = crew_handle {
+                cx.element_mut(crew).next.location = cx.element(source).next.location;
+                cx.element_mut(crew).player = cx.element(source).player;
+                cx.element_mut(crew).flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
+                cx.element_mut(crew).life = 0;
+                cx.element_mut(crew).death = Some(ElementHook::Native(spawn_crew));
+                cx.set_parent(crew, Some(cx.owner(source)));
+                cx.set_target(crew, None);
 
-                put_element(crew_handle);
+                cx.put(crew);
             }
             return;
         }
 
-        let mut handle = disp_q.head;
-        while !handle.is_null() {
-            let object = element(handle);
+        let mut handle = cx.elements().head();
+        while let Some(object) = handle {
             // AbandonShip may append to the queue, so read the link first.
-            let next = (*object).succ;
+            let next = cx.elements().succ(object);
 
-            if (*object).state_flags & PLAYER_SHIP as u16 != 0
-                && (*object).playerNr != (*source).playerNr
-                && (*object).__bindgen_anon_2.crew_level > 1
+            if cx.element(object).flags & PLAYER_SHIP as u16 != 0
+                && cx.element(object).player != cx.element(source).player
+                && cx.element(object).hits > 1
             {
-                let mut dx = (i32::from((*object).next.location.x)
-                    - i32::from((*source).next.location.x)) as SIZE;
+                let mut dx = (i32::from(cx.element(object).next.location.x)
+                    - i32::from(cx.element(source).next.location.x))
+                    as SIZE;
                 if dx < 0 {
                     dx = dx.wrapping_neg();
                 }
-                let mut dy = (i32::from((*object).next.location.y)
-                    - i32::from((*source).next.location.y)) as SIZE;
+                let mut dy = (i32::from(cx.element(object).next.location.y)
+                    - i32::from(cx.element(source).next.location.y))
+                    as SIZE;
                 if dy < 0 {
                     dy = dy.wrapping_neg();
                 }
@@ -177,14 +176,14 @@ pub(crate) mod engine {
                     let d_squared = square(dx).wrapping_add(square(dy));
                     if d_squared <= ABANDONER_RANGE_SQUARED {
                         let mut crew_loss = ((MAX_ABANDONERS
-                            * (ABANDONER_RANGE - i32::from(square_root(d_squared))))
+                            * (ABANDONER_RANGE - i32::from(crate::math::square_root(d_squared))))
                             / ABANDONER_RANGE
                             + 1) as COUNT;
-                        if crew_loss >= (*object).__bindgen_anon_2.crew_level {
-                            crew_loss = (*object).__bindgen_anon_2.crew_level - 1;
+                        if crew_loss >= cx.element(object).hits {
+                            crew_loss = cx.element(object).hits - 1;
                         }
 
-                        AbandonShip(object, source, crew_loss);
+                        cx.abandon_ship(object, source, crew_loss);
                     }
                 }
             }
@@ -193,43 +192,46 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) unsafe extern "C" fn syreen_intelligence(
-        ship: *mut ELEMENT,
-        concerns: *mut EVALUATE_DESC,
-        count: COUNT,
-    ) {
-        ship_intelligence(ship, concerns, count);
+    pub(crate) fn syreen_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+        cx.ship_intelligence(ss, concerns);
 
-        let enemy = concerns.add(ENEMY_SHIP_INDEX as usize);
-        if !(*enemy).ObjectPtr.is_null() {
-            let ss = starship(ship);
-            let enemy_ss = starship((*enemy).ObjectPtr);
-            if (*(*enemy_ss).RaceDescPtr).ship_info.ship_flags & CREW_IMMUNE as u16 == 0
-                && (*ss).special_counter == 0
-                && (*(*enemy).ObjectPtr).__bindgen_anon_2.crew_level > 1
-                && (*enemy).which_turn <= 14
+        let enemy = ENEMY_SHIP_INDEX as usize;
+        if concerns.objects[enemy].object.is_some() {
+            let enemy_ss = cx.owner(
+                concerns.objects[enemy]
+                    .object
+                    .unwrap_or_else(|| panic!("enemy ship")),
+            );
+            if cx.race_stats(enemy_ss).ship_info.ship_flags & CREW_IMMUNE as u16 == 0
+                && cx.ship_state(ss).special_counter == 0
+                && cx
+                    .element(
+                        concerns.objects[enemy]
+                            .object
+                            .unwrap_or_else(|| panic!("AI concern")),
+                    )
+                    .hits
+                    > 1
+                && concerns.objects[enemy].which_turn <= 14
             {
-                (*ss).ship_input_state |= SPECIAL as u8;
+                cx.ship_state_mut(ss).input |= SPECIAL as u8;
             } else {
-                (*ss).ship_input_state &= !(SPECIAL as u8);
+                cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
             }
         }
     }
 
-    pub(crate) unsafe extern "C" fn syreen_postprocess(ship: *mut ELEMENT) {
-        let ss = starship(ship);
-        if (*ss).cur_status_flags & SPECIAL as u16 != 0
-            && (*ss).special_counter == 0
-            && DeltaEnergy(ship, -i16::from(SPECIAL_ENERGY_COST)) != 0
+    pub(crate) fn syreen_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+        let ship = cx.ship_element(ss);
+        if cx.ship_state(ss).status & SPECIAL as u16 != 0
+            && cx.ship_state(ss).special_counter == 0
+            && cx.delta_energy(ship, -i16::from(SPECIAL_ENERGY_COST))
         {
             // SYREEN_SONG
-            ProcessSound(
-                SetAbsStringTableIndex((*(*ss).RaceDescPtr).ship_data.ship_sounds, 1),
-                ship,
-            );
-            spawn_crew(ship);
+            cx.process_ship_sound(ss, 1, ship);
+            spawn_crew(cx, ship);
 
-            (*ss).special_counter = (*(*ss).RaceDescPtr).characteristics.special_wait;
+            cx.ship_state_mut(ss).special_counter = cx.race_stats(ss).characteristics.special_wait;
         }
     }
 }

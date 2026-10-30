@@ -1,9 +1,9 @@
-use uqm_rust::ships::races::init_zoqfotpik;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 
-mod native_ship_common;
-use native_ship_common::*;
+#[path = "support/battle.rs"]
+mod battle;
+use battle::*;
 use std::mem;
 use uqm_rust::ships::native::{abi::*, cosine, element, frame_index, sine};
 #[test]
@@ -11,21 +11,36 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
     battle_context::run(|| {
         let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(init_zoqfotpik, 0);
-            assert_eq!(ship.desc.ship_info.ship_flags, FIRES_FORE as u16);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
+            assert_eq!(
+                ship.descriptor_mut().ship_info.ship_flags,
+                FIRES_FORE as u16
+            );
             assert_eq!(
                 (
-                    ship.desc.ship_info.crew_level,
-                    ship.desc.ship_info.energy_level
+                    ship.descriptor_mut().ship_info.crew_level,
+                    ship.descriptor_mut().ship_info.energy_level
                 ),
                 (10, 10)
             );
             assert_eq!(
-                (ship.desc.fleet.known_loc.x, ship.desc.fleet.known_loc.y),
+                (
+                    ship.descriptor_mut().fleet.known_loc.x,
+                    ship.descriptor_mut().fleet.known_loc.y
+                ),
                 (3761, 5333)
             );
-            assert_eq!(ship.desc.cyborg_control.WeaponRange, 400);
-            let h = with_rng(19, 0, || ship.weapon(1))[0];
+            assert_eq!(ship.descriptor_mut().cyborg_control.WeaponRange, 400);
+            let h = with_rng(19, 0, || {
+                ship.weapon(1)
+                    .into_iter()
+                    .map(|id| {
+                        id.map_or(std::ptr::null_mut(), |id| {
+                            ship.weapon_record(Some(id)).cast()
+                        })
+                    })
+                    .collect::<Vec<HELEMENT>>()
+            })[0];
             let e = element(h);
             assert_eq!(
                 (
@@ -81,12 +96,12 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            let mut ship = Ship::new(init_zoqfotpik, 0);
-            ship.ss.ShipFacing = 0;
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            with_rng(3, 0, || (ship.desc.postprocess_func.unwrap())(ship.ptr()));
-            assert_eq!(ship.desc.ship_info.energy_level, 3);
-            assert_eq!(ship.ss.special_counter, 6);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
+            ship.ship_mut().ShipFacing = 0;
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            with_rng(3, 0, || ship.postprocess());
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
+            assert_eq!(ship.ship_mut().special_counter, 6);
             let mut e = element(disp_q.tail);
             assert_eq!((*e).__bindgen_anon_4.turn_wait, 6);
             for remaining in (0..6).rev() {
@@ -125,10 +140,10 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
     battle_context::run(|| {
         let _battle = Battle::new(64);
         unsafe {
-            let mut ship = Ship::new(init_zoqfotpik, 0);
-            let enemy = Ship::new(init_zoqfotpik, 1);
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
+            let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
+            let mut enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.postprocess();
             let tongue = element(disp_q.tail);
             let mut a = POINT { x: 100, y: 100 };
             let mut b = POINT { x: 110, y: 100 };
@@ -142,25 +157,26 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
                     uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
                 )
             });
-            assert_eq!(enemy.desc.ship_info.crew_level, 0);
-            assert_eq!(ship.ss.special_counter, 0);
+            assert_eq!(enemy.descriptor_mut().ship_info.crew_level, 0);
+            assert_eq!(ship.ship_mut().special_counter, 0);
             assert_eq!((*tongue).__bindgen_anon_4.turn_wait, 0);
             assert_ne!((*tongue).state_flags & NONSOLID as u16, 0);
             // A later frame has no damage window even if it still has mass 12.
-            ship.ss.special_counter = 5;
-            let mut target: ELEMENT = mem::zeroed();
-            target.__bindgen_anon_1.life_span = 1;
+            ship.ship_mut().special_counter = 5;
+            let mut target_fixture = Object::new(&_battle);
+            let target = target_fixture.ptr();
+            (*target).__bindgen_anon_1.life_span = 1;
             (*tongue).__bindgen_anon_4.turn_wait = 4;
             let before = queued();
             uqm_rust::battle::process_native::invoke_collision::invoke_legacy_collision(
                 (*tongue).collision_func.unwrap(),
                 tongue,
                 &mut a,
-                &mut target,
+                target,
                 &mut b,
                 uqm_rust::battle::process_native::invoke_collision::CollisionCall::Hook,
             );
-            assert_eq!(ship.ss.special_counter, 1);
+            assert_eq!(ship.ship_mut().special_counter, 1);
             assert_eq!(queued(), before);
         }
     })
@@ -170,11 +186,11 @@ fn tongue_allocation_failure_still_spends_energy_and_sets_counter() {
     battle_context::run(|| {
         let _battle = Battle::new(1);
         unsafe {
-            let mut ship = Ship::new(init_zoqfotpik, 0);
-            ship.ss.cur_status_flags = SPECIAL as u16;
-            (ship.desc.postprocess_func.unwrap())(ship.ptr());
-            assert_eq!(ship.desc.ship_info.energy_level, 3);
-            assert_eq!(ship.ss.special_counter, 6);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
+            ship.ship_mut().cur_status_flags = SPECIAL as u16;
+            ship.postprocess();
+            assert_eq!(ship.descriptor_mut().ship_info.energy_level, 3);
+            assert_eq!(ship.ship_mut().special_counter, 6);
             assert_eq!(queued(), vec![ship.handle]);
         }
     })
@@ -184,10 +200,10 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
     battle_context::run(|| {
         let _battle = Battle::new(32);
         unsafe {
-            let mut ship = Ship::new(init_zoqfotpik, 0);
-            let enemy = Ship::new(init_zoqfotpik, 1);
+            let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
+            let enemy = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 1);
             (*enemy.ptr()).next.location = POINT { x: 4000, y: 3900 };
-            ship.desc.ship_info.energy_level = 0;
+            ship.descriptor_mut().ship_info.energy_level = 0;
             for (turn, face, tongue) in [(4, 0, true), (4, 1, false), (5, 0, false)] {
                 let mut concerns: [EVALUATE_DESC; 4] = mem::zeroed();
                 concerns[ENEMY_SHIP_INDEX as usize] = EVALUATE_DESC {
@@ -196,12 +212,17 @@ fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
                     which_turn: turn,
                     MoveState: MOVEMENT_STATE_ENTICE,
                 };
-                ship.ss.ShipFacing = face;
-                ship.ss.ship_input_state = WEAPON as u8;
-                with_rng(5, 0, || ship.intelligence(&mut concerns));
-                assert_eq!(ship.ss.ship_input_state & SPECIAL as u8 != 0, tongue);
-                assert_eq!(ship.ss.ship_input_state & WEAPON as u8, 0);
-                assert_eq!(ship.ss.weapon_counter, 0);
+                ship.ship_mut().ShipFacing = face;
+                ship.ship_mut().ship_input_state = WEAPON as u8;
+                with_rng(5, 0, || {
+                    ship.intelligence(&mut *ship.ptr(), &mut concerns, 0)
+                });
+                assert_eq!(
+                    ship.ship_mut().ship_input_state & SPECIAL as u8 != 0,
+                    tongue
+                );
+                assert_eq!(ship.ship_mut().ship_input_state & WEAPON as u8, 0);
+                assert_eq!(ship.ship_mut().weapon_counter, 0);
                 assert_eq!(
                     concerns[ENEMY_SHIP_INDEX as usize].MoveState,
                     if turn <= 4 {
